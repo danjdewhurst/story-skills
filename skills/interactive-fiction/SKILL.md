@@ -132,9 +132,15 @@ learned on two branches, and the `continuity/state.md` snapshot.
 Use `revision-continuity` for the passes, plus these checks:
 
 - **Reachability:** fix every `unreachable-chapter` by adding a choice that
-  leads there or by removing the chapter (`story remove chapter <id>
-  --path .`, which drops the choices that led to it and warns which
-  chapters became endings).
+  leads there, from a passage the user agrees (see Hard Rules). Removing
+  the chapter deletes its file and its drafted prose, so offer it only as
+  an option. To remove one, take a snapshot first (see Draft Snapshots in
+  the `revision-continuity` skill), run `story remove chapter <id> --path .
+  --dry-run`, show the user the files it would update and delete, and
+  remove it only with their explicit approval. `remove chapter` refuses
+  while scene files point at the chapter (remove those scenes the same
+  way first), drops the choices that led to it, and warns which chapters
+  became endings.
 - **Endings:** list the chapters with no `choices`. Each should be a
   deliberate ending. A chapter that lost its last choice in a revision is
   an accidental ending: give it a choice.
@@ -198,6 +204,8 @@ resolving the path relative to this skill folder.
 
 - Never invent a branch, ending, or choice the user has not agreed; offer
   options instead.
+- Never remove a chapter or scene without the user's explicit approval,
+  given after a snapshot and a `--dry-run` that lists what it deletes.
 - Never write rejoin prose that is true on only one incoming path.
 - Never silence `state-differs-by-path` with an `object-state` entry the
   rejoin chapter's prose does not make true.

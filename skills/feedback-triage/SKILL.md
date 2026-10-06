@@ -38,15 +38,24 @@ readers have read. Verify `story.md` exists in the project root.
    and how many readers (2–4 per round is typical; one reader is a data
    point, not a round).
 2. Create the round folder: `feedback/round-{N}/`.
-3. Give readers a review copy they can open without a terminal:
+3. Give readers a review copy they can open without a terminal. Build it
+   from text you can get back, so the round can be rebuilt and old labels
+   mapped later (step 3 of Collect). In a git project, run `git status`
+   first: the copy is built from the working tree, but a tag points at the
+   last commit, so uncommitted changes would make them differ. Show the
+   user any changes and ask before committing and before tagging. With
+   their approval:
 
    ```shell
+   git add -A && git commit -m "Feedback round {N}"
    git tag feedback-round-{N}
    story build . --format html --stamp feedback-round-{N}
    ```
 
-   Tag the commit you share (with the user's approval) so the round's text
-   can be rebuilt later. The single-file HTML copy in `dist/` has a table of
+   Skip the commit when the tree is already clean, and never push, move,
+   or delete a tag without approval. In a project without git, take a
+   snapshot instead (`story snapshot feedback-round-{N} --path .`) and
+   build after it. The single-file HTML copy in `dist/` has a table of
    contents, the build stamp at the top, and a paragraph label beside every
    paragraph (`ch03-p12` is chapter 3, paragraph 12). A label is the
    chapter and the paragraph's position in that build, not a permanent id:
@@ -91,7 +100,8 @@ readers have read. Verify `story.md` exists in the project root.
    story compare . --ref feedback-round-{N} --anchor ch03-p12 --anchor ch07-p4
    ```
 
-   Each line gives the current label: `(text unchanged)`, or `(edited, NN%
+   In a project without git, use `--snapshot feedback-round-{N}` in place
+   of `--ref`. Each line gives the current label: `(text unchanged)`, or `(edited, NN%
    similar)` when the paragraph was revised (check it is the one the
    reader meant). `not found in the current text ("…")` means the
    paragraph was cut or rewritten past recognition: search the chapter for

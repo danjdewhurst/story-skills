@@ -81,7 +81,10 @@ are clean or every remaining finding is a recorded decision. Set story
    - What will change
    - What must stay fixed for continuity
    - Which files may need updates beyond the chapter
-5. Make targeted edits directly in markdown files. Do not create project-local scripts to rewrite prose.
+   - Each scene, subplot, or passage the plan cuts, folds into another, or moves, named one by one
+
+   Show the plan to the user and wait for their approval before editing. Cut, fold, or move only what they approve: a removability audit or a length pass proposes cuts, it does not make them. A single targeted edit the user has already spelled out ("revise chapter 3 so Nell hides the log") is its own approval, so state the plan in a line and go on.
+5. Make targeted edits directly in markdown files, following the approved plan. Do not create project-local scripts to rewrite prose.
 6. Update dependent metadata:
    - Chapter frontmatter `status` (`draft` -> `revised`, `revised` -> `final` only when appropriate)
    - Chapter `word-count` via CLI when available

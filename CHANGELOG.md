@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Changed
+
+- Skills now ask before they cut, remove, or tag prose. revision-continuity's revision plan names each scene, subplot, or passage it would cut, fold, or move, and the skill waits for the user's approval before editing; the removability audit and length pass propose cuts rather than make them, and a single edit the user has already spelled out counts as approved. interactive-fiction fixes `unreachable-chapter` with a choice that leads there, and removes a chapter only after a snapshot, a `--dry-run`, and the user's approval, which a new Hard Rule repeats. feedback-triage checks `git status` and, with approval, commits before it tags a feedback round, so the tag holds the text the review copy was built from; a project without git takes a `story snapshot` and maps old labels with `story compare --snapshot`. ([#543](https://github.com/danjdewhurst/story-skills/issues/543))
+
 ### Fixed
 
 - `story import` into a folder that already exists no longer says `--force` never overwrites files: the refusal now says that `--force` deletes every `chapters/chapter-NN.md` and writes the imported chapters in their place, adds missing starter files, keeps `story.md` and the other files, and reindexes. `import --force` into an existing project now holds the project lock from reading the project's language, count unit, and style sheet to the reindex, as the other write commands do, so while another story command is changing the project it refuses with exit code 4 and changes nothing, and the chapters are never built from settings that changed meanwhile. Before, it replaced the chapters and created starter files, then failed at the reindex saying nothing was changed. `story init`'s message is unchanged. ([#541](https://github.com/danjdewhurst/story-skills/issues/541))
