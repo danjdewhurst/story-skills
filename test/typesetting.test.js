@@ -185,7 +185,8 @@ describe("script-aware typesetting", () => {
     expect(print).toContain("html { writing-mode: vertical-rl; }");
     expect(print).toContain("section.chapter, section.back { page: chapter; break-before: left; }");
     expect(print).toMatch(/@page :left \{\n {2}@top-center \{ content: string\(chapter-title/);
-    expect(print).toContain("float: none;");
+    expect(print).toContain('\n.toc a::after { content: " " target-counter(attr(href), page); float: none; }\n');
+    expect(print).not.toContain(".toc li {");
     expect(print).toContain("Vivliostyle");
     expect(print).toContain("max-height: 8.5in;");
     expect(print).not.toContain('dir="rtl"');
