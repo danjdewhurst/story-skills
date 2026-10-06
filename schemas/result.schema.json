@@ -147,7 +147,38 @@
         "title": { "type": "string" },
         "storyId": { "type": "string" },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
-        "checks": { "$ref": "#/$defs/checks" }
+        "checks": { "$ref": "#/$defs/checks" },
+        "fix": { "$ref": "#/$defs/doctor-fix" }
+      }
+    },
+    "doctor-fix": {
+      "type": "object",
+      "description": "Only on doctor --fix: the safe repairs it applied. actions, checks, and diagnostics are the diagnosis made after them.",
+      "required": ["dryRun", "repairs", "stopped", "changes"],
+      "properties": {
+        "dryRun": { "type": "boolean", "description": "True for --dry-run, which changed nothing: the repairs ran on a copy of the project, and writes is empty." },
+        "repairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["command", "codes", "changes"],
+            "properties": {
+              "command": { "enum": ["migrate", "wordcount --write", "reindex"] },
+              "codes": { "type": "array", "items": { "type": "string" }, "description": "The finding codes that called for this repair." },
+              "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+            }
+          }
+        },
+        "stopped": { "type": ["string", "null"], "description": "Why a repair could not run (a file that does not parse), after which no later repair was tried; null when every due repair ran." },
+        "changes": { "type": "array", "items": { "$ref": "#/$defs/change" }, "description": "Every change the repairs made, sorted by path." }
+      }
+    },
+    "change": {
+      "type": "object",
+      "required": ["action", "path"],
+      "properties": {
+        "action": { "enum": ["create", "update", "delete", "mkdir"] },
+        "path": { "type": "string", "minLength": 1, "description": "Relative to the project root, with / separators." }
       }
     },
     "checks": {
@@ -372,14 +403,7 @@
         "changes": {
           "type": "array",
           "description": "Every file the command created, updated, or deleted, and every folder it made, sorted by path.",
-          "items": {
-            "type": "object",
-            "required": ["action", "path"],
-            "properties": {
-              "action": { "enum": ["create", "update", "delete", "mkdir"] },
-              "path": { "type": "string", "minLength": 1, "description": "Relative to the project root, with / separators." }
-            }
-          }
+          "items": { "$ref": "#/$defs/change" }
         }
       }
     },

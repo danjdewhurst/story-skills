@@ -100,6 +100,7 @@ export {
   reindexProject,
   computeWordCounts,
   migrateProject,
+  fixProject,
   createEntity,
   renameEntity,
   removeEntity,

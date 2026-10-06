@@ -141,6 +141,7 @@ const LOCKED = {
   reindex: ["reindex"],
   wordcount: ["wordcount", "--write"],
   migrate: ["migrate"],
+  doctor: ["doctor", "--fix"],
   remove: ["remove", "character", "mara-quill"]
 };
 
