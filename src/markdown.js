@@ -197,6 +197,12 @@ export function collapseSourceSpace(text) {
   return String(text).replace(SOURCE_SPACE_RUN, " ");
 }
 
+// Each typed space as a plain one, for a check that reads a line's shape,
+// such as whether it is a scene break; layout whitespace is left as it is.
+export function plainSpaces(text) {
+  return String(text).replace(/[^\S \t\n\v\f\r\u2028\u2029]/g, " ");
+}
+
 // trim() for layout whitespace only.
 export function trimSourceSpace(text) {
   const value = String(text);

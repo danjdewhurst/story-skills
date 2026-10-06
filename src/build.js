@@ -18,7 +18,7 @@ import {
   wordCount
 } from "./markdown.js";
 import { chapterByline, copyrightPage, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
-import { DEFAULT_TRIM, estimateBookPages, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
+import { DEFAULT_TRIM, estimateBookPages, indentsFirstLines, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
@@ -177,8 +177,8 @@ export function buildBook(root, options = {}) {
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
-    const book = htmlBook(manuscript);
     const style = projectBuildStyle(project);
+    const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
   } else if (format === "shunn") {
@@ -203,7 +203,8 @@ function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
-  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project), paper);
+  const style = projectBuildStyle(project);
+  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   // A --dry-run finds the engine but does not run it.
   writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
