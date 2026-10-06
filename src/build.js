@@ -746,7 +746,7 @@ export function manuscriptParts(project, action = "build") {
 
   return {
     title: project.title,
-    author: leadNames(meta),
+    author: joinNames(meta.authors, meta.labels),
     meta,
     // The count unit, for the print page estimate and narration runtime.
     unit: project.unit.name,

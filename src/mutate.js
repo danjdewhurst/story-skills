@@ -1905,10 +1905,11 @@ function chapterReferenceFiles(root, chapterId, excluded) {
 }
 
 // Chapter fields the new chapter of a split copies from the one it came
-// from. Its hook goes with it too, since the new chapter now ends where the
+// from, the story's own `author` among them, so both halves keep its
+// byline. Its hook goes with it too, since the new chapter now ends where the
 // old one did; arcs-advanced stays behind, since the arc beat could be in
 // either half.
-const SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+const SPLIT_COPIED_FIELDS = ["numbered", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
 
 // Every file a rename of these chapter or scene ids rewrites: the reference
 // fields, links, and bare ids move rewrites.

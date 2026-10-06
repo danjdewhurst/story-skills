@@ -10,6 +10,7 @@ characters: []
 mentions: []
 arcs-advanced: []
 status: final
+hook: resolution
 mode: ""
 date: ""
 time: ""

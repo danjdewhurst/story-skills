@@ -8,6 +8,7 @@ characters: []
 mentions: []
 arcs-advanced: []
 status: final
+hook: emotional
 mode: ""
 date: ""
 time: ""

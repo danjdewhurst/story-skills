@@ -213,6 +213,11 @@ function reviewStyleRules(style, type, fonts, bylines = false) {
   if (fonts.heading !== null) {
     rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
   }
+  // A byline keeps its own spacing and no first-line indent, whatever the
+  // paragraphs below it do.
+  if (bylines && style.paragraphs === "indented") {
+    rules.push("section > p.byline { text-indent: 0; margin-block-end: 1rem; }");
+  }
   const heading = headingRule(style.headingStyle, type);
   if (heading !== "") {
     rules.push(`section > h2 { ${heading} }`);

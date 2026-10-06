@@ -16584,6 +16584,9 @@ function reviewStyleRules(style, type, fonts, bylines = false) {
   if (fonts.heading !== null) {
     rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
   }
+  if (bylines && style.paragraphs === "indented") {
+    rules.push("section > p.byline { text-indent: 0; margin-block-end: 1rem; }");
+  }
   const heading = headingRule(style.headingStyle, type);
   if (heading !== "") {
     rules.push(`section > h2 { ${heading} }`);
@@ -17353,16 +17356,18 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   ], writeOptions);
 }
 function epubCreators(meta, chapters) {
+  const storyAuthors = new Set(chapters.flatMap((chapter) => chapter.authors ?? []));
   const credited = new Set([...meta.authors, ...meta.editors]);
-  const contributors = [...new Set(chapters.flatMap((chapter) => chapter.authors ?? []))].filter((name) => !credited.has(name));
+  const contributors = [...storyAuthors].filter((name) => !credited.has(name));
   if (meta.editors.length === 0 && contributors.length === 0) {
     return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
   }
-  const entry = (element, id, name, role) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}><meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`;
+  const entry = (element, id, name, roles) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}>${roles.map((role) => `<meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`).join("")}`;
+  const authors = new Set(meta.authors);
   return [
-    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, "aut")),
-    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, "edt")),
-    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, "aut"))
+    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, ["aut"])),
+    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, storyAuthors.has(name) && !authors.has(name) ? ["edt", "aut"] : ["edt"])),
+    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, ["aut"]))
   ].join("");
 }
 function epubStylesheet(type, style = CLASSIC_STYLE, bylines = false) {
@@ -20432,6 +20437,9 @@ function validateChapters(project, errors, warnings) {
     }
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     validateNames(data, "author", label, errors);
+    if ((Array.isArray(data.author) ? data.author : [data.author]).some(isPlaceholder)) {
+      warnings.push(warn("todo-placeholder", `${label} author is still a [TODO] placeholder; builds leave it out`, label));
+    }
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
@@ -22753,7 +22761,7 @@ function chapterReferenceFiles(root, chapterId, excluded) {
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
 }
-var SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+var SPLIT_COPIED_FIELDS = ["numbered", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
 function rewrittenFiles(root, kind, ids) {
   const files = new Set;
   for (const id of ids) {
@@ -25361,7 +25369,7 @@ function manuscriptParts(project, action = "build") {
   }
   return {
     title: project.title,
-    author: leadNames(meta),
+    author: joinNames(meta.authors, meta.labels),
     meta,
     unit: project.unit.name,
     front,

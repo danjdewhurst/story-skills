@@ -119,21 +119,23 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
 // The package's dc:creator and dc:contributor elements. A book by its
 // authors alone lists them as plain creators. Once a book also has editors
 // (story.md `editor`) or stories by other writers (chapter `author`),
-// every name carries its MARC relator role so reading systems and
+// every name carries its MARC relator roles so reading systems and
 // retailers can tell them apart: the authors and editors as creators (aut,
-// edt), and each other story author once, in reading order, as a
-// contributor (aut).
+// edt, and both for an editor who also wrote a story), and each other
+// story author once, in reading order, as a contributor (aut).
 function epubCreators(meta, chapters) {
+  const storyAuthors = new Set(chapters.flatMap((chapter) => chapter.authors ?? []));
   const credited = new Set([...meta.authors, ...meta.editors]);
-  const contributors = [...new Set(chapters.flatMap((chapter) => chapter.authors ?? []))].filter((name) => !credited.has(name));
+  const contributors = [...storyAuthors].filter((name) => !credited.has(name));
   if (meta.editors.length === 0 && contributors.length === 0) {
     return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
   }
-  const entry = (element, id, name, role) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}><meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`;
+  const entry = (element, id, name, roles) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}>${roles.map((role) => `<meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`).join("")}`;
+  const authors = new Set(meta.authors);
   return [
-    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, "aut")),
-    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, "edt")),
-    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, "aut"))
+    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, ["aut"])),
+    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, storyAuthors.has(name) && !authors.has(name) ? ["edt", "aut"] : ["edt"])),
+    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, ["aut"]))
   ].join("");
 }
 
