@@ -11,6 +11,7 @@ import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVer
 import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
 import { PREFLIGHT } from "../scripts/release.js";
+import { CI_WAIT } from "../scripts/publish-gate.js";
 import { relativeLinks } from "../scripts/check-package.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
@@ -45,6 +46,31 @@ function usesRefs(text) {
     }
   }
   return refs;
+}
+
+// Each job's lines, keyed by job id, from a workflow's `jobs:` block.
+function workflowJobs(text) {
+  const jobs = {};
+  let current = null;
+  for (const line of text.slice(text.indexOf("\njobs:\n") + 7).split(/\r?\n/)) {
+    const id = /^ {2}([\w-]+):\s*$/.exec(line);
+    if (id) {
+      current = id[1];
+      jobs[current] = "";
+    } else if (/^\S/.test(line)) {
+      break;
+    } else if (current) {
+      jobs[current] += `${line}\n`;
+    }
+  }
+  return jobs;
+}
+
+// Every job a job waits for, directly or through the jobs it needs.
+function allNeeds(jobs, id) {
+  const match = /^ {4}needs: (?:\[([^\]]*)\]|(\S+))$/m.exec(jobs[id]);
+  const direct = match ? (match[1] ?? match[2]).split(",").map((need) => need.trim()) : [];
+  return [...new Set(direct.flatMap((need) => [need, ...allNeeds(jobs, need)]))].sort();
 }
 
 // Lists each action that more than one SHA pins across the given files, so a
@@ -667,6 +693,53 @@ describe("github workflows", () => {
       const text = readRepo(relativePath);
       expect(text.match(/^ {4}runs-on:/gm)?.length, relativePath).toBe(text.match(/^ {4}timeout-minutes: \d+$/gm)?.length);
     }
+  });
+
+  test("publish reaches npm only behind the gate, the binaries, and the npm environment (#544)", () => {
+    const jobs = workflowJobs(readRepo(".github/workflows/publish.yml"));
+    expect(Object.keys(jobs)).toEqual(["verify", "ci", "binaries", "release-assets", "publish", "homebrew"]);
+    expect(allNeeds(jobs, "verify")).toEqual([]);
+    expect(allNeeds(jobs, "ci")).toEqual(["verify"]);
+    expect(allNeeds(jobs, "binaries")).toEqual(["verify"]);
+    expect(allNeeds(jobs, "release-assets")).toEqual(["binaries", "ci", "verify"]);
+    expect(allNeeds(jobs, "publish")).toEqual(["binaries", "ci", "release-assets", "verify"]);
+    expect(allNeeds(jobs, "homebrew")).toEqual(["binaries", "ci", "release-assets", "verify"]);
+
+    // verify reads every branch and tag, and can write nothing.
+    expect(jobs.verify).toContain("run: node scripts/publish-gate.js verify\n");
+    expect(jobs.verify).toContain("fetch-depth: 0");
+    expect(jobs.verify).toContain("TAG_INPUT: ${{ inputs.tag }}");
+    expect(jobs.verify).toMatch(/ {4}permissions:\n {6}contents: read\n {4}outputs:/);
+
+    // ci reads workflow runs with the job token, and outlasts the gate's own wait.
+    expect(jobs.ci).toContain('run: node scripts/publish-gate.js ci "$RELEASE_SHA"\n');
+    expect(jobs.ci).toContain("RELEASE_SHA: ${{ needs.verify.outputs.sha }}");
+    expect(jobs.ci).toContain("GITHUB_TOKEN: ${{ github.token }}");
+    expect(jobs.ci).toMatch(/ {4}permissions:\n {6}contents: read\n {6}actions: read\n {4}steps:/);
+    expect(Number(/^ {4}timeout-minutes: (\d+)$/m.exec(jobs.ci)[1]) * 60_000).toBeGreaterThan(CI_WAIT.timeoutMs);
+
+    // Only the publish job runs npm publish, and it does so from the npm
+    // environment. release-assets' OIDC token signs attestations only.
+    const npmJobs = Object.keys(jobs).filter((id) => /^\s+npm publish$/m.test(jobs[id]));
+    expect(npmJobs).toEqual(["publish"]);
+    expect(jobs.publish).toMatch(/^ {4}environment: npm$/m);
+    expect(Object.keys(jobs).filter((id) => jobs[id].includes("id-token: write"))).toEqual(["release-assets", "publish"]);
+    expect(Object.keys(jobs).filter((id) => /^ {4}environment:/m.test(jobs[id]))).toEqual(["publish"]);
+
+    // Every later job builds the commit verify checked, never the tag by name.
+    for (const id of ["binaries", "release-assets", "publish", "homebrew"]) {
+      expect(jobs[id], id).toContain("ref: ${{ needs.verify.outputs.sha }}");
+      expect(jobs[id], id).toContain("TAG: ${{ needs.verify.outputs.tag }}");
+      expect(jobs[id], id).not.toContain("refs/tags/${{");
+      expect(jobs[id], id).not.toContain("inputs.tag");
+    }
+  });
+
+  test("the gate's CI lookup matches ci.yml (#544)", () => {
+    // publish-gate.js asks for ci.yml's push runs on main by file name.
+    expect(readRepo("scripts/publish-gate.js")).toContain('const CI_WORKFLOW = "ci.yml";');
+    const ci = readRepo(".github/workflows/ci.yml");
+    expect(ci).toMatch(/^on:\n {2}push:\n {4}branches: \[main\]\n/m);
   });
 
   test("ci runs the release-gate checks and the Node fallback", () => {

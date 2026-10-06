@@ -330,7 +330,7 @@ function release(deps, bump, dryRun) {
   const releaseUrl = deps.run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
   deps.log(`Created GitHub release: ${releaseUrl}`);
 
-  deps.log(`The Publish workflow is publishing ${packageJson.name}@${nextVersion} to npm: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
+  deps.log(`The Publish workflow publishes ${packageJson.name}@${nextVersion} to npm once CI passes on ${RELEASE_BRANCH} for the release commit: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

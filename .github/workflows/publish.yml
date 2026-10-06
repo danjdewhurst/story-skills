@@ -1,16 +1,28 @@
 name: Publish
 
-# `bun run release` pushes a vX.Y.Z tag, and this workflow publishes that
-# version to npm through trusted publishing (OIDC). No npm token is stored;
-# npmjs.com trusts this workflow file by name, and provenance is automatic.
+# `bun run release` pushes main and a vX.Y.Z tag together, and this workflow
+# publishes that version. First the gate (scripts/publish-gate.js): `verify`
+# checks that the tag names package.json's version at a commit on main, and
+# `ci` waits for the CI run on main for that commit to pass. Every later job
+# checks out the commit `verify` checked, not the tag, so a moved tag cannot
+# swap it.
 #
-# It also builds the standalone `story` binaries, each on its own OS so it
-# can be smoke-tested there (and so macOS builds are signed as they need),
-# packs each skill as a zip for claude.ai's Skills upload (plus an
-# all-skills zip), attests the build provenance of the binaries and zips,
-# attaches them and a checksums file to the GitHub release, and, when a
-# HOMEBREW_TAP_DEPLOY_KEY secret is set, updates the formula in
-# danjdewhurst/homebrew-tap.
+# Behind the gate it builds the standalone `story` binaries, each on its own
+# OS so it can be smoke-tested there (and so macOS builds are signed as they
+# need), packs each skill as a zip for claude.ai's Skills upload (plus an
+# all-skills zip), attests the build provenance of the binaries and zips, and
+# attaches them and a checksums file to the GitHub release. Then it publishes
+# to npm through trusted publishing (OIDC) from the `npm` environment, and,
+# when a HOMEBREW_TAP_DEPLOY_KEY secret is set, updates the formula in
+# danjdewhurst/homebrew-tap. npm waits for every job that could fail on the
+# code: npm never takes the same version twice, and every other job can be
+# re-run. No npm token is stored; npmjs.com trusts this workflow file by name,
+# and provenance is automatic.
+#
+# A manual run re-publishes an existing tag. Dispatch it on the tag, which
+# keeps the attestations (`gh workflow run publish.yml --ref vX.Y.Z -f
+# tag=vX.Y.Z`), or on main. The gate refuses any other ref, and the `npm`
+# environment admits only v* tags and main.
 on:
   push:
     tags: ["v*"]
@@ -28,65 +40,68 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  verify:
+    name: Verify the release tag
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
-      id-token: write
-    env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      tag: ${{ steps.verify.outputs.tag }}
+      sha: ${{ steps.verify.outputs.sha }}
     steps:
-      - name: Check out the release tag
+      # Every branch and tag, so the gate can find the tag and origin/main.
+      # This is the workflow's own commit, which matches the tag on a tag push.
+      - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
 
-      # Trusted publishing needs npm 11.5.1 or later. Node 24.5.0 and later
-      # bundle it, so use that npm rather than installing an unpinned one.
-      - name: Check npm supports trusted publishing
-        run: |
-          npm_version="$(npm --version)"
-          if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$npm_version"; then
-            echo "::error::npm $npm_version is older than 11.5.1, which trusted publishing needs; raise node-version."
-            exit 1
-          fi
+      - name: Check the tag is a release of main
+        id: verify
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+        run: node scripts/publish-gate.js verify
 
-      - name: Check the tag matches package.json
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::Tag $TAG does not match package.json version $version"
-            exit 1
-          fi
+  # bun run release pushes main and the tag at once, so CI for the release
+  # commit starts with this workflow. A run that a later push to main
+  # cancelled fails here; re-run it, then re-run this workflow's failed jobs.
+  ci:
+    name: Wait for CI on main
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      # The release preflight already ran the full checks; this is a smoke test.
-      - name: Run both CLIs
-        run: |
-          node bin/story.js --version
-          node skills/story-maintenance/scripts/story.js --help > /dev/null
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
 
-      - name: Install and run the packed tarball
-        run: node scripts/check-package.js
+      - name: Wait for the CI run of the release commit to pass
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.verify.outputs.sha }}
+        run: node scripts/publish-gate.js ci "$RELEASE_SHA"
 
-      - name: Publish to npm
-        run: |
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
-          if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
-            echo "$name@$version is already on npm; nothing to publish."
-            exit 0
-          fi
-          npm publish
-
+  # Builds while the ci job waits. The archives stay workflow artifacts until
+  # release-assets, which also needs ci.
   binaries:
     name: Binary ${{ matrix.target }}
+    needs: verify
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     permissions:
@@ -101,15 +116,15 @@ jobs:
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
           - { target: windows-x64, runner: windows-latest }
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.verify.outputs.tag }}
     defaults:
       run:
         shell: bash
     steps:
-      - name: Check out the release tag
+      - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
       - name: Set up Bun
@@ -142,7 +157,7 @@ jobs:
           if-no-files-found: error
 
   release-assets:
-    needs: binaries
+    needs: [verify, ci, binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -151,12 +166,12 @@ jobs:
       id-token: write
       attestations: write
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.verify.outputs.tag }}
     steps:
-      - name: Check out the release tag
+      - name: Check out the release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
       - name: Set up Node
@@ -196,8 +211,8 @@ jobs:
       # so `gh attestation verify <file> --repo danjdewhurst/story-skills`
       # proves a download was built by this workflow from this repository.
       # The attestation names the run's ref and commit, so it is made only
-      # when the run is on the release tag. A manual run from a branch builds
-      # the tag but would attest the branch; dispatch it on the tag instead:
+      # when the run is on the release tag. A manual run on main builds the
+      # tag but would attest main; dispatch it on the tag instead:
       # `gh workflow run publish.yml --ref vX.Y.Z -f tag=vX.Y.Z`.
       - name: Check the run is on the release tag
         id: provenance
@@ -240,18 +255,82 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # The only job that can publish to npm. The npm environment admits only v*
+  # tags and main, and it runs only after the gate, the binaries, and the
+  # release assets have all passed.
+  publish:
+    name: Publish to npm
+    needs: [verify, ci, release-assets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG: ${{ needs.verify.outputs.tag }}
+    steps:
+      - name: Check out the release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Trusted publishing needs npm 11.5.1 or later. Node 24.5.0 and later
+      # bundle it, so use that npm rather than installing an unpinned one.
+      - name: Check npm supports trusted publishing
+        run: |
+          npm_version="$(npm --version)"
+          if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$npm_version"; then
+            echo "::error::npm $npm_version is older than 11.5.1, which trusted publishing needs; raise node-version."
+            exit 1
+          fi
+
+      - name: Check the tag matches package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match package.json version $version"
+            exit 1
+          fi
+
+      # CI passed on this commit (the ci job); this is a smoke test.
+      - name: Run both CLIs
+        run: |
+          node bin/story.js --version
+          node skills/story-maintenance/scripts/story.js --help > /dev/null
+
+      - name: Install and run the packed tarball
+        run: node scripts/check-package.js
+
+      - name: Publish to npm
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
+            echo "$name@$version is already on npm; nothing to publish."
+            exit 0
+          fi
+          npm publish
+
   # Needs a HOMEBREW_TAP_DEPLOY_KEY secret: the private half of an SSH deploy
   # key with write access to danjdewhurst/homebrew-tap, and to nothing else.
   # Without it the job says so and succeeds, and the formula can be updated
   # by hand.
   homebrew:
-    needs: release-assets
+    needs: [verify, release-assets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     env:
-      TAG: ${{ inputs.tag || github.ref_name }}
+      TAG: ${{ needs.verify.outputs.tag }}
     steps:
       - name: Check for the tap deploy key
         id: token
@@ -265,11 +344,11 @@ jobs:
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check out the release tag
+      - name: Check out the release commit
         if: steps.token.outputs.present == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
       - name: Set up Node

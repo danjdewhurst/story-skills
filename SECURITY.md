@@ -36,6 +36,8 @@ confirmed issues before disclosing them.
 npm releases are published with
 [npm provenance](https://docs.npmjs.com/generating-provenance-statements),
 shown on the package page and checked by `npm audit signatures`.
+They are published only from a release tag on a commit on `main`
+whose CI run passed, by a job in the protected `npm` environment.
 
 The standalone binaries and their `story-skills_<version>_checksums.txt`
 carry a signed build provenance attestation from releases after 0.21.0.
