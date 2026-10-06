@@ -300,14 +300,21 @@ function timelinePage(site) {
     body.push(`<h2>${label(site, "codex-undated")}</h2>\n<div class="scroll"><table>${head}<tbody>\n${timeline.undated.map(row).join("\n")}\n</tbody></table></div>`);
   }
   if (timeline.pov.length > 0) {
-    // Lengths and shares in the book's count unit, as on the progress page.
-    // The timeline view totals words, so a book counted in characters sums
-    // each point of view's chapters again.
+    // Lengths, shares, and order in the book's count unit, as on the
+    // progress page. The timeline view totals words, so a book counted in
+    // characters sums each point of view's chapters again and re-sorts them,
+    // keeping the view's order for ties.
     const characterBook = site.project.unit.name === "characters";
-    const length = (entry) => (characterBook ? site.project.chapters.filter((chapter) => (chapter.pov || "unspecified") === entry.pov).reduce((sum, chapter) => sum + chapter.count, 0) : entry.words);
+    const characters = new Map();
+    for (const chapter of site.project.chapters) {
+      const key = chapter.pov || "unspecified";
+      characters.set(key, (characters.get(key) ?? 0) + chapter.count);
+    }
+    const length = (entry) => (characterBook ? characters.get(entry.pov) ?? 0 : entry.words);
     const total = timeline.pov.reduce((sum, entry) => sum + length(entry), 0);
     const share = (entry) => (characterBook ? (total === 0 ? 0 : Math.round((length(entry) * 100) / total)) : Math.round(entry.share));
-    body.push(`<h2>${label(site, "codex-point-of-view")}</h2>\n<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", characterBook ? "codex-character-count" : "codex-words", "codex-share"])}</tr></thead><tbody>\n${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${length(entry)}</td><td>${share(entry)}%</td></tr>`).join("\n")}\n</tbody></table>`);
+    const povs = characterBook ? [...timeline.pov].sort((left, right) => length(right) - length(left) || right.chapters - left.chapters) : timeline.pov;
+    body.push(`<h2>${label(site, "codex-point-of-view")}</h2>\n<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", characterBook ? "codex-character-count" : "codex-words", "codex-share"])}</tr></thead><tbody>\n${povs.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${length(entry)}</td><td>${share(entry)}%</td></tr>`).join("\n")}\n</tbody></table>`);
   }
   if (timeline.presence.length > 0) {
     const died = (entry) => (site.spoilers && entry.died !== null ? label(site, "codex-dies-in-chapter", { n: entry.died }) : "");

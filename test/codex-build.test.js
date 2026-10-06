@@ -220,7 +220,8 @@ describe("build --format codex", () => {
     const chapter = path.join(root, "chapters", "chapter-01.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("number: 1\n", "number: 1\ntarget-characters: 100\n"), "utf8");
     const second = path.join(root, "chapters", "chapter-02.md");
-    fs.writeFileSync(second, fs.readFileSync(second, "utf8").replace("pov: mara\n", ""), "utf8");
+    // Chapter 2 has fewer words than chapter 1 but more characters.
+    fs.writeFileSync(second, fs.readFileSync(second, "utf8").replace("pov: mara\n", "").replace("The tide went out without Tobias.", "Notwithstanding, Tobias disappeared incomprehensibly."), "utf8");
     // A session logged before the book was counted in characters is left out.
     fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2020-05-01\n    words: 10\n  - date: 2020-05-02\n    words: 12\n    characters: 40\n---\n\n# Progress Log\n", "utf8");
     const site = readSite(buildBook(root, { format: "codex" }).outFile);
@@ -228,11 +229,11 @@ describe("build --format codex", () => {
     expect(site["progress.html"]).toContain('<tr><th scope="row">総文字数</th>');
     expect(site["progress.html"]).toContain("<th>文字数</th><th>目標</th>");
     expect(site["progress.html"]).toMatch(/<td>100 \(\d+%\)<\/td>/);
-    // The timeline's point-of-view table counts and shares characters too:
-    // by words the shares would be 57% and 43%.
+    // The timeline's point-of-view table counts, shares, and orders by
+    // characters too: by words Mara would lead with 67%.
     expect(site["timeline.html"]).toContain("<th>章</th><th>文字数</th>");
     expect(site["timeline.html"]).not.toContain("語数");
-    expect(site["timeline.html"]).toContain('<a href="characters/mara.html">Mara &lt;Keeper&gt;</a></td><td>1</td><td>39</td><td>58%</td></tr>\n<tr><td>未指定</td><td>1</td><td>28</td><td>42%</td>');
+    expect(site["timeline.html"]).toContain('<tbody>\n<tr><td>未指定</td><td>1</td><td>50</td><td>56%</td></tr>\n<tr><td><a href="characters/mara.html">Mara &lt;Keeper&gt;</a></td><td>1</td><td>39</td><td>44%</td></tr>\n</tbody>');
   });
 
   test("refuses a folder that holds other files, the project root, and a file", () => {
