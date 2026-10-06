@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { formatNames } from "../src/names.js";
+import { checkNames, formatNames } from "../src/names.js";
 import { createEntity, createStoryProject, namesReport } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -53,6 +53,10 @@ describe("story names", () => {
       "\"Ilyana\" looks like character ilya-venn (Ilya Venn)"
     ]);
     expect(formatNames(report)).toBe("Maro: check\nSaltmarch: check\nMilo: check\nZander: clear\nIlyana: check\nBo: clear\n");
+  });
+
+  test("checkNames skips blank candidates and trims the rest", () => {
+    expect(checkNames(["", "  ", " Bo "], []).results).toEqual([{ name: "Bo", status: "clear", clashes: [], lookalikes: [], initials: [] }]);
   });
 
   test("the CLI requires a name and exits 1 on a clash", () => {

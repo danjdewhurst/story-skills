@@ -356,7 +356,12 @@ describe("exit codes with --json", () => {
   for (const [name, args] of Object.entries(FINDINGS_ARGS).filter(([command]) => JSON_COMMANDS.includes(command))) {
     test(`${name} --json exits 1 on findings`, () => {
       const root = newProject();
-      if (name !== "names") {
+      if (name === "compare") {
+        // As in the text run: compare refuses a broken chapter outright, so
+        // a broken progress log is the finding.
+        fs.cpSync(root, path.join(root, "..", "clean"), { recursive: true });
+        fs.writeFileSync(path.join(root, "progress.md"), "---\na: 1\na: 2\n---\n", "utf8");
+      } else if (name !== "names") {
         breakChapter(root);
       }
       const result = invokeJson(root, args);

@@ -15,7 +15,7 @@ import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
-import { formatPasses } from "./passes.js";
+import { DEFAULT_PASSES, formatPasses, nextPass, passChecks } from "./passes.js";
 import { formatProgress } from "./progress.js";
 import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
@@ -333,9 +333,12 @@ export const COMMANDS = [
       "review-copy labels to the current paragraphs"
     ],
     project: "positional",
-    options: ["ref", "against", "anchor"],
+    options: ["ref", "against", "anchor", "json"],
     run({ parsed, io, cwd, root, overrides }) {
       const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "compare", compareData(comparison));
+      }
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
     }
@@ -434,9 +437,14 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["out"],
+    options: ["out", "json"],
     run({ parsed, io, root }) {
-      const result = diagramProject(root(), { kind: parsed.positionals[1], out: parsed.options.out });
+      const kind = parsed.positionals[1];
+      const result = diagramProject(root(), { kind, out: parsed.options.out });
+      if (wantsJson(parsed)) {
+        const outFile = result.outFile ?? null;
+        return reportJson(io, "diagram", { ...result, kind, outFile }, { writes: outFile === null ? [] : [outFile] });
+      }
       if (result.ok) {
         io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
         return 0;
@@ -454,8 +462,13 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: Infinity,
+    options: ["json"],
     run({ parsed, io, cwd, root, overrides }) {
       const report = applySeverity(namesReport(root(), nameWords(parsed, 1, cwd, "names")), overrides);
+      if (wantsJson(parsed)) {
+        const { results, ...rest } = report;
+        return reportJson(io, "names", { ...rest, names: results });
+      }
       io.stdout.write(formatNames(report));
       return reportResult(io, report, "Names checked", "Name check failed");
     }
@@ -544,20 +557,29 @@ export const COMMANDS = [
       "mark a pass"
     ],
     project: "positional",
-    options: ["init", "start", "done"],
+    options: ["init", "start", "done", "json"],
     run({ parsed, io, root }) {
-      const result = projectPasses(root(), {
+      const projectRoot = root();
+      const result = projectPasses(projectRoot, {
         init: isTruthy(parsed.options.init),
         start: parsed.options.start,
         done: parsed.options.done
       });
+      const where = shellWord(displayPath(parsed));
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "passes",
+          ok: true,
+          data: passesData(result, where),
+          writes: result.changed ? [path.join(projectRoot, "story.md")] : []
+        });
+      }
       for (const note of result.notes ?? []) {
         io.stderr.write(`note: ${note}\n`);
       }
       if (result.changed) {
         io.stdout.write("Updated revision-passes in story.md\n");
       }
-      const where = shellWord(displayPath(parsed));
       io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
       return 0;
     }
@@ -749,9 +771,13 @@ export const COMMANDS = [
     usage: "synopsis [path]",
     summary: ["Build a deterministic 1- or 3-page synopsis from arcs"],
     project: "positional",
-    options: ["pages", "out"],
+    options: ["pages", "out", "json"],
     run({ parsed, io, root }) {
       const result = synopsisBook(root(), { pages: parsed.options.pages, out: parsed.options.out });
+      if (wantsJson(parsed)) {
+        const outFile = result.outFile ?? null;
+        return writeJsonResult(io, { command: "synopsis", ok: true, data: { ...result, outFile }, writes: outFile === null ? [] : [outFile] });
+      }
       if (result.outFile === undefined) {
         io.stdout.write(result.text);
       } else {
@@ -966,6 +992,40 @@ function reportCheck(parsed, io, command, result, successMessage, failureMessage
 function reportJson(io, command, result, { writes = [], passage = false } = {}) {
   const diagnostics = diagnosticsFrom(result, command).map((entry) => (passage && entry.file === null ? { ...entry, file: STDIN_LABEL } : entry));
   return writeJsonResult(io, { command, ok: result.ok, data: resultData(result), diagnostics, writes });
+}
+
+// story compare --json: both modes, and every chapter and label in them,
+// have the same keys, so a field the mode or entry lacks is null.
+function compareData(comparison) {
+  const anchors = comparison.anchors !== undefined;
+  return {
+    ...comparison,
+    mode: anchors ? "anchors" : "chapters",
+    chapters: anchors ? null : comparison.chapters.map((chapter) => ({ ...chapter, movedFrom: chapter.movedFrom ?? null })),
+    beforeChapters: comparison.beforeChapters ?? null,
+    afterChapters: comparison.afterChapters ?? null,
+    beforeWords: comparison.beforeWords ?? null,
+    afterWords: comparison.afterWords ?? null,
+    anchors: anchors ? comparison.anchors.map((entry) => ({ to: null, similarity: null, excerpt: null, ...entry })) : null
+  };
+}
+
+// story passes --json: each recorded pass with the focus and check commands
+// of a default pass (null for a custom one), pointed at the project as the
+// text output points them.
+function passesData(result, where) {
+  const defaults = new Map(DEFAULT_PASSES.map((entry) => [entry.pass, entry]));
+  const passes = result.passes.map((entry) => {
+    const known = defaults.get(entry.pass);
+    return { pass: entry.pass, status: entry.status, focus: known?.focus ?? null, checks: known ? passChecks(known, where) : null };
+  });
+  return {
+    passes,
+    done: result.passes.filter((entry) => entry.status === "done").length,
+    next: nextPass(result.passes)?.pass ?? null,
+    changed: result.changed,
+    notes: result.notes ?? []
+  };
 }
 
 function checkCounts(result) {
