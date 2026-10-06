@@ -14,14 +14,16 @@
 // host target's executable before archiving it: `--version` must print the
 // package version, and `validate` must pass on an example project. Archives land in
 // dist/binaries/ unless --out says otherwise. Needs bun and tar; the
-// Windows zip is written with the CLI's own zip writer.
+// Windows zip is written with the CLI's own zip writer, then read back with
+// node:zlib to check it.
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { writeZip } from "../src/packaging.js";
+import { inflateRawSync } from "node:zlib";
+import { crc32, writeZip } from "../src/packaging.js";
 import { repoRoot } from "./bun-pin.js";
 
 export const PACKAGE_NAME = "story-skills";
@@ -130,6 +132,20 @@ export function smokeTest(executable, version, spawn = spawnSync) {
   }
 }
 
+// Reads back a one-entry zip from the zip writer before it is published.
+// The writer's deflate is the CLI's own, so the entry must inflate, with
+// node:zlib, to exactly `content`, under `name` and with its CRC.
+export function verifyZip(archive, name, content) {
+  const zip = fs.readFileSync(archive);
+  const nameLength = zip.readUInt16LE(26);
+  const start = 30 + nameLength + zip.readUInt16LE(28);
+  const body = zip.subarray(start, start + zip.readUInt32LE(18));
+  const unpacked = zip.readUInt16LE(8) === 8 ? inflateRawSync(body) : body;
+  if (zip.readUInt32LE(0) !== 0x04034b50 || zip.toString("utf8", 30, 30 + nameLength) !== name || zip.readUInt32LE(14) !== crc32(content) || !unpacked.equals(content)) {
+    throw new Error(`${archive} does not unpack to ${name}`);
+  }
+}
+
 // Compiles and archives one target, and returns its archive's name and hash.
 // `spawn` stands in for child_process.spawnSync, so tests can build without
 // compiling anything.
@@ -145,7 +161,9 @@ export function buildTarget(target, version, out, { smoke = false, spawn = spawn
     const archive = path.join(out, archiveName(version, target));
     fs.rmSync(archive, { force: true });
     if (target.os === "windows") {
-      writeZip(archive, [{ name: executable, content: fs.readFileSync(path.join(work, executable)) }]);
+      const content = fs.readFileSync(path.join(work, executable));
+      writeZip(archive, [{ name: executable, content }]);
+      verifyZip(archive, executable, content);
     } else {
       run("tar", ["-czf", archive, executable], work, spawn);
     }

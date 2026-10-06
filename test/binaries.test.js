@@ -1,14 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { TARGETS, archiveName, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeTest } from "../scripts/build-binaries.js";
+import { TARGETS, archiveName, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeTest, verifyZip } from "../scripts/build-binaries.js";
 import { formula, parseChecksums } from "../scripts/homebrew-formula.js";
+import { writeZip } from "../src/packaging.js";
 import { VERSION } from "../src/version.js";
 import { makeTempDir } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const readRepo = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 const HASH = (digit) => String(digit).repeat(64);
+// Bytes deflate cannot shrink, the same on every run.
+const noise = (blocks) => Buffer.concat(Array.from({ length: blocks }, (_, index) => crypto.createHash("sha256").update(String(index)).digest()));
 
 describe("standalone binaries (#296)", () => {
   test("every release target has an archive name the formula and release share", () => {
@@ -52,6 +57,31 @@ describe("standalone binaries (#296)", () => {
     let calls = 0;
     const failingValidate = () => (calls++ === 0 ? { status: 0, stdout: `${VERSION}\n` } : { status: 1, stdout: "", stderr: "boom" });
     expect(() => smokeTest("story", VERSION, failingValidate)).toThrow("validate");
+  });
+
+  test("the Windows zip is read back and must unpack to the executable (#589)", () => {
+    const dir = makeTempDir();
+    const archive = path.join(dir, "story.zip");
+    // Compressible, so the entry is deflated, with an incompressible tail.
+    const executable = Buffer.concat([Buffer.from("MZ story executable ".repeat(4000)), noise(128)]);
+    writeZip(archive, [{ name: "story.exe", content: executable }]);
+    expect(fs.readFileSync(archive).readUInt16LE(8)).toBe(8);
+    expect(() => verifyZip(archive, "story.exe", executable)).not.toThrow();
+    expect(() => verifyZip(archive, "story", executable)).toThrow(`${archive} does not unpack to story`);
+    expect(() => verifyZip(archive, "story.exe", Buffer.from("other"))).toThrow("does not unpack to story.exe");
+
+    // A wrong byte in the deflated data fails to inflate or unpacks to
+    // something else.
+    const zip = fs.readFileSync(archive);
+    zip[100] ^= 0xff;
+    fs.writeFileSync(archive, zip);
+    expect(() => verifyZip(archive, "story.exe", executable)).toThrow();
+
+    // A stored entry is compared as it is.
+    const random = noise(64);
+    writeZip(archive, [{ name: "story.exe", content: random }]);
+    expect(fs.readFileSync(archive).readUInt16LE(8)).toBe(0);
+    expect(() => verifyZip(archive, "story.exe", random)).not.toThrow();
   });
 
   test("the formula installs story from the release for each macOS and Linux target, and tests its version", () => {

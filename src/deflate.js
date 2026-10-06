@@ -6,7 +6,8 @@
 // byte-identical wherever it is built.
 //
 // It is the usual design, kept short: LZ77 matching over a 32 KiB window
-// with hash chains and one step of lazy matching, then Huffman coding in
+// with hash chains and one step of lazy matching, bounded as zlib bounds it
+// and by a budget that keeps crafted input linear, then Huffman coding in
 // blocks of up to BLOCK_SYMBOLS symbols, each sent with the fixed codes or
 // its own dynamic codes, whichever is smaller.
 import { Buffer } from "node:buffer";
@@ -15,8 +16,19 @@ const WINDOW_SIZE = 32768;
 const WINDOW_MASK = WINDOW_SIZE - 1;
 const MIN_MATCH = 3;
 const MAX_MATCH = 258;
-// How many earlier positions with the same hash each match search tries.
+// How many earlier positions with the same hash a match search tries.
 const MAX_CHAIN = 256;
+// A match this long ends the search, and is taken without looking a byte
+// ahead.
+const NICE_MATCH = 128;
+// While the current match is this long, the search a byte ahead tries only
+// a quarter of the chain.
+const GOOD_MATCH = 32;
+// Every input byte adds this many tries to a budget that each candidate
+// tried takes one from, so input crafted to fill the hash chains with near
+// misses still costs linear time: at most TRIES_PER_BYTE tries a byte, plus
+// one chain, each comparing at most MAX_MATCH bytes.
+const TRIES_PER_BYTE = 16;
 // A three-byte match further back than this costs more bits than the three
 // literals it replaces.
 const FAR_MATCH = 4096;
@@ -61,22 +73,29 @@ const FIXED_LITERAL_CODES = canonicalCodes(FIXED_LITERAL_LENGTHS);
 const FIXED_DISTANCE_CODES = canonicalCodes(FIXED_DISTANCE_LENGTHS);
 
 // Compresses a Buffer or Uint8Array to a raw deflate stream (no zlib header
-// or checksum), as a ZIP entry holds it.
-export function deflateRaw(data) {
+// or checksum), as a ZIP entry holds it. The options are for tests:
+// `blockSymbols`, `codeBits` (at least 9), and `codeLengthBits` (at least 5)
+// lower the limits to reach paths real input rarely takes, and every setting
+// still gives a valid stream; `stats` gets the candidates tried (`tries`)
+// and each block's type (`blocks`).
+export function deflateRaw(data, { blockSymbols = BLOCK_SYMBOLS, codeBits = MAX_CODE_BITS, codeLengthBits = MAX_CODE_LENGTH_BITS, stats = {} } = {}) {
   const length = data.length;
   const writer = bitWriter(length);
+  const limits = { codeBits, codeLengthBits };
+  stats.blocks = [];
   const head = new Int32Array(HASH_MASK + 1).fill(-1);
   const prev = new Int32Array(WINDOW_SIZE);
   // Each symbol of the current block: a literal byte (distance 0) or a match
   // length and distance.
   const block = {
-    values: new Uint16Array(BLOCK_SYMBOLS),
-    distances: new Uint16Array(BLOCK_SYMBOLS),
+    values: new Uint16Array(blockSymbols),
+    distances: new Uint16Array(blockSymbols),
     count: 0,
     literals: new Array(286).fill(0),
     distanceCodes: new Array(30).fill(0)
   };
   let foundDistance = 0;
+  let tries = 0;
 
   const hashAt = (position) => ((data[position] << 10) ^ (data[position + 1] << 5) ^ data[position + 2]) & HASH_MASK;
 
@@ -89,16 +108,19 @@ export function deflateRaw(data) {
   };
 
   // The longest earlier match for the bytes at position, among the positions
-  // inserted so far; sets foundDistance. Every candidate is within the
-  // window, so its prev entry has not been overwritten yet.
-  const longestMatch = (position) => {
+  // inserted so far, trying at most `chain` of them; sets foundDistance.
+  // Every candidate is within the window, so its prev entry has not been
+  // overwritten yet.
+  const longestMatch = (position, chain) => {
     if (position + MIN_MATCH > length) {
       return 0;
     }
     const limit = Math.min(MAX_MATCH, length - position);
+    const enough = Math.min(NICE_MATCH, limit);
     let best = 0;
     let candidate = head[hashAt(position)];
-    for (let chain = MAX_CHAIN; candidate >= 0 && position - candidate <= WINDOW_SIZE && chain > 0; chain -= 1) {
+    for (let left = Math.min(chain, TRIES_PER_BYTE * position + MAX_CHAIN - tries); left > 0 && candidate >= 0 && position - candidate <= WINDOW_SIZE; left -= 1) {
+      tries += 1;
       if (data[candidate + best] === data[position + best]) {
         let run = 0;
         while (run < limit && data[candidate + run] === data[position + run]) {
@@ -107,7 +129,7 @@ export function deflateRaw(data) {
         if (run > best) {
           best = run;
           foundDistance = position - candidate;
-          if (best === limit) {
+          if (best >= enough) {
             break;
           }
         }
@@ -118,8 +140,8 @@ export function deflateRaw(data) {
   };
 
   const emit = (value, distance, symbol) => {
-    if (block.count === BLOCK_SYMBOLS) {
-      writeBlock(writer, block, false);
+    if (block.count === blockSymbols) {
+      stats.blocks.push(writeBlock(writer, block, false, limits));
     }
     block.values[block.count] = value;
     block.distances[block.count] = distance;
@@ -133,15 +155,14 @@ export function deflateRaw(data) {
   const emitMatch = (matchLength, distance) => emit(matchLength, distance, 257 + LENGTH_CODE[matchLength]);
 
   // One step of lazy matching: a match is put off by a byte when the next
-  // position has a longer one. A match of the greatest length is taken
-  // straight away.
+  // position has a longer one.
   let position = 0;
-  let matchLength = longestMatch(0);
+  let matchLength = longestMatch(0, MAX_CHAIN);
   let matchDistance = foundDistance;
   while (position < length) {
     insert(position);
-    if (matchLength > 0 && matchLength < MAX_MATCH) {
-      const nextLength = longestMatch(position + 1);
+    if (matchLength > 0 && matchLength < NICE_MATCH) {
+      const nextLength = longestMatch(position + 1, matchLength >= GOOD_MATCH ? MAX_CHAIN >> 2 : MAX_CHAIN);
       if (nextLength > matchLength) {
         emitLiteral(data[position]);
         position += 1;
@@ -160,10 +181,11 @@ export function deflateRaw(data) {
       emitLiteral(data[position]);
       position += 1;
     }
-    matchLength = longestMatch(position);
+    matchLength = longestMatch(position, MAX_CHAIN);
     matchDistance = foundDistance;
   }
-  writeBlock(writer, block, true);
+  stats.blocks.push(writeBlock(writer, block, true, limits));
+  stats.tries = tries;
   return writer.finish();
 }
 
@@ -203,16 +225,18 @@ function bitWriter(size) {
   };
 }
 
-function writeBlock(writer, block, final) {
+// Writes the block with whichever codes make it smaller, and returns which.
+function writeBlock(writer, block, final, limits) {
   block.literals[END_OF_BLOCK] = 1;
-  const literalLengths = huffmanLengths(block.literals, MAX_CODE_BITS);
-  const distanceLengths = huffmanLengths(block.distanceCodes, MAX_CODE_BITS);
-  const header = dynamicHeader(literalLengths, distanceLengths);
+  const literalLengths = huffmanLengths(block.literals, limits.codeBits);
+  const distanceLengths = huffmanLengths(block.distanceCodes, limits.codeBits);
+  const header = dynamicHeader(literalLengths, distanceLengths, limits.codeLengthBits);
   // Extra bits cost the same under either code, so they are left out.
   const dynamicBits = header.bits + codedBits(block.literals, literalLengths) + codedBits(block.distanceCodes, distanceLengths);
   const fixedBits = codedBits(block.literals, FIXED_LITERAL_LENGTHS) + codedBits(block.distanceCodes, FIXED_DISTANCE_LENGTHS);
+  const type = fixedBits <= dynamicBits ? "fixed" : "dynamic";
   writer.write(final ? 1 : 0, 1);
-  if (fixedBits <= dynamicBits) {
+  if (type === "fixed") {
     writer.write(1, 2);
     writeSymbols(writer, block, FIXED_LITERAL_CODES, FIXED_LITERAL_LENGTHS, FIXED_DISTANCE_CODES, FIXED_DISTANCE_LENGTHS);
   } else {
@@ -223,6 +247,7 @@ function writeBlock(writer, block, final) {
   block.count = 0;
   block.literals.fill(0);
   block.distanceCodes.fill(0);
+  return type;
 }
 
 function writeSymbols(writer, block, literalCodes, literalLengths, distanceCodes, distanceLengths) {
@@ -253,7 +278,7 @@ function codedBits(frequencies, lengths) {
 
 // Section 3.2.7: a dynamic block opens with its code lengths, run-length
 // coded and then Huffman coded themselves.
-function dynamicHeader(literalLengths, distanceLengths) {
+function dynamicHeader(literalLengths, distanceLengths, codeLengthBits) {
   const literalCount = lastUsed(literalLengths) + 1;
   const distanceCount = lastUsed(distanceLengths) + 1;
   const items = runLengths([...literalLengths.slice(0, literalCount), ...distanceLengths.slice(0, distanceCount)]);
@@ -261,7 +286,7 @@ function dynamicHeader(literalLengths, distanceLengths) {
   for (const [symbol] of items) {
     frequencies[symbol] += 1;
   }
-  const lengths = huffmanLengths(frequencies, MAX_CODE_LENGTH_BITS);
+  const lengths = huffmanLengths(frequencies, codeLengthBits);
   const codes = canonicalCodes(lengths);
   let orderCount = CODE_LENGTH_ORDER.length;
   while (orderCount > 4 && lengths[CODE_LENGTH_ORDER[orderCount - 1]] === 0) {
