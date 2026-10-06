@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { isInsideGitDirectory, readTextFile } from "../src/files.js";
+import { isGitDirectoryName, isInsideGitDirectory, readTextFile } from "../src/files.js";
 import {
   computeWordCounts,
   createEntity,
@@ -469,28 +469,33 @@ describe("interrupted add (#202)", () => {
 describe("generated output and new projects stay out of .git", () => {
   // A story repository whose project is the repository root, as the
   // draft-next-chapter workflow checks one out.
-  function gitProject() {
-    const root = newProject("Git Kept");
+  function gitProject(cwd = makeTempDir()) {
+    const root = createStoryProject({ cwd, title: "Git Kept" }).root;
     createEntity(root, { kind: "chapter", name: "Opening" });
     fs.mkdirSync(path.join(root, ".git"));
     fs.writeFileSync(path.join(root, ".git", "config"), "[core]\n\tbare = false\n");
     return root;
   }
 
-  test("--out inside .git is refused for every command that writes one, dry run or not", () => {
+  test("--out inside .git is refused for every command that writes one, dry run or not, relative or absolute", () => {
     const root = gitProject();
-    for (const argv of [
-      ["export", ".", "--out", ".git/config"],
-      ["export", ".", "--out", ".git/config", "--dry-run"],
-      ["build", ".", "--format", "html", "--out", ".git/hooks/book.html"],
-      ["build", ".", "--format", "codex", "--out", ".git/codex"],
-      ["synopsis", ".", "--out", ".git/synopsis.md"],
-      ["diagram", "relationships", "--path", ".", "--out", ".git/relationships.mmd"],
-      ["export", ".", "--out", path.join(root, ".git", "config")]
+    const absolute = (file) => path.join(root, ".git", file);
+    for (const [command, file, ...rest] of [
+      ["export", "config"],
+      ["build", "hooks/book.html", "--format", "html"],
+      ["build", "codex", "--format", "codex"],
+      ["synopsis", "synopsis.md"],
+      ["diagram", "relationships.mmd"]
     ]) {
-      const result = invoke(root, argv);
-      expect(result.code, argv.join(" ")).toBe(4);
-      expect(result.err).toContain("it is inside a .git folder");
+      const head = command === "diagram" ? ["diagram", "relationships", "--path", "."] : [command, "."];
+      for (const out of [`.git/${file}`, absolute(file)]) {
+        for (const dryRun of [[], ["--dry-run"]]) {
+          const argv = [...head, ...rest, "--out", out, ...dryRun];
+          const result = invoke(root, argv);
+          expect(result.code, argv.join(" ")).toBe(4);
+          expect(result.err).toContain("it is inside a .git folder. Choose a path outside .git");
+        }
+      }
     }
     expect(read(root, ".git/config")).toBe("[core]\n\tbare = false\n");
     expect(listDir(root, ".git")).toEqual(["config"]);
@@ -498,26 +503,56 @@ describe("generated output and new projects stay out of .git", () => {
     expect(invoke(root, ["export", ".", "--out", "dist/book.md"]).code).toBe(0);
   });
 
-  test("a .git folder is found in any case, through a symlinked folder, and by its Windows names", () => {
+  test("a .git folder is found in any case and through a symlinked folder", () => {
     const root = gitProject();
     fs.symlinkSync(path.join(root, ".git"), path.join(root, "lnk"), "junction");
-    for (const out of [".GIT/config", "lnk/config", "sub/.git./config", "sub/.git /config", "sub/GIT~1/config"]) {
-      expect(isInsideGitDirectory(path.join(root, out)), out).toBe(true);
+    for (const out of [".GIT/config", "lnk/config", "sub/.git/x.md", "../.git/config"]) {
+      expect(isInsideGitDirectory(path.join(root, out), root), out).toBe(true);
     }
     expect(invoke(root, ["export", ".", "--out", "lnk/config"]).code).toBe(4);
     for (const out of ["dist/book.md", ".github/book.md", "dist/.gitignore", "dist/repo.git/book.md"]) {
-      expect(isInsideGitDirectory(path.join(root, out)), out).toBe(false);
+      expect(isInsideGitDirectory(path.join(root, out), root), out).toBe(false);
     }
   });
 
-  test("init and import refuse a project folder inside .git", () => {
+  test(".git., .git and GIT~1 name the .git folder on Windows only", () => {
+    for (const name of [".git", ".GIT", ".git.", ".git ", ".git. ", "GIT~1", "git~2"]) {
+      expect(isGitDirectoryName(name, "win32"), name).toBe(true);
+    }
+    expect(isGitDirectoryName(".git", "linux")).toBe(true);
+    expect(isGitDirectoryName(".Git", "darwin")).toBe(true);
+    for (const name of [".git.", ".git ", "GIT~1"]) {
+      expect(isGitDirectoryName(name, "linux"), name).toBe(false);
+    }
+    for (const name of [".github", ".gitignore", "repo.git", "git"]) {
+      expect(isGitDirectoryName(name, "win32"), name).toBe(false);
+    }
+  });
+
+  test("a book that itself sits under a folder named .git still builds to its own dist/", () => {
+    for (const parent of [[".git", "wt"], ["GIT~1"]]) {
+      const cwd = path.join(makeTempDir(), ...parent);
+      fs.mkdirSync(cwd, { recursive: true });
+      const root = gitProject(cwd);
+      expect(invoke(root, ["build", ".", "--format", "markdown"]).code, parent.join("/")).toBe(0);
+      expect(listDir(root, "dist")).toEqual(["git-kept.md"]);
+      // Its own .git is still refused.
+      expect(invoke(root, ["export", ".", "--out", ".git/config"]).code).toBe(4);
+      // A new book made from inside that folder is fine too.
+      expect(invoke(cwd, ["init", "Sibling Book"]).code).toBe(0);
+    }
+  });
+
+  test("init and import refuse a project folder inside .git, dry run or not", () => {
     const root = gitProject();
     const manuscript = path.join(makeTempDir(), "book.md");
     fs.writeFileSync(manuscript, "# Chapter 1\n\nThe tide came in.\n");
     for (const argv of [["init", "Inner", "--dir", ".git/inner"], ["import", manuscript, "--title", "Inner", "--dir", ".git/inner"]]) {
-      const result = invoke(root, argv);
-      expect(result.code, argv[0]).toBe(4);
-      expect(result.err).toContain("Refusing to create a story project inside a .git folder");
+      for (const dryRun of [[], ["--dry-run"]]) {
+        const result = invoke(root, [...argv, ...dryRun]);
+        expect(result.code, [...argv, ...dryRun].join(" ")).toBe(4);
+        expect(result.err).toContain("Refusing to create a story project inside a .git folder");
+      }
     }
     expect(listDir(root, ".git")).toEqual(["config"]);
   });

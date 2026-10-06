@@ -400,12 +400,15 @@ function isPathInside(root, target) {
   const relativePath = path.relative(root, target);
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
-var GIT_DIRECTORY_NAME = /^(?:\.git[. ]*|git~\d+)$/i;
-function isInsideGitDirectory(target) {
+function isGitDirectoryName(name, platform = process.platform) {
+  return platform === "win32" ? /^(?:\.git[. ]*|git~\d+)$/i.test(name) : name.toLowerCase() === ".git";
+}
+function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
   const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
   const real = path.join(fs.realpathSync.native(ancestor), ...missing);
-  return [resolved, real].some((candidate) => candidate.split(/[\\/]/).some((name) => GIT_DIRECTORY_NAME.test(name)));
+  const from = path.resolve(base);
+  return [[from, resolved], [fs.realpathSync.native(from), real]].some(([start, end]) => path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name)));
 }
 
 // src/findings.js
@@ -21655,7 +21658,7 @@ function createStoryProject(options) {
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
   }
-  if (isInsideGitDirectory(root)) {
+  if (isInsideGitDirectory(root, cwd)) {
     throw refusedError(`Refusing to create a story project inside a .git folder: ${root}`);
   }
   if (fs10.existsSync(root) && !options.force) {
@@ -25648,8 +25651,8 @@ function isCopyrightMatter(entry) {
 }
 var HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 function assertNotProjectSource(project, outFile) {
-  if (isInsideGitDirectory(outFile)) {
-    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Use a path such as dist/ instead`);
+  if (isInsideGitDirectory(outFile, project.root)) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
   const realRoot = fs12.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
