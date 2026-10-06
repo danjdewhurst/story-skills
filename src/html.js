@@ -346,6 +346,16 @@ export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) 
   const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
   const beforeToc = copyrightIndex === -1 ? [] : [sections[copyrightIndex]];
   const afterToc = sections.filter((_, index) => index !== copyrightIndex);
+  // The page number after each contents entry. Left to right, it floats to
+  // the right margin; vertical text runs it on after the title. A
+  // right-to-left book sets it at the left margin, on the title's last line
+  // as the float would be, without a float: WeasyPrint drops a float that
+  // follows text on a right-to-left line and does not read
+  // `float: inline-end`. The padding keeps a long title clear of it.
+  const tocPageNumbers = rtl
+    ? `.toc li { position: relative; padding-left: 2.5em; }
+.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }`
+    : `.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : "right"}; }`;
 
   return `<!DOCTYPE html>
 ${htmlRoot(book.language)}
@@ -378,7 +388,7 @@ section.front.copyright-page { break-before: page; font-size: 9pt; }
 .toc h1 { font-size: 14pt; font-weight: normal; text-align: center${type.cased ? "; font-variant: small-caps" : ""}; }
 .toc ol { list-style: none; padding: 0; }
 .toc a { color: inherit; text-decoration: none; }
-.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : rtl ? "left" : "right"}; }
+${tocPageNumbers}
 section.chapter, section.back { page: chapter; break-before: ${recto}; }
 section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
 .running-head { height: 0; margin: 0; }
