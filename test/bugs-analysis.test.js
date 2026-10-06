@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -12,7 +12,7 @@ import { analyzeChapter, chapterFindings, proseRules, similarNames } from "../sr
 import { splitSentences } from "../src/sentences.js";
 import { buildVoices, quotedSpans } from "../src/voices.js";
 import { createEntity, createStoryProject, projectProgress, proseReport, validateProject, voicesReport } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { git, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -41,10 +41,6 @@ function setStyleSheet(root, replace) {
     text = text.replace(from, to);
   }
   fs.writeFileSync(file, text, "utf8");
-}
-
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
 }
 
 const rules = (style = {}, names = []) => proseRules(style, names);

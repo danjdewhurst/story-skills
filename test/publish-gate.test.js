@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { git, gitEnv, makeTempDir } from "./helpers.js";
 import { CI_WAIT, USAGE, ciVerdict, gateDeps, main, releaseTag, verifyRelease, waitForCi } from "../scripts/publish-gate.js";
 
 // scripts/publish-gate.js guards .github/workflows/publish.yml (#544). The git
@@ -12,44 +12,36 @@ import { CI_WAIT, USAGE, ciVerdict, gateDeps, main, releaseTag, verifyRelease, w
 const SHA = "a".repeat(40);
 const OTHER = "b".repeat(40);
 
-function gitIn(dir, ...args) {
-  return execFileSync("git", ["-c", "user.name=Gate Test", "-c", "user.email=gate@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], {
-    cwd: dir,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"]
-  }).trim();
-}
-
 // main is 0.9.0, then the 1.0.0 release commit (tagged v1.0.0, and v2.0.0,
 // the wrong version), then a later commit still at 1.0.0. A side branch off
 // the release has v1.0.1, which never reached main.
 function releaseRepo() {
   const dir = makeTempDir("story-publish-gate-");
-  gitIn(dir, "init", "-q", "-b", "main");
+  git(dir, "init", "-q", "-b", "main");
   const commit = (version, message = `release ${version}`) => {
     fs.writeFileSync(path.join(dir, "package.json"), `{\n  "name": "story-skills",\n  "version": "${version}"\n}\n`);
     fs.writeFileSync(path.join(dir, "notes.txt"), `${message}\n`);
-    gitIn(dir, "add", "package.json", "notes.txt");
-    gitIn(dir, "commit", "-q", "-m", message);
-    return gitIn(dir, "rev-parse", "HEAD");
+    git(dir, "add", "package.json", "notes.txt");
+    git(dir, "commit", "-q", "-m", message);
+    return git(dir, "rev-parse", "HEAD").trim();
   };
   commit("0.9.0");
   const onMain = commit("1.0.0");
-  gitIn(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
-  gitIn(dir, "tag", "-a", "v2.0.0", "-m", "v2.0.0");
+  git(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
+  git(dir, "tag", "-a", "v2.0.0", "-m", "v2.0.0");
   const later = commit("1.0.0", "docs: after the release");
-  gitIn(dir, "update-ref", "refs/remotes/origin/main", later);
-  gitIn(dir, "checkout", "-q", "-b", "side", onMain);
+  git(dir, "update-ref", "refs/remotes/origin/main", later);
+  git(dir, "checkout", "-q", "-b", "side", onMain);
   const offMain = commit("1.0.1");
-  gitIn(dir, "tag", "-a", "v1.0.1", "-m", "v1.0.1");
-  return { dir, onMain, later, offMain, retag: (tag, sha) => gitIn(dir, "tag", "-f", "-a", tag, "-m", tag, sha) };
+  git(dir, "tag", "-a", "v1.0.1", "-m", "v1.0.1");
+  return { dir, onMain, later, offMain, retag: (tag, sha) => git(dir, "tag", "-f", "-a", tag, "-m", tag, sha) };
 }
 
 function verifyIn(dir, env) {
   const output = path.join(makeTempDir("story-gate-output-"), "output");
   fs.writeFileSync(output, "");
   const logs = [];
-  const run = (command, args) => execFileSync(command, args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const run = (command, args) => execFileSync(command, args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
   const result = verifyRelease({ env: { GITHUB_OUTPUT: output, ...env }, run, log: (line) => logs.push(line) });
   return { result, output: fs.readFileSync(output, "utf8"), logs };
 }
@@ -174,13 +166,13 @@ describe("verify checks the tagged commit", () => {
 
   test("a tag on a commit with no parent is refused", () => {
     const dir = makeTempDir("story-publish-gate-root-");
-    gitIn(dir, "init", "-q", "-b", "main");
+    git(dir, "init", "-q", "-b", "main");
     fs.writeFileSync(path.join(dir, "package.json"), '{ "version": "1.0.0" }\n');
-    gitIn(dir, "add", "package.json");
-    gitIn(dir, "commit", "-q", "-m", "first");
-    gitIn(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
-    const root = gitIn(dir, "rev-parse", "HEAD");
-    gitIn(dir, "update-ref", "refs/remotes/origin/main", root);
+    git(dir, "add", "package.json");
+    git(dir, "commit", "-q", "-m", "first");
+    git(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
+    const root = git(dir, "rev-parse", "HEAD").trim();
+    git(dir, "update-ref", "refs/remotes/origin/main", root);
     expect(() => verifyIn(dir, { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0", GITHUB_SHA: root })).toThrow(
       `could not read package.json in the parent of ${root}, so it is not a release commit:`
     );
@@ -363,7 +355,7 @@ describe("the publish-gate entry point", () => {
   test("verify returns 0 for a release of main and 1 otherwise", async () => {
     const { dir, onMain } = releaseRepo();
     const errors = [];
-    const run = (command, args) => execFileSync(command, args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const run = (command, args) => execFileSync(command, args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
     const deps = (env) => ({ env, run, log: () => {}, error: (line) => errors.push(line) });
     expect(await main(["verify"], deps({ GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0", GITHUB_SHA: onMain }))).toBe(0);
     expect(await main(["verify"], deps({ GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/feature", TAG_INPUT: "v1.0.0" }))).toBe(1);

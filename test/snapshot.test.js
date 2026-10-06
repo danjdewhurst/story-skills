@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { createEntity, createStoryProject } from "../src/story.js";
 import { listSnapshots, snapshotId, snapshotProject } from "../src/snapshots.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -221,11 +220,10 @@ describe("story compare --snapshot", () => {
 
   test("--ref stays a git ref when a snapshot has the same name", () => {
     const { cwd, root } = project();
-    const git = (...args) => execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", ...args], { cwd: root, encoding: "utf8" });
-    git("init", "-q");
-    git("add", "-A");
-    git("commit", "-qm", "one");
-    git("tag", "draft");
+    git(root, "init", "-q");
+    git(root, "add", "-A");
+    git(root, "commit", "-qm", "one");
+    git(root, "tag", "draft");
     writeChapter(root, 2, "Cut me later, then grow.");
     invoke(cwd, ["snapshot", "draft", "--path", root]);
     writeChapter(root, 2, "Cut me later, then grow again.");

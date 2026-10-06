@@ -1,15 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareChapters, formatComparison, proseParagraphs } from "../src/compare.js";
 import { compareProject, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
-
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
-}
+import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function writeChapter(root, number, body, title = `Chapter ${number}`) {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: ${title}\nnumber: ${number}\nstatus: draft`, `## Chapter Text\n\n${body}\n`);

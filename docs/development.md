@@ -341,6 +341,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 - `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes them after each test, so create test directories with it rather than `fs.mkdtempSync`, and inside the test rather than in a `describe` body.
 - `memoryIo(cwd)` is an in-memory `io` object for `runCli`, with `output()` and `error()` accessors.
 - `writeMarkdown(filePath, frontmatter, body)` writes a markdown file with frontmatter, creating parent directories.
+- `git(cwd, ...args)` runs git and returns its stdout. `gitEnv(overrides)` is the environment it runs with: no global or system config and no `GIT_*` variable from your shell, plus the test identity, `main` as the default branch, and signing turned off, so commit signing, hooks, or a pinentry prompt in your own git config cannot fail or stall a test. Run every git a test starts with it, and pass `env: gitEnv()` to a script or process that runs git itself; `test/helpers.test.js` fails on a `spawnSync("git", …)` or `execFileSync("git", …)` call without it.
 
 Most CLI tests call `runCli` directly with `memoryIo` rather than spawning a process, so they are fast and count toward coverage. Build a project in a temp directory, run commands against it, and assert on the exit code, stdout, stderr, and resulting files. Never point a test that writes files at `examples/`.
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { git, gitEnv, makeTempDir } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const WORKFLOW = fs.readFileSync(path.join(repoRoot, "templates", "github", "draft-next-chapter.yml"), "utf8");
@@ -22,10 +22,6 @@ function stepScript(name) {
   return match[1].replace(/^ {10}/gm, "");
 }
 
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8", stdio: "pipe" }).trim();
-}
-
 // A PATH holding a `story` that runs this checkout's CLI, as the workflow's
 // "Install the Story CLI" step would, and a `gh` that records its arguments
 // to $GH_LOG instead of calling GitHub.
@@ -40,11 +36,12 @@ function run(script, cwd, env) {
   const runnerTemp = env.RUNNER_TEMP ?? makeTempDir("runner-");
   const output = path.join(runnerTemp, "github-output");
   fs.writeFileSync(output, "", { flag: "a" });
-  // The shell GitHub Actions runs `run:` steps with.
+  // The shell GitHub Actions runs `run:` steps with. The steps' git commands
+  // get gitEnv() too.
   const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, STORY_DIR: ".", STORY_VERSION: "0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
+    env: { ...gitEnv(), STORY_DIR: ".", STORY_VERSION: "0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
   });
   return { ...result, output: fs.readFileSync(output, "utf8"), runnerTemp };
 }
@@ -57,7 +54,7 @@ function storyRepo() {
   git(repo, "init", "-q");
   git(repo, "add", "-A");
   git(repo, "commit", "-qm", "start");
-  return { repo, base: git(repo, "rev-parse", "HEAD") };
+  return { repo, base: git(repo, "rev-parse", "HEAD").trim() };
 }
 
 function writeChapterProse(repo, words) {
@@ -172,11 +169,12 @@ describe("draft-next-chapter guardrails (#294)", () => {
     expect(fs.existsSync(path.join(bundled.runnerTemp, "draft", "draft.bundle"))).toBe(true);
 
     // A global or system config the agent wrote (through an absolute --out)
-    // is not read.
+    // is not read. GIT_CONFIG_GLOBAL is left unset, so git would read it.
     const home = makeTempDir("home-");
     fs.writeFileSync(path.join(home, ".gitconfig"), "# Chapter 1\nnot a config line\n");
-    expect(spawnSync("git", ["status"], { cwd: repo, env: { ...process.env, HOME: home, XDG_CONFIG_HOME: home } }).status).not.toBe(0);
-    expect(run(script, repo, { BASE: base, HOME: home, XDG_CONFIG_HOME: home }).output).toContain("drafted=true\n");
+    const agentHome = { HOME: home, XDG_CONFIG_HOME: home, GIT_CONFIG_GLOBAL: undefined };
+    expect(spawnSync("git", ["status"], { cwd: repo, env: gitEnv(agentHome) }).status).not.toBe(0);
+    expect(run(script, repo, { BASE: base, ...agentHome }).output).toContain("drafted=true\n");
 
     git(repo, "checkout", "-q", "-b", "main-ish");
     const wrong = run(script, repo, { BASE: base });
@@ -192,7 +190,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => writeChapterProse(dir, 20));
       const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
       expect(result.status).toBe(0);
-      expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("draft/chapter-1");
+      expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("draft/chapter-1\n");
     });
 
     for (const [label, change, reason] of [
@@ -254,7 +252,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("draft/chapter-1 contains a merge commit");
       expect(result.stdout).toContain("Nothing was pushed");
-      expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("HEAD");
+      expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("HEAD\n");
     });
 
     test("the file check lists a merge's own changes too", () => {

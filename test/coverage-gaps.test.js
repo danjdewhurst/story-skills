@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { importManuscript } from "../src/import.js";
@@ -7,11 +6,7 @@ import { chapterFindings } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
 import { splitOpenSpeech } from "../src/voices.js";
 import { compareProject, createEntity, createStoryProject, renameEntity, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
-
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
-}
+import { git, makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function newProject(title = "Gap Story") {
   const cwd = makeTempDir();
