@@ -54,6 +54,13 @@ describe("story mentions <kind> <id>", () => {
     expect(formatMentions(report)).toContain("chapters/chapter-01.md:16:1: Captain Edran Vale: Captain Edran Vale rode in at dusk.\n");
   });
 
+  test("prints a control character in an excerpt as U+FFFD and a tab as a space", () => {
+    const root = mentionsProject();
+    chapter(root, 1, "characters:\n  - rose-hale", "Rose\twaited.\u001b]52;c;eA==\u0007");
+    const report = mentionsReport(root, { kind: "character", id: "rose-hale" });
+    expect(formatMentions(report)).toContain("chapters/chapter-01.md:12:1: Rose: Rose waited.\ufffd]52;c;eA==\ufffd\n");
+  });
+
   test("a longer name wins its span, case is as written, and listing is reported per chapter", () => {
     const root = mentionsProject();
     chapter(root, 1, "locations:\n  - vale", "Edran Vale looked down on the Vale. the vale was quiet.");
@@ -133,6 +140,22 @@ describe("story mentions <kind> <id>", () => {
     // A one-letter name that is the whole name is still a name.
     expect(mentionsReport(root, { kind: "character", id: "q" }).names).toEqual(["Q"]);
     expect(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "named-not-listed")).toEqual([]);
+  });
+
+  test("a given name of one Hangul syllable or Chinese character is a name, not an initial", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "이름", dir: "ireum", force: false, language: "ko" });
+    writeMarkdown(path.join(root, "characters", "kim-minjun.md"), "name: 김 민준\nrole: supporting\nstatus: alive", "# 김\n");
+    writeMarkdown(path.join(root, "characters", "wang-fang.md"), "name: 王 芳\nrole: supporting\nstatus: alive", "# 王\n");
+    chapter(root, 1, "", "김 씨는 웃었다. 王 走了.");
+    const kim = mentionsReport(root, { kind: "character", id: "kim-minjun" });
+    expect(kim.names).toEqual(["김 민준", "김"]);
+    expect(kim.matches.map((match) => match.text)).toEqual(["김"]);
+    expect(mentionsReport(root, { kind: "character", id: "wang-fang" }).names).toEqual(["王 芳", "王"]);
+    expect(messages(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "named-not-listed"))).toEqual([
+      "chapters/chapter-01.md names character kim-minjun (\"김\") but does not list them in characters or mentions",
+      "chapters/chapter-01.md names character wang-fang (\"王\") but does not list them in characters or mentions"
+    ]);
   });
 
   test("the command prints matches on stdout, takes --json, and rejects a bad kind or id", () => {

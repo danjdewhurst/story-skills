@@ -21,27 +21,67 @@ describe("markdown utilities", () => {
     expect(wordCount("A map ![harbor chart](map.png) hung there.")).toBe(4);
   });
 
-  test("masks link targets, URLs, and reference definitions, keeping link text, offsets, and line breaks", () => {
-    const blank = (part) => "_".repeat(part.length);
+  test("masks link targets, URLs, HTML tags, and reference definitions, keeping link text, offsets, and line breaks", () => {
+    const blank = (part) => part.replace(/[^\n]/g, "_");
     const text = [
       "![Ines](img/Ines.png) met [Ines](https://en.wikipedia.org/wiki/Ines_(name) \"Ines\") and [Ines][ines-ref].",
       "Write to <mailto:ines@example.com>, ines.achebe@example.com, or https://example.com/Ines today.",
+      "<img src=\"img/Ines.png\" alt=\"Ines\"> <a href=\"Ines.html\">Ines</a> and [the map](",
+      "maps/Ines.png \"Ines's",
+      "map\").",
       "[Ines] and [Ines][] are defined; [Ruth] is not. [^1] is a note.",
+      "",
       "[ines]: https://example.com/Ines \"Ines\"",
-      "[^1]: Ines wrote this."
+      "[p]:",
+      "img/Ines.png",
+      "'Ines'",
+      "> [q]: img/Ines.png",
+      "- item",
+      "",
+      "      [r]: img/Ines.png",
+      "# Heading",
+      "[s]: img/Ines.png",
+      "[^1]: Ines wrote this.",
+      "[Ines]: are you there?",
+      "She read the log.",
+      "[t]: Ines"
     ].join("\n");
-    const masked = maskLinkTargets(text, "_");
+    const { text: masked, references } = maskLinkTargets(text, "_");
     expect(masked.length).toBe(text.length);
     expect(masked.split("\n")).toEqual([
       `![Ines]${blank("(img/Ines.png)")} met [Ines]${blank("(https://en.wikipedia.org/wiki/Ines_(name) \"Ines\")")} and [Ines]${blank("[ines-ref]")}.`,
       `Write to ${blank("<mailto:ines@example.com>")}, ${blank("ines.achebe@example.com")}, or ${blank("https://example.com/Ines")} today.`,
-      `[${blank("Ines")}] and [${blank("Ines")}]${blank("[]")} are defined; [Ruth] is not. [^1] is a note.`,
+      `${blank("<img src=\"img/Ines.png\" alt=\"Ines\">")} ${blank("<a href=\"Ines.html\">")}Ines${blank("</a>")} and [the map]_`,
+      blank("maps/Ines.png \"Ines's"),
+      `${blank("map\")")}.`,
+      `[Ines] and [Ines]${blank("[]")} are defined; [Ruth] is not. [^1] is a note.`,
+      "",
       blank("[ines]: https://example.com/Ines \"Ines\""),
-      "[^1]: Ines wrote this."
+      blank("[p]:"),
+      blank("img/Ines.png"),
+      blank("'Ines'"),
+      blank("> [q]: img/Ines.png"),
+      "- item",
+      "",
+      blank("      [r]: img/Ines.png"),
+      "# Heading",
+      blank("[s]: img/Ines.png"),
+      "[^1]: Ines wrote this.",
+      "[Ines]: are you there?",
+      "She read the log.",
+      "[t]: Ines"
     ]);
-    // Without a definition, a bracketed name is prose; the default blank is a space.
-    expect(maskLinkTargets("[Ines] (Ines) <Ines>")).toBe("[Ines] (Ines) <Ines>");
-    expect(maskLinkTargets("[a](b)")).toBe("[a]   ");
+    // The text of a shortcut or collapsed reference whose label is defined,
+    // a line that is not a definition included.
+    const line = text.indexOf("[Ines] and");
+    const question = text.indexOf("[Ines]: are");
+    expect(references).toEqual([[line + 1, line + 5], [line + 12, line + 16], [question + 1, question + 5]]);
+    // A line of nothing but the blank, as a masked comment leaves, ends a
+    // paragraph; without a definition, a bracketed name is prose. The
+    // default blank is a space.
+    expect(maskLinkTargets("Text.\n_____\n[a]: b\n[a]").text).toBe("Text.\n_____\n      \n[a]");
+    expect(maskLinkTargets("[Ines] (Ines) <Ines").text).toBe("[Ines] (Ines) <Ines");
+    expect(maskLinkTargets("[a](b)")).toEqual({ text: "[a]   ", references: [] });
   });
 
   test("counts curly apostrophes, accents, and hyphenated words as single words", () => {
