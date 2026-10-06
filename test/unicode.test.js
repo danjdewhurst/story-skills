@@ -60,6 +60,17 @@ describe("composedText", () => {
     expect(composed.original(3, 4)).toEqual([6, 7]);
   });
 
+  test("a run whose code points change length both ways maps code point by code point", () => {
+    // U+FA6C composes to U+242EE (one unit to two) and U+2F800 to U+4E3D
+    // (two units to one), so the run keeps its length overall.
+    const text = "\ufa6c Ana \u{2f800}";
+    const composed = composedText(text);
+    expect(composed.text).toBe("\u{242ee} Ana \u4e3d");
+    expect(composed.text.length).toBe(text.length);
+    expect(composed.original(3, 6)).toEqual([2, 5]);
+    expect(wordMatcher(text)(/Ana/gu)).toEqual([[2, 5]]);
+  });
+
   test("wordMatcher finds an NFC pattern in NFD text, at offsets in the text as written", () => {
     const text = `Ask ${RENEE_NFD}.`;
     expect(wordMatcher(text)(new RegExp(RENEE, "gu"))).toEqual([[4, 4 + RENEE_NFD.length]]);
@@ -75,6 +86,14 @@ describe("names and prose in different Unicode forms", () => {
     chapter(root, 1, "characters:\n  - renee", `Cafe\u0301 talk: ${RENEE_NFD} waited.`);
     const report = mentionsReport(root, { kind: "character", id: "renee" });
     expect(report.matches.map(({ line, column, text, excerpt }) => [line, column, text, excerpt])).toEqual([[10, 13, RENEE_NFD, `Cafe\u0301 talk: ${RENEE_NFD} waited.`]]);
+  });
+
+  test("story mentions gives the column and excerpt of a name between compatibility ideographs", () => {
+    const root = project();
+    character(root, "ana", "Ana");
+    chapter(root, 1, "characters:\n  - ana", "\ufa6c Ana \u{2f800} waited.");
+    const report = mentionsReport(root, { kind: "character", id: "ana" });
+    expect(report.matches.map(({ column, text, excerpt }) => [column, text, excerpt])).toEqual([[3, "Ana", "\ufa6c Ana \u{2f800} waited."]]);
   });
 
   test("an NFD name in frontmatter finds NFC prose, and continuity sees it", () => {

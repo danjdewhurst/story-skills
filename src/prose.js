@@ -467,8 +467,10 @@ function proseParagraphs(prose) {
   // Fence lines are dropped and the code kept, as word counts and builds do.
   return withoutFenceMarkers(scanComments(String(prose), " ").text)
     .split(/\r?\n\s*\r?\n/)
-    // Drop heading lines, not the prose that follows one without a blank line.
-    .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" "))
+    // Drop ATX heading lines (one to six `#` and a space, or nothing after),
+    // not the prose that follows one without a blank line, nor a line of
+    // prose that opens with "#1".
+    .map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^[ \t]{0,3}#{1,6}(?:\s|$)/.test(line)).join(" "))
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
     .filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }

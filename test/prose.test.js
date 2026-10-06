@@ -139,6 +139,16 @@ describe("prose analysis", () => {
     expect(analysis.words).toBe(6);
   });
 
+  test("drops ATX headings only, so a line of prose that opens with # is analysed", () => {
+    const analysis = analyze("#1 on the list was Mara, she said quietly.\n\nShe ran.");
+    expect(analysis.words).toBe(11);
+    expect(analysis.paragraphs).toBe(2);
+    expect(analysis.adverbs).toEqual([{ word: "quietly", count: 1 }]);
+    const headings = analyze("# One\n###### Six\n#\n#hashtag and ####### seven\n\nText.");
+    expect(headings.words).toBe(4);
+    expect(headings.paragraphs).toBe(2);
+  });
+
   test("empty prose yields zeroed statistics", () => {
     const analysis = analyze("");
     expect(analysis.sentences).toEqual({ count: 0, mean: 0, longest: 0, spread: 0 });

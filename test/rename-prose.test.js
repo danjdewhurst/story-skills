@@ -208,6 +208,15 @@ describe("story rename --prose", () => {
     expect(err).toContain("--prose left 1 name that character ann-lee shares with another entity as written: chapters/chapter-01.md:10:16. Check them [prose-name-shared]");
   });
 
+  test("renames a name between compatibility ideographs that change length", () => {
+    const root = project();
+    const file = chapter(root, 1, "\ufa6c Edran \u{2f800} waited.");
+    const { code, out } = invoke(root, ["rename", "character", "edran-vale", "Mara Holt", "--prose"]);
+    expect(code).toBe(0);
+    expect(out).toContain("chapters/chapter-01.md:10:3: Edran → Mara\nRenamed 1 name in 1 chapter\n");
+    expect(prose(file)).toBe("\ufa6c Mara \u{2f800} waited.\n");
+  });
+
   test("is refused for chapters and scenes", () => {
     const root = project();
     chapter(root, 1, "Text.");
