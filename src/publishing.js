@@ -1,6 +1,6 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
-import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, joinNames, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
 import { chapterNumerals } from "./numerals.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
@@ -38,6 +38,39 @@ export function textDirection(language) {
   return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
 }
 
+// A name field that takes one name or a list (story.md `editor`, chapter
+// `author`), as a list of trimmed names without blanks or placeholders.
+export function nameList(value) {
+  const names = typeof value === "string" ? [value] : Array.isArray(value) ? value : [];
+  return names.filter((name) => typeof name === "string" && name.trim() !== "" && !isPlaceholder(name)).map((name) => name.trim());
+}
+
+// The title page's credit lines: the authors' names, then the editors'
+// with the `edited-by` label. A collection by one writer has the first, an
+// anthology the second, and either can be missing.
+export function creditLines(meta) {
+  const lines = [];
+  if (meta.authors.length > 0) {
+    lines.push(joinNames(meta.authors, meta.labels));
+  }
+  if (meta.editors.length > 0) {
+    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }));
+  }
+  return lines;
+}
+
+// The one name a running head or a format's author field carries: the
+// authors, or the editors of a book with no author of its own.
+export function leadNames(meta) {
+  return joinNames(meta.authors.length > 0 ? meta.authors : meta.editors, meta.labels);
+}
+
+// A chapter's byline in the book's language ("by Ben Other"), or "" for a
+// chapter without its own author.
+export function chapterByline(names, labels) {
+  return names.length === 0 ? "" : fillLabel(labels, "byline", { names: joinNames(names, labels) });
+}
+
 export function publishingMeta(data) {
   const text = (field) => (typeof data[field] === "string" && !isPlaceholder(data[field]) ? data[field].trim() : "");
   const list = (field) => (Array.isArray(data[field]) ? data[field].filter((item) => typeof item === "string" && item.trim() !== "" && !isPlaceholder(item)).map((item) => item.trim()) : []);
@@ -46,6 +79,8 @@ export function publishingMeta(data) {
   const pack = languagePack(projectLanguage(data));
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
+    // A collection's or anthology's editors, credited apart from its authors.
+    editors: nameList(data.editor),
     language: text("language") || "en",
     // "vertical" sets a Japanese or Chinese book in columns; see typesetting.js.
     writingMode: text("writing-mode") || "horizontal",
@@ -119,6 +154,7 @@ export function validatePublishing(data, errors, warnings) {
       errors.push(err("field-not-list", `story.md frontmatter field ${field} must be a list of text`, "story.md"));
     }
   }
+  validateNames(data, "editor", "story.md", errors);
   if (data.labels !== undefined) {
     if (!Array.isArray(data.labels) || !data.labels.every(isEntry)) {
       errors.push(err("field-not-list", "story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}", "story.md"));
@@ -160,7 +196,7 @@ export function validatePublishing(data, errors, warnings) {
   if (Array.isArray(data.keywords) && data.keywords.length > MAX_KEYWORDS) {
     warnings.push(warn("too-many-keywords", `story.md lists ${data.keywords.length} keywords; most retailers accept ${MAX_KEYWORDS}`, "story.md"));
   }
-  for (const field of [...SCALAR_FIELDS, "authors", "keywords", "subjects"]) {
+  for (const field of [...SCALAR_FIELDS, "authors", "editor", "keywords", "subjects"]) {
     const values = Array.isArray(data[field]) ? data[field] : [data[field]];
     if (values.some(isPlaceholder)) {
       warnings.push(warn("todo-placeholder", `story.md ${field} is still a [TODO] placeholder; builds leave it out`, "story.md"));
@@ -168,6 +204,19 @@ export function validatePublishing(data, errors, warnings) {
   }
   if (data.author !== undefined && data.authors !== undefined) {
     warnings.push(warn("author-and-authors", "story.md sets both author and authors; builds use authors", "story.md"));
+  }
+}
+
+// A name field (story.md `editor`, chapter `author`): one name as text,
+// or a list of names, none of them blank.
+export function validateNames(data, field, label, errors) {
+  const value = data[field];
+  if (value === undefined) {
+    return;
+  }
+  const names = Array.isArray(value) ? value : [value];
+  if (names.some((name) => typeof name !== "string" || name.trim() === "")) {
+    errors.push(err("field-not-text", `${label} frontmatter field ${field} must be a name or a list of names, such as ${field}: Ada Writer`, label));
   }
 }
 
@@ -214,6 +263,8 @@ export function metadataSheet(input) {
     ["Title", title],
     ["Series", series],
     ["Author(s)", meta.authors.join("; ")],
+    // Only an anthology or edited collection has an editor to list.
+    ...(meta.editors.length === 0 ? [] : [["Editor(s)", meta.editors.join("; ")]]),
     ["ISBN", meta.isbn],
     ["Publisher", meta.publisher],
     ["Publication date", meta.publicationDate],
@@ -231,7 +282,7 @@ export function metadataSheet(input) {
     ["AI disclosure", meta.aiDisclosure]
   ];
   const checks = [
-    ["Author named (`author` or `authors`)", meta.authors.length > 0],
+    ["Author named (`author` or `authors`, or an anthology's `editor`)", meta.authors.length > 0 || meta.editors.length > 0],
     ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
     ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
     ["Publication date (`publication-date`)", meta.publicationDate !== ""],

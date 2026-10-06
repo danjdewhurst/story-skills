@@ -469,18 +469,22 @@ salt-and-lantern/
    story build . --format shunn
    ```
 
-The EPUB, DOCX, HTML, print, and markdown builds give each story its own heading and table of contents entry, with the matter pages around them. The Shunn builds put the collection's title and byline on the title page, start each story on a new page under its title, and leave out the matter pages, as a manuscript submission expects. `story wordcount` lists each story's length.
+The EPUB, DOCX, HTML, print, and markdown builds give each story its own heading and table of contents entry, with the matter pages around them. The Shunn builds put the collection's title and byline on the title page, start each story on a new page under its title (and its writer's byline, when the chapter sets `author`), and leave out the matter pages, as a manuscript submission expects. `story wordcount` lists each story's length.
 
-**Anthologies.** For a book of several authors' stories, set `author` in `story.md` to the editor, and change the Shunn title page's `by` to suit:
+**Anthologies.** For a book of several writers' stories, credit the editor with `editor` in `story.md`, and each story's writer with `author` in its chapter's frontmatter:
 
 ```yaml
-author: Cara Editor
+# story.md
+editor: Cara Editor
 labels:
-  - by: Edited by
   - chapter-heading: "{title}"
+
+# chapters/chapter-02.md
+title: Salt
+author: Ben Other
 ```
 
-There is no field for a story's own author. Put the contributor's byline as the first line of the story's prose, such as `*by Ben Other*`. It then prints under the story's heading in every build, and it counts toward the word count.
+Leave `author` out of `story.md` when the editor is the book's only credit. The title pages then read `Edited by Cara Editor`, and the EPUB names the editor with the `edt` role and each story's writer as a contributor. A chapter's `author` can be a list for a story written together. Every build prints it under the story's heading, as `by Ben Other`, and it is not part of the prose, so it never counts toward the word count. `editor` is its own field, rather than a role on `author`, so a collection can name both its writer and an editor, and `author` means a writer wherever it appears. The `byline` and `edited-by` labels change the wording (see [Build labels](manuscripts.md#build-labels)), and [Story authors in collections and anthologies](manuscripts.md#story-authors-in-collections-and-anthologies) shows each build's output. The [`salt-and-lantern`](../examples/salt-and-lantern/) example is an anthology set up this way.
 
 **Linked collections.** Stories that share characters or a world can link their story projects as a series with `follows` and `precedes` (see [How a series is modelled](#how-a-series-is-modelled)), so `story series` checks their shared canon. Keep the collection project to prose and matter pages. Its stories would share one set of character and location ids, so unrelated stories with a character of the same name would collide, and `story continuity` would read the stories as one timeline.
 
@@ -488,7 +492,6 @@ There is no field for a story's own author. Put the contributor's byline as the 
 
 - No command assembles story projects into a collection. The collection's chapters are copies, so an edit to a story after assembly must be made in both projects, or the chapter imported again.
 - A build covers the whole project, so a single story's submission manuscript comes from its own project, not from the collection.
-- The EPUB and other metadata name one author or a list of co-authors. There is no editor role and no per-story author metadata.
 - Poetry and nonfiction collections are outside the story project model: the EPUB, HTML, and Shunn builds join the lines of a paragraph, so a poem loses its line breaks.
 
 ## See also

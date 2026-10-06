@@ -32,6 +32,8 @@ export default {
     "note-title": "כתיבת הערה על {label}",
     "anchor-title": "קישור אל {label}",
     by: "מאת",
+    byline: "מאת {names}",
+    "edited-by": "בעריכת {names}",
     "approximate-words": "כ־{words} מילים",
     "approximate-characters": "כ־{characters} תווים",
     "narration-opening": "{title}. מאת {authors}. בקריאת {narrator}.",

@@ -20,8 +20,8 @@ import { sortProgressions, progressionEntry } from "./progressions.js";
 import { escapeHtml, htmlRoot } from "./html.js";
 import { inlineHtml, LINE_BREAK } from "./packaging.js";
 import { typesetting } from "./typesetting.js";
-import { publishingMeta } from "./publishing.js";
-import { fillLabel, joinNames } from "./languages/index.js";
+import { chapterByline, creditLines, nameList, publishingMeta } from "./publishing.js";
+import { fillLabel } from "./languages/index.js";
 import { plainLinks, scanComments } from "./markdown.js";
 import { asArray, readMarkdown } from "./scan.js";
 
@@ -54,7 +54,8 @@ export function codexPages(project, { spoilers = false } = {}) {
     project,
     spoilers,
     title: project.title,
-    authors: joinNames(meta.authors, meta.labels),
+    // The title page's credits: the authors, then "Edited by" the editors.
+    credits: creditLines(meta),
     language: meta.language,
     // The book's build labels (see buildLabels), so the codex speaks its
     // language and story.md `labels` can reword it.
@@ -213,7 +214,7 @@ function indexPage(site) {
   const synopsis = typeof project.story.data.synopsis === "string" ? project.story.data.synopsis.trim() : "";
   const body = [
     `<h1>${escapeHtml(site.title)}</h1>`,
-    site.authors === "" ? "" : `<p class="byline">${escapeHtml(site.authors)}</p>`,
+    ...site.credits.map((line) => `<p class="byline">${escapeHtml(line)}</p>`),
     synopsis === "" || !site.spoilers ? "" : `<p>${inlineHtml(synopsis)}</p>`,
     `<p class="note">${site.spoilers ? label(site, "codex-note-spoilers") : label(site, "codex-note-safe", { flag: "<code>--spoilers</code>" })}</p>`,
     `<table class="facts"><tbody>\n${counts.map(([key, count]) => `<tr><th scope="row">${label(site, key)}</th><td>${count}</td></tr>`).join("\n")}\n</tbody></table>`,
@@ -387,7 +388,9 @@ function progressPage(site) {
     const rows = site.chapters.map((chapter) => {
       const count = characterBook ? chapter.count : chapter.wordCount;
       const goal = targets.get(chapter.id);
-      return `<tr><td>${chapterLabel(site, chapter.id)}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
+      // A story's own author in a collection or anthology (chapter `author`).
+      const byline = chapterByline(nameList(chapter.frontmatter?.author), site.labels);
+      return `<tr><td>${chapterLabel(site, chapter.id)}${byline === "" ? "" : ` <span class="byline">${escapeHtml(byline)}</span>`}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
     });
     body.push(`<h2>${label(site, "codex-chapters")}</h2>\n<div class="scroll"><table><thead><tr>${columns(site, ["codex-chapter", "codex-status", "codex-pov", countColumn, "codex-target"])}</tr></thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
   }

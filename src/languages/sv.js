@@ -35,6 +35,8 @@ export default {
     "note-title": "Skriv en anteckning om {label}",
     "anchor-title": "Länk till {label}",
     by: "av",
+    byline: "av {names}",
+    "edited-by": "Redigerad av {names}",
     "approximate-words": "Cirka {words} ord",
     "approximate-characters": "Cirka {characters} tecken",
     "narration-opening": "{title}. Skriven av {authors}. Uppläst av {narrator}.",

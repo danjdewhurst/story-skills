@@ -28,6 +28,8 @@ export default {
     "note-title": "Scrivete una nota su {label}",
     "anchor-title": "Link a {label}",
     by: "di",
+    byline: "di {names}",
+    "edited-by": "A cura di {names}",
     "approximate-words": "Circa {words} parole",
     "approximate-characters": "Circa {characters} caratteri",
     "narration-opening": "{title}. Scritto da {authors}. Letto da {narrator}.",

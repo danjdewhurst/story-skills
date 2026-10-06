@@ -30,6 +30,8 @@ export default {
     "note-title": "نوشتن یادداشت برای {label}",
     "anchor-title": "پیوند به {label}",
     by: "نوشتهٔ",
+    byline: "نوشتهٔ {names}",
+    "edited-by": "به کوشش {names}",
     "approximate-words": "حدود {words} واژه",
     "approximate-characters": "حدود {characters} نویسه",
     "narration-opening": "{title}. نوشتهٔ {authors}. با صدای {narrator}.",

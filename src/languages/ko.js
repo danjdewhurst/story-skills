@@ -34,6 +34,8 @@ export default {
     "note-title": "{label} 의견 쓰기",
     "anchor-title": "{label} 링크",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 엮음",
     "approximate-words": "약 {words}단어",
     "approximate-characters": "약 {characters}자",
     "narration-opening": "『{title}』. {authors} 지음. {narrator} 낭독.",

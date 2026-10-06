@@ -52,6 +52,8 @@ export default {
     "note-title": "为 {label} 写意见",
     "anchor-title": "链接到 {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 编",
     "approximate-words": "约{words}词",
     "approximate-characters": "约{characters}字",
     "narration-opening": "《{title}》。作者：{authors}。演播：{narrator}。",

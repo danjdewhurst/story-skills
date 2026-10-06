@@ -43,7 +43,8 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   // story.md build-style: its rules join style.css, and its extra
   // stylesheet is extra.css, linked after it so it can override them.
   const style = manuscript.style ?? CLASSIC_STYLE;
-  const stylesheet = epubStylesheet(type, style);
+  const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
+  const stylesheet = epubStylesheet(type, style, bylines);
   const extra = style.cssText ?? "";
   const head = [
     stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
@@ -88,7 +89,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     coverSpine.push(`<itemref idref="cover"/>`);
   }
 
-  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const creator = epubCreators(meta, manuscript.chapters);
   const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
   const optional = [
     meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
@@ -115,13 +116,34 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   ], writeOptions);
 }
 
+// The package's dc:creator and dc:contributor elements. A book by its
+// authors alone lists them as plain creators. Once a book also has editors
+// (story.md `editor`) or stories by other writers (chapter `author`),
+// every name carries its MARC relator role so reading systems and
+// retailers can tell them apart: the authors and editors as creators (aut,
+// edt), and each other story author once, in reading order, as a
+// contributor (aut).
+function epubCreators(meta, chapters) {
+  const credited = new Set([...meta.authors, ...meta.editors]);
+  const contributors = [...new Set(chapters.flatMap((chapter) => chapter.authors ?? []))].filter((name) => !credited.has(name));
+  if (meta.editors.length === 0 && contributors.length === 0) {
+    return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  }
+  const entry = (element, id, name, role) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}><meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`;
+  return [
+    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, "aut")),
+    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, "edt")),
+    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, "aut"))
+  ].join("");
+}
+
 // The EPUB's stylesheet, or "" when the reading system's defaults serve: a
 // Latin-script book without a build-style has none. A book in another
 // script names fonts for it, and a vertical book is set in columns (with
 // the -epub- prefix older reading systems read). A build-style adds its
 // fonts, headings, paragraphs, scene breaks, and drop caps; a choice it
 // leaves unset stays with the reading system.
-export function epubStylesheet(type, style = CLASSIC_STYLE) {
+export function epubStylesheet(type, style = CLASSIC_STYLE, bylines = false) {
   const rules = [];
   if (type.vertical) {
     rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
@@ -135,6 +157,10 @@ export function epubStylesheet(type, style = CLASSIC_STYLE) {
   if (!style.styled) {
     return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
   }
+  // A story's byline under its heading (chapter `author`) sits between the
+  // heading and the first paragraph, so the rules that start a chapter look
+  // past it.
+  const opening = bylines ? ["h1 + p:not(.byline)", "h1 + p.byline + p"] : ["h1 + p"];
   if (fonts.heading !== null) {
     rules.push(`h1 { font-family: ${fonts.heading}; }`);
   }
@@ -145,13 +171,16 @@ export function epubStylesheet(type, style = CLASSIC_STYLE) {
   // Space after a paragraph is below it, or to its left in vertical columns.
   const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
   if (style.paragraphs === "indented") {
-    rules.push("p { margin: 0; text-indent: 1.5em; }", "h1 + p, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }", `body.matter p { margin: ${after}; }`);
+    rules.push("p { margin: 0; text-indent: 1.5em; }", `${opening.join(", ")}, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }`, `body.matter p { margin: ${after}; }`);
   } else if (style.paragraphs === "block") {
     rules.push(`p { margin: ${after}; text-indent: 0; }`);
   }
   rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
+  if (bylines) {
+    rules.push(`p.byline { text-align: center; text-indent: 0; margin: ${after}; }`);
+  }
   if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`body.chapter > h1 + p::first-letter { ${DROP_CAP_RULE} }`);
+    rules.push(`${opening.map((selector) => `body.chapter > ${selector}::first-letter`).join(", ")} { ${DROP_CAP_RULE} }`);
   }
   return `${rules.join("\n")}\n`;
 }
@@ -202,7 +231,8 @@ function chapterXhtml(chapter, root, head, markup) {
   const heading = chapter.heading;
   // XHTML needs a non-blank <title>; an untitled chapter uses its heading.
   const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
+  const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
 }
 
 function matterXhtml(entry, placement, root, head, markup) {
@@ -249,6 +279,7 @@ export function htmlBook(manuscript) {
       placement: "body",
       title: chapter.heading,
       heading: true,
+      byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
       paragraphs: paragraphs(chapter.body)
@@ -260,6 +291,7 @@ export function htmlBook(manuscript) {
     // The unit the print page estimate counts (see estimateBookPages).
     ...(manuscript.unit === "characters" ? { unit: "characters" } : {}),
     authors: manuscript.meta.authors,
+    editors: manuscript.meta.editors ?? [],
     language: manuscript.meta.language,
     writingMode: manuscript.meta.writingMode,
     labels: manuscript.meta.labels,
@@ -271,9 +303,12 @@ export function htmlBook(manuscript) {
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
   const script = docxScript(manuscript.meta);
   const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
-  const pushSection = (heading, body) => {
+  const pushSection = (heading, body, byline = "") => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
+    }
+    if (byline !== "") {
+      bodyParts.push(paragraphXml(script, byline, "Byline"));
     }
     for (const paragraph of markdownParagraphs(body)) {
       bodyParts.push(paragraph.sceneBreak
@@ -284,7 +319,7 @@ export function writeDocx(outFile, manuscript, writeOptions = {}) {
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    pushSection(chapter.heading, chapter.body);
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "");
   }
   manuscript.back.forEach(pushMatter);
 
@@ -365,6 +400,7 @@ function docxStyles(script) {
     + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>`
     + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>`
     + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>`
+    + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>`
     + `</w:styles>`;
 }
 
@@ -412,13 +448,26 @@ function shunnLength(meta) {
 }
 
 // The title block's byline, as lines: "by" and the author, the name alone
-// when the language's `by` label is empty, and nothing without an author.
+// when the language's `by` label is empty, and nothing without an author,
+// then an anthology's editor credit (`meta.editors`, "Edited by Cara
+// Editor"), which stands in for the byline when the book has no author.
 function shunnByline(meta) {
-  if (!meta.author) {
-    return [];
+  const lines = [];
+  if (meta.author) {
+    const by = fillLabel(meta.labels, "by");
+    lines.push(...(by === "" ? [meta.author] : [by, meta.author]));
   }
-  const by = fillLabel(meta.labels, "by");
-  return by === "" ? [meta.author] : [by, meta.author];
+  if (meta.editors) {
+    lines.push(meta.editors);
+  }
+  return lines;
+}
+
+// A story's byline under its heading in a collection or anthology manuscript.
+// A short story or flash piece runs its chapters together as one story, so
+// it prints none.
+function shunnChapterByline(chapter, meta) {
+  return meta.shortForm ? "" : chapter.byline ?? "";
 }
 
 function shunnTitlePageXml(script, meta) {
@@ -450,6 +499,10 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, pap
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, byline), true));
+      }
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
@@ -482,6 +535,10 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
     const body = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        lines.push(byline, "");
+      }
     } else if (body.length === 0) {
       continue;
     } else if (sections++ > 0) {
@@ -514,7 +571,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const language = manuscript.meta?.language ?? "en";
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = [meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const head = [meta.lead ?? meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
@@ -527,7 +584,8 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   for (const chapter of manuscript.chapters) {
     const paragraphs = markdownParagraphs(chapter.body);
     if (!meta.shortForm) {
-      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
+      const byline = shunnChapterByline(chapter, meta);
+      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>\n`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
       continue;
     }
     if (paragraphs.length === 0) {
@@ -560,7 +618,7 @@ p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
 .short-form { margin-top: 2em; }
 .chapter { break-before: page; }
 .chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
-p.break { text-align: center; text-indent: 0; }
+p.break, p.byline { text-align: center; text-indent: 0; }
 blockquote { margin: 0 0.5in; }
 blockquote p { text-indent: 0; }
 </style>

@@ -16,7 +16,7 @@ import {
   titleCaseSlug,
   wordCount
 } from "./markdown.js";
-import { copyrightPage, metadataSheet, publishingMeta } from "./publishing.js";
+import { chapterByline, copyrightPage, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
 import { DEFAULT_TRIM, estimateBookPages, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
@@ -61,7 +61,7 @@ export function exportManuscript(root, options = {}) {
 
   manuscript.front.forEach(pushMatter);
   for (const chapter of manuscript.chapters) {
-    lines.push(`# ${chapter.heading}`, "", chapter.body, "");
+    lines.push(`# ${chapter.heading}`, "", ...(chapter.byline === "" ? [] : [`*${chapter.byline}*`, ""]), chapter.body, "");
   }
   manuscript.back.forEach(pushMatter);
 
@@ -633,8 +633,11 @@ function shunnMeta(project) {
   return {
     title: project.title,
     // Like every other build, `authors` wins over `author`, so a co-written
-    // book gets a full byline.
+    // book gets a full byline. An anthology with no author of its own heads
+    // its pages with the editor's name and credits them on the title page.
     author: joinNames(meta.authors, meta.labels),
+    lead: leadNames(meta),
+    editors: meta.editors.length === 0 ? "" : fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }),
     labels: meta.labels,
     contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
@@ -690,9 +693,14 @@ export function bookChapters(project, action = "build") {
     }
     unnumberedSoFar += numbered ? 0 : 1;
     const displayNumber = numbered ? chapter.number - unnumberedSoFar : null;
+    // A story's own author in a collection or anthology: printed under the
+    // heading, kept out of the prose, so it never counts toward its length.
+    const authors = nameList(markdown.data.author);
     const entry = {
       number: chapter.number,
       title,
+      authors,
+      byline: chapterByline(authors, meta.labels),
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
@@ -738,7 +746,7 @@ export function manuscriptParts(project, action = "build") {
 
   return {
     title: project.title,
-    author: joinNames(meta.authors, meta.labels),
+    author: leadNames(meta),
     meta,
     // The count unit, for the print page estimate and narration runtime.
     unit: project.unit.name,

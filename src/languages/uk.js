@@ -31,6 +31,8 @@ export default {
     "note-title": "Написати зауваження до {label}",
     "anchor-title": "Посилання на {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Упорядник: {names}",
     "approximate-words": "Близько {words} слів",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",

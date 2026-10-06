@@ -30,6 +30,8 @@ export default {
     "note-title": "Napisz uwagę do {label}",
     "anchor-title": "Link do {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Redakcja: {names}",
     "approximate-words": "Około {words} słów",
     "approximate-characters": "Około {characters} znaków",
     "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",

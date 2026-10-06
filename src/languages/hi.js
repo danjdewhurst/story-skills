@@ -31,6 +31,8 @@ export default {
     "note-title": "{label} पर टिप्पणी लिखें",
     "anchor-title": "{label} का लिंक",
     by: "लेखक",
+    byline: "लेखक: {names}",
+    "edited-by": "संपादक: {names}",
     "approximate-words": "लगभग {words} शब्द",
     "approximate-characters": "लगभग {characters} वर्ण",
     "narration-opening": "{title}। लेखक: {authors}। वाचक: {narrator}।",

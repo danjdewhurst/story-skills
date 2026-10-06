@@ -31,6 +31,8 @@ export default {
     "note-title": "Написать замечание к {label}",
     "anchor-title": "Ссылка на {label}",
     by: "",
+    byline: "{names}",
+    "edited-by": "Составитель: {names}",
     "approximate-words": "Около {words} слов",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",

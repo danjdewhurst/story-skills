@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
+- [Build a book](#build-a-book): [story authors in collections and anthologies](#story-authors-in-collections-and-anthologies), [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -389,6 +389,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
+| `editor` | Text, or a list of text | The editor of a collection or anthology. The EPUB names them as creators with the `edt` role; the HTML, print, codex, and Shunn title pages credit them under the authors as `Edited by` (the `edited-by` label); the print and Shunn running heads use the editor's name when no author is set; the metadata sheet lists them. Each story's own writer goes in its chapter's `author` field: see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies). |
 | `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet; the language of all generated text (see [Build labels](#build-labels)). Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
@@ -448,6 +449,8 @@ labels:
 | `note`, `note-title` | `Note`, `Write a note on {label}` | The note link beside each paragraph label, and its tooltip. |
 | `anchor-title` | `Link to {label}` | A paragraph label's tooltip. |
 | `by` | `by` | The line before the author in the Shunn title block. Empty leaves the line out. |
+| `byline` | `by {names}` | A story's own author under its heading, from chapter `author`. |
+| `edited-by` | `Edited by {names}` | The editor's credit from story.md `editor` on the HTML, print, codex, and Shunn title pages. |
 | `approximate-words` | `Approximately {words} words` | The Shunn title block. |
 | `approximate-characters` | `Approximately {characters} characters` | The Shunn title block of a book [counted in characters](project-format.md#counting-in-characters). |
 | `narration-opening`, `narration-opening-anonymous` | `{title}. Written by {authors}. Narrated by {narrator}.` | The narration script's opening credits, with and without an author. |
@@ -666,6 +669,27 @@ Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, h
 
 For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
 
+### Story authors in collections and anthologies
+
+In a collection or anthology, each chapter is one story, and a story by another writer names them in its chapter's `author` field: one name, or a list for a story written together. The book's own credit goes in `story.md`: `author` for a collection by one writer, and `editor` for an anthology's editor.
+
+```yaml
+# story.md
+editor: Miriam Hale
+labels:
+  - chapter-heading: "{title}"
+
+# chapters/chapter-03.md
+title: The Lantern Room
+author:
+  - Tomas Reyes
+  - Ada Writer
+```
+
+Every build prints the story's author under its heading, as `by Tomas Reyes and Ada Writer` (the `byline` label, in the book's language): an italic line in the EPUB and the markdown build, a centred italic `Byline` paragraph in the DOCX build, a line under the heading in the HTML review copy, the print interior, and the Shunn builds, and a note beside the story in the codex progress table. The byline is not prose, so `story wordcount`, the Shunn length, and every other count leave it out. A chapter without `author` prints no byline. The Shunn short-story layout (`form: short-story` or `flash`) runs the chapters together as one story, so it prints no chapter bylines.
+
+The EPUB package lists the book's authors and editors as `dc:creator` and each story author not already credited as a `dc:contributor`, in reading order. Once a book has an editor or a story author, every name carries its [MARC relator](https://id.loc.gov/vocabulary/relators.html) role (`aut` or `edt`) through a `refines` entry, so a reading system can tell the editor from the writers. A book by its authors alone keeps plain `dc:creator` entries. [`salt-and-lantern`](../examples/salt-and-lantern/) is an anthology set up this way.
+
 ### EPUB
 
 The EPUB build is an EPUB 3 package with one XHTML document per matter page and per chapter, and a navigation document that lists them in reading order under a contents heading in the book's language (`Contents` in English; see [Build labels](#build-labels)). It reads the [publishing metadata](#publishing-metadata-in-storymd) in `story.md`, and one more field:
@@ -753,6 +777,7 @@ All three read these `story.md` fields for the title page:
 | Field | Type | Used for |
 |-------|------|----------|
 | `author` or `authors` | Text, or a list of text | The byline under `by`. As in every build, `authors` wins when both are set, and its names are joined with "and". Left out when neither is set. |
+| `editor` | Text, or a list of text | An anthology's editor, credited after the byline as `Edited by Miriam Hale`. With no author set, the editor's credit takes the byline's place, and the PDF's running head uses the editor's name. |
 | `contact` | List of text lines (a single string also works) | Your name, address, email, and so on, one line each. |
 
 ```yaml

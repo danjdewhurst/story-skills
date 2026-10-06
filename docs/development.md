@@ -379,6 +379,7 @@ harbor-of-second-light: 1 chapters, 1489 words, 0 expected continuity findings
 kirimi-eki-no-wasuremono: 3 chapters, 1972 characters, 0 expected continuity findings
 laysat-lil-bay: 3 chapters, 670 words, 0 expected continuity findings
 quatre-heures-dix-sept: 3 chapters, 1079 words, 0 expected continuity findings
+salt-and-lantern: 3 chapters, 808 words, 0 expected continuity findings
 the-fall-of-the-citadel: 1 chapters, 248 words, 0 expected continuity findings
 the-gull-rock-light: 6 chapters, 550 words, 0 expected continuity findings
 the-last-ember: 1 chapters, 993 words, 0 expected continuity findings

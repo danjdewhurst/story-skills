@@ -53,6 +53,8 @@ export default {
     "note-title": "{label} にコメントを書く",
     "anchor-title": "{label} へのリンク",
     by: "",
+    byline: "{names}",
+    "edited-by": "{names} 編",
     "approximate-words": "約{words}語",
     "approximate-characters": "約{characters}字",
     "narration-opening": "『{title}』。作、{authors}。朗読、{narrator}。",

@@ -28,6 +28,8 @@ export default {
     "note-title": "Notitie schrijven bij {label}",
     "anchor-title": "Link naar {label}",
     by: "door",
+    byline: "door {names}",
+    "edited-by": "Onder redactie van {names}",
     "approximate-words": "Ongeveer {words} woorden",
     "approximate-characters": "Ongeveer {characters} tekens",
     "narration-opening": "{title}. Geschreven door {authors}. Voorgelezen door {narrator}.",
