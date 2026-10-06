@@ -4,7 +4,7 @@ import path from "node:path";
 import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
-import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, requireStoryFile } from "./scan.js";
+import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
@@ -105,6 +105,9 @@ function inScratch(target, run, prepare) {
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
     prepare(copyRoot, mirror, atRoot);
+    if (!atRoot) {
+      copyLinkTargets(copyRoot, scratch, mirror, (file) => to + file.slice(from.length));
+    }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
   } catch (error) {
@@ -170,6 +173,95 @@ function copyLinkedBooks(projectRoot, mirror) {
       }
     }
   }
+}
+
+// A markdown link to a file outside the project is an error in its own
+// right (link-outside-project), and one into a linked book is accepted when
+// the file is there, so validate asks whether each target exists. Each
+// target outside the copy that is missing from the scratch folder but
+// exists in fact is made there, as an empty file or folder (only its being
+// there is checked), so the dry run reports the link as the real run does
+// rather than as a broken link.
+function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
+  if (!lstatIfExists(copyRoot)?.isDirectory()) {
+    return;
+  }
+  for (const file of copiedMarkdown(copyRoot)) {
+    let body;
+    try {
+      body = fs.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const target of extractMarkdownLinkTargets(body)) {
+      // An absolute target is checked on the real filesystem already.
+      if (path.isAbsolute(target) || !path.basename(target).endsWith(".md")) {
+        continue;
+      }
+      const copy = path.resolve(path.dirname(file), target);
+      if (!isPathInside(copyRoot, copy) && isPathInside(scratch, copy) && copy !== scratch) {
+        try {
+          copyLinkTarget(copy, realOf(copy), mirror, realOf);
+        } catch {
+          // A read-only copied folder, or a file where a folder would go:
+          // the link is reported as missing.
+        }
+      }
+    }
+  }
+}
+
+// Makes `copy` stand in for `real` when nothing is there yet: an empty file
+// or folder, or for a symlink, a symlink to the stand-in for what it points
+// at, so a check of the real path behind it answers as in the project.
+function copyLinkTarget(copy, real, mirror, realOf) {
+  if (lstatIfExists(copy)) {
+    return;
+  }
+  const stats = lstatIfExists(real);
+  if (stats?.isSymbolicLink()) {
+    const resolved = realPath(real);
+    const stand = mirror(resolved);
+    if (resolved === real || realOf(stand) !== resolved) {
+      return;
+    }
+    copyLinkTarget(stand, resolved, mirror, realOf);
+    makeFolders(path.dirname(copy), realOf);
+    fs.symlinkSync(stand, copy);
+  } else if (stats?.isDirectory()) {
+    makeFolders(copy, realOf);
+  } else if (stats?.isFile()) {
+    makeFolders(path.dirname(copy), realOf);
+    fs.writeFileSync(copy, "");
+  }
+}
+
+// Makes `folder` in the scratch folder, and the folders above it that are
+// missing. A folder that is a project in fact gets an empty story.md, so a
+// scan of a linked book still skips it as another project.
+function makeFolders(folder, realOf) {
+  if (fs.existsSync(folder)) {
+    return;
+  }
+  makeFolders(path.dirname(folder), realOf);
+  fs.mkdirSync(folder);
+  if (lstatIfExists(path.join(realOf(folder), "story.md"))) {
+    fs.writeFileSync(path.join(folder, "story.md"), "");
+  }
+}
+
+// The markdown files in the copy, not through symlinks.
+function copiedMarkdown(folder) {
+  const files = [];
+  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+    const file = path.join(folder, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...copiedMarkdown(file));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(file);
+    }
+  }
+  return files;
 }
 
 // Copies the folders a write command can read, as markdownFiles walks them:

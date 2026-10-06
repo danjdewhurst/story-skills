@@ -11175,6 +11175,26 @@ function nextSceneNumber(project, chapter) {
   return project.scenes.filter((scene) => scene.chapter === chapter).reduce((max, scene) => Math.max(max, scene.scene), 0) + 1;
 }
 var LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
+function extractMarkdownLinkTargets(body) {
+  const targets = [];
+  const pattern = /\]\(([^)]+)\)/g;
+  let match;
+  while ((match = pattern.exec(body)) !== null) {
+    const inner = match[1].trim();
+    const bracketed = /^<([^>]*)>/.exec(inner);
+    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
+    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
+      targets.push(target.split("#")[0].split("?")[0]);
+    }
+  }
+  for (const definition of body.matchAll(LINK_DEFINITION_PATTERN)) {
+    const target = definition[3].replace(/^<|>$/g, "").trim();
+    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
+      targets.push(target.split("#")[0].split("?")[0]);
+    }
+  }
+  return targets;
+}
 var REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
 var SKIPPED_SCAN_DIRECTORIES = new Set(["dist", "node_modules"]);
 function markdownFiles(root, { maxFiles = MAX_SCAN_FILES } = {}, depth = 0, collected = null) {
@@ -18019,26 +18039,6 @@ function idTokensOutsideLinks(body, pattern) {
   });
   return found;
 }
-function extractMarkdownLinkTargets(body) {
-  const targets = [];
-  const pattern = /\]\(([^)]+)\)/g;
-  let match;
-  while ((match = pattern.exec(body)) !== null) {
-    const inner = match[1].trim();
-    const bracketed = /^<([^>]*)>/.exec(inner);
-    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
-    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
-      targets.push(target.split("#")[0].split("?")[0]);
-    }
-  }
-  for (const definition of body.matchAll(LINK_DEFINITION_PATTERN)) {
-    const target = definition[3].replace(/^<|>$/g, "").trim();
-    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
-      targets.push(target.split("#")[0].split("?")[0]);
-    }
-  }
-  return targets;
-}
 function storyIdIsFallback(project) {
   return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? ""), { transliterate: false }) === "";
 }
@@ -24551,6 +24551,9 @@ function inScratch(target, run, prepare) {
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
     prepare(copyRoot, mirror, atRoot);
+    if (!atRoot) {
+      copyLinkTargets(copyRoot, scratch, mirror, (file) => to + file.slice(from.length));
+    }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
   } catch (error) {
@@ -24600,6 +24603,73 @@ function copyLinkedBooks(projectRoot, mirror) {
       }
     }
   }
+}
+function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
+  if (!lstatIfExists(copyRoot)?.isDirectory()) {
+    return;
+  }
+  for (const file of copiedMarkdown(copyRoot)) {
+    let body;
+    try {
+      body = fs15.readFileSync(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const target of extractMarkdownLinkTargets(body)) {
+      if (path17.isAbsolute(target) || !path17.basename(target).endsWith(".md")) {
+        continue;
+      }
+      const copy = path17.resolve(path17.dirname(file), target);
+      if (!isPathInside(copyRoot, copy) && isPathInside(scratch, copy) && copy !== scratch) {
+        try {
+          copyLinkTarget(copy, realOf(copy), mirror, realOf);
+        } catch {}
+      }
+    }
+  }
+}
+function copyLinkTarget(copy, real, mirror, realOf) {
+  if (lstatIfExists(copy)) {
+    return;
+  }
+  const stats = lstatIfExists(real);
+  if (stats?.isSymbolicLink()) {
+    const resolved = realPath2(real);
+    const stand = mirror(resolved);
+    if (resolved === real || realOf(stand) !== resolved) {
+      return;
+    }
+    copyLinkTarget(stand, resolved, mirror, realOf);
+    makeFolders(path17.dirname(copy), realOf);
+    fs15.symlinkSync(stand, copy);
+  } else if (stats?.isDirectory()) {
+    makeFolders(copy, realOf);
+  } else if (stats?.isFile()) {
+    makeFolders(path17.dirname(copy), realOf);
+    fs15.writeFileSync(copy, "");
+  }
+}
+function makeFolders(folder, realOf) {
+  if (fs15.existsSync(folder)) {
+    return;
+  }
+  makeFolders(path17.dirname(folder), realOf);
+  fs15.mkdirSync(folder);
+  if (lstatIfExists(path17.join(realOf(folder), "story.md"))) {
+    fs15.writeFileSync(path17.join(folder, "story.md"), "");
+  }
+}
+function copiedMarkdown(folder) {
+  const files = [];
+  for (const entry of fs15.readdirSync(folder, { withFileTypes: true })) {
+    const file = path17.join(folder, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...copiedMarkdown(file));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(file);
+    }
+  }
+  return files;
 }
 function copyProject(source, target, roots, depth = 0) {
   fs15.mkdirSync(target);

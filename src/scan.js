@@ -1604,6 +1604,33 @@ export function nextSceneNumber(project, chapter) {
 // A reference-style link definition: indent, label, target.
 export const LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
 
+// The file targets of a body's inline and reference-style links, without
+// any #fragment or ?query: validate checks them, and a dry run copies what
+// they point at outside the project.
+export function extractMarkdownLinkTargets(body) {
+  const targets = [];
+  const pattern = /\]\(([^)]+)\)/g;
+  let match;
+  while ((match = pattern.exec(body)) !== null) {
+    // `[x](<a.md>)` and `[x](a.md "Title")` both link to a.md. An unquoted
+    // space stays in the target so `(Bad Name.md)` is still reported.
+    const inner = match[1].trim();
+    const bracketed = /^<([^>]*)>/.exec(inner);
+    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
+    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
+      targets.push(target.split("#")[0].split("?")[0]);
+    }
+  }
+  // Reference-style definitions: `[label]: ../characters/bo.md`.
+  for (const definition of body.matchAll(LINK_DEFINITION_PATTERN)) {
+    const target = definition[3].replace(/^<|>$/g, "").trim();
+    if (target && !/^(https?:|mailto:|#)/i.test(target)) {
+      targets.push(target.split("#")[0].split("?")[0]);
+    }
+  }
+  return targets;
+}
+
 export const REGISTRY_HINT = " (it is a registry: run story reindex to rebuild it)";
 
 // Folders that never hold project prose: build output, installed packages
