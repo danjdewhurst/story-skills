@@ -52,7 +52,7 @@ are clean or every remaining finding is a recorded decision. Set story
 
 ## Revision Workflow
 
-1. Clarify the pass type unless the user already specified it, then follow that pass's checklist in `references/pass-checklists.md` (what to run, read, check, and update):
+1. Clarify the pass type unless the user already specified it. Each pass has a checklist in `references/pass-checklists.md` (what to run, read, check, and update); follow it from step 3 on, after the snapshot, because some checks write files:
    - **Continuity audit** - contradictions, stale references, timeline problems, missing backlinks, word-count drift
    - **Developmental revision** - structure, scene purpose, character motivation, pacing, stakes, arc progression
    - **Reverse outline** - what each chapter actually does, diffed against what the plot files say it should do
@@ -75,6 +75,7 @@ are clean or every remaining finding is a recorded decision. Set story
    - Matching scene files in `scenes/`
    - `continuity/state.md`, open questions, and promises/payoffs
    - `plot/timeline.md` and active arc files for continuity-sensitive edits
+   - The files the pass checklist lists, and the output of the checks it runs
 4. Create a concise revision plan:
    - What will change
    - What must stay fixed for continuity

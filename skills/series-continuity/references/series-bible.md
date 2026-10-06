@@ -16,7 +16,7 @@ to plan and pitch a series of several books.
 | Where this book sits and what it must not contradict | `## Series Notes` in each book's `story.md` body | Read by hand |
 | Characters, places, systems, factions, artifacts, terms | The entity files, copied with the same filename id and `name` into each book that uses them | `story series` (deaths, revivals, name and pronunciation drift, destroyed artifacts) |
 | Fixed endpoints a prequel must reach | `## Series Canon` in the entity file | Read by hand |
-| Who knows what, and since which book | `knowledge-state` in `continuity/state.md`, with a shared `fact` id | `story series` (a fact learned twice), `story continuity` (fact id format, one entry per fact) |
+| Who knows what, and since which book | `knowledge-state` in `continuity/state.md`, with a shared `fact` id | `story series` (a fact learned twice), `story continuity` (fact id format, one entry per character for a given fact) |
 | Events from another book | `## Backstory Events` in `plot/timeline.md` (sequel) or `## Series Canon` notes (prequel), linking the other book's chapter file | `story links` (the linked file exists in a book this one follows or precedes) |
 | Threads paid off in a later book | Open promise, question, or clue files, with an entry in `continuity/exemptions.md` whose `reason` names the later book | `story continuity` (the finding shows as `dismissed`) |
 
@@ -119,7 +119,7 @@ standalone with series potential, not the series as a whole:
   trilogy.`
   Never pitch a debut that only works as part one. See
   `../../submission/references/query-letter.md`, resolved relative to this
-  skill folder.
+  reference file.
 - **Synopsis:** cover book one's ending in full. Mention the series
   question only if book one sets it up on the page.
 - **Series overview**, for when an agent or editor asks for one: save it to
