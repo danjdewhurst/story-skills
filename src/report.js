@@ -227,25 +227,29 @@ export function formatProjectReport(report, options = {}) {
   return `${lines.join("\n")}\n`;
 }
 
-// `date` is "today" for the release schedule, default the local date.
+// With `release` (story next only), the serial release schedule too:
+// `date` is "today" for it, default the local date, and the result adds
+// `release` and `releaseFindings`, the schedule's own findings.
 export function projectActions(root, options = {}) {
-  const today = todayOption(options.date, "next");
+  const today = options.release ? todayOption(options.date, "next") : null;
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
+  if (!options.release) {
+    return { root: project.root, title: project.title, storyId: project.storyId, actions: buildProjectActions(project, validation, links, continuity, options.displayPath), validation, links, continuity };
+  }
   const schedule = projectRelease(project, today);
-  // The schedule's own findings, with severity and exemptions applied, so a
-  // release-undrafted warning turned off in story.md is not an action.
+  // Severity and exemptions apply, so a release-undrafted warning turned
+  // off in story.md is not an action.
   const releaseFindings = applySeverity({ ok: true, errors: [], warnings: schedule?.warnings ?? [] }, options.overrides);
   const releaseActions = [...releaseFindings.errors, ...releaseFindings.warnings]
     .map((finding) => action("P1", "Draft the scheduled episode", `${finding.message}: ${finding.file === "story.md" ? "add it with story add chapter" : "draft it under ## Chapter Text"}, then run story wordcount ${shellWord(options.displayPath ?? ".")} --write.`));
-  const actions = buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions);
   return {
     root: project.root,
     title: project.title,
     storyId: project.storyId,
     release: releaseData(schedule),
     releaseFindings,
-    actions,
+    actions: buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions),
     validation,
     links,
     continuity

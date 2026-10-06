@@ -13,6 +13,10 @@ import { plural } from "./plural.js";
 // as one already past its date.
 export const RELEASE_SOON_DAYS = 3;
 
+// The last day a YYYY-MM-DD date can name: a cadence that runs past it
+// schedules nothing more.
+const LAST_DAY = parseClockDate("9999-12-31").days;
+
 // The project's release schedule on `today`, or null when the book has
 // none. An episode counts as drafted once its chapter has prose.
 export function projectRelease(project, today) {
@@ -47,8 +51,10 @@ export function releaseCadence(data) {
 
 // The release schedule as { every, start, next, episodes, warnings }, or
 // null when the book sets no cadence and no chapter has a release-date.
-// `chapters` are { id, file, releaseDate, drafted } in reading order; the
-// episode number is the chapter's position. With a cadence, the episodes
+// `chapters` are { id, file, releaseDate, drafted } in reading order, with
+// `releaseDate` the raw frontmatter value or undefined; the episode number
+// is the chapter's position. An episode whose release-date is not a real
+// day is left out rather than put back on the cadence (validate reports it). With a cadence, the episodes
 // after the last chapter are projected too, so `next` can be one with no
 // chapter yet (`chapter` and `file` null).
 export function releaseSchedule({ data, chapters, today }) {
@@ -56,9 +62,11 @@ export function releaseSchedule({ data, chapters, today }) {
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
-    const own = chapter.releaseDate ? parseClockDate(chapter.releaseDate) : undefined;
-    const days = own ? own.days : cadence ? cadence.startDays + index * cadence.every : null;
-    if (days !== null) {
+    let days = cadence ? cadence.startDays + index * cadence.every : null;
+    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
+      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
+    }
+    if (days !== null && days <= LAST_DAY) {
       episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
     }
   });
@@ -69,15 +77,21 @@ export function releaseSchedule({ data, chapters, today }) {
   // Past the last chapter, a cadence keeps scheduling episodes: those due
   // by today plus RELEASE_SOON_DAYS have no chapter to draft yet, and the
   // first one today or later can be the next release.
+  // A projection past LAST_DAY is null.
   const projected = (index) => {
     const days = cadence.startDays + index * cadence.every;
-    return { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
   };
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
   if (cadence !== null) {
-    candidates.push(projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every))));
+    const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
+    if (upcoming !== null) {
+      candidates.push(upcoming);
+    }
+    // Today is a real day, so every episode due by today plus a few days
+    // is within LAST_DAY.
     unwritten = Math.floor((todayDays + RELEASE_SOON_DAYS - cadence.startDays) / cadence.every) - chapters.length + 1;
     firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
   }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { checkProjectSchema } from "../scripts/check-schema.js";
+import { RESULT_SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { formatNextRelease, releaseSchedule } from "../src/release-schedule.js";
 import { projectActions } from "../src/report.js";
@@ -29,7 +29,9 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
-const episode = (id, releaseDate, drafted) => ({ id, file: `chapters/${id}.md`, releaseDate, drafted });
+const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
+
+const episode = (id, releaseDate, drafted) => ({ id, file: `chapters/${id}.md`, releaseDate: releaseDate === "" ? undefined : releaseDate, drafted });
 
 describe("releaseSchedule", () => {
   const data = { "release-every": 7, "release-start": "2026-09-04" };
@@ -92,6 +94,22 @@ describe("releaseSchedule", () => {
     expect(messages(after.warnings)).toEqual(["chapters/chapter-03.md (episode 3) was due 2026-09-20, 1 day ago, and has no prose yet"]);
   });
 
+  test("an invalid release-date leaves its episode out instead of putting it back on the cadence", () => {
+    const invalid = [episode("chapter-01", "", true), episode("chapter-02", "2026-02-30", false), episode("chapter-03", 20260918, false)];
+    expect(releaseSchedule({ data, chapters: invalid, today: "2026-09-12" }).episodes.map((entry) => entry.chapter)).toEqual(["chapter-01"]);
+    expect(releaseSchedule({ data: {}, chapters: invalid.slice(1), today: "2026-09-12" })).toBeNull();
+  });
+
+  test("a cadence past 9999-12-31 schedules nothing more, and never crashes", () => {
+    const huge = releaseSchedule({ data: { "release-every": 100000000, "release-start": "2026-09-04" }, chapters, today: "2026-09-05" });
+    expect(huge.episodes.map((entry) => entry.date)).toEqual(["2026-09-04"]);
+    expect(huge.next).toBeNull();
+    const late = releaseSchedule({ data: { "release-every": 7, "release-start": "9999-12-20" }, chapters, today: "9999-12-21" });
+    expect(late.episodes.map((entry) => entry.date)).toEqual(["9999-12-20", "9999-12-27"]);
+    expect(late.next).toMatchObject({ episode: 2, date: "9999-12-27" });
+    expect(releaseSchedule({ data: { "release-every": 7, "release-start": "9999-12-20" }, chapters, today: "9999-12-28" }).next).toBeNull();
+  });
+
   test("before release-start the first episode is next", () => {
     expect(releaseSchedule({ data, chapters, today: "2026-08-01" }).next).toMatchObject({ episode: 1, daysUntil: 34 });
     expect(releaseSchedule({ data, chapters: [], today: "2026-08-01" }).next).toMatchObject({ episode: 1, chapter: null, date: "2026-09-04" });
@@ -107,8 +125,10 @@ describe("release schedule in the project", () => {
 
     const half = serialProject("release-every: 7");
     expect(messages(validateProject(half.root).errors)).toContain("story.md release-every needs release-start too: an episode every release-every days from release-start");
+    expect(checkProjectSchema(half.root).join("\n")).toContain("release-start");
     const other = serialProject("release-start: 2026-09-04");
     expect(messages(validateProject(other.root).errors)).toContain("story.md release-start needs release-every too: an episode every release-every days from release-start");
+    expect(checkProjectSchema(other.root).join("\n")).toContain("release-every");
 
     const bad = serialProject("release-every: 0\nrelease-start: 2026-02-30");
     writeChapter(bad.root, 1, 100, "release-date: 4 Thaw 302 AE");
@@ -116,6 +136,11 @@ describe("release schedule in the project", () => {
     expect(messages(errors)).toContain("story.md frontmatter field release-every must be at least 1");
     expect(messages(errors)).toContain("story.md release-start date must be a real YYYY-MM-DD calendar day, got 2026-02-30");
     expect(errors.find((error) => error.message.includes("release-date"))).toMatchObject({ code: "invalid-date", message: "chapters/chapter-01.md release-date date must be a real YYYY-MM-DD calendar day, got 4 Thaw 302 AE" });
+    // progress reports the bad fields too, and schedules nothing from them.
+    const progress = projectProgress(bad.root, { date: "2026-09-05" });
+    expect(progress.ok).toBe(false);
+    expect(messages(progress.errors)).toContain("chapters/chapter-01.md release-date date must be a real YYYY-MM-DD calendar day, got 4 Thaw 302 AE");
+    expect(progress.release).toBeNull();
 
     const calendar = serialProject("release-every: 7\nrelease-start: 2026-09-04\ncalendar:\n  - month: Thaw\n    days: 30\n  - era: Age of Embers\n    abbrev: AE");
     writeChapter(calendar.root, 1, 100, "date: 3 Thaw 302 AE\nrelease-date: 2026-09-05");
@@ -131,6 +156,7 @@ describe("release schedule in the project", () => {
     expect(text.err).toContain("warning: chapters/chapter-03.md (episode 3) releases 2026-09-18, in 2 days, and has no prose yet [release-undrafted]");
 
     const json = JSON.parse(invoke(cwd, ["progress", root, "--date", "2026-09-16", "--json"]).out);
+    expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
     expect(json.data.release).toMatchObject({ every: 7, start: "2026-09-04", next: { episode: 3, chapter: "chapter-03", daysUntil: 2, drafted: false } });
     expect(json.data.release.warnings).toBeUndefined();
     expect(json.diagnostics).toEqual([expect.objectContaining({ severity: "warning", code: "release-undrafted", file: "chapters/chapter-03.md", check: "progress" })]);
@@ -161,6 +187,7 @@ describe("release schedule in the project", () => {
     expect(text.out).toContain(`- [P1] Draft the scheduled episode: chapters/chapter-03.md (episode 3) was due 2026-09-18, 1 day ago, and has no prose yet: draft it under ## Chapter Text, then run story wordcount `);
 
     const json = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-19", "--json"]).out);
+    expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
     expect(json.ok).toBe(true);
     expect(json.data.release.next).toMatchObject({ episode: 4, chapter: null });
     expect(json.data.releaseFindings).toBeUndefined();
@@ -170,5 +197,20 @@ describe("release schedule in the project", () => {
     const bad = invoke(cwd, ["next", root, "--date", "2026-02-30"]);
     expect(bad.code).toBe(2);
     expect(bad.err).toContain("next --date date must be a real YYYY-MM-DD calendar day, got 2026-02-30");
+  });
+
+  test("doctor leaves the schedule to next", () => {
+    const { root, cwd } = serialProject();
+    const doctor = invoke(cwd, ["doctor", root]);
+    expect(doctor.out).not.toContain("Draft the scheduled episode");
+    const json = JSON.parse(invoke(cwd, ["doctor", root, "--json"]).out);
+    expect(json.data.release).toBeUndefined();
+    expect(json.data.releaseFindings).toBeUndefined();
+    expect(json.diagnostics.some((entry) => entry.code === "release-undrafted")).toBe(false);
+  });
+
+  test("next --date cannot be a cli-defaults entry", () => {
+    const { root } = serialProject("release-every: 7\nrelease-start: 2026-09-04\ncli-defaults:\n  - command: next\n    date: 2026-08-01");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("sets date, which names one target and cannot be a default");
   });
 });

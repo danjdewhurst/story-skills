@@ -12,7 +12,9 @@
       "$comment": "writing-mode vertical and chapter-numerals native need a language that has them; without language the book is English, which has neither. Which set languages qualify depends on how story validate resolves the tag, so the schema checks only that one is set.",
       "allOf": [
         { "if": { "required": ["writing-mode"], "properties": { "writing-mode": { "const": "vertical" } } }, "then": { "required": ["language"] } },
-        { "if": { "required": ["chapter-numerals"], "properties": { "chapter-numerals": { "const": "native" } } }, "then": { "required": ["language"] } }
+        { "if": { "required": ["chapter-numerals"], "properties": { "chapter-numerals": { "const": "native" } } }, "then": { "required": ["language"] } },
+        { "if": { "required": ["release-every"] }, "then": { "required": ["release-start"] } },
+        { "if": { "required": ["release-start"] }, "then": { "required": ["release-every"] } }
       ],
       "properties": {
         "title": { "type": "string", "pattern": "\\S" },

@@ -11563,6 +11563,7 @@ function tweeSource(story) {
 
 // src/release-schedule.js
 var RELEASE_SOON_DAYS = 3;
+var LAST_DAY = parseClockDate("9999-12-31").days;
 function projectRelease(project, today) {
   return releaseSchedule({
     data: project.story.data,
@@ -11592,9 +11593,11 @@ function releaseSchedule({ data, chapters, today }) {
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
-    const own = chapter.releaseDate ? parseClockDate(chapter.releaseDate) : undefined;
-    const days = own ? own.days : cadence ? cadence.startDays + index * cadence.every : null;
-    if (days !== null) {
+    let days = cadence ? cadence.startDays + index * cadence.every : null;
+    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
+      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
+    }
+    if (days !== null && days <= LAST_DAY) {
       episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
     }
   });
@@ -11603,13 +11606,16 @@ function releaseSchedule({ data, chapters, today }) {
   }
   const projected = (index) => {
     const days = cadence.startDays + index * cadence.every;
-    return { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
   };
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
   if (cadence !== null) {
-    candidates.push(projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every))));
+    const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
+    if (upcoming !== null) {
+      candidates.push(upcoming);
+    }
     unwritten = Math.floor((todayDays + RELEASE_SOON_DAYS - cadence.startDays) / cadence.every) - chapters.length + 1;
     firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
   }
@@ -12271,7 +12277,7 @@ function scanProject(root) {
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      releaseDate: typeof data["release-date"] === "string" ? data["release-date"].trim() : "",
+      releaseDate: data["release-date"],
       mode: String(data.mode ?? ""),
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
@@ -18375,7 +18381,7 @@ function formatSimilarity(report) {
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
-var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
+var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
 var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
@@ -21406,20 +21412,22 @@ function formatProjectReport(report, options = {}) {
 `;
 }
 function projectActions(root, options = {}) {
-  const today = todayOption(options.date, "next");
+  const today = options.release ? todayOption(options.date, "next") : null;
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
+  if (!options.release) {
+    return { root: project.root, title: project.title, storyId: project.storyId, actions: buildProjectActions(project, validation, links, continuity, options.displayPath), validation, links, continuity };
+  }
   const schedule = projectRelease(project, today);
   const releaseFindings = applySeverity({ ok: true, errors: [], warnings: schedule?.warnings ?? [] }, options.overrides);
   const releaseActions = [...releaseFindings.errors, ...releaseFindings.warnings].map((finding) => action("P1", "Draft the scheduled episode", `${finding.message}: ${finding.file === "story.md" ? "add it with story add chapter" : "draft it under ## Chapter Text"}, then run story wordcount ${shellWord(options.displayPath ?? ".")} --write.`));
-  const actions = buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions);
   return {
     root: project.root,
     title: project.title,
     storyId: project.storyId,
     release: releaseData(schedule),
     releaseFindings,
-    actions,
+    actions: buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions),
     validation,
     links,
     continuity
@@ -26111,6 +26119,10 @@ function projectProgress(root, options = {}) {
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
+  for (const chapter of project.chapters) {
+    const label = projectPath(project.root, chapter.file);
+    validateReleaseDate(chapter.releaseDate, `${label} release-date`, label, errors);
+  }
   const release = projectRelease(project, today);
   const target = data[unit.targetField];
   const dailyTarget = data[unit.dailyTargetField];
@@ -28221,7 +28233,7 @@ var COMMANDS = [
     project: "positional",
     options: ["date", "json"],
     run({ parsed, io, root, overrides }) {
-      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath2(parsed), overrides, date: parsed.options.date });
+      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath2(parsed), overrides, release: true, date: parsed.options.date });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "next", report, { diagnostics: diagnosticsFrom(releaseFindings, "next") });
       }

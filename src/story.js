@@ -76,6 +76,7 @@ import {
   validateDailyTarget,
   validateDeadline,
   validateReleaseCadence,
+  validateReleaseDate,
   validateProgressLog,
   requireInteger
 } from "./validate.js";
@@ -704,6 +705,10 @@ export function projectProgress(root, options = {}) {
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
+  for (const chapter of project.chapters) {
+    const label = projectPath(project.root, chapter.file);
+    validateReleaseDate(chapter.releaseDate, `${label} release-date`, label, errors);
+  }
   const release = projectRelease(project, today);
   const target = data[unit.targetField];
   const dailyTarget = data[unit.dailyTargetField];
