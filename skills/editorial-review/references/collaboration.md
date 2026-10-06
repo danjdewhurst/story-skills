@@ -44,8 +44,9 @@ Agree and record in `story.md`'s `## Notes`:
 4. Update branches by rebasing onto `main` before merging, and push a
    rebased branch with `--force-with-lease`, never plain `--force`.
 5. Registries (`_index.md` files) and word counts are generated: when two
-   branches conflict there, take either side and run `story reindex .`
-   and `story wordcount . --write` rather than hand-merging.
+   branches conflict there, take either side and run `story reindex .`,
+   `story wordcount . --write`, and `story check .` rather than
+   hand-merging.
 6. Conflicts in chapter prose or entity files are creative decisions;
    show both versions to the users and let them choose.
 
