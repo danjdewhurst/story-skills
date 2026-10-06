@@ -24552,7 +24552,8 @@ function inScratch(target, run, prepare) {
   try {
     prepare(copyRoot, mirror, atRoot);
     if (!atRoot) {
-      copyLinkTargets(copyRoot, scratch, mirror, (file) => to + file.slice(from.length));
+      const realOf = (file) => isPathInside(from, file) ? to + file.slice(from.length) : null;
+      copyLinkTargets(copyRoot, scratch, mirror, realOf);
     }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
@@ -24604,11 +24605,17 @@ function copyLinkedBooks(projectRoot, mirror) {
     }
   }
 }
+var MAX_LINK_HOPS = 40;
 function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
   if (!lstatIfExists(copyRoot)?.isDirectory()) {
     return;
   }
-  for (const file of copiedMarkdown(copyRoot)) {
+  const context = { copyRoot, scratch, mirror, realOf };
+  for (const file of linkSources(copyRoot)) {
+    const stats = lstatIfExists(file);
+    if (!stats?.isFile() || stats.size > MAX_READ_BYTES) {
+      continue;
+    }
     let body;
     try {
       body = fs15.readFileSync(file, "utf8");
@@ -24619,57 +24626,95 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
       if (path17.isAbsolute(target) || !path17.basename(target).endsWith(".md")) {
         continue;
       }
-      const copy = path17.resolve(path17.dirname(file), target);
-      if (!isPathInside(copyRoot, copy) && isPathInside(scratch, copy) && copy !== scratch) {
-        try {
-          copyLinkTarget(copy, realOf(copy), mirror, realOf);
-        } catch {}
-      }
+      try {
+        stageLinkTarget(path17.resolve(path17.dirname(file), target), context, 0);
+      } catch {}
     }
   }
 }
-function copyLinkTarget(copy, real, mirror, realOf) {
-  if (lstatIfExists(copy)) {
-    return;
-  }
-  const stats = lstatIfExists(real);
-  if (stats?.isSymbolicLink()) {
-    const resolved = realPath2(real);
-    const stand = mirror(resolved);
-    if (resolved === real || realOf(stand) !== resolved) {
-      return;
+function linkSources(copyRoot) {
+  const files = [path17.join(copyRoot, "plot", "timeline.md")];
+  for (const folder of [path17.join("plot", "arcs"), MATTER_DIR]) {
+    let entries = [];
+    try {
+      entries = fs15.readdirSync(path17.join(copyRoot, folder), { withFileTypes: true });
+    } catch {
+      continue;
     }
-    copyLinkTarget(stand, resolved, mirror, realOf);
-    makeFolders(path17.dirname(copy), realOf);
-    fs15.symlinkSync(stand, copy);
-  } else if (stats?.isDirectory()) {
-    makeFolders(copy, realOf);
-  } else if (stats?.isFile()) {
-    makeFolders(path17.dirname(copy), realOf);
-    fs15.writeFileSync(copy, "");
-  }
-}
-function makeFolders(folder, realOf) {
-  if (fs15.existsSync(folder)) {
-    return;
-  }
-  makeFolders(path17.dirname(folder), realOf);
-  fs15.mkdirSync(folder);
-  if (lstatIfExists(path17.join(realOf(folder), "story.md"))) {
-    fs15.writeFileSync(path17.join(folder, "story.md"), "");
-  }
-}
-function copiedMarkdown(folder) {
-  const files = [];
-  for (const entry of fs15.readdirSync(folder, { withFileTypes: true })) {
-    const file = path17.join(folder, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...copiedMarkdown(file));
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
-      files.push(file);
-    }
+    files.push(...entries.filter((entry) => entry.name.endsWith(".md")).slice(0, MAX_SCAN_FILES).map((entry) => path17.join(copyRoot, folder, entry.name)));
   }
   return files;
+}
+function stageLinkTarget(file, context, hops) {
+  const { copyRoot, scratch } = context;
+  if (!isPathInside(scratch, file) || file === scratch) {
+    return null;
+  }
+  const parts = path17.relative(scratch, file).split(path17.sep);
+  let current = scratch;
+  for (const [index, part] of parts.entries()) {
+    const next = path17.join(current, part);
+    let stats = lstatIfExists(next);
+    if (!stats) {
+      if (isPathInside(copyRoot, next) || !makeStandIn(next, context, index === parts.length - 1)) {
+        return null;
+      }
+      stats = fs15.lstatSync(next);
+    }
+    if (stats.isSymbolicLink()) {
+      if (hops >= MAX_LINK_HOPS) {
+        return null;
+      }
+      current = stageLinkTarget(path17.resolve(path17.dirname(next), fs15.readlinkSync(next)), context, hops + 1);
+      if (current === null) {
+        return null;
+      }
+    } else {
+      current = next;
+    }
+  }
+  return current;
+}
+function makeStandIn(copy, { mirror, realOf }, last) {
+  const real = realOf(copy);
+  const stats = real === null ? null : lstatIfExists(real);
+  if (!stats || !(stats.isSymbolicLink() || stats.isDirectory() || last && stats.isFile())) {
+    return false;
+  }
+  withWritable(path17.dirname(copy), () => {
+    if (stats.isSymbolicLink()) {
+      const text = fs15.readlinkSync(real);
+      fs15.symlinkSync(path17.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
+    } else if (stats.isDirectory()) {
+      fs15.mkdirSync(copy);
+      if (lstatIfExists(path17.join(real, "story.md"))) {
+        fs15.writeFileSync(path17.join(copy, "story.md"), "");
+      }
+    } else {
+      fs15.writeFileSync(copy, "");
+    }
+  });
+  return true;
+}
+function isFolder(target) {
+  try {
+    return fs15.statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+function withWritable(folder, make) {
+  const mode = fs15.statSync(folder).mode & 4095;
+  if ((mode & 192) === 192) {
+    make();
+    return;
+  }
+  fs15.chmodSync(folder, mode | 192);
+  try {
+    make();
+  } finally {
+    fs15.chmodSync(folder, mode);
+  }
 }
 function copyProject(source, target, roots, depth = 0) {
   fs15.mkdirSync(target);

@@ -4,7 +4,7 @@ import path from "node:path";
 import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
-import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
+import { MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
@@ -106,7 +106,9 @@ function inScratch(target, run, prepare) {
   try {
     prepare(copyRoot, mirror, atRoot);
     if (!atRoot) {
-      copyLinkTargets(copyRoot, scratch, mirror, (file) => to + file.slice(from.length));
+      // The real path a scratch path mirrors; null for another drive's.
+      const realOf = (file) => (isPathInside(from, file) ? to + file.slice(from.length) : null);
+      copyLinkTargets(copyRoot, scratch, mirror, realOf);
     }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
@@ -175,18 +177,30 @@ function copyLinkedBooks(projectRoot, mirror) {
   }
 }
 
+// The most symlinks followed to stage one link target, as the system's own
+// limit on a path stops a loop.
+const MAX_LINK_HOPS = 40;
+
 // A markdown link to a file outside the project is an error in its own
 // right (link-outside-project), and one into a linked book is accepted when
-// the file is there, so validate asks whether each target exists. Each
-// target outside the copy that is missing from the scratch folder but
-// exists in fact is made there, as an empty file or folder (only its being
-// there is checked), so the dry run reports the link as the real run does
-// rather than as a broken link.
+// the file is there, so validate asks whether each target exists. Each part
+// of a target's path that the scratch folder lacks outside the copy, but
+// that exists in fact, is made there: an empty file or folder (only its
+// being there is checked), or a symlink like the real one. Symlinks already
+// in the copy are followed, so an in-project link that leads outside the
+// project is staged too. The dry run then reports each link as the real run
+// does rather than as a broken link.
 function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
   if (!lstatIfExists(copyRoot)?.isDirectory()) {
     return;
   }
-  for (const file of copiedMarkdown(copyRoot)) {
+  const context = { copyRoot, scratch, mirror, realOf };
+  for (const file of linkSources(copyRoot)) {
+    // An oversized file is a blank sparse copy, and validate refuses it.
+    const stats = lstatIfExists(file);
+    if (!stats?.isFile() || stats.size > MAX_READ_BYTES) {
+      continue;
+    }
     let body;
     try {
       body = fs.readFileSync(file, "utf8");
@@ -194,74 +208,122 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
       continue;
     }
     for (const target of extractMarkdownLinkTargets(body)) {
-      // An absolute target is checked on the real filesystem already.
+      // An absolute target names the real file already.
       if (path.isAbsolute(target) || !path.basename(target).endsWith(".md")) {
         continue;
       }
-      const copy = path.resolve(path.dirname(file), target);
-      if (!isPathInside(copyRoot, copy) && isPathInside(scratch, copy) && copy !== scratch) {
-        try {
-          copyLinkTarget(copy, realOf(copy), mirror, realOf);
-        } catch {
-          // A read-only copied folder, or a file where a folder would go:
-          // the link is reported as missing.
-        }
+      try {
+        stageLinkTarget(path.resolve(path.dirname(file), target), context, 0);
+      } catch {
+        // A file where a folder would go: the link is reported as missing,
+        // as in the real run.
       }
     }
   }
 }
 
-// Makes `copy` stand in for `real` when nothing is there yet: an empty file
-// or folder, or for a symlink, a symlink to the stand-in for what it points
-// at, so a check of the real path behind it answers as in the project.
-function copyLinkTarget(copy, real, mirror, realOf) {
-  if (lstatIfExists(copy)) {
-    return;
-  }
-  const stats = lstatIfExists(real);
-  if (stats?.isSymbolicLink()) {
-    const resolved = realPath(real);
-    const stand = mirror(resolved);
-    if (resolved === real || realOf(stand) !== resolved) {
-      return;
+// The files whose markdown links validate checks (see checkBodyLinkTarget
+// in validate.js): the timeline, the arcs, and the matter pages.
+function linkSources(copyRoot) {
+  const files = [path.join(copyRoot, "plot", "timeline.md")];
+  for (const folder of [path.join("plot", "arcs"), MATTER_DIR]) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(path.join(copyRoot, folder), { withFileTypes: true });
+    } catch {
+      continue;
     }
-    copyLinkTarget(stand, resolved, mirror, realOf);
-    makeFolders(path.dirname(copy), realOf);
-    fs.symlinkSync(stand, copy);
-  } else if (stats?.isDirectory()) {
-    makeFolders(copy, realOf);
-  } else if (stats?.isFile()) {
-    makeFolders(path.dirname(copy), realOf);
-    fs.writeFileSync(copy, "");
-  }
-}
-
-// Makes `folder` in the scratch folder, and the folders above it that are
-// missing. A folder that is a project in fact gets an empty story.md, so a
-// scan of a linked book still skips it as another project.
-function makeFolders(folder, realOf) {
-  if (fs.existsSync(folder)) {
-    return;
-  }
-  makeFolders(path.dirname(folder), realOf);
-  fs.mkdirSync(folder);
-  if (lstatIfExists(path.join(realOf(folder), "story.md"))) {
-    fs.writeFileSync(path.join(folder, "story.md"), "");
-  }
-}
-
-// The markdown files in the copy, not through symlinks.
-function copiedMarkdown(folder) {
-  const files = [];
-  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
-    const file = path.join(folder, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...copiedMarkdown(file));
-    } else if (entry.isFile() && entry.name.endsWith(".md")) {
-      files.push(file);
-    }
+    files.push(...entries.filter((entry) => entry.name.endsWith(".md")).slice(0, MAX_SCAN_FILES).map((entry) => path.join(copyRoot, folder, entry.name)));
   }
   return files;
+}
+
+// Walks `file` from the scratch root as the system would, following
+// symlinks, and makes each missing part outside the copy that exists in
+// fact. Inside the copy, a missing part was left out on purpose (dist/, a
+// nested project), and a link to it is broken in the real run too. Returns
+// the path reached, or null where the walk stops: something missing, a
+// symlink out of the scratch folder (to the real file, which the command
+// reads directly), or too many symlinks.
+function stageLinkTarget(file, context, hops) {
+  const { copyRoot, scratch } = context;
+  if (!isPathInside(scratch, file) || file === scratch) {
+    return null;
+  }
+  const parts = path.relative(scratch, file).split(path.sep);
+  let current = scratch;
+  for (const [index, part] of parts.entries()) {
+    const next = path.join(current, part);
+    let stats = lstatIfExists(next);
+    if (!stats) {
+      if (isPathInside(copyRoot, next) || !makeStandIn(next, context, index === parts.length - 1)) {
+        return null;
+      }
+      stats = fs.lstatSync(next);
+    }
+    if (stats.isSymbolicLink()) {
+      if (hops >= MAX_LINK_HOPS) {
+        return null;
+      }
+      current = stageLinkTarget(path.resolve(path.dirname(next), fs.readlinkSync(next)), context, hops + 1);
+      if (current === null) {
+        return null;
+      }
+    } else {
+      current = next;
+    }
+  }
+  return current;
+}
+
+// Makes `copy` stand in for the real path it mirrors, and returns whether
+// that path exists. A folder that is a project in fact gets an empty
+// story.md, so a scan of a linked book still skips it as another project.
+function makeStandIn(copy, { mirror, realOf }, last) {
+  const real = realOf(copy);
+  const stats = real === null ? null : lstatIfExists(real);
+  if (!stats || !(stats.isSymbolicLink() || stats.isDirectory() || (last && stats.isFile()))) {
+    return false;
+  }
+  // A copied folder may be read-only, as its book is; the stand-in is
+  // scratch, so it is made all the same.
+  withWritable(path.dirname(copy), () => {
+    if (stats.isSymbolicLink()) {
+      const text = fs.readlinkSync(real);
+      fs.symlinkSync(path.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
+    } else if (stats.isDirectory()) {
+      fs.mkdirSync(copy);
+      if (lstatIfExists(path.join(real, "story.md"))) {
+        fs.writeFileSync(path.join(copy, "story.md"), "");
+      }
+    } else {
+      fs.writeFileSync(copy, "");
+    }
+  });
+  return true;
+}
+
+// Whether `target` leads to a folder; false for a dangling or looping link.
+function isFolder(target) {
+  try {
+    return fs.statSync(target).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function withWritable(folder, make) {
+  const mode = fs.statSync(folder).mode & 0o7777;
+  if ((mode & 0o300) === 0o300) {
+    make();
+    return;
+  }
+  fs.chmodSync(folder, mode | 0o300);
+  try {
+    make();
+  } finally {
+    fs.chmodSync(folder, mode);
+  }
 }
 
 // Copies the folders a write command can read, as markdownFiles walks them:
