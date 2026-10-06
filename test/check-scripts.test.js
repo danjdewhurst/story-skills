@@ -548,13 +548,77 @@ describe("check-metadata bun pin", () => {
     expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": 'run: curl -fsSL https://bun.sh/install | bash -s "bun-v1.4.2"\n' })).toEqual([]);
   });
 
-  test("readWorkflows reads every yml and yaml file in .github/workflows", () => {
+  // Qodo on #624: a `run: |` script is text, so a version in it is not a pin.
+  test("skips keys inside block scalars but still checks install scripts there (#570)", () => {
+    const ci = [
+      "jobs:",
+      "  test:",
+      "    steps:",
+      "      - uses: oven-sh/setup-bun@abc # v2",
+      "        with:",
+      "          bun-version: 1.4.2",
+      "      - run: |",
+      "          echo bun-version: 1.3.0",
+      "          cat > x.yml <<'EOF'",
+      "          bun-version: 1.0.0",
+      "          EOF",
+      "",
+      "          curl -fsSL https://bun.sh/install | bash -s bun-v1.3.0",
+      "      - name: notes",
+      "        env:",
+      "          NOTES: >-",
+      "            use bun-version: 0.1.0",
+      "        run: echo done"
+    ].join("\n");
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": ci })).toEqual([
+      ".github/workflows/ci.yml:13 Bun install script mismatch: expected 1.4.2, got 1.3.0"
+    ]);
+  });
+
+  // setup-bun v2 falls back to packageManager only when package.json is
+  // already checked out, and installs the latest Bun otherwise.
+  test("requires bun-version on every setup-bun step (#570)", () => {
+    const publish = [
+      "jobs:",
+      "  build:",
+      "    steps:",
+      "      - name: Set up Bun",
+      "        uses: oven-sh/setup-bun@abc # v2",
+      "      - uses: 'oven-sh/setup-bun@abc'",
+      "        with:",
+      "          no-cache: true",
+      "      - uses: actions/checkout@abc",
+      "        with:",
+      "          bun-version: 1.4.2",
+      "      - { uses: oven-sh/setup-bun@abc, with: { bun-version: 1.4.2 } }",
+      "      - name: From a file",
+      "        uses: oven-sh/setup-bun@abc",
+      "        with:",
+      "          bun-version-file: package.json",
+      "      - name: Pinned",
+      "        uses: oven-sh/setup-bun@abc",
+      "        with:",
+      "          # the pin",
+      "          bun-version: 1.4.2",
+      "      - uses: oven-sh/setup-bun@abc"
+    ].join("\n");
+    expect(checkWorkflowBunPin([], "bun@1.4.2", { "ci.yml": "          bun-version: 1.4.2\n", "publish.yml": publish })).toEqual([
+      ".github/workflows/publish.yml:5 runs oven-sh/setup-bun without bun-version; add bun-version: 1.4.2",
+      ".github/workflows/publish.yml:6 runs oven-sh/setup-bun without bun-version; add bun-version: 1.4.2",
+      ".github/workflows/publish.yml:16 sets bun-version-file, which check:metadata cannot compare with the pin; use bun-version: 1.4.2",
+      ".github/workflows/publish.yml:22 runs oven-sh/setup-bun without bun-version; add bun-version: 1.4.2"
+    ]);
+  });
+
+  test("readWorkflows reads every yml and yaml file in .github/workflows, and no folder (#570)", () => {
     const root = makeTempDir("story-workflows-");
     const dir = path.join(root, ".github", "workflows");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "z.yaml"), "z\n");
     fs.writeFileSync(path.join(dir, "a.yml"), "a\n");
     fs.writeFileSync(path.join(dir, "notes.md"), "not a workflow\n");
+    // Qodo on #624: a folder named like a workflow made readFileSync throw.
+    fs.mkdirSync(path.join(dir, "archived.yml"));
     expect(readWorkflows(root)).toEqual({ "a.yml": "a\n", "z.yaml": "z\n" });
   });
 });
