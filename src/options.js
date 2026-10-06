@@ -8,7 +8,7 @@ import { usageError } from "./exit-codes.js";
 // `aliasOf` names the flag an alias shares its value with, so a flag given
 // on the command line overrides a story.md default set through either name.
 export const OPTIONS = [
-  { name: "title", value: "<name>", help: ["Story title for import"] },
+  { name: "title", value: "<name>", help: ["Story title for import; title of the new chapter", "for split"] },
   { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
   { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
   { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
@@ -52,7 +52,7 @@ export const OPTIONS = [
   { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
   { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them; for", "split, where to split: a scene break number, a", "heading, or a line of the text"] },
   { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
   { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
@@ -68,7 +68,7 @@ export const OPTIONS = [
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
-  { name: "dry-run", help: ["List the files add, rename, remove, move,", "reindex, migrate, wordcount --write, doctor", "--fix, or snapshot would create, update, or", "delete, and change nothing"] },
+  { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, or snapshot would create, update,", "or delete, and change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },

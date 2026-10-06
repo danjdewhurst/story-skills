@@ -82,7 +82,7 @@ The files fall into three groups:
 | Group | Files | Who writes them |
 |-------|-------|-----------------|
 | Story bible | `story.md`, `style-sheet.md`, `continuity/state.md`, `plot/timeline.md` | You or an agent, by hand. `story init` creates starter versions. |
-| Entities | One file per character, location, chapter, scene, and so on, such as `characters/sera-voss.md` | You or an agent, by hand or with `story add`. `story rename`, `story move`, and `story remove` keep references in step. |
+| Entities | One file per character, location, chapter, scene, and so on, such as `characters/sera-voss.md` | You or an agent, by hand or with `story add`. `story rename`, `story move`, `story split`, `story merge`, and `story remove` keep references in step. |
 | Registries | Every `_index.md` | The CLI (`story reindex`). Some registries also have hand-written sections, described in [Registries](#registries). |
 
 `story init` creates the full layout in one step; see [Getting started](getting-started.md). `story validate` reports an error for any required path that is missing. It warns about a markdown file the model doesn't recognise, such as a stray `notes.md` at the project root or a file nested one folder too deep. Those files are ignored:
@@ -258,7 +258,7 @@ Updated 1 registries
 
 When nothing has changed, `story reindex` prints `Registries already up to date`.
 
-You rarely need to run `story reindex` yourself. `story add`, `story rename`, `story move`, `story remove`, `story wordcount --write`, `story migrate`, and `story import` all reindex when they finish. Run it after you create, delete, or rename an entity file by hand.
+You rarely need to run `story reindex` yourself. `story add`, `story rename`, `story move`, `story split`, `story merge`, `story remove`, `story wordcount --write`, `story migrate`, and `story import` all reindex when they finish. Run it after you create, delete, or rename an entity file by hand.
 
 ## Links and backlinks
 

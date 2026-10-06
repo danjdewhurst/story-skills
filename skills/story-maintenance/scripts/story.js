@@ -558,6 +558,9 @@ var FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  "split-references": "warning",
+  "split-scenes": "warning",
+  "merge-conflicts": "warning",
   "kept-story-options": "warning",
   "unsplit-chapter-lines": "warning",
   "usage-error": "error",
@@ -8669,7 +8672,7 @@ function times(count) {
 
 // src/options.js
 var OPTIONS = [
-  { name: "title", value: "<name>", help: ["Story title for import"] },
+  { name: "title", value: "<name>", help: ["Story title for import; title of the new chapter", "for split"] },
   { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
   { name: "genre", value: "<name>", help: ["Story genre for init or import"] },
   { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
@@ -8713,7 +8716,7 @@ var OPTIONS = [
   { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
   { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },
-  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them"] },
+  { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them; for", "split, where to split: a scene break number, a", "heading, or a line of the text"] },
   { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
   { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
   { name: "init", help: ["Add the default revision passes for passes"] },
@@ -8729,7 +8732,7 @@ var OPTIONS = [
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
-  { name: "dry-run", help: ["List the files add, rename, remove, move,", "reindex, migrate, wordcount --write, doctor", "--fix, or snapshot would create, update, or", "delete, and change nothing"] },
+  { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, or snapshot would create, update,", "or delete, and change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
@@ -20639,6 +20642,521 @@ function moveScene(project, oldId, options) {
   const reindexed = reindexProject(project.root);
   return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed), warnings };
 }
+function splitChapter(root, options) {
+  return withProjectLock(root, () => splitChapterUnlocked(root, options));
+}
+function mergeChapters(root, options) {
+  return withProjectLock(root, () => mergeChaptersUnlocked(root, options));
+}
+var RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again";
+function restructureWrites(root, write) {
+  const { result: error, changes } = recordChanges(root, () => {
+    try {
+      write();
+      return null;
+    } catch (caught) {
+      return caught;
+    }
+  });
+  if (error !== null) {
+    if (changes.length > 0) {
+      error.hint = RESTRUCTURE_HINT;
+    }
+    throw error;
+  }
+}
+function existingChapter(project, value, missing) {
+  const id = String(value ?? "").trim();
+  if (!id) {
+    throw usageError(missing);
+  }
+  requireKebabId(id, "chapter id");
+  const chapter = project.chapters.find((entry) => entry.id === id);
+  if (!chapter) {
+    throw usageError(`chapter ${id} does not exist`);
+  }
+  return chapter;
+}
+function refuseBranching(project, command) {
+  const choosers = project.chapters.filter((chapter) => chapterChoices(chapter, "").choices.length > 0);
+  if (choosers.length > 0) {
+    const files = choosers.map((chapter) => relative(project, chapter.file));
+    throw refusedError(`story ${command} does not work on a branching book: ${files.join(", ")} ${files.length === 1 ? "has" : "have"} choices, and a ${command} would change where they lead. Restructure it by hand with story add chapter, story move, and story remove`);
+  }
+}
+function followingRun(project, number) {
+  const run = [];
+  const numbered = (next) => project.chapters.filter((entry) => entry.number === next);
+  for (let chapters = numbered(number);chapters.length > 0; chapters = numbered(number + run.length)) {
+    if (chapters.length > 1) {
+      throw refusedError(`${chapters.map((chapter) => relative(project, chapter.file)).join(" and ")} share chapter number ${chapters[0].number}: give each its own number first (story validate reports it)`);
+    }
+    run.push(chapters[0]);
+  }
+  return run;
+}
+function shiftChapters(root, run, step, warnings) {
+  for (const chapter of step > 0 ? [...run].reverse() : run) {
+    const result = moveChapter(scanProject(root), chapter.id, { number: String(chapter.number + step) });
+    warnings.push(...result.warnings);
+  }
+}
+function chapterRunFiles(project, run) {
+  const ids = new Set(run.map((chapter) => chapter.id));
+  return [...run.map((chapter) => chapter.file), ...project.scenes.filter((scene) => ids.has(scene.chapter)).map((scene) => scene.file)];
+}
+function chapterLengthFields(body, unit) {
+  const prose = chapterProse(body);
+  return { "word-count": wordCount(prose), ...unit.name === "characters" ? { "character-count": characterCount(prose) } : {} };
+}
+function withLineEndings(text, sample) {
+  return sample.includes(`\r
+`) ? text.replace(/\r?\n/g, `\r
+`) : text;
+}
+function proseParagraphs3(body) {
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const paragraphs = [];
+  let offset = 0;
+  let line = 0;
+  let current = null;
+  for (const text of masked.split(`
+`)) {
+    const lineStart = offset;
+    offset += text.length + 1;
+    if (lineStart >= start && text.trim() !== "") {
+      current ??= { start: lineStart, line, lines: [] };
+      current.lines.push({ text, line });
+      current.end = lineStart + text.length;
+    } else if (current) {
+      paragraphs.push(current);
+      current = null;
+    }
+    line += 1;
+  }
+  if (current) {
+    paragraphs.push(current);
+  }
+  for (const paragraph of paragraphs) {
+    paragraph.sceneBreak = isSceneBreak(paragraph.lines.map((entry) => entry.text).join(`
+`));
+  }
+  return paragraphs;
+}
+function splitPoint(body, marker, chapterId, headerLines) {
+  const paragraphs = proseParagraphs3(body);
+  const breaks = paragraphs.filter((paragraph) => paragraph.sceneBreak);
+  let index;
+  if (/^\d+$/.test(marker)) {
+    const number = Number(marker);
+    if (number < 1 || number > breaks.length) {
+      throw usageError(breaks.length === 0 ? `chapter ${chapterId} has no scene breaks in its chapter text: pass --at with a heading or a line of the text instead` : `--at ${marker}: chapter ${chapterId} has ${breaks.length} scene ${breaks.length === 1 ? "break" : "breaks"}, so give a number from 1 to ${breaks.length}, or a heading or a line of the text`);
+    }
+    index = paragraphs.indexOf(breaks[number - 1]) + 1;
+  } else {
+    const lines = paragraphs.filter((paragraph) => !paragraph.sceneBreak).flatMap((paragraph) => paragraph.lines.map((entry) => ({ ...entry, paragraph })));
+    const plain = (text) => text.trim().replace(/^#{1,6}[ \t]+/, "").replace(/[ \t]+#+$/, "").trim();
+    let matches = lines.filter((entry) => plain(entry.text) === marker);
+    if (matches.length === 0) {
+      matches = lines.filter((entry) => entry.text.includes(marker));
+    }
+    if (matches.length === 0) {
+      throw usageError(`--at "${marker}" matches no line in the chapter text of ${chapterId}: give a scene break number, a heading, or a line of the text`);
+    }
+    if (matches.length > 1) {
+      throw usageError(`--at "${marker}" matches ${matches.length} lines in ${chapterId} (lines ${matches.map((entry) => entry.line + headerLines + 1).join(", ")}): quote more of the line so it matches only one`);
+    }
+    index = paragraphs.indexOf(matches[0].paragraph);
+  }
+  return splitAt(paragraphs, index, marker, chapterId);
+}
+function splitAt(paragraphs, index, marker, chapterId) {
+  const breaks = paragraphs.filter((paragraph) => paragraph.sceneBreak);
+  const before = paragraphs.slice(0, index);
+  const after = paragraphs.slice(index);
+  const atBreak = before.length > 0 && before.at(-1).sceneBreak;
+  if (!before.some((paragraph) => !paragraph.sceneBreak)) {
+    throw usageError(`--at "${marker}" is at the start of the chapter text of ${chapterId}, so nothing would stay in it: split at a later point`);
+  }
+  if (!after.some((paragraph) => !paragraph.sceneBreak)) {
+    throw usageError(`--at "${marker}" is at the end of the chapter text of ${chapterId}, so the new chapter would be empty: split at an earlier point`);
+  }
+  return {
+    index,
+    cut: atBreak ? before.at(-1).start : after[0].start,
+    start: after[0].start,
+    breaksBefore: before.filter((paragraph) => paragraph.sceneBreak).length,
+    atBreak,
+    sections: breaks.length + 1
+  };
+}
+function chapterReferenceFiles(root, chapterId, excluded) {
+  const context = entityReferenceContext(root, "chapter", chapterId);
+  const probe = `${chapterId}-reference-probe`;
+  const chapterOnly = (text, oldId, newId) => text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
+  const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
+  return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
+}
+var SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "strand"];
+function splitChapterUnlocked(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "split");
+  const chapter = existingChapter(project, options.id, "split requires a chapter id");
+  const marker = options.at === undefined || options.at === true ? "" : String(options.at).trim();
+  if (marker === "") {
+    throw usageError("split requires --at <marker>: a scene break number, a heading, or a line of the chapter text");
+  }
+  let title = `${chapter.title} (continued)`;
+  if (options.title !== undefined) {
+    title = options.title === true ? "" : String(options.title).trim();
+    if (title === "") {
+      throw usageError("--title cannot be empty: leave it out to use the chapter's title with (continued)");
+    }
+    requireSingleLineName(title, "chapter");
+  }
+  refuseBranching(project, "split");
+  const original = readMarkdown(chapter.file, project.root);
+  const headerLines = original.rawMarkdown.slice(0, original.rawMarkdown.length - original.body.length).split(`
+`).length - 1;
+  const point = splitPoint(original.body, marker, chapter.id, headerLines);
+  const number = chapter.number + 1;
+  const newId = canonicalChapterId(number);
+  const newFile = path13.join(project.root, "chapters", `${newId}.md`);
+  const run = followingRun(project, number);
+  if (fs12.existsSync(newFile) && !run.some((entry) => entry.file === newFile)) {
+    throw refusedError(`${relative(project, newFile)} already exists and is not chapter ${number}: fix it first (story validate reports it)`);
+  }
+  const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene);
+  const keep = point.atBreak ? point.breaksBefore : point.breaksBefore + 1;
+  const moving = scenes.slice(keep);
+  const label = relative(project, chapter.file);
+  const warnings = [];
+  if (scenes.length > 0 && scenes.length !== point.sections) {
+    warnings.push(warn("split-scenes", `${label} has ${scenes.length} scene ${scenes.length === 1 ? "record" : "records"} but ${point.sections} ${point.sections === 1 ? "scene" : "scenes"} of text between scene breaks, so split kept the first ${Math.min(keep, scenes.length)} in ${chapter.id} and moved ${moving.length === 0 ? "none" : moving.map((scene) => scene.id).join(", ")} to ${newId} by order. Check them, and fix any with story move scene`, label));
+  } else if (!point.atBreak && scenes[keep - 1] !== undefined) {
+    warnings.push(warn("split-scenes", `--at "${marker}" falls inside the text of ${scenes[keep - 1].id}, whose record stays in ${chapter.id}; if the scene now belongs to ${newId}, or needs a record in each, use story move scene and story add scene`, label));
+  }
+  const referencing = chapterReferenceFiles(project.root, chapter.id, [chapter.file, ...scenes.map((scene) => scene.file)]);
+  if (referencing.length > 0) {
+    warnings.push(warn("split-references", `${referencing.join(", ")} still ${referencing.length === 1 ? "names" : "name"} ${chapter.id}, which now holds only the text before the split: check whether ${referencing.length === 1 ? "it" : "any of them"} should name ${newId} instead`, referencing.length === 1 ? referencing[0] : null));
+  }
+  assertWritable(project.root, [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)], [newFile]);
+  restructureWrites(project.root, () => {
+    shiftChapters(project.root, run, 1, warnings);
+    const current = scanProject(project.root);
+    const markdown = readMarkdown(chapter.file, project.root);
+    const split = splitAt(proseParagraphs3(markdown.body), point.index, marker, chapter.id);
+    const firstBody = withLineEndings(`${markdown.body.slice(0, split.cut).trimEnd()}
+`, markdown.rawMarkdown);
+    const secondProse = `${markdown.body.slice(split.start).trimEnd()}
+`;
+    const { hook, ...kept } = markdown.data;
+    const copied = Object.fromEntries(SPLIT_COPIED_FIELDS.filter((key) => Object.hasOwn(markdown.data, key)).map((key) => [key, markdown.data[key]]));
+    const secondBody = `# ${chapterHeading(number, title)}
+
+## Chapter Text
+
+${secondProse}`;
+    const secondData = {
+      title,
+      number,
+      ...copied,
+      "arcs-advanced": [],
+      ...hook === undefined ? {} : { hook },
+      ...chapterLengthFields(secondBody, current.unit)
+    };
+    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root });
+    writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...chapterLengthFields(firstBody, current.unit) }, firstBody), { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    setCurrentChapter(project.root, chapter.number, number);
+    for (const [index, scene] of moving.entries()) {
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: newId, scene: String(index + 1) }).warnings);
+    }
+  });
+  const reindexed = reindexProject(project.root);
+  return {
+    kind: "chapter",
+    id: chapter.id,
+    newId,
+    title,
+    file: newFile,
+    scenesMoved: moving.length,
+    renumbered: run.length,
+    changed: [chapter.file, newFile].concat(reindexed.changed),
+    warnings
+  };
+}
+function setCurrentChapter(root, from, to, plan = null) {
+  const statePath = path13.join(root, "continuity", "state.md");
+  if (!fs12.existsSync(statePath)) {
+    return;
+  }
+  const text = plan?.get(statePath) ?? readTextFile(statePath);
+  const data = parseFrontmatter(text, statePath).data;
+  if (data["current-chapter"] !== from) {
+    return;
+  }
+  const next = replaceFrontmatter(text, { ...data, "current-chapter": to });
+  if (plan) {
+    if (!plan.has(statePath)) {
+      plan.originals.set(statePath, text);
+    }
+    plan.set(statePath, next);
+  } else {
+    writeFile(statePath, next, { root, unchangedFrom: text });
+  }
+}
+function mergeChaptersUnlocked(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "merge");
+  const missing = "merge requires two chapter ids: the chapter to keep, then the one after it";
+  const first = existingChapter(project, options.id, missing);
+  const second = existingChapter(project, options.next, missing);
+  if (first === second) {
+    throw usageError(`merge needs two different chapters, got ${first.id} twice`);
+  }
+  const position = project.chapters.indexOf(first);
+  if (project.chapters[position + 1] !== second) {
+    const secondPosition = project.chapters.indexOf(second);
+    if (secondPosition < position) {
+      throw usageError(`${second.id} comes before ${first.id}: name the earlier chapter first (story merge ${second.id} ${first.id})`);
+    }
+    const between = project.chapters.slice(position + 1, secondPosition).map((chapter) => chapter.id);
+    throw usageError(`${second.id} does not follow ${first.id}: merge takes neighbouring chapters, and ${between.join(", ")} ${between.length === 1 ? "comes" : "come"} between them`);
+  }
+  refuseBranching(project, "merge");
+  const scenes = project.scenes.filter((scene) => scene.chapter === second.id).sort((left, right) => left.scene - right.scene);
+  const firstScene = nextSceneNumber(project, first.id);
+  const sceneFiles = scenes.map((scene, index) => path13.join(project.root, "scenes", `${first.id}-scene-${String(firstScene + index).padStart(2, "0")}.md`));
+  const taken = sceneFiles.find((file) => fs12.existsSync(file));
+  if (taken) {
+    throw refusedError(`${relative(project, taken)} already exists; nothing was changed`);
+  }
+  const run = followingRun(project, second.number + 1);
+  assertWritable(project.root, [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)], sceneFiles);
+  const warnings = [];
+  restructureWrites(project.root, () => {
+    for (const [index, scene] of scenes.entries()) {
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: first.id, scene: String(firstScene + index) }).warnings);
+    }
+    const current = scanProject(project.root);
+    const kept = readMarkdown(first.file, project.root);
+    const merged = mergedChapter(kept, readMarkdown(second.file, project.root), current.unit, first.id, second.id);
+    warnings.push(...merged.warnings);
+    const context = entityReferenceContext(project.root, "chapter", second.id);
+    const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]), idRenamer(second.id, first.id), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, first.id), second.id, first.id));
+    plan.originals.set(first.file, kept.rawMarkdown);
+    setCurrentChapter(project.root, second.number, first.number, plan);
+    followExemptionPatterns(project.root, plan, "chapter", second.id, first.id);
+    reorderProgressions(current, plan, chapterChronology(current));
+    warnings.push(...mergeProgressions(project.root, plan, first.id));
+    assertWritable(project.root, [...plan.keys(), second.file]);
+    writeReferencePlan(project.root, plan);
+    removeFile(second.file);
+    shiftChapters(project.root, run, -1, warnings);
+  });
+  const reindexed = reindexProject(project.root);
+  return {
+    kind: "chapter",
+    id: first.id,
+    mergedId: second.id,
+    file: first.file,
+    scenesMoved: scenes.length,
+    renumbered: run.length,
+    changed: [first.file].concat(reindexed.changed),
+    warnings
+  };
+}
+function mergeProgressions(root, plan, chapterId) {
+  const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
+  const warnings = [];
+  for (const [file, text] of plan) {
+    if (text === null || !dirs.includes(projectPath(root, path13.dirname(file)))) {
+      continue;
+    }
+    const data = parseFrontmatter(text, file).data;
+    if (!Array.isArray(data.progressions)) {
+      continue;
+    }
+    const last = new Map;
+    data.progressions.forEach((item, index) => {
+      if (item && typeof item === "object" && !Array.isArray(item) && idText(item.from) === chapterId && typeof item.field === "string") {
+        last.set(item.field, index);
+      }
+    });
+    const dropped = [];
+    const progressions = data.progressions.filter((item, index) => {
+      const repeated = item && typeof item === "object" && !Array.isArray(item) && idText(item.from) === chapterId && typeof item.field === "string" && last.get(item.field) !== index;
+      if (repeated) {
+        dropped.push(`${item.field} ${JSON.stringify(item.value)}`);
+      }
+      return !repeated;
+    });
+    if (dropped.length > 0) {
+      plan.set(file, replaceFrontmatter(text, { ...data, progressions }));
+      const label = projectPath(root, file);
+      warnings.push(warn("merge-conflicts", `${label} changed the same ${dropped.length === 1 ? "field" : "fields"} in both merged chapters; the earlier ${dropped.length === 1 ? "progression" : "progressions"} (${dropped.join(", ")}) ${dropped.length === 1 ? "was" : "were"} dropped and the later value kept from ${chapterId}`, label));
+    }
+  }
+  return warnings;
+}
+var BLANK_VALUES = [undefined, null, ""];
+function isBlankValue(value) {
+  return BLANK_VALUES.includes(value) || Array.isArray(value) && value.length === 0;
+}
+var MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook"]);
+var MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
+function mergedChapterData(firstData, secondData) {
+  const data = { ...firstData };
+  const conflicts = [];
+  const statuses = [...CHAPTER_STATUSES];
+  for (const [key, value] of Object.entries(secondData)) {
+    if (MERGE_DERIVED_FIELDS.has(key) || isBlankValue(value)) {
+      continue;
+    }
+    const current = firstData[key];
+    if (!Object.hasOwn(firstData, key) || isBlankValue(current)) {
+      data[key] = value;
+    } else if (Array.isArray(current) && Array.isArray(value)) {
+      const seen = new Set(current.map((item) => JSON.stringify(item)));
+      data[key] = current.concat(value.filter((item) => !seen.has(JSON.stringify(item)) && seen.add(JSON.stringify(item))));
+    } else if (MERGE_SUMMED_FIELDS.has(key) && Number.isInteger(current) && Number.isInteger(value)) {
+      data[key] = current + value;
+    } else if (key === "status" && statuses.includes(current) && statuses.includes(value)) {
+      data[key] = statuses[Math.min(statuses.indexOf(current), statuses.indexOf(value))];
+    } else if (JSON.stringify(current) !== JSON.stringify(value)) {
+      conflicts.push(`${key} ${JSON.stringify(value)}`);
+    }
+  }
+  if (!isBlankValue(secondData.hook)) {
+    data.hook = secondData.hook;
+  } else if (Object.hasOwn(data, "hook")) {
+    delete data.hook;
+  }
+  const droppedHook = isBlankValue(secondData.hook) && !isBlankValue(firstData.hook) ? firstData.hook : null;
+  return { data, conflicts, droppedHook };
+}
+var CHAPTER_TEXT_HEADING = /^ {0,3}##[ \t]+Chapter Text(?:[ \t]+#+)?[ \t]*\r?$/i;
+var NOTE_SECTION_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?$/gm;
+function chapterNotesRange(body, masked, proseOffset) {
+  const heading = /^(?:[ \t]*\r?\n)*[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/.exec(masked.slice(0, proseOffset));
+  const start = heading ? heading[0].length : 0;
+  const lines = masked.slice(start, proseOffset).split(`
+`);
+  let offset = start;
+  const starts = lines.map((line) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    return lineStart;
+  });
+  let end = proseOffset;
+  for (let index = lines.length - 1;index >= 0; index -= 1) {
+    const text = lines[index].trim();
+    if (text !== "" && text !== "---" && !CHAPTER_TEXT_HEADING.test(text)) {
+      break;
+    }
+    end = starts[index];
+  }
+  return { start, end: start + masked.slice(start, end).trimEnd().length };
+}
+function noteSections(text, masked) {
+  const headings = [...masked.matchAll(NOTE_SECTION_HEADING)];
+  const sections = headings.map((match, index) => {
+    const lineEnd = match.index + match[0].length;
+    return {
+      key: match[1].trim().toLowerCase(),
+      heading: text.slice(match.index, lineEnd).replace(/\r$/, ""),
+      body: text.slice(lineEnd, index + 1 < headings.length ? headings[index + 1].index : text.length)
+    };
+  });
+  return { preamble: text.slice(0, headings[0]?.index ?? text.length), sections };
+}
+function joinNotes(first, second) {
+  const left = first.trimEnd();
+  const right = second.trim();
+  if (left.trim() === "" || right === "") {
+    return left.trim() === "" ? right : left;
+  }
+  const listItem = /^\s*(?:[-*+]|\d+[.)])[ \t]/;
+  return `${left}${listItem.test(left.split(`
+`).at(-1)) && listItem.test(right.split(`
+`)[0]) ? `
+` : `
+
+`}${right}`;
+}
+function mergedChapterBody(firstBody, secondBody) {
+  const firstMasked = maskMarkup(firstBody);
+  const secondMasked = maskMarkup(secondBody);
+  const firstStart = proseStart(firstBody, firstMasked);
+  const secondStart = proseStart(secondBody, secondMasked);
+  let head = firstBody.slice(0, firstStart);
+  let firstProse = firstBody.slice(firstStart);
+  const secondRange = chapterNotesRange(secondBody, secondMasked, secondStart);
+  if (secondRange.end > secondRange.start) {
+    const firstRange = chapterNotesRange(firstBody, firstMasked, firstStart);
+    const notes = noteSections(firstBody.slice(firstRange.start, firstRange.end), firstMasked.slice(firstRange.start, firstRange.end));
+    const added = noteSections(secondBody.slice(secondRange.start, secondRange.end), secondMasked.slice(secondRange.start, secondRange.end));
+    notes.preamble = joinNotes(notes.preamble, added.preamble);
+    for (const section of added.sections) {
+      const match = notes.sections.find((entry) => entry.key === section.key);
+      if (match) {
+        match.body = joinNotes(match.body, section.body);
+      } else {
+        notes.sections.push(section);
+      }
+    }
+    const text = [notes.preamble.trim(), ...notes.sections.map((section) => joinNotes(section.heading, section.body))].filter((part) => part !== "").join(`
+
+`);
+    const tail = head.slice(firstRange.end);
+    head = `${head.slice(0, firstRange.start)}
+${text}${firstRange.end === firstRange.start ? `
+` : ""}${tail}`;
+    if (!firstMasked.slice(0, firstStart).split(`
+`).some((line) => CHAPTER_TEXT_HEADING.test(line))) {
+      head = `${head.trimEnd()}
+
+## Chapter Text
+
+`;
+      firstProse = firstProse.replace(/^(?:[ \t]*\r?\n)+/, "");
+    }
+  }
+  const blankLines = /^(?:[ \t]*\r?\n)*/;
+  const lead = firstProse.match(blankLines)[0] || (head === "" || head.endsWith(`
+`) ? "" : `
+
+`);
+  const firstText = firstProse.replace(blankLines, "").trimEnd();
+  const secondProse = secondBody.slice(secondStart).replace(blankLines, "").trimEnd();
+  const parts = [firstText];
+  if (firstText !== "" && secondProse !== "") {
+    parts.push(sceneBreakLine(firstBody) ?? sceneBreakLine(secondBody) ?? "* * *");
+  }
+  parts.push(secondProse);
+  return `${head}${lead}${parts.filter((part) => part !== "").join(`
+
+`)}
+`;
+}
+function sceneBreakLine(body) {
+  const paragraph = proseParagraphs3(body).find((entry) => entry.sceneBreak);
+  return paragraph ? body.slice(paragraph.start, paragraph.end).trim() : null;
+}
+function mergedChapter(first, second, unit, firstId, secondId) {
+  const body = withLineEndings(mergedChapterBody(first.body, second.body), first.rawMarkdown);
+  const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
+  const label = `chapters/${firstId}.md`;
+  const warnings = [];
+  if (conflicts.length > 0) {
+    warnings.push(warn("merge-conflicts", `${secondId} set ${conflicts.join(", ")}, which the merged ${firstId} does not take: it keeps ${firstId}'s values. Check them`, label));
+  }
+  if (droppedHook !== null) {
+    warnings.push(warn("merge-conflicts", `${firstId}'s hook ${JSON.stringify(droppedHook)} was dropped: the merged chapter ends where ${secondId} did, and ${secondId} had no hook. Set one if it needs it`, label));
+  }
+  return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
+}
 var BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   const context = entityReferenceContext(root, kind, id);
@@ -20657,12 +21175,12 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
 function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;
 }
-function renameIdTokens(root, file, body, oldId, newId) {
+function renameIdTokens(root, file, body, oldId, newId, rename = renameIdText) {
   const relativePath = projectPath(root, file);
   if (relativePath !== "plot/timeline.md" && relativePath !== "plot/_index.md" && path13.posix.dirname(relativePath) !== "plot/arcs") {
     return body;
   }
-  return mapOutsideLinks(body, (text) => renameIdText(text, oldId, newId));
+  return mapOutsideLinks(body, (text) => rename(text, oldId, newId));
 }
 function renameIdText(text, oldId, newId) {
   return text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`).replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
@@ -23478,6 +23996,41 @@ var COMMANDS = [
     }
   },
   {
+    name: "split",
+    usage: "split <chapter-id>",
+    summary: [
+      "Split a chapter in two at --at (a scene break",
+      "number, a heading, or a line of its text),",
+      "renumbering the chapters after it"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["at", "title", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed } = context;
+      const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
+      return runWrite(context, "split", (projectRoot) => splitChapter(projectRoot, options), (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}
+`);
+    }
+  },
+  {
+    name: "merge",
+    usage: "merge <chapter-id> <next-chapter-id>",
+    summary: [
+      "Merge the next chapter into a chapter, rewriting",
+      "references and renumbering the chapters after it"
+    ],
+    project: "flag",
+    args: 2,
+    options: WRITE_OPTIONS,
+    run(context) {
+      const { parsed } = context;
+      const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
+      return runWrite(context, "merge", (projectRoot) => mergeChapters(projectRoot, options), (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}
+`);
+    }
+  },
+  {
     name: "export",
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
@@ -23554,6 +24107,16 @@ function nameWords2(parsed, from, cwd, command) {
     }
   }
   return words;
+}
+function restructureDetails(result) {
+  const parts = [];
+  if (result.scenesMoved > 0) {
+    parts.push(`moved ${result.scenesMoved} ${result.scenesMoved === 1 ? "scene" : "scenes"}`);
+  }
+  if (result.renumbered > 0) {
+    parts.push(`renumbered ${result.renumbered} ${result.renumbered === 1 ? "chapter" : "chapters"}`);
+  }
+  return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
 }
 function pipedText(io, command) {
   return stdinText(command, io.readStdin ? io.readStdin() : readStdin(command));

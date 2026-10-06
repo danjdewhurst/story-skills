@@ -1064,14 +1064,14 @@ The skill reads the chapter, its neighbours, the scene files, and every entity t
 Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
 ```
 
-Structural edits change chapter and scene numbers, and those numbers are the ids every clue, question, research note, and state entry points at. The skill makes them with `story move`, which renames the files and rewrites those references, instead of renaming files by hand:
+Structural edits change chapter and scene numbers, and those numbers are the ids every clue, question, research note, and state entry points at. The skill makes them with `story move`, `story split`, and `story merge`, which rename the files and rewrite those references, instead of renaming files by hand:
 
 - **Insert a chapter.** Move each later chapter up one, starting from the highest (`story move chapter chapter-05 --number 6`, then `chapter-04 --number 5`), then `story add chapter "<Title>" --number 4`. `move` refuses a number that is taken, so the order matters.
 - **Move a scene.** `story move scene chapter-03-scene-02 --chapter chapter-05` gives it the next free number in chapter 5; add `--scene <n>` to place it, or use `--scene` alone to reorder within a chapter.
-- **Split a chapter.** Add the new chapter (after making room, as above), move the scenes that belong to it, then move their prose between the chapter files by hand.
-- **Merge two chapters.** Move the scenes into the chapter you keep and move the prose by hand. Before `story remove chapter` on the emptied one, check that no clue, promise, or question still pays off there: `remove` clears those references instead of pointing them at the kept chapter.
+- **Split a chapter.** `story split chapter-04 --at 2` keeps the text before the second scene break in chapter 4 and makes the rest chapter 5, moving the later chapters up one; `--at` also takes a heading or a line of the text. The skill then checks each file the `split-references` warning lists, since a clue or death in the old chapter may now happen in the new one.
+- **Merge two chapters.** `story merge chapter-04 chapter-05` appends chapter 5 to chapter 4 after a scene break, with its scenes, outline beats, and cast, points every reference to chapter 5 at chapter 4, and moves the later chapters down one. The skill checks the `merge-conflicts` warning for fields the two set differently.
 
-`move` never edits prose, so the skill rereads for "Chapter 2" in the text and for outline beats that no longer match. See [`story move`](cli-reference.md#move).
+These commands never rewrite prose, so the skill rereads for "Chapter 2" in the text, smooths the join of a merge, and gives a split's new chapter its own outline beats. A branching book, with `choices`, is restructured by hand. See [`story move`](cli-reference.md#move), [`story split`](cli-reference.md#split), and [`story merge`](cli-reference.md#merge).
 
 ### 5. Compare with the snapshot
 

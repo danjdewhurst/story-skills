@@ -79,8 +79,9 @@ files say it should do. Reorder, merge, split, or cut where they disagree.
 - **Read:** every chapter in `chapters/`, `plot/timeline.md`, active arc
   files.
 - **Update:** `plot/timeline.md`, arc plot-point tables, and
-  `chapters/_index.md` when chapters move, merge, or split. Make the moves
-  with `story move` (see Structural Edits in `SKILL.md`).
+  `chapters/_index.md` when chapters move, merge, or split. Make the changes
+  with `story move`, `story split`, and `story merge` (see Structural Edits
+  in `SKILL.md`).
 
 ## Theme audit
 
@@ -192,8 +193,8 @@ polished and then cut. Track it as a custom pass with
   something they later act on, or carry a state change; move what it
   carries to a scene that stays. Expand by adding scenes or sequels that
   change something, not by padding existing ones.
-- **Update:** chapters, scenes (merge and remove with `story move` and
-  `story remove`, see Structural Edits in `SKILL.md`), chapter
+- **Update:** chapters, scenes (merge and remove with `story merge`,
+  `story move`, and `story remove`, see Structural Edits in `SKILL.md`), chapter
   `target-words`, promise, question, and clue chapters, arc plot points,
   `plot/timeline.md`, and `continuity/state.md`. When the pass is done,
   ask whether to keep the chapter budgets as targets or remove them.

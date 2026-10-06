@@ -1589,7 +1589,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
 | Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
-| Inserting, reordering, splitting, or merging chapters and scenes | `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story wordcount . --write`, `story validate .`, `story links .`, `story continuity .` |
+| Inserting, reordering, splitting, or merging chapters and scenes | `story split <chapter-id> --at <marker>`, `story merge <chapter-id> <next-chapter-id>`, `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story wordcount . --write`, `story validate .`, `story links .`, `story continuity .` |
 | Planting or revealing a mystery clue | `story clues .`, `story diagram clues` |
 | Adding places and journeys | `story diagram locations`, then `story continuity .` for route travel |
 | After dialogue changes | `story voices .` |

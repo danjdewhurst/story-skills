@@ -163,6 +163,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story mentions character sera-voss` | List every place chapter prose names an entity (name, given name, or alias), and which chapters name it without listing it; with no entity, check every chapter's names against its frontmatter |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update kebab-case references |
 | `story move chapter chapter-03 --number 4` | Renumber a chapter, or move a scene with `story move scene <id> --chapter <id>`, renaming the files and rewriting every reference to the old id |
+| `story split chapter-03 --at 2` | Split a chapter in two at a scene break, heading, or line, or join two with `story merge chapter-03 chapter-04`, renumbering the chapters after them and updating references |
 | `story remove promise old-setup` | Remove an entity and scrub metadata references |
 | `story migrate [path]` | Upgrade a project to the current schema |
 

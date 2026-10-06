@@ -91,6 +91,19 @@ const OK_ARGS = {
   rename: () => ["rename", "character", "mara-quill", "Mara Vell"],
   remove: () => ["remove", "character", "mara-quill"],
   move: () => ["move", "chapter", "chapter-01", "--number", "2"],
+  split: (cwd) => {
+    const chapter = path.join(cwd, "chapters", "chapter-01.md");
+    if (fs.existsSync(chapter)) {
+      fs.appendFileSync(chapter, "The tide came in.\n\n* * *\n\nThe lamp was lit.\n", "utf8");
+    }
+    return ["split", "chapter-01", "--at", "1"];
+  },
+  merge: (cwd) => {
+    if (fs.existsSync(path.join(cwd, "story.md"))) {
+      invoke(cwd, ["add", "chapter", "Two"]);
+    }
+    return ["merge", "chapter-01", "chapter-02"];
+  },
   export: () => ["export"],
   build: () => ["build"],
   synopsis: () => ["synopsis"]
@@ -139,6 +152,12 @@ const REFUSED = {
     invoke(root, ["snapshot", "draft"]);
     return ["snapshot", "draft"];
   },
+  // A branching book is refused.
+  split: (root) => {
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("\nstatus:", "\nchoices:\n  - text: Again\n    to: chapter-01\nstatus:"), "utf8");
+    return ["split", "chapter-01", "--at", "1"];
+  },
   export: () => ["export", "--out", "chapters/chapter-01.md"],
   build: () => ["build", "--out", "story.md"],
   synopsis: () => ["synopsis", "--out", "story.md"],
@@ -153,7 +172,9 @@ const LOCKED = {
   migrate: ["migrate"],
   doctor: ["doctor", "--fix"],
   remove: ["remove", "character", "mara-quill"],
-  snapshot: ["snapshot", "draft"]
+  snapshot: ["snapshot", "draft"],
+  split: ["split", "chapter-01", "--at", "1"],
+  merge: ["merge", "chapter-01", "chapter-02"]
 };
 
 const savedLockWait = process.env.STORY_LOCK_WAIT_MS;
