@@ -1,4 +1,8 @@
 // Commands that write the project: init, add, rename, remove, move, reindex, wordcount, and migrate.
+// They do not take the project lock themselves: runCli holds it around every
+// command whose registry entry declares `writes` (see commands.js), and
+// createStoryProject locks the folders init and import fill. A caller
+// outside the CLI wraps them in withProjectLock.
 import fs from "node:fs";
 import path from "node:path";
 import { idText } from "./continuity.js";
@@ -10,6 +14,7 @@ import {
   assertLexicallyInsideRoot,
   assertSafeProjectDirectory,
   assertSafeProjectPath,
+  assertWriteAllowed,
   isInsideGitDirectory,
   lstatIfExists,
   makeDirectories,
@@ -20,7 +25,7 @@ import {
   removeFile,
   writeFile
 } from "./files.js";
-import { withProjectLock } from "./lock.js";
+import { withProjectLocks } from "./lock.js";
 import { optionValues } from "./options.js";
 import {
   chapterHeading,
@@ -167,16 +172,18 @@ export function createStoryProject(options) {
   if (options.language !== undefined && !isLanguageTag(options.language)) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
-  // --force fills an existing folder, which holds the project lock from
-  // reading its story.md to the last write, whether or not it is a project
-  // yet. A symlinked folder is refused below, so the lock is not taken
-  // through it. The books --follows and --precedes link to get a backlink
-  // in their story.md, so their locks are held for the whole run too.
-  const fill = () => fillStoryProject(root, title, cwd, options);
-  const filled = options.force && lstatIfExists(root)?.isDirectory() ? () => withProjectLock(root, fill, { folder: true }) : fill;
-  return ["follows", "precedes"]
+  // The books --follows and --precedes link to get a backlink in their
+  // story.md, so their locks are held for the whole run. --force fills an
+  // existing folder, which is locked too, whether or not it is a project
+  // yet. A symlinked folder is refused below, so its lock is not taken
+  // through it.
+  const locks = ["follows", "precedes"]
     .flatMap((field) => asArray(options[field]).filter((value) => typeof value === "string" && value.trim() !== ""))
-    .reduce((run, value) => () => withProjectLock(path.resolve(cwd, value), run), filled)();
+    .map((value) => ({ root: path.resolve(cwd, value) }));
+  if (options.force && lstatIfExists(root)?.isDirectory()) {
+    locks.push({ root, folder: true });
+  }
+  return withProjectLocks(locks, () => fillStoryProject(root, title, cwd, options));
 }
 
 function fillStoryProject(root, title, cwd, options) {
@@ -288,7 +295,16 @@ function fillStoryProject(root, title, cwd, options) {
     if (existingLinks && !linksInclude(existingLinks[book.field], book.root)) {
       continue;
     }
-    writeFile(path.join(book.root, "story.md"), updated, { root: book.root, unchangedFrom: original });
+    const storyPath = path.join(book.root, "story.md");
+    try {
+      writeFile(storyPath, updated, { root: book.root, unchangedFrom: original });
+    } catch (error) {
+      // The new book is made by now, so a plain rerun is refused.
+      if (error.changedOnDisk) {
+        error.message = `${storyPath} changed on disk while story was adding the series backlink, so it was left as it is. The new book in ${root} was made without it: run the same story init with --force to add it`;
+      }
+      throw error;
+    }
     linkedBooks.push(book.root);
   }
 
@@ -526,6 +542,13 @@ function planSeriesBacklinks(root, series) {
       fs.accessSync(storyPath, fs.constants.W_OK);
     } catch {
       throw refusedError(`Cannot add the series backlink to ${storyPath}: the file is not writable; nothing was created`);
+    }
+    // The book's lock could not be made, so its backlink would be refused
+    // after the new book is made.
+    try {
+      assertWriteAllowed(storyPath);
+    } catch (error) {
+      throw refusedError(`Cannot add the series backlink to ${storyPath}: ${error.message}`);
     }
     planned.push({ book, original, updated });
   }
@@ -1728,7 +1751,8 @@ const RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot fin
 
 // Runs the writes of a split or merge. When a step fails after earlier ones
 // wrote, the error says so in place of any rerun hint the step gave, since
-// rerunning the whole command would not resume it. The checks before it
+// rerunning the whole command would not resume it, unless the error is
+// marked `resumable` (a merge that put its last step back). The checks before it
 // leave little that can fail (a full disk, a file saved meanwhile), so it is
 // exported for tests.
 export function restructureWrites(root, write) {
@@ -1741,7 +1765,7 @@ export function restructureWrites(root, write) {
     }
   });
   if (error !== null) {
-    if (changes.length > 0) {
+    if (changes.length > 0 && !error.resumable) {
       error.hint = RESTRUCTURE_HINT;
     }
     throw error;
@@ -2162,7 +2186,22 @@ export function mergeChapters(root, options) {
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);
     writeReferencePlan(project.root, plan);
-    removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
+    try {
+      removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
+    } catch (error) {
+      // Saved since it was read: the merged text lacks the save, so this
+      // step is put back. The scenes already moved stay with the first
+      // chapter, and a rerun merges the rest.
+      if (error.changedOnDisk) {
+        undoReferencePlan(project.root, plan);
+        Object.assign(error, {
+          message: `${relative(project, second.file)} changed on disk while story was merging it into ${first.id}, so it was left as it is and ${relative(project, first.file)} was put back`,
+          hint: "Run the same command again to merge it with the change",
+          resumable: true
+        });
+      }
+      throw error;
+    }
     shiftChapters(project.root, run, -1, warnings);
   });
   const reindexed = reindexProject(project.root);
@@ -2491,6 +2530,8 @@ function removeMovedFile(root, { oldFile, original, newFile, written }) {
   } catch (error) {
     if (error.changedOnDisk) {
       removeFile(newFile, { root, unchangedFrom: written });
+      error.message = `${error.message}, and the copy written at ${projectPath(root, newFile)} was removed`;
+      error.hint = "Run the same command again to finish with the change";
     }
     throw error;
   }
@@ -2787,6 +2828,14 @@ function writeReferencePlan(root, plan) {
   }
 }
 
+// Puts back every file writeReferencePlan rewrote, each only while it still
+// holds what was written.
+function undoReferencePlan(root, plan) {
+  for (const [file, contents] of plan) {
+    writeFile(file, plan.originals.get(file), { root, unchangedFrom: contents });
+  }
+}
+
 const UNWRITABLE_REASONS = { EACCES: "permission denied", EPERM: "permission denied", EROFS: "the file system is read-only" };
 
 // Before a rename, remove, or move writes anything, checks that every file it
@@ -2832,12 +2881,23 @@ function assertWritable(root, changed, created = []) {
 // Runs the writes of a rename, remove, or move. The preflight catches
 // unwritable files, but a write can still fail partway (a full disk, a file
 // an editor saved meanwhile): then some references already name the new id,
-// so the error says to rerun, which finishes the job.
+// so the error says to rerun, which finishes the job. A failure before any
+// write (a project whose lock could not be made) changed nothing, and an
+// error that already says what to do next keeps its hint.
 function commitWrites(write) {
-  try {
-    return write();
-  } catch (error) {
-    throw Object.assign(error, { hint: "Some files were already updated: fix the problem and run the same command again to finish" });
+  const { result: error, changes } = recordChanges(process.cwd(), () => {
+    try {
+      write();
+      return null;
+    } catch (caught) {
+      return caught;
+    }
+  });
+  if (error !== null) {
+    if (changes.length > 0 && error.hint === undefined) {
+      error.hint = "Some files were already updated: fix the problem and run the same command again to finish";
+    }
+    throw error;
   }
 }
 

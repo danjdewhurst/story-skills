@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +8,7 @@ import { importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
 import { buildBook, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
-import { OTHER_LIVE_PID, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
+import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -116,7 +116,7 @@ describe("init and the project lock", () => {
   });
 
   function holdLock(dir) {
-    const lock = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    const lock = `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     fs.writeFileSync(path.join(dir, LOCK_FILE), lock);
     process.env.STORY_LOCK_WAIT_MS = "0";
     return lock;
@@ -162,9 +162,36 @@ describe("init and the project lock", () => {
       spy.mockRestore();
     }
     expect(result.code).toBe(4);
-    expect(result.err).toContain("story.md changed on disk while story was updating it, so it was left as it is");
+    expect(result.err).toBe(`${story} changed on disk while story was adding the series backlink, so it was left as it is. The new book in ${path.join(cwd, "book-two")} was made without it: run the same story init with --force to add it\n`);
     expect(fs.readFileSync(story, "utf8")).toBe(saved);
     expect(fs.existsSync(path.join(one, LOCK_FILE))).toBe(false);
+    // A plain rerun finds the new book; --force adds the backlink.
+    expect(invoke(cwd, ["init", "Book Two", "--follows", "book-one"]).code).toBe(4);
+    expect(invoke(cwd, ["init", "Book Two", "--follows", "book-one", "--force"]).code).toBe(0);
+    expect(frontmatter(story).precedes).toEqual(["../book-two"]);
+    expect(fs.readFileSync(story, "utf8")).toContain("Saved meanwhile.");
+  });
+
+  test("a linked book whose lock cannot be made is refused before anything is created", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Book One"]).code).toBe(0);
+    const lockPath = path.join(cwd, "book-one", LOCK_FILE);
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      if (file === lockPath && flags === "wx") {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
+      return open(file, flags, ...rest);
+    });
+    let result;
+    try {
+      result = invoke(cwd, ["init", "Book Two", "--follows", "book-one"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toBe(`Cannot add the series backlink to ${path.join(cwd, "book-one", "story.md")}: Cannot create the project lock ${LOCK_FILE} (permission denied), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again\n`);
+    expect(fs.existsSync(path.join(cwd, "book-two"))).toBe(false);
   });
 });
 

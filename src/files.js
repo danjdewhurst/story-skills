@@ -213,7 +213,7 @@ export function removeFile(filePath, options = {}) {
   const existed = lstatIfExists(target) !== null;
   assertWriteAllowed(target);
   if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
-    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is. Run the command again`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
+    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
   }
   if (planning > 0) {
     // As fs.rmSync would: a missing file without force is an error, and a
@@ -261,8 +261,10 @@ export function refuseWrites(root, message, run) {
   }
 }
 
-// A planned write changes nothing, so only a real one is refused.
-function assertWriteAllowed(target) {
+// A planned write changes nothing, so only a real one is refused. A
+// command whose first change is not made through writeFile or removeFile
+// (a snapshot's backup) checks first.
+export function assertWriteAllowed(target) {
   const refusal = planning > 0 ? undefined : refusals.find((entry) => isPathInside(entry.root, path.resolve(target)));
   if (refusal) {
     throw refusedError(refusal.message);

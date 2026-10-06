@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { writeFile } from "../src/files.js";
-import { FOREIGN_LOCK_STALE_MS, LOCK_FILE, TAKEOVER_FILE, withProjectLock } from "../src/lock.js";
+import { FOREIGN_LOCK_STALE_MS, LOCK_FILE, TAKEOVER_FILE, processIdentity, withProjectLock, withProjectLocks } from "../src/lock.js";
 import {
   createEntity,
   moveEntity,
@@ -14,7 +14,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { CHMOD_IGNORED, OTHER_LIVE_PID, makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, otherLivePid, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
@@ -64,12 +64,12 @@ afterEach(() => {
 describe("project lock (#196)", () => {
   test("a write command refuses while another live command holds the lock, and changes nothing", () => {
     const root = copyExample("harbor-of-second-light");
-    fs.writeFileSync(path.join(root, LOCK_FILE), `${OTHER_LIVE_PID}\n${os.hostname()}\n`);
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${otherLivePid()}\n${os.hostname()}\n`);
     process.env.STORY_LOCK_WAIT_MS = "0";
     const before = snapshot(root);
     const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
     expect(result.code).toBe(4);
-    expect(result.err).toContain(`another story command (process ${OTHER_LIVE_PID}) is modifying this project; nothing was changed`);
+    expect(result.err).toContain(`another story command (process ${otherLivePid()}) is modifying this project; nothing was changed`);
     expect(result.err).toContain(`delete ${LOCK_FILE}`);
     expect(snapshot(root)).toEqual(before);
     // Read-only commands never take the lock.
@@ -325,16 +325,110 @@ describe("lock edge cases", () => {
     expect(withProjectLock(path.join(dir, "missing"), () => "ran", { folder: true })).toBe("ran");
   });
 
-  test("a lock with this process's own pid was left by an earlier process, and is taken over (#547)", () => {
+  // A lock this process's pid wrote: the fourth line, when /proc gives it,
+  // records the boot, the pid namespace, and the start time.
+  const IDENTITY = processIdentity();
+  const [BOOT, NAMESPACE, STARTED] = (IDENTITY ?? "").split(" ");
+  function ownPidLock(root, identity, age = 0) {
+    const lockPath = path.join(root, LOCK_FILE);
+    const written = new Date(Date.now() - age);
+    fs.writeFileSync(lockPath, `${process.pid}\n${os.hostname()}\n${written.toISOString()}\n${identity === null ? "" : `${identity}\n`}`);
+    fs.utimesSync(lockPath, written, written);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    return lockPath;
+  }
+
+  test.skipIf(IDENTITY === null)("a lock with this pid and another start time in this pid namespace was left by an earlier process, and is taken over (#547)", () => {
     // A container's story command often gets the same pid every run, so a
     // killed run's lock carries the pid of the next one.
     const root = newProject();
-    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`);
-    process.env.STORY_LOCK_WAIT_MS = "0";
+    const lockPath = ownPidLock(root, `${BOOT} ${NAMESPACE} ${Number(STARTED) - 1}`);
     const result = invoke(root, ["add", "character", "Bo"]);
     expect(result.err).toBe("");
     expect(result.code).toBe(0);
-    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test.skipIf(IDENTITY === null)("a lock that records this very process is held by it, as by another thread", () => {
+    const root = newProject();
+    ownPidLock(root, IDENTITY);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${process.pid}) is modifying this project`);
+  });
+
+  test.skipIf(IDENTITY === null)("a lock from another pid namespace on this host goes by age, whatever its pid", () => {
+    // Another container with this host name and the project folder, where
+    // story is pid 1 too: its pid says nothing about it here.
+    const root = newProject();
+    const other = `${BOOT} pid:[1] 7`;
+    ownPidLock(root, other);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${process.pid}) is modifying this project`);
+    const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]).pid;
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${dead}\n${os.hostname()}\n${new Date().toISOString()}\n${other}\n`);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${dead}) is modifying this project`);
+    const lockPath = ownPidLock(root, other, FOREIGN_LOCK_STALE_MS + 1000);
+    expect(addLocked(root, "Bo").id).toBe("bo");
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test.skipIf(IDENTITY === null)("a lock from an earlier boot is stale, even when its pid is alive now", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n00000000-0000-0000-0000-000000000000 ${NAMESPACE} ${STARTED}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(addLocked(root, "Bo").id).toBe("bo");
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test("a lock with this pid and no record of the process goes by age", () => {
+    // Written by an older story, or where /proc gives no record.
+    const root = newProject();
+    ownPidLock(root, null);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${process.pid}) is modifying this project`);
+    const lockPath = ownPidLock(root, null, FOREIGN_LOCK_STALE_MS + 1000);
+    expect(addLocked(root, "Bo").id).toBe("bo");
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test("a lock records this process's identity where /proc gives one", () => {
+    const lockPath = path.join(newProject(), LOCK_FILE);
+    const lines = withProjectLock(path.dirname(lockPath), () => fs.readFileSync(lockPath, "utf8")).split("\n");
+    expect(lines.slice(0, 2)).toEqual([String(process.pid), os.hostname()]);
+    expect(lines.slice(3)).toEqual(IDENTITY === null ? [""] : [IDENTITY, ""]);
+  });
+
+  test.skipIf(process.platform === "win32")("processIdentity reads the boot, the pid namespace, and the start time", () => {
+    const proc = makeTempDir();
+    fs.mkdirSync(path.join(proc, "self", "ns"), { recursive: true });
+    fs.mkdirSync(path.join(proc, "sys", "kernel", "random"), { recursive: true });
+    fs.writeFileSync(path.join(proc, "sys", "kernel", "random", "boot_id"), "0f2e-41\n");
+    fs.symlinkSync("pid:[4026531836]", path.join(proc, "self", "ns", "pid"));
+    // A command name with a space and a parenthesis in it.
+    const fields = Array.from({ length: 50 }, (_, index) => String(index + 3));
+    fs.writeFileSync(path.join(proc, "self", "stat"), `42 (story (x) y) ${fields.join(" ")}\n`);
+    expect(processIdentity(proc)).toBe("0f2e-41 pid:[4026531836] 22");
+    fs.writeFileSync(path.join(proc, "self", "stat"), "42 (story) S\n");
+    expect(processIdentity(proc)).toBeNull();
+    expect(processIdentity(path.join(proc, "missing"))).toBeNull();
+  });
+
+  test("locks on several projects are taken in the order of their real paths", () => {
+    const one = newProject();
+    const two = newProject();
+    const order = [one, two].sort((left, right) => (fs.realpathSync(left) < fs.realpathSync(right) ? -1 : 1));
+    const taken = [];
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      if (flags === "wx" && path.basename(file) === LOCK_FILE) {
+        taken.push(path.dirname(file));
+      }
+      return open(file, flags, ...rest);
+    });
+    try {
+      expect(withProjectLocks([{ root: order[1] }, { root: order[0] }, { root: order[1] }], () => "ran")).toBe("ran");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(taken).toEqual(order);
   });
 
   test("a lock that cannot be created refuses the first write, and a run with nothing to write still succeeds (#601)", () => {
@@ -395,6 +489,60 @@ describe("lock edge cases", () => {
     expect(result.code).toBe(0);
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
     expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test("the retry starts at the first failure, so a command that waited for a lock still retries when it is being deleted", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "2000";
+    const started = Date.now();
+    const open = fs.openSync;
+    let refused = false;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      // Past the first 200 ms, the other command deletes its lock, which
+      // refuses a new one for a moment.
+      if (file === lockPath && flags === "wx" && !refused && Date.now() - started > 400) {
+        refused = true;
+        fs.rmSync(lockPath);
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      }
+      return open(file, flags, ...rest);
+    });
+    let result;
+    try {
+      result = invoke(root, ["add", "character", "Bo"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(refused).toBe(true);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test("a delete that is the command's first write is refused too when the lock cannot be created", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Bo" });
+    const lockPath = path.join(root, LOCK_FILE);
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      if (file === lockPath && flags === "wx") {
+        throw Object.assign(new Error("EROFS"), { code: "EROFS" });
+      }
+      return open(file, flags, ...rest);
+    });
+    const before = snapshot(root);
+    let result;
+    try {
+      // Nothing names bo, so deleting its file is the first write.
+      result = invoke(root, ["remove", "character", "bo"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toBe(`Cannot create the project lock ${LOCK_FILE} (the file system is read-only), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again\n`);
+    expect(snapshot(root)).toEqual(before);
   });
 
   test.skipIf(CHMOD_IGNORED)("a project folder the user cannot write to refuses a write, though its subfolders take one (#601)", () => {
@@ -513,7 +661,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(lockPath, "2147483647\n" + os.hostname() + "\n");
     // Another agent found the same stale lock, removed it, and took its own
     // just before this command took the takeover lock.
-    const live = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    const live = `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     const open = fs.openSync;
     const spy = spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
       if (file === guard) {
@@ -523,7 +671,7 @@ describe("lock edge cases", () => {
     });
     process.env.STORY_LOCK_WAIT_MS = "0";
     try {
-      expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${OTHER_LIVE_PID}) is modifying this project`);
+      expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${otherLivePid()}) is modifying this project`);
     } finally {
       spy.mockRestore();
     }

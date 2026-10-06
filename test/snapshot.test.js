@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { LOCK_FILE } from "../src/lock.js";
 import { createEntity, createStoryProject } from "../src/story.js";
 import { listSnapshots, snapshotId, snapshotProject } from "../src/snapshots.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
@@ -229,6 +230,34 @@ describe("story compare --snapshot", () => {
     writeChapter(root, 2, "Cut me later, then grow again.");
     expect(invoke(cwd, ["compare", root, "--ref", "draft"]).out).toContain("chapter-02 Chapter 2: 3 -> 6 words");
     expect(invoke(cwd, ["compare", root, "--snapshot", "draft"]).out).toContain("chapter-02 Chapter 2: 5 -> 6 words");
+  });
+});
+
+describe("story snapshot --force", () => {
+  test("leaves the snapshot it would replace untouched when the project lock cannot be made (#601)", () => {
+    const { cwd, root } = project();
+    expect(invoke(cwd, ["snapshot", "First", "--path", root]).code).toBe(0);
+    const folder = path.join(root, ".snapshots", "first");
+    const inode = fs.statSync(folder).ino;
+    const lockPath = path.join(root, LOCK_FILE);
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      if (file === lockPath && flags === "wx") {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
+      return open(file, flags, ...rest);
+    });
+    let result;
+    try {
+      result = invoke(cwd, ["snapshot", "First", "--force", "--path", root]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toContain(`Cannot create the project lock ${LOCK_FILE} (permission denied)`);
+    // Not copied aside and put back: the same folder, and no backup left.
+    expect(fs.statSync(folder).ino).toBe(inode);
+    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["first"]);
   });
 });
 

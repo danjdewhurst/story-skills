@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { refusedError } from "./exit-codes.js";
-import { FILE_ERROR_REASONS, isPlanning, readFileAndStats, refuseWrites } from "./files.js";
+import { FILE_ERROR_REASONS, isPlanning, readFileAndStats, readTextFile, refuseWrites } from "./files.js";
 
 // The lock a write command holds on its project, so two commands (two agent
 // sessions, or an editor hook running reindex while the user runs rename)
@@ -20,10 +20,11 @@ const POLL_MS = 50;
 // a virus scanner still has it open.
 const CREATE_RETRY_MS = 200;
 
-// A lock from another host (a container, a cloud agent, or a share) cannot
-// be checked by pid. One older than this is taken over. Ten minutes is
-// longer than a rename or reindex, so a command still running elsewhere is
-// not stolen by a second agent. Both the time written in the lock and the
+// A lock from another host (a container, a cloud agent, or a share), or
+// from another pid namespace on this one, cannot be checked by pid. One
+// older than this is taken over. Ten minutes is longer than a rename or
+// reindex, so a command still running elsewhere is not stolen by a second
+// agent. Both the time written in the lock and the
 // file's modification time must be this old, so a host whose clock runs
 // behind ours does not make its fresh lock look stale.
 export const FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
@@ -88,11 +89,14 @@ export function withProjectLock(root, run, options = {}) {
 // it past the wait.
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
-  const retryUntil = Date.now() + CREATE_RETRY_MS;
+  // From the first failure, so a command that waited for another one's
+  // lock still retries when that lock is being deleted.
+  let retryUntil = null;
   let removedStale = false;
   let created;
   while (typeof (created = tryCreate(lockPath)) !== "string") {
     if (created !== null) {
+      retryUntil ??= Date.now() + CREATE_RETRY_MS;
       if (Date.now() >= retryUntil) {
         return created;
       }
@@ -111,6 +115,17 @@ function acquire(lockPath) {
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }
   return created;
+}
+
+// Runs `run` holding the locks of several projects, each { root, folder }
+// as withProjectLock takes them, in the order of their real paths, so two
+// commands that need the same two locks cannot each take one and wait for
+// the other.
+export function withProjectLocks(locks, run) {
+  const order = (lock) => realPath(path.resolve(lock.root));
+  return [...locks]
+    .sort((left, right) => (order(left) < order(right) ? -1 : order(left) > order(right) ? 1 : 0))
+    .reduceRight((inner, lock) => () => withProjectLock(lock.root, inner, lock), run)();
 }
 
 // A command killed before it could remove its lock. Another command may
@@ -142,7 +157,8 @@ function removeStale(lockPath, staleText) {
 function tryCreate(lockPath) {
   try {
     const descriptor = fs.openSync(lockPath, "wx", 0o644);
-    const text = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    const identity = ownIdentity();
+    const text = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n${identity === null ? "" : `${identity}\n`}`;
     try {
       fs.writeFileSync(descriptor, text, "utf8");
     } finally {
@@ -172,7 +188,7 @@ function readOwner(lockPath) {
   } catch {
     return null;
   }
-  const [pidText, host, writtenAt] = text.split("\n");
+  const [pidText, host, writtenAt, identity] = text.split("\n");
   const pid = Number.parseInt(pidText, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     // Being written right now, or damaged: treat a damaged one as live, so
@@ -183,7 +199,61 @@ function readOwner(lockPath) {
   // bound is stale; a fresh one, or one with no timestamp, stays, so the
   // wait ends with the hint to delete it.
   const foreign = host && host !== os.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : sameHostAlive(pid, identity, Date.parse(writtenAt), modified) };
+}
+
+// Whether the command that wrote a lock on this host still runs. A lock
+// from an earlier boot is stale. One from another pid namespace (a
+// container sharing this host name and the project folder) cannot be
+// checked by pid, so it goes by age, as a lock from another host does. A
+// lock with this process's own pid is held by this process (another
+// thread) when it records this process's start time, and stale when it
+// records another: that process had this pid in this namespace, so it has
+// ended, as a container's story command, always the same pid, does when it
+// is killed. Without a record to compare, an own-pid lock goes by age.
+function sameHostAlive(pid, recorded, written, modified) {
+  const own = ownIdentity();
+  const comparable = own !== null && IDENTITY_PATTERN.test(recorded ?? "");
+  const [boot, namespace, started] = comparable ? recorded.split(" ") : [];
+  const [ownBoot, ownNamespace, ownStarted] = comparable ? own.split(" ") : [];
+  if (comparable && boot !== ownBoot) {
+    return false;
+  }
+  if (comparable && namespace !== ownNamespace) {
+    return !foreignLockStale(written, modified);
+  }
+  if (pid !== process.pid) {
+    return processAlive(pid);
+  }
+  return comparable ? started === ownStarted : !foreignLockStale(written, modified);
+}
+
+// The boot, the pid namespace, and the start time (clock ticks since boot)
+// of this process, read from /proc, as a lock records them: together they
+// tell this process from any other on the machine. Null where /proc does
+// not give them (macOS, Windows), and the lock then records none.
+const IDENTITY_PATTERN = /^[0-9a-f-]+ pid:\[\d+\] \d+$/;
+
+export function processIdentity(proc = "/proc") {
+  try {
+    const stat = readTextFile(path.join(proc, "self", "stat"));
+    // The command name in parentheses may hold spaces; the start time is
+    // the 22nd field, the 20th after it.
+    const started = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    const boot = readTextFile(path.join(proc, "sys", "kernel", "random", "boot_id")).trim();
+    const identity = `${boot} ${fs.readlinkSync(path.join(proc, "self", "ns", "pid"))} ${started}`;
+    return IDENTITY_PATTERN.test(identity) ? identity : null;
+  } catch {
+    return null;
+  }
+}
+
+let identityRead;
+function ownIdentity() {
+  if (identityRead === undefined) {
+    identityRead = processIdentity();
+  }
+  return identityRead;
 }
 
 function foreignLockStale(written, modified) {
@@ -199,13 +269,7 @@ function modifiedAt(file) {
   }
 }
 
-// A lock with this process's own pid is stale: one this process holds is
-// in `held` and never checked here, so it was left by an earlier process
-// that had the same pid, as a container's story command often does.
 function processAlive(pid) {
-  if (pid === process.pid) {
-    return false;
-  }
   try {
     process.kill(pid, 0);
     return true;

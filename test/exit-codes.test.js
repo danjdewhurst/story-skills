@@ -271,6 +271,18 @@ describe("exit codes", () => {
     });
   }
 
+  test("passes --start and --done, and snapshot --restore, exit 4 while another command holds the lock", () => {
+    const root = newProject();
+    expect(invoke(root, ["snapshot", "draft"]).code).toBe(ok);
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\nhost\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    for (const args of [["passes", "--start", "structure"], ["passes", "--done", "structure"], ["snapshot", "--restore", "draft"]]) {
+      const result = invoke(root, args);
+      expect(result.err).toContain("is modifying this project");
+      expect(result.code).toBe(refused);
+    }
+  });
+
   test("a run of a write command that only reads neither takes nor waits for the lock", () => {
     const root = newProject();
     expect(invoke(root, ["snapshot", "draft"]).code).toBe(ok);

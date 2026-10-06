@@ -1,6 +1,6 @@
 import { spyOn } from "bun:test";
 import { Buffer } from "node:buffer";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,10 +15,19 @@ const tempDirs = [];
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
 
-// A live process other than this one, whose pid stands in for another
-// story command holding a project lock: a lock with this process's own pid
-// is stale (see src/lock.js). The test runner's parent waits for it.
-export const OTHER_LIVE_PID = process.ppid;
+// The pid of a live process other than this one, standing in for another
+// story command that holds a project lock. It is a child that sleeps until
+// the test run ends (the runner's parent is no use: in a container where
+// bun is pid 1 it has pid 0), started on first use.
+let sleeper = null;
+export function otherLivePid() {
+  if (sleeper === null) {
+    sleeper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30 * 60 * 1000)"], { stdio: "ignore" });
+    sleeper.unref();
+    process.on("exit", () => sleeper.kill());
+  }
+  return sleeper.pid;
+}
 
 // Runs `save` once, when a story command opens the temporary file it
 // writes `target` through: after the command has read the project, just
