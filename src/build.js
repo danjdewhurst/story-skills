@@ -20,7 +20,8 @@ import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { derivedIfid, isIfid, tweeSource } from "./twee.js";
-import { htmlBook, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { htmlBook, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { renderPdf, resolvePdfEngine } from "./pdf.js";
 import { wordSpans } from "./words.js";
 import { fillLabel, joinNames } from "./languages/index.js";
 import { endsSentence, splitSentences } from "./sentences.js";
@@ -96,9 +97,19 @@ export function buildBook(root, options = {}) {
   if (options.shunn && format !== "docx") {
     throw usageError("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
   }
+  if (options.pdf && format !== "print" && format !== "shunn") {
+    throw usageError("--pdf applies only to --format print and --format shunn");
+  }
+  if (options.pdfEngine !== undefined && !options.pdf) {
+    throw usageError("--pdf-engine applies only with --pdf");
+  }
   const project = scanProject(root);
-  const extension = BUILD_EXTENSIONS[format];
+  const extension = options.pdf ? PDF_EXTENSIONS[format] : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
+
+  if (options.pdf) {
+    return buildPdf(project, format, trim, output, options);
+  }
 
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
@@ -159,6 +170,18 @@ export function buildBook(root, options = {}) {
   }
 
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+}
+
+// `--pdf`: the print interior or Shunn manuscript as HTML, rendered by an
+// installed engine. The engine is found before the manuscript is assembled,
+// so a machine without one fails fast, and the PDF is written like any other
+// build, only once the engine has made it.
+function buildPdf(project, format, trim, output, options) {
+  const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
+  const manuscript = manuscriptParts(project);
+  const html = format === "print" ? printHtml(htmlBook(manuscript), trim) : shunnHtml(manuscript, shunnMeta(project));
+  writeFile(output.outFile, renderPdf(html, engine), output.writeOptions);
+  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
 
 // The chapter graph and IFID behind the twee and ink builds, which refuse
@@ -706,6 +729,9 @@ export const BUILD_EXTENSIONS = {
   twee: "twee",
   ink: "ink"
 };
+
+// The file extension of each format --pdf renders.
+export const PDF_EXTENSIONS = { print: "pdf", shunn: "shunn.pdf" };
 
 // Other names --format accepts for a format.
 export const BUILD_FORMAT_ALIASES = { md: "markdown" };

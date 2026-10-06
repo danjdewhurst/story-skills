@@ -391,7 +391,7 @@ export function escapeHtml(value) {
 
 // CSS escapes keep a title or author from ending the string or, with "<",
 // closing the style element.
-function cssString(value) {
+export function cssString(value) {
   return String(value)
     .replace(/\\/g, "\\\\")
     .replace(/"/g, "\\\"")

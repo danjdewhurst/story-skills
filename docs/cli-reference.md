@@ -253,7 +253,7 @@ Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
 ```
 
-Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, or `--shunn`, which belong with a particular format. Likewise `--ref`, `--against`, or `--snapshot` on `compare` drops a default for the others. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, `--shunn`, or `--pdf`, which belong with a particular format. A default `--pdf-engine` stays, and builds without `--pdf` ignore it. Likewise `--ref`, `--against`, or `--snapshot` on `compare` drops a default for the others. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
 
 ### Output streams and exit codes
 
@@ -274,7 +274,7 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
 | `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `check`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
-| `4` | Refused or failed write: the target already exists, is project source or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it. |
+| `4` | Refused or failed write: the target already exists, is project source or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it; or `build --pdf` found no PDF engine, or the engine failed. |
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
@@ -2560,7 +2560,7 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--out <file>]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--out <file>]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -2572,6 +2572,8 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
 | `--note-url <url>` | With `--format html`, add a faint **Note** link beside every paragraph label, to this http or https address with `title=[<label>] `, `anchor=<label>`, `build=<stamp>` (with `--stamp`), and `quote=<first six words>` appended as URL-encoded query parameters. Pointed at `https://github.com/<owner>/<repo>/issues/new?template=manuscript-note.yml`, it opens the [manuscript-note form](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) already filled in. An error with any other format or another kind of address. Builds without it are unchanged | None |
+| `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
+| `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome` (`chromium` also works), or the path to its executable. An error without `--pdf`, unless it comes from `cli-defaults` | The first engine found |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |
@@ -2627,6 +2629,12 @@ $ story build --format twee
 Built 1 chapters as twee to ~/stories/the-last-ember/dist/the-last-ember.twee
 warning: story.md has no ifid, so the build derived 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 from the story id; add ifid: 1E3BB0E5-139A-4964-98B4-217D50BEB2A4 to story.md to keep it if the title changes [derived-ifid]
 
+$ story build --format print --trim 6x9 --pdf
+Built 1 chapters as print PDF (weasyprint) to ~/stories/the-last-ember/dist/the-last-ember.pdf
+
+$ story build --format shunn --pdf
+Built 1 chapters as shunn PDF (weasyprint) to ~/stories/the-last-ember/dist/the-last-ember.shunn.pdf
+
 $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
@@ -2635,6 +2643,35 @@ Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, h
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
+
+#### PDF output
+
+`--pdf` renders the print interior or the Shunn manuscript to PDF with a paged-media engine you have installed. The CLI bundles none and adds no dependency. Without `--pdf-engine`, it looks on `PATH` for these, in order, and runs the first it finds:
+
+| Engine | Executables looked for | Install |
+|---|---|---|
+| `prince` | `prince` | [princexml.com](https://www.princexml.com/) |
+| `weasyprint` | `weasyprint` | `pip install weasyprint` |
+| `pagedjs-cli` | `pagedjs-cli` | `npm install -g pagedjs-cli` |
+| `chrome` | `chromium`, `chromium-browser`, `google-chrome`, `google-chrome-stable`, `chrome`, `msedge`, then the usual install folders of Chrome, Chromium, and Edge on macOS and Windows | [google.com/chrome](https://www.google.com/chrome/) |
+
+On Windows each name is tried with every `PATHEXT` extension, so `pagedjs-cli` finds `pagedjs-cli.cmd`. The three paged-media engines set the running heads, page numbers, and left and right pages in full. Chrome's headless print to PDF is a fallback: it prints running heads and page numbers only from Chrome 131, and it does not insert the blank pages that start chapters on a right-hand page.
+
+The CLI writes the HTML to a temporary folder, runs the engine on it there with an argument list (never a shell command line, so no title or file name reaches one), and removes the folder afterwards. Only a PDF the engine actually wrote is copied to `--out` or the default path; no `.print.html` file is left in `dist/`. Engines stamp their own creation dates, so PDF output is not byte-identical between builds.
+
+`--pdf-engine` names the engine, or the path to its executable, whose file name must say which engine it is (`/opt/prince/bin/prince`, `C:\Tools\weasyprint.exe`, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). A relative path is read from the current directory. Set a default for the project in `story.md` with `cli-defaults` (`- command: build` with `pdf-engine: prince`); a default engine is ignored by builds without `--pdf`.
+
+The Shunn PDF is US Letter with 1 in margins, Courier New 12 pt, double-spaced, with half-inch paragraph indents. The first page has the contact lines at the top left, the length at the top right, and the title and byline centred below; every later page has a running head of the author, title, and page number at the top right. A novel starts each chapter on a new page, a third of the way down, under a bold centred heading; a [short story or flash piece](#build) runs on after the byline with `#` between sections.
+
+```text
+$ story build --format print --pdf
+No PDF engine found on PATH (looked for prince, weasyprint, pagedjs-cli, chrome). Install one: Prince (https://www.princexml.com/), WeasyPrint (pip install weasyprint), Paged.js CLI (npm install -g pagedjs-cli), Chrome or Chromium (https://www.google.com/chrome/). Or name an installed one with --pdf-engine <name|path>, or build without --pdf and render the HTML yourself
+
+$ story build --format epub --pdf
+--pdf applies only to --format print and --format shunn
+```
+
+A missing engine, an engine that exits with an error, that runs more than 10 minutes, or that writes no PDF stops the build with exit code `4`, quoting the engine's last lines of output. An unknown `--pdf-engine` name is a usage error (exit `2`).
 
 The start of the metadata sheet for [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose `story.md` sets `author`, `language`, `description`, `keywords`, and `subjects`:
 

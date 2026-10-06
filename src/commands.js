@@ -888,24 +888,31 @@ export const COMMANDS = [
     summary: [
       "Build a disposable book artifact in dist/: markdown,",
       "epub, docx, shunn, html (review copy with paragraph",
-      "anchors), print (paged-media interior),",
+      "anchors), print (paged-media interior; --pdf",
+      "renders print or shunn to PDF),",
       "narration (audiobook script), metadata (retailer",
       "sheet), fountain (screenplay scene skeleton),",
       "twee (Twine story from chapter choices), or ink",
       "(ink story from chapter choices)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url"],
-    run({ parsed, io, root, overrides }) {
+    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine"],
+    run({ parsed, io, cwd, root, overrides, defaulted }) {
+      const pdf = isTruthy(parsed.options.pdf);
       const result = buildBook(root(), {
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
         trim: parsed.options.trim,
         stamp: parsed.options.stamp,
-        noteUrl: parsed.options["note-url"]
+        noteUrl: parsed.options["note-url"],
+        pdf,
+        // A story.md default engine waits for a build that asks for a PDF.
+        pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
+        cwd
       });
-      io.stdout.write(`Built ${result.chapters} chapters as ${result.format} to ${result.outFile}\n`);
+      const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
+      io.stdout.write(`Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },

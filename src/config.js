@@ -42,7 +42,7 @@ const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id"] };
 // epub` must not pick up a default --trim meant for --format print, and
 // `story compare --against` must not pick up a default --ref.
 const LINKED_FLAGS = {
-  build: [["format", "shunn", "trim", "stamp", "note-url"]],
+  build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]]
 };
 

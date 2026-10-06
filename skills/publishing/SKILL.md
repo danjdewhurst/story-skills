@@ -167,8 +167,17 @@ Follow `references/print-interior.md`:
    story build . --format print --trim 6x9
    ```
 
-2. Render the HTML to PDF with a paged-media engine the author has
-   (`pagedjs-cli`, WeasyPrint, or Prince). The CLI bundles none.
+2. Render the PDF. If the author has a paged-media engine installed
+   (Prince, WeasyPrint, `pagedjs-cli`, or Chrome as a fallback), let the CLI
+   find and run it:
+
+   ```shell
+   story build . --format print --trim 6x9 --pdf
+   ```
+
+   It writes `dist/<story-id>.pdf`. Name an engine with
+   `--pdf-engine <name|path>`. With none installed it stops (exit 4) and lists
+   what to install; the CLI bundles none.
 3. Check the rendered PDF against the printer's file requirements; use its
    actual page count for the cover.
 4. Tell the author to get the spine width and full cover wrap template from

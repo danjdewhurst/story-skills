@@ -6,7 +6,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import { deflateRawSync } from "node:zlib";
 import { writeFile } from "./files.js";
-import { escapeHtml, withBlockquotes } from "./html.js";
+import { cssString, escapeHtml, withBlockquotes } from "./html.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { characterCount, flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
@@ -431,6 +431,83 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   }
 
   writeFile(outFile, `${lines.join("\n").trimEnd()}\n`, writeOptions);
+}
+
+// The Shunn manuscript as HTML with CSS paged media, the source `build
+// --format shunn --pdf` renders: US Letter with 1in margins, Courier New 12pt
+// double-spaced, half-inch paragraph indents, and a running head of author,
+// title, and page number on every page after the first. The first page sets
+// the contact lines top left and the length top right, then the title and
+// byline. A novel starts each chapter on a new page under its heading, a
+// third of the way down; a short story or flash piece runs on after the
+// byline, as the DOCX and markdown builds lay it out.
+export function shunnHtml(manuscript, meta) {
+  const language = manuscript.meta?.language ?? "en";
+  const type = typesetting(language, "horizontal");
+  const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
+  const head = [meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const paragraphMarkup = (paragraph) => ({
+    quote: Boolean(paragraph.quote),
+    markup: paragraph.sceneBreak
+      ? `<p class="break">${escapeHtml(sceneBreak)}</p>`
+      : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+  });
+  const body = [];
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const paragraphs = markdownParagraphs(chapter.body);
+    if (!meta.shortForm) {
+      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
+      continue;
+    }
+    if (paragraphs.length === 0) {
+      continue;
+    }
+    if (sections++ > 0) {
+      body.push(`<p class="break">#</p>`);
+    }
+    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n"));
+  }
+  const dir = type.rtl ? ` dir="rtl"` : "";
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(language)}"${dir}>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(meta.title)}</title>
+<style>
+@page { size: letter; margin: 1in;
+  @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
+@page :first { @top-right { content: none; } }
+html { font: 12pt/2 ${fonts}; }
+body { margin: 0; }
+p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
+.title-page { line-height: 1.2; }
+.title-page p { text-indent: 0; }
+.title-page .length { float: ${type.rtl ? "left" : "right"}; }
+.title-block { clear: both; text-align: center; margin-top: ${meta.shortForm ? "2.5in" : "3in"}; }
+.title-block h1, .chapter h2 { font: inherit; font-weight: bold; margin: 0; }
+.title-block p { text-indent: 0; text-align: center; }
+.short-form { margin-top: 2em; }
+.chapter { break-before: page; }
+.chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
+p.break { text-align: center; text-indent: 0; }
+blockquote { margin: 0 0.5in; }
+blockquote p { text-indent: 0; }
+</style>
+</head>
+<body>
+<header class="title-page">
+<p class="length">${escapeHtml(shunnLength(meta))}</p>
+${meta.contact.map((line) => `<p>${escapeHtml(String(line))}</p>`).join("\n")}
+</header>
+<div class="title-block"><h1>${escapeHtml(meta.title)}</h1>
+${shunnByline(meta).map((line) => `<p>${escapeHtml(line)}</p>`).join("\n")}
+</div>
+${meta.shortForm ? `<div class="short-form">\n${body.join("\n")}\n</div>` : body.join("\n")}
+</body>
+</html>
+`;
 }
 
 // The text elements of a DOCX run, with a <w:br/> for each hard break.

@@ -47,6 +47,8 @@ export const OPTIONS = [
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "pdf", help: ["Render build --format print or shunn to PDF with an", "installed engine (Prince, WeasyPrint, pagedjs-cli,", "or Chrome/Chromium, found on PATH in that order)"] },
+  { name: "pdf-engine", value: "<name|path>", help: ["PDF engine for build --pdf: prince, weasyprint,", "pagedjs-cli, chrome, or the path to one"] },
   { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
   { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },

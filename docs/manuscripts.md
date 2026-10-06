@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
+- [Build a book](#build-a-book): [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .narration.md, .metadata.md, .fountain, .twee, .ink"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -589,6 +589,8 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `shunn` | Plain-text Shunn manuscript | `dist/<story-id>.shunn.md` | No |
 | `html` | Single-file review copy with a label on every paragraph | `dist/<story-id>.html` | Yes |
 | `print` | Print interior as HTML with CSS paged media, to render to PDF | `dist/<story-id>.print.html` | Yes |
+| `print` with `--pdf` | Print interior rendered to PDF by an installed engine | `dist/<story-id>.pdf` | Yes |
+| `shunn` with `--pdf` | Shunn manuscript rendered to PDF by an installed engine | `dist/<story-id>.shunn.pdf` | No |
 | `narration` | Audiobook narration script with a pronunciation guide and runtimes | `dist/<story-id>.narration.md` | Yes, except the copyright page |
 | `metadata` | Retailer metadata sheet with a readiness checklist | `dist/<story-id>.metadata.md` | No prose at all |
 | `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
@@ -630,6 +632,8 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
+| `--pdf` | With `--format print` or `--format shunn`, render to PDF with an installed engine. An error with every other format. See [PDF output](#pdf-output). |
+| `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
 | `--out <file>` | Output file instead of the default in `dist/`. |
 
 Any other format is an error:
@@ -638,7 +642,7 @@ Any other format is an error:
 Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink
 ```
 
-For a book PDF, build the [print interior](#print-interior) and render it with a paged-media engine. For a quick PDF of a manuscript, open the DOCX in a word processor and export it.
+For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
 
 `--format docx` and `--format docx --shunn` write to the same default file, so the second build replaces the first. Pass `--out` to keep both.
 
@@ -719,9 +723,10 @@ Shunn manuscript format is the plain layout that many agents, publishers, and sh
 ```shell
 story build . --format docx --shunn   # Word document
 story build . --format shunn          # plain text in a .shunn.md file
+story build . --format shunn --pdf    # PDF, with an installed engine
 ```
 
-Both read these `story.md` fields for the title page:
+All three read these `story.md` fields for the title page:
 
 | Field | Type | Used for |
 |-------|------|----------|
@@ -759,6 +764,8 @@ The grove was quieter than it should have been.
 In the `.shunn.md` file, a form-feed character (`\f`) on its own line before each chapter heading marks the page break, and each prose paragraph is joined onto one line with a blank line after it. Markdown emphasis such as `*italic*` is left as written.
 
 The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It does not add a running header, page numbers, or custom margins. Add those in a word processor if a market requires them, and check each market's own guidelines.
+
+The PDF is laid out as Shunn sets a manuscript page: US Letter with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and a running head of the author, title, and page number at the top right of every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
 
 The [`submission`](../skills/submission/SKILL.md) skill runs these builds as part of preparing a submission package.
 
@@ -823,7 +830,7 @@ For a project in a GitHub repository, the `review-copy.yml` workflow template re
 
 ### Print interior
 
-`--format print` writes the interior of a paperback as one HTML file styled with CSS paged media. It is not a PDF. Render it to PDF with a paged-media engine such as [Paged.js](https://pagedjs.org/) (`pagedjs-cli`), [WeasyPrint](https://weasyprint.org/), or [Prince](https://www.princexml.com/), then send the PDF to your printer. Pick a trim size with `--trim`:
+`--format print` writes the interior of a paperback as one HTML file styled with CSS paged media. It is not a PDF. Add `--pdf` to have the CLI render it with a paged-media engine you have installed, such as [Paged.js](https://pagedjs.org/) (`pagedjs-cli`), [WeasyPrint](https://weasyprint.org/), or [Prince](https://www.princexml.com/) (see [PDF output](#pdf-output)), or render the HTML with one yourself, then send the PDF to your printer. Pick a trim size with `--trim`:
 
 ```shell
 story build . --format print --trim 6x9
@@ -867,6 +874,35 @@ The layout:
 The page estimate follows this layout: two pages for the title page and its back (the copyright page or a blank), the contents (a page per 25 chapters), and then each matter page, chapter, and back matter page rounded up to whole pages at the trim's words per page, with about a third of a page for a heading's sink and half a blank page on average for starting on a right-hand page. A 60-chapter, 80,000-word book at 6x9 comes to about 336 pages, not the 267 its words alone would fill. It is still for planning; the rendered PDF's real page count is what printers use to price the book and size the spine. Check the rendered PDF against your printer's current requirements for margins, bleed, and fonts before ordering a proof. Opened in a browser, the file shows the text in one column at the trim width, which is useful for proofreading but is not the paged layout.
 
 The [`publishing`](../skills/publishing/SKILL.md) skill covers choosing a trim, rendering the PDF, and checking the proof.
+
+### PDF output
+
+`--pdf` turns the print interior or the Shunn manuscript straight into a PDF, using a paged-media engine already on your machine. The CLI bundles none. It looks for these on your `PATH`, in this order, and uses the first it finds:
+
+1. [Prince](https://www.princexml.com/) (`prince`): commercial, free for non-commercial use with a watermark on the first page.
+2. [WeasyPrint](https://weasyprint.org/) (`weasyprint`): free; `pip install weasyprint`.
+3. [Paged.js CLI](https://pagedjs.org/) (`pagedjs-cli`): free; `npm install -g pagedjs-cli`.
+4. Chrome, Chromium, or Edge, in headless mode: a fallback that prints running heads and page numbers only from Chrome 131 and does not leave blank pages to start chapters on the right.
+
+```shell
+story build . --format print --trim 6x9 --pdf
+story build . --format shunn --pdf --pdf-engine weasyprint
+```
+
+```text
+Built 1 chapters as print PDF (weasyprint) to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.pdf
+Built 1 chapters as shunn PDF (weasyprint) to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.shunn.pdf
+```
+
+`--pdf-engine` picks the engine by name (`prince`, `weasyprint`, `pagedjs-cli`, `chrome`) or by the path to its executable, for one that is not on your `PATH`. To use one engine for every PDF build of a project, set it in `story.md`:
+
+```yaml
+cli-defaults:
+  - command: build
+    pdf-engine: prince
+```
+
+With no engine installed, the build stops (exit code 4) and lists what to install. The CLI runs the engine on a temporary copy of the HTML and writes only the PDF, so no `.print.html` file is left in `dist/`; build without `--pdf` when you want the HTML too. Different engines lay out the same HTML slightly differently, so check the page count and proof in the PDF you will upload. See the [CLI reference](cli-reference.md#pdf-output) for the details.
 
 ### Narration script
 
