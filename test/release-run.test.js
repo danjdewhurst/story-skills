@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
@@ -6,8 +7,11 @@ import { MISSING_BUN_MESSAGE } from "../scripts/bun-missing.js";
 import { PREFLIGHT, USAGE, parseReleaseArgs, releaseDeps, runRelease } from "../scripts/release.js";
 
 // These tests drive scripts/release.js end to end with every external command
-// stubbed. Nothing here starts git, gh, npm, or bun, so a test can never tag,
-// push, or publish.
+// stubbed. Nothing here starts gh, npm, or bun, and git runs only against a
+// throwaway clone and a bare origin in a temp folder, so a test can never tag,
+// push, or publish anything real.
+
+const FALLBACK = "skills/story-maintenance/scripts/story.js";
 
 // A throwaway release root with every file the release rewrites.
 function releaseFixture({ unreleased = "- Added a thing.\n" } = {}) {
@@ -24,6 +28,7 @@ function releaseFixture({ unreleased = "- Added a thing.\n" } = {}) {
     write(`templates/github/${name}`, 'env:\n  STORY_VERSION: "0.5.0"\n');
   }
   write("docs/install.md", "npm install -g story-skills@0.5.0\n");
+  write(FALLBACK, 'const VERSION = "0.5.0";\n');
   write(
     "CHANGELOG.md",
     `# Changelog\n\n## [Unreleased]\n\n### Added\n\n${unreleased}\n## [0.5.0] - 2026-01-01\n\n- Earlier.\n\n` +
@@ -40,16 +45,21 @@ const throws = (error) => () => {
   throw error;
 };
 
+const GIT_REPLIES = {
+  "git rev-parse --abbrev-ref HEAD": "main\n",
+  "git status --porcelain": "",
+  "git fetch origin main --tags": "",
+  "git rev-parse HEAD": "abc123\n",
+  "git rev-parse origin/main": "abc123\n"
+};
+
 // Replies keyed by the command and its arguments joined by spaces; a function
-// reply may throw. Anything unscripted fails the test.
-function stubRun(overrides = {}) {
+// reply may throw. Given `git`, unscripted git commands run through it for
+// real; anything else unscripted fails the test.
+function stubRun(overrides = {}, git = null) {
   const calls = [];
   const replies = {
-    "git rev-parse --abbrev-ref HEAD": "main\n",
-    "git status --porcelain": "",
-    "git fetch origin main --tags": "",
-    "git rev-parse HEAD": "abc123\n",
-    "git rev-parse origin/main": "abc123\n",
+    ...(git ? {} : GIT_REPLIES),
     "gh auth status": "",
     "gh release view v0.5.1": throws(commandError("release not found")),
     "npm view story-skills@0.5.1 version": throws(commandError("npm error code E404")),
@@ -65,16 +75,17 @@ function stubRun(overrides = {}) {
       return typeof reply === "function" ? reply() : reply;
     }
     if (command === "bun" && args[0] === "run") return "";
+    if (git && command === "git") return git(...args);
     if (key.startsWith("git tag --list ")) return "";
-    if (/^git (add|commit|tag -a|push) /.test(key)) return "";
+    if (/^git (add|commit|tag -a|tag -d|push|reset --hard) /.test(key)) return "";
     if (key.startsWith("gh release create ")) return "https://github.com/danjdewhurst/story-skills/releases/tag/v0.5.1\n";
     throw new Error(`unexpected command in test: ${key}`);
   };
   return { run, calls, keys: () => calls.map((call) => call.key) };
 }
 
-function releaseWith(argv, { root = releaseFixture(), replies } = {}) {
-  const stub = stubRun(replies);
+function releaseWith(argv, { root = releaseFixture(), replies, git } = {}) {
+  const stub = stubRun(replies, git);
   const logs = [];
   const errors = [];
   const status = runRelease(argv, {
@@ -225,16 +236,92 @@ describe("release run with stubbed commands", () => {
     expect(read(root, "package.json")).toBe(before);
   });
 
-  test("a changelog that already has the new section stops before any bump", () => {
-    const root = releaseFixture();
-    const changelogPath = path.join(root, "CHANGELOG.md");
-    fs.writeFileSync(
-      changelogPath,
-      fs.readFileSync(changelogPath, "utf8").replace("## [0.5.0]", "## [0.5.1] - 2026-01-02\n\n- Oops.\n\n## [0.5.0]")
+  for (const argv of [["patch"], ["patch", "--dry-run"]]) {
+    test(`a changelog that already has the new section stops ${argv.join(" ")} before any slow check`, () => {
+      const root = releaseFixture();
+      const changelogPath = path.join(root, "CHANGELOG.md");
+      fs.writeFileSync(
+        changelogPath,
+        fs.readFileSync(changelogPath, "utf8").replace("## [0.5.0]", "## [0.5.1] - 2026-01-02\n\n- Oops.\n\n## [0.5.0]")
+      );
+      const before = read(root, "package.json");
+      const changelog = read(root, "CHANGELOG.md");
+      const result = releaseWith(argv, { root });
+      expect(result.status).toBe(1);
+      expect(result.err).toBe(
+        'Release aborted: CHANGELOG.md already has a section for 0.5.1. Move its entries back under "## [Unreleased]" and remove its heading, or release a later version.'
+      );
+      expect(result.stub.keys().some((key) => key.startsWith("bun ") || PUBLISHING.test(key))).toBe(false);
+      expect(read(root, "package.json")).toBe(before);
+      expect(read(root, "CHANGELOG.md")).toBe(changelog);
+    });
+  }
+
+  test("a failed `gh release create` after the push says how to finish, and undoes nothing", () => {
+    const result = releaseWith(["patch"], {
+      replies: { "gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag": throws(commandError("HTTP 502: Bad Gateway")) }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      [
+        "Release aborted: main and v0.5.1 are on origin, but `gh release create` failed: HTTP 502: Bad Gateway",
+        "Do not run the release again, and leave v0.5.1 where it is. The Publish workflow runs for v0.5.1 anyway: once CI and the binaries pass, its release-assets job waits five minutes for the GitHub release, and npm publishes only after that job passes.",
+        "Create the release now: gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag",
+        "If release-assets has already failed, re-run the failed jobs of that Publish run: `gh run list --workflow publish.yml` lists the runs, then `gh run rerun <run-id> --failed`."
+      ].join("\n")
     );
-    const before = read(root, "package.json");
-    expect(() => releaseWith(["patch"], { root })).toThrow("already has a section for 0.5.1");
-    expect(read(root, "package.json")).toBe(before);
+    expect(result.out).toContain("Pushed main and v0.5.1");
+    // The tag is on origin and tag rules forbid moving or deleting it.
+    expect(result.stub.keys().filter((key) => /^git (reset|tag -d|push .*(--delete|--force|-f\b|:refs))/.test(key))).toEqual([]);
+  });
+
+  test("a push whose outcome origin cannot confirm is left for the maintainer to check", () => {
+    const result = releaseWith(["patch"], {
+      replies: {
+        "git push --atomic origin main v0.5.1": throws(commandError("fatal: unable to access origin: Could not resolve host")),
+        "git ls-remote origin refs/tags/v0.5.1": throws(commandError("fatal: unable to access origin: Could not resolve host"))
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      [
+        "Release aborted: `git push` failed: fatal: unable to access origin: Could not resolve host",
+        "Could not ask origin whether the push landed: fatal: unable to access origin: Could not resolve host",
+        "Run `git ls-remote origin refs/tags/v0.5.1`. If it prints nothing, the push did not land: run `git tag -d v0.5.1` and `git reset --hard abc123`, then run the release again. If it prints the tag, the push landed: create the GitHub release with `gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag`."
+      ].join("\n")
+    );
+    expect(result.stub.keys().filter((key) => /^(git (reset|tag -d)|gh release create)/.test(key))).toEqual([]);
+  });
+
+  test("a rollback that fails too names the commands that finish it", () => {
+    const result = releaseWith(["patch"], {
+      replies: {
+        "bun run build:fallback": throws(Object.assign(new Error("Command failed: bun run build:fallback"), { status: 1, stderr: null })),
+        "git reset --hard abc123": throws(commandError("fatal: Unable to create '.git/index.lock': File exists."))
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      [
+        "Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback",
+        "The rollback failed too: fatal: Unable to create '.git/index.lock': File exists.",
+        "Undo the release by hand with `git reset --hard abc123`, then run the release again."
+      ].join("\n")
+    );
+    expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
+  });
+
+  test("a missing bun after the bump rolls the bump back", () => {
+    const result = releaseWith(["patch"], {
+      replies: { "bun run build:fallback": throws(Object.assign(new Error("spawnSync bun ENOENT"), { code: "ENOENT" })) }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      `Release aborted: the release failed before anything was pushed: ${MISSING_BUN_MESSAGE}\n` +
+        "Rolled back: main is at abc123 again and the bumped files are restored. Fix the problem, then run the release again."
+    );
+    const keys = result.stub.keys();
+    expect(keys.slice(keys.indexOf("bun run build:fallback") + 1)).toEqual(["git reset --hard abc123"]);
   });
 
   test("the default runner executes commands in the release root", () => {
@@ -243,5 +330,118 @@ describe("release run with stubbed commands", () => {
     expect(deps.root).toBe(root);
     expect(deps.run(process.execPath, ["-e", "process.stdout.write(process.cwd())"])).toBe(fs.realpathSync(root));
     expect(deps.today()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+// git config for the throwaway repositories: a fixed identity, no signing,
+// and no line-ending conversion, so a reset restores files byte for byte.
+const GIT_CONFIG = ["-c", "user.name=Release Test", "-c", "user.email=release@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "core.autocrlf=false"];
+
+function gitIn(cwd, ...args) {
+  return execFileSync("git", [...GIT_CONFIG, ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+}
+
+// The release fixture committed on main in a real repository, with a bare
+// origin that already has that commit.
+function gitFixture() {
+  const root = releaseFixture();
+  const origin = path.join(makeTempDir("story-release-origin-"), "origin.git");
+  gitIn(path.dirname(origin), "init", "-q", "--bare", "-b", "main", origin);
+  gitIn(root, "init", "-q", "-b", "main");
+  gitIn(root, "add", "-A");
+  gitIn(root, "commit", "-q", "-m", "initial");
+  gitIn(root, "remote", "add", "origin", origin);
+  gitIn(root, "push", "-q", "origin", "main");
+  const head = gitIn(root, "rev-parse", "HEAD").trim();
+  const files = Object.fromEntries(gitIn(root, "ls-files").trim().split("\n").map((file) => [file, read(root, file)]));
+  return {
+    root,
+    origin,
+    head,
+    git: (...args) => gitIn(root, ...args),
+    // What every tracked file held before the release.
+    files,
+    // Someone else pushes to main while the release runs.
+    advanceOrigin() {
+      const commit = gitIn(origin, "commit-tree", `${head}^{tree}`, "-p", head, "-m", "concurrent").trim();
+      gitIn(origin, "update-ref", "refs/heads/main", commit);
+    }
+  };
+}
+
+function expectUntouched(repo) {
+  expect(repo.git("rev-parse", "HEAD").trim()).toBe(repo.head);
+  expect(repo.git("status", "--porcelain")).toBe("");
+  expect(repo.git("tag", "--list")).toBe("");
+  for (const [file, text] of Object.entries(repo.files)) {
+    expect(read(repo.root, file)).toBe(text);
+  }
+}
+
+describe("release run against a throwaway git origin", () => {
+  test("a failed step before the push restores every file and leaves main where it was", () => {
+    const repo = gitFixture();
+    const result = releaseWith(["patch"], {
+      root: repo.root,
+      git: repo.git,
+      replies: {
+        "bun run build:fallback": () => {
+          fs.writeFileSync(path.join(repo.root, FALLBACK), "half built\n");
+          throw Object.assign(new Error("Command failed: bun run build:fallback"), { status: 1, stderr: null });
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      "Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback\n" +
+        `Rolled back: main is at ${repo.head} again and the bumped files are restored. Fix the problem, then run the release again.`
+    );
+    expectUntouched(repo);
+    expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
+  });
+
+  test("a push origin refuses rolls back the release commit and the local tag", () => {
+    const repo = gitFixture();
+    const result = releaseWith(["patch"], {
+      root: repo.root,
+      git: repo.git,
+      replies: {
+        "bun run build:fallback": () => {
+          repo.advanceOrigin();
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toStartWith("Release aborted: `git push` failed and origin does not have this release's v0.5.1, so the atomic push changed nothing there: ");
+    expect(result.err).toContain("[rejected]");
+    expect(result.err).toEndWith(
+      "If origin/main has moved on, pull it first. Only a repository admin can push a v* tag.\n" +
+        `Rolled back: main is at ${repo.head} again, the local v0.5.1 tag is deleted, and the bumped files are restored. Fix the problem, then run the release again.`
+    );
+    expectUntouched(repo);
+    expect(gitIn(repo.origin, "tag", "--list")).toBe("");
+    expect(result.stub.keys().some((key) => key.startsWith("gh release create "))).toBe(false);
+  });
+
+  test("a push that lands but reports an error goes on to the GitHub release", () => {
+    const repo = gitFixture();
+    const result = releaseWith(["patch"], {
+      root: repo.root,
+      git: repo.git,
+      replies: {
+        "git push --atomic origin main v0.5.1": () => {
+          repo.git("push", "-q", "--atomic", "origin", "main", "v0.5.1");
+          throw commandError("fatal: the remote end hung up unexpectedly");
+        }
+      }
+    });
+    expect(result.err).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.out).toContain("`git push` reported an error, but origin has v0.5.1, so the push landed: fatal: the remote end hung up unexpectedly");
+    expect(result.out).toContain("Created GitHub release:");
+    const release = repo.git("rev-parse", "HEAD").trim();
+    expect(release).not.toBe(repo.head);
+    expect(gitIn(repo.origin, "rev-parse", "main", "v0.5.1^{commit}").trim().split("\n")).toEqual([release, release]);
   });
 });

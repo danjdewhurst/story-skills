@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
-import { promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
+import { hasVersionSection, promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
 import { checkChangelogVersion } from "../scripts/check-metadata.js";
 import { changelogProblemFor, updateChangelog } from "../scripts/release.js";
 
@@ -72,9 +72,15 @@ Intro.
     expect(() => promoteUnreleased(changelog("\n- New.\n\n"), "1.2.2", "1.2.3", "2026-02-03")).toThrow("already has a section for 1.2.3");
   });
 
-  test("the release preflight reports an empty Unreleased section", () => {
-    expect(changelogProblemFor(changelog("\n"))).toContain('no entries under "## [Unreleased]"');
-    expect(changelogProblemFor(changelog("\n- New.\n\n"))).toBeNull();
+  test("the release preflight reports an empty Unreleased section and a duplicate version", () => {
+    expect(changelogProblemFor(changelog("\n"), "1.2.4")).toContain('no entries under "## [Unreleased]"');
+    expect(changelogProblemFor(changelog("\n- New.\n\n"), "1.2.4")).toBeNull();
+    expect(changelogProblemFor(changelog("\n- New.\n\n"), "1.2.3")).toBe(
+      'CHANGELOG.md already has a section for 1.2.3. Move its entries back under "## [Unreleased]" and remove its heading, or release a later version.'
+    );
+    expect(hasVersionSection(changelog("\n"), "1.2.3")).toBe(true);
+    expect(hasVersionSection(changelog("\n"), "1.2.30")).toBe(false);
+    expect(hasVersionSection("## [1x2x3] - 2026-01-01\n", "1.2.3")).toBe(false);
   });
 
   test("updateChangelog rewrites the file in place", () => {
