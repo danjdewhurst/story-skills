@@ -1987,7 +1987,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 | Kind | What it draws | Reads |
 |---|---|---|
 | `relationships` | Characters and their relationships: family links as solid edges drawn from the elder side, other relationships as dotted edges. Characters dead at the end of the book (by `died-in`, a status progression, or `status: deceased`, in story order, planned chapters included) are dashed (class `deceased`), and characters who died and came back have a thick outline (class `revived`) | Character `relationships`, `status`, `died-in`, `revived-in`, status `progressions` |
-| `locations` | Locations with their region, and routes labelled with hours and mode; a one-way route uses an arrow | Location `region`, `routes` |
+| `locations` | Locations with their region, and routes labelled with hours and mode. A route declared on one side is two-way and drawn as a plain line; when both locations declare a route to each other, each direction is an arrow with its own hours | Location `region`, `routes` |
 | `timeline` | The dated entries from `story timeline` (scenes, and chapters without scene records) in story order, grouped by date, marking entries told out of order | Scene and chapter `date`, `time` |
 | `clues` | Chapters in order, with an edge from each clue's plant to its reveal; red herrings dotted, unrevealed clues pointing at a "not yet revealed" node | Clue `planted`, `payoff`, `red-herring`, `status` |
 | `arcs` | Arcs linked to each chapter that advances them | Chapter and scene `arcs-advanced` |
