@@ -14,23 +14,32 @@ import { assertProjectParses, markdownFiles, requireStoryFile, scanProject } fro
 export const SNAPSHOTS_DIR = ".snapshots";
 export const SNAPSHOT_MANIFEST = "snapshot.json";
 
-// The folder name for a snapshot name: "Before the line edit" is
-// before-the-line-edit.
-export function snapshotId(name) {
+const KEBAB_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+// The folder name for a snapshot: `id` when given, else the kebab-case form
+// of the name ("Before the line edit" is before-the-line-edit). A name with
+// a letter no folder name can spell (Chinese, Arabic, Hebrew, and the other
+// scripts kebabCase drops) needs `id`, so "初稿 v2" and "改稿 v2" never
+// share the folder v2.
+export function snapshotId(name, id) {
+  if (id !== undefined) {
+    const explicit = String(id).trim();
+    if (!KEBAB_ID.test(explicit)) {
+      throw usageError(`Snapshot --id must be kebab-case, such as first-draft: got ${explicit}`);
+    }
+    return explicit;
+  }
   const text = String(name ?? "").trim();
   if (text === "") {
     throw usageError("story snapshot needs a name, such as story snapshot \"before line edit\"");
   }
-  const id = kebabCase(text);
-  if (id === "") {
-    throw usageError(`Snapshot name ${text} has no letters or digits to name its folder: use a name such as draft-2`);
+  const unspelled = [...text].filter((character) => /[\p{L}\p{N}]/u.test(character) && character !== "\u02bc" && kebabCase(character) === "");
+  const derived = kebabCase(text);
+  if (unspelled.length > 0 || derived === "") {
+    const reason = unspelled.length > 0 ? `has letters a folder name cannot spell (${unspelled.slice(0, 3).join("")})` : "has no letters or digits to name its folder";
+    throw usageError(`Snapshot name ${text} ${reason}: add --id <kebab-id>, such as --id first-draft`);
   }
-  return id;
-}
-
-// The snapshot folder, absolute, for a name.
-export function snapshotDirectory(root, name) {
-  return path.join(path.resolve(root), SNAPSHOTS_DIR, snapshotId(name));
+  return derived;
 }
 
 // Saves every markdown file a scan reads (the files `markdownFiles` walks:
@@ -42,7 +51,7 @@ export function snapshotProject(root, options = {}) {
 }
 
 function snapshotProjectUnlocked(root, options) {
-  const id = snapshotId(options.name);
+  const id = snapshotId(options.name, options.id);
   const project = scanProject(root);
   // A chapter that fails to parse would be missing from the word count, and
   // from a later comparison.
@@ -54,12 +63,35 @@ function snapshotProjectUnlocked(root, options) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
   }
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
+  // The snapshot being replaced is kept aside until the new one is whole,
+  // so a failed write (a full disk, an unreadable file) leaves it as it was.
+  const backup = existing ? path.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
+  if (backup !== null) {
+    fs.rmSync(backup, { recursive: true, force: true });
+    fs.cpSync(target, backup, { recursive: true });
+  }
+  try {
+    const manifest = writeSnapshot(project, target, id, options, previous);
+    return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
+  } catch (error) {
+    fs.rmSync(target, { recursive: true, force: true });
+    if (backup !== null) {
+      fs.renameSync(backup, target);
+    }
+    throw error;
+  } finally {
+    if (backup !== null) {
+      fs.rmSync(backup, { recursive: true, force: true });
+    }
+  }
+}
 
+function writeSnapshot(project, target, id, options, previous) {
+  const projectRoot = project.root;
   const files = markdownFiles(projectRoot);
   const written = new Set();
   for (const file of files) {
-    const relative = path.relative(projectRoot, file);
-    const copy = path.join(target, relative);
+    const copy = path.join(target, path.relative(projectRoot, file));
     writeFile(copy, readTextFile(file), { root: projectRoot });
     written.add(copy);
   }
@@ -84,7 +116,7 @@ function snapshotProjectUnlocked(root, options) {
     }
   }
   removeEmptyFolders(target);
-  return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
+  return manifest;
 }
 
 // The files under an existing snapshot folder, which must be a real folder
@@ -131,7 +163,7 @@ export function listSnapshots(root) {
   }
   assertSafeProjectDirectory(folder, projectRoot);
   const snapshots = fs.readdirSync(folder, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
     .map((entry) => {
       const blank = { name: entry.name, id: entry.name, created: null, chapters: null, words: null };
       try {
@@ -162,18 +194,27 @@ function bySnapshotAge(a, b) {
   return order(a.created ?? "", b.created ?? "") || order(a.id, b.id);
 }
 
-// The folder of an existing snapshot, for compare --snapshot.
-export function existingSnapshot(root, name) {
+// The folder of an existing snapshot, for compare --snapshot: `value` is
+// its name as given when it was taken, its id, or a name with that id.
+export function existingSnapshot(root, value) {
   const projectRoot = path.resolve(root);
-  const directory = snapshotDirectory(projectRoot, name);
-  if (lstatIfExists(directory) === null) {
-    const known = listSnapshots(projectRoot).snapshots.map((snapshot) => snapshot.id);
-    const list = known.length === 0 ? "this project has none yet (story snapshot <name> takes one)" : `story snapshot --list shows them: ${known.join(", ")}`;
-    throw usageError(`No snapshot named ${snapshotId(name)}: ${list}`);
+  const text = String(value).trim();
+  const { snapshots } = listSnapshots(projectRoot);
+  let derived = null;
+  try {
+    derived = snapshotId(text);
+  } catch {
+    // A name only an exact match finds.
   }
-  assertSafeProjectDirectory(path.dirname(directory), projectRoot);
+  const found = snapshots.find((snapshot) => snapshot.name === text)
+    ?? snapshots.find((snapshot) => snapshot.id === text || snapshot.id === derived);
+  if (found === undefined) {
+    const list = snapshots.length === 0 ? "this project has none yet (story snapshot <name> takes one)" : `story snapshot --list shows them: ${snapshots.map((snapshot) => snapshot.id).join(", ")}`;
+    throw usageError(`No snapshot named ${text}: ${list}`);
+  }
+  const directory = path.join(projectRoot, SNAPSHOTS_DIR, found.id);
   assertSafeProjectDirectory(directory, projectRoot);
-  return directory;
+  return { directory, id: found.id };
 }
 
 export function formatSnapshot(result) {

@@ -1097,7 +1097,7 @@ Compares the current chapters with an earlier draft and reports word changes per
 |---|---|
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
-| `--snapshot <name>` | Read the earlier chapters from a snapshot saved with [`snapshot`](#snapshot), in the project's `.snapshots/` folder. The name is matched by its kebab-case id, so `"Draft 1"` and `draft-1` are the same snapshot. `--ref` is always a git ref and `--snapshot` always a snapshot, so a tag and a snapshot that share a name are never confused |
+| `--snapshot <name>` | Read the earlier chapters from a snapshot saved with [`snapshot`](#snapshot), in the project's `.snapshots/` folder. It matches the name the snapshot was taken with, its id, or a name with that id, so `"Draft 1"` and `draft-1` find the same snapshot. `--ref` is always a git ref and `--snapshot` always a snapshot, so a tag and a snapshot that share a name are never confused |
 | `--anchor <label>` | A paragraph label from a review copy of the earlier draft, such as `ch03-p12` (repeatable). Prints where each paragraph is in the current text instead of the chapter comparison |
 | `--json` | Print the comparison as a JSON result (see below) |
 
@@ -2113,23 +2113,24 @@ See [Writing workflows](writing-workflows.md) for where passes fit in a revision
 ### snapshot
 
 ```text
-story snapshot <name> [--force] [--dry-run] [--json] [--path <path>]
+story snapshot <name> [--id <kebab-id>] [--force] [--dry-run] [--json] [--path <path>]
 story snapshot --list [--json] [--path <path>]
 ```
 
-Saves a named copy of the project's markdown in `.snapshots/<id>/`, so a draft can be kept and compared with later without git. The id is the kebab-case form of the name (`"Before line edit"` is saved as `before-line-edit`). The copy holds every markdown file a scan reads, under the same paths: `story.md`, the style sheet, chapters, scenes, every entity file and registry. It leaves out what scans leave out: `dist/`, `node_modules/`, dot-folders (so a snapshot never holds an earlier snapshot, or `.git/`), subfolders with their own `story.md`, and every file that is not markdown, such as a cover image. Beside the copy, `snapshot.json` records the name as typed, the `id`, the time it was `created` (UTC), and the number of `chapters`, `words` (plus `characters` in a project counted in characters), and `files` copied.
+Saves a named copy of the project's markdown in `.snapshots/<id>/`, so a draft can be kept and compared with later without git. The id is the kebab-case form of the name (`"Before line edit"` is saved as `before-line-edit`), with Latin letters folded and Cyrillic and Greek transliterated as for entity ids. A name with letters in another script, such as `初稿 v2`, needs `--id`, so two names that differ only in those letters never share a folder. The copy holds every markdown file a scan reads, under the same paths: `story.md`, the style sheet, chapters, scenes, every entity file and registry. It leaves out what scans leave out: `dist/`, `node_modules/`, dot-folders (so a snapshot never holds an earlier snapshot, or `.git/`), subfolders with their own `story.md`, and every file that is not markdown, such as a cover image. Beside the copy, `snapshot.json` records the name as typed, the `id`, the time it was `created` (UTC), and the number of `chapters`, `words` (plus `characters` in a project counted in characters), and `files` copied.
 
 Every scan skips dot-folders, so `validate`, `links`, `continuity`, `check`, `reindex`, `wordcount`, `export`, `build`, and the rest never read `.snapshots/`: a project with snapshots checks, counts, and builds exactly as it does without them. Compare with a snapshot through [`compare --snapshot <name>`](#compare).
 
 | Option | Effect |
 |---|---|
-| `--force` | Replace a snapshot of the same name. The old copy is replaced whole: files the project no longer has are deleted from it |
+| `--id <kebab-id>` | The snapshot's folder name, instead of one derived from the name. `snapshot.json` keeps the name as typed, and `compare --snapshot` finds the snapshot by either |
+| `--force` | Replace a snapshot of the same name. The old copy is replaced whole: files the project no longer has are deleted from it. The old copy is kept aside until the new one is complete, so a failed replacement leaves it as it was |
 | `--list` | List the snapshots, oldest first, instead of taking one. A folder in `.snapshots/` without a readable `snapshot.json` is listed by its name, with its date and counts unknown |
 | `--dry-run` | List the files it would create, update, or delete, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--json` | Print the snapshot, or with `--list` the snapshots, as a JSON result (see below) |
 | `--path <path>` | Project root (default: current directory) |
 
-Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project.
+Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. A snapshot that fails part way, such as on a markdown file that is not UTF-8, is removed, so no half-written snapshot is left. `cli-defaults` in `story.md` cannot set `force`, `list`, or `id`, which belong to one run. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project.
 
 ```shell
 story snapshot "Draft 1"
@@ -3113,7 +3114,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
-| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename` | The entity id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
+| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
 | `--chapter` | `<id>` | `add scene`, `move scene` | |
 | `--scene` | `<n>` | `add scene`, `move scene` | |

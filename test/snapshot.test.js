@@ -120,6 +120,45 @@ describe("story snapshot", () => {
     expect(listSnapshots(root).snapshots[0].characters).toBe(taken.characters);
   });
 
+  test("a failed --force leaves the old snapshot as it was, and a failed first snapshot leaves nothing", () => {
+    const { cwd, root } = project();
+    expect(invoke(cwd, ["snapshot", "draft", "--path", root]).code).toBe(0);
+    const dir = path.join(root, ".snapshots", "draft");
+    const manifest = fs.readFileSync(path.join(dir, "snapshot.json"), "utf8");
+    fs.rmSync(path.join(root, "chapters", "chapter-02.md"));
+    invoke(cwd, ["reindex", root]);
+    writeChapter(root, 1, "Rewritten.");
+    // Sorted after chapters/, so the copy fails part way through.
+    fs.mkdirSync(path.join(root, "notes"));
+    fs.writeFileSync(path.join(root, "notes", "latin1.md"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+    const failed = invoke(cwd, ["snapshot", "draft", "--force", "--path", root]);
+    expect(failed.code).toBe(3);
+    expect(failed.err).toContain("is not valid UTF-8");
+    expect(fs.readFileSync(path.join(dir, "snapshot.json"), "utf8")).toBe(manifest);
+    expect(fs.existsSync(path.join(dir, "chapters", "chapter-02.md"))).toBe(true);
+    expect(fs.readFileSync(path.join(dir, "chapters", "chapter-01.md"), "utf8")).toContain("First paragraph.");
+    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["draft"]);
+
+    expect(invoke(cwd, ["snapshot", "fresh", "--path", root]).code).toBe(3);
+    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["draft"]);
+  });
+
+  test("a name in a script with no folder spelling needs --id, and compare finds it by name or id", () => {
+    const { cwd, root } = project();
+    const refused = invoke(cwd, ["snapshot", "初稿 v2", "--path", root]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("Snapshot name 初稿 v2 has letters a folder name cannot spell (初稿): add --id <kebab-id>");
+    expect(invoke(cwd, ["snapshot", "初稿", "--id", "Bad Id", "--path", root]).err).toContain("Snapshot --id must be kebab-case");
+    expect(invoke(cwd, ["snapshot", "初稿 v2", "--id", "first-draft", "--path", root]).code).toBe(0);
+    expect(listSnapshots(root).snapshots[0]).toMatchObject({ name: "初稿 v2", id: "first-draft" });
+    // Cyrillic is transliterated, and the Ukrainian apostrophe is dropped.
+    expect(snapshotId("Мʼята")).toBe("myata");
+    expect(invoke(cwd, ["compare", root, "--snapshot", "初稿 v2"]).out).toContain("Compared with snapshot first-draft\n");
+    expect(invoke(cwd, ["compare", root, "--snapshot", "first-draft"]).code).toBe(0);
+    expect(invoke(cwd, ["compare", root, "--snapshot", "改稿"]).err).toContain("No snapshot named 改稿: story snapshot --list shows them: first-draft");
+    expect(invoke(cwd, ["snapshot", "--list", "--id", "x", "--path", root]).err).toContain("--id does not apply to story snapshot --list");
+  });
+
   test("rejects a missing or unusable name and misplaced flags", () => {
     const { cwd, root } = project();
     expect(invoke(cwd, ["snapshot", "--path", root]).code).toBe(2);
