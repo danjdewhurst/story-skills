@@ -659,8 +659,8 @@ describe("check-links", () => {
     });
     const { files, failures } = checkLinks(root);
     expect(files.map((file) => path.relative(root, file).split(path.sep).join("/"))).toEqual([
-      "README.md",
       "CONTRIBUTING.md",
+      "README.md",
       "docs/guide.md",
       "docs/with space.md",
       "skills/demo/SKILL.md",
@@ -673,6 +673,59 @@ describe("check-links", () => {
       "README.md:3: docs/guide.md#nope has no heading or anchor #nope in docs/guide.md",
       "skills/demo/SKILL.md:1: ../../README.md#nowhere has no heading or anchor #nowhere in README.md",
       "examples/demo/README.md:1: story.md points at a missing file"
+    ]);
+  });
+
+  // #570: a link above the root passed whenever the target existed on this
+  // disk, though GitHub cannot serve it.
+  test("rejects links that leave the repository, even to files that exist (#570)", () => {
+    const parent = makeTempDir("story-links-outside-");
+    fs.writeFileSync(path.join(parent, "outside.md"), "# Outside\n");
+    const root = path.join(parent, "repo");
+    fs.mkdirSync(path.join(root, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(root, "README.md"), "[out](../outside.md) [abs](/../outside.md#outside) [up](..) [in](docs/../README.md) [root](./)\n");
+    fs.writeFileSync(path.join(root, "docs", "guide.md"), "[deep](../../outside.md)\n<img src=\"../../outside.md\">\n");
+    expect(checkLinks(root).failures).toEqual([
+      "README.md:1: ../outside.md points outside the repository",
+      "README.md:1: /../outside.md#outside points outside the repository",
+      "README.md:1: .. points outside the repository",
+      "docs/guide.md:1: ../../outside.md points outside the repository",
+      "docs/guide.md:2: ../../outside.md points outside the repository"
+    ]);
+  });
+
+  test("checks root and .github markdown, CHANGELOG and AGENTS included, and evals/README.md (#570)", () => {
+    const root = linkRepo({
+      "AGENTS.md": "[a](gone-agents.md)\n",
+      "CHANGELOG.md": "[c](CONTRIBUTING.md#nope)\n",
+      "CONTRIBUTING.md": "# Contributing\n",
+      "SECURITY.md": "[s](gone-security.md)\n",
+      ".github/PULL_REQUEST_TEMPLATE.md": "[p](../gone-template.md)\n",
+      ".github/ISSUE_TEMPLATE/notes.md": "[i](gone-issue.md)\n",
+      "evals/README.md": "[e](fixtures/gone/)\n",
+      "evals/examples/draft.md": "[x](gone-draft.md)\n"
+    });
+    // CLAUDE.md is a symlink to AGENTS.md and is not checked twice. Windows
+    // needs Developer Mode for a symlink, and the expected list is the same
+    // without one, so the link is made only elsewhere.
+    if (process.platform !== "win32") {
+      fs.symlinkSync("AGENTS.md", path.join(root, "CLAUDE.md"));
+    }
+    const { files, failures } = checkLinks(root);
+    expect(files.map((file) => path.relative(root, file).split(path.sep).join("/"))).toEqual([
+      "AGENTS.md",
+      "CHANGELOG.md",
+      "CONTRIBUTING.md",
+      "SECURITY.md",
+      ".github/PULL_REQUEST_TEMPLATE.md",
+      "evals/README.md"
+    ]);
+    expect(failures).toEqual([
+      "AGENTS.md:1: gone-agents.md points at a missing file",
+      "CHANGELOG.md:1: CONTRIBUTING.md#nope has no heading or anchor #nope in CONTRIBUTING.md",
+      "SECURITY.md:1: gone-security.md points at a missing file",
+      ".github/PULL_REQUEST_TEMPLATE.md:1: ../gone-template.md points at a missing file",
+      "evals/README.md:1: fixtures/gone/ points at a missing file"
     ]);
   });
 
