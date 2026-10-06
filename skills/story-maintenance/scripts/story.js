@@ -8728,7 +8728,7 @@ var OPTIONS = [
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
   { name: "dry-run", help: ["List the files add, rename, remove, move,", "reindex, migrate, wordcount --write, doctor", "--fix, or snapshot would create, update, or", "delete, and change nothing"] },
-  { name: "id", value: "<kebab-id>", help: ["Explicit id for add or rename, for a name with", "no ASCII letters or digits"] },
+  { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
   { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
@@ -14442,6 +14442,7 @@ function formatSimilarity(report) {
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url"]],
   compare: [["ref", "against", "snapshot"]]
@@ -14521,6 +14522,8 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which story ${command.name} does not accept${suggestion(key, accepted)}`);
     } else if ((TARGETED_FLAGS[command.name] ?? []).includes(key)) {
       errors.push(`${label} sets ${key}, which names one target and cannot be a default`);
+    } else if ((ONE_RUN_FLAGS[command.name] ?? []).includes(key)) {
+      errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));
@@ -16036,25 +16039,32 @@ function realPath(target) {
 // src/snapshots.js
 var SNAPSHOTS_DIR = ".snapshots";
 var SNAPSHOT_MANIFEST = "snapshot.json";
-function snapshotId(name) {
+var KEBAB_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function snapshotId(name, id) {
+  if (id !== undefined) {
+    const explicit = String(id).trim();
+    if (!KEBAB_ID.test(explicit)) {
+      throw usageError(`Snapshot --id must be kebab-case, such as first-draft: got ${explicit}`);
+    }
+    return explicit;
+  }
   const text = String(name ?? "").trim();
   if (text === "") {
     throw usageError('story snapshot needs a name, such as story snapshot "before line edit"');
   }
-  const id = kebabCase(text);
-  if (id === "") {
-    throw usageError(`Snapshot name ${text} has no letters or digits to name its folder: use a name such as draft-2`);
+  const unspelled = [...text].filter((character) => /[\p{L}\p{N}]/u.test(character) && character !== "ʼ" && kebabCase(character) === "");
+  const derived = kebabCase(text);
+  if (unspelled.length > 0 || derived === "") {
+    const reason = unspelled.length > 0 ? `has letters a folder name cannot spell (${unspelled.slice(0, 3).join("")})` : "has no letters or digits to name its folder";
+    throw usageError(`Snapshot name ${text} ${reason}: add --id <kebab-id>, such as --id first-draft`);
   }
-  return id;
-}
-function snapshotDirectory(root, name) {
-  return path9.join(path9.resolve(root), SNAPSHOTS_DIR, snapshotId(name));
+  return derived;
 }
 function snapshotProject(root, options = {}) {
   return withProjectLock(root, () => snapshotProjectUnlocked(root, options));
 }
 function snapshotProjectUnlocked(root, options) {
-  const id = snapshotId(options.name);
+  const id = snapshotId(options.name, options.id);
   const project = scanProject(root);
   assertProjectParses(project, "take a snapshot");
   const projectRoot = project.root;
@@ -16064,11 +16074,32 @@ function snapshotProjectUnlocked(root, options) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
   }
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
+  const backup = existing ? path9.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
+  if (backup !== null) {
+    fs8.rmSync(backup, { recursive: true, force: true });
+    fs8.cpSync(target, backup, { recursive: true });
+  }
+  try {
+    const manifest = writeSnapshot(project, target, id, options, previous);
+    return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
+  } catch (error) {
+    fs8.rmSync(target, { recursive: true, force: true });
+    if (backup !== null) {
+      fs8.renameSync(backup, target);
+    }
+    throw error;
+  } finally {
+    if (backup !== null) {
+      fs8.rmSync(backup, { recursive: true, force: true });
+    }
+  }
+}
+function writeSnapshot(project, target, id, options, previous) {
+  const projectRoot = project.root;
   const files = markdownFiles(projectRoot);
   const written = new Set;
   for (const file of files) {
-    const relative = path9.relative(projectRoot, file);
-    const copy = path9.join(target, relative);
+    const copy = path9.join(target, path9.relative(projectRoot, file));
     writeFile(copy, readTextFile(file), { root: projectRoot });
     written.add(copy);
   }
@@ -16092,7 +16123,7 @@ function snapshotProjectUnlocked(root, options) {
     }
   }
   removeEmptyFolders(target);
-  return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
+  return manifest;
 }
 function snapshotFiles(directory, root) {
   assertSafeProjectDirectory(path9.dirname(directory), root);
@@ -16131,7 +16162,7 @@ function listSnapshots(root) {
     return { ok: true, errors: [], warnings, snapshots: [] };
   }
   assertSafeProjectDirectory(folder, projectRoot);
-  const snapshots = fs8.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => {
+  const snapshots = fs8.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => {
     const blank = { name: entry.name, id: entry.name, created: null, chapters: null, words: null };
     try {
       const manifest = JSON.parse(readTextFile(path9.join(folder, entry.name, SNAPSHOT_MANIFEST)));
@@ -16156,17 +16187,22 @@ function bySnapshotAge(a, b) {
   }
   return order(a.created ?? "", b.created ?? "") || order(a.id, b.id);
 }
-function existingSnapshot(root, name) {
+function existingSnapshot(root, value) {
   const projectRoot = path9.resolve(root);
-  const directory = snapshotDirectory(projectRoot, name);
-  if (lstatIfExists(directory) === null) {
-    const known = listSnapshots(projectRoot).snapshots.map((snapshot) => snapshot.id);
-    const list = known.length === 0 ? "this project has none yet (story snapshot <name> takes one)" : `story snapshot --list shows them: ${known.join(", ")}`;
-    throw usageError(`No snapshot named ${snapshotId(name)}: ${list}`);
+  const text = String(value).trim();
+  const { snapshots } = listSnapshots(projectRoot);
+  let derived = null;
+  try {
+    derived = snapshotId(text);
+  } catch {}
+  const found = snapshots.find((snapshot) => snapshot.name === text) ?? snapshots.find((snapshot) => snapshot.id === text || snapshot.id === derived);
+  if (found === undefined) {
+    const list = snapshots.length === 0 ? "this project has none yet (story snapshot <name> takes one)" : `story snapshot --list shows them: ${snapshots.map((snapshot) => snapshot.id).join(", ")}`;
+    throw usageError(`No snapshot named ${text}: ${list}`);
   }
-  assertSafeProjectDirectory(path9.dirname(directory), projectRoot);
+  const directory = path9.join(projectRoot, SNAPSHOTS_DIR, found.id);
   assertSafeProjectDirectory(directory, projectRoot);
-  return directory;
+  return { directory, id: found.id };
 }
 function formatSnapshot(result) {
   const counts = [`${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"}`, `${formatNumber3(result.words)} words`];
@@ -20742,7 +20778,8 @@ function compareProject(root, options = {}) {
   }
   const project = scanProject(root);
   assertProjectParses(project, "compare");
-  const other = hasRef ? null : given(options.snapshot) ? { root: existingSnapshot(project.root, options.snapshot), label: `snapshot ${snapshotId(options.snapshot)}` } : { root: path13.resolve(options.cwd ?? process.cwd(), options.against) };
+  const snapshot = given(options.snapshot) ? existingSnapshot(project.root, options.snapshot) : null;
+  const other = hasRef ? null : snapshot !== null ? { root: snapshot.directory, label: `snapshot ${snapshot.id}` } : { root: path13.resolve(options.cwd ?? process.cwd(), options.against) };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
     return mapProjectLabels(project, anchors, { ...options, other });
@@ -22918,13 +22955,13 @@ var COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["list", "force", ...WRITE_OPTIONS],
+    options: ["id", "list", "force", ...WRITE_OPTIONS],
     run(context) {
       const { parsed, io, root } = context;
       const name = parsed.positionals[1];
       if (isTruthy(parsed.options.list)) {
-        for (const flag of ["force", "dry-run"]) {
-          if (isTruthy(parsed.options[flag])) {
+        for (const flag of ["id", "force", "dry-run"]) {
+          if (flag === "id" ? parsed.options.id !== undefined : isTruthy(parsed.options[flag])) {
             throw usageError(`--${flag} does not apply to story snapshot --list`);
           }
         }
@@ -22942,8 +22979,9 @@ var COMMANDS = [
         throw usageError("Usage: story snapshot <name>, or story snapshot --list");
       }
       const force = isTruthy(parsed.options.force);
+      const id = parsed.options.id;
       const projectRoot = root();
-      const existing = snapshotDirectory(projectRoot, name);
+      const existing = path17.join(projectRoot, SNAPSHOTS_DIR, snapshotId(name, id));
       const seed = (target) => {
         if (target !== projectRoot && fs16.existsSync(existing)) {
           fs16.cpSync(existing, path17.join(target, path17.relative(projectRoot, existing)), { recursive: true });
@@ -22951,7 +22989,7 @@ var COMMANDS = [
       };
       return runWrite(context, "snapshot", (target) => {
         seed(target);
-        return snapshotProject(target, { name, force });
+        return snapshotProject(target, { name, id, force });
       }, formatSnapshot);
     }
   },

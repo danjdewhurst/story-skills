@@ -32,6 +32,11 @@ const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove
 // Flags that name one target or one moment rather than a habit.
 const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
 
+// Flags that change what one run does rather than set a habit: a default
+// --force would replace every snapshot whose name is taken, and a default
+// --list would stop snapshot taking one.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id"] };
+
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format
 // epub` must not pick up a default --trim meant for --format print, and
@@ -126,6 +131,8 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which story ${command.name} does not accept${suggestion(key, accepted)}`);
     } else if ((TARGETED_FLAGS[command.name] ?? []).includes(key)) {
       errors.push(`${label} sets ${key}, which names one target and cannot be a default`);
+    } else if ((ONE_RUN_FLAGS[command.name] ?? []).includes(key)) {
+      errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));

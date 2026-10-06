@@ -24,7 +24,7 @@ import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatSimilarity } from "./similarity.js";
-import { formatSnapshot, formatSnapshotList, listSnapshots, snapshotDirectory, snapshotProject } from "./snapshots.js";
+import { SNAPSHOTS_DIR, formatSnapshot, formatSnapshotList, listSnapshots, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
 import {
@@ -685,13 +685,13 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["list", "force", ...WRITE_OPTIONS],
+    options: ["id", "list", "force", ...WRITE_OPTIONS],
     run(context) {
       const { parsed, io, root } = context;
       const name = parsed.positionals[1];
       if (isTruthy(parsed.options.list)) {
-        for (const flag of ["force", "dry-run"]) {
-          if (isTruthy(parsed.options[flag])) {
+        for (const flag of ["id", "force", "dry-run"]) {
+          if (flag === "id" ? parsed.options.id !== undefined : isTruthy(parsed.options[flag])) {
             throw usageError(`--${flag} does not apply to story snapshot --list`);
           }
         }
@@ -709,12 +709,13 @@ export const COMMANDS = [
         throw usageError("Usage: story snapshot <name>, or story snapshot --list");
       }
       const force = isTruthy(parsed.options.force);
+      const id = parsed.options.id;
       const projectRoot = root();
       // The --dry-run copy leaves out dot-folders, .snapshots/ among them, so
       // the snapshot being replaced is copied in first: the preview then
       // lists what --force would update and delete, and refuses as the real
       // run does when the name is taken.
-      const existing = snapshotDirectory(projectRoot, name);
+      const existing = path.join(projectRoot, SNAPSHOTS_DIR, snapshotId(name, id));
       const seed = (target) => {
         if (target !== projectRoot && fs.existsSync(existing)) {
           fs.cpSync(existing, path.join(target, path.relative(projectRoot, existing)), { recursive: true });
@@ -722,7 +723,7 @@ export const COMMANDS = [
       };
       return runWrite(context, "snapshot", (target) => {
         seed(target);
-        return snapshotProject(target, { name, force });
+        return snapshotProject(target, { name, id, force });
       }, formatSnapshot);
     }
   },

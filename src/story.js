@@ -29,7 +29,7 @@ import { addedPassNotes, readPasses, updatePasses, validatePasses } from "./pass
 import { buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
-import { existingSnapshot, snapshotId } from "./snapshots.js";
+import { existingSnapshot } from "./snapshots.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession, writingDays } from "./progress.js";
 import {
   BASELINE_CHECKS,
@@ -256,8 +256,9 @@ export function compareProject(root, options = {}) {
   // A chapter that fails to parse would be reported as removed.
   assertProjectParses(project, "compare");
   // The earlier draft on disk, for --against and --snapshot.
-  const other = hasRef ? null : given(options.snapshot)
-    ? { root: existingSnapshot(project.root, options.snapshot), label: `snapshot ${snapshotId(options.snapshot)}` }
+  const snapshot = given(options.snapshot) ? existingSnapshot(project.root, options.snapshot) : null;
+  const other = hasRef ? null : snapshot !== null
+    ? { root: snapshot.directory, label: `snapshot ${snapshot.id}` }
     : { root: path.resolve(options.cwd ?? process.cwd(), options.against) };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
