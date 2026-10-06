@@ -492,6 +492,7 @@ describe("check-links", () => {
     expect(slugify(headingText("What's new? (v2.0)"))).toBe("whats-new-v20");
     expect(slugify(headingText("[Links](x.md) and _emphasis_ in snake_case"))).toBe("links-and-emphasis-in-snake_case");
     expect(slugify(headingText("Ünïcode — dash"))).toBe("ünïcode--dash");
+    expect(headingText("<code>Tagged</code> <<b>x</b>>heading")).toBe("Tagged heading");
     expect([...anchorsFor("# Notes\n\n## Notes\n\nSetext\n---\n\n## Notes\n\n<a id=\"custom\"></a>\n")]).toEqual(["notes", "notes-1", "setext", "notes-2", "custom"]);
   });
 
