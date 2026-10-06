@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { isGitDirectoryName, isInsideGitDirectory, readTextFile } from "../src/files.js";
+import { fileSystemName, isGitDirectoryName, isInsideGitDirectory, readTextFile } from "../src/files.js";
 import {
   computeWordCounts,
   createEntity,
@@ -662,90 +662,107 @@ describe("generated output and new projects stay out of .git", () => {
     }
   });
 
-  test(".git., .git and GIT~1 name the .git folder on Windows only", () => {
-    for (const name of [".git", ".GIT", ".git.", ".git ", ".git. ", "GIT~1", "git~2"]) {
-      expect(isGitDirectoryName(name, "win32"), name).toBe(true);
+  test("the names NTFS, vfat and HFS+ read as .git count as .git on every system (#603)", () => {
+    // Linux reaches each of these disks too (WSL's /mnt/c, a USB stick, an
+    // hfsplus mount), so every rule applies everywhere.
+    for (const name of [
+      ".git", ".GIT", ".git.", ".git ", ".git. ", "GIT~1", "git~2", "GIT~1.",
+      ".git::$INDEX_ALLOCATION", ".GIT:$I30:$INDEX_ALLOCATION", ".git:notes", ".git. ::$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION",
+      ".g\u200Cit", "\uFEFF.git", ".GI\u200ET", ".git\u200D", ".\u202Eg\u206Ait", ".git\u200B."
+    ]) {
+      expect(isGitDirectoryName(name), JSON.stringify(name)).toBe(true);
     }
-    expect(isGitDirectoryName(".git", "linux")).toBe(true);
-    expect(isGitDirectoryName(".Git", "darwin")).toBe(true);
-    for (const name of [".git.", ".git ", "GIT~1"]) {
-      expect(isGitDirectoryName(name, "linux"), name).toBe(false);
+    for (const name of [
+      ".github", ".gitignore", "repo.git", "git", "git~", ".git~1",
+      ".github:x", ".gitignore::$DATA", "repo.git:x", "x:.git", "git:x",
+      ".g\u200Cithub", "repo\u200C.git", ".gi\u200Bt\u00ADignore"
+    ]) {
+      expect(isGitDirectoryName(name), JSON.stringify(name)).toBe(false);
     }
-    for (const name of [".github", ".gitignore", "repo.git", "git"]) {
-      expect(isGitDirectoryName(name, "win32"), name).toBe(false);
-    }
+    expect(fileSystemName("Story.MD::$DATA")).toBe("story.md");
+    expect(fileSystemName("Chap\u200Cters. ")).toBe("chapters");
   });
 
-  test("a stream name on Windows and characters HFS+ ignores on macOS still name .git (#603)", () => {
-    for (const name of [".git::$INDEX_ALLOCATION", ".GIT:$I30:$INDEX_ALLOCATION", ".git:notes", ".git. ::$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION", "GIT~1."]) {
-      expect(isGitDirectoryName(name, "win32"), name).toBe(true);
-    }
-    for (const name of [".g‌it", "﻿.git", ".GI‎T", ".git‍", ".‮g⁪it"]) {
-      expect(isGitDirectoryName(name, "darwin"), name).toBe(true);
-    }
-    // Each rule is its own file system's: elsewhere these are other folders.
-    for (const name of [".git::$INDEX_ALLOCATION", ".g‌it"]) {
-      expect(isGitDirectoryName(name, "linux"), name).toBe(false);
-    }
-    expect(isGitDirectoryName(".g‌it", "win32")).toBe(false);
-    expect(isGitDirectoryName(".git::$INDEX_ALLOCATION", "darwin")).toBe(false);
-    for (const name of [".github:x", ".gitignore::$DATA", "repo.git:x", "x:.git", "git:x"]) {
-      expect(isGitDirectoryName(name, "win32"), name).toBe(false);
-    }
-    for (const name of [".g‌ithub", "repo‌.git", ".gi​t­ignore"]) {
-      expect(isGitDirectoryName(name, "darwin"), name).toBe(false);
-    }
-  });
-
-  test("the path as typed is refused before the file system is asked to resolve it (#603)", () => {
+  test("a name a file system reads its own way is refused before anything resolves it (#603)", () => {
     const root = gitProject();
-    // A file system that cannot resolve the name (a stream name on a disk
-    // without streams, say) must not stand between the name and the check.
-    const realpath = spyOn(fs.realpathSync, "native").mockImplementation((target) => {
-      throw Object.assign(new Error(`EINVAL: invalid argument, realpath '${target}'`), { code: "EINVAL" });
+    // As on Windows, where `story.md::$DATA` is story.md's text: the path
+    // exists, but its real path may be refused outright.
+    const stream = (target) => String(target).includes("::$");
+    const existsSync = fs.existsSync;
+    const realpath = fs.realpathSync.native;
+    const exists = spyOn(fs, "existsSync").mockImplementation((target) => stream(target) || existsSync(target));
+    const resolve = spyOn(fs.realpathSync, "native").mockImplementation((target, ...rest) => {
+      if (stream(target)) {
+        throw Object.assign(new Error(`EINVAL: invalid argument, realpath '${target}'`), { code: "EINVAL" });
+      }
+      return realpath(target, ...rest);
     });
     try {
-      expect(isInsideGitDirectory(path.join(root, ".git", "config"), root)).toBe(true);
-      expect(realpath).not.toHaveBeenCalled();
+      expect(isInsideGitDirectory(path.join(root, ".git::$INDEX_ALLOCATION", "config"), root)).toBe(true);
+      for (const [out, message] of [
+        [".git::$INDEX_ALLOCATION/config", "it is inside a .git folder"],
+        ["story.md::$DATA", "it is project source"],
+        ["chapters::$INDEX_ALLOCATION/chapter-01.md", "it is project source"]
+      ]) {
+        const result = invoke(root, ["export", ".", "--out", out]);
+        expect(result.code, out).toBe(4);
+        expect(result.err, out).toContain(message);
+      }
+      expect(resolve.mock.calls.filter(([target]) => stream(target))).toEqual([]);
     } finally {
-      realpath.mockRestore();
+      exists.mockRestore();
+      resolve.mockRestore();
     }
   });
 
-  // Only Windows reads stream names and only macOS drops ignorable
-  // characters, so the commands run there; the names are checked on every
-  // system above. A disk that will not take such a name at all fails the
-  // command instead, so each run is checked for what it wrote, not for its
-  // message: nothing, inside .git or beside it.
-  const strangeGitNames = {
-    win32: [".git::$INDEX_ALLOCATION", ".git:$I30:$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION"],
-    darwin: [".g‌it", "﻿.git", ".GI‎T"]
-  }[process.platform] ?? [];
-
-  test.skipIf(strangeGitNames.length === 0)("--out, init and import never write into .git through a stream name or ignorable characters (#603)", () => {
+  test("--out, init and import refuse every name a disk reads as .git, relative or absolute, dry run or not (#603)", () => {
     const root = gitProject();
     const manuscript = path.join(makeTempDir(), "book.md");
     fs.writeFileSync(manuscript, "# Chapter 1\n\nThe tide came in.\n");
     const tree = () => fs.readdirSync(root, { recursive: true }).map(String).sort();
     const before = tree();
-    for (const name of strangeGitNames) {
-      expect(isInsideGitDirectory(path.join(root, name, "config"), root), name).toBe(true);
-      for (const out of [`${name}/config`, path.join(root, name, "config")]) {
+    const outside = "it is inside a .git folder. Choose a path outside .git";
+    const nested = "Refusing to create a story project inside a .git folder";
+    for (const name of [".git::$INDEX_ALLOCATION", ".git:$I30:$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION", "GIT~1", ".git.", ".g\u200Cit", "\uFEFF.git", ".GI\u200ET"]) {
+      for (const at of [(file) => `${name}/${file}`, (file) => path.join(root, name, file)]) {
         for (const dryRun of [[], ["--dry-run"]]) {
-          for (const argv of [
-            ["export", ".", "--out", out],
-            ["build", ".", "--format", "html", "--out", out],
-            ["init", "Inner", "--dir", `${name}/inner`],
-            ["import", manuscript, "--title", "Inner", "--dir", `${name}/inner`]
+          for (const [argv, message] of [
+            [["export", ".", "--out", at("config")], outside],
+            [["build", ".", "--format", "html", "--out", at("config")], outside],
+            [["init", "Inner", "--dir", at("inner")], nested],
+            [["import", manuscript, "--title", "Inner", "--dir", at("inner")], nested]
           ]) {
+            const label = JSON.stringify([...argv, ...dryRun]);
             const result = invoke(root, [...argv, ...dryRun]);
-            expect(result.code, [...argv, ...dryRun].join(" ")).not.toBe(0);
+            expect(result.code, label).toBe(4);
+            expect(result.err, label).toContain(message);
           }
         }
       }
     }
     expect(read(root, ".git/config")).toBe("[core]\n\tbare = false\n");
     expect(listDir(root, ".git")).toEqual(["config"]);
+    expect(tree()).toEqual(before);
+  });
+
+  test("--out names project source under the names NTFS, vfat and HFS+ read as it (#603)", () => {
+    const root = gitProject();
+    const notes = path.join(root, "feedback\u200B", "notes.md");
+    fs.mkdirSync(path.dirname(notes));
+    fs.writeFileSync(notes, "Keep.\n");
+    const tree = () => fs.readdirSync(root, { recursive: true }).map(String).sort();
+    const before = tree();
+    for (const out of ["story.md::$DATA", "Story.md.", "style-sheet.md ", "progress.md:x", "chapters::$INDEX_ALLOCATION/chapter-01.md", "chap\u200Cters/x.md", "Chapters./x.md", "\uFEFFplot/s.md"]) {
+      for (const at of [out, path.join(root, out)]) {
+        const result = invoke(root, ["export", ".", "--out", at]);
+        expect(result.code, JSON.stringify(at)).toBe(4);
+        expect(result.err, JSON.stringify(at)).toContain("it is project source");
+      }
+    }
+    const kept = invoke(root, ["export", ".", "--out", "feedback\u200B/notes.md"]);
+    expect(kept.code).toBe(4);
+    expect(kept.err).toContain("may hold hand-written work");
+    expect(fs.readFileSync(notes, "utf8")).toBe("Keep.\n");
     expect(tree()).toEqual(before);
   });
 

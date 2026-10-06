@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
+import { fileSystemName, isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -796,28 +796,38 @@ function isCopyrightMatter(entry) {
 const HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 
 function assertNotProjectSource(project, outFile) {
+  // The path as typed is checked before anything resolves it, so a name a
+  // file system reads its own way (`story.md::$DATA`,
+  // `.git::$INDEX_ALLOCATION`) is refused before the file system sees it.
+  assertNotSourcePath(project, outFile, project.root, outFile);
   if (isInsideGitDirectory(outFile, project.root)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
-  // Check the path as typed and the real path behind any symlinked folder
-  // (`lnk -> chapters`), case-insensitively for case-insensitive disks,
-  // where `/users/me/book` can name the project at `/Users/me/Book`.
+  // Then the real path behind any symlinked folder (`lnk -> chapters`),
+  // case-insensitively for case-insensitive disks, where `/users/me/book`
+  // can name the project at `/Users/me/Book`.
   const realRoot = fs.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
-  const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
-  for (const [root, target] of candidates) {
-    const relativePath = path.relative(root, target);
-    if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-      continue;
-    }
-    const lower = portablePath(relativePath).toLowerCase();
-    const [first] = lower.split("/");
-    if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
-      throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
-    }
-    if (HAND_EDITED_DIRECTORIES.includes(first) && lower.includes("/") && lstatIfExists(outFile) !== null) {
-      throw refusedError(`Refusing to overwrite ${projectPath(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
-    }
+  assertNotSourcePath(project, outFile, realRoot, realTarget);
+  assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
+}
+
+// `target` below `root` names project source, or an existing file in a
+// skill-owned folder. Each name is compared as a file system may look it up,
+// so `Chapters/x.md`, `chapters::$INDEX_ALLOCATION/x.md` and `story.md.`
+// count too.
+function assertNotSourcePath(project, outFile, root, target) {
+  const relativePath = path.relative(root, target);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return;
+  }
+  const lower = relativePath.split(path.sep).map(fileSystemName).join("/");
+  const [first] = lower.split("/");
+  if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+  }
+  if (HAND_EDITED_DIRECTORIES.includes(first) && lower.includes("/") && lstatIfExists(outFile) !== null) {
+    throw refusedError(`Refusing to overwrite ${projectPath(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
   }
 }
 

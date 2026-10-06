@@ -626,20 +626,25 @@ export function isPathInside(root, target) {
 
 // Characters HFS+ leaves out of a name when it looks one up (zero-width
 // joiners, direction marks, the byte order mark), with the rest of
-// Unicode's default-ignorable code points, so `.g‌it` is `.git` there.
+// Unicode's default-ignorable code points.
 const IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 
-// A folder name git reads as its own folder: `.git` in any letter case, and
-// on Windows also `.git.`, `.git ` and the short name `GIT~1`, which name
-// the same folder there but are other folders elsewhere. NTFS reads what
-// follows a colon as a stream of the folder (`.git::$INDEX_ALLOCATION` is
-// the folder itself), so on Windows the name ends at the first colon; on
-// macOS ignorable characters are dropped before the name is compared.
-export function isGitDirectoryName(name, platform = process.platform) {
-  if (platform === "win32") {
-    return /^(?:\.git|git~\d+)[. ]*$/i.test(name.split(":")[0]);
-  }
-  return (platform === "darwin" ? name.replace(IGNORABLE_CHARACTERS, "") : name).toLowerCase() === ".git";
+// A file or folder name as a file system may look it up, in lower case.
+// NTFS reads what follows a colon as a stream (`.git::$INDEX_ALLOCATION` is
+// the folder itself, `story.md::$DATA` the file's text) and drops trailing
+// dots and spaces, as vfat and exFAT do; HFS+ leaves out ignorable
+// characters (`.g\u200Cit` is `.git`). Linux reaches all of these disks too
+// (WSL's /mnt/c, a USB stick, an hfsplus mount) and its real path keeps the
+// name as typed, so the guards that compare names use this on every system,
+// as git's core.protectNTFS does.
+export function fileSystemName(name) {
+  return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
+}
+
+// A folder name git reads as its own folder: `.git` in any letter case or
+// under any name above, and the short name `GIT~1` that NTFS gives it.
+export function isGitDirectoryName(name) {
+  return /^(?:\.git|git~\d+)$/.test(fileSystemName(name));
 }
 
 // A git folder on the way from `base` (the project, or the folder a new

@@ -486,11 +486,11 @@ function isPathInside(root, target) {
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
 var IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
-function isGitDirectoryName(name, platform = process.platform) {
-  if (platform === "win32") {
-    return /^(?:\.git|git~\d+)[. ]*$/i.test(name.split(":")[0]);
-  }
-  return (platform === "darwin" ? name.replace(IGNORABLE_CHARACTERS, "") : name).toLowerCase() === ".git";
+function fileSystemName(name) {
+  return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
+}
+function isGitDirectoryName(name) {
+  return /^(?:\.git|git~\d+)$/.test(fileSystemName(name));
 }
 function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
@@ -25797,25 +25797,27 @@ function isCopyrightMatter(entry) {
 }
 var HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 function assertNotProjectSource(project, outFile) {
+  assertNotSourcePath(project, outFile, project.root, outFile);
   if (isInsideGitDirectory(outFile, project.root)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
   const realRoot = fs10.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
-  const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
-  for (const [root, target] of candidates) {
-    const relativePath = path14.relative(root, target);
-    if (relativePath === "" || relativePath.startsWith("..") || path14.isAbsolute(relativePath)) {
-      continue;
-    }
-    const lower = portablePath(relativePath).toLowerCase();
-    const [first] = lower.split("/");
-    if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
-      throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
-    }
-    if (HAND_EDITED_DIRECTORIES.includes(first) && lower.includes("/") && lstatIfExists(outFile) !== null) {
-      throw refusedError(`Refusing to overwrite ${projectPath(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
-    }
+  assertNotSourcePath(project, outFile, realRoot, realTarget);
+  assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
+}
+function assertNotSourcePath(project, outFile, root, target) {
+  const relativePath = path14.relative(root, target);
+  if (relativePath === "" || relativePath.startsWith("..") || path14.isAbsolute(relativePath)) {
+    return;
+  }
+  const lower = relativePath.split(path14.sep).map(fileSystemName).join("/");
+  const [first] = lower.split("/");
+  if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+  }
+  if (HAND_EDITED_DIRECTORIES.includes(first) && lower.includes("/") && lstatIfExists(outFile) !== null) {
+    throw refusedError(`Refusing to overwrite ${projectPath(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
   }
 }
 function realPathThroughAncestors(target) {
