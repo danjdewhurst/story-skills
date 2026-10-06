@@ -47,8 +47,8 @@ payoff exists in the ledger, the thread is alive — leave it.
      that registry. Drop the character from casts, relationships, and arc
      `characters` lists.
    - Update `plot/timeline.md` for any removed events.
-4. **Run maintenance:** `story reindex .`, `story links .`,
-   `story validate .`, `story continuity .` — the checker should confirm
+4. **Run maintenance:** `story reindex .`, `story wordcount . --write`,
+   and `story check .` — the checker should confirm
    nothing still references the cut thread. `story continuity` warns about
    a `status: cut` character still in a chapter or scene `pov` or
    `characters`, an arc's `characters`, or a relationship.

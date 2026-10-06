@@ -40,8 +40,7 @@ Agree and record in `story.md`'s `## Notes`:
    change per branch keeps reviews small.
 3. Merge through pull requests. The other author reviews story changes;
    the `story-checks.yml` template from `templates/github/` runs
-   `story validate`, `story links`, and `story continuity` on every pull
-   request.
+   `story check` (validate, links, and continuity) on every pull request.
 4. Update branches by rebasing onto `main` before merging, and push a
    rebased branch with `--force-with-lease`, never plain `--force`.
 5. Registries (`_index.md` files) and word counts are generated: when two

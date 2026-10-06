@@ -103,11 +103,9 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 After each reconcile loop:
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 ```
 
 ## Reference Files

@@ -103,8 +103,8 @@ detective, the witness); a clue nobody can notice cannot be played fair.
 - A clue with `significance-delayed: true` is fair play *only if* the clue
   itself was visible; delayed significance is the game, hidden clues are
   the cheat.
-- After adding or editing clues, run `story reindex .`, `story links .`,
-  `story validate .`, `story continuity .`
+- After adding or editing clues, run `story reindex .`,
+  `story wordcount . --write`, and `story check .`, then `story clues .`
 
 ## The fair-play matrix
 

@@ -35,8 +35,8 @@ A story project must already exist (created via the story-init skill). Verify by
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 ## Updating a Character
@@ -46,7 +46,7 @@ story validate .
 3. Make the requested changes. If the change happens partway through the story (a scar, a new title, a turn to the other side), add a progression instead of editing the opening value (see Changes Over the Story)
 4. If relationships changed, update the other character's file (bidirectional)
 5. Update `characters/_index.md` if role or status changed
-6. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+6. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Changes Over the Story
 
@@ -69,7 +69,7 @@ progressions:
 - Before drafting or revising a chapter, run `story knowledge {id} --at chapter-NN`. It lists what the character knows at that chapter in story time (by date when both chapters are dated, otherwise by chapter number), the same rule as `story context`, and which progressions already apply. Write to that state rather than the opening frontmatter alone
 - A line marked `reader-knowledge` is already on the page, or known before the book, and may appear in the prose. A line marked `character-knowledge` and `do not reveal` is something the character knows from a flashback the reader has not reached: the character may act on it, and the fact itself must not be stated. Do not drop those lines, and do not write them in as if the reader had already learned them
 
-After adding or editing progressions, run `story validate .`, `story links .`, and `story continuity .`.
+After adding or editing progressions, run `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 ## Renaming or Killing Off a Character
 
@@ -80,7 +80,7 @@ To rename:
 3. Show the user the replacements before running it for real, then run the same command without `--dry-run`. It also sets `name`, renames the file when the id changes, and rewrites the id in every frontmatter field and markdown link target.
 4. A `prose-name-shared` warning lists places another entity shares the name, which were left alone: read each one and edit it by hand if it means this character. Update any alias that should change in the character file and in the prose yourself.
 5. Hand-written registry sections (such as Family Trees in `characters/_index.md`), link labels, and outline beats keep the old display name: search for it (`grep -rn "Old Name" .`) and update each hit by hand.
-6. Run `story wordcount --write`, `story links .`, and `story validate .`.
+6. Run `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 Without `--prose`, `rename` leaves the chapter text alone, for when the user wants to revise those passages by hand.
 
@@ -98,7 +98,7 @@ Variants:
 - **Non-linear books:** give chapters a `date` so deaths compare by story time, and give a dual-timeline book's chapters a `strand` so each timeline keeps its own clock and its own route check
 - Drop the character's `character-state` entry in `continuity/state.md` once the death is drafted and at or before `current-chapter`
 
-After either change, run `story reindex .`, `story links .`, and `story validate .`.
+After either change, run `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 ## Managing Relationships
 

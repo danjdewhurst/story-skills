@@ -16,8 +16,8 @@ the chapter files.
 
 ## Sending a round
 
-1. Settle the chapters first: `story validate .`, `story links .`,
-   `story wordcount . --write`.
+1. Settle the chapters first: `story reindex .`,
+   `story wordcount . --write`, and `story check .`.
 2. With the user's approval, commit and tag the version sent, so the
    return can be compared against it:
 

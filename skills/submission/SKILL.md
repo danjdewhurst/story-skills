@@ -76,18 +76,17 @@ reads, which is usually the book's.
 Run the deterministic checks and report every finding before drafting:
 
 ```shell
-story validate .
-story links .
-story continuity .
-story prose .
+story reindex .
 story wordcount . --write
+story check .
+story prose .
 story report .
 ```
 
 Then check what the CLI cannot:
 
-1. Validate, links, and continuity have no errors. List warnings for the
-   user to accept or fix.
+1. `story check .` (validate, links, and continuity) has no errors. List
+   warnings for the user to accept or fix.
 2. `story prose .` shows no avoided spellings, and the user has reviewed
    the other findings. If `style-sheet.md` is missing or still the
    scaffold, suggest the `voice-style` skill first.
@@ -272,9 +271,9 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 After the readiness check, or any manuscript change made for submission:
 
 ```shell
+story reindex .
 story wordcount . --write
-story validate .
-story continuity .
+story check .
 story prose .
 ```
 

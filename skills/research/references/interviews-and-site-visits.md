@@ -91,4 +91,4 @@ specific passages under `## Findings`), record the reviewer in the
 Notes with a `risk` need this review before the chapters are final.
 
 After adding or updating interview, visit, or review notes, run
-`story reindex .`, `story links .`, and `story validate .`.
+`story reindex .`, `story wordcount . --write`, and `story check .`.

@@ -223,9 +223,8 @@ metadata, or chapters:
 
 ```shell
 story reindex .
-story links .
-story validate .
 story wordcount . --write
+story check .
 ```
 
 ## Reference Files

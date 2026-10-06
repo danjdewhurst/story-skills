@@ -201,11 +201,11 @@ hand.
 After editing chapters, character voice fields, or the style sheet:
 
 ```shell
+story reindex .
 story wordcount . --write
+story check .
 story prose .
 story voices .
-story links .
-story validate .
 ```
 
 ## Reference Files

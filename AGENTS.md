@@ -58,7 +58,7 @@ CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test`,
 - Keep skill instructions operational and agent-facing: what to read, what to edit, what checks to run, and when to ask the user.
 - Reference files belong under the relevant skill's `references/` directory.
 - Story entities should use kebab-case identifiers and maintain bidirectional links where the domain requires them.
-- After instructions that add, remove, rename, or revise story entities, direct agents to run the appropriate maintenance commands: `story reindex`, `story wordcount --write`, `story links`, and/or `story validate`.
+- After instructions that add, remove, rename, or revise story entities, direct agents to run the canonical maintenance block, in this order: `story reindex .`, `story wordcount . --write`, `story check .`. `story check` runs `validate`, `links`, and `continuity` and fails only on errors, so do not list those three separately. Skill-specific checks such as `story clues .` or `story pacing .` go after the block. `test/maintenance-order.test.js` enforces this for every fenced code block under `skills/`.
 
 ## Git And Commits
 

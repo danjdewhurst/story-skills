@@ -550,7 +550,17 @@ Conventions the existing skills follow:
 - Write for the agent, not the reader: what to read, what to edit, which checks to run, and when to stop and ask the user. The usual sections are Overview, Prerequisites, When to Use, a numbered Workflow, Conventions, CLI Maintenance, and Reference Files (see [`skills/research/SKILL.md`](../skills/research/SKILL.md)).
 - Put long templates and craft material in `references/` and list each file with a one-line description under "Reference Files". Keep `SKILL.md` itself operational.
 - Use kebab-case ids for story entities and keep bidirectional links where the format requires them (relationships, faction members, series links, and so on).
-- After any step that adds, removes, renames, or revises story entities, tell the agent which maintenance commands to run: `story reindex`, `story wordcount --write`, `story links`, and/or `story validate`.
+- After any step that adds, removes, renames, or revises story entities, tell the agent to run the canonical maintenance block, in this order:
+
+  ```shell
+  story reindex .
+  story wordcount . --write
+  story check .
+  ```
+
+  `reindex` rebuilds the registries, `wordcount --write` updates chapter counts (and reindexes again), and `check` runs `validate`, `links`, and `continuity` over the settled files. `check` exits 1 only on errors; warnings print but never block the agent. Put skill-specific checks such as `story clues .`, `story pacing .`, or `story series .` after the block, and do not list `story validate`, `story links`, or `story continuity` in it, since `check` already runs them. In running prose, write the same three commands in the same order.
+
+  [`test/maintenance-order.test.js`](../test/maintenance-order.test.js) enforces this. A *maintenance block* is any fenced code block in a markdown file under `skills/` that runs `story reindex`, `story wordcount ... --write`, `story check`, `story links`, or `story validate`. Its first three `story` lines must be the canonical three, all on the same project path, and no later line may run one of those commands, or `story continuity`, again. A command catalogue that lists every command, such as the one in `story-maintenance`, opts out with a `<!-- command-reference -->` comment on the line before its fence.
 - Include the standard "CLI Maintenance" paragraph telling the agent to prefer `story`, then `bun run story --` from a checkout, then the bundled fallback `node ../story-maintenance/scripts/story.js`, and to do the checks by hand if no CLI is available. Copy it from an existing skill.
 - Keep projects markdown-first. Skills must not tell agents to create project-local generator or build scripts that emit story content.
 - End every `SKILL.md` with the "Shared Conventions" section that links [`skills/story-maintenance/references/conventions.md`](../skills/story-maintenance/references/conventions.md) and repeats its summary. Copy it from an existing skill: `test/skill-conventions.test.js` checks that every skill has it and that the summaries match. When a shared convention changes, edit `conventions.md` and, if the summary changes, every copy of it.

@@ -204,9 +204,8 @@ After creating or updating feedback files and synthesis:
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 ```
 
 ## Reference Files

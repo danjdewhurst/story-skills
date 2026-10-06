@@ -93,11 +93,9 @@ are clean or every remaining finding is a recorded decision. Set story
 7. Run maintenance:
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story doctor .
 ```
 
@@ -144,9 +142,7 @@ Chapter ids come from `number` (`chapter-07`), and scene ids embed the chapter i
 ```shell
 story reindex .
 story wordcount . --write
-story validate .
-story links .
-story continuity .
+story check .
 ```
 
 `grep -rn "chapter-NN" .` finds references to an old id that the checks do not cover, such as ids in prose notes.

@@ -174,6 +174,6 @@ anthologies, gives the layout, the anthology byline, and the builds.
    `story add matter "Acknowledgements" --placement back`, then write the
    lines into `matter/acknowledgements.md` and run `story validate .`.
 5. **Check the stories against each other.** In a linked collection, run
-   each story's checks (`story validate .`, `story continuity .`) and compare
+   each story's checks (`story check .`) and compare
    shared names, dates, and facts by reading. Note contradictions for the
    user; fix them with `revision-continuity`.

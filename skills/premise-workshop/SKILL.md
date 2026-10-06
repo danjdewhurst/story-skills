@@ -184,11 +184,12 @@ After `story init` and the hand edits to `story.md`:
 
 ```shell
 story reindex .
-story validate .
+story wordcount . --write
+story check .
 story report .
 ```
 
-`story validate` warns when `target-words` (`target-characters` for
+`story check` warns when `target-words` (`target-characters` for
 Chinese or Japanese) sits outside the chosen form's usual range; either
 adjust the target or confirm the choice with the user.
 `story reindex .` is needed only when the title changed, but it is safe to

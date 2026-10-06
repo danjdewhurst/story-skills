@@ -31,7 +31,7 @@ A story project must already exist (created via the story-init skill). Verify by
 7. Without the CLI, write the file from `references/location-template.md` to `worldbuilding/locations/{name-kebab}.md`
 8. Without the CLI, update the `worldbuilding/_index.md` locations table
 9. If notable characters are listed, verify those character files exist and add this location's kebab-case identifier to each character file's `locations` frontmatter list
-10. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+10. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Maps, Routes, and Travel
 
@@ -64,7 +64,7 @@ Use the travel speeds table in `references/economy-logistics.md` to set plausibl
 6. Save to `worldbuilding/systems/{name-kebab}.md`
 7. Update `worldbuilding/_index.md` systems table
 8. Cross-reference with characters who interact with the system (e.g., magic-users for a magic system)
-9. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+9. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Creating A Faction
 
@@ -80,7 +80,7 @@ Then:
 1. Save to `worldbuilding/factions/{name-kebab}.md`
 2. Update the Factions table in `worldbuilding/_index.md`
 3. If members are listed, verify those character files exist
-4. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+4. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Creating An Artifact
 
@@ -96,7 +96,7 @@ Then:
 1. Save to `worldbuilding/artifacts/{name-kebab}.md`
 2. Update the Artifacts table in `worldbuilding/_index.md`
 3. If an owner or location is listed, verify those files exist and cross-reference back
-4. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+4. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Updating World Elements
 
@@ -104,7 +104,7 @@ Then:
 2. Make the requested changes. If a location or faction changes partway through the story (a city falls, a guild disbands), add a progression instead of editing the opening value (see Changes Over the Story)
 3. If cross-references changed, update the linked files
 4. Update `worldbuilding/_index.md` if name, type, or status changed
-5. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+5. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Changes Over the Story
 
@@ -126,7 +126,7 @@ progressions:
 - Keep entries in story order, and read the progressions up to the chapter being drafted before describing the place or faction in it
 - Artifacts and systems do not take progressions; track an artifact's changes with `object-state` and scene `state-changes` (see the revision-continuity skill)
 
-After adding or editing progressions, run `story validate .` and `story links .`.
+After adding or editing progressions, run `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 ## Cross-Referencing
 

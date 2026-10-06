@@ -231,7 +231,7 @@ flowchart LR
   P[premise-workshop<br/>optional] -.-> A
   A[story-init<br/>story init] --> B[character-management<br/>worldbuilding<br/>story add]
   B --> C[chapter-writing<br/>outline, then prose]
-  C --> D[story wordcount --write<br/>story reindex<br/>story links<br/>story validate]
+  C --> D[story reindex<br/>story wordcount --write<br/>story check]
   D -->|next chapter| C
 ```
 
@@ -507,41 +507,31 @@ If you would rather write without an outline, ask for discovery drafting instead
 
 ### 4. Run the maintenance loop
 
-After a chapter is drafted, the skill runs the maintenance pass. You can run it yourself at any time:
+After a chapter is drafted, the skill runs the maintenance pass. Every skill runs these three commands in this order, and you can run them yourself at any time. The output below assumes the skill set `current-chapter: 1` in `continuity/state.md` after drafting; if you are running the commands yourself, set it first, or `story check` warns `continuity/state.md current-chapter 0 is behind the latest chapter 1`.
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 ```text
+Registries already up to date
 chapters/chapter-01.md: 84
 Total: 84
-Registries already up to date
-Links are valid: 0 errors, 0 warnings, 0 dismissed
-Project is valid: 0 errors, 0 warnings, 0 dismissed
+Checks passed: 0 errors, 0 warnings, 0 dismissed
 ```
 
 | Command | What it does |
 |---------|--------------|
-| `story wordcount . --write` | Counts prose under `## Chapter Text` and writes `word-count` into each chapter and the total into `chapters/_index.md` |
 | `story reindex .` | Rebuilds every `_index.md` registry table from the entity files |
-| `story links .` | Checks that every id reference points at a real file and that backlinks exist |
-| `story validate .` | Checks required files, the schema version, frontmatter fields and values, and registries |
+| `story wordcount . --write` | Counts prose under `## Chapter Text` and writes `word-count` into each chapter and the total into `chapters/_index.md` |
+| `story check .` | Runs `validate` (required files, the schema version, frontmatter fields and values, and registries), `links` (every id reference points at a real file and backlinks exist), and `continuity` over one scan. It exits 1 on errors; warnings alone do not fail it |
 
-The skill's post-write list also runs `story continuity .` before `story next .`, in the same place discovery-drafting does. `story next` can name continuity errors and still exit 0, so the continuity command is the check. `story reindex` in that list rebuilds `chapters/_index.md`; the skill does not edit registry rows by hand.
-
-Then check the story itself and ask what to do next. The output below assumes the skill set `current-chapter: 1` in `continuity/state.md` after drafting; if you are running the commands yourself, set it first, or `story continuity` warns `continuity/state.md current-chapter 0 is behind the latest chapter 1`.
+`story reindex` rebuilds `chapters/_index.md`; the skill does not edit registry rows by hand. `story next` can name continuity errors and still exit 0, so `story check` is the check. Then ask what to do next:
 
 ```shell
-story continuity .
 story next .
-```
-
-```text
-Continuity is consistent: 0 errors, 0 warnings, 0 dismissed
 ```
 
 ```text

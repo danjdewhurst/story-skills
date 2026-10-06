@@ -23,6 +23,10 @@ These conventions apply across all story skills. Every `SKILL.md` links here and
 - **Death tracking** - when a character dies on the page, set `status: deceased` and `died-in: chapter-{NN}` so `story continuity` can flag posthumous appearances
 - **`mentions` vs `characters`** - chapter and scene frontmatter lists characters present in-scene under `characters`; characters who are only referenced, remembered, recorded, or seen in flashback go under `mentions`
 
+## Maintenance
+
+- **One maintenance block, one order** - after adding, removing, renaming, or revising story files, run `story reindex .`, then `story wordcount . --write`, then `story check .` (which runs `validate`, `links`, and `continuity` and fails only on errors). Run any skill-specific check, such as `story clues .` or `story pacing .`, after it.
+
 ## Scripts
 
 - **Markdown-first artifacts** - create and edit story content directly in the target `.md` files. Do not create project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit story files.

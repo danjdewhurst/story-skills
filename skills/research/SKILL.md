@@ -162,8 +162,8 @@ After adding or editing research notes:
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 ## Reference Files
