@@ -42,15 +42,19 @@ readers have read. Verify `story.md` exists in the project root.
    from text you can get back, so the round can be rebuilt and old labels
    mapped later (step 2 of Collect). Save that text first:
 
-   - **Git project:** check that `.gitignore` lists `dist/` (`story init`
+   - **Git project:** work from the book's folder, the one that holds
+     `story.md` (`cd` there first), because `-- .` below means the
+     current folder. Check that `.gitignore` lists `dist/` (`story init`
      writes one that does; add the line if it is missing), so earlier
      review copies stay out of the commit. Then run
      `git status --untracked-files=all -- .` and show the user what it
      lists: the copy is built from the working tree, but a tag points at
      the last commit, so uncommitted changes would make the two differ.
-     Ask before committing and before tagging. With approval, commit the
-     project folder only (skip the commit when the tree is already clean)
-     and tag that commit:
+     Look through it for private files (a `.env`, keys or credentials,
+     scanned documents): unless the user says to commit one, add it to
+     `.gitignore` first. Ask before committing and before tagging. With
+     approval, commit the project folder only (skip the commit when the
+     tree is already clean) and tag that commit:
 
      ```shell
      git add -A -- .

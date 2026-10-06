@@ -19,21 +19,26 @@ the chapter files.
 1. Settle the chapters first: `story reindex .`,
    `story wordcount . --write`, and `story check .`.
 2. Commit and tag the version sent, so the return can be compared
-   against it. Check that `.gitignore` lists `dist/` (`story init` writes
+   against it. Work from the book's folder, the one that holds
+   `story.md` (`cd` there first), because `-- .` below means the current
+   folder. Check that `.gitignore` lists `dist/` (`story init` writes
    one that does; add the line if it is missing), so earlier builds stay
    out of the commit. Then run `git status --untracked-files=all -- .`
-   and show the user what it lists. With the user's approval, commit the
-   project folder only (skip the commit when the status lists nothing)
-   and tag that commit:
+   and show the user what it lists. Look through it for private files
+   (a `.env`, keys or credentials, scanned documents): unless the user
+   says to commit one, add it to `.gitignore` first. With the user's
+   approval, commit the book's folder only and tag that commit:
 
    ```shell
-   git add -A -- .
-   git commit -m "Manuscript sent to editor, round 1" -- .
-   git tag sent-to-editor-1
+   git add -A -- . && git commit -m "Manuscript sent to editor, round 1" -- . && git tag sent-to-editor-1
    ```
 
-   The `-- .` keeps files outside the project, and anything staged
-   earlier, out of the commit.
+   The `-- .` keeps files outside the book's folder out of the add and
+   the commit, staged or not; when the book's folder is the repository
+   root, that is the whole repository. If the status lists nothing,
+   skip the add and the commit and run only the tag. If the user
+   declines the commit, or it fails, never tag the last commit over an
+   uncommitted tree: copy the project as below instead, or stop.
 
    Never push, move, or delete tags without approval. Without git,
    copy the project folder beside it (`../{project}-sent-to-editor-1`).
