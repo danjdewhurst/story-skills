@@ -1439,8 +1439,18 @@ function formatHours(hours, round = Math.round) {
   return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
 }
 
-export function storyDateError(value) {
+const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
+// The one check of a story date. `deadline`, `publication-date`, and
+// progress sessions must be a real YYYY-MM-DD day. A chapter or scene `date`
+// passes `freeText`: a value shaped like YYYY-MM-DD must still be a real day
+// (2024-13-45 and 2023-02-29 are errors), but other text is left to story
+// continuity, which warns about it as malformed-date.
+export function storyDateError(value, { freeText = false } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
+    return "";
+  }
+  if (freeText && !DATE_SHAPE.test(String(value).trim())) {
     return "";
   }
   if (!parseClockDate(String(value))) {

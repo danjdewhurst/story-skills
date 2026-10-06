@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
-import { createStoryProject, scanProject, validateLinks } from "../src/story.js";
+import { createStoryProject, scanProject, validateLinks, validateProject } from "../src/story.js";
 import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function baseProject(chapters) {
@@ -456,6 +456,46 @@ time: "10:00"
     const result = checkContinuity(scanProject(root));
     expect(result.ok).toBe(false);
     expect(messages(result.errors).join("\n")).toContain("characters/ada.md");
+  });
+});
+
+describe("validate checks story dates", () => {
+  const setChapterDate = (root, number, date) => {
+    const chapterPath = path.join(root, "chapters", `chapter-0${number}.md`);
+    fs.writeFileSync(chapterPath, fs.readFileSync(chapterPath, "utf8").replace("word-count: 0", `word-count: 0\ndate: ${date}`), "utf8");
+  };
+
+  test("rejects a chapter or scene date that is not a real calendar day", () => {
+    const root = baseProject(3);
+    setChapterDate(root, 1, "2024-13-45");
+    setChapterDate(root, 2, "2023-02-29");
+    setChapterDate(root, 3, '"2026-04-31"');
+    writeScene(root, 1, 1, "date: 2026-02-30");
+    writeScene(root, 1, 2, "date: 0042-00-10");
+
+    const result = validateProject(root);
+    expect(result.ok).toBe(false);
+    expect(result.errors.filter((entry) => entry.code === "invalid-date").map((entry) => entry.message)).toEqual([
+      "chapters/chapter-01.md date must be a real YYYY-MM-DD calendar day, got 2024-13-45",
+      "chapters/chapter-02.md date must be a real YYYY-MM-DD calendar day, got 2023-02-29",
+      "chapters/chapter-03.md date must be a real YYYY-MM-DD calendar day, got 2026-04-31",
+      "scenes/chapter-01-scene-01.md date must be a real YYYY-MM-DD calendar day, got 2026-02-30",
+      "scenes/chapter-01-scene-02.md date must be a real YYYY-MM-DD calendar day, got 0042-00-10"
+    ]);
+  });
+
+  test("accepts real days, leap days, low years, and free text", () => {
+    const root = baseProject(3);
+    setChapterDate(root, 1, "2024-02-29");
+    setChapterDate(root, 2, "2000-02-29");
+    setChapterDate(root, 3, "Midwinter, Year of the Long Night");
+    writeScene(root, 1, 1, "date: 0050-12-31");
+    writeScene(root, 1, 2, `date: ""`);
+
+    const result = validateProject(root);
+    expect(result.errors).toEqual([]);
+    // Text that is not shaped like a date stays a continuity warning.
+    expect(messages(checkContinuity(scanProject(root)).warnings)).toContain('Chapter 3 has malformed date "Midwinter, Year of the Long Night"');
   });
 });
 

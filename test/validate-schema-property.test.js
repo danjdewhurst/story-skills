@@ -41,6 +41,8 @@ const EXCEPTIONS = [
   { kind: "story", field: "cover", side: "validate", match: /^invalid-cover: story\.md cover .* (?:does not exist|is not a file|must be inside the project)$/, reason: "the cover file must exist on disk" },
   { kind: "story", field: "deadline", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "a date must be a real calendar day (no 2024-13-45), which a pattern cannot check" },
   { kind: "story", field: "publication-date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline" },
+  { kind: "chapter", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline; the schema allows any text, since continuity only warns about a date not shaped YYYY-MM-DD" },
+  { kind: "scene", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for chapter date" },
   { kind: "story", field: "publication-date", side: "schema", match: /does not match/, reason: "validate reads a blank value or a [TODO] placeholder in a publishing field as not set yet, and warns (todo-placeholder); the schema describes finished values" },
   { kind: "story", field: "language", side: "schema", match: /does not match/, reason: "as for publication-date" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
