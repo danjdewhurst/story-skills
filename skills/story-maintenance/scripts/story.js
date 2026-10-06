@@ -68,6 +68,29 @@ function readFileBytes(filePath, maxBytes = MAX_READ_BYTES) {
 var SAFE_READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
 var READ_CHUNK_BYTES = 64 * 1024;
 function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
+  const { descriptor, stats } = openRegularFile(filePath, maxBytes);
+  try {
+    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+function readFilePrefix(filePath, length) {
+  const { descriptor } = openRegularFile(filePath, Infinity);
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    let filled = 0;
+    let read;
+    do {
+      read = fs.readSync(descriptor, buffer, filled, length - filled, null);
+      filled += read;
+    } while (read > 0 && filled < length);
+    return buffer.subarray(0, filled);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+function openRegularFile(filePath, maxBytes) {
   const named = fs.lstatSync(filePath);
   if (named.isSymbolicLink()) {
     throw symlinkReadRefusal(filePath);
@@ -89,9 +112,10 @@ function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
     if (!stats.isFile()) {
       throw notRegularFileRefusal(filePath);
     }
-    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
-  } finally {
+    return { descriptor, stats };
+  } catch (error) {
     fs.closeSync(descriptor);
+    throw error;
   }
 }
 function readAtMost(descriptor, filePath, size, maxBytes) {
@@ -262,6 +286,13 @@ function writeWholeFile(filePath, contents, options) {
     }
     if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
       throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
+    }
+    if (options.root) {
+      try {
+        assertSafeProjectParent(target, options.root);
+      } catch {
+        throw Object.assign(new Error(`Refusing to write ${projectPath(path.resolve(options.root), target)}: a folder on its path was replaced while story was writing it and now leads outside the project, so nothing was written there. Run the command again`), { changedOnDisk: true });
+      }
     }
     fs.renameSync(temporary, target);
   } catch (error) {
@@ -25310,9 +25341,10 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
 function isCodexFolder(directory) {
   return isCodexPage(path14.join(directory, "index.html"));
 }
+var CODEX_HEAD_BYTES = 4096;
 function isCodexPage(file) {
   try {
-    return readTextFile(file).includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return readFilePrefix(file, CODEX_HEAD_BYTES).toString("utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }
@@ -27257,7 +27289,7 @@ function previewNewProject(root, run) {
       const story = path17.join(folder, "story.md");
       if (lstatIfExists(story)?.isFile()) {
         fs13.mkdirSync(mirror(folder), { recursive: true });
-        copyFile(story, mirror(story));
+        copyRegularFile(story, mirror(story));
       }
       if (path17.dirname(folder) === folder) {
         break;
@@ -27268,7 +27300,7 @@ function previewNewProject(root, run) {
     } else if (stats?.isDirectory()) {
       copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot });
     } else if (stats) {
-      copyFile(target, copyRoot);
+      copyRegularFile(target, copyRoot);
     }
     if (isFolder) {
       fs13.chmodSync(mirror(ancestor), copyMode(ancestor, true));
@@ -27460,12 +27492,12 @@ function copyProject(source, target, roots, depth = 0) {
     } else if (entry.isSymbolicLink()) {
       fs13.symlinkSync(linkTarget(fs13.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyFile(from, to);
+      copyRegularFile(from, to);
     }
   }
   fs13.chmodSync(target, copyMode(source, true));
 }
-function copyFile(from, to) {
+function copyRegularFile(from, to) {
   const { size } = fs13.statSync(from);
   if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs13.constants.R_OK)) {
     fs13.writeFileSync(to, readFileBytes(from));
@@ -28662,8 +28694,9 @@ function runRestore(context, name) {
       if (entry.isDirectory()) {
         fs15.mkdirSync(copy, { recursive: true });
         const manifest = path19.join(folder, entry.name, SNAPSHOT_MANIFEST);
-        if (lstatIfExists(manifest)?.isFile()) {
-          fs15.writeFileSync(path19.join(copy, SNAPSHOT_MANIFEST), readFileBytes(manifest));
+        const text = currentText(manifest);
+        if (text !== null) {
+          fs15.writeFileSync(path19.join(copy, SNAPSHOT_MANIFEST), text, "utf8");
         }
       }
     }

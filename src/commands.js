@@ -9,7 +9,7 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
-import { lstatIfExists, planChanges, readFileBytes, recordChanges } from "./files.js";
+import { currentText, planChanges, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
@@ -1102,9 +1102,12 @@ function runRestore(context, name) {
       if (entry.isDirectory()) {
         fs.mkdirSync(copy, { recursive: true });
         const manifest = path.join(folder, entry.name, SNAPSHOT_MANIFEST);
-        // Only a real manifest file, read as --list reads one.
-        if (lstatIfExists(manifest)?.isFile()) {
-          fs.writeFileSync(path.join(copy, SNAPSHOT_MANIFEST), readFileBytes(manifest));
+        // Only a manifest --list can read, read as it reads one. One it
+        // cannot (oversized, or not a regular file) is left out, and --list
+        // names that snapshot by its folder, in the copy as in the project.
+        const text = currentText(manifest);
+        if (text !== null) {
+          fs.writeFileSync(path.join(copy, SNAPSHOT_MANIFEST), text, "utf8");
         }
       }
     }

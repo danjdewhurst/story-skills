@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
+import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -271,11 +271,15 @@ function isCodexFolder(directory) {
   return isCodexPage(path.join(directory, "index.html"));
 }
 
-// A page that is a symlink, a FIFO, or over the read limit is not one the
-// codex wrote, so it is never followed or read whole.
+// The bytes of a page read for the generator tag, which the codex writes
+// near the top of <head>. Only these are read, so a page of any size can
+// be recognised, and a page that is a symlink or a FIFO is not one the
+// codex wrote: it is never followed or read.
+const CODEX_HEAD_BYTES = 4096;
+
 function isCodexPage(file) {
   try {
-    return readTextFile(file).includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return readFilePrefix(file, CODEX_HEAD_BYTES).toString("utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }

@@ -24,8 +24,11 @@ export function readFileBytes(filePath, maxBytes = MAX_READ_BYTES) {
 // at the name, so a file swapped at that name afterwards (by a process
 // writing to the project while a command runs) could still redirect the
 // read: O_NOFOLLOW refuses a symlink put there, and O_NONBLOCK keeps a FIFO
-// put there from holding the open until a writer comes. Windows has neither
-// flag, nor FIFOs, so there the checks before the open stand alone.
+// put there from holding the open until a writer comes. Both apply to the
+// file's own name only: a folder above it swapped for a symlink is not
+// caught here (scan checks each folder's real path before it reads), and
+// Windows has neither flag, nor FIFOs, so there the checks before the open
+// stand alone.
 const SAFE_READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
 
 const READ_CHUNK_BYTES = 64 * 1024;
@@ -33,8 +36,39 @@ const READ_CHUNK_BYTES = 64 * 1024;
 // The bytes of a regular file and its stats, taken through the descriptor
 // the bytes are read from (the lock reads its modification time this way).
 // Every file story reads from a project, or from beside one, comes through
-// here: test/files.test.js fails on a raw read anywhere else in src/.
+// here or readFilePrefix: test/files.test.js fails on a raw read anywhere
+// else in src/.
 export function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
+  const { descriptor, stats } = openRegularFile(filePath, maxBytes);
+  try {
+    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// The first `length` bytes of a regular file (fewer if it is shorter),
+// refused as readFileBytes refuses a symlink, a device, or a FIFO, but
+// with no size cap, since the rest is never read.
+export function readFilePrefix(filePath, length) {
+  const { descriptor } = openRegularFile(filePath, Infinity);
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    let filled = 0;
+    let read;
+    do {
+      read = fs.readSync(descriptor, buffer, filled, length - filled, null);
+      filled += read;
+    } while (read > 0 && filled < length);
+    return buffer.subarray(0, filled);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// Opens a regular file of at most `maxBytes` for reading, checking it by
+// name and then again through the open descriptor.
+function openRegularFile(filePath, maxBytes) {
   const named = fs.lstatSync(filePath);
   if (named.isSymbolicLink()) {
     throw symlinkReadRefusal(filePath);
@@ -57,9 +91,10 @@ export function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
     if (!stats.isFile()) {
       throw notRegularFileRefusal(filePath);
     }
-    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
-  } finally {
+    return { descriptor, stats };
+  } catch (error) {
     fs.closeSync(descriptor);
+    throw error;
   }
 }
 
@@ -302,6 +337,18 @@ function writeWholeFile(filePath, contents, options) {
     }
     if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
       throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
+    }
+    // The folders on the way were checked before the temporary file was
+    // made, and are checked again just before the rename, so one swapped for
+    // a symlink meanwhile cannot carry the file outside the project. A swap
+    // after this check can still land: Node has no openat to hold a folder
+    // open while writing into it.
+    if (options.root) {
+      try {
+        assertSafeProjectParent(target, options.root);
+      } catch {
+        throw Object.assign(new Error(`Refusing to write ${projectPath(path.resolve(options.root), target)}: a folder on its path was replaced while story was writing it and now leads outside the project, so nothing was written there. Run the command again`), { changedOnDisk: true });
+      }
     }
     fs.renameSync(temporary, target);
   } catch (error) {
