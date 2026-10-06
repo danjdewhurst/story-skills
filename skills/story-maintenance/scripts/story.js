@@ -9042,6 +9042,7 @@ var OPTIONS = [
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex)"] },
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, codex) or grid (markdown,", "csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
+  { name: "paper", value: "<letter|a4>", help: ["Paper for build --format shunn --pdf and", "--format docx --shunn (letter, a4; default letter)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
@@ -14931,7 +14932,7 @@ function formatNumber3(value) {
 }
 
 // src/config.js
-import fs5 from "node:fs";
+import fs6 from "node:fs";
 import path9 from "node:path";
 
 // src/pdf.js
@@ -15180,6 +15181,746 @@ function lastLines(text, count = 10) {
 `);
 }
 
+// src/packaging.js
+import { Buffer as Buffer4 } from "node:buffer";
+import fs5 from "node:fs";
+import { deflateRawSync } from "node:zlib";
+function epubModifiedTimestamp() {
+  const raw = process.env.SOURCE_DATE_EPOCH;
+  if (raw !== undefined && raw !== "") {
+    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
+    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
+      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+  }
+  return "2000-01-01T00:00:00Z";
+}
+function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const lang = xmlEscape(meta.language);
+  const type = typesetting(meta.language, meta.writingMode);
+  const rtl = type.rtl;
+  const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
+  const style = manuscript.style ?? CLASSIC_STYLE;
+  const stylesheet = epubStylesheet(type, style);
+  const extra = style.cssText ?? "";
+  const head = [
+    stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
+    extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
+  ].join("");
+  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *" };
+  const documents = [];
+  const pushMatter = (placement) => (entry) => documents.push({
+    id: `${placement}-${entry.id}`,
+    label: entry.title,
+    content: matterXhtml(entry, placement, root, head, markup)
+  });
+  manuscript.front.forEach(pushMatter("front"));
+  for (const chapter of manuscript.chapters) {
+    documents.push({
+      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
+      label: chapter.heading,
+      content: chapterXhtml(chapter, root, head, markup),
+      bodymatter: true
+    });
+  }
+  manuscript.back.forEach(pushMatter("back"));
+  const coverEntries = [];
+  const coverItems = [];
+  const coverMeta = [];
+  const coverSpine = [];
+  if (manuscript.cover) {
+    const href = `images/cover.${manuscript.cover.extension}`;
+    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs5.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
+    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
+    coverSpine.push(`<itemref idref="cover"/>`);
+  }
+  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
+  const optional = [
+    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
+    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
+    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
+    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
+    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
+  ].join("");
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
+  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
+  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
+  const modified = epubModifiedTimestamp();
+  writeZip(outFile, [
+    { name: "mimetype", content: "application/epub+zip", stored: true },
+    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${extra === "" ? "" : `<item id="extra-style" href="extra.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
+    ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
+    ...extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }],
+    ...coverEntries,
+    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
+  ], writeOptions);
+}
+function epubStylesheet(type, style = CLASSIC_STYLE) {
+  const rules = [];
+  if (type.vertical) {
+    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
+  }
+  const fonts = styleFonts(style, type);
+  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
+    rules.push(`body { font-family: ${fonts.body}; }`);
+  }
+  if (!style.styled) {
+    return rules.length === 0 ? "" : `${rules.join(`
+`)}
+`;
+  }
+  if (fonts.heading !== null) {
+    rules.push(`h1 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`h1 { ${heading} }`);
+  }
+  const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
+  if (style.paragraphs === "indented") {
+    rules.push("p { margin: 0; text-indent: 1.5em; }", "h1 + p, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }", `body.matter p { margin: ${after}; }`);
+  } else if (style.paragraphs === "block") {
+    rules.push(`p { margin: ${after}; text-indent: 0; }`);
+  }
+  rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`body.chapter > h1 + p::first-letter { ${DROP_CAP_RULE} }`);
+  }
+  return `${rules.join(`
+`)}
+`;
+}
+function navXhtml(title, documents, root, labels, head = "") {
+  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
+  const start = documents.find((doc) => doc.bodymatter);
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+}
+function epubAccessibilityMeta(hasCover, labels) {
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
+  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
+  return [
+    `<meta property="schema:accessMode">textual</meta>`,
+    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
+    `<meta property="schema:accessModeSufficient">textual</meta>`,
+    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
+    `<meta property="schema:accessibilityHazard">none</meta>`,
+    `<meta property="schema:accessibilitySummary">${summary}</meta>`
+  ].join("");
+}
+function xhtmlParagraphs(body, markup) {
+  const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
+  return withBlockquotes(markdownParagraphs(body).map((paragraph) => ({
+    quote: Boolean(paragraph.quote),
+    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
+  }))).join("");
+}
+function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
+  const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}"${classes}>${content}</body></html>`;
+}
+function chapterXhtml(chapter, root, head, markup) {
+  const heading = chapter.heading;
+  const title = String(chapter.title ?? "").trim() || heading;
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
+}
+function matterXhtml(entry, placement, root, head, markup) {
+  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
+  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
+}
+function htmlBook(manuscript) {
+  const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
+  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
+    if (paragraph.sceneBreak) {
+      return null;
+    }
+    const runs = inlineRuns(paragraph.text);
+    return {
+      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
+      text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
+      quote: paragraph.quote
+    };
+  });
+  const matter = (placement) => (entry) => ({
+    key: `${placement}-${entry.id}`,
+    kind: entry.copyright ? `${placement} copyright-page` : placement,
+    copyright: Boolean(entry.copyright),
+    placement,
+    title: entry.title,
+    heading: entry.heading,
+    words: wordCount(entry.body),
+    ...characters(entry.body),
+    paragraphs: paragraphs(entry.body)
+  });
+  const parts = [
+    ...manuscript.front.map(matter("front")),
+    ...manuscript.chapters.map((chapter) => ({
+      key: chapter.key,
+      kind: "chapter",
+      placement: "body",
+      title: chapter.heading,
+      heading: true,
+      words: wordCount(chapter.body),
+      ...characters(chapter.body),
+      paragraphs: paragraphs(chapter.body)
+    })),
+    ...manuscript.back.map(matter("back"))
+  ];
+  return {
+    title: manuscript.title,
+    ...manuscript.unit === "characters" ? { unit: "characters" } : {},
+    authors: manuscript.meta.authors,
+    language: manuscript.meta.language,
+    writingMode: manuscript.meta.writingMode,
+    labels: manuscript.meta.labels,
+    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    parts
+  };
+}
+function writeDocx(outFile, manuscript, writeOptions = {}) {
+  const script = docxScript(manuscript.meta);
+  const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
+  const pushSection = (heading, body) => {
+    if (heading !== null) {
+      bodyParts.push(paragraphXml(script, heading, "Heading1"));
+    }
+    for (const paragraph of markdownParagraphs(body)) {
+      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
+    }
+  };
+  const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
+  manuscript.front.forEach(pushMatter);
+  for (const chapter of manuscript.chapters) {
+    pushSection(chapter.heading, chapter.body);
+  }
+  manuscript.back.forEach(pushMatter);
+  writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
+}
+function docxScript(meta) {
+  const language = meta?.language ?? "en";
+  const type = typesetting(language, meta?.writingMode);
+  const { eastAsia, cs, eastAsian, complex } = type.docx;
+  const written = writtenTag(language);
+  const tag = xmlEscape(written);
+  const font = (name) => `"${name ?? "Times New Roman"}"`;
+  return {
+    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
+    bidi: type.rtl ? "<w:bidi/>" : "",
+    rtl: type.rtl ? "<w:rtl/>" : "",
+    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
+    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
+    sizeCs: complex,
+    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
+    direction: type.vertical ? `<w:textDirection w:val="tbRl"/>` : type.rtl ? "<w:bidi/>" : ""
+  };
+}
+function docxSection(script, page = "") {
+  const content = `${page}${script.direction}`;
+  return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
+}
+var SHUNN_PAPERS = new Map([
+  ["letter", { css: "letter", width: 12240, height: 15840 }],
+  ["a4", { css: "A4", width: 11906, height: 16838 }]
+]);
+var DEFAULT_PAPER = "letter";
+function shunnPaper(name) {
+  const paper = SHUNN_PAPERS.get(name ?? DEFAULT_PAPER);
+  if (paper === undefined) {
+    throw new Error(`Unsupported paper: ${name}`);
+  }
+  return paper;
+}
+function docxPackageEntries(script, body, page = "") {
+  return [
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
+    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "word/styles.xml", content: docxStyles(script) },
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${docxSection(script, page)}</w:body></w:document>` }
+  ];
+}
+function docxStyles(script) {
+  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `</w:styles>`;
+}
+var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
+var SHUNN_SIZE = `<w:sz w:val="24"/>`;
+var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
+function shunnRunXml(script, text, { strong = false, em = false } = {}) {
+  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
+}
+function shunnParagraphXml(script, runXml, centered, quote = false) {
+  const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
+}
+function shunnChapterHeadingXml(script, text) {
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
+}
+function shunnWordCount(words, pack = languagePack()) {
+  const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
+  const rounded = Math.round(words / step) * step;
+  return formatNumber(rounded, pack);
+}
+function shunnLength(meta) {
+  return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
+}
+function shunnByline(meta) {
+  if (!meta.author) {
+    return [];
+  }
+  const by = fillLabel(meta.labels, "by");
+  return by === "" ? [meta.author] : [by, meta.author];
+}
+function shunnTitlePageXml(script, meta) {
+  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
+  const lines = [line(meta.title, { strong: true })];
+  lines.push(...shunnByline(meta).map((text) => line(text)));
+  lines.push(line(shunnLength(meta)));
+  for (const contactLine of meta.contact) {
+    lines.push(line(String(contactLine)));
+  }
+  return lines;
+}
+function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName = DEFAULT_PAPER) {
+  const script = docxScript(manuscript.meta);
+  const paragraphs = [...shunnTitlePageXml(script, meta)];
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
+  if (meta.shortForm) {
+    paragraphs.push(shunnParagraphXml(script, "", true));
+  }
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const body = markdownParagraphs(chapter.body);
+    if (!meta.shortForm) {
+      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+    } else if (body.length === 0) {
+      continue;
+    } else if (sections++ > 0) {
+      paragraphs.push(hash);
+    }
+    for (const paragraph of body) {
+      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+    }
+  }
+  const paper = shunnPaper(paperName);
+  const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
+  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page), writeOptions);
+}
+function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
+  const lines = [meta.title];
+  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
+  for (const contactLine of meta.contact) {
+    lines.push(String(contactLine));
+  }
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  if (meta.shortForm) {
+    lines.push("");
+  }
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const body = markdownParagraphs(chapter.body);
+    if (!meta.shortForm) {
+      lines.push("\f", `# ${chapter.heading}`, "");
+    } else if (body.length === 0) {
+      continue;
+    } else if (sections++ > 0) {
+      lines.push("#", "");
+    }
+    for (const paragraph of body) {
+      if (paragraph.sceneBreak) {
+        lines.push(sceneBreak, "");
+        continue;
+      }
+      const prefix = paragraph.quote ? "> " : "";
+      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK).join(`\\
+${prefix}`)}`, "");
+    }
+  }
+  writeFile(outFile, `${lines.join(`
+`).trimEnd()}
+`, writeOptions);
+}
+function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
+  const paper = shunnPaper(paperName);
+  const language = manuscript.meta?.language ?? "en";
+  const type = typesetting(language, "horizontal");
+  const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
+  const head = [meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const paragraphMarkup = (paragraph) => ({
+    quote: Boolean(paragraph.quote),
+    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+  });
+  const body = [];
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const paragraphs = markdownParagraphs(chapter.body);
+    if (!meta.shortForm) {
+      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
+${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+`)}
+</section>`);
+      continue;
+    }
+    if (paragraphs.length === 0) {
+      continue;
+    }
+    if (sections++ > 0) {
+      body.push(`<p class="break">#</p>`);
+    }
+    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+`));
+  }
+  const dir = type.rtl ? ` dir="rtl"` : "";
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(language)}"${dir}>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(meta.title)}</title>
+<style>
+@page { size: ${paper.css}; margin: 1in;
+  @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
+@page :first { @top-right { content: none; } }
+html { font: 12pt/2 ${fonts}; }
+body { margin: 0; }
+p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
+.title-page { line-height: 1.2; }
+.title-page p { text-indent: 0; }
+.title-page .length { float: ${type.rtl ? "left" : "right"}; }
+.title-block { clear: both; text-align: center; margin-top: ${meta.shortForm ? "2.5in" : "3in"}; }
+.title-block h1, .chapter h2 { font: inherit; font-weight: bold; margin: 0; }
+.title-block p { text-indent: 0; text-align: center; }
+.short-form { margin-top: 2em; }
+.chapter { break-before: page; }
+.chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
+p.break { text-align: center; text-indent: 0; }
+blockquote { margin: 0 0.5in; }
+blockquote p { text-indent: 0; }
+</style>
+</head>
+<body>
+<header class="title-page">
+<p class="length">${escapeHtml(shunnLength(meta))}</p>
+${meta.contact.map((line) => `<p>${escapeHtml(String(line))}</p>`).join(`
+`)}
+</header>
+<div class="title-block"><h1>${escapeHtml(meta.title)}</h1>
+${shunnByline(meta).map((line) => `<p>${escapeHtml(line)}</p>`).join(`
+`)}
+</div>
+${meta.shortForm ? `<div class="short-form">
+${body.join(`
+`)}
+</div>` : body.join(`
+`)}
+</body>
+</html>
+`;
+}
+function docxTextXml(text) {
+  return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
+}
+function paragraphXml(script, text, style = "", runs = [{ text }]) {
+  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
+  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
+  const runXml = runs.map((run) => {
+    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
+    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
+    return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
+  });
+  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+}
+function inlineRuns(text) {
+  const nodes = [];
+  const unclosedTicks = new Set;
+  let buffer = "";
+  const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
+  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
+  for (let index = 0;index < text.length; ) {
+    const char = text[index];
+    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
+      buffer += text[index + 1];
+      index += 2;
+      continue;
+    }
+    if (char === "`") {
+      let run = 0;
+      while (text[index + run] === "`") {
+        run += 1;
+      }
+      const end = unclosedTicks.has(run) ? -1 : codeSpanEnd2(text, index, run);
+      if (end === -1) {
+        unclosedTicks.add(run);
+        buffer += "`".repeat(run);
+        index += run;
+      } else {
+        const code = text.slice(index + run, end - run);
+        buffer += /^ .*[^ ].* $/.test(code) ? code.slice(1, -1) : code;
+        index = end;
+      }
+      continue;
+    }
+    if (char !== "*" && char !== "_") {
+      buffer += char;
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (text[end] === char) {
+      end += 1;
+    }
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+    const before = text[index - 1];
+    const after = text[end];
+    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
+    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
+    nodes.push({
+      delimiter: char,
+      count: end - index,
+      original: end - index,
+      open: char === "*" ? left : left && (!right || isPunct(before)),
+      close: char === "*" ? right : right && (!left || isPunct(after)),
+      strong: 0,
+      em: 0
+    });
+    index = end;
+  }
+  if (buffer !== "") {
+    nodes.push({ text: buffer });
+  }
+  const stack = [];
+  const bottom = new Map;
+  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
+  for (const [closeIndex, closer] of nodes.entries()) {
+    if (!closer.delimiter) {
+      continue;
+    }
+    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
+    while (closer.close && closer.count > 0) {
+      const floor = bottom.get(key) ?? 0;
+      let position = stack.length - 1;
+      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
+        position -= 1;
+      }
+      if (position < floor) {
+        bottom.set(key, stack.length);
+        break;
+      }
+      const openIndex = stack[position];
+      const opener = nodes[openIndex];
+      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
+      opener.count -= used;
+      closer.count -= used;
+      const marks = depth[used === 2 ? "strong" : "em"];
+      marks[openIndex + 1] += 1;
+      marks[closeIndex] -= 1;
+      stack.length = opener.count > 0 ? position + 1 : position;
+      for (const [other, value] of bottom) {
+        if (value > stack.length) {
+          bottom.set(other, stack.length);
+        }
+      }
+    }
+    if (closer.open && closer.count > 0) {
+      stack.push(closeIndex);
+    }
+  }
+  let strongDepth = 0;
+  let emDepth = 0;
+  for (const [index, node] of nodes.entries()) {
+    strongDepth += depth.strong[index];
+    emDepth += depth.em[index];
+    node.strong = strongDepth;
+    node.em = emDepth;
+  }
+  const runs = [];
+  for (const node of nodes) {
+    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
+    if (value === "") {
+      continue;
+    }
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    const previous = runs[runs.length - 1];
+    if (previous && previous.strong === strong && previous.em === em) {
+      previous.text += value;
+    } else {
+      runs.push({ text: value, strong, em });
+    }
+  }
+  return runs;
+}
+function codeSpanEnd2(text, start, length) {
+  let next = text.indexOf("`", start + length);
+  while (next !== -1) {
+    let end = next;
+    while (text[end] === "`") {
+      end += 1;
+    }
+    if (end - next === length) {
+      return end;
+    }
+    next = text.indexOf("`", end);
+  }
+  return -1;
+}
+function canPairEmphasis(opener, closer) {
+  const both = opener.close || closer.open;
+  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
+  return opener.delimiter === closer.delimiter && !ruleOfThree;
+}
+function inlineHtml(text) {
+  return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
+}
+function runMarkup(run, escape, lineBreak) {
+  let markup = escape(run.text).split(LINE_BREAK).join(lineBreak);
+  if (run.em) {
+    markup = `<em>${markup}</em>`;
+  }
+  if (run.strong) {
+    markup = `<strong>${markup}</strong>`;
+  }
+  return markup;
+}
+var LINE_BREAK = "";
+function markdownParagraphs(markdown) {
+  const paragraphs = [];
+  let lines = [];
+  let quote = false;
+  const flush = () => {
+    if (lines.length === 0) {
+      return;
+    }
+    const joined = lines.map((line, index) => {
+      if (index === lines.length - 1) {
+        return line;
+      }
+      if (/\\$/.test(line)) {
+        return `${line.slice(0, -1)}${LINE_BREAK}`;
+      }
+      return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
+    }).join("");
+    const text = joined.replace(/\s+/g, " ").replace(new RegExp(` *${LINE_BREAK} *`, "g"), LINE_BREAK).replace(new RegExp(`^${LINE_BREAK}+|${LINE_BREAK}+$`, "g"), "").trim();
+    lines = [];
+    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text) ? { sceneBreak: true } : { text, quote });
+  };
+  const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, `
+`))));
+  for (const rawLine of source.split(`
+`)) {
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
+    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+    if (lines.length > 0 && marker && !quote) {
+      flush();
+    }
+    if (lines.length === 0) {
+      quote = Boolean(marker);
+    }
+    lines.push(line);
+  }
+  flush();
+  return paragraphs;
+}
+var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
+var ZIP_UTF8_NAME_FLAG = 2048;
+var ZIP_STORED = 0;
+var ZIP_DEFLATED = 8;
+var ZIP_DEFLATE_LEVEL = 9;
+function writeZip(outFile, entries, writeOptions = {}) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer4.from(entry.name, "utf8");
+    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
+    const crc = crc32(content);
+    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
+    const compressed = deflated !== null && deflated.length < content.length;
+    const body = compressed ? deflated : content;
+    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
+    const localHeader = Buffer4.alloc(30);
+    localHeader.writeUInt32LE(67324752, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
+    localHeader.writeUInt16LE(method, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(body.length, 18);
+    localHeader.writeUInt32LE(content.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, name, body);
+    const centralHeader = Buffer4.alloc(46);
+    centralHeader.writeUInt32LE(33639248, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
+    centralHeader.writeUInt16LE(method, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(body.length, 20);
+    centralHeader.writeUInt32LE(content.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + body.length;
+  }
+  let centralSize = 0;
+  for (const part of centralParts) {
+    centralSize += part.length;
+  }
+  const end = Buffer4.alloc(22);
+  end.writeUInt32LE(101010256, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
+}
+function crc32(buffer) {
+  let crc = 4294967295;
+  for (const byte of buffer) {
+    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+var CRC_TABLE = [];
+for (let index = 0;index < 256; index += 1) {
+  let value = index;
+  for (let bit = 0;bit < 8; bit += 1) {
+    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
+  }
+  CRC_TABLE.push(value >>> 0);
+}
+var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+function xmlEscape(value) {
+  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 // src/similarity.js
 var SIMILARITY_DEFAULTS = { minWords: 8 };
 var MIN_SHINGLE = 5;
@@ -15398,7 +16139,7 @@ var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], e
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs5.readFileSync(path9.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(fs6.readFileSync(path9.join(root, "story.md"), "utf8")).data;
   } catch {
     return EMPTY_CONFIG;
   }
@@ -15473,6 +16214,8 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
     } else if (key === "pdf-engine" && !isPdfEngineName(value)) {
       errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
+    } else if (key === "paper" && !SHUNN_PAPERS.has(String(value).trim().toLowerCase())) {
+      errors.push(`${label} paper must be ${[...SHUNN_PAPERS.keys()].join(" or ")}`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));
@@ -15593,19 +16336,19 @@ import fs14 from "node:fs";
 import path16 from "node:path";
 
 // src/stdin.js
-import { Buffer as Buffer4 } from "node:buffer";
-import fs6 from "node:fs";
+import { Buffer as Buffer5 } from "node:buffer";
+import fs7 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
 var MAX_STDIN_BYTES = 5 * 1024 * 1024;
 var CHUNK_BYTES = 64 * 1024;
 var RETRY_MS = 10;
-function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
+function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs7.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer4.alloc(CHUNK_BYTES);
+  const buffer = Buffer5.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -15631,9 +16374,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSy
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer4.from(buffer.subarray(0, read)));
+    chunks.push(Buffer5.from(buffer.subarray(0, read)));
   }
-  return Buffer4.concat(chunks);
+  return Buffer5.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -16100,727 +16843,6 @@ function edgeLabel(text) {
 }
 function timelineText(text) {
   return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
-}
-
-// src/packaging.js
-import { Buffer as Buffer5 } from "node:buffer";
-import fs7 from "node:fs";
-import { deflateRawSync } from "node:zlib";
-function epubModifiedTimestamp() {
-  const raw = process.env.SOURCE_DATE_EPOCH;
-  if (raw !== undefined && raw !== "") {
-    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
-    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
-      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
-    }
-  }
-  return "2000-01-01T00:00:00Z";
-}
-function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
-  const meta = manuscript.meta ?? publishingMeta({});
-  const lang = xmlEscape(meta.language);
-  const type = typesetting(meta.language, meta.writingMode);
-  const rtl = type.rtl;
-  const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
-  const style = manuscript.style ?? CLASSIC_STYLE;
-  const stylesheet = epubStylesheet(type, style);
-  const extra = style.cssText ?? "";
-  const head = [
-    stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
-    extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
-  ].join("");
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *" };
-  const documents = [];
-  const pushMatter = (placement) => (entry) => documents.push({
-    id: `${placement}-${entry.id}`,
-    label: entry.title,
-    content: matterXhtml(entry, placement, root, head, markup)
-  });
-  manuscript.front.forEach(pushMatter("front"));
-  for (const chapter of manuscript.chapters) {
-    documents.push({
-      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
-      label: chapter.heading,
-      content: chapterXhtml(chapter, root, head, markup),
-      bodymatter: true
-    });
-  }
-  manuscript.back.forEach(pushMatter("back"));
-  const coverEntries = [];
-  const coverItems = [];
-  const coverMeta = [];
-  const coverSpine = [];
-  if (manuscript.cover) {
-    const href = `images/cover.${manuscript.cover.extension}`;
-    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs7.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
-    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
-    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
-    coverSpine.push(`<itemref idref="cover"/>`);
-  }
-  const creator = meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
-  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
-  const optional = [
-    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
-    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
-    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
-    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
-    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
-  ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
-  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
-  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
-  const modified = epubModifiedTimestamp();
-  writeZip(outFile, [
-    { name: "mimetype", content: "application/epub+zip", stored: true },
-    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${extra === "" ? "" : `<item id="extra-style" href="extra.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
-    ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
-    ...extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }],
-    ...coverEntries,
-    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
-  ], writeOptions);
-}
-function epubStylesheet(type, style = CLASSIC_STYLE) {
-  const rules = [];
-  if (type.vertical) {
-    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
-  }
-  const fonts = styleFonts(style, type);
-  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
-    rules.push(`body { font-family: ${fonts.body}; }`);
-  }
-  if (!style.styled) {
-    return rules.length === 0 ? "" : `${rules.join(`
-`)}
-`;
-  }
-  if (fonts.heading !== null) {
-    rules.push(`h1 { font-family: ${fonts.heading}; }`);
-  }
-  const heading = headingRule(style.headingStyle, type);
-  if (heading !== "") {
-    rules.push(`h1 { ${heading} }`);
-  }
-  const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
-  if (style.paragraphs === "indented") {
-    rules.push("p { margin: 0; text-indent: 1.5em; }", "h1 + p, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }", `body.matter p { margin: ${after}; }`);
-  } else if (style.paragraphs === "block") {
-    rules.push(`p { margin: ${after}; text-indent: 0; }`);
-  }
-  rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
-  if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`body.chapter > h1 + p::first-letter { ${DROP_CAP_RULE} }`);
-  }
-  return `${rules.join(`
-`)}
-`;
-}
-function navXhtml(title, documents, root, labels, head = "") {
-  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
-  const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
-}
-function epubAccessibilityMeta(hasCover, labels) {
-  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
-  return [
-    `<meta property="schema:accessMode">textual</meta>`,
-    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
-    `<meta property="schema:accessModeSufficient">textual</meta>`,
-    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
-    `<meta property="schema:accessibilityHazard">none</meta>`,
-    `<meta property="schema:accessibilitySummary">${summary}</meta>`
-  ].join("");
-}
-function xhtmlParagraphs(body, markup) {
-  const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body).map((paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
-  }))).join("");
-}
-function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
-  const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}"${classes}>${content}</body></html>`;
-}
-function chapterXhtml(chapter, root, head, markup) {
-  const heading = chapter.heading;
-  const title = String(chapter.title ?? "").trim() || heading;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
-}
-function matterXhtml(entry, placement, root, head, markup) {
-  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
-}
-function htmlBook(manuscript) {
-  const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
-  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
-    if (paragraph.sceneBreak) {
-      return null;
-    }
-    const runs = inlineRuns(paragraph.text);
-    return {
-      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
-      quote: paragraph.quote
-    };
-  });
-  const matter = (placement) => (entry) => ({
-    key: `${placement}-${entry.id}`,
-    kind: entry.copyright ? `${placement} copyright-page` : placement,
-    copyright: Boolean(entry.copyright),
-    placement,
-    title: entry.title,
-    heading: entry.heading,
-    words: wordCount(entry.body),
-    ...characters(entry.body),
-    paragraphs: paragraphs(entry.body)
-  });
-  const parts = [
-    ...manuscript.front.map(matter("front")),
-    ...manuscript.chapters.map((chapter) => ({
-      key: chapter.key,
-      kind: "chapter",
-      placement: "body",
-      title: chapter.heading,
-      heading: true,
-      words: wordCount(chapter.body),
-      ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body)
-    })),
-    ...manuscript.back.map(matter("back"))
-  ];
-  return {
-    title: manuscript.title,
-    ...manuscript.unit === "characters" ? { unit: "characters" } : {},
-    authors: manuscript.meta.authors,
-    language: manuscript.meta.language,
-    writingMode: manuscript.meta.writingMode,
-    labels: manuscript.meta.labels,
-    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
-    parts
-  };
-}
-function writeDocx(outFile, manuscript, writeOptions = {}) {
-  const script = docxScript(manuscript.meta);
-  const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
-  const pushSection = (heading, body) => {
-    if (heading !== null) {
-      bodyParts.push(paragraphXml(script, heading, "Heading1"));
-    }
-    for (const paragraph of markdownParagraphs(body)) {
-      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
-    }
-  };
-  const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
-  manuscript.front.forEach(pushMatter);
-  for (const chapter of manuscript.chapters) {
-    pushSection(chapter.heading, chapter.body);
-  }
-  manuscript.back.forEach(pushMatter);
-  writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
-}
-function docxScript(meta) {
-  const language = meta?.language ?? "en";
-  const type = typesetting(language, meta?.writingMode);
-  const { eastAsia, cs, eastAsian, complex } = type.docx;
-  const written = writtenTag(language);
-  const tag = xmlEscape(written);
-  const font = (name) => `"${name ?? "Times New Roman"}"`;
-  return {
-    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
-    bidi: type.rtl ? "<w:bidi/>" : "",
-    rtl: type.rtl ? "<w:rtl/>" : "",
-    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
-    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
-    sizeCs: complex,
-    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
-    section: type.vertical ? `<w:sectPr><w:textDirection w:val="tbRl"/></w:sectPr>` : type.rtl ? `<w:sectPr><w:bidi/></w:sectPr>` : "<w:sectPr/>"
-  };
-}
-function docxPackageEntries(script, body) {
-  return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
-    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "word/styles.xml", content: docxStyles(script) },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${script.section}</w:body></w:document>` }
-  ];
-}
-function docxStyles(script) {
-  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `</w:styles>`;
-}
-var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
-var SHUNN_SIZE = `<w:sz w:val="24"/>`;
-var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunXml(script, text, { strong = false, em = false } = {}) {
-  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
-}
-function shunnParagraphXml(script, runXml, centered, quote = false) {
-  const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
-}
-function shunnChapterHeadingXml(script, text) {
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
-}
-function shunnWordCount(words, pack = languagePack()) {
-  const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
-  const rounded = Math.round(words / step) * step;
-  return formatNumber(rounded, pack);
-}
-function shunnLength(meta) {
-  return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
-}
-function shunnByline(meta) {
-  if (!meta.author) {
-    return [];
-  }
-  const by = fillLabel(meta.labels, "by");
-  return by === "" ? [meta.author] : [by, meta.author];
-}
-function shunnTitlePageXml(script, meta) {
-  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
-  const lines = [line(meta.title, { strong: true })];
-  lines.push(...shunnByline(meta).map((text) => line(text)));
-  lines.push(line(shunnLength(meta)));
-  for (const contactLine of meta.contact) {
-    lines.push(line(String(contactLine)));
-  }
-  return lines;
-}
-function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
-  const script = docxScript(manuscript.meta);
-  const paragraphs = [...shunnTitlePageXml(script, meta)];
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
-  if (meta.shortForm) {
-    paragraphs.push(shunnParagraphXml(script, "", true));
-  }
-  let sections = 0;
-  for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
-    if (!meta.shortForm) {
-      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
-    } else if (body.length === 0) {
-      continue;
-    } else if (sections++ > 0) {
-      paragraphs.push(hash);
-    }
-    for (const paragraph of body) {
-      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
-    }
-  }
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join("")), writeOptions);
-}
-function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
-  const lines = [meta.title];
-  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
-  for (const contactLine of meta.contact) {
-    lines.push(String(contactLine));
-  }
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  if (meta.shortForm) {
-    lines.push("");
-  }
-  let sections = 0;
-  for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
-    if (!meta.shortForm) {
-      lines.push("\f", `# ${chapter.heading}`, "");
-    } else if (body.length === 0) {
-      continue;
-    } else if (sections++ > 0) {
-      lines.push("#", "");
-    }
-    for (const paragraph of body) {
-      if (paragraph.sceneBreak) {
-        lines.push(sceneBreak, "");
-        continue;
-      }
-      const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK).join(`\\
-${prefix}`)}`, "");
-    }
-  }
-  writeFile(outFile, `${lines.join(`
-`).trimEnd()}
-`, writeOptions);
-}
-function shunnHtml(manuscript, meta) {
-  const language = manuscript.meta?.language ?? "en";
-  const type = typesetting(language, "horizontal");
-  const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = [meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const paragraphMarkup = (paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
-  });
-  const body = [];
-  let sections = 0;
-  for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body);
-    if (!meta.shortForm) {
-      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
-${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`)}
-</section>`);
-      continue;
-    }
-    if (paragraphs.length === 0) {
-      continue;
-    }
-    if (sections++ > 0) {
-      body.push(`<p class="break">#</p>`);
-    }
-    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`));
-  }
-  const dir = type.rtl ? ` dir="rtl"` : "";
-  return `<!DOCTYPE html>
-<html lang="${escapeHtml(language)}"${dir}>
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(meta.title)}</title>
-<style>
-@page { size: letter; margin: 1in;
-  @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
-@page :first { @top-right { content: none; } }
-html { font: 12pt/2 ${fonts}; }
-body { margin: 0; }
-p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
-.title-page { line-height: 1.2; }
-.title-page p { text-indent: 0; }
-.title-page .length { float: ${type.rtl ? "left" : "right"}; }
-.title-block { clear: both; text-align: center; margin-top: ${meta.shortForm ? "2.5in" : "3in"}; }
-.title-block h1, .chapter h2 { font: inherit; font-weight: bold; margin: 0; }
-.title-block p { text-indent: 0; text-align: center; }
-.short-form { margin-top: 2em; }
-.chapter { break-before: page; }
-.chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
-p.break { text-align: center; text-indent: 0; }
-blockquote { margin: 0 0.5in; }
-blockquote p { text-indent: 0; }
-</style>
-</head>
-<body>
-<header class="title-page">
-<p class="length">${escapeHtml(shunnLength(meta))}</p>
-${meta.contact.map((line) => `<p>${escapeHtml(String(line))}</p>`).join(`
-`)}
-</header>
-<div class="title-block"><h1>${escapeHtml(meta.title)}</h1>
-${shunnByline(meta).map((line) => `<p>${escapeHtml(line)}</p>`).join(`
-`)}
-</div>
-${meta.shortForm ? `<div class="short-form">
-${body.join(`
-`)}
-</div>` : body.join(`
-`)}
-</body>
-</html>
-`;
-}
-function docxTextXml(text) {
-  return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
-}
-function paragraphXml(script, text, style = "", runs = [{ text }]) {
-  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
-  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
-  const runXml = runs.map((run) => {
-    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
-    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
-    return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
-  });
-  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
-}
-function inlineRuns(text) {
-  const nodes = [];
-  const unclosedTicks = new Set;
-  let buffer = "";
-  const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
-  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
-  for (let index = 0;index < text.length; ) {
-    const char = text[index];
-    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
-      buffer += text[index + 1];
-      index += 2;
-      continue;
-    }
-    if (char === "`") {
-      let run = 0;
-      while (text[index + run] === "`") {
-        run += 1;
-      }
-      const end = unclosedTicks.has(run) ? -1 : codeSpanEnd2(text, index, run);
-      if (end === -1) {
-        unclosedTicks.add(run);
-        buffer += "`".repeat(run);
-        index += run;
-      } else {
-        const code = text.slice(index + run, end - run);
-        buffer += /^ .*[^ ].* $/.test(code) ? code.slice(1, -1) : code;
-        index = end;
-      }
-      continue;
-    }
-    if (char !== "*" && char !== "_") {
-      buffer += char;
-      index += 1;
-      continue;
-    }
-    let end = index;
-    while (text[end] === char) {
-      end += 1;
-    }
-    if (buffer !== "") {
-      nodes.push({ text: buffer });
-      buffer = "";
-    }
-    const before = text[index - 1];
-    const after = text[end];
-    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
-    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
-    nodes.push({
-      delimiter: char,
-      count: end - index,
-      original: end - index,
-      open: char === "*" ? left : left && (!right || isPunct(before)),
-      close: char === "*" ? right : right && (!left || isPunct(after)),
-      strong: 0,
-      em: 0
-    });
-    index = end;
-  }
-  if (buffer !== "") {
-    nodes.push({ text: buffer });
-  }
-  const stack = [];
-  const bottom = new Map;
-  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
-  for (const [closeIndex, closer] of nodes.entries()) {
-    if (!closer.delimiter) {
-      continue;
-    }
-    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
-    while (closer.close && closer.count > 0) {
-      const floor = bottom.get(key) ?? 0;
-      let position = stack.length - 1;
-      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
-        position -= 1;
-      }
-      if (position < floor) {
-        bottom.set(key, stack.length);
-        break;
-      }
-      const openIndex = stack[position];
-      const opener = nodes[openIndex];
-      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
-      opener.count -= used;
-      closer.count -= used;
-      const marks = depth[used === 2 ? "strong" : "em"];
-      marks[openIndex + 1] += 1;
-      marks[closeIndex] -= 1;
-      stack.length = opener.count > 0 ? position + 1 : position;
-      for (const [other, value] of bottom) {
-        if (value > stack.length) {
-          bottom.set(other, stack.length);
-        }
-      }
-    }
-    if (closer.open && closer.count > 0) {
-      stack.push(closeIndex);
-    }
-  }
-  let strongDepth = 0;
-  let emDepth = 0;
-  for (const [index, node] of nodes.entries()) {
-    strongDepth += depth.strong[index];
-    emDepth += depth.em[index];
-    node.strong = strongDepth;
-    node.em = emDepth;
-  }
-  const runs = [];
-  for (const node of nodes) {
-    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
-    if (value === "") {
-      continue;
-    }
-    const strong = (node.strong ?? 0) > 0;
-    const em = (node.em ?? 0) > 0;
-    const previous = runs[runs.length - 1];
-    if (previous && previous.strong === strong && previous.em === em) {
-      previous.text += value;
-    } else {
-      runs.push({ text: value, strong, em });
-    }
-  }
-  return runs;
-}
-function codeSpanEnd2(text, start, length) {
-  let next = text.indexOf("`", start + length);
-  while (next !== -1) {
-    let end = next;
-    while (text[end] === "`") {
-      end += 1;
-    }
-    if (end - next === length) {
-      return end;
-    }
-    next = text.indexOf("`", end);
-  }
-  return -1;
-}
-function canPairEmphasis(opener, closer) {
-  const both = opener.close || closer.open;
-  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
-  return opener.delimiter === closer.delimiter && !ruleOfThree;
-}
-function inlineHtml(text) {
-  return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
-}
-function runMarkup(run, escape, lineBreak) {
-  let markup = escape(run.text).split(LINE_BREAK).join(lineBreak);
-  if (run.em) {
-    markup = `<em>${markup}</em>`;
-  }
-  if (run.strong) {
-    markup = `<strong>${markup}</strong>`;
-  }
-  return markup;
-}
-var LINE_BREAK = "";
-function markdownParagraphs(markdown) {
-  const paragraphs = [];
-  let lines = [];
-  let quote = false;
-  const flush = () => {
-    if (lines.length === 0) {
-      return;
-    }
-    const joined = lines.map((line, index) => {
-      if (index === lines.length - 1) {
-        return line;
-      }
-      if (/\\$/.test(line)) {
-        return `${line.slice(0, -1)}${LINE_BREAK}`;
-      }
-      return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
-    }).join("");
-    const text = joined.replace(/\s+/g, " ").replace(new RegExp(` *${LINE_BREAK} *`, "g"), LINE_BREAK).replace(new RegExp(`^${LINE_BREAK}+|${LINE_BREAK}+$`, "g"), "").trim();
-    lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text) ? { sceneBreak: true } : { text, quote });
-  };
-  const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, `
-`))));
-  for (const rawLine of source.split(`
-`)) {
-    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
-    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
-    if (line.trim() === "") {
-      flush();
-      continue;
-    }
-    if (lines.length > 0 && marker && !quote) {
-      flush();
-    }
-    if (lines.length === 0) {
-      quote = Boolean(marker);
-    }
-    lines.push(line);
-  }
-  flush();
-  return paragraphs;
-}
-var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
-var ZIP_UTF8_NAME_FLAG = 2048;
-var ZIP_STORED = 0;
-var ZIP_DEFLATED = 8;
-var ZIP_DEFLATE_LEVEL = 9;
-function writeZip(outFile, entries, writeOptions = {}) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = Buffer5.from(entry.name, "utf8");
-    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
-    const crc = crc32(content);
-    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
-    const compressed = deflated !== null && deflated.length < content.length;
-    const body = compressed ? deflated : content;
-    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer5.alloc(30);
-    localHeader.writeUInt32LE(67324752, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
-    localHeader.writeUInt16LE(method, 8);
-    localHeader.writeUInt16LE(0, 10);
-    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(body.length, 18);
-    localHeader.writeUInt32LE(content.length, 22);
-    localHeader.writeUInt16LE(name.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, name, body);
-    const centralHeader = Buffer5.alloc(46);
-    centralHeader.writeUInt32LE(33639248, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
-    centralHeader.writeUInt16LE(method, 10);
-    centralHeader.writeUInt16LE(0, 12);
-    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
-    centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(body.length, 20);
-    centralHeader.writeUInt32LE(content.length, 24);
-    centralHeader.writeUInt16LE(name.length, 28);
-    centralHeader.writeUInt16LE(0, 30);
-    centralHeader.writeUInt16LE(0, 32);
-    centralHeader.writeUInt16LE(0, 34);
-    centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
-    centralHeader.writeUInt32LE(offset, 42);
-    centralParts.push(centralHeader, name);
-    offset += localHeader.length + name.length + body.length;
-  }
-  let centralSize = 0;
-  for (const part of centralParts) {
-    centralSize += part.length;
-  }
-  const end = Buffer5.alloc(22);
-  end.writeUInt32LE(101010256, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
-}
-function crc32(buffer) {
-  let crc = 4294967295;
-  for (const byte of buffer) {
-    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
-  }
-  return (crc ^ 4294967295) >>> 0;
-}
-var CRC_TABLE = [];
-for (let index = 0;index < 256; index += 1) {
-  let value = index;
-  for (let bit = 0;bit < 8; bit += 1) {
-    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
-  }
-  CRC_TABLE.push(value >>> 0);
-}
-var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-function xmlEscape(value) {
-  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // src/passes.js
@@ -22617,6 +22639,15 @@ function buildBook(root, options = {}) {
   if (!TRIM_SIZES.has(trim)) {
     throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
   }
+  const shunnPages = format === "shunn" && Boolean(options.pdf) || format === "docx" && Boolean(options.shunn);
+  const rawPaper = options.paperDefaulted && !shunnPages ? undefined : options.paper;
+  if (rawPaper !== undefined && !shunnPages) {
+    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)");
+  }
+  const paper = rawPaper === undefined ? DEFAULT_PAPER : String(rawPaper).trim().toLowerCase();
+  if (!SHUNN_PAPERS.has(paper)) {
+    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`);
+  }
   if (options.stamp !== undefined && format !== "html") {
     throw usageError("--stamp applies only to --format html");
   }
@@ -22650,7 +22681,7 @@ function buildBook(root, options = {}) {
   const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
   if (options.pdf) {
-    return buildPdf(project, format, trim, output, options);
+    return buildPdf(project, format, { trim, paper }, output, options);
   }
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
@@ -22699,16 +22730,16 @@ function buildBook(root, options = {}) {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
   } else if (options.shunn) {
-    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
+    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
 }
-function buildPdf(project, format, trim, output, options) {
+function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
-  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project));
+  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project), paper);
   writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
@@ -25981,7 +26012,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -25991,6 +26022,8 @@ ${formatProseRenames(result)}`, formatProseRenames);
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
         trim: parsed.options.trim,
+        paper: parsed.options.paper,
+        paperDefaulted: defaulted.has("paper"),
         stamp: parsed.options.stamp,
         noteUrl: parsed.options["note-url"],
         pdf,

@@ -10,6 +10,7 @@ import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { PDF_ENGINES, isPdfEngineName } from "./pdf.js";
 import { historyWeeks } from "./progress.js";
+import { SHUNN_PAPERS } from "./packaging.js";
 import { proseThresholds } from "./prose.js";
 import { similarityOptions } from "./similarity.js";
 
@@ -141,6 +142,8 @@ function parseCommandDefaults(command, item, label, errors) {
       // A path or command here would let a cloned project pick a program
       // for `story build` to run, so a default may only name an engine.
       errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
+    } else if (key === "paper" && !SHUNN_PAPERS.has(String(value).trim().toLowerCase())) {
+      errors.push(`${label} paper must be ${[...SHUNN_PAPERS.keys()].join(" or ")}`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));

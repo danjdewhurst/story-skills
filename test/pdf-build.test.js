@@ -115,6 +115,27 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(call.html).toContain("<h2>Chapter 1: First Light</h2>");
   });
 
+  test("--paper a4 sets the Shunn PDF on A4, from the command line or a story.md default", () => {
+    const bin = makeTempDir();
+    fakeEngine(bin, "prince");
+    const log = path.join(makeTempDir(), "log.jsonl");
+    const root = pdfProject();
+    const flagged = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "" }, ["build", root, "--format", "shunn", "--pdf", "--paper", "A4"], root);
+    expect(flagged.err).toBe("");
+    expect(flagged.code).toBe(0);
+
+    const defaulted = pdfProject("cli-defaults:\n  - command: build\n    paper: a4\n");
+    const fromDefault = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "" }, ["build", defaulted, "--format", "shunn", "--pdf"], defaulted);
+    expect(fromDefault.err).toBe("");
+    expect(fromDefault.code).toBe(0);
+
+    const calls = readLog(log);
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.html).toContain("@page { size: A4; margin: 1in;");
+    }
+  });
+
   test("falls back to Chrome's headless print to PDF with a file URL and a profile of its own", () => {
     const root = pdfProject();
     const bin = makeTempDir();
@@ -386,6 +407,15 @@ describe("Shunn manuscript HTML", () => {
     expect(html).not.toContain("Chapter 1");
     expect(html).toContain("<p>One.</p>\n<p class=\"break\">#</p>\n<p>Two.</p>\n<p class=\"break\">#</p>\n<p>Three.</p>");
     expect(html).toContain("<div class=\"short-form\">");
+  });
+
+  test("the page is US Letter by default and A4 on request, with 1in margins on both", () => {
+    const labels = { by: "by", "approximate-words": "Approximately {words} words" };
+    const book = manuscript([{ heading: "Chapter 1", body: "One." }]);
+    expect(shunnHtml(book, { ...meta, labels })).toContain("@page { size: letter; margin: 1in;");
+    expect(shunnHtml(book, { ...meta, labels }, "letter")).toContain("@page { size: letter; margin: 1in;");
+    expect(shunnHtml(book, { ...meta, labels }, "a4")).toContain("@page { size: A4; margin: 1in;");
+    expect(() => shunnHtml(book, { ...meta, labels }, "a3")).toThrow("Unsupported paper: a3");
   });
 
   test("the running head escapes the title for CSS", () => {

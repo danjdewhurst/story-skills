@@ -296,8 +296,8 @@ export function writeDocx(outFile, manuscript, writeOptions = {}) {
 // Word keeps the reader's own), `bidi` and `rtl` to mark each paragraph and
 // run right to left, `bold` and `italic` that reach complex-script text
 // too (bCs, iCs), `sizeCs` for complex-script text sizes, `fonts` for the
-// run defaults, and the section properties: columns set top to bottom and
-// right to left for a vertical book, or a right-to-left section.
+// run defaults, and the section's `direction`: columns set top to bottom
+// and right to left for a vertical book, or a right-to-left section.
 function docxScript(meta) {
   const language = meta?.language ?? "en";
   const type = typesetting(language, meta?.writingMode);
@@ -315,17 +315,42 @@ function docxScript(meta) {
     // The eastAsia hint sets quotation marks and other shared punctuation in
     // the East Asian font.
     fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
-    section: type.vertical ? `<w:sectPr><w:textDirection w:val="tbRl"/></w:sectPr>` : type.rtl ? `<w:sectPr><w:bidi/></w:sectPr>` : "<w:sectPr/>"
+    direction: type.vertical ? `<w:textDirection w:val="tbRl"/>` : type.rtl ? "<w:bidi/>" : ""
   };
 }
 
-function docxPackageEntries(script, body) {
+// The section properties that close the document: an optional page size and
+// margins (`page`, which the schema puts first), then the text direction.
+function docxSection(script, page = "") {
+  const content = `${page}${script.direction}`;
+  return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
+}
+
+// Paper for the Shunn manuscript builds: US Letter, the default, or A4 for
+// markets outside North America. `css` is the @page size, and `width` and
+// `height` are the DOCX page size in twentieths of a point. Margins stay
+// 1in (1440 twips, about 25mm) on either paper, as Shunn sets them.
+export const SHUNN_PAPERS = new Map([
+  ["letter", { css: "letter", width: 12240, height: 15840 }],
+  ["a4", { css: "A4", width: 11906, height: 16838 }]
+]);
+export const DEFAULT_PAPER = "letter";
+
+function shunnPaper(name) {
+  const paper = SHUNN_PAPERS.get(name ?? DEFAULT_PAPER);
+  if (paper === undefined) {
+    throw new Error(`Unsupported paper: ${name}`);
+  }
+  return paper;
+}
+
+function docxPackageEntries(script, body, page = "") {
   return [
     { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
     { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "word/styles.xml", content: docxStyles(script) },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${script.section}</w:body></w:document>` }
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${docxSection(script, page)}</w:body></w:document>` }
   ];
 }
 
@@ -412,7 +437,7 @@ function shunnTitlePageXml(script, meta) {
 // headings or page breaks, its chapters joined as sections, and every
 // section or scene break is a centred `#`, as Shunn's short-story format
 // sets it.
-export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
+export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName = DEFAULT_PAPER) {
   const script = docxScript(manuscript.meta);
   const paragraphs = [...shunnTitlePageXml(script, meta)];
   const sceneBreak = meta.shortForm ? "#" : "* * *";
@@ -437,7 +462,9 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}) {
     }
   }
 
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join("")), writeOptions);
+  const paper = shunnPaper(paperName);
+  const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
+  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page), writeOptions);
 }
 
 export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
@@ -475,14 +502,15 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
 }
 
 // The Shunn manuscript as HTML with CSS paged media, the source `build
-// --format shunn --pdf` renders: US Letter with 1in margins, Courier New 12pt
+// --format shunn --pdf` renders: US Letter (or A4, `paperName`) with 1in margins, Courier New 12pt
 // double-spaced, half-inch paragraph indents, and a running head of author,
 // title, and page number on every page after the first. The first page sets
 // the contact lines top left and the length top right, then the title and
 // byline. A novel starts each chapter on a new page under its heading, a
 // third of the way down; a short story or flash piece runs on after the
 // byline, as the DOCX and markdown builds lay it out.
-export function shunnHtml(manuscript, meta) {
+export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
+  const paper = shunnPaper(paperName);
   const language = manuscript.meta?.language ?? "en";
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
@@ -517,7 +545,7 @@ export function shunnHtml(manuscript, meta) {
 <meta charset="utf-8">
 <title>${escapeHtml(meta.title)}</title>
 <style>
-@page { size: letter; margin: 1in;
+@page { size: ${paper.css}; margin: 1in;
   @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
 @page :first { @top-right { content: none; } }
 html { font: 12pt/2 ${fonts}; }

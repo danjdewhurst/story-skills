@@ -201,6 +201,13 @@ For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
 head) with a paged-media engine the user has installed, and stops with
 install hints when there is none.
 
+The PDF and DOCX are US Letter, which North American markets expect. For a
+market that asks for A4 (most outside North America), add `--paper a4` to
+the `--pdf` or `docx --shunn` build; the 1-inch margins stay. Go by the
+market's guidelines, not the author's language or country. An author who
+always submits on A4 can set `paper: a4` under a `build` entry in
+`cli-defaults` in `story.md`; other builds ignore it.
+
 Confirm `story.md` has `author` (or `authors`) and `contact` first; the
 title page uses them, joining co-authors with "and". Shunn builds leave out `matter/` pages, as submissions expect. With
 `form: short-story` or `form: flash` in `story.md` they use Shunn's
