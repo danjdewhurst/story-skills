@@ -234,10 +234,11 @@ describe("story prose with samples", () => {
     expect(findings.map((finding) => finding.code)).not.toContain("prose-baseline-filter-words");
   });
 
-  test("samples never include the chapters being compared", () => {
+  test("a folder of this project's chapters is never a sample", () => {
     const { cwd, root } = project({ chapter: prose(40, 14) });
+    fs.mkdirSync(path.join(root, "chapters", "part-one"));
     const withSamples = (list) => writeMarkdown(path.join(root, "style-sheet.md"), `type: style-sheet\ndialect: unspecified\nsamples:\n${list.map((entry) => `  - "${entry}"`).join("\n")}`, "# Style Sheet\n");
-    for (const entry of [".", "chapters", "chapters/chapter-01.md"]) {
+    for (const entry of [".", "chapters", "./chapters/", "chapters/part-one"]) {
       withSamples([entry]);
       const report = proseReport(root);
       expect(report.baseline.samples).toEqual([]);
@@ -249,6 +250,27 @@ describe("story prose with samples", () => {
     writeMarkdown(path.join(other, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", `## Chapter Text\n\n${prose(400, 8)}\n`);
     withSamples([".."]);
     expect(proseReport(root).baseline.samples).toEqual(["../book-one/chapters/chapter-01.md"]);
+  });
+
+  test("an approved chapter named on its own is a sample and is not compared with itself", () => {
+    const { root } = project({ chapter: prose(400, 8) });
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", `## Chapter Text\n\n${prose(40, 14)}\n`);
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - chapters/chapter-01.md", "# Style Sheet\n");
+    expect(validateProject(root).warnings.map((warning) => warning.code)).not.toContain("style-sample-own-chapters");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["chapters/chapter-01.md"]);
+    expect(report.baseline.usable).toBe(true);
+    expect(codes(report)).not.toContain("style-sample-own-chapters");
+    const [one, two] = report.chapters;
+    expect(one.sample).toBe(true);
+    expect(two.sample).toBeUndefined();
+    // Chapter two, with longer sentences, drifts; chapter one is the measure.
+    const drifts = report.warnings.filter((warning) => warning.code.startsWith("prose-baseline-"));
+    expect(drifts.map((warning) => warning.file)).toContain("chapters/chapter-02.md");
+    expect(drifts.map((warning) => warning.file)).not.toContain("chapters/chapter-01.md");
+    expect(validateAgainstSchema(JSON.parse(invoke(root, ["prose", "--json"]).out), schema)).toEqual([]);
+    const text = invoke(root, ["prose"]).out;
+    expect(text).toContain("A sample: part of the baseline, so not compared with it");
   });
 
   test("a sample that cannot be read is reported and left out, and the run goes on", () => {

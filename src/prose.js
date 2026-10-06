@@ -431,7 +431,9 @@ export function formatProseReport(report) {
     if (runs("dialogue-tags")) {
       lines.push(`  Dialogue tags: ${formatCounts(analysis.plainTags, 4) || "none plain"}; said-bookisms: ${formatCounts(analysis.bookisms, 5) || "none"}`);
     }
-    if (chapter.baseline && profile.usable) {
+    if (chapter.sample) {
+      lines.push("  A sample: part of the baseline, so not compared with it");
+    } else if (chapter.baseline && profile.usable) {
       const figures = chapter.baseline;
       const signature = figures.signatureWordsUsed === null ? "" : `, signature words ${figures.signatureWordsUsed} of ${profile.signatureWords.length}`;
       lines.push(`  Against the baseline: paragraphs ${formatRate(figures.paragraphMean)} words, ${formatRate(figures.dialogueShare)}% dialogue${signature}`);

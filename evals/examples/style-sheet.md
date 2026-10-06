@@ -4,6 +4,9 @@ dialect: british
 preferred: []
 watch-words: []
 allow-words: []
+samples:
+  - chapters/chapter-01.md
+  - chapters/chapter-02.md
 ---
 
 # Style Sheet

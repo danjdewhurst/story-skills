@@ -852,6 +852,7 @@
             "properties": {
               "file": { "type": "string" },
               "title": { "type": "string" },
+              "sample": { "const": true, "description": "Present when the style sheet names this chapter as a sample: it is part of the baseline, so no prose-baseline-* drift is reported for it." },
               "baseline": {
                 "type": "object",
                 "description": "Present when a baseline is on: the chapter's figures on the baseline's scales.",
