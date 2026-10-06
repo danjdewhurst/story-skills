@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -48,6 +49,35 @@ export function memoryIo(cwd) {
       return err.join("");
     }
   };
+}
+
+// Settings for every git a test runs. gitEnv() passes them as GIT_CONFIG_COUNT
+// variables, so they also reach the git that a script or the CLI runs.
+const GIT_SETTINGS = [
+  ["user.name", "Test"],
+  ["user.email", "test@example.com"],
+  ["init.defaultBranch", "main"],
+  ["commit.gpgsign", "false"],
+  ["tag.gpgsign", "false"]
+];
+
+// An environment for git that reads nothing from the developer's machine: no
+// global or system config, so commit signing, hooks, or a pinentry prompt set
+// there cannot fail or stall a test (#561), and no GIT_* variable, such as
+// GIT_DIR from a hook or GIT_CONFIG_PARAMETERS. An override set to undefined
+// leaves that variable out.
+export function gitEnv(overrides = {}) {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)));
+  GIT_SETTINGS.forEach(([key, value], index) => {
+    env[`GIT_CONFIG_KEY_${index}`] = key;
+    env[`GIT_CONFIG_VALUE_${index}`] = value;
+  });
+  return { ...env, GIT_CONFIG_COUNT: String(GIT_SETTINGS.length), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...overrides };
+}
+
+// Runs git in cwd with gitEnv() and returns its stdout.
+export function git(cwd, ...args) {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
 }
 
 export function writeMarkdown(filePath, frontmatter, body = "") {

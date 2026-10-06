@@ -1,20 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareSimilarity, formatSimilarity, similarityOptions, tokenizeDocument } from "../src/similarity.js";
 import { createStoryProject, similarityReport, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
 const SHARED = "The lamp keeper counted the steps twice before he trusted the rail again";
-
-function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" });
-}
 
 function writeChapter(root, number, body, title = `Chapter ${number}`) {
   writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `title: ${title}\nnumber: ${number}\nstatus: draft`, `## Chapter Text\n\n${body}\n`);

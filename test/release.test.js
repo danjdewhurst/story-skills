@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
-import { execFileSync, spawnSync } from "node:child_process";
+import { git, gitEnv, makeTempDir } from "./helpers.js";
+import { spawnSync } from "node:child_process";
 import { bumpDocVersions, staleDocVersions } from "../scripts/doc-versions.js";
 import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
 
@@ -100,12 +100,6 @@ describe("release script", () => {
 
   test("a rejected main push leaves no tag on the remote", () => {
     const dir = makeTempDir("story-release-push-");
-    const git = (cwd, ...args) =>
-      execFileSync("git", ["-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "init.defaultBranch=main", ...args], {
-        cwd,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"]
-      });
     const remote = path.join(dir, "remote.git");
     git(dir, "init", "--bare", "--initial-branch=main", remote);
     const seed = path.join(dir, "seed");
@@ -120,7 +114,7 @@ describe("release script", () => {
     git(seed, "push", "origin", "main");
     git(releaser, "commit", "--allow-empty", "-m", "chore: release 1.2.3");
     git(releaser, "tag", "-a", "v1.2.3", "-m", "v1.2.3");
-    const push = spawnSync("git", releasePushArgs("v1.2.3"), { cwd: releaser, encoding: "utf8" });
+    const push = spawnSync("git", releasePushArgs("v1.2.3"), { cwd: releaser, encoding: "utf8", env: gitEnv() });
     expect(push.status).not.toBe(0);
     expect(git(remote, "tag", "--list")).toBe("");
   });
