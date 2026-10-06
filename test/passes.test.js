@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatPasses, nextPass, readPasses, updatePasses } from "../src/passes.js";
 import { createEntity, createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, whileWriting } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -25,6 +25,19 @@ function setStoryField(root, text) {
 }
 
 describe("story passes", () => {
+  test("keeps story.md when it is saved after it was read (#547)", () => {
+    const { root } = project();
+    const storyPath = path.join(root, "story.md");
+    const saved = fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ndeadline: 2027-01-01\n");
+    const spy = whileWriting(storyPath, () => fs.writeFileSync(storyPath, saved));
+    try {
+      expect(() => projectPasses(root, { init: true })).toThrow("story.md changed on disk while story was updating it, so it was left as it is");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(storyPath, "utf8")).toBe(saved);
+  });
+
   test("init adds the ladder, start and done mark passes, and the rest of story.md is kept", () => {
     const { root } = project();
     const before = fs.readFileSync(path.join(root, "story.md"), "utf8");

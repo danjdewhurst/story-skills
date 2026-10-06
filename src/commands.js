@@ -114,7 +114,12 @@ const WRITE_OPTIONS = ["dry-run", "json"];
 // lists the flags the command reads besides --path, so a stray argument or
 // flag is an error rather than silently ignored. `kinds`, for a command whose
 // first argument is an entity kind, maps each kind to the flags it reads, so
-// a flag meant for another kind is an error too. `run` receives
+// a flag meant for another kind is an error too. `writes` marks a command
+// that changes the project in place: true, or a function of the parsed
+// options for one that writes only with a flag (wordcount --write). runCli
+// holds the project lock around such a run, except with --dry-run (see
+// lock.js). init and import lock the folder they fill themselves, and the
+// builds write only generated files, so they take no lock. `run` receives
 // { parsed, io, cwd, root, overrides, defaulted }, where root() resolves
 // the project path and overrides holds the story.md severity overrides and
 // the exemptions that name a code (see findingOverrides), passed to
@@ -225,6 +230,7 @@ export const COMMANDS = [
     summary: ["Rebuild registry tables from markdown files"],
     project: "positional",
     options: WRITE_OPTIONS,
+    writes: true,
     run: (context) => runWrite(context, "reindex", reindexProject, (result) => (result.changed.length === 0
       ? "Registries already up to date\n"
       : `Updated ${result.changed.length} registries\n`))
@@ -235,6 +241,7 @@ export const COMMANDS = [
     summary: ["Count chapter prose words"],
     project: "positional",
     options: ["write", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.write),
     run(context) {
       const write = isTruthy(context.parsed.options.write);
       if (!write && isTruthy(context.parsed.options["dry-run"])) {
@@ -417,6 +424,7 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["log", "date", "weeks", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.log),
     run({ parsed, io, root, overrides }) {
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -692,6 +700,7 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["init", "start", "done", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.init) || options.start !== undefined || options.done !== undefined,
     run({ parsed, io, root }) {
       const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -733,6 +742,7 @@ export const COMMANDS = [
     project: "flag",
     args: 1,
     options: ["id", "list", "restore", "force", ...WRITE_OPTIONS],
+    writes: (options) => !isTruthy(options.list),
     run(context) {
       const { parsed, io, root } = context;
       const name = parsed.positionals[1];
@@ -813,6 +823,7 @@ export const COMMANDS = [
     summary: ["Show health checks plus actionable repair steps;", "--fix applies the safe repairs first"],
     project: "positional",
     options: ["fix", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.fix),
     run(context) {
       const { parsed, io, cwd, root, overrides } = context;
       const options = { displayPath: displayPath(parsed), overrides };
@@ -837,6 +848,7 @@ export const COMMANDS = [
     summary: ["Upgrade a project to the current schema"],
     project: "positional",
     options: WRITE_OPTIONS,
+    writes: true,
     run: (context) => runWrite(context, "migrate", migrateProject, (result) => (result.changed.length === 0
       ? "Project already uses the current schema\n"
       : `Migrated project to current schema: ${result.changed.length} changes\n`))
@@ -849,6 +861,7 @@ export const COMMANDS = [
     args: Infinity,
     options: [...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
     kinds: ADD_KIND_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -867,6 +880,7 @@ export const COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ["id", "prose", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -891,6 +905,7 @@ export const COMMANDS = [
     project: "flag",
     args: 2,
     options: WRITE_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
@@ -910,6 +925,7 @@ export const COMMANDS = [
     project: "flag",
     args: 2,
     options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = {
@@ -934,6 +950,7 @@ export const COMMANDS = [
     project: "flag",
     args: 1,
     options: ["at", "title", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
@@ -951,6 +968,7 @@ export const COMMANDS = [
     project: "flag",
     args: 2,
     options: WRITE_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };

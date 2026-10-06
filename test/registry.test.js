@@ -17,6 +17,18 @@ describe("command registry", () => {
     }
   });
 
+  test("every command that changes the project in place declares it, so runCli holds the lock", () => {
+    // These write only generated files (dist/, --out); init and import
+    // lock the folder they fill themselves.
+    const generated = ["diagram", "export", "build", "synopsis"];
+    for (const command of COMMANDS.filter((entry) => entry.project !== "none" && entry.options?.includes("dry-run"))) {
+      expect([command.name, command.writes !== undefined]).toEqual([command.name, !generated.includes(command.name)]);
+    }
+    for (const command of COMMANDS.filter((entry) => entry.writes !== undefined)) {
+      expect(command.writes === true || typeof command.writes === "function").toBe(true);
+    }
+  });
+
   test("help lists every command and every documented option", () => {
     for (const command of COMMANDS) {
       expect(HELP).toContain(`  ${command.usage}`);

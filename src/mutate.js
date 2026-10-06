@@ -167,6 +167,19 @@ export function createStoryProject(options) {
   if (options.language !== undefined && !isLanguageTag(options.language)) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
+  // --force fills an existing folder, which holds the project lock from
+  // reading its story.md to the last write, whether or not it is a project
+  // yet. A symlinked folder is refused below, so the lock is not taken
+  // through it. The books --follows and --precedes link to get a backlink
+  // in their story.md, so their locks are held for the whole run too.
+  const fill = () => fillStoryProject(root, title, cwd, options);
+  const filled = options.force && lstatIfExists(root)?.isDirectory() ? () => withProjectLock(root, fill, { folder: true }) : fill;
+  return ["follows", "precedes"]
+    .flatMap((field) => asArray(options[field]).filter((value) => typeof value === "string" && value.trim() !== ""))
+    .reduce((run, value) => () => withProjectLock(path.resolve(cwd, value), run), filled)();
+}
+
+function fillStoryProject(root, title, cwd, options) {
   // `--force` keeps an existing story.md, so new registries take the story id
   // from its title, and the options it would have set are reported unused.
   const existingStory = existingStoryData(root);
@@ -271,11 +284,11 @@ export function createStoryProject(options) {
   // forward link the existing story.md already has (a rerun after a failed
   // backlink write, say).
   const existingLinks = storyWritten ? null : existingSeriesLinks(root);
-  for (const { book, updated } of backlinks) {
+  for (const { book, original, updated } of backlinks) {
     if (existingLinks && !linksInclude(existingLinks[book.field], book.root)) {
       continue;
     }
-    writeFile(path.join(book.root, "story.md"), updated, { root: book.root });
+    writeFile(path.join(book.root, "story.md"), updated, { root: book.root, unchangedFrom: original });
     linkedBooks.push(book.root);
   }
 
@@ -316,7 +329,7 @@ function writeStarterGitignore(root) {
   const filePath = path.join(root, ".gitignore");
   const existing = lstatIfExists(filePath);
   if (!existing) {
-    writeFile(filePath, STARTER_GITIGNORE, { root });
+    writeFile(filePath, STARTER_GITIGNORE, { root, unchangedFrom: null });
     return "created";
   }
   if (!existing.isFile()) {
@@ -402,7 +415,7 @@ function writeStarterFile(filePath, contents, options) {
     assertSafeProjectPath(filePath, options.root);
     return false;
   }
-  writeFile(filePath, contents, options);
+  writeFile(filePath, contents, { ...options, unchangedFrom: null });
   return true;
 }
 
@@ -497,13 +510,15 @@ function seriesBookNumbers(linked, requireComplete = false) {
   return entries;
 }
 
-// Each linked book's story.md with the backlink added, checked writable.
-// Books that already link back and share the series id are left out.
+// Each linked book's story.md with the backlink added, and the text it was
+// made from, checked writable. Books that already link back and share the
+// series id are left out.
 function planSeriesBacklinks(root, series) {
   const planned = [];
   for (const book of series.linked) {
     const storyPath = path.join(book.root, "story.md");
-    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
+    const original = readTextFile(storyPath);
+    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series, original);
     if (updated === null) {
       continue;
     }
@@ -512,7 +527,7 @@ function planSeriesBacklinks(root, series) {
     } catch {
       throw refusedError(`Cannot add the series backlink to ${storyPath}: the file is not writable; nothing was created`);
     }
-    planned.push({ book, updated });
+    planned.push({ book, original, updated });
   }
   return planned;
 }
@@ -554,10 +569,6 @@ function enclosingStoryProject(root) {
 }
 
 export function reindexProject(root) {
-  return withProjectLock(root, () => reindexProjectUnlocked(root));
-}
-
-function reindexProjectUnlocked(root) {
   const project = scanProject(root);
   assertProjectParses(project, "reindex");
   const changed = [];
@@ -616,13 +627,13 @@ function readRegistrySource(filePath, root) {
 // other `## ` section the generator does not produce is appended unchanged,
 // and a CRLF registry stays CRLF.
 function writeRegistry(filePath, build, changed, root) {
-  const raw = safeRead(filePath, root);
-  const existing = raw.replace(/\r\n/g, "\n");
+  const raw = fs.existsSync(filePath) ? safeRead(filePath, root) : null;
+  const existing = (raw ?? "").replace(/\r\n/g, "\n");
   const generated = build(existing);
   const custom = customSections(existing, generated);
   let contents = custom.length === 0 ? generated : `${generated.replace(/\n*$/, "\n")}\n${custom.join("\n\n")}\n`;
   contents = keepRegistryFrontmatter(existing, contents);
-  writeChanged(filePath, raw.includes("\r\n") ? contents.replace(/\n/g, "\r\n") : contents, changed, root);
+  writeChanged(filePath, raw?.includes("\r\n") ? contents.replace(/\n/g, "\r\n") : contents, raw, changed, root);
 }
 
 // The generator owns only the frontmatter fields it writes; other fields and
@@ -724,14 +735,10 @@ function refreshStoryField(filePath, storyId, changed, root) {
   writeChanged(filePath, replaceFrontmatter(raw, {
     ...parsed.data,
     story: storyId
-  }), changed, root);
+  }), raw, changed, root);
 }
 
 export function computeWordCounts(root, options = {}) {
-  return options.write ? withProjectLock(root, () => computeWordCountsUnlocked(root, options)) : computeWordCountsUnlocked(root, options);
-}
-
-function computeWordCountsUnlocked(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "count words");
   const characters = project.unit.name === "characters";
@@ -774,10 +781,6 @@ function computeWordCountsUnlocked(root, options = {}) {
 }
 
 export function migrateProject(root) {
-  return withProjectLock(root, () => migrateProjectUnlocked(root));
-}
-
-function migrateProjectUnlocked(root) {
   const projectRoot = path.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   // Scan first, so an unparseable story.md is reported by name like any other
@@ -807,7 +810,7 @@ function migrateProjectUnlocked(root) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
       "schema-version": STORY_SCHEMA_VERSION
-    }), { root: projectRoot });
+    }), { root: projectRoot, unchangedFrom: story.rawMarkdown });
     changed.push(storyPath);
   }
 
@@ -829,55 +832,53 @@ const DOCTOR_REPAIRS = [
 ];
 
 // story doctor --fix: diagnoses the project, applies the safe repairs the
-// findings call for, and diagnoses it again, all under the project lock, so
-// the report is what remains for the writer to do. Returns that second
-// diagnosis (see projectActions) with `repairs`, one { command, codes,
-// changes } per repair run, and `stopped`, the message of the error that
-// stopped a repair (a file that does not parse), after which none of the
-// later ones is tried; null when every due repair ran.
+// findings call for, and diagnoses it again, all under the project lock
+// runCli holds, so the report is what remains for the writer to do.
+// Returns that second diagnosis (see projectActions) with `repairs`, one {
+// command, codes, changes } per repair run, and `stopped`, the message of
+// the error that stopped a repair (a file that does not parse), after
+// which none of the later ones is tried; null when every due repair ran.
 export function fixProject(root, options = {}) {
-  return withProjectLock(root, () => {
-    const before = projectActions(root, options);
-    const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
-    const due = DOCTOR_REPAIRS
-      .map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) }))
-      .filter((repair) => repair.codes.length > 0);
-    const repairs = [];
-    let stopped = null;
-    try {
-      if (due.length > 0) {
-        assertRepairable(root);
+  const before = projectActions(root, options);
+  const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+  const due = DOCTOR_REPAIRS
+    .map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) }))
+    .filter((repair) => repair.codes.length > 0);
+  const repairs = [];
+  let stopped = null;
+  try {
+    if (due.length > 0) {
+      assertRepairable(root);
+    }
+  } catch (error) {
+    stopped = projectErrorMessage(error);
+  }
+  for (const repair of stopped === null ? due : []) {
+    if (repair.command === "reindex" && repairs.length > 0) {
+      continue;
+    }
+    // The changes are kept even when the repair stops part way, so the
+    // report lists every file written.
+    const { result: error, changes } = recordChanges(root, () => {
+      try {
+        repair.run(root);
+        return null;
+      } catch (caught) {
+        return caught;
       }
-    } catch (error) {
+    });
+    if (error !== null) {
       stopped = projectErrorMessage(error);
     }
-    for (const repair of stopped === null ? due : []) {
-      if (repair.command === "reindex" && repairs.length > 0) {
-        continue;
-      }
-      // The changes are kept even when the repair stops part way, so the
-      // report lists every file written.
-      const { result: error, changes } = recordChanges(root, () => {
-        try {
-          repair.run(root);
-          return null;
-        } catch (caught) {
-          return caught;
-        }
-      });
-      if (error !== null) {
-        stopped = projectErrorMessage(error);
-      }
-      if (error === null || changes.length > 0) {
-        repairs.push({ command: repair.command, codes: repair.codes, changes });
-      }
-      if (error !== null) {
-        break;
-      }
+    if (error === null || changes.length > 0) {
+      repairs.push({ command: repair.command, codes: repair.codes, changes });
     }
-    const after = repairs.length > 0 ? projectActions(root, options) : before;
-    return { ...after, repairs, stopped };
-  });
+    if (error !== null) {
+      break;
+    }
+  }
+  const after = repairs.length > 0 ? projectActions(root, options) : before;
+  return { ...after, repairs, stopped };
 }
 
 // Every repair ends in a reindex, which needs each entity file and the plot
@@ -1090,10 +1091,6 @@ function assertStatusChapters(project, kind, options) {
 }
 
 export function createEntity(root, options) {
-  return withProjectLock(root, () => createEntityUnlocked(root, options));
-}
-
-function createEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
@@ -1149,7 +1146,7 @@ function createEntityUnlocked(root, options) {
   }
 
   if (!resumed) {
-    writeFile(entity.file, entity.markdown, { root: project.root });
+    writeFile(entity.file, entity.markdown, { root: project.root, unchangedFrom: null });
   }
   const data = readMarkdown(entity.file, project.root).data;
   applyEntityBacklinks(project.root, kind, entity.id, data);
@@ -1205,10 +1202,6 @@ function registryLists(root, kind, file) {
 }
 
 export function renameEntity(root, options) {
-  return withProjectLock(root, () => renameEntityUnlocked(root, options));
-}
-
-function renameEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "rename");
   const kind = normalizeKind(options.kind);
@@ -1296,9 +1289,9 @@ function renameEntityUnlocked(root, options) {
     commitWrites(() => {
       writeReferencePlan(project.root, plan);
       if (!interrupted) {
-        writeFile(newFile, renamedContents, { root: project.root });
+        writeFile(newFile, renamedContents, { root: project.root, unchangedFrom: null });
       }
-      removeFile(oldFile);
+      removeMovedFile(project.root, { oldFile, original: markdown.rawMarkdown, newFile, written: renamedContents });
     });
   }
 
@@ -1367,10 +1360,6 @@ function retitleHeading(markdown, oldName, newName) {
 }
 
 export function removeEntity(root, options) {
-  return withProjectLock(root, () => removeEntityUnlocked(root, options));
-}
-
-function removeEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "remove");
   const kind = normalizeKind(options.kind);
@@ -1422,10 +1411,12 @@ function removeEntityUnlocked(root, options) {
   const wasBranching = choosers.length > 0 && branchGraph(project).branching;
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   assertWritable(project.root, [...plan.keys(), file]);
+  // An edit saved after this read keeps the file.
+  const original = alreadyGone ? undefined : readTextFile(file);
   // References first, the file last, so an interrupted remove can be rerun.
   commitWrites(() => {
     writeReferencePlan(project.root, plan);
-    removeFile(file, { force: true });
+    removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
   const warnings = leftoverReferenceWarnings(project.root, kind, id);
@@ -1556,10 +1547,6 @@ function followExemptionPatterns(root, plan, kind, oldId, newId) {
 // bare ids in plot/timeline.md and arc files. References are written first
 // and the moved files last, so an interrupted move can be rerun.
 export function moveEntity(root, options) {
-  return withProjectLock(root, () => moveEntityUnlocked(root, options));
-}
-
-function moveEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "move");
   const kind = normalizeMoveKind(options.kind);
@@ -1626,6 +1613,7 @@ function moveChapter(project, oldId, options) {
       (text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId),
       renameLinkTargets(project.root, file, body, context, newId)
     ), oldId, newId));
+  plan.originals.set(chapter.file, markdown.rawMarkdown);
   // current-chapter is a number: follow the chapter it pointed at.
   const statePath = path.join(project.root, "continuity", "state.md");
   if (fs.existsSync(statePath)) {
@@ -1694,6 +1682,7 @@ function moveScene(project, oldId, options) {
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]),
       idRenamer(oldId, newId),
       (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
+    plan.originals.set(scene.file, markdown.rawMarkdown);
     followExemptionPatterns(project.root, plan, "scene", oldId, newId);
     return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path.join(project.root, "scenes", `${newId}.md`) }] };
   };
@@ -1735,14 +1724,6 @@ function moveScene(project, oldId, options) {
 // first write. The steps each write references before files, but a split or
 // merge is several of them, so one stopped part way is finished by hand
 // rather than by a rerun.
-export function splitChapter(root, options) {
-  return withProjectLock(root, () => splitChapterUnlocked(root, options));
-}
-
-export function mergeChapters(root, options) {
-  return withProjectLock(root, () => mergeChaptersUnlocked(root, options));
-}
-
 const RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again";
 
 // Runs the writes of a split or merge. When a step fails after earlier ones
@@ -1989,7 +1970,7 @@ function assertRestructurable(project, { chapters, scenes, changed, created, cha
   assertWritable(root, [...changed, ...rewrittenFiles(root, "chapter", chapters), ...rewrittenFiles(root, "scene", scenes), ...fixed], created);
 }
 
-function splitChapterUnlocked(root, options) {
+export function splitChapter(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "split");
   const chapter = existingChapter(project, options.id, "split requires a chapter id");
@@ -2076,7 +2057,7 @@ function splitChapterUnlocked(root, options) {
       ...(hook === undefined ? {} : { hook }),
       ...chapterLengthFields(secondBody, current.unit)
     };
-    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root });
+    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root, unchangedFrom: null });
     writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...chapterLengthFields(firstBody, current.unit) }, firstBody),
       { root: project.root, unchangedFrom: markdown.rawMarkdown });
     // The latest drafted chapter is now the second half.
@@ -2121,7 +2102,7 @@ function setCurrentChapter(root, from, to, plan = null) {
   }
 }
 
-function mergeChaptersUnlocked(root, options) {
+export function mergeChapters(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "merge");
   const missing = "merge requires two chapter ids: the chapter to keep, then the one after it";
@@ -2167,7 +2148,8 @@ function mergeChaptersUnlocked(root, options) {
     }
     const current = scanProject(project.root);
     const kept = readMarkdown(first.file, project.root);
-    const merged = mergedChapter(kept, readMarkdown(second.file, project.root), current.unit, first.id, second.id);
+    const gone = readMarkdown(second.file, project.root);
+    const merged = mergedChapter(kept, gone, current.unit, first.id, second.id);
     warnings.push(...merged.warnings);
     const context = entityReferenceContext(project.root, "chapter", second.id);
     const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]),
@@ -2180,7 +2162,7 @@ function mergeChaptersUnlocked(root, options) {
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);
     writeReferencePlan(project.root, plan);
-    removeFile(second.file);
+    removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
     shiftChapters(project.root, run, -1, warnings);
   });
   const reindexed = reindexProject(project.root);
@@ -2469,12 +2451,16 @@ function renameIdText(text, oldId, newId) {
 // Writes every rewritten reference, then each moved file at its new path,
 // then deletes the old paths. A file already at a new path is refused unless
 // it is byte for byte what this move writes there: then an earlier run was
-// interrupted after writing it, and this run finishes the job.
+// interrupted after writing it, and this run finishes the job. The text of
+// each moving file is the one the plan read (plan.originals), so an edit
+// saved since is never lost with the old path.
 function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = []) {
-  const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
+  const originals = moves.map((move) => plan.originals?.get(move.oldFile) ?? readTextFile(move.oldFile));
+  const contents = moves.map((move, index) => plan.get(move.oldFile) ?? originals[index]);
   const interrupted = interruptedMove(plan, moves);
-  moves.forEach((move) => {
-    if (fs.existsSync(move.newFile) && !interrupted) {
+  const present = moves.map((move) => fs.existsSync(move.newFile));
+  moves.forEach((move, index) => {
+    if (present[index] && !interrupted) {
       throw refusedError(`${projectPath(root, move.newFile)} already exists; nothing was changed`);
     }
   });
@@ -2484,14 +2470,30 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
   assertWritable(root, [...plan.keys(), ...moves.map((move) => move.oldFile), ...alsoChanged], moves.map((move) => move.newFile));
   commitWrites(() => {
     writeReferencePlan(root, plan);
-    moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
+    // A file an interrupted run wrote already holds these contents.
+    moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root, unchangedFrom: present[index] ? contents[index] : null }));
     beforeDelete();
     // A chapter's scenes go before the chapter, so a rerun still finds the
     // chapter and its remaining scenes.
-    for (const move of [...moves].reverse()) {
-      removeFile(move.oldFile);
+    for (const index of [...moves.keys()].reverse()) {
+      removeMovedFile(root, { ...moves[index], original: originals[index], written: contents[index] });
     }
   });
+}
+
+// Deletes the old file of a renamed or moved entity, unless it changed on
+// disk after the command read it: then the copy just written at the new
+// path is deleted instead, so the change is kept and a rerun moves the file
+// with it.
+function removeMovedFile(root, { oldFile, original, newFile, written }) {
+  try {
+    removeFile(oldFile, { root, unchangedFrom: original });
+  } catch (error) {
+    if (error.changedOnDisk) {
+      removeFile(newFile, { root, unchangedFrom: written });
+    }
+    throw error;
+  }
 }
 
 // An earlier run of this move was killed after writing the new files when
@@ -2524,7 +2526,7 @@ function ensureDirectory(directory, changed, root) {
 
 function ensureFile(filePath, contents, changed, root) {
   if (!fs.existsSync(filePath)) {
-    writeFile(filePath, contents, { root });
+    writeFile(filePath, contents, { root, unchangedFrom: null });
     changed.push(filePath);
     return;
   }
@@ -2944,13 +2946,16 @@ function addFrontmatterListValue(root, relativePath, field, value) {
     writeFile(filePath, replaceFrontmatter(markdown.rawMarkdown, {
       ...markdown.data,
       [field]: list.concat(value)
-    }), { root });
+    }), { root, unchangedFrom: markdown.rawMarkdown });
   }
 }
 
-function writeChanged(filePath, contents, changed, root) {
-  if (safeRead(filePath, root) !== contents) {
-    writeFile(filePath, contents, { root });
+// Writes `contents` when they differ from `original`, the text they were
+// made from (null for a file that did not exist), and only while the file
+// still holds it, so a registry saved meanwhile keeps the save.
+function writeChanged(filePath, contents, original, changed, root) {
+  if (original !== contents) {
+    writeFile(filePath, contents, { root, unchangedFrom: original });
     changed.push(filePath);
   }
 }

@@ -10,7 +10,7 @@ import { previewChanges } from "../src/preview.js";
 import { createEntity } from "../src/story.js";
 import { MAX_SERIES_BOOKS } from "../src/series.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { CHMOD_IGNORED, makeTempDir, memoryIo, treeDiff as diff, treeSnapshot as snapshot, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, OTHER_LIVE_PID, makeTempDir, memoryIo, treeDiff as diff, treeSnapshot as snapshot, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
@@ -110,8 +110,8 @@ describe("--dry-run", () => {
 
   test("a dry run neither takes nor waits for the project lock", () => {
     const root = copyExample("the-unraveled-thread");
-    // A live command (this process) holds the lock.
-    const lock = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    // A live command holds the lock.
+    const lock = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     fs.writeFileSync(path.join(root, LOCK_FILE), lock);
     const previous = process.env.STORY_LOCK_WAIT_MS;
     process.env.STORY_LOCK_WAIT_MS = "0";

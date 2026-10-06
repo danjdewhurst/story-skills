@@ -182,6 +182,7 @@ function invalidUtf8Offset(buffer) {
 }
 function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
+  assertWriteAllowed(filePath);
   try {
     if (planning > 0) {
       planWrite(filePath, options);
@@ -194,7 +195,12 @@ function writeFile(filePath, contents, options = {}) {
   record(filePath, existed, "write");
 }
 function removeFile(filePath, options = {}) {
-  const existed = lstatIfExists(path.resolve(filePath)) !== null;
+  const target = path.resolve(filePath);
+  const existed = lstatIfExists(target) !== null;
+  assertWriteAllowed(target);
+  if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is. Run the command again`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
+  }
   if (planning > 0) {
     if (!existed && !options.force) {
       throw Object.assign(new Error(`ENOENT: no such file or directory, lstat '${filePath}'`), { code: "ENOENT", path: filePath, syscall: "lstat" });
@@ -210,12 +216,29 @@ function removeFile(filePath, options = {}) {
   }
 }
 function removeDirectory(directory) {
+  assertWriteAllowed(directory);
   if (planning > 0) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
   }
   record(directory, true, "delete");
+}
+var refusals = [];
+function refuseWrites(root, message, run) {
+  const refusal = { root: path.resolve(root), message };
+  refusals.push(refusal);
+  try {
+    return run();
+  } finally {
+    refusals.splice(refusals.indexOf(refusal), 1);
+  }
+}
+function assertWriteAllowed(target) {
+  const refusal = planning > 0 ? undefined : refusals.find((entry) => isPathInside(entry.root, path.resolve(target)));
+  if (refusal) {
+    throw refusedError(refusal.message);
+  }
 }
 var journals = [];
 function record(target, existed, action) {
@@ -443,6 +466,9 @@ function makeDirectories(directory) {
       record(planned, false, "mkdir");
     }
     return;
+  }
+  if (missing.length > 0) {
+    assertWriteAllowed(path.join(ancestor, missing[0]));
   }
   let current = ancestor;
   for (const name of missing) {
@@ -8370,9 +8396,8 @@ function validateSeriesLinks(root, data, errors) {
     }
   }
 }
-function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
+function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId, markdown = readTextFile(path2.join(targetRoot, "story.md"))) {
   const storyPath = path2.join(targetRoot, "story.md");
-  const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   const current = data[field];
   const existing = Array.isArray(current) ? current : typeof current === "string" && current.trim() !== "" ? [current] : [];
@@ -19027,11 +19052,12 @@ import path10 from "node:path";
 var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
+var CREATE_RETRY_MS = 200;
 var FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
 var TAKEOVER_FILE = ".story-takeover.tmp";
 var TAKEOVER_STALE_MS = 2000;
 var held = new Map;
-function withProjectLock(root, run) {
+function withProjectLock(root, run, options = {}) {
   const projectRoot = path10.resolve(root);
   const key = realPath(projectRoot);
   if (held.has(key)) {
@@ -19043,9 +19069,14 @@ function withProjectLock(root, run) {
     }
   }
   const lockPath = path10.join(projectRoot, LOCK_FILE);
-  const ours = fs5.existsSync(path10.join(projectRoot, "story.md")) && acquire(lockPath);
-  if (!ours) {
+  const lockable = options.folder ? isDirectory(projectRoot) : fs5.existsSync(path10.join(projectRoot, "story.md"));
+  if (!lockable || isPlanning()) {
     return run();
+  }
+  const ours = acquire(lockPath);
+  if (typeof ours !== "string") {
+    const reason = FILE_ERROR_REASONS[ours.code] ?? ours.code ?? ours.message;
+    return refuseWrites(projectRoot, `Cannot create the project lock ${LOCK_FILE} (${reason}), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again`, run);
   }
   held.set(key, 1);
   try {
@@ -19059,9 +19090,17 @@ function withProjectLock(root, run) {
 }
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
+  const retryUntil = Date.now() + CREATE_RETRY_MS;
   let removedStale = false;
   let created;
-  while ((created = tryCreate(lockPath)) === null) {
+  while (typeof (created = tryCreate(lockPath)) !== "string") {
+    if (created !== null) {
+      if (Date.now() >= retryUntil) {
+        return created;
+      }
+      sleep(POLL_MS);
+      continue;
+    }
     const owner = readOwner(lockPath);
     if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
       removedStale = true;
@@ -19082,7 +19121,7 @@ function removeStale(lockPath, staleText) {
     fs5.rmSync(guard, { force: true });
     created = tryCreate(guard);
   }
-  if (!created) {
+  if (typeof created !== "string") {
     return false;
   }
   try {
@@ -19108,7 +19147,7 @@ ${new Date().toISOString()}
     }
     return text;
   } catch (error) {
-    return error.code === "EEXIST" ? null : false;
+    return error.code === "EEXIST" ? null : error;
   }
 }
 var MAX_LOCK_BYTES = 4096;
@@ -19142,6 +19181,9 @@ function modifiedAt(file) {
   }
 }
 function processAlive(pid) {
+  if (pid === process.pid) {
+    return false;
+  }
   try {
     process.kill(pid, 0);
     return true;
@@ -19155,6 +19197,9 @@ function lockWaitMs() {
 }
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function isDirectory(target) {
+  return fs5.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 function realPath(target) {
   try {
@@ -22077,6 +22122,11 @@ function createStoryProject(options) {
   if (options.language !== undefined && !isLanguageTag(options.language)) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
+  const fill = () => fillStoryProject(root, title, cwd, options);
+  const filled = options.force && lstatIfExists(root)?.isDirectory() ? () => withProjectLock(root, fill, { folder: true }) : fill;
+  return ["follows", "precedes"].flatMap((field) => asArray(options[field]).filter((value) => typeof value === "string" && value.trim() !== "")).reduce((run, value) => () => withProjectLock(path12.resolve(cwd, value), run), filled)();
+}
+function fillStoryProject(root, title, cwd, options) {
   const existingStory = existingStoryData(root);
   const storyId = asciiStoryId(existingStory ? existingStory.title : title, root);
   assertPortableId(storyId, "story");
@@ -22155,11 +22205,11 @@ function createStoryProject(options) {
   const gitignore = writeStarterGitignore(root);
   const linkedBooks = [];
   const existingLinks = storyWritten ? null : existingSeriesLinks(root);
-  for (const { book, updated } of backlinks) {
+  for (const { book, original, updated } of backlinks) {
     if (existingLinks && !linksInclude(existingLinks[book.field], book.root)) {
       continue;
     }
-    writeFile(path12.join(book.root, "story.md"), updated, { root: book.root });
+    writeFile(path12.join(book.root, "story.md"), updated, { root: book.root, unchangedFrom: original });
     linkedBooks.push(book.root);
   }
   return {
@@ -22191,7 +22241,7 @@ function writeStarterGitignore(root) {
   const filePath = path12.join(root, ".gitignore");
   const existing = lstatIfExists(filePath);
   if (!existing) {
-    writeFile(filePath, STARTER_GITIGNORE, { root });
+    writeFile(filePath, STARTER_GITIGNORE, { root, unchangedFrom: null });
     return "created";
   }
   if (!existing.isFile()) {
@@ -22269,7 +22319,7 @@ function writeStarterFile(filePath, contents, options) {
     assertSafeProjectPath(filePath, options.root);
     return false;
   }
-  writeFile(filePath, contents, options);
+  writeFile(filePath, contents, { ...options, unchangedFrom: null });
   return true;
 }
 function resolveSeriesOptions(root, cwd, options) {
@@ -22353,7 +22403,8 @@ function planSeriesBacklinks(root, series) {
   const planned = [];
   for (const book of series.linked) {
     const storyPath = path12.join(book.root, "story.md");
-    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series);
+    const original = readTextFile(storyPath);
+    const updated = withSeriesBacklink(book.root, book.inverse, root, series.series, original);
     if (updated === null) {
       continue;
     }
@@ -22362,7 +22413,7 @@ function planSeriesBacklinks(root, series) {
     } catch {
       throw refusedError(`Cannot add the series backlink to ${storyPath}: the file is not writable; nothing was created`);
     }
-    planned.push({ book, updated });
+    planned.push({ book, original, updated });
   }
   return planned;
 }
@@ -22395,9 +22446,6 @@ function enclosingStoryProject(root) {
   return null;
 }
 function reindexProject(root) {
-  return withProjectLock(root, () => reindexProjectUnlocked(root));
-}
-function reindexProjectUnlocked(root) {
   const project = scanProject(root);
   assertProjectParses(project, "reindex");
   const changed = [];
@@ -22431,8 +22479,8 @@ function readRegistrySource(filePath, root) {
 `);
 }
 function writeRegistry(filePath, build, changed, root) {
-  const raw = safeRead(filePath, root);
-  const existing = raw.replace(/\r\n/g, `
+  const raw = fs8.existsSync(filePath) ? safeRead(filePath, root) : null;
+  const existing = (raw ?? "").replace(/\r\n/g, `
 `);
   const generated = build(existing);
   const custom = customSections(existing, generated);
@@ -22443,9 +22491,9 @@ ${custom.join(`
 `)}
 `;
   contents = keepRegistryFrontmatter(existing, contents);
-  writeChanged(filePath, raw.includes(`\r
+  writeChanged(filePath, raw?.includes(`\r
 `) ? contents.replace(/\n/g, `\r
-`) : contents, changed, root);
+`) : contents, raw, changed, root);
 }
 function keepRegistryFrontmatter(existing, contents) {
   let current;
@@ -22531,12 +22579,9 @@ function refreshStoryField(filePath, storyId, changed, root) {
   writeChanged(filePath, replaceFrontmatter(raw, {
     ...parsed.data,
     story: storyId
-  }), changed, root);
+  }), raw, changed, root);
 }
 function computeWordCounts(root, options = {}) {
-  return options.write ? withProjectLock(root, () => computeWordCountsUnlocked(root, options)) : computeWordCountsUnlocked(root, options);
-}
-function computeWordCountsUnlocked(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "count words");
   const characters = project.unit.name === "characters";
@@ -22569,9 +22614,6 @@ function computeWordCountsUnlocked(root, options = {}) {
   };
 }
 function migrateProject(root) {
-  return withProjectLock(root, () => migrateProjectUnlocked(root));
-}
-function migrateProjectUnlocked(root) {
   const projectRoot = path12.resolve(root);
   const storyPath = requireStoryFile(projectRoot);
   assertProjectParses(scanProject(projectRoot), "migrate");
@@ -22596,7 +22638,7 @@ function migrateProjectUnlocked(root) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
       "schema-version": STORY_SCHEMA_VERSION
-    }), { root: projectRoot });
+    }), { root: projectRoot, unchangedFrom: story.rawMarkdown });
     changed.push(storyPath);
   }
   const reindexed = reindexProject(projectRoot);
@@ -22608,44 +22650,42 @@ var DOCTOR_REPAIRS = [
   { command: "reindex", codes: ["stale-registry", "story-id-mismatch"], run: (root) => reindexProject(root) }
 ];
 function fixProject(root, options = {}) {
-  return withProjectLock(root, () => {
-    const before = projectActions(root, options);
-    const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
-    const due = DOCTOR_REPAIRS.map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) })).filter((repair) => repair.codes.length > 0);
-    const repairs = [];
-    let stopped = null;
-    try {
-      if (due.length > 0) {
-        assertRepairable(root);
+  const before = projectActions(root, options);
+  const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+  const due = DOCTOR_REPAIRS.map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) })).filter((repair) => repair.codes.length > 0);
+  const repairs = [];
+  let stopped = null;
+  try {
+    if (due.length > 0) {
+      assertRepairable(root);
+    }
+  } catch (error) {
+    stopped = projectErrorMessage(error);
+  }
+  for (const repair of stopped === null ? due : []) {
+    if (repair.command === "reindex" && repairs.length > 0) {
+      continue;
+    }
+    const { result: error, changes } = recordChanges(root, () => {
+      try {
+        repair.run(root);
+        return null;
+      } catch (caught) {
+        return caught;
       }
-    } catch (error) {
+    });
+    if (error !== null) {
       stopped = projectErrorMessage(error);
     }
-    for (const repair of stopped === null ? due : []) {
-      if (repair.command === "reindex" && repairs.length > 0) {
-        continue;
-      }
-      const { result: error, changes } = recordChanges(root, () => {
-        try {
-          repair.run(root);
-          return null;
-        } catch (caught) {
-          return caught;
-        }
-      });
-      if (error !== null) {
-        stopped = projectErrorMessage(error);
-      }
-      if (error === null || changes.length > 0) {
-        repairs.push({ command: repair.command, codes: repair.codes, changes });
-      }
-      if (error !== null) {
-        break;
-      }
+    if (error === null || changes.length > 0) {
+      repairs.push({ command: repair.command, codes: repair.codes, changes });
     }
-    const after = repairs.length > 0 ? projectActions(root, options) : before;
-    return { ...after, repairs, stopped };
-  });
+    if (error !== null) {
+      break;
+    }
+  }
+  const after = repairs.length > 0 ? projectActions(root, options) : before;
+  return { ...after, repairs, stopped };
 }
 function assertRepairable(root) {
   const project = scanProject(root);
@@ -22821,9 +22861,6 @@ function assertStatusChapters(project, kind, options) {
   }
 }
 function createEntity(root, options) {
-  return withProjectLock(root, () => createEntityUnlocked(root, options));
-}
-function createEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "add");
   const kind = normalizeKind(options.kind);
@@ -22866,7 +22903,7 @@ function createEntityUnlocked(root, options) {
     resumed = true;
   }
   if (!resumed) {
-    writeFile(entity.file, entity.markdown, { root: project.root });
+    writeFile(entity.file, entity.markdown, { root: project.root, unchangedFrom: null });
   }
   const data = readMarkdown(entity.file, project.root).data;
   applyEntityBacklinks(project.root, kind, entity.id, data);
@@ -22910,9 +22947,6 @@ function registryLists(root, kind, file) {
   return safeRead(registryPath, root).includes(`](${link})`);
 }
 function renameEntity(root, options) {
-  return withProjectLock(root, () => renameEntityUnlocked(root, options));
-}
-function renameEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "rename");
   const kind = normalizeKind(options.kind);
@@ -22979,9 +23013,9 @@ function renameEntityUnlocked(root, options) {
     commitWrites(() => {
       writeReferencePlan(project.root, plan);
       if (!interrupted) {
-        writeFile(newFile, renamedContents, { root: project.root });
+        writeFile(newFile, renamedContents, { root: project.root, unchangedFrom: null });
       }
-      removeFile(oldFile);
+      removeMovedFile(project.root, { oldFile, original: markdown.rawMarkdown, newFile, written: renamedContents });
     });
   }
   if (newFile !== oldFile) {
@@ -23035,9 +23069,6 @@ function retitleHeading(markdown, oldName, newName) {
   return `${header}${body.replace(heading, (whole, prefix, trailing) => `${prefix}${newName}${trailing}`)}`;
 }
 function removeEntity(root, options) {
-  return withProjectLock(root, () => removeEntityUnlocked(root, options));
-}
-function removeEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "remove");
   const kind = normalizeKind(options.kind);
@@ -23070,9 +23101,10 @@ function removeEntityUnlocked(root, options) {
   const wasBranching = choosers.length > 0 && branchGraph(project).branching;
   const plan = removeEntityReferences(project.root, kind, id, new Map([[file, null]]));
   assertWritable(project.root, [...plan.keys(), file]);
+  const original = alreadyGone ? undefined : readTextFile(file);
   commitWrites(() => {
     writeReferencePlan(project.root, plan);
-    removeFile(file, { force: true });
+    removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
   const warnings = leftoverReferenceWarnings(project.root, kind, id);
@@ -23160,9 +23192,6 @@ function followExemptionPatterns(root, plan, kind, oldId, newId) {
   }
 }
 function moveEntity(root, options) {
-  return withProjectLock(root, () => moveEntityUnlocked(root, options));
-}
-function moveEntityUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "move");
   const kind = normalizeMoveKind(options.kind);
@@ -23226,6 +23255,7 @@ function moveChapter(project, oldId, options) {
   const context = entityReferenceContext(project.root, "chapter", oldId);
   const sceneContexts = scenes.map((scene) => ({ context: entityReferenceContext(project.root, "scene", scene.id), newId: `${newId}-scene-${String(scene.scene).padStart(2, "0")}` }));
   const plan = planReferenceRewrites(project.root, context, new Map([[chapter.file, renumbered]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, sceneContexts.reduce((text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId), renameLinkTargets(project.root, file, body, context, newId)), oldId, newId));
+  plan.originals.set(chapter.file, markdown.rawMarkdown);
   const statePath = path12.join(project.root, "continuity", "state.md");
   if (fs8.existsSync(statePath)) {
     const stateText = plan.get(statePath) ?? readTextFile(statePath);
@@ -23283,6 +23313,7 @@ function moveScene(project, oldId, options) {
     const newId = `${chapterId}-scene-${String(number).padStart(2, "0")}`;
     const moved = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, chapter: chapterId, scene: number });
     const plan = planReferenceRewrites(project.root, context, new Map([[scene.file, moved]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, newId), oldId, newId));
+    plan.originals.set(scene.file, markdown.rawMarkdown);
     followExemptionPatterns(project.root, plan, "scene", oldId, newId);
     return { number, newId, plan, moves: [{ oldFile: scene.file, newFile: path12.join(project.root, "scenes", `${newId}.md`) }] };
   };
@@ -23303,12 +23334,6 @@ function moveScene(project, oldId, options) {
   commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data), [path12.join(project.root, "chapters", `${chapterId}.md`)]);
   const reindexed = reindexProject(project.root);
   return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed), warnings };
-}
-function splitChapter(root, options) {
-  return withProjectLock(root, () => splitChapterUnlocked(root, options));
-}
-function mergeChapters(root, options) {
-  return withProjectLock(root, () => mergeChaptersUnlocked(root, options));
 }
 var RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again";
 function restructureWrites(root, write) {
@@ -23489,7 +23514,7 @@ function assertRestructurable(project, { chapters, scenes, changed, created, cha
   const fixed = [path12.join("continuity", "state.md"), EXEMPTIONS_FILE, ...REGISTRY_FILES].map((file) => path12.join(root, file));
   assertWritable(root, [...changed, ...rewrittenFiles(root, "chapter", chapters), ...rewrittenFiles(root, "scene", scenes), ...fixed], created);
 }
-function splitChapterUnlocked(root, options) {
+function splitChapter(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "split");
   const chapter = existingChapter(project, options.id, "split requires a chapter id");
@@ -23570,7 +23595,7 @@ ${secondProse}`;
       ...hook === undefined ? {} : { hook },
       ...chapterLengthFields(secondBody, current.unit)
     };
-    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root });
+    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root, unchangedFrom: null });
     writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...chapterLengthFields(firstBody, current.unit) }, firstBody), { root: project.root, unchangedFrom: markdown.rawMarkdown });
     setCurrentChapter(project.root, chapter.number, number);
     for (const [index, scene] of moving.entries()) {
@@ -23610,7 +23635,7 @@ function setCurrentChapter(root, from, to, plan = null) {
     writeFile(statePath, next, { root, unchangedFrom: text });
   }
 }
-function mergeChaptersUnlocked(root, options) {
+function mergeChapters(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "merge");
   const missing = "merge requires two chapter ids: the chapter to keep, then the one after it";
@@ -23652,7 +23677,8 @@ function mergeChaptersUnlocked(root, options) {
     }
     const current = scanProject(project.root);
     const kept = readMarkdown(first.file, project.root);
-    const merged = mergedChapter(kept, readMarkdown(second.file, project.root), current.unit, first.id, second.id);
+    const gone = readMarkdown(second.file, project.root);
+    const merged = mergedChapter(kept, gone, current.unit, first.id, second.id);
     warnings.push(...merged.warnings);
     const context = entityReferenceContext(project.root, "chapter", second.id);
     const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]), idRenamer(second.id, first.id), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, first.id), second.id, first.id));
@@ -23663,7 +23689,7 @@ function mergeChaptersUnlocked(root, options) {
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);
     writeReferencePlan(project.root, plan);
-    removeFile(second.file);
+    removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
     shiftChapters(project.root, run, -1, warnings);
   });
   const reindexed = reindexProject(project.root);
@@ -23904,10 +23930,12 @@ function renameIdText(text, oldId, newId) {
   return text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`).replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
 }
 function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = []) {
-  const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
+  const originals = moves.map((move) => plan.originals?.get(move.oldFile) ?? readTextFile(move.oldFile));
+  const contents = moves.map((move, index) => plan.get(move.oldFile) ?? originals[index]);
   const interrupted = interruptedMove(plan, moves);
-  moves.forEach((move) => {
-    if (fs8.existsSync(move.newFile) && !interrupted) {
+  const present = moves.map((move) => fs8.existsSync(move.newFile));
+  moves.forEach((move, index) => {
+    if (present[index] && !interrupted) {
       throw refusedError(`${projectPath(root, move.newFile)} already exists; nothing was changed`);
     }
   });
@@ -23917,12 +23945,22 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
   assertWritable(root, [...plan.keys(), ...moves.map((move) => move.oldFile), ...alsoChanged], moves.map((move) => move.newFile));
   commitWrites(() => {
     writeReferencePlan(root, plan);
-    moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root }));
+    moves.forEach((move, index) => writeFile(move.newFile, contents[index], { root, unchangedFrom: present[index] ? contents[index] : null }));
     beforeDelete();
-    for (const move of [...moves].reverse()) {
-      removeFile(move.oldFile);
+    for (const index of [...moves.keys()].reverse()) {
+      removeMovedFile(root, { ...moves[index], original: originals[index], written: contents[index] });
     }
   });
+}
+function removeMovedFile(root, { oldFile, original, newFile, written }) {
+  try {
+    removeFile(oldFile, { root, unchangedFrom: original });
+  } catch (error) {
+    if (error.changedOnDisk) {
+      removeFile(newFile, { root, unchangedFrom: written });
+    }
+    throw error;
+  }
 }
 function interruptedMove(plan, moves) {
   const moving = new Set(moves.map((move) => move.oldFile));
@@ -23944,7 +23982,7 @@ function ensureDirectory(directory, changed, root) {
 }
 function ensureFile(filePath, contents, changed, root) {
   if (!fs8.existsSync(filePath)) {
-    writeFile(filePath, contents, { root });
+    writeFile(filePath, contents, { root, unchangedFrom: null });
     changed.push(filePath);
     return;
   }
@@ -24263,12 +24301,12 @@ function addFrontmatterListValue(root, relativePath, field, value) {
     writeFile(filePath, replaceFrontmatter(markdown.rawMarkdown, {
       ...markdown.data,
       [field]: list.concat(value)
-    }), { root });
+    }), { root, unchangedFrom: markdown.rawMarkdown });
   }
 }
-function writeChanged(filePath, contents, changed, root) {
-  if (safeRead(filePath, root) !== contents) {
-    writeFile(filePath, contents, { root });
+function writeChanged(filePath, contents, original, changed, root) {
+  if (original !== contents) {
+    writeFile(filePath, contents, { root, unchangedFrom: original });
     changed.push(filePath);
   }
 }
@@ -24298,9 +24336,6 @@ function snapshotId(name, id) {
   return derived;
 }
 function snapshotProject(root, options = {}) {
-  return withProjectLock(root, () => snapshotProjectUnlocked(root, options));
-}
-function snapshotProjectUnlocked(root, options) {
   const id = snapshotId(options.name, options.id);
   const project = scanProject(root);
   if (!options.unparsed) {
@@ -24444,9 +24479,6 @@ function existingSnapshot(root, value) {
   return { directory, id: found.id };
 }
 function restoreSnapshot(root, options = {}) {
-  return withProjectLock(root, () => restoreSnapshotUnlocked(root, options));
-}
-function restoreSnapshotUnlocked(root, options) {
   const projectRoot = path13.resolve(root);
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
@@ -24463,26 +24495,27 @@ function restoreSnapshotUnlocked(root, options) {
     const target = path13.join(projectRoot, ...relative.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
-    if (existing?.isFile() && currentText(target) === text) {
+    const current = existing?.isFile() ? currentText(target) : null;
+    if (current === text) {
       continue;
     }
-    writes.push({ path: relative, target, text, created: existing === null });
+    writes.push({ path: relative, target, text, created: existing === null, original: current });
   }
-  const deletes = markdownFiles(projectRoot).map((file) => ({ path: projectPath(projectRoot, file), target: file })).filter((file) => !saved.has(file.path));
+  const deletes = markdownFiles(projectRoot).map((file) => ({ path: projectPath(projectRoot, file), target: file })).filter((file) => !saved.has(file.path)).map((file) => ({ ...file, original: readTextFile(file.target) }));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
     return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
   }
   const safetyId = nextSafetyId(projectRoot, id);
-  const safety = snapshotProjectUnlocked(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
+  const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
   const done = { created: [], updated: [], deleted: [] };
   try {
     for (const write of writes) {
-      writeFile(write.target, write.text, { root: projectRoot });
+      writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
       done[write.created ? "created" : "updated"].push(write.path);
     }
     for (const file of deletes) {
-      removeFile(file.target);
+      removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
       done.deleted.push(file.path);
     }
     if (parses) {
@@ -26643,7 +26676,7 @@ function projectProgress(root, options = {}) {
     const existing = project.progressLog;
     const sessions = withSession(asArray(existing?.data.sessions), today, counts);
     const contents = existing === null ? progressLogFile(sessions, unit) : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
-    writeFile(filePath, contents, { root: project.root });
+    writeFile(filePath, contents, { root: project.root, unchangedFrom: existing?.rawMarkdown ?? null });
     logged = { file: filePath, date: today, words, characterCount: counts.characters ?? null };
     project = scanProject(root);
   }
@@ -26745,10 +26778,10 @@ function projectPasses(root, change = {}) {
   const current = asArray(project.story.data["revision-passes"]);
   const next = updatePasses(current, change);
   const notes = addedPassNotes(readPasses({ "revision-passes": current }), readPasses({ "revision-passes": next }));
-  const raw = safeRead(storyPath, project.root);
+  const raw = project.story.rawMarkdown;
   const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) {
-    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
+    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root, unchangedFrom: raw });
   }
   return { passes: readPasses({ "revision-passes": next }), changed, notes };
 }
@@ -27094,7 +27127,7 @@ function importManuscript(options) {
       removeFile(path16.join(chaptersDir, name));
     }
     for (const chapter of chapterFiles) {
-      writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
+      writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: created.root, unchangedFrom: null });
     }
     reindexProject(created.root);
     return {
@@ -27113,7 +27146,7 @@ function importManuscript(options) {
     };
   };
   const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
-  return locked ? withProjectLock(target, run) : run();
+  return locked ? withProjectLock(target, run, { folder: true }) : run();
 }
 var NAME_WORD = "(?:(?:Ma?c|[OD]['’])(?=\\p{Lu}))?\\p{Lu}\\p{Ll}+(?:['’]\\p{Ll}+)?(?:-\\p{Lu}\\p{Ll}+)*";
 var NAME_RUN_PATTERN = new RegExp(`(?<![\\p{L}\\p{N}'’-])${NAME_WORD}(?:\\s+${NAME_WORD})+(?![\\p{L}\\p{N}])`, "gu");
@@ -28196,6 +28229,7 @@ var COMMANDS = [
     summary: ["Rebuild registry tables from markdown files"],
     project: "positional",
     options: WRITE_OPTIONS,
+    writes: true,
     run: (context) => runWrite(context, "reindex", reindexProject, (result) => result.changed.length === 0 ? `Registries already up to date
 ` : `Updated ${result.changed.length} registries
 `)
@@ -28206,6 +28240,7 @@ var COMMANDS = [
     summary: ["Count chapter prose words"],
     project: "positional",
     options: ["write", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.write),
     run(context) {
       const write = isTruthy(context.parsed.options.write);
       if (!write && isTruthy(context.parsed.options["dry-run"])) {
@@ -28385,6 +28420,7 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["log", "date", "weeks", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.log),
     run({ parsed, io, root, overrides }) {
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -28650,6 +28686,7 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["init", "start", "done", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.init) || options.start !== undefined || options.done !== undefined,
     run({ parsed, io, root }) {
       const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -28693,6 +28730,7 @@ var COMMANDS = [
     project: "flag",
     args: 1,
     options: ["id", "list", "restore", "force", ...WRITE_OPTIONS],
+    writes: (options) => !isTruthy(options.list),
     run(context) {
       const { parsed, io, root } = context;
       const name = parsed.positionals[1];
@@ -28769,6 +28807,7 @@ var COMMANDS = [
     summary: ["Show health checks plus actionable repair steps;", "--fix applies the safe repairs first"],
     project: "positional",
     options: ["fix", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.fix),
     run(context) {
       const { parsed, io, cwd, root, overrides } = context;
       const options = { displayPath: displayPath2(parsed), overrides };
@@ -28793,6 +28832,7 @@ var COMMANDS = [
     summary: ["Upgrade a project to the current schema"],
     project: "positional",
     options: WRITE_OPTIONS,
+    writes: true,
     run: (context) => runWrite(context, "migrate", migrateProject, (result) => result.changed.length === 0 ? `Project already uses the current schema
 ` : `Migrated project to current schema: ${result.changed.length} changes
 `)
@@ -28805,6 +28845,7 @@ var COMMANDS = [
     args: Infinity,
     options: [...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
     kinds: ADD_KIND_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -28823,6 +28864,7 @@ var COMMANDS = [
     project: "flag",
     args: Infinity,
     options: ["id", "prose", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -28844,6 +28886,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
     project: "flag",
     args: 2,
     options: WRITE_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
@@ -28863,6 +28906,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
     project: "flag",
     args: 2,
     options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = {
@@ -28887,6 +28931,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
     project: "flag",
     args: 1,
     options: ["at", "title", ...WRITE_OPTIONS],
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
@@ -28904,6 +28949,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
     project: "flag",
     args: 2,
     options: WRITE_OPTIONS,
+    writes: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
@@ -29438,7 +29484,8 @@ Run story --help to list commands.
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
-    return command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
+    const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
+    return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
@@ -29449,6 +29496,10 @@ Run story --help to list commands.
 `);
     return exitCode;
   }
+}
+function writesInPlace(command, options) {
+  const writes = typeof command.writes === "function" ? command.writes(options) : command.writes === true;
+  return writes && !isTruthy(options["dry-run"]);
 }
 function configRoot(cwd, parsed, root) {
   return parsed.positionals[1] === "-" ? path20.resolve(cwd, lastOptionValue(parsed.options.path) ?? ".") : root();

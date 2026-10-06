@@ -5,7 +5,7 @@ import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { computeProgress, formatProgress, historyWeeks, localDate } from "../src/progress.js";
 import { createStoryProject, formatProjectReport, projectProgress, projectReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function progressProject(storyFields = "target-words: 1000\ndeadline: 2026-10-01") {
   const cwd = makeTempDir();
@@ -70,6 +70,27 @@ describe("story progress", () => {
     expect(log).toContain("goal: finish draft one");
     expect(log).toContain("  - date: 2026-08-02\n    words: 250");
     expect(log).toContain("# My log\n\nNotes stay.\n");
+  });
+
+  test("--log keeps a session saved meanwhile, and a log made meanwhile (#547)", () => {
+    const { root } = progressProject();
+    const log = path.join(root, "progress.md");
+    const made = "---\ntype: progress-log\nsessions:\n  - date: 2026-08-31\n    words: 90\n---\n";
+    let spy = whileWriting(log, () => fs.writeFileSync(log, made));
+    try {
+      expect(() => projectProgress(root, { log: true, date: "2026-09-01" })).toThrow("progress.md changed on disk while story was updating it, so it was left as it is");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(log, "utf8")).toBe(made);
+    const saved = made.replace("words: 90", "words: 95");
+    spy = whileWriting(log, () => fs.writeFileSync(log, saved));
+    try {
+      expect(() => projectProgress(root, { log: true, date: "2026-09-01" })).toThrow("progress.md changed on disk");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(log, "utf8")).toBe(saved);
   });
 
   test("--log refuses an unparsable progress.md and a bad --date", () => {

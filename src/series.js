@@ -134,10 +134,10 @@ export function validateSeriesLinks(root, data, errors) {
 // Returns an existing book's story.md with a reciprocal link added, or null
 // when the link is already present.
 // Also gives the existing book the new book's series id when it has none,
-// so both sides of the link agree.
-export function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId) {
+// so both sides of the link agree. `markdown` is the story.md text, when
+// the caller has read it.
+export function withSeriesBacklink(targetRoot, field, linkedRoot, newSeriesId, markdown = readTextFile(path.join(targetRoot, "story.md"))) {
   const storyPath = path.join(targetRoot, "story.md");
-  const markdown = readTextFile(storyPath);
   const { data } = parseFrontmatter(markdown, storyPath);
   // A hand-written scalar link is kept and converted to a list rather than
   // dropped when the new link is added.

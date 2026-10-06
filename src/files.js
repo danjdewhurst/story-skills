@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
-import { EXIT_CODES, projectError, withExitCode } from "./exit-codes.js";
+import { EXIT_CODES, projectError, refusedError, withExitCode } from "./exit-codes.js";
 
 export const MAX_READ_BYTES = 5 * 1024 * 1024;
 
@@ -190,6 +190,7 @@ function invalidUtf8Offset(buffer) {
 // system's, exits as a refused write.
 export function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
+  assertWriteAllowed(filePath);
   try {
     if (planning > 0) {
       planWrite(filePath, options);
@@ -203,9 +204,17 @@ export function writeFile(filePath, contents, options = {}) {
 }
 
 // Deletes a project file, recording it like a write. `force` ignores a file
-// that is already gone, as fs.rmSync does.
+// that is already gone, as fs.rmSync does. With `unchangedFrom`, the delete
+// is refused when the file no longer holds that text (an editor saved it
+// after the command read it), so the save is not lost; `root` names the
+// file in that message by its project path.
 export function removeFile(filePath, options = {}) {
-  const existed = lstatIfExists(path.resolve(filePath)) !== null;
+  const target = path.resolve(filePath);
+  const existed = lstatIfExists(target) !== null;
+  assertWriteAllowed(target);
+  if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is. Run the command again`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
+  }
   if (planning > 0) {
     // As fs.rmSync would: a missing file without force is an error, and a
     // file can be deleted only from a folder this user can write to.
@@ -227,12 +236,37 @@ export function removeFile(filePath, options = {}) {
 // folder a build emptied). Planned, it checks only that the folder's parent
 // is writable, since the files that would empty it are still there.
 export function removeDirectory(directory) {
+  assertWriteAllowed(directory);
   if (planning > 0) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
   }
   record(directory, true, "delete");
+}
+
+// Projects whose lock could not be made (see withProjectLock): a write
+// inside one is refused with the message given, rather than made while
+// another command could be writing too. A command that finds nothing to
+// change still succeeds.
+const refusals = [];
+
+export function refuseWrites(root, message, run) {
+  const refusal = { root: path.resolve(root), message };
+  refusals.push(refusal);
+  try {
+    return run();
+  } finally {
+    refusals.splice(refusals.indexOf(refusal), 1);
+  }
+}
+
+// A planned write changes nothing, so only a real one is refused.
+function assertWriteAllowed(target) {
+  const refusal = planning > 0 ? undefined : refusals.find((entry) => isPathInside(entry.root, path.resolve(target)));
+  if (refusal) {
+    throw refusedError(refusal.message);
+  }
 }
 
 // Every file a write command creates, rewrites, or deletes goes through
@@ -568,6 +602,9 @@ export function makeDirectories(directory) {
       record(planned, false, "mkdir");
     }
     return;
+  }
+  if (missing.length > 0) {
+    assertWriteAllowed(path.join(ancestor, missing[0]));
   }
   let current = ancestor;
   for (const name of missing) {

@@ -65,7 +65,6 @@ import {
   MAX_SCAN_DEPTH,
   requireStoryFile,
   readMarkdown,
-  safeRead,
   asArray,
   CHAPTER_FILENAME_PATTERN,
   relative
@@ -692,7 +691,8 @@ export function projectProgress(root, options = {}) {
     const contents = existing === null
       ? progressLogFile(sessions, unit)
       : replaceFrontmatter(existing.rawMarkdown, { ...existing.data, sessions });
-    writeFile(filePath, contents, { root: project.root });
+    // A session an editor saved meanwhile, or a log made since, is kept.
+    writeFile(filePath, contents, { root: project.root, unchangedFrom: existing?.rawMarkdown ?? null });
     logged = { file: filePath, date: today, words, characterCount: counts.characters ?? null };
     project = scanProject(root);
   }
@@ -817,10 +817,12 @@ export function projectPasses(root, change = {}) {
   const current = asArray(project.story.data["revision-passes"]);
   const next = updatePasses(current, change);
   const notes = addedPassNotes(readPasses({ "revision-passes": current }), readPasses({ "revision-passes": next }));
-  const raw = safeRead(storyPath, project.root);
+  // The passes come from the story.md the scan read, so it is rewritten
+  // only while it still holds that text.
+  const raw = project.story.rawMarkdown;
   const changed = JSON.stringify(next) !== JSON.stringify(current);
   if (changed) {
-    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root });
+    writeFile(storyPath, replaceFrontmatter(raw, { ...parseFrontmatter(raw, storyPath).data, "revision-passes": next }), { root: project.root, unchangedFrom: raw });
   }
   return { passes: readPasses({ "revision-passes": next }), changed, notes };
 }

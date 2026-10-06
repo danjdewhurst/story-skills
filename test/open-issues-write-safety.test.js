@@ -14,7 +14,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { CHMOD_IGNORED, makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, OTHER_LIVE_PID, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
@@ -64,13 +64,12 @@ afterEach(() => {
 describe("project lock (#196)", () => {
   test("a write command refuses while another live command holds the lock, and changes nothing", () => {
     const root = copyExample("harbor-of-second-light");
-    // This test process is alive, so its pid stands in for another command.
-    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\n${os.hostname()}\n`);
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${OTHER_LIVE_PID}\n${os.hostname()}\n`);
     process.env.STORY_LOCK_WAIT_MS = "0";
     const before = snapshot(root);
     const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
     expect(result.code).toBe(4);
-    expect(result.err).toContain(`another story command (process ${process.pid}) is modifying this project; nothing was changed`);
+    expect(result.err).toContain(`another story command (process ${OTHER_LIVE_PID}) is modifying this project; nothing was changed`);
     expect(result.err).toContain(`delete ${LOCK_FILE}`);
     expect(snapshot(root)).toEqual(before);
     // Read-only commands never take the lock.
@@ -87,17 +86,16 @@ describe("project lock (#196)", () => {
     expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
-  test("nested write commands in one process do not wait on themselves, and the lock is released on failure", () => {
+  test("nested locks in one process do not wait on themselves, and the lock is released on failure", () => {
     const root = newProject();
     process.env.STORY_LOCK_WAIT_MS = "0";
-    // add reindexes inside its own lock.
-    createEntity(root, { kind: "character", name: "Ann" });
-    const inner = withProjectLock(root, () => {
+    const inner = withProjectLock(root, () => withProjectLock(root, () => {
       expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(true);
       return createEntity(root, { kind: "character", name: "Bo" });
-    });
+    }));
     expect(inner.id).toBe("bo");
-    expect(() => renameEntity(root, { kind: "character", id: "nobody", name: "X" })).toThrow("does not exist");
+    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+    expect(() => withProjectLock(root, () => renameEntity(root, { kind: "character", id: "nobody", name: "X" }))).toThrow("does not exist");
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
   });
 
@@ -308,6 +306,11 @@ describe("symlinked entity files (#63)", () => {
   });
 });
 
+// story add as the CLI runs it, holding the project lock.
+function addLocked(root, name) {
+  return withProjectLock(root, () => createEntity(root, { kind: "character", name }));
+}
+
 describe("lock edge cases", () => {
   test("a folder that is not a project, or does not exist, runs without a lock", () => {
     const dir = makeTempDir();
@@ -315,14 +318,102 @@ describe("lock edge cases", () => {
     expect(withProjectLock(path.join(dir, "missing"), () => "ran")).toBe("ran");
   });
 
-  test.skipIf(CHMOD_IGNORED)("a project folder the user cannot write to runs without a lock", () => {
+  test("with folder, an existing folder without story.md is locked too", () => {
+    const dir = makeTempDir();
+    expect(withProjectLock(dir, () => fs.existsSync(path.join(dir, LOCK_FILE)), { folder: true })).toBe(true);
+    expect(fs.existsSync(path.join(dir, LOCK_FILE))).toBe(false);
+    expect(withProjectLock(path.join(dir, "missing"), () => "ran", { folder: true })).toBe("ran");
+  });
+
+  test("a lock with this process's own pid was left by an earlier process, and is taken over (#547)", () => {
+    // A container's story command often gets the same pid every run, so a
+    // killed run's lock carries the pid of the next one.
     const root = newProject();
+    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    const result = invoke(root, ["add", "character", "Bo"]);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+  });
+
+  test("a lock that cannot be created refuses the first write, and a run with nothing to write still succeeds (#601)", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
+      if (file === lockPath) {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
+      return open(file, ...rest);
+    });
+    fs.writeFileSync(path.join(root, "..", "draft.md"), "# Chapter 1\n\nText.\n");
+    const runs = {};
+    let before;
+    try {
+      // reindex finds the registries up to date and writes nothing.
+      runs.reindex = invoke(root, ["reindex"]);
+      // add writes a new file, import --force first deletes the chapters,
+      // and migrate first makes a missing folder: each is refused.
+      fs.rmSync(path.join(root, "glossary"), { recursive: true });
+      before = snapshot(root);
+      runs.add = invoke(root, ["add", "character", "Bo"]);
+      runs.import = invoke(path.join(root, ".."), ["import", "draft.md", "--title", "Safety", "--dir", "p", "--force"]);
+      runs.migrate = invoke(root, ["migrate"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(runs.reindex.code).toBe(0);
+    expect(runs.reindex.out).toBe("Registries already up to date\n");
+    for (const name of ["add", "import", "migrate"]) {
+      expect(runs[name].code).toBe(4);
+      expect(runs[name].err).toBe(`Cannot create the project lock ${LOCK_FILE} (permission denied), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again\n`);
+    }
+    expect(snapshot(root)).toEqual(before);
+    expect(fs.existsSync(path.join(root, "glossary"))).toBe(false);
+  });
+
+  test("a lock that cannot be created for a moment, as on Windows just after another command deleted it, is tried again", () => {
+    const root = newProject();
+    const lockPath = path.join(root, LOCK_FILE);
+    const open = fs.openSync;
+    let refusals = 1;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
+      if (file === lockPath && refusals > 0) {
+        refusals -= 1;
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      }
+      return open(file, ...rest);
+    });
+    let result;
+    try {
+      result = invoke(root, ["add", "character", "Bo"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test.skipIf(CHMOD_IGNORED)("a project folder the user cannot write to refuses a write, though its subfolders take one (#601)", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapter, "\nNew words here.\n");
+    const text = fs.readFileSync(chapter, "utf8");
     fs.chmodSync(root, 0o555);
     try {
       expect(withProjectLock(root, () => "ran")).toBe("ran");
+      expect(invoke(root, ["wordcount"]).code).toBe(0);
+      const result = invoke(root, ["wordcount", "--write"]);
+      expect(result.code).toBe(4);
+      expect(result.err).toContain(`Cannot create the project lock ${LOCK_FILE} (permission denied)`);
     } finally {
       fs.chmodSync(root, 0o755);
     }
+    expect(fs.readFileSync(chapter, "utf8")).toBe(text);
   });
 
   test("the command waits for the lock before refusing, and a damaged lock counts as held", () => {
@@ -330,7 +421,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(path.join(root, LOCK_FILE), "garbage\n");
     process.env.STORY_LOCK_WAIT_MS = "60";
     const started = Date.now();
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project; nothing was changed");
+    expect(() => addLocked(root, "Bo")).toThrow("another story command is modifying this project; nothing was changed");
     expect(Date.now() - started).toBeGreaterThanOrEqual(50);
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
   });
@@ -339,7 +430,7 @@ describe("lock edge cases", () => {
     const root = newProject();
     fs.mkdirSync(path.join(root, LOCK_FILE));
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project");
+    expect(() => addLocked(root, "Bo")).toThrow("another story command is modifying this project");
   });
 
   test.skipIf(process.platform === "win32")("a symlinked lock counts as held rather than being followed (#548)", () => {
@@ -350,7 +441,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(outside, `${dead}\n${os.hostname()}\n${new Date().toISOString()}\n`);
     fs.symlinkSync(outside, path.join(root, LOCK_FILE));
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project");
+    expect(() => addLocked(root, "Bo")).toThrow("another story command is modifying this project");
     expect(fs.lstatSync(path.join(root, LOCK_FILE)).isSymbolicLink()).toBe(true);
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
   });
@@ -374,7 +465,7 @@ describe("lock edge cases", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, LOCK_FILE), "1\nsome-other-host\n");
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command (process 1 on some-other-host) is modifying this project");
+    expect(() => addLocked(root, "Bo")).toThrow("another story command (process 1 on some-other-host) is modifying this project");
   });
 
   test("a fresh lock from another machine is left for the user to delete (#349)", () => {
@@ -385,7 +476,7 @@ describe("lock edge cases", () => {
     const written = new Date().toISOString();
     fs.writeFileSync(path.join(root, LOCK_FILE), `${dead}\nsome-other-host\n${written}\n`);
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${dead} on some-other-host) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE}`);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${dead} on some-other-host) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE}`);
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
     expect(fs.readFileSync(path.join(root, LOCK_FILE), "utf8")).toBe(`${dead}\nsome-other-host\n${written}\n`);
   });
@@ -399,7 +490,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(lockPath, `${process.pid}\nsome-other-host\n${written}\n`);
     fs.utimesSync(lockPath, new Date(written), new Date(written));
     process.env.STORY_LOCK_WAIT_MS = "0";
-    createEntity(root, { kind: "character", name: "Bo" });
+    addLocked(root, "Bo");
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
   });
@@ -411,7 +502,7 @@ describe("lock edge cases", () => {
     const written = new Date(Date.now() - FOREIGN_LOCK_STALE_MS - 1000).toISOString();
     fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\nsome-other-host\n${written}\n`);
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${process.pid} on some-other-host) is modifying this project`);
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${process.pid} on some-other-host) is modifying this project`);
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(true);
   });
 
@@ -422,7 +513,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(lockPath, "2147483647\n" + os.hostname() + "\n");
     // Another agent found the same stale lock, removed it, and took its own
     // just before this command took the takeover lock.
-    const live = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    const live = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     const open = fs.openSync;
     const spy = spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
       if (file === guard) {
@@ -432,7 +523,7 @@ describe("lock edge cases", () => {
     });
     process.env.STORY_LOCK_WAIT_MS = "0";
     try {
-      expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow(`another story command (process ${process.pid}) is modifying this project`);
+      expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${OTHER_LIVE_PID}) is modifying this project`);
     } finally {
       spy.mockRestore();
     }
@@ -448,7 +539,7 @@ describe("lock edge cases", () => {
     fs.writeFileSync(lockPath, "2147483647\n" + os.hostname() + "\n");
     fs.writeFileSync(guard, "1\nsome-other-host\n");
     process.env.STORY_LOCK_WAIT_MS = "0";
-    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command (process 2147483647) is modifying this project");
+    expect(() => addLocked(root, "Bo")).toThrow("another story command (process 2147483647) is modifying this project");
     expect(fs.existsSync(lockPath)).toBe(true);
     expect(fs.existsSync(guard)).toBe(true);
   });
@@ -469,7 +560,7 @@ describe("lock edge cases", () => {
     });
     process.env.STORY_LOCK_WAIT_MS = "0";
     try {
-      expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command (process 2147483647) is modifying this project");
+      expect(() => addLocked(root, "Bo")).toThrow("another story command (process 2147483647) is modifying this project");
     } finally {
       spy.mockRestore();
     }
@@ -485,7 +576,7 @@ describe("lock edge cases", () => {
     const old = new Date(Date.now() - 60 * 1000);
     fs.utimesSync(guard, old, old);
     process.env.STORY_LOCK_WAIT_MS = "0";
-    createEntity(root, { kind: "character", name: "Bo" });
+    addLocked(root, "Bo");
     expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(true);
     expect(fs.existsSync(lockPath)).toBe(false);
     expect(fs.existsSync(guard)).toBe(false);
