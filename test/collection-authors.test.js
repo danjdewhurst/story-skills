@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { shunnHtml } from "../src/packaging.js";
-import { buildBook, computeWordCounts, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
+import { parseFrontmatter } from "../src/frontmatter.js";
+import { buildBook, computeWordCounts, createStoryProject, exportManuscript, splitChapter, validateProject } from "../src/story.js";
 import { makeTempDir, messages, readArchiveText, writeMarkdown } from "./helpers.js";
 
 // Collections and anthologies (#473): a chapter's own `author` and the
@@ -170,5 +171,40 @@ describe("collection and anthology authors (#473)", () => {
     const text = build(anthology(), "metadata");
     expect(text).toContain("| Editor(s) | Cara Editor |");
     expect(text).toContain("- [x] Author named");
+  });
+  test("a placeholder story author warns and is left out of builds", () => {
+    const root = anthology();
+    chapter(root, 3, "Lantern", "The lamp was lit.", "\nauthor: \"[TODO: author to supply]\"");
+    expect(messages(validateProject(root).warnings)).toContain("chapters/chapter-03.md author is still a [TODO] placeholder; builds leave it out");
+    expect(build(root, "markdown")).not.toContain("TODO");
+  });
+
+  test("an editor who also wrote a story carries both roles in the EPUB", () => {
+    const root = anthology("editor: Ben Other\n");
+    const text = build(root, "epub");
+    expect(text).toContain(`<dc:creator id="editor-1">Ben Other</dc:creator><meta refines="#editor-1" property="role" scheme="marc:relators">edt</meta><meta refines="#editor-1" property="role" scheme="marc:relators">aut</meta>`);
+    expect(text).not.toContain(`<dc:contributor id="contributor-1">Ben Other`);
+  });
+
+  test("the ink author tag names only authors, never the editor", () => {
+    const text = build(anthology(), "ink");
+    expect(text).not.toContain("Cara Editor");
+    expect(build(anthology("author: Ada Writer\neditor: Cara Editor\n"), "ink")).toContain("# author: Ada Writer");
+  });
+
+  test("an indented review copy keeps the byline unindented", () => {
+    const review = build(anthology("editor: Cara Editor\nbuild-style:\n  - paragraphs: indented\n    drop-caps: true\n"), "html");
+    expect(review).toContain("section > p.byline { text-indent: 0; margin-block-end: 1rem; }");
+    expect(review).toContain("section > h2 + p:not(.byline), section > h2 + p.byline + p, .scene-break + p");
+    expect(review).toContain("section.chapter > h2 + p:not(.byline)::first-letter, section.chapter > h2 + p.byline + p::first-letter");
+  });
+
+  test("splitting a story keeps its author on both halves", () => {
+    const root = anthology();
+    chapter(root, 1, "Low Tide", "The tide went out.\n\n* * *\n\nNell walked home.", "\nauthor: Ben Other");
+    splitChapter(root, { id: "chapter-01", at: "1" });
+    const second = parseFrontmatter(fs.readFileSync(path.join(root, "chapters", "chapter-02.md"), "utf8")).data;
+    expect(second.author).toBe("Ben Other");
+    expect(build(root, "markdown")).toContain("# Low Tide (continued)\n\n*by Ben Other*");
   });
 });
