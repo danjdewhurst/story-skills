@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
+import { idText } from "./continuity.js";
 import { characterLifeline, revivedBy } from "./deaths.js";
 import { err, warn } from "./findings.js";
 import { languagePack } from "./languages/index.js";
@@ -503,7 +504,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
       continue;
     }
     if (character.status !== "deceased") {
-      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
+      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${idText(character.status) || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
     }
   }
 

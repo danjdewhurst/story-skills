@@ -38,7 +38,11 @@ These checks ignore the paths, so they can misread sibling branches:
   `route-too-fast`)
 - `story pacing` runs (consecutive `yes` outcomes, `resolution` hooks in a
   row)
-- `story series` and `story diagram` lifelines
+
+`story series` and `story diagram` lifelines, and the second-death checks,
+read every chapter in one order rather than path by path: the reading order
+of the choices, so a chapter comes after the chapters that lead to it. A
+death on one branch still counts at the end of the book.
 
 A sibling ending dated earlier than the ending numbered before it reports
 `clock-backward`. When the finding only reflects branch order, record it in

@@ -51,14 +51,21 @@ function chapterPosition(chronology, id) {
 }
 
 // True when chapter `later` comes strictly after `earlier` in story time.
-// Two written chapters use the chronology (dates first, then numbers); a
-// planned chapter compares by number, as an undated chapter does, so a change
-// planned for chapter 20 stays out of chapter 5 before chapter 20 exists.
+// Two written chapters use the chronology. A planned chapter takes the place
+// an undated chapter with its number would have (see storyOrder in
+// chronology.js), so a change planned for chapter 20 stays out of chapter 5
+// before chapter 20 exists; in a branching book, where no choice reaches it
+// yet, it compares by number. An id that is neither comes after nothing.
 export function happensAfter(chronology, later, earlier) {
   if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
     return chronology.after(later, earlier);
   }
-  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+  const laterPosition = chapterPosition(chronology, later);
+  const earlierPosition = chapterPosition(chronology, earlier);
+  if (chronology.branching || Number.isNaN(laterPosition) || Number.isNaN(earlierPosition)) {
+    return laterPosition > earlierPosition;
+  }
+  return chronology.compare(later, earlier) > 0;
 }
 
 // Whether chapter `earlier` happens at or before `later` in story time. In a
@@ -71,10 +78,10 @@ export function happensAtOrBefore(chronology, earlier, later) {
   return !happensAfter(chronology, earlier, later);
 }
 
-// A `progressions` list in story order, stable, so entries from the same
-// chapter keep their file order. Entries with no known chapter keep their
-// place relative to each other at the end. Used by `story move chapter`,
-// which can move a chapter past another entry's.
+// A `progressions` list in story order (the chronology's `compare`), stable,
+// so entries from the same chapter keep their file order. Entries with no
+// known chapter keep their place relative to each other at the end. Used by
+// `story move chapter`, which can move a chapter past another entry's.
 export function sortProgressions(list, chronology) {
   const known = [];
   const unknown = [];

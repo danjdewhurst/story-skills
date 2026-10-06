@@ -1,4 +1,5 @@
 import { deathWindow, orderedChronology } from "./chronology.js";
+import { idText } from "./continuity.js";
 import { entityStateAt, happensAfter, progressionEntry } from "./progressions.js";
 
 // When a character is dead or alive, from `died-in`, `revived-in`, `status`,
@@ -8,7 +9,9 @@ import { entityStateAt, happensAfter, progressionEntry } from "./progressions.js
 // the three commands agree on every death and revival.
 
 // A character's usable status progressions (see progressions.js), with their
-// place in the list. Worked out once per character.
+// place in the list. Worked out once per character. Statuses are read as
+// text, and one that is not a single value (which validate reports) as "",
+// so a malformed file cannot stop the checks.
 const STATUS_PROGRESSIONS = new WeakMap();
 
 export function statusProgressions(character) {
@@ -17,7 +20,7 @@ export function statusProgressions(character) {
     STATUS_PROGRESSIONS.set(character, list
       .map((item, index) => ({ index, entry: progressionEntry(item) }))
       .filter(({ entry }) => entry !== null && entry.field === "status")
-      .map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
+      .map(({ index, entry }) => ({ index, from: entry.from, value: idText(entry.value) })));
   }
   return STATUS_PROGRESSIONS.get(character);
 }
@@ -30,7 +33,7 @@ export function statusProgressions(character) {
 // that repeats deceased does not move the death). A record in a chapter that
 // is not written keeps the frontmatter status, as the died-in window does.
 export function progressionStatusAt(character, chapterId, chronology) {
-  let status = String(character.status);
+  let status = idText(character.status);
   let from = "";
   let deadFrom = "";
   if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
@@ -38,7 +41,7 @@ export function progressionStatusAt(character, chapterId, chronology) {
       if (change.field !== "status") {
         continue;
       }
-      const value = String(change.value);
+      const value = idText(change.value);
       if (value === "deceased" && status !== "deceased") {
         deadFrom = change.from;
       }
@@ -65,16 +68,34 @@ export function progressionDeathAt(character, chapterId, chronology) {
 // Where the character's current death by status began at chapter
 // `chapterId`, including in that chapter itself: "" for dead since before
 // the story, a chapter id for a progression death, or null when they are not
-// dead by status (see progressionDeathAt).
+// dead by status (see progressionDeathAt). With died-in, the died-in window
+// covers the first death, and revived-in ends it with the character alive:
+// only the status progressions after revived-in count, read from there, so
+// one to deceased is a second death whatever the frontmatter status says. A
+// revived-in that does not come after died-in (revival-before-death) ends
+// no death, so nothing after it is a second one.
 export function progressionDeathFrom(character, chapterId, chronology) {
-  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
-  if (status !== "deceased" || (character.diedIn && deadFrom === "")) {
+  if (!character.diedIn) {
+    const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
+    return status === "deceased" ? deadFrom : null;
+  }
+  const revived = character.revivedIn;
+  if (revived === "" || !chronology.numbers.has(chapterId) || statusProgressions(character).length === 0 || !happensAfter(chronology, revived, character.diedIn)) {
     return null;
   }
-  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
-    return null;
+  let status = "alive";
+  let deadFrom = "";
+  for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
+    if (change.field !== "status" || !happensAfter(chronology, change.from, revived)) {
+      continue;
+    }
+    const value = idText(change.value);
+    if (value === "deceased" && status !== "deceased") {
+      deadFrom = change.from;
+    }
+    status = value;
   }
-  return deadFrom;
+  return status === "deceased" ? deadFrom : null;
 }
 
 // A character's deaths and revivals across the whole book, as
@@ -84,7 +105,9 @@ export function progressionDeathFrom(character, chapterId, chronology) {
 // of a chapter from their died-in chapter until revived-in, and from the
 // chapter a status progression makes them deceased until one changes it
 // back; `status: deceased` with no died-in is dead before the story, as it
-// is with died-in when a status progression brings them back first. These
+// is with died-in when a status progression brings them back first. After
+// revived-in, a status progression to deceased is a second death. A
+// branching book is read in its reading order (see orderedChronology). These
 // match the cast checks, so the death chapter itself ends dead and the
 // revival chapter ends alive, except that planned `outline` chapters count
 // here. Series and diagram read the end of the book with that death still
@@ -95,11 +118,10 @@ export function progressionDeathFrom(character, chapterId, chronology) {
 // timeline to place a death on, so the frontmatter status alone decides:
 // deceased is dead throughout, with no events.
 export function characterLifeline(character, bookChronology) {
-  // The lifeline reads the whole book in one total order, and compares
-  // chapters by their place in it, so a book dated only in places reads
-  // the same in Bun and Node (see orderedChronology).
+  // The lifeline reads the whole book in one order, and compares chapters
+  // by their place in it (see orderedChronology).
   const chronology = orderedChronology(bookChronology);
-  const status = String(character.status ?? "");
+  const status = idText(character.status);
   const chapters = chronology.order;
   if (chapters.length === 0 || (character.diedIn && !chronology.numbers.has(character.diedIn))) {
     const dead = status === "deceased";
@@ -125,11 +147,15 @@ export function characterLifeline(character, bookChronology) {
     const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
     const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
     // A revival needs a cause: revived-in, or a status progression that set
-    // the status the character now has. A revived-in that does not come
-    // after died-in (revival-before-death) ends no death, so the frontmatter
-    // status after died-in is not a return to life.
-    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
-      continue;
+    // the status the character now has, other than deceased. A revived-in
+    // that does not come after died-in (revival-before-death) ends no death,
+    // so neither the frontmatter status nor a progression to deceased after
+    // died-in is a return to life.
+    if (!now && dead && chapter !== window?.revived) {
+      const current = progressionStatusAt(character, chapter, chronology);
+      if (current.from === "" || current.status === "deceased") {
+        continue;
+      }
     }
     if (now !== dead) {
       events.push(now

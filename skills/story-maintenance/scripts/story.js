@@ -7962,7 +7962,12 @@ function happensAfter(chronology, later, earlier) {
   if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
     return chronology.after(later, earlier);
   }
-  return chapterPosition(chronology, later) > chapterPosition(chronology, earlier);
+  const laterPosition = chapterPosition(chronology, later);
+  const earlierPosition = chapterPosition(chronology, earlier);
+  if (chronology.branching || Number.isNaN(laterPosition) || Number.isNaN(earlierPosition)) {
+    return laterPosition > earlierPosition;
+  }
+  return chronology.compare(later, earlier) > 0;
 }
 function happensAtOrBefore(chronology, earlier, later) {
   if (chronology.numbers.has(later) && chronology.numbers.has(earlier) && chronology.atOrBefore) {
@@ -8077,12 +8082,12 @@ var STATUS_PROGRESSIONS = new WeakMap;
 function statusProgressions(character) {
   if (!STATUS_PROGRESSIONS.has(character)) {
     const list = Array.isArray(character.frontmatter.progressions) ? character.frontmatter.progressions : [];
-    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: String(entry.value) })));
+    STATUS_PROGRESSIONS.set(character, list.map((item, index) => ({ index, entry: progressionEntry(item) })).filter(({ entry }) => entry !== null && entry.field === "status").map(({ index, entry }) => ({ index, from: entry.from, value: idText(entry.value) })));
   }
   return STATUS_PROGRESSIONS.get(character);
 }
 function progressionStatusAt(character, chapterId, chronology) {
-  let status = String(character.status);
+  let status = idText(character.status);
   let from = "";
   let deadFrom = "";
   if (chronology.numbers.has(chapterId) && statusProgressions(character).length > 0) {
@@ -8090,7 +8095,7 @@ function progressionStatusAt(character, chapterId, chronology) {
       if (change.field !== "status") {
         continue;
       }
-      const value = String(change.value);
+      const value = idText(change.value);
       if (value === "deceased" && status !== "deceased") {
         deadFrom = change.from;
       }
@@ -8108,18 +8113,31 @@ function progressionDeathAt(character, chapterId, chronology) {
   return { from };
 }
 function progressionDeathFrom(character, chapterId, chronology) {
-  const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
-  if (status !== "deceased" || character.diedIn && deadFrom === "") {
+  if (!character.diedIn) {
+    const { status, deadFrom } = progressionStatusAt(character, chapterId, chronology);
+    return status === "deceased" ? deadFrom : null;
+  }
+  const revived = character.revivedIn;
+  if (revived === "" || !chronology.numbers.has(chapterId) || statusProgressions(character).length === 0 || !happensAfter(chronology, revived, character.diedIn)) {
     return null;
   }
-  if (character.diedIn && (character.revivedIn === "" || !happensAfter(chronology, deadFrom, character.revivedIn))) {
-    return null;
+  let status = "alive";
+  let deadFrom = "";
+  for (const change of entityStateAt(character.frontmatter, chapterId, chronology).changes) {
+    if (change.field !== "status" || !happensAfter(chronology, change.from, revived)) {
+      continue;
+    }
+    const value = idText(change.value);
+    if (value === "deceased" && status !== "deceased") {
+      deadFrom = change.from;
+    }
+    status = value;
   }
-  return deadFrom;
+  return status === "deceased" ? deadFrom : null;
 }
 function characterLifeline(character, bookChronology) {
   const chronology = orderedChronology(bookChronology);
-  const status = String(character.status ?? "");
+  const status = idText(character.status);
   const chapters = chronology.order;
   if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
     const dead = status === "deceased";
@@ -8137,8 +8155,11 @@ function characterLifeline(character, bookChronology) {
     const byDiedIn = window !== null && (chapter === window.died || window.deadIn(chapter));
     const beforeDeath = leadIn && happensAfter(chronology, window.died, chapter) && progressionStatusAt(character, chapter, chronology).status === "deceased";
     const now = byDiedIn || beforeDeath || progressionDeathFrom(character, chapter, chronology) !== null;
-    if (!now && dead && chapter !== window?.revived && progressionStatusAt(character, chapter, chronology).from === "") {
-      continue;
+    if (!now && dead && chapter !== window?.revived) {
+      const current = progressionStatusAt(character, chapter, chronology);
+      if (current.from === "" || current.status === "deceased") {
+        continue;
+      }
     }
     if (now !== dead) {
       events.push(now ? { type: "death", chapter, source: chapter === window?.died ? "died-in" : "progression" } : { type: "revival", chapter, source: chapter === window?.revived ? "revived-in" : "progression" });
@@ -8653,7 +8674,7 @@ function checkCanonDeaths(book, earlierBooks, errors) {
       continue;
     }
     if (character.status !== "deceased") {
-      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${character.status || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
+      errors.push(err("canon-death-status", `${bookFile(book, character.file)} has status ${idText(character.status) || "unset"}, but ${character.id} is deceased in earlier book ${death.title}; set status: deceased`, bookFile(book, character.file)));
     }
   }
   for (const record of book.project.chapters.concat(book.project.scenes)) {
@@ -14328,7 +14349,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     const deathWritten = !context.chronology.outline.has(character.diedIn);
     const revivalWritten = character.revivedIn !== "" && !context.chronology.outline.has(character.revivedIn);
     if (deathWritten && !revivalWritten && character.status !== "deceased") {
-      errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`, label));
+      errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${idText(character.status) || "unset"}; set status: deceased`, label));
     }
     if (revivalWritten && character.status === "deceased" && !diesAgain(character, context.chronology)) {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
@@ -14353,7 +14374,8 @@ function checkCharacterDeaths(project, context, errors, warnings) {
 }
 function diesAgain(character, chronology) {
   const lifeline = characterLifeline(character, chronology);
-  return lifeline.deadAtEnd && lifeline.events.at(-1)?.source === "progression";
+  const last = lifeline.events.at(-1);
+  return lifeline.deadAtEnd && last?.source === "progression" && !chronology.outline.has(last.chapter);
 }
 function checkStatusAppearances(project, character, chronology, warnings) {
   if (statusProgressions(character).length === 0 && character.status !== "deceased") {
@@ -15564,13 +15586,14 @@ function pathChronology(linear, passages) {
       }
     }
   }
-  const plannedRank = (number) => Math.max(-1, ...ids.filter((id) => numbers.get(id) < number).map((id) => rank.get(id))) + number / (number + 1);
+  const { compare, order } = storyOrder([...rank.keys()], numbers, days);
   return {
     numbers,
     days,
     branching: true,
     after,
-    compare: storyOrder(days, (id) => rank.has(id) ? rank.get(id) : plannedRank(plannedChapterNumber(id))),
+    compare,
+    order,
     atOrBefore: (earlier, later) => earlier === later || after(later, earlier),
     readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
     readAfter: (later, earlier) => numbers.has(later) && numbers.has(earlier) && readAfter(later, earlier),
@@ -15579,54 +15602,80 @@ function pathChronology(linear, passages) {
   };
 }
 function chronologyFrom(numbers, days) {
-  const after = (later, earlier) => {
-    const laterDays = days.get(later);
-    const earlierDays = days.get(earlier);
-    if (laterDays !== undefined && earlierDays !== undefined && laterDays !== earlierDays) {
-      return laterDays > earlierDays;
-    }
-    return numbers.get(later) > numbers.get(earlier);
-  };
+  const reading = [...numbers.keys()].sort((left, right) => numbers.get(left) - numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0));
+  const { compare, order } = storyOrder(reading, numbers, days);
+  const after = (later, earlier) => compare(later, earlier) > 0;
   return {
     numbers,
     days,
     branching: false,
     after,
+    compare,
+    order,
     atOrBefore: (earlier, later) => !after(earlier, later),
-    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later),
-    compare: storyOrder(days, (id) => numbers.has(id) ? numbers.get(id) : plannedChapterNumber(id))
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later)
   };
 }
 function plannedChapterNumber(id) {
   const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+  const number = match ? Number(match[1]) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : Number.NaN;
 }
-function storyOrder(days, position) {
-  const dated = [...days.keys()].sort((left, right) => days.get(left) - days.get(right) || position(left) - position(right) || (left < right ? -1 : left > right ? 1 : 0));
+function storyOrder(reading, numbers, days) {
   const keys = new Map;
+  const latest = [];
   let reached = -Infinity;
-  for (const [index, id] of dated.entries()) {
-    reached = Math.max(reached, position(id));
-    keys.set(id, [reached, 1, index]);
+  reading.forEach((id, index) => {
+    const day = days.get(id) ?? reached;
+    keys.set(id, [day, index, 0, id]);
+    reached = Math.max(reached, day);
+    latest.push(reached);
+  });
+  const byNumber = [...reading].sort((left, right) => numbers.get(left) - numbers.get(right));
+  const lastRead = [];
+  for (const id of byNumber) {
+    lastRead.push(Math.max(lastRead.at(-1) ?? -1, keys.get(id)[1]));
   }
-  const key = (id) => keys.get(id) ?? [position(id), 0, id];
-  return (left, right) => {
+  const plannedKey = (id) => {
+    const number = plannedChapterNumber(id);
+    let below = 0;
+    let above = byNumber.length;
+    while (below < above) {
+      const middle = below + above >> 1;
+      if (numbers.get(byNumber[middle]) < number) {
+        below = middle + 1;
+      } else {
+        above = middle;
+      }
+    }
+    const place = below === 0 ? -1 : lastRead[below - 1];
+    return [place === -1 ? -Infinity : latest[place], place + 0.5, number, id];
+  };
+  const key = (id) => {
+    if (!keys.has(id)) {
+      keys.set(id, plannedKey(id));
+    }
+    return keys.get(id);
+  };
+  const compare = (left, right) => {
     const leftKey = key(left);
     const rightKey = key(right);
-    const index = leftKey.findIndex((value, at) => value !== rightKey[at]);
-    return index === -1 ? 0 : leftKey[index] < rightKey[index] ? -1 : 1;
+    const at = leftKey.findIndex((value, index) => value !== rightKey[index]);
+    return at === -1 ? 0 : leftKey[at] < rightKey[at] ? -1 : 1;
   };
+  return { compare, order: [...reading].sort(compare) };
 }
 var ORDERED = new WeakMap;
 function orderedChronology(chronology) {
-  const base = chronology.linear ?? chronology;
-  if (!ORDERED.has(base)) {
-    const order = [...base.numbers.keys()].sort(base.compare);
-    const place = new Map(order.map((id, index) => [id, index]));
-    const after = (later, earlier) => place.get(later) > place.get(earlier);
-    ORDERED.set(base, { ...base, order, after, atOrBefore: (earlier, later) => !after(earlier, later) });
+  if (!chronology.branching) {
+    return chronology;
   }
-  return ORDERED.get(base);
+  if (!ORDERED.has(chronology)) {
+    const { numbers, days, outline, compare, order } = chronology;
+    const after = (later, earlier) => compare(later, earlier) > 0;
+    ORDERED.set(chronology, { numbers, days, outline, branching: false, compare, order, after, atOrBefore: (earlier, later) => !after(earlier, later) });
+  }
+  return ORDERED.get(chronology);
 }
 function knowledgeAudience(chronology, learnedIn, atChapterId) {
   if (learnedIn === "") {

@@ -2,11 +2,12 @@ import { parseStoryDate } from "./continuity.js";
 import { branchGraph } from "./scan.js";
 
 // Story-time order of chapters, shared by the death, knowledge, and state
-// checks. Two chapters that are both dated compare by date, so a 2034
+// checks. A chapter's date is its own `date`, else the earliest dated scene
+// in it. Two chapters that are both dated compare by date, so a 2034
 // prologue read first comes after a 2024 chapter 3, and a dual-timeline book
-// compares its 1990 and 2020 strands correctly. Otherwise, or on the same
-// day, they compare by chapter number (reading order). A chapter's date is
-// its own `date`, else the earliest dated scene in it.
+// compares its 1990 and 2020 strands correctly. An undated chapter happens
+// after every chapter read before it, and on the same day chapters compare
+// by chapter number (reading order); see storyOrder.
 export function chapterChronology(project) {
   const numbers = new Map(project.chapters.map((chapter) => [chapter.id, chapter.number]));
   const days = new Map();
@@ -43,8 +44,9 @@ export function chapterChronology(project) {
 // the choices. Two chapters in the same loop, each reaching the other,
 // compare as a linear book does, by date then number. A chapter no path
 // reaches compares with everything by date then number, as before the
-// choices were written. `linear` keeps the number-order chronology for the
-// whole-book reads (series and diagram lifelines, sorting progressions).
+// choices were written. `compare` is the total order for sorting, by story
+// date and then the reading rank below, and `linear` keeps the number-order
+// chronology for checking and rewriting progressions lists.
 function pathChronology(linear, passages) {
   const { numbers, days } = linear;
   const links = new Map(passages.map((passage) => [passage.chapter.id, passage.links.map((link) => link.to)]));
@@ -111,7 +113,7 @@ function pathChronology(linear, passages) {
     const order = pathOrder(later, earlier);
     return order === null ? numbers.get(later) > numbers.get(earlier) : order === 1;
   };
-  // A total reading order for sorting (`compare` merges dates into it): a
+  // A total reading order for sorting (`compare` adds dates to it): a
   // topological order of the choices from the first chapter, taking the
   // lowest-numbered ready chapter first, and inside a loop (or for chapters
   // no path reaches) the lowest-numbered chapter left.
@@ -135,17 +137,14 @@ function pathChronology(linear, passages) {
       }
     }
   }
-  // A planned chapter, which no choice reaches yet, sorts just after the
-  // last-ranked written chapter numbered below it: N / (N + 1) is at least
-  // 0.5 and below 1, so planned chapters that share that place keep their
-  // number order.
-  const plannedRank = (number) => Math.max(-1, ...ids.filter((id) => numbers.get(id) < number).map((id) => rank.get(id))) + number / (number + 1);
+  const { compare, order } = storyOrder([...rank.keys()], numbers, days);
   return {
     numbers,
     days,
     branching: true,
     after,
-    compare: storyOrder(days, (id) => (rank.has(id) ? rank.get(id) : plannedRank(plannedChapterNumber(id)))),
+    compare,
+    order,
     atOrBefore: (earlier, later) => earlier === later || after(later, earlier),
     readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
     // `later` is read strictly after `earlier` on some path.
@@ -158,86 +157,116 @@ function pathChronology(linear, passages) {
 }
 
 // The story-time order over chapter numbers and days, as { numbers, days,
-// after, compare }. `after(later, earlier)` is true when chapter `later`
-// happens strictly after chapter `earlier`; `compare` sorts by the total
-// order storyOrder derives from it.
+// after, compare, order }. `compare` is the total order storyOrder builds,
+// `after(later, earlier)` is true when chapter `later` comes strictly after
+// chapter `earlier` in it, and `order` lists the chapters in it.
 export function chronologyFrom(numbers, days) {
-  const after = (later, earlier) => {
-    const laterDays = days.get(later);
-    const earlierDays = days.get(earlier);
-    if (laterDays !== undefined && earlierDays !== undefined && laterDays !== earlierDays) {
-      return laterDays > earlierDays;
-    }
-    return numbers.get(later) > numbers.get(earlier);
-  };
+  const reading = [...numbers.keys()].sort((left, right) => numbers.get(left) - numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0));
+  const { compare, order } = storyOrder(reading, numbers, days);
+  const after = (later, earlier) => compare(later, earlier) > 0;
   return {
     numbers,
     days,
     branching: false,
     after,
+    compare,
+    order,
     // `earlier` happens at or before `later` in story time.
     atOrBefore: (earlier, later) => !after(earlier, later),
     // `earlier` is read at or before `later`: by chapter number.
-    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later),
-    compare: storyOrder(days, (id) => (numbers.has(id) ? numbers.get(id) : plannedChapterNumber(id)))
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later)
   };
 }
 
 // The number in a planned chapter id (`chapter-NN`, for a chapter not
-// written yet), or NaN for any other id.
+// written yet), or NaN for any other id, or one too long to be a number.
 export function plannedChapterNumber(id) {
   const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+  const number = match ? Number(match[1]) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : Number.NaN;
 }
 
-// A total story order for sorting chapter ids, as a compare function that
-// gives -1, 0, or 1. `after` alone cannot sort a book with only some
-// chapters dated: with chapter 3 dated a day after chapter 5 and chapter 4
-// undated, 4 comes after 3 and 5 after 4 by number, yet 3 comes after 5 by
-// date, and Array.prototype.sort orders such a cycle differently in Bun and
-// Node. This order keeps the dated chapters in date order and the others in
-// `position` order (chapter number, or a branching book's reading rank),
-// and merges the two lists: the next chapter is the earliest dated chapter
-// left when its position comes before the next undated chapter's, else that
-// undated chapter. Where `after` is transitive, this is the same order. An
-// id with no chapter (a planned `chapter-NN`) sorts as an undated chapter at
-// `position(id)`; callers leave out ids with no position.
-function storyOrder(days, position) {
-  const dated = [...days.keys()].sort((left, right) => days.get(left) - days.get(right) || position(left) - position(right) || (left < right ? -1 : left > right ? 1 : 0));
-  // The merge puts a dated chapter after every undated chapter at or before
-  // the furthest position it or an earlier-dated chapter has, and before
-  // the rest.
+// The total story order over the written chapters in `reading`, listed in
+// reading order, and planned `chapter-NN` ids, as `compare` (-1, 0, or 1)
+// and `order`, the written chapters in it. Each chapter's story date is its
+// own date, else the latest date among the chapters read before it (before
+// every date when there is none), and chapters compare by story date, then
+// by their place in `reading`. So an undated chapter happens after every
+// chapter read before it, and a flashback dated before an earlier chapter
+// comes before the undated chapters read since then too. Two chapters
+// compare as the plain rule says (by date when both are dated, else by
+// number), except where that rule goes in a circle: with chapter 2 dated a
+// day after chapter 5 and chapters 3 and 4 undated, 3 comes after 2 and 5
+// after 4 by number, but 2 after 5 by date. Array.prototype.sort orders such
+// a circle differently in Bun and Node; here 5 comes before 2, 3, and 4.
+// A planned chapter is placed as an undated one read just after the
+// last-read written chapter numbered below it; planned chapters sharing a
+// place go by number. Callers leave out ids that are neither.
+function storyOrder(reading, numbers, days) {
   const keys = new Map();
+  // latest[i]: the latest date among the first i + 1 chapters read.
+  const latest = [];
   let reached = -Infinity;
-  for (const [index, id] of dated.entries()) {
-    reached = Math.max(reached, position(id));
-    keys.set(id, [reached, 1, index]);
+  reading.forEach((id, index) => {
+    const day = days.get(id) ?? reached;
+    keys.set(id, [day, index, 0, id]);
+    reached = Math.max(reached, day);
+    latest.push(reached);
+  });
+  // The written chapters by number, each with the last place in `reading`
+  // among them and those numbered below, for placing planned chapters.
+  const byNumber = [...reading].sort((left, right) => numbers.get(left) - numbers.get(right));
+  const lastRead = [];
+  for (const id of byNumber) {
+    lastRead.push(Math.max(lastRead.at(-1) ?? -1, keys.get(id)[1]));
   }
-  const key = (id) => keys.get(id) ?? [position(id), 0, id];
-  return (left, right) => {
+  const plannedKey = (id) => {
+    const number = plannedChapterNumber(id);
+    let below = 0;
+    let above = byNumber.length;
+    while (below < above) {
+      const middle = (below + above) >> 1;
+      if (numbers.get(byNumber[middle]) < number) {
+        below = middle + 1;
+      } else {
+        above = middle;
+      }
+    }
+    const place = below === 0 ? -1 : lastRead[below - 1];
+    return [place === -1 ? -Infinity : latest[place], place + 0.5, number, id];
+  };
+  const key = (id) => {
+    if (!keys.has(id)) {
+      keys.set(id, plannedKey(id));
+    }
+    return keys.get(id);
+  };
+  const compare = (left, right) => {
     const leftKey = key(left);
     const rightKey = key(right);
-    const index = leftKey.findIndex((value, at) => value !== rightKey[at]);
-    return index === -1 ? 0 : leftKey[index] < rightKey[index] ? -1 : 1;
+    const at = leftKey.findIndex((value, index) => value !== rightKey[index]);
+    return at === -1 ? 0 : leftKey[at] < rightKey[at] ? -1 : 1;
   };
+  return { compare, order: [...reading].sort(compare) };
 }
 
 // The chronology a whole-book read walks (the series and diagram
-// lifelines): chapters in the total order `compare` gives, as `order`, with
-// `after` comparing places in that order, so the walk and every comparison
-// in it agree. A branching book is read in its number-order chronology.
-// Where the book's own `after` is transitive, the two agree on every pair.
+// lifelines, and the second-death checks that read them): every chapter in
+// one order, `order`, with `after` comparing places in it. A linear book's
+// chronology already is one. A branching book is read in its `compare`
+// order, by story date and then reading rank, rather than path by path.
 const ORDERED = new WeakMap();
 
 export function orderedChronology(chronology) {
-  const base = chronology.linear ?? chronology;
-  if (!ORDERED.has(base)) {
-    const order = [...base.numbers.keys()].sort(base.compare);
-    const place = new Map(order.map((id, index) => [id, index]));
-    const after = (later, earlier) => place.get(later) > place.get(earlier);
-    ORDERED.set(base, { ...base, order, after, atOrBefore: (earlier, later) => !after(earlier, later) });
+  if (!chronology.branching) {
+    return chronology;
   }
-  return ORDERED.get(base);
+  if (!ORDERED.has(chronology)) {
+    const { numbers, days, outline, compare, order } = chronology;
+    const after = (later, earlier) => compare(later, earlier) > 0;
+    ORDERED.set(chronology, { numbers, days, outline, branching: false, compare, order, after, atOrBefore: (earlier, later) => !after(earlier, later) });
+  }
+  return ORDERED.get(chronology);
 }
 
 // How a knowledge-state fact stands at `atChapterId`.

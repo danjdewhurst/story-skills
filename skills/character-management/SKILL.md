@@ -95,7 +95,7 @@ Variants:
 - **Planned death:** set `died-in` to an outline chapter and keep `status: alive`; set `status: deceased` when that chapter is drafted
 - **Dead narrator (ghost, posthumous POV):** keep them as `pov` and also list them in `mentions`; that is not a posthumous appearance
 - **Resurrection:** add `revived-in: chapter-NN`; casts from that chapter on are allowed again, and once it is drafted set `status: alive`. If a progression made them `deceased`, add a `status` progression from the revival chapter too
-- **Second death after a resurrection:** keep `died-in` and `revived-in` on the first death and revival, and add a `status` progression to `deceased` from the chapter where they die again. `died-in` holds only one death. `status: deceased` is then correct
+- **Second death after a resurrection:** keep `died-in` and `revived-in` on the first death and revival, and add a `status` progression to `deceased` from the chapter where they die again. `died-in` holds only one death, and `revived-in` already brings them back, so no progression to `alive` is needed. Once that chapter is drafted, `status: deceased` is correct; while it is an outline, keep `status: alive`
 - **Non-linear books:** give chapters a `date` so deaths compare by story time, and give a dual-timeline book's chapters a `strand` so each timeline keeps its own clock and its own route check
 - Drop the character's `character-state` entry in `continuity/state.md` once the death is drafted and at or before `current-chapter`
 
