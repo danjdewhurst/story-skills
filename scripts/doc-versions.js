@@ -2,14 +2,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 // Version examples in the docs that name the current release: `--version`
-// output lines, pinned npm and GitHub-tag installs, the STORY_REF sample, and
+// output lines, pinned npm and GitHub-tag installs, the STORY_VERSION sample, and
 // the `git checkout` tip. Other version mentions, such as history ("newer than
 // 0.8.2") or git refs in examples, are not matched and never change.
 const EXAMPLE_PATTERNS = [
   /^()(\d+\.\d+\.\d+)$/gm,
   /(story-skills@)(\d+\.\d+\.\d+)/g,
   /(story-skills#v)(\d+\.\d+\.\d+)/g,
-  /(STORY_REF:\s*"v)(\d+\.\d+\.\d+)/g,
+  /(STORY_VERSION:\s*")(\d+\.\d+\.\d+)/g,
   /(git checkout v)(\d+\.\d+\.\d+)/g
 ];
 

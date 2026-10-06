@@ -7,11 +7,9 @@
 #
 # If your story project lives in a subdirectory, change STORY_DIR.
 #
-# The Story CLI runs straight from GitHub, pinned to the STORY_REF tag below;
-# bump STORY_REF when you adopt a newer story-skills release. To use the
-# story-skills package from npm instead, replace each
-# github:danjdewhurst/story-skills#... --package value with
-# story-skills@<version>.
+# The Story CLI is installed once per job from npm, pinned to the
+# STORY_VERSION release below; bump STORY_VERSION when you adopt a newer
+# story-skills release. Set STORY_PACKAGE to install from a git ref instead.
 #
 # Actions are pinned to commit SHAs with their moving tags in comments, so a
 # compromised tag cannot silently change what this workflow runs. Dependabot
@@ -29,7 +27,11 @@ permissions:
 
 env:
   STORY_DIR: "."
-  STORY_REF: "v0.21.0"
+  STORY_VERSION: "0.21.0"
+  # To run the CLI from GitHub instead of npm (an unreleased fix, a fork),
+  # uncomment STORY_PACKAGE and point it at a tag, branch, or commit; it
+  # replaces story-skills@$STORY_VERSION in the install step.
+  # STORY_PACKAGE: "github:danjdewhurst/story-skills#main"
 
 jobs:
   story-checks:
@@ -46,11 +48,17 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install the Story CLI
+        working-directory: ${{ runner.temp }}
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/story-cli" "${STORY_PACKAGE:-story-skills@$STORY_VERSION}"
+          echo "$RUNNER_TEMP/story-cli/bin" >> "$GITHUB_PATH"
+
       # story check runs validate, links, and continuity over one scan and
       # reports every finding before failing. Add --strict to fail on
       # warnings too.
       - name: Check structure, references, and continuity
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story check "$STORY_DIR"
+        run: story check "$STORY_DIR"
 
       - name: Report project health
-        run: npx --yes --package "github:danjdewhurst/story-skills#$STORY_REF" story report "$STORY_DIR" --actionable
+        run: story report "$STORY_DIR" --actionable

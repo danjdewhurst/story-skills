@@ -45,7 +45,7 @@ describe("release script", () => {
       fs.writeFileSync(path.join(dir, relativePath), '{\n  "name": "story-skills",\n  "version": "0.5.0"\n}\n', "utf8");
     }
     for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
-      fs.writeFileSync(path.join(dir, "templates", "github", name), 'env:\n  STORY_REF: "v0.5.0"\n', "utf8");
+      fs.writeFileSync(path.join(dir, "templates", "github", name), 'env:\n  STORY_VERSION: "0.5.0"\n', "utf8");
     }
     fs.mkdirSync(path.join(dir, "src"));
     fs.writeFileSync(path.join(dir, "src", "version.js"), '// note\nexport const VERSION = "0.5.0";\n', "utf8");
@@ -67,10 +67,10 @@ describe("release script", () => {
     expect(JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version).toBe("0.6.0");
     expect(fs.readFileSync(path.join(dir, "src", "version.js"), "utf8")).toBe('// note\nexport const VERSION = "0.6.0";\n');
     for (const name of ["story-checks.yml", "draft-next-chapter.yml", "review-copy.yml"]) {
-      expect(fs.readFileSync(path.join(dir, "templates", "github", name), "utf8")).toContain('STORY_REF: "v0.6.0"');
+      expect(fs.readFileSync(path.join(dir, "templates", "github", name), "utf8")).toContain('STORY_VERSION: "0.6.0"');
     }
     fs.writeFileSync(path.join(dir, "templates", "github", "story-checks.yml"), "env: {}\n", "utf8");
-    expect(() => updateVersionFiles(dir, "0.6.1")).toThrow("No STORY_REF");
+    expect(() => updateVersionFiles(dir, "0.6.1")).toThrow("No STORY_VERSION");
   });
 
   test("treats only a missing GitHub release as absent", () => {
@@ -132,7 +132,7 @@ describe("release script", () => {
       "```",
       "npx --yes --package story-skills@0.5.0 story --version",
       "npx --package github:danjdewhurst/story-skills#v0.5.0 story",
-      '  STORY_REF: "v0.5.0"',
+      '  STORY_VERSION: "0.5.0"',
       "run `git checkout v0.5.0` in the clone",
       "Releasing 0.5.0 -> 0.5.1 (v0.5.1)",
       "The html format is newer than Story Skills 0.5.0.",
@@ -147,7 +147,7 @@ describe("release script", () => {
         "```",
         "npx --yes --package story-skills@0.6.0 story --version",
         "npx --package github:danjdewhurst/story-skills#v0.6.0 story",
-        '  STORY_REF: "v0.6.0"',
+        '  STORY_VERSION: "0.6.0"',
         "run `git checkout v0.6.0` in the clone",
         "Releasing 0.6.0 -> 0.6.1 (v0.6.1)",
         "The html format is newer than Story Skills 0.5.0.",

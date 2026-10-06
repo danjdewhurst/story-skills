@@ -18,7 +18,7 @@ Primary paths:
 - `docs/` - user and contributor documentation, indexed by `docs/README.md`: getting started, core concepts, the project format (schema v2) reference, the CLI reference, the skills catalogue, writing workflows, continuity and analysis, series, import/export/builds, automation and CI, and the development guide
 - `assets/` - plugin logo, screenshot, social preview, and the README demo GIF (regenerate the GIF with `vhs assets/demo.tape`)
 - `schemas/story.schema.json` - JSON schema for story project frontmatter; `test:examples` validates every example against it, so update both together
-- `templates/github/` - files users copy into a story repository: GitHub Actions workflows for checks (`story-checks.yml`), scheduled chapter drafting (`draft-next-chapter.yml`), and an HTML review copy on GitHub Pages (`review-copy.yml`), plus the `ISSUE_TEMPLATE/manuscript-note.yml` reader-note form. The release script and `check:metadata` keep `STORY_REF` in all three workflows at the package version
+- `templates/github/` - files users copy into a story repository: GitHub Actions workflows for checks (`story-checks.yml`), scheduled chapter drafting (`draft-next-chapter.yml`), and an HTML review copy on GitHub Pages (`review-copy.yml`), plus the `ISSUE_TEMPLATE/manuscript-note.yml` reader-note form. The release script and `check:metadata` keep `STORY_VERSION` in all three workflows at the package version
 - `.codex-plugin/`, `.claude-plugin/`, `.agents/` - plugin and marketplace metadata
 - `plugins/story-skills` - symlink to the repo root. Codex marketplace entries must point at a child plugin directory, so keep it a symlink rather than a copy.
 
@@ -77,7 +77,7 @@ For published changes, keep version metadata aligned across:
 - `.claude-plugin/plugin.json`
 - `src/version.js` (printed by `story --version`, inlined into the bundled fallback)
 
-Do not bump these by hand. `bun run release <patch|minor|major|X.Y.Z>` bumps all four, plus `STORY_REF` in the templates and the version examples in `README.md` and `docs/` (see `scripts/doc-versions.js`), rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes `main` and the tag, and creates the GitHub release. The tag push runs `.github/workflows/publish.yml`, which publishes to npm through trusted publishing, so no npm login is needed locally. `--dry-run` runs the checks and stops before any change. Marketplace entries should remain unversioned unless the existing release process changes.
+Do not bump these by hand. `bun run release <patch|minor|major|X.Y.Z>` bumps all four, plus `STORY_VERSION` in the templates and the version examples in `README.md` and `docs/` (see `scripts/doc-versions.js`), rebuilds the fallback, runs the CI checks, commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes `main` and the tag, and creates the GitHub release. The tag push runs `.github/workflows/publish.yml`, which publishes to npm through trusted publishing, so no npm login is needed locally. `--dry-run` runs the checks and stops before any change. Marketplace entries should remain unversioned unless the existing release process changes.
 
 ## Generated And Local Artifacts
 

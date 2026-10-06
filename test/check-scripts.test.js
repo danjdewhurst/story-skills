@@ -6,7 +6,7 @@ import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
-import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryRef, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
+import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual } from "../scripts/check-metadata.js";
 import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
 import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
@@ -659,6 +659,53 @@ describe("github workflows", () => {
     expect(draft).toContain("for check in validate links continuity; do");
   });
 
+  test("story templates install the CLI from npm once per job (#402)", () => {
+    const templates = ["templates/github/story-checks.yml", "templates/github/review-copy.yml", "templates/github/draft-next-chapter.yml"];
+    // Every "Install the Story CLI" step body, unindented.
+    const installScripts = (text) =>
+      [...text.matchAll(/- name: Install the Story CLI\n(?:(?! {6}- name:).*\n)*? {8}run: \|\n((?: {10}.*\n)+)/g)].map(([, body]) => body.replace(/^ {10}/gm, ""));
+    // Runs a step with a fake npm that records its arguments.
+    const runInstall = (script, env) => {
+      const bin = makeTempDir("fake-npm-");
+      const log = path.join(bin, "npm.log");
+      fs.writeFileSync(path.join(bin, "npm"), `#!/bin/sh\nprintf '%s\\n' "$@" > "${log}"\n`, { mode: 0o755 });
+      const runnerTemp = makeTempDir("runner-");
+      const githubPath = path.join(runnerTemp, "github-path");
+      const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
+        encoding: "utf8",
+        env: { PATH: `${bin}${path.delimiter}${process.env.PATH}`, RUNNER_TEMP: runnerTemp, GITHUB_PATH: githubPath, ...env }
+      });
+      expect(result.status, result.stderr).toBe(0);
+      return { args: fs.readFileSync(log, "utf8").trim().split("\n"), path: fs.readFileSync(githubPath, "utf8").trim(), runnerTemp };
+    };
+    for (const relativePath of templates) {
+      const text = readRepo(relativePath);
+      expect(/npx --(?:yes|package)/.test(text), relativePath).toBe(false);
+      expect(/^\s*STORY_PACKAGE:/m.test(text), relativePath).toBe(false);
+      const jobs = text.match(/^ {4}runs-on:/gm).length;
+      const scripts = installScripts(text);
+      // review-copy's deploy job runs no story command, so it installs nothing.
+      expect(scripts.length, relativePath).toBe(relativePath.endsWith("review-copy.yml") ? jobs - 1 : jobs);
+      for (const script of scripts) {
+        const npm = runInstall(script, { STORY_VERSION: "1.2.3" });
+        expect(npm.args).toEqual(["install", "--global", "--prefix", `${npm.runnerTemp}/story-cli`, "story-skills@1.2.3"]);
+        expect(npm.path).toBe(`${npm.runnerTemp}/story-cli/bin`);
+        // The documented opt-in installs from a git ref instead.
+        const git = runInstall(script, { STORY_VERSION: "1.2.3", STORY_PACKAGE: "github:danjdewhurst/story-skills#main" });
+        expect(git.args.at(-1)).toBe("github:danjdewhurst/story-skills#main");
+      }
+      // Every step that runs story comes after the job's install step.
+      for (const job of text.split(/\n {2}(?=[a-z][\w-]*:\n {4})/).slice(1)) {
+        const firstStory = job.search(/(?:^\s*(?:run: )?|\$\(|\|\| )story [a-z"$]/m);
+        if (firstStory !== -1) {
+          const install = job.indexOf("- name: Install the Story CLI");
+          expect(install, relativePath).toBeGreaterThan(-1);
+          expect(install, relativePath).toBeLessThan(firstStory);
+        }
+      }
+    }
+  });
+
   test("the review copy template builds html and publishes it with Pages", () => {
     const template = readRepo("templates/github/review-copy.yml");
     expect(template).toContain("story build \"$STORY_DIR\" --format html");
@@ -669,9 +716,9 @@ describe("github workflows", () => {
     expect(note).toContain("ch03-p12");
   });
 
-  test("story templates pin STORY_REF to the package version", () => {
+  test("story templates pin STORY_VERSION to the package version", () => {
     const packageJson = JSON.parse(readRepo("package.json"));
-    const failures = checkTemplateStoryRef([], packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
+    const failures = checkTemplateStoryVersion([], packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
       fs.readFileSync(filePath, "utf8")
     );
     expect(failures).toEqual([]);
@@ -692,12 +739,12 @@ describe("github workflows", () => {
     ]);
   });
 
-  test("checkTemplateStoryRef flags missing and stale refs", () => {
-    const readFile = (filePath) => (filePath.endsWith("story-checks.yml") ? 'STORY_REF: "v9.9.9"\n' : "no ref here\n");
-    expect(checkTemplateStoryRef([], "0.5.0", "/templates", readFile)).toEqual([
-      "templates/github/story-checks.yml STORY_REF mismatch: expected v0.5.0, got v9.9.9",
-      "templates/github/draft-next-chapter.yml is missing STORY_REF",
-      "templates/github/review-copy.yml is missing STORY_REF"
+  test("checkTemplateStoryVersion flags missing and stale refs", () => {
+    const readFile = (filePath) => (filePath.endsWith("story-checks.yml") ? 'STORY_VERSION: "9.9.9"\n' : "no ref here\n");
+    expect(checkTemplateStoryVersion([], "0.5.0", "/templates", readFile)).toEqual([
+      "templates/github/story-checks.yml STORY_VERSION mismatch: expected 0.5.0, got 9.9.9",
+      "templates/github/draft-next-chapter.yml is missing STORY_VERSION",
+      "templates/github/review-copy.yml is missing STORY_VERSION"
     ]);
   });
 
