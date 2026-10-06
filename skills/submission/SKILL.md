@@ -101,6 +101,11 @@ Then check what the CLI cannot:
    `story wordcount .`'s character total, and `story validate .` checks
    `target-characters` against per-form character ranges where a source
    sets one. Never pad or cut to hit a number without the user's direction.
+   When the count is well outside the range and the user wants to change
+   it, hand the book to `revision-continuity`'s length pass
+   ([`../revision-continuity/references/pass-checklists.md#length-pass`](../revision-continuity/references/pass-checklists.md#length-pass)),
+   which budgets the cut or expansion by chapter and arc instead of
+   trimming every chapter evenly.
 5. No `[TODO` markers remain in chapter prose. `story validate` warns about
    each chapter that still has one.
 6. Open questions and planted promises are resolved, or deliberately left

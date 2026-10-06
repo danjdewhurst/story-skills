@@ -1461,7 +1461,7 @@ story prose .
 story report .
 ```
 
-It then checks what the CLI cannot. There must be no validate, links, or continuity errors, and no avoided spellings. Every chapter must be at `revised`, `final`, or `complete`. No `[TODO` markers may remain in the prose. Every open question and planted promise must be resolved or deliberately left for a sequel. The word count must fall inside the range for the category in its [word-count norms](../skills/submission/references/word-count-norms.md), which the skill states as rough conventions for you to confirm. The verdict is `ready`, `ready-with-caveats`, or `not-ready`. Blockers go to `revision-continuity`.
+It then checks what the CLI cannot. There must be no validate, links, or continuity errors, and no avoided spellings. Every chapter must be at `revised`, `final`, or `complete`. No `[TODO` markers may remain in the prose. Every open question and planted promise must be resolved or deliberately left for a sequel. The word count must fall inside the range for the category in its [word-count norms](../skills/submission/references/word-count-norms.md), which the skill states as rough conventions for you to confirm. If you decide to cut or expand to fit, it hands the book to `revision-continuity`'s [length pass](../skills/revision-continuity/references/pass-checklists.md#length-pass). The verdict is `ready`, `ready-with-caveats`, or `not-ready`. Blockers go to `revision-continuity`.
 
 ### 2. Draft the package
 
