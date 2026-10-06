@@ -950,7 +950,7 @@ A chapter listed as a sample is part of the profile, so it is not compared with 
 
 `story prose` then builds a profile from the samples. It covers sentence length and spread, paragraph length, the share of words in dialogue, filter-word and adverb rates, and the 20 content words you use most. The report prints the profile above the chapters. A chapter that drifts too far from it, either way, warns: `chapters/chapter-07.md sentences average 14.2 words, longer than your samples' 9.8 (tolerance 30%) [prose-baseline-sentences]`. With samples, your own filter-word and adverb rates replace the fixed limits.
 
-The profile needs 2,000 words of sample narration. The tolerances are fixed and listed in [`prose`](cli-reference.md#comparing-with-your-own-prose), so the same samples and chapter always give the same result. A drift is a prompt to reread, not a verdict: a chase should run shorter than the book's average, and a quiet chapter longer. `--baseline false` turns the comparison off for a run.
+The profile needs 2,000 words of sample narration. The tolerances are fixed and listed in [`prose`](cli-reference.md#comparing-with-your-own-prose), so the same samples and chapter always give the same result. A drift is a prompt to reread, not a verdict: a chase should run shorter than the book's average, and a quiet chapter longer. `--baseline=false` turns the comparison off for a run.
 
 Prose findings are warnings. `story prose` exits 0 on any readable project, so you can run it freely, unless a `severity` entry in `story.md` promotes a prose warning, such as `prose-avoided-spelling`, to an error. The word lists are English; a book in another language skips the checks that need them (see [Books not in English](#books-not-in-english)).
 

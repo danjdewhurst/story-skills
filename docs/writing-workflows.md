@@ -1642,7 +1642,7 @@ Using the [metadata checklist](../skills/publishing/references/metadata-checklis
 The copyright page is a matter page ordered first, filled from the [copyright page template](../skills/publishing/references/copyright-page.md) with `heading: false`:
 
 ```shell
-story add matter "Copyright" --order 0 --heading false
+story add matter "Copyright" --order 0 --heading=false
 ```
 
 Without it, every build except Shunn generates a minimal copyright page from `copyright`. Quoted pages get their permission fields, as in [Editorial review](#editorial-review). The skill rebuilds the metadata sheet until the checklist is clean.

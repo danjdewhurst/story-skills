@@ -204,7 +204,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
+- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, so `story add chapter --dry-run No Way Back` previews a chapter titled `No Way Back` and writes nothing. A bare `true` or `false` there is refused rather than read as an argument (`--heading false is ambiguous: write --heading=false to set the flag, or put false after -- to keep it as an argument`).
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -301,7 +301,7 @@ Every result has the same envelope:
 
 `report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `doctor --fix` adds `data.fix` (`dryRun`, `repairs` with each repair's `command`, the finding `codes` that called for it, and its `changes`, `stopped`, and every change in `changes`), lists the files it wrote in `writes`, and reports the diagnosis made after its repairs; its `ok` is `false` while a check still reports an error. `report --json` always includes `actions`.
 
-A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic, coded `usage-error`, `unusable-project`, `write-refused`, or `command-failed` to match the exit code. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
+A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic, coded `usage-error`, `unusable-project`, `write-refused`, or `command-failed` to match the exit code. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json=false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
 
 ```shell
 story continuity examples/the-unraveled-thread --json
@@ -1393,7 +1393,7 @@ The report prints the profile, and each chapter's paragraph length, dialogue sha
 
 With a baseline, the fixed `--max-filter-words` and `--max-adverbs` warnings are off: your own rate is the measure. Said-bookisms, uniform sentences, spellings, and similar names are checked as before. The samples need at least 2,000 words of narration. With fewer, `prose` warns `prose-baseline-small` and keeps the fixed limits. A sample entry that names nothing warns `style-sample-missing`, one that cannot be read (not UTF-8, say) warns `style-sample-unreadable`, and the rest are used. Signature words leave out the names in this project's bible, but not names from another book's cast.
 
-The baseline is on whenever `samples` lists something. `--baseline false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`, with `chapters[].sample: true` on a chapter that is itself a sample.
+The baseline is on whenever `samples` lists something. `--baseline=false` (or `baseline: false` in `cli-defaults`) turns it off for a run, and `--baseline` with no samples is a usage error. A drift is a prompt to reread the chapter, not a rule: a fight scene should run shorter than the book's average. `--json` adds the profile as `data.baseline` (or `null`) and each chapter's figures as `chapters[].baseline`, with `chapters[].sample: true` on a chapter that is itself a sample.
 
 `story prose -` lints a passage from stdin instead of the chapters, with the style sheet, samples, and character names of the project given by `--path` or the current directory (and the default rules outside a project). The passage is reported as `stdin`, and similar character names, a bible finding, are left out. A whole chapter file can be piped: its frontmatter is skipped and only its prose (the text under `## Chapter Text`) is linted, as for a chapter in the project. A chapter or scene file in the project that fails to parse does not fail a passage check, since the passage stands in for them; a broken style sheet or character file still does.
 
@@ -2312,7 +2312,7 @@ Options by kind:
 | `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` when `--planted` names an existing chapter, otherwise `planned`; `red-herring` written only when set |
 | `term` | `--category`, `--alias` (`aliases`) | `term` |
 | `research` | `--status`, `--source` (`sources`), `--used-in` (`used-in`), `--accuracy`, `--confidence`, `--method`, `--risk` (`risk`) | `open`; the other four fields written only when given |
-| `matter` | `--placement`, `--order`, `--heading` | `front`, one more than the highest order in that placement, `heading: true`; `--heading false` writes `heading: false` for a dedication or epigraph |
+| `matter` | `--placement`, `--order`, `--heading` | `front`, one more than the highest order in that placement, `heading: true`; `--heading=false` writes `heading: false` for a dedication or epigraph |
 
 `add` checks enum values before writing anything:
 
@@ -3405,7 +3405,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--acts` | `<a,b>` | `add arc` | Repeatable; alias `--act` |
 | `--placement` | `<front\|back>` | `add matter` | |
 | `--order` | `<n>` | `add matter` | |
-| `--heading` | | `add matter` | Boolean, default true; `--heading false` for a dedication or epigraph |
+| `--heading` | | `add matter` | Boolean, default true; `--heading=false` for a dedication or epigraph |
 | `--source` | `<text>` | `add research` | Repeatable, kept whole; alias `--sources` |
 | `--used-in` | `<chapter-id>` | `add research` | Repeatable |
 | `--accuracy` | `<level>` | `add research` | `must-be-accurate`, `blended`, `invented` |

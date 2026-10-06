@@ -148,7 +148,7 @@ Rescan every line you change.
    file for an epigraph, created without a printed page title:
 
 ```shell
-story add matter "Epigraph" --heading false
+story add matter "Epigraph" --heading=false
 ```
 
 2. Keep line breaks through every build: end each line of a stanza,

@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Changed
+
+- A boolean flag takes a value only as `--flag=value`, so the next word is never read as its value: `story add chapter --dry-run No Way Back` now previews a chapter titled "No Way Back" instead of writing one titled "Way Back". A bare `true` or `false` after a flag is refused (`--heading false is ambiguous: write --heading=false ...`), so write `--heading=false`, `--baseline=false`, or `--json=false` instead. ([#549](https://github.com/danjdewhurst/story-skills/issues/549))
+
 ### Fixed
 
 - A write that finds something already at its temporary file's name now says so in plain words (`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file (.chapter-01.md.story-<random>.tmp, in the same folder), so it was left as it is. Run the command again`) instead of ending in `EEXIST`. `story validate` now also reports a symlink, folder, or other entry that is not a regular file at a temporary file's name (`interrupted-write`), without following a symlink, and says to delete a symlink itself rather than what it points to; before, it reported only regular files there. ([#602](https://github.com/danjdewhurst/story-skills/issues/602))

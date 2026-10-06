@@ -78,7 +78,7 @@ market; do not assert it from memory.
 ## Matter-file fields
 
 Each epigraph or quoted page in `matter/` records its state. Create an
-epigraph with `story add matter "Epigraph" --heading false`, or edit the
+epigraph with `story add matter "Epigraph" --heading=false`, or edit the
 scaffolded `heading:` key; never add a second `heading:` line.
 
 ```yaml

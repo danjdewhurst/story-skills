@@ -360,7 +360,7 @@ heading: true
 | `title` | Yes | Text | The page title, used as its heading and in the EPUB table of contents. |
 | `placement` | Yes | `front` or `back` | Before or after the chapters. `story add matter` defaults to `front`; `--placement` sets it. |
 | `order` | No | Integer, 0 or more | Position within its placement. `story add matter` uses one more than the highest `order` already in that placement; `--order` sets it. Ties sort by file name. |
-| `heading` | No | `true` or `false` | Whether the page shows its title as a heading. Defaults to `true`. Set `false` for a dedication or epigraph, with `story add matter "Dedication" --heading false` or by editing the scaffolded `heading:` line. |
+| `heading` | No | `true` or `false` | Whether the page shows its title as a heading. Defaults to `true`. Set `false` for a dedication or epigraph, with `story add matter "Dedication" --heading=false` or by editing the scaffolded `heading:` line. |
 | `permission` | No | `not-needed`, `pending`, `granted`, or `public-domain` | Whether quoted material on the page, such as an epigraph, lyrics, or a poem, is cleared for publication. |
 | `rights-holder` | No | Text | Who granted permission for quoted material. |
 | `credit` | No | Text | The credit line the rights holder asked for. |
@@ -539,7 +539,7 @@ ISBN 9780306406157
 > An ember given is a fire kept. An ember taken is a debt the mountain remembers.
 ```
 
-The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set, in the book's language (`Alle Rechte vorbehalten.` and `Erschienen bei` for `de`; see [Build labels](#build-labels)). The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0 --heading false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
+The page holds the `copyright` line, `All rights reserved.`, then `Published by` the `publisher`, the `isbn`, and the `ai-disclosure` text when each is set, in the book's language (`Alle Rechte vorbehalten.` and `Erschienen bei` for `de`; see [Build labels](#build-labels)). The ISBN is printed as bare digits. For different wording, such as a Creative Commons licence or a disclaimer, write your own page with `story add matter "Copyright" --order 0 --heading=false`; the generated page is then left out. The [`publishing`](../skills/publishing/SKILL.md) skill has a template for it.
 
 ## Export a markdown manuscript
 

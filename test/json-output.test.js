@@ -185,9 +185,9 @@ describe("--json result envelope", () => {
     expect(result.err).toBe("Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]\n");
   });
 
-  test("--json false, --json=off, and options after -- keep the text output", () => {
+  test("--json=false, --json=off, and options after -- keep the text output", () => {
     const root = path.join(examplesRoot, "the-last-ember");
-    for (const argv of [["validate", "--json", "false"], ["validate", "--json=off"], ["validate", "--json", "--json=no"]]) {
+    for (const argv of [["validate", "--json=false"], ["validate", "--json=off"], ["validate", "--json", "--json=no"]]) {
       const result = invoke(root, argv);
       expect(result.code).toBe(0);
       expect(result.out).toBe("");

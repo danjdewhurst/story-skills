@@ -37,7 +37,7 @@ See the `revision-continuity` skill.
 
 `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page.
 
-- Pages live in `matter/` (indexed in `matter/_index.md` by reindex) with `title`, `placement` (`front` or `back`), `order`, and `heading` (pass `--heading false` for a dedication or epigraph, or edit the scaffolded `heading:` key; never add a second one).
+- Pages live in `matter/` (indexed in `matter/_index.md` by reindex) with `title`, `placement` (`front` or `back`), `order`, and `heading` (pass `--heading=false` for a dedication or epigraph, or edit the scaffolded `heading:` key; never add a second one).
 - Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them.
 - Never invent acknowledgments, biographical facts, or copyright details: ask the user for them.
 - Matter pages that quote others' work (an epigraph, song lyrics) may record `permission` (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`, and `credit`; `validate` warns when `permission: pending` remains on a complete story and when `granted` has no `rights-holder`.

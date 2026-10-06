@@ -4,11 +4,11 @@ The copyright page sits on the verso (left-hand page) behind the title
 page in print, and near the front of an ebook. Create it with:
 
 ```shell
-story add matter "Copyright" --order 0 --heading false
+story add matter "Copyright" --order 0 --heading=false
 ```
 
 Give it an `order` lower than every other front page (`0` works unless
-another page already uses it). `--heading false` writes `heading: false`
+another page already uses it). `--heading=false` writes `heading: false`
 (on an existing page, edit its `heading:` key rather than adding a second
 one). Then write the page
 from the template. Without this page, every build except Shunn (markdown,
