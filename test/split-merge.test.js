@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
+import { writeFile } from "../src/files.js";
+import { restructureWrites } from "../src/mutate.js";
 import { chapterProse, wordCount } from "../src/markdown.js";
 import {
   checkProjectContinuity,
@@ -229,14 +231,65 @@ describe("story split", () => {
     expect(runCli(["merge", "chapter-04", "chapter-05"], merged)).toBe(0);
     expect(merged.output()).toMatch(/^Merged chapter chapter-05 into chapter-04: .*chapter-04\.md\n$/);
 
-    // A scene file whose frontmatter names another chapter stays put when
-    // its chapter is renumbered, so the scene the split moves finds it.
+    // A scene file whose frontmatter names another chapter would stay put
+    // when its chapter is renumbered, so the scene the split moves would
+    // find it part way: it is refused first.
     const stray = book();
     const crossing = path.join(stray, "scenes", "chapter-03-scene-01.md");
     fs.writeFileSync(crossing, read(stray, "scenes", "chapter-03-scene-01.md").replace("chapter: chapter-03", "chapter: chapter-09"), "utf8");
+    const before = snapshot(stray);
     const failed = memoryIo(stray);
     expect(runCli(["split", "chapter-02", "--at", "1"], failed)).toBe(4);
-    expect(failed.error()).toContain("chapter-03-scene-01 already exists: move it first. Some files were already changed, so a rerun cannot finish the job");
+    expect(failed.error()).toContain("scenes/chapter-03-scene-01.md is scene 1 of chapter-09 by its frontmatter but not by its file name");
+    expect(snapshot(stray)).toEqual(before);
+  });
+
+  test("a step that fails after another wrote says a rerun cannot finish the job", () => {
+    const root = book();
+    const file = path.join(root, "notes.md");
+    const fail = (wrote) => () => {
+      if (wrote) {
+        writeFile(file, "partial\n", { root });
+      }
+      throw Object.assign(new Error("disk full"), { hint: "run it again" });
+    };
+    expect(() => restructureWrites(root, fail(false))).toThrow(expect.objectContaining({ hint: "run it again" }));
+    expect(() => restructureWrites(root, fail(true))).toThrow(expect.objectContaining({ hint: expect.stringContaining("a rerun cannot finish the job") }));
+  });
+
+  test("refuses before writing when a file it would rewrite is read-only", () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const root = book();
+    const clue = path.join(root, "continuity", "clues", "the-ticket.md");
+    fs.chmodSync(clue, 0o444);
+    const before = snapshot(root);
+    expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("Cannot write to continuity/clues/the-ticket.md (permission denied); nothing was changed");
+    expect(() => mergeChapters(root, { id: "chapter-02", next: "chapter-03" })).toThrow("Cannot write to continuity/clues/the-ticket.md (permission denied); nothing was changed");
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  test("the new chapter only mentions a character who died in the split chapter, and keeps an unnumbered heading", () => {
+    const root = book();
+    const mara = path.join(root, "characters", "mara-quill.md");
+    fs.writeFileSync(mara, read(root, "characters", "mara-quill.md").replace(/\nstatus: \w+/, "\nstatus: deceased\ndied-in: chapter-02"), "utf8");
+    const chapterTwo = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(chapterTwo, read(root, "chapters", "chapter-02.md").replace('time: ""', 'time: "09:00"\nnumbered: false'), "utf8");
+    const result = splitChapter(root, { id: "chapter-02", at: "The Ferry", title: "Interlude" });
+    const second = data(root, "chapters", "chapter-03.md");
+    expect(second.characters).toEqual([]);
+    expect(second.mentions).toEqual(["mara-quill"]);
+    expect(second).toMatchObject({ numbered: false, time: "09:00" });
+    expect(read(root, "chapters", "chapter-03.md")).toContain("\n# Interlude\n\n## Chapter Text\n");
+    expect(result.warnings.find((warning) => warning.code === "split-references").message).toContain("characters/mara-quill.md");
+  });
+
+  test("refuses a chapter file in the way of the renumbering", () => {
+    const root = book();
+    const file = path.join(root, "chapters", "chapter-04.md");
+    fs.writeFileSync(file, read(root, "chapters", "chapter-04.md").replace(/^number: 4$/m, "number: 9"), "utf8");
+    expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-04.md already exists and is not a chapter this command renumbers");
   });
 
   test("refuses duplicate chapter numbers and a file in the new chapter's place", () => {
@@ -249,7 +302,7 @@ describe("story split", () => {
       const file = path.join(taken, "chapters", `${id}.md`);
       fs.writeFileSync(file, read(taken, "chapters", `${id}.md`).replace(/^number: \d+$/m, `number: ${id === "chapter-03" ? 7 : 8}`), "utf8");
     }
-    expect(() => splitChapter(taken, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-03.md already exists and is not chapter 3");
+    expect(() => splitChapter(taken, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-03.md already exists and is not a chapter this command renumbers");
   });
 
   test("works without a trailing newline or continuity/state.md", () => {

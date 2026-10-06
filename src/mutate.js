@@ -1673,8 +1673,10 @@ const RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot fin
 
 // Runs the writes of a split or merge. When a step fails after earlier ones
 // wrote, the error says so in place of any rerun hint the step gave, since
-// rerunning the whole command would not resume it.
-function restructureWrites(root, write) {
+// rerunning the whole command would not resume it. The checks before it
+// leave little that can fail (a full disk, a file saved meanwhile), so it is
+// exported for tests.
+export function restructureWrites(root, write) {
   const { result: error, changes } = recordChanges(root, () => {
     try {
       write();
@@ -1868,7 +1870,49 @@ function chapterReferenceFiles(root, chapterId, excluded) {
 // from. Its hook goes with it too, since the new chapter now ends where the
 // old one did; arcs-advanced stays behind, since the arc beat could be in
 // either half.
-const SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "strand"];
+const SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+
+// Every file a rename of these chapter or scene ids rewrites: the reference
+// fields, links, and bare ids move rewrites.
+function rewrittenFiles(root, kind, ids) {
+  const files = new Set();
+  for (const id of ids) {
+    const context = entityReferenceContext(root, kind, id);
+    const probe = `${id}-restructure-probe`;
+    const plan = planReferenceRewrites(root, context, new Map(), idRenamer(id, probe),
+      (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), id, probe));
+    plan.forEach((text, file) => files.add(file));
+  }
+  return [...files];
+}
+
+// The checks a split or merge runs before its first write, since a step
+// that fails after an earlier one wrote cannot be finished by a rerun:
+// every file a step rewrites (the references to each renamed chapter and
+// scene, continuity/state.md, the exemptions log, and the registries) must
+// be writable, the files it creates must not exist (`chapterTargets`, the
+// chapter files the renumbering writes, unless a chapter that moves away
+// holds one now), and every scene file of the chapters involved must be
+// named for its chapter and scene fields, or the renumbering could collide
+// with it part way.
+function assertRestructurable(project, { chapters, scenes, changed, created, chapterTargets }) {
+  const root = project.root;
+  const vacated = new Set(project.chapters.filter((chapter) => chapters.includes(chapter.id)).map((chapter) => chapter.file));
+  const occupied = chapterTargets.find((file) => fs.existsSync(file) && !vacated.has(file));
+  if (occupied) {
+    throw refusedError(`${relative(project, occupied)} already exists and is not a chapter this command renumbers: fix it first (story validate reports it)`);
+  }
+  const ids = new Set([...chapters, ...chapterTargets.map((file) => path.basename(file, ".md"))]);
+  for (const scene of project.scenes) {
+    const named = /^(.+)-scene-\d+$/.exec(scene.id)?.[1];
+    const expected = `${scene.chapter}-scene-${String(scene.scene).padStart(2, "0")}`;
+    if (named !== undefined && (ids.has(scene.chapter) || ids.has(named)) && scene.id !== expected) {
+      throw refusedError(`${relative(project, scene.file)} is scene ${scene.scene} of ${scene.chapter} by its frontmatter but not by its file name, so renumbering could collide with it: rename it to scenes/${expected}.md, or fix its chapter and scene fields, first`);
+    }
+  }
+  const fixed = [path.join("continuity", "state.md"), EXEMPTIONS_FILE, ...REGISTRY_FILES].map((file) => path.join(root, file));
+  assertWritable(root, [...changed, ...rewrittenFiles(root, "chapter", chapters), ...rewrittenFiles(root, "scene", scenes), ...fixed], created);
+}
 
 function splitChapterUnlocked(root, options) {
   const project = scanProject(root);
@@ -1895,9 +1939,6 @@ function splitChapterUnlocked(root, options) {
   const newId = canonicalChapterId(number);
   const newFile = path.join(project.root, "chapters", `${newId}.md`);
   const run = followingRun(project, number);
-  if (fs.existsSync(newFile) && !run.some((entry) => entry.file === newFile)) {
-    throw refusedError(`${relative(project, newFile)} already exists and is not chapter ${number}: fix it first (story validate reports it)`);
-  }
 
   // Scene records have no place in the text, so they follow it in order: the
   // records of the scenes before the split stay, the rest move.
@@ -1915,7 +1956,19 @@ function splitChapterUnlocked(root, options) {
   if (referencing.length > 0) {
     warnings.push(warn("split-references", `${referencing.join(", ")} still ${referencing.length === 1 ? "names" : "name"} ${chapter.id}, which now holds only the text before the split: check whether ${referencing.length === 1 ? "it" : "any of them"} should name ${newId} instead`, referencing.length === 1 ? referencing[0] : null));
   }
-  assertWritable(project.root, [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)], [newFile]);
+  const runIds = new Set(run.map((entry) => entry.id));
+  const chapterTargets = [newFile, ...run.map((entry) => path.join(project.root, "chapters", `${canonicalChapterId(entry.number + 1)}.md`))];
+  assertRestructurable(project, {
+    chapters: [chapter.id, ...runIds],
+    scenes: [...moving, ...project.scenes.filter((scene) => runIds.has(scene.chapter))].map((scene) => scene.id),
+    changed: [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)],
+    created: [...chapterTargets, ...moving.map((scene, index) => path.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
+    chapterTargets
+  });
+  // A character who dies in the chapter cannot be in the cast of a later
+  // one, so the new chapter only mentions them; split-references lists the
+  // death to check.
+  const dead = new Set(project.characters.filter((character) => character.diedIn === chapter.id).map((character) => character.id));
 
   restructureWrites(project.root, () => {
     shiftChapters(project.root, run, 1, warnings);
@@ -1929,7 +1982,13 @@ function splitChapterUnlocked(root, options) {
     const secondProse = `${markdown.body.slice(split.start).trimEnd()}\n`;
     const { hook, ...kept } = markdown.data;
     const copied = Object.fromEntries(SPLIT_COPIED_FIELDS.filter((key) => Object.hasOwn(markdown.data, key)).map((key) => [key, markdown.data[key]]));
-    const secondBody = `# ${chapterHeading(number, title)}\n\n## Chapter Text\n\n${secondProse}`;
+    const departed = asArray(copied.characters).filter((id) => dead.has(id));
+    if (departed.length > 0) {
+      copied.characters = asArray(copied.characters).filter((id) => !dead.has(id));
+      copied.mentions = [...new Set([...asArray(copied.mentions), ...departed])];
+    }
+    // An unnumbered chapter (a prologue) is headed by its title alone.
+    const secondBody = `# ${markdown.data.numbered === false ? title : chapterHeading(number, title)}\n\n## Chapter Text\n\n${secondProse}`;
     const secondData = {
       title,
       number,
@@ -2011,7 +2070,14 @@ function mergeChaptersUnlocked(root, options) {
     throw refusedError(`${relative(project, taken)} already exists; nothing was changed`);
   }
   const run = followingRun(project, second.number + 1);
-  assertWritable(project.root, [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)], sceneFiles);
+  const runIds = new Set(run.map((entry) => entry.id));
+  assertRestructurable(project, {
+    chapters: [first.id, second.id, ...runIds],
+    scenes: [...scenes, ...project.scenes.filter((scene) => runIds.has(scene.chapter))].map((scene) => scene.id),
+    changed: [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)],
+    created: sceneFiles,
+    chapterTargets: run.map((entry) => path.join(project.root, "chapters", `${canonicalChapterId(entry.number - 1)}.md`))
+  });
 
   const warnings = [];
   restructureWrites(project.root, () => {
