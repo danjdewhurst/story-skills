@@ -5,9 +5,6 @@
     "readiness: ready",
     "readiness: not-ready",
     "the author disagrees",
-    "add a romance",
-    "add the romance",
-    "romantic subplot",
     "every Thursday as written"
   ],
   "banned_regex": [

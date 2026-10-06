@@ -20,7 +20,7 @@
     "\\bfans of (?!\\[TODO)",
     "\\bmeets\\b[^.\\n]{0,40}\\bmeets\\b"
   ],
-  "brief": "Draft the query letter for submission/query.md from the query-letter template: frontmatter, the one-sentence pitch, and the letter. Use only the facts given, and mark anything the author has not supplied for the author to fill in. Return only the file.",
+  "brief": "Draft the query letter for submission/query.md from the query-letter template. Return only the letter itself, from the salutation to the sign-off, within the template's 250 to 350 words. Use only the facts given, and mark anything the author has not supplied for the author to fill in.",
   "expected_overlaps": {
     "in_input": [
       ["71,482"],
@@ -30,11 +30,10 @@
       ["goes ashore with Petra"]
     ]
   },
-  "max_words": 400,
-  "min_words_ratio": 0.6,
+  "max_words": 350,
+  "min_words_ratio": 1.15,
   "name": "query-letter",
   "required": [
-    "type: query",
     "THE KEY ON THE DOOR",
     "71,000",
     "Tomas",

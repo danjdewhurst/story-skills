@@ -1,21 +1,10 @@
 {
   "banned": [
-    "for free",
-    "free of charge",
-    "unpaid",
-    "volunteer",
-    "a free copy",
-    "in exchange for",
-    "exposure",
-    "guarantee",
-    "certify",
-    "sign off on",
     "is this okay",
-    "is it okay",
-    "speak for the community",
-    "on behalf of the community"
+    "is it okay"
   ],
   "banned_regex": [
+    "(?:^|[.!?\\n])(?:(?!\\b(?:not|never|no|nor|without)\\b|n't\\b)[^.!?\\n])*\\b(?:for free|free of charge|unpaid|volunteer(?:s|ed|ing)?|a free copy|in exchange for|exposure|guarantee[sd]?|certif(?:y|ies|ied)|signs? off|speaks? for (?:the|a|your|their|whole) (?:whole )?community|on behalf of the community)\\b",
     "[£$€]\\s?\\d",
     "\\b\\d+\\s*(?:pounds|dollars|euros|per word|per hour|an hour)\\b",
     "\\b20\\d\\d-\\d\\d-\\d\\d\\b",

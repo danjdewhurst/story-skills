@@ -1,16 +1,3 @@
----
-type: query
-updated: 2026-10-06
----
-
-# Query: The Key on the Door
-
-## Pitch
-
-A widowed lighthouse keeper finds a brass key that fits only his dead wife's sea-chest, and must decide whether to open it before the Board takes his light.
-
-## Letter
-
 Dear [TODO: author to supply agent name],
 
 For four winters Tomas Reyes has kept Greywidow Light alone, and he has never opened his late wife's sea-chest. Then, one evening at dusk, he finds a brass key hanging on the lamp-room door that could fit no lock but hers.
