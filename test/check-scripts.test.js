@@ -47,6 +47,23 @@ function usesRefs(text) {
   return refs;
 }
 
+// Lists each action that more than one SHA pins across the given files, so a
+// bump that reaches ci.yml but not another workflow or a template is caught.
+function actionPinConflicts(files) {
+  const shas = new Map();
+  for (const [relativePath, text] of Object.entries(files)) {
+    for (const { ref } of usesRefs(text)) {
+      const [action, sha] = ref.split("@");
+      const bySha = shas.get(action) || new Map();
+      bySha.set(sha, [...(bySha.get(sha) || []), relativePath]);
+      shas.set(action, bySha);
+    }
+  }
+  return [...shas]
+    .filter(([, bySha]) => bySha.size > 1)
+    .map(([action, bySha]) => `${action}: ${[...bySha].map(([sha, paths]) => `${sha} (${[...new Set(paths)].join(", ")})`).join(", ")}`);
+}
+
 function lcovRecord(file, { lines = [10, 10], functions = [2, 2], branches = null } = {}) {
   let text = `TN:\nSF:${file}\nFNF:${functions[0]}\nFNH:${functions[1]}\n`;
   for (let index = 0; index < lines[0]; index += 1) {
@@ -608,27 +625,25 @@ describe("github workflows", () => {
     }
   });
 
-  test("templates pin the same action versions as the repo workflows", () => {
+  test("each action is pinned at one SHA across repo workflows and templates", () => {
     // Users copy the templates, so a stale pin there spreads to every story
     // repository. Dependabot bumps both directories in one pull request; this
-    // catches a hand edit that moves one side only.
-    const repoPins = new Map();
-    for (const relativePath of repoWorkflowFiles) {
-      for (const { ref } of usesRefs(readRepo(relativePath))) {
-        const [action, sha] = ref.split("@");
-        repoPins.set(action, [...new Set([...(repoPins.get(action) || []), sha])]);
-      }
-    }
-    const mismatches = [];
-    for (const relativePath of workflowFiles.slice(1)) {
-      for (const { ref } of usesRefs(readRepo(relativePath))) {
-        const [action, sha] = ref.split("@");
-        if (repoPins.has(action) && !repoPins.get(action).includes(sha)) {
-          mismatches.push(`${relativePath} ${action}@${sha}, repo workflows pin ${repoPins.get(action).join(", ")}`);
-        }
-      }
-    }
-    expect(mismatches).toEqual([]);
+    // catches a hand edit, or a partial bump, that moves only some files.
+    const files = Object.fromEntries(pinnedFiles.map((relativePath) => [relativePath, readRepo(relativePath)]));
+    expect(actionPinConflicts(files)).toEqual([]);
+  });
+
+  test("a partial action bump is a pin conflict", () => {
+    const old = "actions/checkout@" + "a".repeat(40) + " # v6.0.0";
+    const bumped = "actions/checkout@" + "b".repeat(40) + " # v7.0.1";
+    const files = {
+      ".github/workflows/ci.yml": `        uses: ${bumped}\n`,
+      ".github/workflows/publish.yml": `        uses: ${old}\n`,
+      "templates/github/story-checks.yml": `        uses: ${old}\n`
+    };
+    expect(actionPinConflicts(files)).toEqual([
+      `actions/checkout: ${"b".repeat(40)} (.github/workflows/ci.yml), ${"a".repeat(40)} (.github/workflows/publish.yml, templates/github/story-checks.yml)`
+    ]);
   });
 
   test("one action SHA carries one version comment everywhere", () => {

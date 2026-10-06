@@ -26,7 +26,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Changed
 
-- Dependabot now proposes action bumps for `templates/github/` as well as `.github/workflows/`, grouped so one pull request moves an action in both. The `draft-next-chapter.yml` template pins `anthropics/claude-code-action` v1.0.243 (was v1.0.234), and the template version comments name exact releases (`# v7.0.1`, not `# v7`). The workflow tests now check template pins against every repository workflow, not only `ci.yml`. ([#396](https://github.com/danjdewhurst/story-skills/issues/396))
+- Dependabot now proposes action bumps for `templates/github/` as well as `.github/workflows/`, grouped so one pull request moves an action in both. The `draft-next-chapter.yml` template pins `anthropics/claude-code-action` v1.0.243 (was v1.0.234), and the template version comments name exact releases (`# v7.0.1`, not `# v7`). The workflow tests now require each action to be pinned at one SHA across every repository workflow and template, not only to match `ci.yml`. ([#396](https://github.com/danjdewhurst/story-skills/issues/396))
 - The GitHub Actions templates install the Story CLI once per job from npm (`story-skills@$STORY_VERSION`, with npm provenance) and run plain `story` commands, in place of an `npx` call that fetched the package from GitHub on every step. The pin is now `STORY_VERSION: "0.21.0"`, without the `v`, in place of `STORY_REF: "v0.21.0"`; rename it when you copy the new templates. To install from GitHub instead, for an unreleased fix or a fork, set the commented `STORY_PACKAGE` env to an install spec such as `github:danjdewhurst/story-skills#main`. ([#402](https://github.com/danjdewhurst/story-skills/issues/402))
 
 ### Fixed
