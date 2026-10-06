@@ -686,7 +686,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 
 **Workflow.**
 
-1. Takes a draft snapshot before any pass that touches more than one chapter. In a git project it asks before committing, then tags the snapshot (for example `draft-1`), and it never pushes or rewrites history. Without git, it offers `git init` or copies the project folder beside it, never inside it.
+1. Takes a draft snapshot before any pass that touches more than one chapter. In a git project it asks before committing, then tags the snapshot (for example `draft-1`), and it never pushes or rewrites history. Without git, it offers `git init` or takes a named snapshot with `story snapshot`, and can put one back with `story snapshot --restore` (after a `--dry-run` and your approval).
 2. Reads `story.md`, `chapters/_index.md`, the target chapters and their neighbours, referenced entity and arc files, matching scenes, `continuity/`, and `plot/timeline.md`.
 3. Writes a short plan: what changes, what must stay fixed, and which other files are affected.
 4. Makes structural edits (inserting, reordering, splitting, or merging chapters, and moving scenes) with `story move chapter`, `story move scene`, `story split`, and `story merge`, which rename the files, move the prose and scenes, and rewrite every reference to the old ids. Edits the markdown directly, then updates the chapter `status` (`draft` to `revised`, and to `final` only when appropriate), timeline, scenes, continuity records, arc plot points, and entity files.

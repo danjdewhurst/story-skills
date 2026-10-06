@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, lstatIfExists, readTextFile, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
-import { refusedError, usageError } from "./exit-codes.js";
+import { EXIT_CODES, exitCodeFor, refusedError, usageError } from "./exit-codes.js";
+import { reindexProject } from "./mutate.js";
 import { assertProjectParses, markdownFiles, requireStoryFile, scanProject } from "./scan.js";
 
 // Named snapshots: `story snapshot <name>` copies the project's markdown to
@@ -54,8 +55,12 @@ function snapshotProjectUnlocked(root, options) {
   const id = snapshotId(options.name, options.id);
   const project = scanProject(root);
   // A chapter that fails to parse would be missing from the word count, and
-  // from a later comparison.
-  assertProjectParses(project, "take a snapshot");
+  // from a later comparison. The safety copy a restore takes first keeps
+  // the project in whatever state it is: its counts leave out a file that
+  // does not parse, but every markdown file is copied.
+  if (!options.unparsed) {
+    assertProjectParses(project, "take a snapshot");
+  }
   const projectRoot = project.root;
   const target = path.join(projectRoot, SNAPSHOTS_DIR, id);
   const existing = lstatIfExists(target);
@@ -215,6 +220,121 @@ export function existingSnapshot(root, value) {
   const directory = path.join(projectRoot, SNAPSHOTS_DIR, found.id);
   assertSafeProjectDirectory(directory, projectRoot);
   return { directory, id: found.id };
+}
+
+// story snapshot --restore <name>: puts the project's markdown back as the
+// snapshot holds it. Every markdown file in the snapshot is written back
+// (one that is already the same is left alone), and every markdown file a
+// scan reads that the snapshot lacks is deleted. Those are the files a
+// snapshot copies, so dist/, .snapshots/ and other dot-folders, nested
+// projects, and files that are not markdown are never touched. Before any
+// change the project as it is is saved as snapshot before-restore-<id>-<n>,
+// so the restore can itself be undone, and a restore that fails part way
+// names it. The registries are rebuilt afterwards.
+export function restoreSnapshot(root, options = {}) {
+  return withProjectLock(root, () => restoreSnapshotUnlocked(root, options));
+}
+
+function restoreSnapshotUnlocked(root, options) {
+  const projectRoot = path.resolve(root);
+  requireStoryFile(projectRoot);
+  const { directory, id } = existingSnapshot(projectRoot, options.name);
+  const manifest = listSnapshots(projectRoot).snapshots.find((snapshot) => snapshot.id === id);
+  // A snapshot that would leave the project without story.md, or with a
+  // file reindex cannot read, is refused before anything changes.
+  if (lstatIfExists(path.join(directory, "story.md"))?.isFile() !== true) {
+    throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
+  }
+  assertProjectParses(scanProject(directory), `restore snapshot ${id}, nothing was changed`);
+
+  const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
+  const writes = [];
+  for (const [relative, source] of saved) {
+    const target = path.join(projectRoot, ...relative.split("/"));
+    // A folder that has since become a project of its own is not this
+    // project's to write into.
+    for (let folder = path.dirname(target); folder !== projectRoot; folder = path.dirname(folder)) {
+      if (fs.existsSync(path.join(folder, "story.md"))) {
+        throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${projectPath(projectRoot, folder)}/, which is now a story project of its own. Nothing was changed`);
+      }
+    }
+    const text = readTextFile(source);
+    const existing = lstatIfExists(target);
+    if (existing?.isFile() && fs.readFileSync(target).equals(Buffer.from(text, "utf8"))) {
+      continue;
+    }
+    writes.push({ path: relative, target, text, created: existing === null });
+  }
+  const deletes = markdownFiles(projectRoot)
+    .map((file) => ({ path: projectPath(projectRoot, file), target: file }))
+    .filter((file) => !saved.has(file.path));
+  const restored = { name: manifest?.name ?? id, id };
+  if (writes.length === 0 && deletes.length === 0) {
+    return { restored, safety: null, created: [], updated: [], deleted: [], warnings: [] };
+  }
+
+  const safetyId = nextSafetyId(projectRoot, id);
+  const safety = snapshotProjectUnlocked(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
+  const done = { created: [], updated: [], deleted: [] };
+  try {
+    for (const write of writes) {
+      writeFile(write.target, write.text, { root: projectRoot });
+      done[write.created ? "created" : "updated"].push(write.path);
+    }
+    for (const file of deletes) {
+      removeFile(file.target);
+      done.deleted.push(file.path);
+    }
+    reindexProject(projectRoot);
+  } catch (error) {
+    const changed = done.created.length + done.updated.length + done.deleted.length;
+    const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${writes.length + deletes.length} files changed)`;
+    const code = exitCodeFor(error);
+    throw Object.assign(new Error(`Restoring snapshot ${id} stopped: ${error.message}\n${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the project as it was before: story snapshot --restore ${safetyId} puts it back`), {
+      exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
+    });
+  }
+  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, warnings: [] };
+}
+
+// before-restore-<id>-<n>: one more than the highest n a safety snapshot of
+// this id has, so each restore keeps its own and later ones number higher.
+function nextSafetyId(projectRoot, id) {
+  const prefix = `before-restore-${id}-`;
+  const folder = path.join(projectRoot, SNAPSHOTS_DIR);
+  const taken = lstatIfExists(folder) === null ? [] : fs.readdirSync(folder);
+  let next = 1;
+  for (const name of taken) {
+    const rest = name.startsWith(prefix) ? name.slice(prefix.length) : "";
+    if (/^[1-9]\d*$/.test(rest)) {
+      next = Math.max(next, Number(rest) + 1);
+    }
+  }
+  return `${prefix}${next}`;
+}
+
+export function formatRestore(result) {
+  if (result.safety === null) {
+    return `The project already matches snapshot ${result.restored.id}: nothing to restore\n`;
+  }
+  const lines = [
+    `Saved the project as it was in snapshot ${result.safety.id} (${result.safety.dir}/)`,
+    `Restored snapshot ${result.restored.id}: ${result.updated.length} updated, ${result.created.length} created, ${result.deleted.length} deleted (not in the snapshot)`,
+    ...result.updated.map((file) => `  update  ${file}`),
+    ...result.created.map((file) => `  create  ${file}`),
+    ...result.deleted.map((file) => `  delete  ${file}`),
+    `Undo it: story snapshot --restore ${result.safety.id}`
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+// What a --dry-run restore says above its list of changes.
+export function formatRestorePreview(result) {
+  if (result.safety === null) {
+    return `The project already matches snapshot ${result.restored.id}: nothing to restore\n`;
+  }
+  const deleted = result.deleted.length === 0 ? "" : `; it would delete ${result.deleted.length === 1 ? "1 markdown file" : `${result.deleted.length} markdown files`} the snapshot does not have`;
+  return `Restoring snapshot ${result.restored.id} would first save the project as snapshot ${result.safety.id}${deleted}\n`;
 }
 
 export function formatSnapshot(result) {
