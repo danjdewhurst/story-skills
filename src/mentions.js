@@ -24,6 +24,8 @@ import { wholeWords, wordMatcher } from "./words.js";
 // The entity kinds with a name to look for, as story mentions takes them.
 export const MENTION_KINDS = ["character", "location", "faction", "artifact", "system", "term"];
 
+const BLANKED = "\u0000";
+
 // Every name and alias to look for, cut characters included, each once per
 // entity, with its pattern. A name that opens with titles or articles (the
 // pack's `titleWords`) is also looked for without them, so "The Hollow" is
@@ -57,6 +59,9 @@ export function mentionNames(project) {
   return names;
 }
 
+// A name as a pattern for wordMatcher. Its words are apart by spaces, or by
+// one line break as in a wrapped paragraph, never by a blank line that ends
+// the paragraph.
 function namePattern(name, pack) {
   const words = name.split(/\s+/);
   const body = words.map((word, index) => {
@@ -73,14 +78,16 @@ function namePattern(name, pack) {
     const variants = words.length > 1 ? [first, upper, lower] : first === lower ? [first, upper] : [first];
     const unique = [...new Set(variants)].map(escapeRegExp);
     return `${unique.length === 1 ? unique[0] : `(?:${unique.join("|")})`}${rest}`;
-  }).join("\\s+");
+  }).join("(?:[^\\S\\n]+|[^\\S\\n]*\\n[^\\S\\n]*)");
   return new RegExp(wholeWords(body, name), "gu");
 }
 
-// The chapter's prose as it sits in its file, with comments and code
-// fences blanked so offsets and line numbers still match the file, and
-// `offset`, where the prose starts in the file. Null when the file cannot
-// be read, which the scan has already reported.
+// The chapter's prose as it sits in its file, and `offset`, where the
+// prose starts in the file. Comments and code fences are blanked with a
+// character that is neither a letter nor a space, keeping line breaks, so
+// offsets and line numbers still match the file and no name runs across
+// one. Null when the file cannot be read, which the scan has already
+// reported.
 export function chapterText(project, chapter) {
   let markdown;
   try {
@@ -88,9 +95,14 @@ export function chapterText(project, chapter) {
   } catch {
     return null;
   }
-  const masked = maskMarkup(markdown.body);
-  const start = proseStart(markdown.body, masked);
-  return { raw: markdown.rawMarkdown, text: masked.slice(start), offset: markdown.rawMarkdown.length - markdown.body.length + start };
+  const { body } = markdown;
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  let text = "";
+  for (let index = start; index < body.length; index += 1) {
+    text += masked[index] === body[index] ? body[index] : BLANKED;
+  }
+  return { raw: markdown.rawMarkdown, text, offset: markdown.rawMarkdown.length - body.length + start };
 }
 
 // The names `names` finds in `text`, as { start, end, text, entities },
@@ -258,13 +270,14 @@ export function auditMentions(project, { unnamed = false } = {}) {
   return warnings;
 }
 
-// story mentions: every place chapter prose names one entity.
+// story mentions: every place drafted chapter prose names one entity. An
+// outline chapter's body is planning notes, which auditMentions skips too.
 export function entityMentions(project, kind, id) {
   const entries = mentionNames(project);
   const own = entries.filter((entry) => entry.kind === kind && entry.id === id);
   const chapters = [];
   const matches = [];
-  for (const chapter of project.chapters) {
+  for (const chapter of project.chapters.filter((entry) => entry.status !== "outline")) {
     const prose = chapterText(project, chapter);
     if (prose === null) {
       continue;
@@ -283,7 +296,8 @@ export function entityMentions(project, kind, id) {
 }
 
 export function formatMentions(report) {
-  const lines = report.matches.map((match) => `${match.file}:${match.line}:${match.column}: ${match.text}: ${match.excerpt}`);
+  // A name wrapped onto the next line prints on one.
+  const lines = report.matches.map((match) => `${match.file}:${match.line}:${match.column}: ${match.text.replace(/\s+/gu, " ")}: ${match.excerpt}`);
   const heading = `${report.kind} ${report.id} (${report.names.join(", ")})`;
   if (report.matches.length === 0) {
     lines.push(`No mentions of ${heading} in chapter prose`);

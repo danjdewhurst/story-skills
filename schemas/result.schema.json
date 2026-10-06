@@ -457,7 +457,7 @@
         "names": { "type": ["array", "null"], "items": { "type": "string" }, "description": "The names looked for: the entity's name, a character's given name, and its aliases." },
         "chapters": {
           "type": ["array", "null"],
-          "description": "Each chapter, in chapter order, whose prose names the entity or whose frontmatter lists it.",
+          "description": "Each drafted (not outline) chapter, in chapter order, whose prose names the entity or whose frontmatter lists it.",
           "items": {
             "type": "object",
             "required": ["chapter", "file", "count", "listed"],

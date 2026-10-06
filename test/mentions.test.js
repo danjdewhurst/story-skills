@@ -67,6 +67,30 @@ describe("story mentions <kind> <id>", () => {
     expect(formatMentions(hollow)).toBe("No mentions of location the-hollow (The Hollow, Hollow) in chapter prose\n");
   });
 
+  test("a name never runs across a paragraph break, a comment, or a fence, and outline chapters are left out", () => {
+    const root = mentionsProject();
+    chapter(root, 1, "", [
+      "He said Edran",
+      "Vale was near.",
+      "",
+      "Then Edran",
+      "",
+      "Vale. And Edran <!-- note --> Vale.",
+      "",
+      "Brass",
+      "```",
+      "x",
+      "```",
+      "Key."
+    ].join("\n"));
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: outline\ncharacters:\n  - edran-vale", "# Chapter 2\n\nEdran Vale comes back.\n");
+    const edran = mentionsReport(root, { kind: "character", id: "edran-vale" });
+    expect(edran.matches.map((match) => [match.line, match.text])).toEqual([[10, "Edran\nVale"], [13, "Edran"], [15, "Edran"]]);
+    expect(edran.chapters.map((entry) => entry.chapter)).toEqual(["chapter-01"]);
+    expect(formatMentions(edran)).toContain("chapters/chapter-01.md:10:9: Edran Vale: He said Edran\n");
+    expect(mentionsReport(root, { kind: "artifact", id: "brass-key" }).matches).toEqual([]);
+  });
+
   test("an artifact is listed by mentions, and a location named but not listed is reported", () => {
     const root = mentionsProject();
     chapter(root, 1, "mentions:\n  - brass-key", "The Brass Key was cold.");
