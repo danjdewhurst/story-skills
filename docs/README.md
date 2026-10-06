@@ -108,6 +108,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Self-publish: metadata, ISBNs, copyright page, print, launch | [Writing workflows](writing-workflows.md), [Import, export, and builds](manuscripts.md), and the publishing entry in the [Skills catalogue](skills.md) |
 | Adapt the book for audio, screen, comics, or translation | [Writing workflows](writing-workflows.md) and the adaptation entry in the [Skills catalogue](skills.md) |
 | Run the checks on every pull request | [Automation and CI](automation.md) |
+| Pick out files by frontmatter, such as draft chapters or the scenes a character is in | [CLI reference](cli-reference.md#list) (`story list`) |
 | Share a review copy that readers can annotate by paragraph | [Automation and CI](automation.md) (`review-copy.yml` and the manuscript-note issue form) |
 | Upgrade an older project | [Project format reference](project-format.md#migrating-older-projects) |
 | Change the CLI or a skill | [Contributing](../CONTRIBUTING.md), then the [Development guide](development.md) |

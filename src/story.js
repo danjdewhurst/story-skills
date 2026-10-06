@@ -18,6 +18,7 @@ import { chapterProse, characterCount, titleCaseSlug, wordCount } from "./markdo
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildGrid } from "./grid.js";
+import { buildList } from "./list.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
@@ -729,6 +730,13 @@ export function gridReport(root, options = {}) {
   const project = scanProject(root);
   const ok = project.fileErrors.length === 0;
   return { ok, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, ok ? options : {}) };
+}
+
+// The files of one entity kind whose frontmatter matches every --where
+// filter.
+export function listReport(root, kind, where = []) {
+  const project = scanProject(root);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where) };
 }
 
 // Mermaid source for one diagram kind, printed or written to --out.

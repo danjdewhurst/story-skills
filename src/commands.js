@@ -4,6 +4,7 @@ import { formatClueMatrix } from "./clues.js";
 import { formatKnowledgeMark } from "./chronology.js";
 import { formatContext } from "./context.js";
 import { formatGrid, gridFormat } from "./grid.js";
+import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
@@ -36,6 +37,7 @@ import {
   diagramProject,
   entityStateAtChapter,
   gridReport,
+  listReport,
   draftingContext,
   exportManuscript,
   formatActionReport,
@@ -563,6 +565,33 @@ export const COMMANDS = [
         return 0;
       }
       return reportResult(io, report, "Grid built", "Grid failed");
+    }
+  },
+  {
+    name: "list",
+    usage: "list <kind>",
+    summary: [
+      "List the chapters, scenes, characters, or other",
+      "entities whose frontmatter matches every --where",
+      "filter, in book order"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["where", "json"],
+    run({ parsed, io, root }) {
+      const report = listReport(root(), parsed.positionals[1], parsed.options.where);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "list", report);
+      }
+      // As with grid, a partly unreadable project would silently drop the
+      // files that fail to parse, so nothing is listed until the scan is
+      // clean.
+      if (report.ok) {
+        io.stdout.write(formatList(report));
+        io.stderr.write(`${report.items.length} of ${report.total} ${report.kind} matched\n`);
+        return 0;
+      }
+      return reportResult(io, report, "Listed", "List failed");
     }
   },
   {
