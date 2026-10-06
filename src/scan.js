@@ -1,6 +1,7 @@
 // Project scan and entity records: read a story project into memory, and the markdown those records are written from.
 import fs from "node:fs";
 import path from "node:path";
+import { parseCalendar } from "./calendar.js";
 import { storyDateError, storyTimeError } from "./continuity.js";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import {
@@ -259,6 +260,10 @@ export function scanProject(root) {
     // The unit lengths are counted in (see forms.js): words, or characters
     // for Chinese and Japanese.
     unit,
+    // The story.md calendar (see calendar.js) chapter and scene dates are
+    // read under: null for YYYY-MM-DD dates, `{ invalid: true }` when the
+    // calendar has problems, which validate reports.
+    calendar: parseCalendar(story.data.calendar).calendar,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -901,7 +906,7 @@ export function buildEntity(project, kind, name, options) {
       ? project.chapters.reduce((max, chapter) => Math.max(max, chapter.number), 0) + 1
       : requirePositiveInteger(options.number, "chapter number");
     const id = `chapter-${String(number).padStart(2, "0")}`;
-    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit));
+    return entityResult(project, kind, id, chapterFile(name, number, options, project.unit, project.calendar));
   }
 
   if (kind === "scene") {
@@ -917,7 +922,7 @@ export function buildEntity(project, kind, name, options) {
       ? nextSceneNumber(project, chapter)
       : requirePositiveInteger(options.scene, "scene number");
     const id = `${chapter}-scene-${String(scene).padStart(2, "0")}`;
-    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options));
+    return entityResult(project, kind, id, sceneFile(name, chapter, scene, options, project.calendar));
   }
 
   const id = requestedId ?? kebabCase(name);
@@ -1324,8 +1329,8 @@ What changes because of this arc.
 `;
 }
 
-export function chapterFile(title, number, options, unit) {
-  const dateError = storyDateError(options.date);
+export function chapterFile(title, number, options, unit, calendar = null) {
+  const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
     throw usageError(dateError);
   }
@@ -1364,8 +1369,8 @@ export function chapterFile(title, number, options, unit) {
 `;
 }
 
-function sceneFile(title, chapter, scene, options) {
-  const dateError = storyDateError(options.date);
+function sceneFile(title, chapter, scene, options, calendar = null) {
+  const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
     throw usageError(dateError);
   }

@@ -10,6 +10,8 @@ characters:
 arcs-advanced:
   - seras-reclamation
 status: draft
+date: 3 Thaw 302 AE
+time: dawn
 state-changes: []
 ---
 

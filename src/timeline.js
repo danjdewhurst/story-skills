@@ -1,4 +1,4 @@
-import { parseClockDate, parseClockTime, readingUnits } from "./continuity.js";
+import { parseClockTime, parseStoryDate, readingUnits } from "./continuity.js";
 import { roundedShares } from "./plural.js";
 import { projectPath } from "./files.js";
 
@@ -108,7 +108,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   // Scenes carry their own timestamps; a chapter's date and time only apply
   // to the chapter-level entry that stands in for a chapter with no scenes,
   // matching how story continuity reads them.
-  const parsedDate = parseClockDate(unit.date || "");
+  const parsedDate = parseStoryDate(unit.date || "", project.calendar);
   const time = unit.time;
   const minutes = parseClockTime(time || "");
   return {

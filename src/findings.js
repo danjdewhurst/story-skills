@@ -61,6 +61,7 @@ export const FINDING_CODES = {
   "invalid-ifid": "error",
   "invalid-cover": "error",
   "invalid-date": "error",
+  "invalid-calendar": "error",
   "invalid-cli-config": "error",
   "invalid-filename": "error",
   "filename-number-mismatch": "error",

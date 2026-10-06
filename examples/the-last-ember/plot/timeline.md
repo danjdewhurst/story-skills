@@ -21,7 +21,7 @@ story: the-last-ember
 
 | When | Event | Arc | Chapter |
 |------|-------|-----|---------|
-| Day 1, dawn | Sera senses the embers weakening in the Heart Grove | Sera's Reclamation | Ch 1 |
-| Day 1, morning | Kael returns from scouting the citadel | Sera's Reclamation | Ch 1 |
-| Day 1, midday | Sera absorbs a wild ember, decides to act | Sera's Reclamation | Ch 1 |
-| Day 1, evening | Maren receives word of movement near the Vale | Sera's Reclamation | Ch 1 |
+| 3 Thaw 302 AE, dawn | Sera senses the embers weakening in the Heart Grove | Sera's Reclamation | Ch 1 |
+| 3 Thaw 302 AE, morning | Kael returns from scouting the citadel | Sera's Reclamation | Ch 1 |
+| 3 Thaw 302 AE, midday | Sera absorbs a wild ember, decides to act | Sera's Reclamation | Ch 1 |
+| 3 Thaw 302 AE, evening | Maren receives word of movement near the Vale | Sera's Reclamation | Ch 1 |

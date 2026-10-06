@@ -152,7 +152,7 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 - **`references/artifact-template.md`** - Template for artifact/object files
 - **`references/world-element-types.md`** - Detailed prompts for each system type (magic, political, technology, religion, economic, military, social)
 - **`references/maps-and-routes.md`** - Recording `routes`, the `story diagram locations` map-graph, and the continuity travel check
-- **`references/calendars.md`** - Recording a custom calendar, seasons, and moons as a system file and dating scenes consistently
+- **`references/calendars.md`** - Adding a custom `calendar` to `story.md`, dating scenes in it, and recording seasons and moons as a system file
 - **`references/naming-languages.md`** - Phonology sketches, naming rules per culture, pronunciation, and the `story names` collision check
 - **`references/economy-logistics.md`** - Prices and wages, supply lines, magic and technology costs, and a travel speeds table by mode
 

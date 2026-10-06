@@ -2307,7 +2307,7 @@ A status that says the chapter is on the page needs it written, as `story links`
 
 `add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
-Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag or a comma list: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
+Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag or a comma list: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
 
 `--source` keeps each value whole, because citations contain commas. Repeat the flag for more sources. Other list options split on commas.
 
@@ -2902,7 +2902,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-book-number` | error | `story.md` `book-number` is not a number 0 or more. |
 | `invalid-ifid` | error | `story.md` `ifid` is not a version 4 UUID. |
 | `invalid-cover` | error | `story.md` `cover` is not an image inside the project. |
-| `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day, or a chapter or scene `date` shaped `YYYY-MM-DD` is not a real day (`2024-13-45`). |
+| `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day, or a chapter or scene `date` shaped `YYYY-MM-DD` is not a real day (`2024-13-45`). Under a story [`calendar`](project-format.md#custom-calendars), a chapter or scene `date` that starts with a digit or a weekday is not a day of that calendar (`31 Thaw 302 AE` in a 30-day month). |
+| `invalid-calendar` | error | The `story.md` `calendar` is not a valid list of months, weekdays, and eras. See [Custom calendars](project-format.md#custom-calendars). |
 | `invalid-cli-config` | error | `story.md` `cli-defaults` or `severity` is invalid. See [Defaults and severity](#defaults-and-severity-from-storymd). |
 | `invalid-filename` | error | A chapter or scene file name does not follow `chapter-NN.md` or `{chapter}-scene-NN.md`. |
 | `filename-number-mismatch` | error | A chapter or scene number does not match its file name. |
@@ -3264,7 +3265,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--role` | `<name>` | `add character` | |
 | `--status` | `<name>` | `add` (most kinds) | |
 | `--mode` | `<name>` | `add chapter` | For example `discovered` |
-| `--date` | `<date>` | `add chapter`, `add scene`, `progress` | `YYYY-MM-DD` |
+| `--date` | `<date>` | `add chapter`, `add scene`, `progress` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add` |
 | `--time` | `<time>` | `add chapter`, `add scene` | `HH:MM` or a named time of day |
 | `--travel-hours` | `<n>` | `add scene` | |
 | `--dilemma` | `<text>` | `add scene` | |
