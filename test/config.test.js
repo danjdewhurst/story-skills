@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -322,6 +323,26 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["init", "Fresh", "--dir", "fresh"]).code).toBe(0);
     fs.writeFileSync(path.join(cwd, "fresh", "story.md"), "no frontmatter\n", "utf8");
     expect(messages(readCliConfig(path.join(cwd, "fresh")).errors)).toEqual([]);
+  });
+
+  test.skipIf(process.platform === "win32")("a symlinked story.md gives no config, and one linked to /dev/zero does not hang the command (#548)", () => {
+    const { root } = project();
+    const storyPath = path.join(root, "story.md");
+    // A story.md elsewhere whose defaults would otherwise apply.
+    const outside = path.join(makeTempDir(), "story.md");
+    fs.copyFileSync(storyPath, outside);
+    configure(path.dirname(outside), "cli-defaults:\n  - command: prose\n    max-adverbs: 8");
+    fs.rmSync(storyPath);
+    fs.symlinkSync(outside, storyPath);
+    expect(readCliConfig(root)).toEqual({ defaults: {}, severity: {}, exemptions: [], errors: [] });
+    // Every project command reads the config first. Run in a child, so a
+    // read that never ends fails the test rather than stalling the suite.
+    fs.rmSync(storyPath);
+    fs.symlinkSync("/dev/zero", storyPath);
+    const result = spawnSync(process.execPath, [path.join(import.meta.dir, "..", "bin", "story.js"), "validate", root], { encoding: "utf8", timeout: 20000 });
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("story.md: Refusing to read through symlink");
   });
 });
 

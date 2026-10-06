@@ -11,17 +11,91 @@ export const MAX_READ_BYTES = 5 * 1024 * 1024;
 // /dev/zero or at a file outside itself. Every refusal starts with the
 // path, so a caller that labels the file can drop it rather than repeat it.
 export function readTextFile(filePath) {
-  const stats = fs.lstatSync(filePath);
-  if (stats.isSymbolicLink()) {
-    throw projectError(`${filePath}: Refusing to read through symlink`);
+  return decodeUtf8(readFileBytes(filePath), filePath);
+}
+
+// Reads a project file's bytes, refused as readTextFile refuses it.
+// `maxBytes` is the size cap: a cover image takes a larger one.
+export function readFileBytes(filePath, maxBytes = MAX_READ_BYTES) {
+  return readFileAndStats(filePath, maxBytes).bytes;
+}
+
+// The flags every read opens a file with. The checks before the open look
+// at the name, so a file swapped at that name afterwards (by a process
+// writing to the project while a command runs) could still redirect the
+// read: O_NOFOLLOW refuses a symlink put there, and O_NONBLOCK keeps a FIFO
+// put there from holding the open until a writer comes. Windows has neither
+// flag, nor FIFOs, so there the checks before the open stand alone.
+const SAFE_READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+
+const READ_CHUNK_BYTES = 64 * 1024;
+
+// The bytes of a regular file and its stats, taken through the descriptor
+// the bytes are read from (the lock reads its modification time this way).
+// Every file story reads from a project, or from beside one, comes through
+// here: test/files.test.js fails on a raw read anywhere else in src/.
+export function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
+  const named = fs.lstatSync(filePath);
+  if (named.isSymbolicLink()) {
+    throw symlinkReadRefusal(filePath);
   }
-  if (!stats.isFile()) {
-    throw projectError(`${filePath}: Refusing to read: not a regular file`);
+  if (!named.isFile()) {
+    throw notRegularFileRefusal(filePath);
   }
-  if (stats.size > MAX_READ_BYTES) {
-    throw projectError(`${filePath}: Refusing to read oversized file: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+  if (named.size > maxBytes) {
+    throw projectError(`${filePath}: Refusing to read oversized file: ${named.size} bytes exceeds the ${maxBytes} byte limit`);
   }
-  return decodeUtf8(fs.readFileSync(filePath), filePath);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(filePath, SAFE_READ_FLAGS);
+  } catch (error) {
+    // ELOOP (EMLINK on FreeBSD): a symlink took the file's place.
+    throw error.code === "ELOOP" || error.code === "EMLINK" ? symlinkReadRefusal(filePath) : error;
+  }
+  try {
+    const stats = fs.fstatSync(descriptor);
+    if (!stats.isFile()) {
+      throw notRegularFileRefusal(filePath);
+    }
+    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+// Reads to the end of the file, but never more than `maxBytes`, so a file
+// that grew past the cap after it was checked is refused rather than read
+// whole. The size the file reported (0 for a /proc file) sizes only the
+// first buffer, with a byte to spare to find the end.
+function readAtMost(descriptor, filePath, size, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  let buffer = Buffer.allocUnsafe(Math.min(size, maxBytes) + 1);
+  let filled = 0;
+  let read;
+  do {
+    if (filled === buffer.length) {
+      chunks.push(buffer);
+      buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+      filled = 0;
+    }
+    read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);
+    filled += read;
+    total += read;
+    if (total > maxBytes) {
+      throw projectError(`${filePath}: Refusing to read oversized file: it grew past the ${maxBytes} byte limit while story was reading it`);
+    }
+  } while (read > 0);
+  chunks.push(buffer.subarray(0, filled));
+  return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total);
+}
+
+function symlinkReadRefusal(filePath) {
+  return projectError(`${filePath}: Refusing to read through symlink`);
+}
+
+function notRegularFileRefusal(filePath) {
+  return projectError(`${filePath}: Refusing to read: not a regular file`);
 }
 
 // Plain words for the file-system error codes a command can hit.
@@ -278,10 +352,12 @@ function planWrite(filePath, options) {
   }
 }
 
-// The file's text now, or null when it is gone or unreadable.
-function currentText(target) {
+// The file's text now, or null when it is gone or unreadable. It is read
+// as the command read it, so a symlink, FIFO, or oversized file swapped in
+// since counts as a change rather than being followed or read whole.
+export function currentText(target) {
   try {
-    return fs.readFileSync(target, "utf8");
+    return readTextFile(target);
   } catch {
     return null;
   }

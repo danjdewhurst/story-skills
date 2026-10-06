@@ -2058,6 +2058,8 @@ export function coverIsReady(project) {
 
 // Resolves story.md `cover` to an image inside the project. Throws with a
 // story.md-prefixed message so validate and build report the same problem.
+// `maxBytes` is the cap the EPUB build reads the image with, so a cover
+// swapped for a larger file or a symlink after this check is still refused.
 export function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
   const mediaType = COVER_MEDIA_TYPES[path.extname(cover).toLowerCase()];
@@ -2079,7 +2081,7 @@ export function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path.extname(cover).slice(1).toLowerCase() };
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
 }
 
 export const CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;

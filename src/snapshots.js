@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, currentText, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
@@ -257,7 +257,9 @@ function restoreSnapshotUnlocked(root, options) {
     const target = path.join(projectRoot, ...relative.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
-    if (existing?.isFile() && fs.readFileSync(target).equals(Buffer.from(text, "utf8"))) {
+    // A file that cannot be read as text (swapped for a symlink or a FIFO
+    // since the check, say) is written rather than followed or read whole.
+    if (existing?.isFile() && currentText(target) === text) {
       continue;
     }
     writes.push({ path: relative, target, text, created: existing === null });

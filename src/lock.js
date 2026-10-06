@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { refusedError } from "./exit-codes.js";
+import { readFileAndStats } from "./files.js";
 
 // The lock a write command holds on its project, so two commands (two agent
 // sessions, or an editor hook running reindex while the user runs rename)
@@ -126,17 +127,21 @@ function tryCreate(lockPath) {
   }
 }
 
+// A lock holds a pid, a host name, and a time, so one larger than this was
+// not written by story.
+const MAX_LOCK_BYTES = 4096;
+
+// The command holding the lock, or null when there is no lock or it cannot
+// be read. A lock that is a symlink, a FIFO, or oversized is refused rather
+// than followed or read whole (a cloned project can link it to /dev/zero),
+// so it counts as held and the wait ends with the hint to delete it.
 function readOwner(lockPath) {
   let text;
   let modified;
   try {
-    const descriptor = fs.openSync(lockPath, "r");
-    try {
-      modified = fs.fstatSync(descriptor).mtimeMs;
-      text = fs.readFileSync(descriptor, "utf8");
-    } finally {
-      fs.closeSync(descriptor);
-    }
+    const { bytes, stats } = readFileAndStats(lockPath, MAX_LOCK_BYTES);
+    text = bytes.toString("utf8");
+    modified = stats.mtimeMs;
   } catch {
     return null;
   }

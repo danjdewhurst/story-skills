@@ -8,7 +8,7 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { MAX_READ_BYTES, lstatIfExists, removeFile } from "./files.js";
+import { MAX_READ_BYTES, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
@@ -403,9 +403,11 @@ function addCandidate(counts, name) {
 
 // Reads a source file as UTF-8 text without its byte-order mark. A zip
 // (such as .docx), a binary file, or text in another encoding is refused, so
-// no character is silently replaced.
+// no character is silently replaced. readSourceDocuments has already
+// refused a symlink or an oversized file; the read refuses one swapped in
+// since.
 function readSourceText(filePath) {
-  return decodeUtf8(fs.readFileSync(filePath), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+  return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
 }
 
 // The source is an argument, so a source that cannot be read (permission
