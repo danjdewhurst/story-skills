@@ -1,6 +1,6 @@
 ---
 name: submission
-description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", or wants to prepare and track a finished manuscript's submission to agents, publishers, or retailers.
+description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", "submit a short story", "magazine submission", "short-fiction markets", "simultaneous submission", "reprint rights", "order a short story collection", or wants to prepare and track a finished manuscript's submission to agents, publishers, magazines, anthologies, or retailers.
 ---
 
 # Submission
@@ -42,9 +42,15 @@ reads, which is usually the book's.
 - Building a Shunn-format manuscript for agents or magazines
 - Writing a retailer or back-cover description for self-publishing
 - Recording queries sent and responses received
+- Submitting short fiction to magazines, anthologies, or contests:
+  simultaneous or exclusive submissions, rights, response windows, and
+  status queries
+- Choosing and ordering the stories for a collection, and its
+  previously-published acknowledgements
 - NOT for self-publishing production (ISBNs, retailer metadata, print
-  interiors, launch, rights): use the `publishing` skill. This skill still
-  drafts the blurb and retailer description it uses
+  interiors, launch, rights deals and contracts): use the `publishing`
+  skill. This skill still drafts the blurb and retailer description it
+  uses, and records the rights a short-fiction market buys
 - NOT for revising the manuscript itself (use `revision-continuity`)
 - NOT for reader feedback rounds (use `feedback-triage`)
 
@@ -53,8 +59,9 @@ reads, which is usually the book's.
 - Never invent the author's bio, credentials, awards, publication history,
   platform, or contact details. Ask the user, or leave a clearly marked
   `[TODO: author to supply]` placeholder.
-- Never invent agent or publisher names, submission guidelines, dates, or
-  responses. Tracker entries come from the user.
+- Never invent agent, publisher, or market names, submission guidelines,
+  pay rates, rights terms, response times, dates, or responses. Tracker
+  entries come from the user.
 - Never send, email, or upload anything. The user submits.
 - Never claim sales figures, bestseller status, awards, or endorsements for
   comp titles or the author that the user has not confirmed.
@@ -218,6 +225,18 @@ time the user reports a submission or a response, using only what they tell
 you. On request, summarize: queries out, partial and full requests, offers,
 declines, and entries with no response after the window the user sets.
 
+### 9. Short fiction and collections
+
+For a short story, novelette, or novella going to magazines, anthologies,
+or contests, follow `references/short-fiction-markets.md` instead of steps
+2 to 6: the story goes out in full with a short cover letter. Use the
+short-fiction tracker columns (submission type, rights offered) and the
+publication history section from that reference, and check the tracker
+before suggesting a market so an exclusive submission is never doubled.
+To assemble a collection, follow its "Assemble a collection" section:
+choose the stories, find the linking threads, propose an order, and draft
+the acknowledgements from the publication history.
+
 ## Conventions
 
 - Package files: `submission/query.md`, `submission/comps.md`,
@@ -232,7 +251,8 @@ declines, and entries with no response after the window the user sets.
   its length in characters, as `story wordcount .` reports it (`12万字`,
   or sheets of 400字 when a Japanese contest asks for them).
 - Tracker statuses: `queried`, `requested-partial`, `requested-full`,
-  `offer`, `declined`, `no-response`, `withdrawn`.
+  `offer`, `declined`, `no-response`, `withdrawn`, plus `submitted` and
+  `held` for short fiction.
 - When the manuscript changes after the package is drafted, reread the
   package and update anything the revision made untrue.
 
@@ -256,6 +276,7 @@ story prose .
 - **`references/comp-titles.md`** - How to choose comparable titles, how to phrase them, and the verification rule
 - **`references/word-count-norms.md`** - Rough word-count ranges by category for the English-language market only, to confirm with the user
 - **`references/tracker-template.md`** - `submission/tracker.md` template and status definitions
+- **`references/short-fiction-markets.md`** - Magazine, anthology, and contest submissions (simultaneous and exclusive, rights, response times and status queries, tracker columns, publication history) and assembling a story collection
 
 ## Shared Conventions
 

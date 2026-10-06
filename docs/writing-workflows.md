@@ -1483,7 +1483,7 @@ Write back-cover copy and a retailer description.
 | `submission/synopsis-1-page.md` | About 500 words, present tense, third person, names in capitals on first use, ending revealed |
 | `submission/synopsis-3-page.md` | About 1,500 words, same rules |
 | `submission/blurb.md` | Tagline, 150 to 200 words of back-cover copy, optional retailer description. Never reveals the ending |
-| `submission/tracker.md` | One row per submission, with status `queried`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn` |
+| `submission/tracker.md` | One row per submission, with status `queried`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn` (`submitted` and `held` for short fiction) |
 
 Each file has YAML frontmatter with a `type` (`query`, `comps`, `synopsis`, `blurb`, or `submission-tracker`) and `updated: YYYY-MM-DD`. Word counts in the copy come from `story wordcount .`, rounded to the nearest thousand.
 
@@ -1523,6 +1523,18 @@ Summarize where the book stands.
 ```
 
 The tracker is created the first time you report a submission, and every row comes from what you tell the agent. On request it summarises queries out, partial and full requests, offers, declines, and entries past the response window you set.
+
+### 5. Short fiction and collections
+
+```text
+I'm sending this story to three magazines. Two take simultaneous submissions.
+This story was accepted. Record it and the rights I sold.
+Help me order the stories for my collection.
+```
+
+Magazines, anthologies, and contests take the story in full with a short cover letter, so the skill skips the query package and builds the Shunn short-story manuscript. Following [`short-fiction-markets.md`](../skills/submission/references/short-fiction-markets.md), the tracker records whether each submission is exclusive or simultaneous and which rights the market buys (first, reprint, audio), and adds a publication history once a story is accepted. Before suggesting a market, the skill checks that the story is not under an exclusive submission elsewhere; when a story is accepted, it reminds you to withdraw it from every other market. It drafts a status query only after the market's stated window has passed. The skill never quotes a market's pay rate, rights terms, or response time: you supply them from the market's guidelines.
+
+To assemble a collection, the skill lists your candidate stories with their lengths and publication history, finds the threads that link them, proposes an order with a reason for each position, and drafts the previously-published acknowledgements from the publication history, flagging any story whose rights you need to confirm. Each story stays an ordinary project; [Series](series.md) shows how separate projects link.
 
 ### Checks
 
