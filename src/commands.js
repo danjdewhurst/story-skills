@@ -24,7 +24,7 @@ import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatSimilarity } from "./similarity.js";
-import { SNAPSHOTS_DIR, formatSnapshot, formatSnapshotList, listSnapshots, snapshotId, snapshotProject } from "./snapshots.js";
+import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, restoreSnapshot, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
 import {
@@ -377,10 +377,11 @@ export const COMMANDS = [
     summary: [
       "Find passages of chapter prose that share a run of",
       "words with other text (--against a file, folder, or",
-      "git ref); advisory, never proof of copying"
+      "git ref, or --snapshot a saved snapshot); advisory,",
+      "never proof of copying"
     ],
     project: "positional",
-    options: ["against", "min-words", "json"],
+    options: ["against", "snapshot", "min-words", "json"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const report = applySeverity(similarityReport(root(), { ...parsed.options, cwd, againstFromProject: defaulted.has("against") }), overrides);
       if (wantsJson(parsed)) {
@@ -710,14 +711,18 @@ export const COMMANDS = [
     summary: [
       "Save a named copy of the project's markdown in",
       ".snapshots/ to compare with later (compare",
-      "--snapshot); --list shows the saved snapshots"
+      "--snapshot); --list shows the saved snapshots;",
+      "--restore puts one back, saving the project first"
     ],
     project: "flag",
     args: 1,
-    options: ["id", "list", "force", ...WRITE_OPTIONS],
+    options: ["id", "list", "restore", "force", ...WRITE_OPTIONS],
     run(context) {
       const { parsed, io, root } = context;
       const name = parsed.positionals[1];
+      if (parsed.options.restore !== undefined) {
+        return runRestore(context, name);
+      }
       if (isTruthy(parsed.options.list)) {
         for (const flag of ["id", "force", "dry-run"]) {
           if (flag === "id" ? parsed.options.id !== undefined : isTruthy(parsed.options[flag])) {
@@ -1063,6 +1068,46 @@ function passageRoot(parsed, cwd, required) {
     return path.resolve(cwd, parsed.options.path);
   }
   return required || fs.existsSync(path.join(cwd, "story.md")) ? path.resolve(cwd) : null;
+}
+
+// story snapshot --restore <name>. The --dry-run copy leaves out
+// .snapshots/, so the snapshot being restored is copied in first, with
+// every other snapshot's folder and manifest: the preview then finds it by
+// the same name, and numbers its safety snapshot, as the real run does.
+function runRestore(context, name) {
+  const { parsed } = context;
+  if (name !== undefined) {
+    throw usageError("story snapshot --restore takes the snapshot's name as its value: story snapshot --restore <name>");
+  }
+  for (const flag of ["id", "list", "force"]) {
+    if (flag === "id" ? parsed.options.id !== undefined : isTruthy(parsed.options[flag])) {
+      throw usageError(`--${flag} does not apply to story snapshot --restore`);
+    }
+  }
+  const restore = String(parsed.options.restore);
+  const projectRoot = context.root();
+  const seed = (target) => {
+    if (target === projectRoot) {
+      return;
+    }
+    const folder = path.join(projectRoot, SNAPSHOTS_DIR);
+    const { directory } = existingSnapshot(projectRoot, restore);
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const copy = path.join(target, SNAPSHOTS_DIR, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(copy, { recursive: true });
+        const manifest = path.join(folder, entry.name, SNAPSHOT_MANIFEST);
+        if (fs.existsSync(manifest)) {
+          fs.copyFileSync(manifest, path.join(copy, SNAPSHOT_MANIFEST));
+        }
+      }
+    }
+    fs.cpSync(directory, path.join(target, SNAPSHOTS_DIR, path.basename(directory)), { recursive: true });
+  };
+  return runWrite(context, "snapshot", (target) => {
+    seed(target);
+    return restoreSnapshot(target, { name: restore });
+  }, formatRestore, formatRestorePreview);
 }
 
 // Runs a write command: `write(projectRoot)` makes the changes and

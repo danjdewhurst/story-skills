@@ -570,10 +570,10 @@
     },
     "data-snapshot": {
       "type": "object",
-      "$comment": "story snapshot <name> reports the snapshot taken, as a write command does (dryRun and changes); story snapshot --list reports data.snapshots.",
+      "$comment": "story snapshot <name> reports the snapshot taken, as a write command does (dryRun and changes); story snapshot --restore <name> reports data.restored; story snapshot --list reports data.snapshots.",
       "allOf": [
         {
-          "if": { "required": ["dryRun"] },
+          "if": { "required": ["dryRun"], "properties": { "restored": { "type": "null" } } },
           "then": {
             "required": ["name", "id", "created", "chapters", "words", "files", "dir", "replaced", "dryRun", "changes"],
             "properties": {
@@ -588,6 +588,37 @@
               "replaced": { "type": "boolean", "description": "True when --force replaced a snapshot of the same name." },
               "dryRun": { "type": "boolean" },
               "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } }
+            }
+          }
+        },
+        {
+          "if": { "required": ["restored"] },
+          "then": {
+            "required": ["restored", "safety", "created", "updated", "deleted", "dryRun", "changes"],
+            "properties": {
+              "restored": {
+                "type": "object",
+                "required": ["name", "id"],
+                "description": "The snapshot put back: its name as taken and its id.",
+                "properties": {
+                  "name": { "type": "string", "minLength": 1 },
+                  "id": { "type": "string", "minLength": 1 }
+                }
+              },
+              "safety": {
+                "type": ["object", "null"],
+                "required": ["id", "dir"],
+                "description": "The snapshot of the project as it was, taken before the restore (before-restore-<id>-<n>); null when the project already matched and nothing changed.",
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "dir": { "type": "string", "minLength": 1, "description": ".snapshots/<id>, relative to the project root." }
+                }
+              },
+              "created": { "type": "array", "items": { "type": "string" }, "description": "Markdown files written back that the project did not have, relative to the project root." },
+              "updated": { "type": "array", "items": { "type": "string" }, "description": "Markdown files rewritten to the snapshot's text." },
+              "deleted": { "type": "array", "items": { "type": "string" }, "description": "Markdown files the snapshot does not have, deleted from the project." },
+              "dryRun": { "type": "boolean" },
+              "changes": { "type": "array", "description": "Every file created, updated, or deleted, the safety snapshot's and the registries reindex rebuilt included.", "items": { "$ref": "#/$defs/change" } }
             }
           }
         },

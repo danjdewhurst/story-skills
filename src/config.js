@@ -35,8 +35,8 @@ const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
 
 // Flags that change what one run does rather than set a habit: a default
 // --force would replace every snapshot whose name is taken, and a default
-// --list would stop snapshot taking one.
-const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id"] };
+// --list or --restore would stop snapshot taking one.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"] };
 
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format
@@ -44,7 +44,8 @@ const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id"] };
 // `story compare --against` must not pick up a default --ref.
 const LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
-  compare: [["ref", "against", "snapshot"]]
+  compare: [["ref", "against", "snapshot"]],
+  similarity: [["against", "snapshot"]]
 };
 
 const EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], errors: [] });

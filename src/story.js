@@ -463,19 +463,35 @@ function chaptersAtGitRef(root, ref, warnings) {
 // chapters of each story project in it (itself, or one nested inside) and
 // every other .md, .markdown, and .txt file; anything else is tried as a
 // git ref, and the project's own chapters at that commit are the reference.
+// --snapshot <name> instead reads the chapters of a snapshot in .snapshots/.
 // This project's own files are never a reference. A relative --against from
 // story.md cli-defaults is read from the project folder, where the entry is
 // written; one on the command line from the current directory.
 export function similarityReport(root, options = {}) {
   const against = typeof options.against === "string" ? options.against.trim() : "";
-  if (against === "") {
-    throw usageError("similarity needs --against <file|folder|git-ref>: the text to compare the chapters with");
+  const snapshotName = typeof options.snapshot === "string" ? options.snapshot.trim() : "";
+  if (against === "" && snapshotName === "") {
+    throw usageError("similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with");
+  }
+  if (against !== "" && snapshotName !== "") {
+    throw usageError("similarity takes one of --against <file|folder|git-ref> or --snapshot <name>, not both");
   }
   const { minWords } = similarityOptions(options);
   const project = scanProject(root);
   // A chapter that fails to parse would be left out of the comparison.
   assertProjectParses(project, "check similarity");
   const chapters = labelledChapters(project, (file) => relative(project, file));
+  if (snapshotName !== "") {
+    // A snapshot in .snapshots/, found as compare --snapshot finds it; its
+    // files are named by their place in the project folder.
+    const snapshot = existingSnapshot(project.root, snapshotName);
+    const self = canonicalPath(project.root);
+    const label = `snapshot ${snapshot.id}`;
+    const references = referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
+    const report = compareSimilarity(chapters, references, { minWords, label });
+    const warnings = report.reference.words === 0 ? [warn("similarity-no-reference-text", `${label} has no chapter text to compare with`)] : [];
+    return { ...report, warnings: [...warnings, ...report.warnings] };
+  }
   const cwd = options.cwd ?? process.cwd();
   const target = path.resolve(options.againstFromProject ? project.root : cwd, against);
   const warnings = [];

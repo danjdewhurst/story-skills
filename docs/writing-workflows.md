@@ -1054,7 +1054,7 @@ For genre books, add the audit checklist at the end of the relevant [`genre-craf
 Before any pass that touches more than one chapter, the skill takes a snapshot named after the draft it preserves (`draft-1`, `pre-beta-edit`):
 
 - **In a git repository**, it asks before committing, then commits and tags: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. It never pushes, rewrites history, or deletes tags without your approval.
-- **Without git**, it offers `git init`. If you decline, it runs `story snapshot draft-1`, which copies the project's markdown to `.snapshots/draft-1/`. Every `story` command skips that folder, and `story snapshot --list` shows the snapshots you have. See [`story snapshot`](cli-reference.md#snapshot).
+- **Without git**, it offers `git init`. If you decline, it runs `story snapshot draft-1`, which copies the project's markdown to `.snapshots/draft-1/`. Every `story` command skips that folder, and `story snapshot --list` shows the snapshots you have. If you abandon the pass, `story snapshot --restore draft-1` puts the snapshot back: it saves the project as it is first (`before-restore-draft-1-1`), and deletes any markdown file the snapshot does not have, such as a chapter added during the pass. The skill shows you a `--dry-run` and asks before it restores. See [`story snapshot`](cli-reference.md#snapshot).
 
 ### 4. Plan, edit, and update
 

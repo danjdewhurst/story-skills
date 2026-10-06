@@ -1194,7 +1194,7 @@ Unknown git ref: no-such-tag
 ### similarity
 
 ```text
-story similarity [path] --against <file|folder|git-ref> [--min-words <n>] [--json]
+story similarity [path] (--against <file|folder|git-ref> | --snapshot <name>) [--min-words <n>] [--json]
 ```
 
 Finds passages of chapter prose that share a run of words with other text: your earlier books, a previous draft, or a source a passage might echo too closely. It is advisory. A shared run is a place to look, not a finding of copying: a stock phrase, a quotation you meant, or your own recurring line all share words. Each passage is a `similarity-shared-passage` warning, so the command exits 0 unless a `severity` entry promotes it.
@@ -1202,6 +1202,7 @@ Finds passages of chapter prose that share a run of words with other text: your 
 | Option | Effect |
 |---|---|
 | `--against <file\|folder\|git-ref>` | The text to compare with. On the command line it is resolved against the current directory; set in `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd), against the project folder. A symlink you name is followed. A **file** is read as UTF-8 text; a markdown file loses its frontmatter, and a chapter file keeps only its `## Chapter Text`. A **folder** contributes the chapters of each story project in it (the folder itself when it holds `story.md`, or one nested inside), and every other `.md`, `.markdown`, and `.txt` file. Hidden files, `dist/`, `node_modules/`, and symlinks inside are skipped. A name that is neither is tried as a **git ref**, and the project's own chapters at that commit are the reference, read the way `compare --ref` reads them. An existing path wins over a ref of the same name; write `refs/heads/main` to mean the branch. This project, and its own chapter files, are never a reference |
+| `--snapshot <name>` | Compare with the chapters of a snapshot saved with [`snapshot`](#snapshot), found as `compare --snapshot` finds it: by the name it was taken with, its id, or a name with that id. Its files are named by their path in the project, such as `.snapshots/draft-1/chapters/chapter-02.md`. Give `--against` or `--snapshot`, not both; `--snapshot` on the command line drops a `cli-defaults` `--against` |
 | `--min-words <n>` | The shortest shared run to report, in words; default `8`, at least `5`. A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
 
 Both sides are split into words and compared lowercased, with punctuation dropped and curly apostrophes folded. So `"The tide, turning,"` matches `the tide turning`, and `lamp-keeper` matches `lamp keeper`. A hyphenated word counts as two here, so the word totals can differ from [`wordcount`](#wordcount). Chinese and Japanese are compared a character at a time, and Thai, Lao, Khmer, and Burmese a word at a time, split as [`wordcount`](#wordcount) splits them. Every run of `--min-words` words in the reference is indexed. Each run a chapter shares with the index is followed as far as the two texts agree. The longest runs are reported first. A shorter run that overlaps one keeps only the words not already reported, and only if at least `--min-words` of them are left, so each word is reported once.
@@ -1230,13 +1231,13 @@ Similarity check complete: 0 errors, 1 warnings, 0 dismissed
 warning: chapters/chapter-02.md (ch02-p1) shares 9 words with ../sources/parish-notes.txt (p2): "was pulled from the millpond on a grey Tuesday" [similarity-shared-passage]
 ```
 
-Against an earlier draft, `story similarity --against beta-round-1` shows what survived the revision word for word. For a chapter-by-chapter count of changes, use [`compare`](#compare).
+Against an earlier draft, `story similarity --against beta-round-1` (a git tag) or `story similarity --snapshot draft-1` (a [snapshot](#snapshot)) shows what survived the revision word for word. For a chapter-by-chapter count of changes, use [`compare`](#compare).
 
 Errors:
 
 ```text
 $ story similarity
-similarity needs --against <file|folder|git-ref>: the text to compare the chapters with
+similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with
 
 $ story similarity --against .
 similarity --against . is this project: point it at other text, or at a git ref for an earlier draft
@@ -2134,22 +2135,24 @@ See [Writing workflows](writing-workflows.md) for where passes fit in a revision
 ```text
 story snapshot <name> [--id <kebab-id>] [--force] [--dry-run] [--json] [--path <path>]
 story snapshot --list [--json] [--path <path>]
+story snapshot --restore <name> [--dry-run] [--json] [--path <path>]
 ```
 
 Saves a named copy of the project's markdown in `.snapshots/<id>/`, so a draft can be kept and compared with later without git. The id is the kebab-case form of the name (`"Before line edit"` is saved as `before-line-edit`), with Latin letters folded and Cyrillic and Greek transliterated as for entity ids. A name with letters in another script, such as `初稿 v2`, needs `--id`, so two names that differ only in those letters never share a folder. The copy holds every markdown file a scan reads, under the same paths: `story.md`, the style sheet, chapters, scenes, every entity file and registry. It leaves out what scans leave out: `dist/`, `node_modules/`, dot-folders (so a snapshot never holds an earlier snapshot, or `.git/`), subfolders with their own `story.md`, and every file that is not markdown, such as a cover image. Beside the copy, `snapshot.json` records the name as typed, the `id`, the time it was `created` (UTC), and the number of `chapters`, `words` (plus `characters` in a project counted in characters), and `files` copied.
 
-Every scan skips dot-folders, so `validate`, `links`, `continuity`, `check`, `reindex`, `wordcount`, `export`, `build`, and the rest never read `.snapshots/`: a project with snapshots checks, counts, and builds exactly as it does without them. Compare with a snapshot through [`compare --snapshot <name>`](#compare).
+Every scan skips dot-folders, so `validate`, `links`, `continuity`, `check`, `reindex`, `wordcount`, `export`, `build`, and the rest never read `.snapshots/`: a project with snapshots checks, counts, and builds exactly as it does without them. Compare with a snapshot through [`compare --snapshot <name>`](#compare), look for passages it shares with the current chapters through [`similarity --snapshot <name>`](#similarity), and put it back with `--restore`.
 
 | Option | Effect |
 |---|---|
 | `--id <kebab-id>` | The snapshot's folder name, instead of one derived from the name. `snapshot.json` keeps the name as typed, and `compare --snapshot` finds the snapshot by either |
 | `--force` | Replace a snapshot of the same name. The old copy is replaced whole: files the project no longer has are deleted from it. The old copy is kept aside until the new one is complete, so a failed replacement leaves it as it was |
 | `--list` | List the snapshots, oldest first, instead of taking one. A folder in `.snapshots/` without a readable `snapshot.json` is listed by its name, with its date and counts unknown |
+| `--restore <name>` | Put a snapshot back over the project instead of taking one (see [Restoring a snapshot](#restoring-a-snapshot)). It finds the snapshot as `compare --snapshot` does |
 | `--dry-run` | List the files it would create, update, or delete, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--json` | Print the snapshot, or with `--list` the snapshots, as a JSON result (see below) |
 | `--path <path>` | Project root (default: current directory) |
 
-Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. A snapshot that fails part way, such as on a markdown file that is not UTF-8, is removed, so no half-written snapshot is left. `cli-defaults` in `story.md` cannot set `force`, `list`, or `id`, which belong to one run. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project.
+Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. A snapshot that fails part way, such as on a markdown file that is not UTF-8, is removed, so no half-written snapshot is left. `cli-defaults` in `story.md` cannot set `force`, `list`, `id`, or `restore`, which belong to one run. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project.
 
 ```shell
 story snapshot "Draft 1"
@@ -2172,6 +2175,34 @@ Snapshots: 2
 ```
 
 With `--json`, a snapshot's `data` holds the manifest fields (`name`, `id`, `created`, `chapters`, `words`, `files`), `dir` (`.snapshots/<id>`), `replaced`, `dryRun`, and `changes`; `--list` gives `data.snapshots`, each with `name`, `id`, `created`, `chapters`, and `words` (`null` where the manifest is missing).
+
+#### Restoring a snapshot
+
+`story snapshot --restore <name>` makes the project's markdown match the snapshot again:
+
+1. It first saves the project as it is as a new snapshot, `before-restore-<id>-<n>`, where `<n>` is one more than the highest number a safety snapshot of that id already has (`before-restore-draft-1-1`, then `before-restore-draft-1-2`). This copy is taken even when a chapter does not parse, so nothing is lost.
+2. Every markdown file in the snapshot is written back to the same path. A file that already has the snapshot's text is left alone.
+3. **Every markdown file the project has that the snapshot does not is deleted**, such as a chapter added since the snapshot was taken. Only the files a snapshot copies count: `dist/`, `node_modules/`, `.snapshots/` and other dot-folders, subfolders with their own `story.md`, and files that are not markdown, such as a cover image, are never touched.
+4. The registries are rebuilt, as `story reindex` does.
+
+The output lists every file updated, created, and deleted, and the command that undoes the restore: `story snapshot --restore before-restore-<id>-<n>`. When the project already matches the snapshot, nothing is written and no safety snapshot is taken. `--dry-run` lists every file the restore would create, update, or delete, the safety snapshot's files among them, and changes nothing.
+
+A snapshot without `story.md`, or with a file that does not parse, is refused with nothing changed. The restore runs under the project [lock](#where-commands-write), through the same guarded writes as every other command. If a write fails part way, the command stops with exit 4, says how much of the project was restored, and names the safety snapshot that puts it back.
+
+```shell
+story snapshot --restore draft-1
+```
+
+```text
+Saved the project as it was in snapshot before-restore-draft-1-1 (.snapshots/before-restore-draft-1-1/)
+Restored snapshot draft-1: 2 updated, 0 created, 1 deleted (not in the snapshot)
+  update  chapters/_index.md
+  update  chapters/chapter-01.md
+  delete  chapters/chapter-05.md
+Undo it: story snapshot --restore before-restore-draft-1-1
+```
+
+With `--json`, `data` holds `restored` (the snapshot's `name` and `id`), `safety` (the safety snapshot's `id` and `dir`, or `null` when nothing changed), the `created`, `updated`, and `deleted` paths, `dryRun`, and `changes`, which also lists the safety snapshot's files and any registry the reindex rebuilt.
 
 `init` does not add `.snapshots/` to the `.gitignore` it writes. A writer without git does not need it, and in a git repository a committed snapshot is a plain copy that git stores compactly; a writer who uses git can tag drafts and use `compare --ref` instead, and add `.snapshots/` to `.gitignore` to keep any snapshots out of commits.
 
@@ -3209,7 +3240,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | Code | Level | Reported when |
 |---|---|---|
 | `similarity-shared-passage` | warning | A run of at least `--min-words` words in a chapter also appears in the `--against` text. |
-| `similarity-no-reference-text` | warning | The `--against` file, folder, or git ref holds no words to compare with. |
+| `similarity-no-reference-text` | warning | The `--against` file, folder, or git ref, or the `--snapshot`, holds no words to compare with. |
 
 ### Codes: build and export
 
@@ -3285,9 +3316,10 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
 | `--ref` | `<git-ref>` | `compare` | Exclusive with `--against` and `--snapshot` |
-| `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, required: a file, folder, or git ref |
-| `--snapshot` | `<name>` | `compare` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
+| `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, a file, folder, or git ref; exclusive with `--snapshot` |
+| `--snapshot` | `<name>` | `compare`, `similarity` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
+| `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
 | `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |

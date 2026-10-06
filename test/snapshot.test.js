@@ -233,3 +233,154 @@ describe("story compare --snapshot", () => {
     expect(invoke(cwd, ["compare", root, "--snapshot", "draft"]).out).toContain("chapter-02 Chapter 2: 5 -> 6 words");
   });
 });
+
+describe("story snapshot --restore", () => {
+  // The project changed after "Draft One": chapter 1 rewritten, chapter 2
+  // deleted, chapter 3 and a note added, plus files a restore never touches.
+  function revised() {
+    const { cwd, root } = project();
+    invoke(cwd, ["snapshot", "Draft One", "--path", root]);
+    writeChapter(root, 1, "Rewritten opening.");
+    fs.rmSync(path.join(root, "chapters", "chapter-02.md"));
+    writeChapter(root, 3, "A new ending.");
+    writeMarkdown(path.join(root, "notes", "idea.md"), "title: Idea");
+    invoke(cwd, ["reindex", root]);
+    fs.mkdirSync(path.join(root, "dist"));
+    fs.writeFileSync(path.join(root, "dist", "book.md"), "built\n");
+    fs.writeFileSync(path.join(root, "cover.png"), "not markdown\n");
+    writeMarkdown(path.join(root, "spinoff", "story.md"), "title: Spinoff");
+    return { cwd, root };
+  }
+
+  test("saves the project first, writes the snapshot back, and deletes markdown files it lacks", () => {
+    const { cwd, root } = revised();
+    const result = invoke(cwd, ["snapshot", "--restore", "draft one", "--path", root]);
+    expect(result.code).toBe(0);
+    expect(result.out).toStartWith("Saved the project as it was in snapshot before-restore-draft-one-1 (.snapshots/before-restore-draft-one-1/)\nRestored snapshot draft-one: ");
+    expect(result.out).toContain("  update  chapters/chapter-01.md\n");
+    expect(result.out).toContain("  create  chapters/chapter-02.md\n");
+    expect(result.out).toContain("  delete  chapters/chapter-03.md\n");
+    expect(result.out).toContain("  delete  notes/idea.md\n");
+    expect(result.out).toEndWith("Undo it: story snapshot --restore before-restore-draft-one-1\n");
+    const snapshot = path.join(root, ".snapshots", "draft-one");
+    for (const file of ["chapters/chapter-01.md", "chapters/chapter-02.md", "chapters/_index.md", "story.md"]) {
+      expect(fs.readFileSync(path.join(root, file), "utf8")).toBe(fs.readFileSync(path.join(snapshot, file), "utf8"));
+    }
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(false);
+    expect(fs.existsSync(path.join(root, "notes", "idea.md"))).toBe(false);
+    // Never touched: builds, assets, nested projects, and the snapshots.
+    expect(fs.readFileSync(path.join(root, "dist", "book.md"), "utf8")).toBe("built\n");
+    expect(fs.existsSync(path.join(root, "cover.png"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "spinoff", "story.md"))).toBe(true);
+    expect(fs.existsSync(path.join(snapshot, "chapters", "chapter-03.md"))).toBe(false);
+    const safety = path.join(root, ".snapshots", "before-restore-draft-one-1");
+    expect(fs.readFileSync(path.join(safety, "chapters", "chapter-03.md"), "utf8")).toContain("A new ending.");
+    expect(fs.existsSync(path.join(safety, "spinoff"))).toBe(false);
+    expect(json(invoke(cwd, ["check", root, "--json"])).ok).toBe(true);
+
+    // Nothing differs now, so no safety snapshot is taken.
+    expect(invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]).out).toBe("The project already matches snapshot draft-one: nothing to restore\n");
+    expect(json(invoke(cwd, ["snapshot", "--restore", "draft-one", "--json", "--path", root])).data).toMatchObject({ safety: null, changes: [] });
+    // The safety snapshot undoes the restore.
+    const undo = invoke(cwd, ["snapshot", "--restore", "before-restore-draft-one-1", "--path", root]);
+    expect(undo.code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain("A new ending.");
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(false);
+    // A second restore of the same snapshot numbers its safety copy on.
+    expect(invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]).out).toStartWith("Saved the project as it was in snapshot before-restore-draft-one-2 ");
+  });
+
+  test("--dry-run lists the same changes as the real run and writes nothing", () => {
+    const { cwd, root } = revised();
+    const before = fs.readdirSync(path.join(root, ".snapshots"));
+    const preview = invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--json", "--path", root]);
+    expect(preview.code).toBe(0);
+    const planned = json(preview).data;
+    expect(planned.dryRun).toBe(true);
+    expect(planned.changes).toContainEqual({ action: "delete", path: "chapters/chapter-03.md" });
+    expect(planned.changes).toContainEqual({ action: "create", path: ".snapshots/before-restore-draft-one-1/snapshot.json" });
+    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(before);
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(true);
+    const text = invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--path", root]);
+    expect(text.out).toStartWith("Restoring snapshot draft-one would first save the project as snapshot before-restore-draft-one-1; it would delete 2 markdown files the snapshot does not have\n");
+    expect(text.out).toContain("delete  notes/idea.md\n");
+
+    const real = json(invoke(cwd, ["snapshot", "--restore", "draft-one", "--json", "--path", root]));
+    expect(real.data.changes).toEqual(planned.changes);
+    expect(real.data).toMatchObject({ restored: { name: "Draft One", id: "draft-one" }, safety: { id: "before-restore-draft-one-1" }, deleted: ["chapters/chapter-03.md", "notes/idea.md"] });
+  });
+
+  test("a restore that fails part way names the safety snapshot", () => {
+    const { cwd, root } = revised();
+    // A folder where the snapshot has chapter 2, so writing it fails after
+    // chapter 1 and its registry are restored.
+    fs.mkdirSync(path.join(root, "chapters", "chapter-02.md"));
+    const failed = invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]);
+    expect(failed.code).toBe(4);
+    expect(failed.err).toContain("Restoring snapshot draft-one stopped: ");
+    expect(failed.err).toContain("The project is part restored (");
+    expect(failed.err).toContain("Snapshot before-restore-draft-one-1 holds the project as it was before: story snapshot --restore before-restore-draft-one-1 puts it back");
+    expect(fs.readFileSync(path.join(root, ".snapshots", "before-restore-draft-one-1", "chapters", "chapter-01.md"), "utf8")).toContain("Rewritten opening.");
+  });
+
+  test("refuses a missing or incomplete snapshot, and misplaced flags, before changing anything", () => {
+    const { cwd, root } = revised();
+    expect(invoke(cwd, ["snapshot", "--restore", "nope", "--path", root]).err).toContain("No snapshot named nope: story snapshot --list shows them: draft-one");
+    expect(invoke(cwd, ["snapshot", "x", "--restore", "draft-one", "--path", root]).err).toContain("takes the snapshot's name as its value");
+    expect(invoke(cwd, ["snapshot", "--restore", "draft-one", "--force", "--path", root]).err).toContain("--force does not apply to story snapshot --restore");
+    fs.mkdirSync(path.join(root, ".snapshots", "by-hand", "chapters"), { recursive: true });
+    const incomplete = invoke(cwd, ["snapshot", "--restore", "by-hand", "--path", root]);
+    expect(incomplete.code).toBe(4);
+    expect(incomplete.err).toContain("Cannot restore snapshot by-hand: .snapshots/by-hand has no story.md");
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["by-hand", "draft-one"]);
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(true);
+
+    // A folder the snapshot writes into that is now a project of its own.
+    writeMarkdown(path.join(root, ".snapshots", "draft-one", "spinoff", "notes.md"), "title: Notes");
+    const nested = invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]);
+    expect(nested.code).toBe(4);
+    expect(nested.err).toContain("spinoff/notes.md would be written into spinoff/, which is now a story project of its own. Nothing was changed");
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["by-hand", "draft-one"]);
+  });
+
+  test("restores over a chapter that no longer parses, keeping it in the safety snapshot", () => {
+    const { cwd, root } = project();
+    invoke(cwd, ["snapshot", "good", "--path", root]);
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, "---\ntitle: [broken\n---\n\nText.\n");
+    expect(invoke(cwd, ["snapshot", "broken", "--path", root]).code).toBe(3);
+    const restored = invoke(cwd, ["snapshot", "--restore", "good", "--path", root]);
+    expect(restored.code).toBe(0);
+    expect(fs.readFileSync(chapter, "utf8")).toContain("First paragraph.");
+    expect(fs.readFileSync(path.join(root, ".snapshots", "before-restore-good-1", "chapters", "chapter-01.md"), "utf8")).toContain("title: [broken");
+  });
+
+  test("--dry-run says when the project already matches", () => {
+    const { cwd, root } = project();
+    invoke(cwd, ["snapshot", "same", "--path", root]);
+    expect(invoke(cwd, ["snapshot", "--restore", "same", "--dry-run", "--path", root]).out).toBe("The project already matches snapshot same: nothing to restore\nDry run: story snapshot would make no changes; nothing was written\n");
+  });
+});
+
+describe("story similarity --snapshot", () => {
+  test("compares the chapters with a saved snapshot, found by name or id", () => {
+    const { cwd, root } = project();
+    writeChapter(root, 1, "The lighthouse keeper climbed the stairs every night before the storm came in.");
+    invoke(cwd, ["snapshot", "Draft One", "--path", root]);
+    writeChapter(root, 1, "Years later, the lighthouse keeper climbed the stairs every night before the storm came in, alone.");
+    const result = invoke(cwd, ["similarity", root, "--snapshot", "Draft One"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toStartWith("Similarity against snapshot draft-one: ");
+    expect(result.err).toContain("with .snapshots/draft-one/chapters/chapter-01.md (ch01-p1)");
+    const data = json(invoke(cwd, ["similarity", root, "--snapshot", "draft-one", "--json"])).data;
+    expect(data.label).toBe("snapshot draft-one");
+    expect(data.passages[0]).toMatchObject({ file: "chapters/chapter-01.md", words: 13 });
+    expect(invoke(cwd, ["similarity", root, "--snapshot", "draft-one", "--against", "x"]).err).toContain("one of --against <file|folder|git-ref> or --snapshot <name>, not both");
+    expect(invoke(cwd, ["similarity", root, "--snapshot", "nope"]).err).toContain("No snapshot named nope");
+
+    // --snapshot on the command line drops a cli-defaults --against.
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: similarity\n    against: ../missing.txt\n"));
+    expect(invoke(cwd, ["similarity", root, "--snapshot", "draft-one"]).out).toStartWith("Similarity against snapshot draft-one: ");
+  });
+});
