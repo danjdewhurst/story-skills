@@ -12,7 +12,7 @@ import {
   withoutLeadingFrontmatter
 } from "./frontmatter.js";
 import { buildContext, DEFAULT_CONTEXT_BUDGET, DEFAULT_CONTEXT_SCENES } from "./context.js";
-import { isPathInside, lstatIfExists, makeDirectories, readTextFile, writeFile } from "./files.js";
+import { isPathInside, lstatIfExists, makeDirectories, projectPath, readTextFile, writeFile } from "./files.js";
 import { isTruthy } from "./options.js";
 import { chapterProse, characterCount, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
@@ -492,7 +492,7 @@ export function similarityReport(root, options = {}) {
         }
         const old = scanProject(oldRoot);
         assertProjectParses(old, `read chapters at git ref ${against}`);
-        return labelledChapters(old, (file) => `${against}:${path.relative(oldRoot, file).split(path.sep).join("/")}`);
+        return labelledChapters(old, (file) => `${against}:${projectPath(oldRoot, file)}`);
       }, "similarity --against");
     } catch (error) {
       // A mistyped path is far likelier than a mistyped ref, so say both,

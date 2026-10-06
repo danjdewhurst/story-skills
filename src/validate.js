@@ -6,7 +6,7 @@ import { chapterChronology } from "./chronology.js";
 import { validateProgressions } from "./progressions.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
-import { isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
+import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
 import { validatePublishing } from "./publishing.js";
@@ -188,7 +188,7 @@ export function validateProjectOf(project) {
 
   // Each registry link as [needle, file]: the needle is the link target the
   // registry must contain, the file is what the warning names.
-  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path.basename(item.file)})`, path.relative(projectRoot, item.file)]);
+  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path.basename(item.file)})`, projectPath(projectRoot, item.file)]);
   const indexChecks = [
     [path.join("characters", "_index.md"), linksFor(project.characters)],
     [path.join("worldbuilding", "_index.md"), linksFor(project.locations, "locations/")
@@ -223,13 +223,13 @@ export function validateProjectOf(project) {
     }
     for (const [link, file] of links) {
       if (!markdown.includes(link)) {
-        warnings.push(warn("stale-registry", `${indexPath} does not list ${file}; run story reindex`, indexPath));
+        warnings.push(warn("stale-registry", `${portablePath(indexPath)} does not list ${file}; run story reindex`, indexPath));
       }
     }
   }
 
   for (const chapter of project.chapters) {
-    const file = path.relative(projectRoot, chapter.file);
+    const file = projectPath(projectRoot, chapter.file);
     if (chapter.declaredWordCount !== null && chapter.declaredWordCount !== chapter.wordCount) {
       warnings.push(warn("stale-word-count", chapter.wordCountMissing
         ? `${file} has no word-count (contains ${chapter.wordCount})`
@@ -794,7 +794,7 @@ function collectStrayFileWarnings(project, warnings) {
     for (const file of markdownFiles(directory)) {
       const relativePath = path.relative(directory, file);
       if (relativePath.includes(path.sep) || path.dirname(relativePath) !== ".") {
-        nested.push(path.join(relativeDir, relativePath));
+        nested.push(portablePath(path.join(relativeDir, relativePath)));
       }
     }
   }
@@ -812,16 +812,16 @@ function collectStrayFileWarnings(project, warnings) {
     }
     const linked = fs.readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md")
-      .map((entry) => path.join(relativeDir, entry.name))
+      .map((entry) => portablePath(path.join(relativeDir, entry.name)))
       .sort();
     for (const linkPath of linked) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
   }
 
-  for (const leftover of temporaryFiles(root).sort()) {
-    const name = TEMPORARY_FILE_PATTERN.exec(path.basename(leftover))?.[1];
-    const target = name ? ` to ${path.join(path.dirname(leftover), name)}` : "";
+  for (const leftover of temporaryFiles(root).map((file) => portablePath(file)).sort()) {
+    const name = TEMPORARY_FILE_PATTERN.exec(path.posix.basename(leftover))?.[1];
+    const target = name ? ` to ${path.posix.join(path.posix.dirname(leftover), name)}` : "";
     warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
   }
 }

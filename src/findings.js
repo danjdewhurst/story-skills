@@ -1,3 +1,5 @@
+import { portablePath } from "./files.js";
+
 // Every error and warning a command reports is a finding: `code` is its
 // stable kebab-case rule name, `message` the line the text output prints
 // after `error:` or `warning:`, `file` the project file it is about, as the
@@ -13,13 +15,13 @@
 // code is raised but not listed or documented, or listed but never raised.
 
 export function err(code, message, file = null, chapter = null) {
-  return { code, message, file, chapter };
+  return { code, message, file: portablePath(file), chapter };
 }
 
 // The same shape as err: the level is where the finding is pushed. The two
 // names let the finding-codes test check each code's level in the source.
 export function warn(code, message, file = null, chapter = null) {
-  return { code, message, file, chapter };
+  return { code, message, file: portablePath(file), chapter };
 }
 
 export const FINDING_CODES = {

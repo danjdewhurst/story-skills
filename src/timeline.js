@@ -1,6 +1,6 @@
-import path from "node:path";
 import { parseClockDate, parseClockTime, readingUnits } from "./continuity.js";
 import { roundedShares } from "./plural.js";
+import { projectPath } from "./files.js";
 
 // Read-only views over the project: story events in chronological order,
 // POV balance, and each character's presence across chapters. Nothing here
@@ -113,7 +113,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   const minutes = parseClockTime(time || "");
   return {
     id: unit.id,
-    file: path.relative(project.root, unit.file),
+    file: projectPath(project.root, unit.file),
     title: unit.title,
     chapterNumber: Number.isFinite(chapter.number) ? chapter.number : chapter.id,
     // Set when the scene's chapter has no chapter file.

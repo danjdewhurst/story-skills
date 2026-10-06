@@ -3,8 +3,8 @@
 // hooks, and length, plus advisory findings about runs that go slack. Reads
 // frontmatter only; everything here is a warning.
 
-import path from "node:path";
 import { warn } from "./findings.js";
+import { projectPath } from "./files.js";
 import { plural } from "./plural.js";
 
 export const SCENE_OUTCOMES = new Set(["yes", "no", "yes-but", "no-and"]);
@@ -25,7 +25,7 @@ export function buildPacing(project) {
   const noun = characterBook ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   // The chapter file a finding is about, relative to the project.
-  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : path.relative(project.root, chapter.file)]));
+  const files = new Map(chapters.map((chapter) => [chapter.id, project.root === undefined ? null : projectPath(project.root, chapter.file)]));
   const warnings = [];
   const rows = [];
   const units = [];

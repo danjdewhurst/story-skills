@@ -20,15 +20,15 @@ import { suggestion } from "./options.js";
 // entry that names a code also dismisses that warning wherever another
 // command reports it (see applySeverity in config.js).
 
-export const EXEMPTIONS_FILE = path.join("continuity", "exemptions.md");
+export const EXEMPTIONS_FILE = "continuity/exemptions.md";
 
 // The keys that say which findings an entry dismisses.
 export const MATCH_KEYS = ["pattern", "code", "file", "chapter"];
 
 const MIN_PATTERN_LENGTH = 4;
 
-// Paths in findings use the platform separator, so an entry written on one
-// system (`continuity/promises/x.md`) matches on another.
+// Findings name files with forward slashes on every system; an entry
+// written with backslashes (`continuity\\promises\\x.md`) still matches.
 function portable(text) {
   return text.replace(/\\/g, "/");
 }

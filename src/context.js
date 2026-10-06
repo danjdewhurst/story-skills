@@ -2,6 +2,7 @@ import path from "node:path";
 import { chapterChronology, deathWindow, formatKnowledgeMark, knowledgeAudience } from "./chronology.js";
 import { idText, normalizeKnowledge } from "./continuity.js";
 import { warn } from "./findings.js";
+import { projectPath } from "./files.js";
 import { entityStateAt } from "./progressions.js";
 import { projectError, usageError } from "./exit-codes.js";
 import { extractSection } from "./markdown.js";
@@ -293,7 +294,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
   // A scene with no POV of its own is told from its chapter's.
   const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
-  const relative = (file) => path.relative(project.root, file);
+  const relative = (file) => projectPath(project.root, file);
   const statePath = path.join("continuity", "state.md");
 
   const sections = [];

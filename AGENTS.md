@@ -40,7 +40,7 @@ bun run check:links
 bun run eval:selftest
 ```
 
-CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test`, `test:coverage` (which also runs `check:fallback`), `test:examples`, and then the fallback's `--help` under Node, in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node, then installs the packed npm tarball and runs it (`bun run check:package`). Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
+CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test`, `test:coverage` (which also runs `check:fallback`), `test:examples`, and then the fallback's `--help` under Node, in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node, then installs the packed npm tarball and runs it (`bun run check:package`), and `bun run test` on Windows and macOS. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
 
 ## Implementation Rules
 

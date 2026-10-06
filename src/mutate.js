@@ -12,6 +12,7 @@ import {
   assertSafeProjectPath,
   lstatIfExists,
   makeDirectories,
+  projectPath,
   readTextFile,
   recordChanges,
   removeFile,
@@ -723,7 +724,7 @@ function computeWordCountsUnlocked(root, options = {}) {
     chapters.push({
       number: chapter.number,
       title: chapter.title,
-      file: path.relative(project.root, chapter.file),
+      file: projectPath(project.root, chapter.file),
       wordCount: chapter.wordCount,
       ...(characters ? { characterCount: chapter.count } : {})
     });
@@ -1157,7 +1158,7 @@ function registryLists(root, kind, file) {
   if (!registryPath || !fs.existsSync(registryPath)) {
     return false;
   }
-  const link = path.relative(path.dirname(registryPath), file).split(path.sep).join("/");
+  const link = projectPath(path.dirname(registryPath), file);
   return safeRead(registryPath, root).includes(`](${link})`);
 }
 
@@ -1330,7 +1331,7 @@ function removeEntityUnlocked(root, options) {
     const context = { ...entityReferenceContext(project.root, "chapter", id), isReferenceKey: (key) => BEFORE_STORY_FIELDS.includes(key) };
     const named = [...planReferenceRewrites(project.root, context, new Map([[file, null]]), idRenamer(id, `${id}-removed`), (body) => body).keys()];
     if (named.length > 0) {
-      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => path.relative(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
+      throw refusedError(`chapter ${id} is still named by ${BEFORE_STORY_FIELDS.join(", ")}, or a progression's from in ${named.map((entry) => projectPath(project.root, entry)).join(", ")}; an empty value there means before the story, and a progression needs the chapter it starts in, so point them at another chapter first`);
     }
   }
 
@@ -1373,7 +1374,7 @@ function leftoverReferenceWarnings(root, kind, id) {
     files = [...planReferenceRewrites(root, context, new Map(), (value) => value, (body, file) => {
       const relinked = renameLinkTargets(root, file, body, context, probe);
       return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
-    }).keys()].map((file) => path.relative(root, file)).sort();
+    }).keys()].map((file) => projectPath(root, file)).sort();
   } catch {
     // Every file parsed before the remove; a file broken since is reported
     // by validate.
@@ -1665,7 +1666,7 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   if (plan.size === 0) {
     return [];
   }
-  const files = [...plan.keys()].map((file) => path.relative(root, file)).sort();
+  const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 
@@ -1703,7 +1704,7 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
   const interrupted = interruptedMove(plan, moves);
   moves.forEach((move) => {
     if (fs.existsSync(move.newFile) && !interrupted) {
-      throw refusedError(`${path.relative(root, move.newFile)} already exists; nothing was changed`);
+      throw refusedError(`${projectPath(root, move.newFile)} already exists; nothing was changed`);
     }
   });
   for (const move of moves) {
@@ -1920,7 +1921,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
     }
     const match = FRONTMATTER_PATTERN.exec(text);
     if (!match && sourceFile) {
-      throw projectError(`${path.relative(root, file)} is missing YAML frontmatter${registryHint(root, file)}; nothing was changed`);
+      throw projectError(`${projectPath(root, file)} is missing YAML frontmatter${registryHint(root, file)}; nothing was changed`);
     }
     let header = "";
     let body = text;
@@ -1936,7 +1937,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
           // A note outside the project model may use YAML the CLI does not
           // parse; only its body links are rewritten.
           if (sourceFile) {
-            throw projectError(`${path.relative(root, file)}: ${error.message}${registryHint(root, file)}; nothing was changed`);
+            throw projectError(`${projectPath(root, file)}: ${error.message}${registryHint(root, file)}; nothing was changed`);
           }
         }
         if (data !== null) {
@@ -2035,14 +2036,14 @@ function assertWritable(root, changed, created = []) {
   // A folder that does not exist yet is made by the write itself.
   const folder = (file) => {
     const directory = path.dirname(file);
-    const shown = path.relative(root, directory);
+    const shown = projectPath(root, directory);
     if (fs.existsSync(directory)) {
       check(directory, shown === "" ? "the project folder" : `${shown}/`);
     }
   };
   for (const file of changed) {
     if (fs.existsSync(file)) {
-      check(file, path.relative(root, file));
+      check(file, projectPath(root, file));
     }
     folder(file);
   }

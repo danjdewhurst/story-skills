@@ -6,7 +6,7 @@ import { err, warn } from "./findings.js";
 import { languagePack } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
-import { readTextFile } from "./files.js";
+import { portablePath, projectPath, readTextFile } from "./files.js";
 
 // Each pair is a series link field and the field the linked book must use to
 // point back. `follows` names books set earlier in the story's chronology;
@@ -43,7 +43,7 @@ export function seriesDisplayName(data) {
 // Stored link paths are relative to the book root and use forward slashes so
 // story.md stays portable between operating systems.
 export function seriesLinkPath(fromRoot, toRoot) {
-  return path.relative(fromRoot, toRoot).split(path.sep).join("/");
+  return projectPath(fromRoot, toRoot);
 }
 
 export function seriesLinks(root, data, field) {
@@ -674,5 +674,5 @@ function sharedCanon(books) {
 }
 
 function bookFile(book, file) {
-  return path.join(book.label, path.relative(book.root, file));
+  return path.posix.join(portablePath(book.label), projectPath(book.root, file));
 }

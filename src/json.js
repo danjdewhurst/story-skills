@@ -1,5 +1,6 @@
 import { EXIT_CODES } from "./exit-codes.js";
 import { err } from "./findings.js";
+import { portablePath } from "./files.js";
 import { isTruthy } from "./options.js";
 
 // The version of the --json result envelope. Adding a field keeps it;
@@ -20,7 +21,7 @@ export function wantsJson(parsed) {
 // Every command with --json output calls this, and nothing else is printed,
 // so stdout parses as a single JSON document.
 export function writeJsonResult(io, { command, ok, exitCode = EXIT_CODES.findings, data = null, diagnostics = [], writes = [] }) {
-  const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes };
+  const envelope = { apiVersion: API_VERSION, command, ok: Boolean(ok), data, diagnostics, writes: writes.map((file) => portablePath(file)) };
   // A field a result leaves undefined prints as null, so every result of a
   // command has the same keys.
   io.stdout.write(`${JSON.stringify(envelope, (key, value) => (value === undefined ? null : value), 2)}\n`);
@@ -39,7 +40,7 @@ export function diagnosticsFrom(result, check) {
 }
 
 export function diagnostic(severity, finding, check) {
-  return { severity, file: finding.file, chapter: finding.chapter ?? null, message: finding.message, code: finding.code, check };
+  return { severity, file: portablePath(finding.file), chapter: finding.chapter ?? null, message: finding.message, code: finding.code, check };
 }
 
 // A command that failed before it produced a result (a usage error, a

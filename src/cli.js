@@ -5,7 +5,7 @@ import { failureDiagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
-import { FILE_ERROR_REASONS } from "./files.js";
+import { FILE_ERROR_REASONS, portablePath } from "./files.js";
 
 export { isTruthy, parseArgs };
 
@@ -235,7 +235,7 @@ function describeError(error, cwd) {
     return `${error.message}${hint}`;
   }
   const relativePath = path.relative(cwd, error.path);
-  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath) ? relativePath : error.path;
+  const shown = relativePath !== "" && !relativePath.startsWith("..") && !path.isAbsolute(relativePath) ? portablePath(relativePath) : error.path;
   return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}${hint}`;
 }
 
