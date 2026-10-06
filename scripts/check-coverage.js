@@ -114,16 +114,18 @@ export function checkLineThreshold(lcovText, absoluteSourceFiles, minPercent) {
 }
 
 // `src` gates a folder at 100%; `scripts:85` gates each file's lines at 85%.
+// A colon followed by no path separator is a threshold, so `scripts:abc` is
+// refused while a Windows path such as `C:\repo\src` stays a folder.
 export function parseGate(arg) {
-  const match = /^(.+):(\d+(?:\.\d+)?)$/.exec(arg);
+  const match = /^(.+):([^:\\/]*)$/.exec(arg);
   if (!match) {
     return { dir: arg, minPercent: null };
   }
-  const minPercent = Number(match[2]);
-  if (minPercent > 100) {
-    throw new Error(`Coverage threshold for ${match[1]} must be at most 100, got ${match[2]}`);
+  const [, dir, threshold] = match;
+  if (!/^\d+(?:\.\d+)?$/.test(threshold) || Number(threshold) > 100) {
+    throw new Error(`Coverage threshold for ${dir} must be a number from 0 to 100, got "${threshold}"`);
   }
-  return { dir: match[1], minPercent };
+  return { dir, minPercent: Number(threshold) };
 }
 
 export const USAGE = "Usage: check-coverage <lcov.info> <dir>[:<min-line-percent>] ...";
@@ -140,6 +142,11 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
     gates = gateArgs.map(parseGate);
   } catch (problem) {
     error(problem.message);
+    return 1;
+  }
+  const missingDir = gates.find((gate) => !fs.statSync(gate.dir, { throwIfNoEntry: false })?.isDirectory());
+  if (missingDir) {
+    error(`Coverage folder ${missingDir.dir} does not exist`);
     return 1;
   }
 
