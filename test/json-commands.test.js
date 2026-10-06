@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { API_VERSION } from "../src/json.js";
 import { createEntity, createStoryProject } from "../src/story.js";
+import { shellWord } from "../src/report.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -105,7 +106,7 @@ describe("--json on names, compare, passes, diagram, and synopsis", () => {
     const init = invokeJson(cwd, ["passes", root, "--init", "--start", "structure", "--done", "polishh", "--json"]).envelope;
     expect(init.writes).toEqual([path.join(root, "story.md")]);
     expect(init.data).toMatchObject({ changed: true, done: 1, next: "structure" });
-    expect(init.data.passes[0]).toEqual({ pass: "structure", status: "in-progress", focus: expect.any(String), checks: [`story timeline ${root}`, `story pacing ${root}`, `story diagram arcs --path ${root}`] });
+    expect(init.data.passes[0]).toEqual({ pass: "structure", status: "in-progress", focus: expect.any(String), checks: [`story timeline ${shellWord(root)}`, `story pacing ${shellWord(root)}`, `story diagram arcs --path ${shellWord(root)}`] });
     expect(init.data.passes.at(-1)).toEqual({ pass: "polishh", status: "done", focus: null, checks: null });
     expect(init.data.notes).toEqual(["Added custom pass polishh, which is not in the default ladder"]);
 
