@@ -47,6 +47,7 @@ import {
   fixProject,
   knowledgeAtChapter,
   mentionsReport,
+  mergeChapters,
   migrateProject,
   moveEntity,
   namesReport,
@@ -64,6 +65,7 @@ import {
   scanProject,
   seriesReport,
   similarityReport,
+  splitChapter,
   storyTimeline,
   synopsisBook,
   uniqueCheckFindings,
@@ -871,6 +873,41 @@ export const COMMANDS = [
     }
   },
   {
+    name: "split",
+    usage: "split <chapter-id>",
+    summary: [
+      "Split a chapter in two at --at (a scene break",
+      "number, a heading, or a line of its text),",
+      "renumbering the chapters after it"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["at", "title", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed } = context;
+      const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
+      return runWrite(context, "split", (projectRoot) => splitChapter(projectRoot, options),
+        (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}\n`);
+    }
+  },
+  {
+    name: "merge",
+    usage: "merge <chapter-id> <next-chapter-id>",
+    summary: [
+      "Merge the next chapter into a chapter, rewriting",
+      "references and renumbering the chapters after it"
+    ],
+    project: "flag",
+    args: 2,
+    options: WRITE_OPTIONS,
+    run(context) {
+      const { parsed } = context;
+      const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
+      return runWrite(context, "merge", (projectRoot) => mergeChapters(projectRoot, options),
+        (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}\n`);
+    }
+  },
+  {
     name: "export",
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
@@ -949,6 +986,18 @@ function nameWords(parsed, from, cwd, command) {
     }
   }
   return words;
+}
+
+// The scenes a split or merge moved and the chapters it renumbered.
+function restructureDetails(result) {
+  const parts = [];
+  if (result.scenesMoved > 0) {
+    parts.push(`moved ${result.scenesMoved} ${result.scenesMoved === 1 ? "scene" : "scenes"}`);
+  }
+  if (result.renumbered > 0) {
+    parts.push(`renumbered ${result.renumbered} ${result.renumbered === 1 ? "chapter" : "chapters"}`);
+  }
+  return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
 }
 
 // Text piped to `story <command> -`. `io.readStdin` stands in for the real

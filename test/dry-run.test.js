@@ -82,6 +82,11 @@ const CASES = [
   { argv: ["remove", "character", "jonas-reed"] },
   { argv: ["move", "chapter", "chapter-01", "--number", "9"] },
   { argv: ["move", "scene", "chapter-01-scene-01", "--chapter", "chapter-02"] },
+  {
+    argv: ["split", "chapter-02", "--at", "The constable came at dusk."],
+    prepare: (root) => fs.appendFileSync(path.join(root, "chapters", "chapter-02.md"), "\n\n* * *\n\nThe constable came at dusk.\n")
+  },
+  { argv: ["merge", "chapter-02", "chapter-03"] },
   { argv: ["add", "character", "Mira Holt", "--location", "the-weavers-loft"] },
   {
     argv: ["reindex"],

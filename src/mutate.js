@@ -4,7 +4,7 @@ import path from "node:path";
 import { idText } from "./continuity.js";
 import { chapterChronology, renumberedChronology } from "./chronology.js";
 import { PROGRESSION_KINDS, sortProgressions } from "./progressions.js";
-import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
+import { FRONTMATTER_PATTERN, parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import {
   assertExistingAncestorInsideRoot,
   assertLexicallyInsideRoot,
@@ -21,12 +21,16 @@ import {
 } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import {
+  chapterHeading,
   chapterProse,
   characterCount,
   escapeRegExp,
   extractSection,
   fencedLineIndexes,
+  isSceneBreak,
   kebabCase,
+  maskMarkup,
+  proseStart,
   wordCount
 } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, countUnit } from "./forms.js";
@@ -1650,6 +1654,612 @@ function moveScene(project, oldId, options) {
   return { kind: "scene", oldId, id: newId, file: newFile, moved: 1, changed: [newFile].concat(reindexed.changed), warnings };
 }
 
+// story split and story merge restructure chapters with the machinery move
+// uses: the chapters after the change are renumbered with moveChapter, scene
+// records follow their text with moveScene, and references to a merged
+// chapter are rewritten as move rewrites them. Every check runs before the
+// first write. The steps each write references before files, but a split or
+// merge is several of them, so one stopped part way is finished by hand
+// rather than by a rerun.
+export function splitChapter(root, options) {
+  return withProjectLock(root, () => splitChapterUnlocked(root, options));
+}
+
+export function mergeChapters(root, options) {
+  return withProjectLock(root, () => mergeChaptersUnlocked(root, options));
+}
+
+const RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again";
+
+// Runs the writes of a split or merge. When a step fails after earlier ones
+// wrote, the error says so in place of any rerun hint the step gave, since
+// rerunning the whole command would not resume it.
+function restructureWrites(root, write) {
+  const { result: error, changes } = recordChanges(root, () => {
+    try {
+      write();
+      return null;
+    } catch (caught) {
+      return caught;
+    }
+  });
+  if (error !== null) {
+    if (changes.length > 0) {
+      error.hint = RESTRUCTURE_HINT;
+    }
+    throw error;
+  }
+}
+
+function existingChapter(project, value, missing) {
+  const id = String(value ?? "").trim();
+  if (!id) {
+    throw usageError(missing);
+  }
+  requireKebabId(id, "chapter id");
+  const chapter = project.chapters.find((entry) => entry.id === id);
+  if (!chapter) {
+    throw usageError(`chapter ${id} does not exist`);
+  }
+  return chapter;
+}
+
+// In a branching book a chapter's place comes from the choices that lead to
+// it, and its own choices end it: splitting one would leave its first half an
+// ending, and merging two would join chapters a reader never reads in a row.
+function refuseBranching(project, command) {
+  const choosers = project.chapters.filter((chapter) => chapterChoices(chapter, "").choices.length > 0);
+  if (choosers.length > 0) {
+    const files = choosers.map((chapter) => relative(project, chapter.file));
+    throw refusedError(`story ${command} does not work on a branching book: ${files.join(", ")} ${files.length === 1 ? "has" : "have"} choices, and a ${command} would change where they lead. Restructure it by hand with story add chapter, story move, and story remove`);
+  }
+}
+
+// The chapters numbered `number`, `number + 1`, and so on up to the first
+// gap: the run a split or merge renumbers by one. A gap stops it, so the
+// rest of the book keeps its numbers.
+function followingRun(project, number) {
+  const run = [];
+  const numbered = (next) => project.chapters.filter((entry) => entry.number === next);
+  for (let chapters = numbered(number); chapters.length > 0; chapters = numbered(number + run.length)) {
+    if (chapters.length > 1) {
+      throw refusedError(`${chapters.map((chapter) => relative(project, chapter.file)).join(" and ")} share chapter number ${chapters[0].number}: give each its own number first (story validate reports it)`);
+    }
+    run.push(chapters[0]);
+  }
+  return run;
+}
+
+// Renumbers each chapter of `run` by `step` with move chapter: from the
+// highest down when making room, from the lowest up when closing a gap, so
+// no number is ever taken twice.
+function shiftChapters(root, run, step, warnings) {
+  for (const chapter of step > 0 ? [...run].reverse() : run) {
+    const result = moveChapter(scanProject(root), chapter.id, { number: String(chapter.number + step) });
+    warnings.push(...result.warnings);
+  }
+}
+
+// The files a run of chapters and their scenes occupies.
+function chapterRunFiles(project, run) {
+  const ids = new Set(run.map((chapter) => chapter.id));
+  return [...run.map((chapter) => chapter.file), ...project.scenes.filter((scene) => ids.has(scene.chapter)).map((scene) => scene.file)];
+}
+
+// The length frontmatter for a chapter body: word-count, and character-count
+// in a book counted in characters.
+function chapterLengthFields(body, unit) {
+  const prose = chapterProse(body);
+  return { "word-count": wordCount(prose), ...(unit.name === "characters" ? { "character-count": characterCount(prose) } : {}) };
+}
+
+// A file's own line ending for text the command generates.
+function withLineEndings(text, sample) {
+  return sample.includes("\r\n") ? text.replace(/\r?\n/g, "\r\n") : text;
+}
+
+// The paragraphs of a chapter's prose: runs of lines that are not blank once
+// comments and code fences are masked, so a scene break or a marker inside
+// either never counts. Each has its offsets in the body, its first line's
+// index in the body, its masked lines, and whether it is a scene break.
+function proseParagraphs(body) {
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const paragraphs = [];
+  let offset = 0;
+  let line = 0;
+  let current = null;
+  for (const text of masked.split("\n")) {
+    const lineStart = offset;
+    offset += text.length + 1;
+    if (lineStart >= start && text.trim() !== "") {
+      current ??= { start: lineStart, line, lines: [] };
+      current.lines.push({ text, line });
+      current.end = lineStart + text.length;
+    } else if (current) {
+      paragraphs.push(current);
+      current = null;
+    }
+    line += 1;
+  }
+  if (current) {
+    paragraphs.push(current);
+  }
+  for (const paragraph of paragraphs) {
+    paragraph.sceneBreak = isSceneBreak(paragraph.lines.map((entry) => entry.text).join("\n"));
+  }
+  return paragraphs;
+}
+
+// Where `--at` splits a chapter body. A number is a scene break, counted from
+// 1, and the break itself is dropped. Any other marker names a line of the
+// prose: first a line whose text, without heading hashes, is exactly the
+// marker, else the one line that contains it; the split falls at the start of
+// its paragraph, dropping a scene break just before it. Returns the offset
+// the first chapter ends at (`cut`), where the second starts (`start`), how
+// many scene breaks come before the split, and whether it falls on one.
+function splitPoint(body, marker, chapterId, headerLines) {
+  const paragraphs = proseParagraphs(body);
+  const breaks = paragraphs.filter((paragraph) => paragraph.sceneBreak);
+  let index;
+  if (/^\d+$/.test(marker)) {
+    const number = Number(marker);
+    if (number < 1 || number > breaks.length) {
+      throw usageError(breaks.length === 0
+        ? `chapter ${chapterId} has no scene breaks in its chapter text: pass --at with a heading or a line of the text instead`
+        : `--at ${marker}: chapter ${chapterId} has ${breaks.length} scene ${breaks.length === 1 ? "break" : "breaks"}, so give a number from 1 to ${breaks.length}, or a heading or a line of the text`);
+    }
+    index = paragraphs.indexOf(breaks[number - 1]) + 1;
+  } else {
+    const lines = paragraphs.filter((paragraph) => !paragraph.sceneBreak).flatMap((paragraph) => paragraph.lines.map((entry) => ({ ...entry, paragraph })));
+    const plain = (text) => text.trim().replace(/^#{1,6}[ \t]+/, "").replace(/[ \t]+#+$/, "").trim();
+    let matches = lines.filter((entry) => plain(entry.text) === marker);
+    if (matches.length === 0) {
+      matches = lines.filter((entry) => entry.text.includes(marker));
+    }
+    if (matches.length === 0) {
+      throw usageError(`--at "${marker}" matches no line in the chapter text of ${chapterId}: give a scene break number, a heading, or a line of the text`);
+    }
+    if (matches.length > 1) {
+      throw usageError(`--at "${marker}" matches ${matches.length} lines in ${chapterId} (lines ${matches.map((entry) => entry.line + headerLines + 1).join(", ")}): quote more of the line so it matches only one`);
+    }
+    index = paragraphs.indexOf(matches[0].paragraph);
+  }
+  return splitAt(paragraphs, index, marker, chapterId);
+}
+
+// The split before paragraph `index` (see splitPoint), which also locates
+// it again after the renumbering has rewritten links in the chapter.
+function splitAt(paragraphs, index, marker, chapterId) {
+  const breaks = paragraphs.filter((paragraph) => paragraph.sceneBreak);
+  const before = paragraphs.slice(0, index);
+  const after = paragraphs.slice(index);
+  const atBreak = before.length > 0 && before.at(-1).sceneBreak;
+  if (!before.some((paragraph) => !paragraph.sceneBreak)) {
+    throw usageError(`--at "${marker}" is at the start of the chapter text of ${chapterId}, so nothing would stay in it: split at a later point`);
+  }
+  if (!after.some((paragraph) => !paragraph.sceneBreak)) {
+    throw usageError(`--at "${marker}" is at the end of the chapter text of ${chapterId}, so the new chapter would be empty: split at an earlier point`);
+  }
+  return {
+    index,
+    cut: atBreak ? before.at(-1).start : after[0].start,
+    start: after[0].start,
+    breaksBefore: before.filter((paragraph) => paragraph.sceneBreak).length,
+    atBreak,
+    sections: breaks.length + 1
+  };
+}
+
+// The files besides `excluded` that name `chapterId` in a reference field, a
+// link to its file, or a bare id in the timeline and arc bodies. Registries
+// are left out, since reindex rewrites them.
+function chapterReferenceFiles(root, chapterId, excluded) {
+  const context = entityReferenceContext(root, "chapter", chapterId);
+  const probe = `${chapterId}-reference-probe`;
+  // Only the chapter id itself: its scene ids follow their scenes.
+  const chapterOnly = (text, oldId, newId) => text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
+  const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe),
+    (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
+  return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
+}
+
+// Chapter fields the new chapter of a split copies from the one it came
+// from. Its hook goes with it too, since the new chapter now ends where the
+// old one did; arcs-advanced stays behind, since the arc beat could be in
+// either half.
+const SPLIT_COPIED_FIELDS = ["numbered", "pov", "locations", "characters", "mentions", "status", "mode", "date", "strand"];
+
+function splitChapterUnlocked(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "split");
+  const chapter = existingChapter(project, options.id, "split requires a chapter id");
+  const marker = options.at === undefined || options.at === true ? "" : String(options.at).trim();
+  if (marker === "") {
+    throw usageError("split requires --at <marker>: a scene break number, a heading, or a line of the chapter text");
+  }
+  let title = `${chapter.title} (continued)`;
+  if (options.title !== undefined) {
+    title = options.title === true ? "" : String(options.title).trim();
+    if (title === "") {
+      throw usageError("--title cannot be empty: leave it out to use the chapter's title with (continued)");
+    }
+    requireSingleLineName(title, "chapter");
+  }
+  refuseBranching(project, "split");
+
+  const original = readMarkdown(chapter.file, project.root);
+  const headerLines = original.rawMarkdown.slice(0, original.rawMarkdown.length - original.body.length).split("\n").length - 1;
+  const point = splitPoint(original.body, marker, chapter.id, headerLines);
+  const number = chapter.number + 1;
+  const newId = canonicalChapterId(number);
+  const newFile = path.join(project.root, "chapters", `${newId}.md`);
+  const run = followingRun(project, number);
+  if (fs.existsSync(newFile) && !run.some((entry) => entry.file === newFile)) {
+    throw refusedError(`${relative(project, newFile)} already exists and is not chapter ${number}: fix it first (story validate reports it)`);
+  }
+
+  // Scene records have no place in the text, so they follow it in order: the
+  // records of the scenes before the split stay, the rest move.
+  const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene);
+  const keep = point.atBreak ? point.breaksBefore : point.breaksBefore + 1;
+  const moving = scenes.slice(keep);
+  const label = relative(project, chapter.file);
+  const warnings = [];
+  if (scenes.length > 0 && scenes.length !== point.sections) {
+    warnings.push(warn("split-scenes", `${label} has ${scenes.length} scene ${scenes.length === 1 ? "record" : "records"} but ${point.sections} ${point.sections === 1 ? "scene" : "scenes"} of text between scene breaks, so split kept the first ${Math.min(keep, scenes.length)} in ${chapter.id} and moved ${moving.length === 0 ? "none" : moving.map((scene) => scene.id).join(", ")} to ${newId} by order. Check them, and fix any with story move scene`, label));
+  } else if (!point.atBreak && scenes[keep - 1] !== undefined) {
+    warnings.push(warn("split-scenes", `--at "${marker}" falls inside the text of ${scenes[keep - 1].id}, whose record stays in ${chapter.id}; if the scene now belongs to ${newId}, or needs a record in each, use story move scene and story add scene`, label));
+  }
+  const referencing = chapterReferenceFiles(project.root, chapter.id, [chapter.file, ...scenes.map((scene) => scene.file)]);
+  if (referencing.length > 0) {
+    warnings.push(warn("split-references", `${referencing.join(", ")} still ${referencing.length === 1 ? "names" : "name"} ${chapter.id}, which now holds only the text before the split: check whether ${referencing.length === 1 ? "it" : "any of them"} should name ${newId} instead`, referencing.length === 1 ? referencing[0] : null));
+  }
+  assertWritable(project.root, [chapter.file, ...chapterRunFiles(project, run), ...moving.map((scene) => scene.file)], [newFile]);
+
+  restructureWrites(project.root, () => {
+    shiftChapters(project.root, run, 1, warnings);
+    // The renumbering can rewrite link targets in the chapter, which moves
+    // offsets but never paragraphs, so split what it holds now at the same
+    // paragraph.
+    const current = scanProject(project.root);
+    const markdown = readMarkdown(chapter.file, project.root);
+    const split = splitAt(proseParagraphs(markdown.body), point.index, marker, chapter.id);
+    const firstBody = withLineEndings(`${markdown.body.slice(0, split.cut).trimEnd()}\n`, markdown.rawMarkdown);
+    const secondProse = `${markdown.body.slice(split.start).trimEnd()}\n`;
+    const { hook, ...kept } = markdown.data;
+    const copied = Object.fromEntries(SPLIT_COPIED_FIELDS.filter((key) => Object.hasOwn(markdown.data, key)).map((key) => [key, markdown.data[key]]));
+    const secondBody = `# ${chapterHeading(number, title)}\n\n## Chapter Text\n\n${secondProse}`;
+    const secondData = {
+      title,
+      number,
+      ...copied,
+      "arcs-advanced": [],
+      ...(hook === undefined ? {} : { hook }),
+      ...chapterLengthFields(secondBody, current.unit)
+    };
+    writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root });
+    writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...chapterLengthFields(firstBody, current.unit) }, firstBody),
+      { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    // The latest drafted chapter is now the second half.
+    setCurrentChapter(project.root, chapter.number, number);
+    for (const [index, scene] of moving.entries()) {
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: newId, scene: String(index + 1) }).warnings);
+    }
+  });
+  const reindexed = reindexProject(project.root);
+  return {
+    kind: "chapter",
+    id: chapter.id,
+    newId,
+    title,
+    file: newFile,
+    scenesMoved: moving.length,
+    renumbered: run.length,
+    changed: [chapter.file, newFile].concat(reindexed.changed),
+    warnings
+  };
+}
+
+// Sets continuity/state.md current-chapter to `to` when it holds `from`.
+function setCurrentChapter(root, from, to, plan = null) {
+  const statePath = path.join(root, "continuity", "state.md");
+  if (!fs.existsSync(statePath)) {
+    return;
+  }
+  const text = plan?.get(statePath) ?? readTextFile(statePath);
+  const data = parseFrontmatter(text, statePath).data;
+  if (data["current-chapter"] !== from) {
+    return;
+  }
+  const next = replaceFrontmatter(text, { ...data, "current-chapter": to });
+  if (plan) {
+    if (!plan.has(statePath)) {
+      plan.originals.set(statePath, text);
+    }
+    plan.set(statePath, next);
+  } else {
+    writeFile(statePath, next, { root, unchangedFrom: text });
+  }
+}
+
+function mergeChaptersUnlocked(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "merge");
+  const missing = "merge requires two chapter ids: the chapter to keep, then the one after it";
+  const first = existingChapter(project, options.id, missing);
+  const second = existingChapter(project, options.next, missing);
+  if (first === second) {
+    throw usageError(`merge needs two different chapters, got ${first.id} twice`);
+  }
+  const position = project.chapters.indexOf(first);
+  if (project.chapters[position + 1] !== second) {
+    const secondPosition = project.chapters.indexOf(second);
+    if (secondPosition < position) {
+      throw usageError(`${second.id} comes before ${first.id}: name the earlier chapter first (story merge ${second.id} ${first.id})`);
+    }
+    const between = project.chapters.slice(position + 1, secondPosition).map((chapter) => chapter.id);
+    throw usageError(`${second.id} does not follow ${first.id}: merge takes neighbouring chapters, and ${between.join(", ")} ${between.length === 1 ? "comes" : "come"} between them`);
+  }
+  refuseBranching(project, "merge");
+
+  const scenes = project.scenes.filter((scene) => scene.chapter === second.id).sort((left, right) => left.scene - right.scene);
+  const firstScene = nextSceneNumber(project, first.id);
+  const sceneFiles = scenes.map((scene, index) => path.join(project.root, "scenes", `${first.id}-scene-${String(firstScene + index).padStart(2, "0")}.md`));
+  const taken = sceneFiles.find((file) => fs.existsSync(file));
+  if (taken) {
+    throw refusedError(`${relative(project, taken)} already exists; nothing was changed`);
+  }
+  const run = followingRun(project, second.number + 1);
+  assertWritable(project.root, [first.file, second.file, ...scenes.map((scene) => scene.file), ...chapterRunFiles(project, run)], sceneFiles);
+
+  const warnings = [];
+  restructureWrites(project.root, () => {
+    // The scenes go first, so the chapter they leave is the only file that
+    // still names it by id.
+    for (const [index, scene] of scenes.entries()) {
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: first.id, scene: String(firstScene + index) }).warnings);
+    }
+    const current = scanProject(project.root);
+    const kept = readMarkdown(first.file, project.root);
+    const merged = mergedChapter(kept, readMarkdown(second.file, project.root), current.unit, first.id, second.id);
+    warnings.push(...merged.warnings);
+    const context = entityReferenceContext(project.root, "chapter", second.id);
+    const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]),
+      idRenamer(second.id, first.id),
+      (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, first.id), second.id, first.id));
+    plan.originals.set(first.file, kept.rawMarkdown);
+    setCurrentChapter(project.root, second.number, first.number, plan);
+    followExemptionPatterns(project.root, plan, "chapter", second.id, first.id);
+    reorderProgressions(current, plan, chapterChronology(current));
+    warnings.push(...mergeProgressions(project.root, plan, first.id));
+    assertWritable(project.root, [...plan.keys(), second.file]);
+    writeReferencePlan(project.root, plan);
+    removeFile(second.file);
+    shiftChapters(project.root, run, -1, warnings);
+  });
+  const reindexed = reindexProject(project.root);
+  return {
+    kind: "chapter",
+    id: first.id,
+    mergedId: second.id,
+    file: first.file,
+    scenesMoved: scenes.length,
+    renumbered: run.length,
+    changed: [first.file].concat(reindexed.changed),
+    warnings
+  };
+}
+
+// After a merge, two progressions of one field can start in the kept
+// chapter: one from each half. The later one is the value the chapter ends
+// with, so it is kept and the earlier dropped, which validate would
+// otherwise reject as a repeat.
+function mergeProgressions(root, plan, chapterId) {
+  const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
+  const warnings = [];
+  for (const [file, text] of plan) {
+    if (text === null || !dirs.includes(projectPath(root, path.dirname(file)))) {
+      continue;
+    }
+    const data = parseFrontmatter(text, file).data;
+    if (!Array.isArray(data.progressions)) {
+      continue;
+    }
+    const last = new Map();
+    data.progressions.forEach((item, index) => {
+      if (item && typeof item === "object" && !Array.isArray(item) && idText(item.from) === chapterId && typeof item.field === "string") {
+        last.set(item.field, index);
+      }
+    });
+    const dropped = [];
+    const progressions = data.progressions.filter((item, index) => {
+      const repeated = item && typeof item === "object" && !Array.isArray(item) && idText(item.from) === chapterId
+        && typeof item.field === "string" && last.get(item.field) !== index;
+      if (repeated) {
+        dropped.push(`${item.field} ${JSON.stringify(item.value)}`);
+      }
+      return !repeated;
+    });
+    if (dropped.length > 0) {
+      plan.set(file, replaceFrontmatter(text, { ...data, progressions }));
+      const label = projectPath(root, file);
+      warnings.push(warn("merge-conflicts", `${label} changed the same ${dropped.length === 1 ? "field" : "fields"} in both merged chapters; the earlier ${dropped.length === 1 ? "progression" : "progressions"} (${dropped.join(", ")}) ${dropped.length === 1 ? "was" : "were"} dropped and the later value kept from ${chapterId}`, label));
+    }
+  }
+  return warnings;
+}
+
+const BLANK_VALUES = [undefined, null, ""];
+
+function isBlankValue(value) {
+  return BLANK_VALUES.includes(value) || (Array.isArray(value) && value.length === 0);
+}
+
+// Chapter fields a merge works out rather than takes from the first chapter.
+const MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook"]);
+const MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
+
+// The frontmatter of two merged chapters: the first chapter's, with lists
+// joined (each item once), a field only the second sets added, targets
+// summed, the earlier status of the two, and the second chapter's hook, since
+// the merged chapter ends where the second did. Any other field the two set
+// differently keeps the first chapter's value and is listed in `conflicts`.
+function mergedChapterData(firstData, secondData) {
+  const data = { ...firstData };
+  const conflicts = [];
+  const statuses = [...CHAPTER_STATUSES];
+  for (const [key, value] of Object.entries(secondData)) {
+    if (MERGE_DERIVED_FIELDS.has(key) || isBlankValue(value)) {
+      continue;
+    }
+    const current = firstData[key];
+    if (!Object.hasOwn(firstData, key) || isBlankValue(current)) {
+      data[key] = value;
+    } else if (Array.isArray(current) && Array.isArray(value)) {
+      const seen = new Set(current.map((item) => JSON.stringify(item)));
+      data[key] = current.concat(value.filter((item) => !seen.has(JSON.stringify(item)) && seen.add(JSON.stringify(item))));
+    } else if (MERGE_SUMMED_FIELDS.has(key) && Number.isInteger(current) && Number.isInteger(value)) {
+      data[key] = current + value;
+    } else if (key === "status" && statuses.includes(current) && statuses.includes(value)) {
+      data[key] = statuses[Math.min(statuses.indexOf(current), statuses.indexOf(value))];
+    } else if (JSON.stringify(current) !== JSON.stringify(value)) {
+      conflicts.push(`${key} ${JSON.stringify(value)}`);
+    }
+  }
+  if (!isBlankValue(secondData.hook)) {
+    data.hook = secondData.hook;
+  } else if (Object.hasOwn(data, "hook")) {
+    delete data.hook;
+  }
+  const droppedHook = isBlankValue(secondData.hook) && !isBlankValue(firstData.hook) ? firstData.hook : null;
+  return { data, conflicts, droppedHook };
+}
+
+const CHAPTER_TEXT_HEADING = /^ {0,3}##[ \t]+Chapter Text(?:[ \t]+#+)?[ \t]*\r?$/i;
+const NOTE_SECTION_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?$/gm;
+
+// The planning notes of a chapter body: what lies between its leading
+// `# heading` and its prose (the outline and any other `##` sections), as
+// offsets in the body, without the outline divider and the `## Chapter
+// Text` heading that close them.
+function chapterNotesRange(body, masked, proseOffset) {
+  const heading = /^(?:[ \t]*\r?\n)*[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/.exec(masked.slice(0, proseOffset));
+  const start = heading ? heading[0].length : 0;
+  const lines = masked.slice(start, proseOffset).split("\n");
+  let offset = start;
+  const starts = lines.map((line) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    return lineStart;
+  });
+  let end = proseOffset;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const text = lines[index].trim();
+    if (text !== "" && text !== "---" && !CHAPTER_TEXT_HEADING.test(text)) {
+      break;
+    }
+    end = starts[index];
+  }
+  return { start, end: start + masked.slice(start, end).trimEnd().length };
+}
+
+// Notes as a preamble and `##` sections, each { key, heading, body }.
+function noteSections(text, masked) {
+  const headings = [...masked.matchAll(NOTE_SECTION_HEADING)];
+  const sections = headings.map((match, index) => {
+    const lineEnd = match.index + match[0].length;
+    return {
+      key: match[1].trim().toLowerCase(),
+      heading: text.slice(match.index, lineEnd).replace(/\r$/, ""),
+      body: text.slice(lineEnd, index + 1 < headings.length ? headings[index + 1].index : text.length)
+    };
+  });
+  return { preamble: text.slice(0, headings[0]?.index ?? text.length), sections };
+}
+
+// Joins two blocks of notes: a list continues on the next line, anything
+// else after a blank line.
+function joinNotes(first, second) {
+  const left = first.trimEnd();
+  const right = second.trim();
+  if (left.trim() === "" || right === "") {
+    return left.trim() === "" ? right : left;
+  }
+  const listItem = /^\s*(?:[-*+]|\d+[.)])[ \t]/;
+  return `${left}${listItem.test(left.split("\n").at(-1)) && listItem.test(right.split("\n")[0]) ? "\n" : "\n\n"}${right}`;
+}
+
+// The body of two merged chapters: the first chapter's heading and notes,
+// with the second chapter's notes added section by section (its outline
+// beats after the first one's, a section only it has at the end), then the
+// first chapter's prose, a scene break, and the second chapter's prose. The
+// scene break is the first one either chapter already uses, else `* * *`.
+function mergedChapterBody(firstBody, secondBody) {
+  const firstMasked = maskMarkup(firstBody);
+  const secondMasked = maskMarkup(secondBody);
+  const firstStart = proseStart(firstBody, firstMasked);
+  const secondStart = proseStart(secondBody, secondMasked);
+  let head = firstBody.slice(0, firstStart);
+  let firstProse = firstBody.slice(firstStart);
+  const secondRange = chapterNotesRange(secondBody, secondMasked, secondStart);
+  if (secondRange.end > secondRange.start) {
+    const firstRange = chapterNotesRange(firstBody, firstMasked, firstStart);
+    const notes = noteSections(firstBody.slice(firstRange.start, firstRange.end), firstMasked.slice(firstRange.start, firstRange.end));
+    const added = noteSections(secondBody.slice(secondRange.start, secondRange.end), secondMasked.slice(secondRange.start, secondRange.end));
+    notes.preamble = joinNotes(notes.preamble, added.preamble);
+    for (const section of added.sections) {
+      const match = notes.sections.find((entry) => entry.key === section.key);
+      if (match) {
+        match.body = joinNotes(match.body, section.body);
+      } else {
+        notes.sections.push(section);
+      }
+    }
+    const text = [notes.preamble.trim(), ...notes.sections.map((section) => joinNotes(section.heading, section.body))].filter((part) => part !== "").join("\n\n");
+    const tail = head.slice(firstRange.end);
+    head = `${head.slice(0, firstRange.start)}\n${text}${firstRange.end === firstRange.start ? "\n" : ""}${tail}`;
+    // The notes need a `## Chapter Text` heading after them to stay out of
+    // the prose.
+    if (!firstMasked.slice(0, firstStart).split("\n").some((line) => CHAPTER_TEXT_HEADING.test(line))) {
+      head = `${head.trimEnd()}\n\n## Chapter Text\n\n`;
+      firstProse = firstProse.replace(/^(?:[ \t]*\r?\n)+/, "");
+    }
+  }
+  const blankLines = /^(?:[ \t]*\r?\n)*/;
+  const lead = firstProse.match(blankLines)[0] || (head === "" || head.endsWith("\n") ? "" : "\n\n");
+  const firstText = firstProse.replace(blankLines, "").trimEnd();
+  const secondProse = secondBody.slice(secondStart).replace(blankLines, "").trimEnd();
+  const parts = [firstText];
+  if (firstText !== "" && secondProse !== "") {
+    parts.push(sceneBreakLine(firstBody) ?? sceneBreakLine(secondBody) ?? "* * *");
+  }
+  parts.push(secondProse);
+  return `${head}${lead}${parts.filter((part) => part !== "").join("\n\n")}\n`;
+}
+
+// The first scene break line a chapter body's prose uses, or null.
+function sceneBreakLine(body) {
+  const paragraph = proseParagraphs(body).find((entry) => entry.sceneBreak);
+  return paragraph ? body.slice(paragraph.start, paragraph.end).trim() : null;
+}
+
+// The merged chapter file, from the first chapter's markdown, with the
+// warnings for fields the second set differently.
+function mergedChapter(first, second, unit, firstId, secondId) {
+  const body = withLineEndings(mergedChapterBody(first.body, second.body), first.rawMarkdown);
+  const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
+  const label = `chapters/${firstId}.md`;
+  const warnings = [];
+  if (conflicts.length > 0) {
+    warnings.push(warn("merge-conflicts", `${secondId} set ${conflicts.join(", ")}, which the merged ${firstId} does not take: it keeps ${firstId}'s values. Check them`, label));
+  }
+  if (droppedHook !== null) {
+    warnings.push(warn("merge-conflicts", `${firstId}'s hook ${JSON.stringify(droppedHook)} was dropped: the merged chapter ends where ${secondId} did, and ${secondId} had no hook. Set one if it needs it`, label));
+  }
+  return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
+}
+
 const BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 
 // Before a rename or move gives an entity `id`, lists the files that already
@@ -1679,14 +2289,14 @@ function idRenamer(oldId, newId) {
 // checks, and in the plot/_index.md theme tracking table follow the move. `chapter-03` never matches inside `chapter-03-scene-01`
 // unless the whole scene id is the one moving, and scene ids of a moved chapter
 // (`chapter-03-scene-02`) follow it too.
-function renameIdTokens(root, file, body, oldId, newId) {
+function renameIdTokens(root, file, body, oldId, newId, rename = renameIdText) {
   const relativePath = projectPath(root, file);
   if (relativePath !== "plot/timeline.md" && relativePath !== "plot/_index.md" && path.posix.dirname(relativePath) !== "plot/arcs") {
     return body;
   }
   // Link destinations were already handled by renameLinkTargets, and a URL
   // or a path into another book is not this book's id.
-  return mapOutsideLinks(body, (text) => renameIdText(text, oldId, newId));
+  return mapOutsideLinks(body, (text) => rename(text, oldId, newId));
 }
 
 // Replaces whole-token `oldId` in text, and the scene ids of a chapter id.

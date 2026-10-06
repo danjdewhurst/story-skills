@@ -13,7 +13,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
-- [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
+- [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Finding codes](#finding-codes): every error and warning code, by command
 - [Option index](#option-index)
@@ -76,6 +76,8 @@ Absolute paths in output are shortened to `~/stories/...`.
 | Entities | [`add <kind> <name>`](#add) | Create an entity file and reindex | Yes |
 | | [`rename <kind> <id> <name>`](#rename) | Rename an entity and update references | Yes |
 | | [`move <kind> <id>`](#move) | Renumber a chapter or move a scene and update references | Yes |
+| | [`split <chapter-id>`](#split) | Split a chapter in two at a scene break, heading, or line, renumbering the chapters after it | Yes |
+| | [`merge <chapter-id> <next-chapter-id>`](#merge) | Merge the next chapter into a chapter, update references, and renumber the chapters after it | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
 | | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink` output in `dist/` | Yes |
@@ -132,7 +134,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
+| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -253,7 +255,7 @@ Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: chapters/chapter-03.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment [todo-markers]
 ```
 
-Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, `--shunn`, or `--pdf`, which belong with a particular format. A default `--pdf-engine` stays, and builds without `--pdf` ignore it. Likewise `--ref`, `--against`, or `--snapshot` on `compare` drops a default for the others. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
+Defaults apply with `--json` too, and to `prose -` and `voices -` inside a project; `--json` itself cannot be a default. With `--json`, a promoted warning is a diagnostic with `severity` `"error"` and makes `ok` false, and an `off` warning is a `dismissed` diagnostic. `story prose --json` reports the limits it used in `data.thresholds`. A flag on the command line always wins over a default: `story build --format epub` still builds an EPUB, and it also drops any default `--trim`, `--stamp`, `--note-url`, `--shunn`, or `--pdf`, which belong with a particular format. A default `--pdf-engine` stays, and builds without `--pdf` ignore it. Likewise `--ref`, `--against`, or `--snapshot` on `compare` drops a default for the others. `level: off` reports a warning as `dismissed:` instead. A `severity` entry names any warning by the code its line ends with (see [Finding codes](#finding-codes)), and applies wherever that warning is reported: in the check that raises it, in the checks `check` runs and `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, and `remove` print after their output, which then exit 1 when a promoted warning is among them. Errors cannot be demoted or turned off, so an entry naming an error code is rejected. `story validate` rejects unknown commands, flags, codes, and levels; while either field is invalid, other commands refuse to run until it is fixed and exit 3. The [Project format reference](project-format.md#cli-defaults-and-severity) lists every rule.
 
 ### Output streams and exit codes
 
@@ -282,7 +284,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -330,13 +332,13 @@ story continuity examples/the-unraveled-thread --json
 }
 ```
 
-The write commands (`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
+The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
 
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
 
 ### Previewing changes with --dry-run
 
-`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, and `snapshot` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, and `snapshot` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
 ```text
 $ story rename character edran-vale "Edran Vane" --dry-run
@@ -370,7 +372,7 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. Generated and rewritten files are written whole or not at all: the new contents go to a hidden temporary file beside the target (`.chapter-01.md.story-<pid>.tmp`), which is flushed to disk and then renamed over it. A full disk, a failed write, or a killed process leaves the old file intact rather than truncated, and the error names the target, not the temporary file (`Cannot write to chapters/chapter-01.md: no space left on the device`). An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`), and the folder must be writable too. A target that is a hard link, such as an `--out` path linked to a chapter, is replaced rather than written through, so the linked file is left unchanged. If a process is killed before the rename, `story validate` warns about the leftover temporary file (`<path> was left by an interrupted write to <target>; delete it once the files beside it look right`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
-Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`, `migrate`, `wordcount --write`, and `doctor --fix`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
+Commands that change project files (`add`, `rename`, `remove`, `move`, `split`, `merge`, `reindex`, `migrate`, `wordcount --write`, and `doctor --fix`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
 
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
@@ -389,7 +391,7 @@ $ story build --out dist
 
 ### Files that fail to parse
 
-Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, `move`, `remove`, and `progress --log` name the files and change nothing:
+Commands that rewrite registries or assemble chapters stop when an entity file, a registry, or `story.md` fails to parse, because carrying on would silently drop that file. `reindex`, `wordcount`, `export`, `build`, `synopsis`, `add`, `migrate`, `rename`, `move`, `split`, `merge`, `remove`, and `progress --log` name the files and change nothing:
 
 ```text
 $ story reindex
@@ -397,7 +399,7 @@ Cannot reindex: fix this file first (story validate reports it):
 - characters/old-bram.md: Duplicate frontmatter key: name
 ```
 
-The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot move`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename`, `move`, and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
+The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot move`, `Cannot split`, `Cannot merge`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename`, `move`, and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
 
 A parse error names the file by its path inside the project, never an absolute path, for every file including `story.md`, the registries, `progress.md`, and `style-sheet.md`: `story.md: is missing YAML frontmatter`. When `story.md` cannot be read, `validate` reports that once rather than also listing each required field as missing.
 
@@ -662,7 +664,7 @@ Hand-written sections of the registries survive a reindex: `## Relationship Map`
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
-Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `move`, `remove`, `migrate`, and `wordcount --write` reindex for you. Every command that rewrites the project takes `--dry-run` to list the files it would change first; see [Previewing changes](#previewing-changes-with---dry-run).
+Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `move`, `split`, `merge`, `remove`, `migrate`, and `wordcount --write` reindex for you. Every command that rewrites the project takes `--dry-run` to list the files it would change first; see [Previewing changes](#previewing-changes-with---dry-run).
 
 ```shell
 story reindex
@@ -2158,7 +2160,7 @@ With `--json`, a snapshot's `data` holds the manifest fields (`name`, `id`, `cre
 
 ## Entity commands
 
-`add`, `rename`, `move`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name. Each one reindexes the registries when it finishes.
+`add`, `rename`, `move`, `split`, `merge`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name, or chapter ids. Each one reindexes the registries when it finishes.
 
 ### Entity kinds
 
@@ -2492,6 +2494,102 @@ Moved scene chapter-02-scene-01 to chapter-02-scene-02: ~/stories/the-salt-road/
 
 As with `rename`, every file is parsed before anything is written, so a file that fails to parse leaves the project unchanged (`Cannot move: fix this file first ...`). References are written first and the moved files last (a chapter's scenes before the chapter, and a moved scene's cast added to its new chapter before the old scene is deleted), so if a move is interrupted, run the same command again to finish it. A file already at the new path is accepted only when it is exactly what this move writes and nothing but the moving files still names the old id; otherwise the number counts as taken, so a move onto a placeholder chapter or scene with the same title is refused. Without `--scene`, a rerun of an interrupted `move scene` reuses the number the first run took.
 
+### split
+
+```text
+story split <chapter-id> --at <marker> [--title <name>] [--dry-run] [--json] [--path <project>]
+```
+
+Splits a chapter in two. The text before `--at` stays in the chapter; the rest becomes a new chapter numbered one after it, and the chapters after it move up one with [`move chapter`](#move), from the highest down, so every reference to them follows. The run of chapters that moves stops at the first gap in the numbering, so the rest of the book keeps its numbers.
+
+`--at` says where to split, in the chapter text (the outline and notes before `## Chapter Text` stay with the first chapter):
+
+- **A number** is a scene break, counted from 1: `--at 2` splits at the second break, and the break itself is dropped. A break is a paragraph of `* * *`, `---`, `***`, `~~~`, or a lone `#`, as the builds read them.
+- **A heading** splits just before that heading line: `--at "The Ferry"` matches `### The Ferry`.
+- **Any other text** splits at the start of the paragraph holding the one line that contains it: `--at "Ticket was in order"`. A line that is exactly the text wins over lines that only contain it, and text that matches several lines is refused with their line numbers, so quote more of it.
+
+A scene break or marker inside an HTML comment or a code fence never counts, and a scene break just before the split point is dropped too.
+
+The new chapter is titled `<title> (continued)` unless `--title` names it. It gets the chapter's `pov`, `locations`, `characters`, `mentions`, `status`, `mode`, `date`, `strand`, and `numbered`, and its `hook`, which moves to the new chapter because that is where the old chapter now ends. `arcs-advanced` and every other field stay on the first chapter, as do the outline and any notes; the new chapter starts with a `# Chapter N: Title` heading and a `## Chapter Text` section. Both chapters get fresh word counts (and character counts in a book counted in characters). When `continuity/state.md` `current-chapter` was the split chapter, it moves to the new one.
+
+Scene records have no position in the chapter text, so they follow it in order: the records of the scenes before the split stay, and the rest move to the new chapter with [`move scene`](#move), numbered from 1. When the split falls inside a scene, that scene's record stays with the first chapter. `split` warns (`split-scenes`) when the number of scene records differs from the number of scenes the breaks mark out, since it then assigned them by order, and when it split inside a scene.
+
+References to the split chapter keep pointing at it, which now holds only the first part. A clue planted, a question introduced, a death, or a progression in the split chapter may now happen in the new one, and `split` cannot tell, so it lists the files that still name the chapter (`split-references`) for you to check. Registries are left out, since `split` reindexes.
+
+On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
+
+```text
+$ story split chapter-02 --at 1 --title "Shelf Nine"
+Split chapter chapter-02: the rest is chapter-03 "Shelf Nine": ~/stories/the-left-luggage-office/chapters/chapter-03.md (moved 1 scene, renumbered 1 chapter)
+warning: continuity/questions/who-collected-the-suitcase.md, continuity/questions/who-wrote-her-name.md, continuity/state.md, plot/arcs/folas-suitcase.md still name chapter-02, which now holds only the text before the split: check whether any of them should name chapter-03 instead [split-references]
+warning: chapter-04 was already referenced before this move, and those references now point at the moved chapter: continuity/promises/sallis-comes-back.md, plot/arcs/folas-suitcase.md. Check them [adopted-references]
+
+$ story split chapter-03 --at "Ticket was in order"
+Split chapter chapter-03: the rest is chapter-04 "Shelf Nine (continued)": ~/stories/the-left-luggage-office/chapters/chapter-04.md (renumbered 1 chapter)
+warning: --at "Ticket was in order" falls inside the text of chapter-03-scene-01, whose record stays in chapter-03; if the scene now belongs to chapter-04, or needs a record in each, use story move scene and story add scene [split-scenes]
+```
+
+The `adopted-references` warning comes from the renumbering: the promise was scheduled to pay off in chapter 4, which did not exist yet, and that id now names the old chapter 3 (see [move](#move)).
+
+`split` refuses, and changes nothing, when:
+
+| Situation | Message |
+|---|---|
+| No chapter id | `split requires a chapter id` |
+| The chapter does not exist | `chapter chapter-09 does not exist` |
+| No `--at` | `split requires --at <marker>: a scene break number, a heading, or a line of the chapter text` |
+| An empty `--title` | `--title cannot be empty: leave it out to use the chapter's title with (continued)` |
+| The book is branching | `story split does not work on a branching book: chapters/chapter-01.md has choices, and a split would change where they lead. Restructure it by hand with story add chapter, story move, and story remove` |
+| A scene break number out of range | `--at 3: chapter chapter-02 has 1 scene break, so give a number from 1 to 1, or a heading or a line of the text` |
+| No line matches | `--at "Ines" matches no line in the chapter text of chapter-03: give a scene break number, a heading, or a line of the text` |
+| Several lines match | `--at "said" matches 5 lines in chapter-02 (lines 49, 55, 59, 61, 67): quote more of the line so it matches only one` |
+| Nothing would be left on one side | `--at "..." is at the start of the chapter text of chapter-02, so nothing would stay in it: split at a later point` (or `at the end ..., so the new chapter would be empty`) |
+| Two chapters after it share a number | `chapters/chapter-03.md and chapters/chapter-3.md share chapter number 3: give each its own number first (story validate reports it)` |
+
+A branching book (one with `choices`) is refused because a chapter's choices end it: splitting one would make its first half an ending, and the new chapter would be reachable from nothing. Restructure a branching book by hand: [`add`](#add) the new chapter, give the first half a choice that leads to it, and move the original choices across.
+
+Like [`move`](#move), `split` parses every file and checks that each file it will change is writable before it writes anything. It is several moves in a row, though, so one stopped part way (a full disk, say) cannot be finished by running it again: the error says `Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again`. Preview it with `--dry-run` first.
+
+### merge
+
+```text
+story merge <chapter-id> <next-chapter-id> [--dry-run] [--json] [--path <project>]
+```
+
+Merges a chapter into the one before it. The two must be neighbours in chapter order, the earlier one first: `story merge chapter-02 chapter-03` keeps `chapter-02` and folds `chapter-03` into it. The chapters after them move down one with [`move chapter`](#move), from the lowest up, as far as the first gap in the numbering.
+
+The merged chapter keeps the first chapter's heading, title, and frontmatter, and gains:
+
+- the second chapter's prose after its own, with a scene break between them: the first break either chapter already uses, else `* * *`
+- the second chapter's notes, section by section: its `## Outline` beats after the first chapter's, its text under any other `##` heading the first chapter has (`## Episode Notes`, say) after that section's, and a section only it has at the end of the notes
+- every item of the second chapter's list fields (`characters`, `locations`, `mentions`, `arcs-advanced`, and any other list) that the first lacks
+- any field only the second chapter sets, the sum of `target-words` (and `target-characters`), the earlier `status` of the two, and the second chapter's `hook`, since the merged chapter ends where the second did
+- a fresh word count (and character count)
+
+The second chapter's scenes move to the end of the first chapter with [`move scene`](#move), numbered after its own. Then every reference to the second chapter is rewritten to the first, as `move` rewrites references: clue and promise `planted` and `payoff`, question `introduced` and `resolved`, research `used-in`, `died-in`, `revived-in`, progressions' `from`, `since` and `learned-in` in `continuity/state.md` (and `current-chapter` when it held the second chapter's number), markdown links, bare ids in the timeline and arc files, and `continuity/exemptions.md` entries. The second chapter's file is then deleted.
+
+`merge` warns (`merge-conflicts`) about what it could not combine: a single-value field both chapters set differently (`pov`, `date`, `time`, and so on), where it keeps the first chapter's value; the first chapter's `hook` when the second has none, which it drops; and two progressions of the same field that now both start in the merged chapter, where it keeps the later one, the value the chapter ends with, and drops the earlier, which validate would reject as a repeat. On a copy of `the-left-luggage-office`:
+
+```text
+$ story merge chapter-02 chapter-03
+Merged chapter chapter-03 into chapter-02: ~/stories/the-left-luggage-office/chapters/chapter-02.md (moved 2 scenes)
+warning: chapter-03 set time "22:05", episode-question "Who took the suitcase out of the office in Ines's name?", which the merged chapter-02 does not take: it keeps chapter-02's values. Check them [merge-conflicts]
+```
+
+`merge` refuses, and changes nothing, when:
+
+| Situation | Message |
+|---|---|
+| Fewer than two chapter ids | `merge requires two chapter ids: the chapter to keep, then the one after it` |
+| A chapter does not exist | `chapter chapter-09 does not exist` |
+| The same chapter twice | `merge needs two different chapters, got chapter-02 twice` |
+| The chapters are in the wrong order | `chapter-02 comes before chapter-03: name the earlier chapter first (story merge chapter-02 chapter-03)` |
+| A chapter lies between them | `chapter-04 does not follow chapter-02: merge takes neighbouring chapters, and chapter-03 comes between them` |
+| The book is branching | `story merge does not work on a branching book: ...`, as for [split](#split) |
+| A moved scene would overwrite a file | `scenes/chapter-02-scene-03.md already exists; nothing was changed` |
+
+As with `split`, a merge stopped part way cannot be finished by a rerun, so preview it with `--dry-run`. Like `move`, `split` and `merge` never edit prose: a "Chapter 3" in the text stays as it was.
+
 ### remove
 
 ```text
@@ -2756,7 +2854,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [names](#codes-names)
-- [context](#codes-context) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export) · [add, rename, move, and remove](#codes-add-rename-move-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+- [context](#codes-context) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export) · [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
 
@@ -3069,7 +3167,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `chapter-no-scenes` | warning | A Fountain build has chapters with no scene records. |
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
 
-### Codes: add, rename, move, and remove
+### Codes: add, rename, move, split, merge, and remove
 
 | Code | Level | Reported when |
 |---|---|---|
@@ -3079,6 +3177,9 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |
 | `leftover-references` | warning | `remove` left mentions of the removed entity in prose links or ids. |
 | `stale-exemption` | warning | `remove` left continuity exemption entries whose `pattern` or `file` names the removed entity. |
+| `split-references` | warning | `split` left references to the split chapter that may belong to the new chapter. |
+| `split-scenes` | warning | `split` assigned scene records by order, or split inside a scene. |
+| `merge-conflicts` | warning | `merge` kept the first chapter's value for a field the second set differently, dropped a hook, or dropped a repeated progression. |
 
 ### Codes: init and import
 
@@ -3106,7 +3207,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 
 | Option | Value | Used by | Notes |
 |---|---|---|---|
-| `--title` | `<name>` | `import` | Required for `import` |
+| `--title` | `<name>` | `import`, `split` | Required for `import`; for `split`, the new chapter's title (default: the chapter's title with `(continued)`) |
 | `--dir` | `<path>` | `init`, `import` | Target directory |
 | `--genre` | `<name>` | `init`, `import` | |
 | `--sub-genre` | `<name>` | `init`, `import` | |
@@ -3138,7 +3239,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
-| `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
+| `--at` | `<chapter-id>` | `knowledge`, `split` | Required for both; for `split`, where to split: a scene break number, a heading, or a line of the chapter text |
 | `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
 | `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |
 | `--init` | | `passes` | Boolean; adds the missing default passes |

@@ -273,6 +273,10 @@ export const FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  // story split and story merge
+  "split-references": "warning",
+  "split-scenes": "warning",
+  "merge-conflicts": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "unsplit-chapter-lines": "warning",

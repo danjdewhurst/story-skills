@@ -109,7 +109,9 @@ export {
   createEntity,
   renameEntity,
   removeEntity,
-  moveEntity
+  moveEntity,
+  splitChapter,
+  mergeChapters
 } from "./mutate.js";
 export {
   projectCheck,
