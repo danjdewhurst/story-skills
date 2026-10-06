@@ -93,7 +93,7 @@ describe("story diagram", () => {
 `);
   });
 
-  test("locations draws two-way routes once and one-way declarations as arrows", () => {
+  test("locations draws a route declared once as a line and a route declared both ways as two arrows", () => {
     const { root } = diagramFixture();
     expect(diagramProject(root, { kind: "locations" }).text).toBe(`flowchart LR
   fort["Fort"]
