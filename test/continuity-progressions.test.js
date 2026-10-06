@@ -197,6 +197,33 @@ describe("more deaths by status", () => {
     expect(codes(root)).not.toContain("posthumous-appearance");
   });
 
+  test("a second death after a revival keeps died-in on the first, and may end the book deceased", () => {
+    const second = (...entries) => `progressions:\n${entries.map(([from, value]) => `  - from: chapter-0${from}\n    field: status\n    value: ${value}`).join("\n")}`;
+    const { root } = fixture({
+      characters: {
+        // #584: died-in holds the first death, so the second is a status
+        // progression, and deceased is right at the end of the book.
+        "ada-fenn": `status: deceased\ndied-in: chapter-02\nrevived-in: chapter-03\n${second([3, "alive"], [5, "deceased"])}`,
+        // Revived again after the second death: deceased is wrong.
+        "nell-ashe": `status: deceased\ndied-in: chapter-02\nrevived-in: chapter-03\n${second([3, "alive"], [4, "deceased"], [5, "alive"])}`,
+        // Both deaths by progression: died-in can record only the first.
+        "old-tomas": `status: alive\n${second([2, "deceased"], [3, "alive"], [5, "deceased"])}`,
+        // Dead before the story and back in chapter 2: died-in can record
+        // the death in chapter 4, the first in the book.
+        kai: `status: deceased\n${second([2, "alive"], [4, "deceased"])}`,
+        // A second death planned for a chapter not written yet.
+        eli: `status: alive\ndied-in: chapter-02\nrevived-in: chapter-03\n${second([3, "alive"], [9, "deceased"])}`
+      }
+    });
+    expect(findings(root, "revival-status-mismatch").map((finding) => finding.message)).toEqual([
+      "characters/nell-ashe.md has revived-in chapter-03 but status deceased; set status: alive"
+    ]);
+    expect(validateProject(root).warnings.filter((warning) => warning.code === "deceased-without-died-in").map((warning) => warning.message)).toEqual([
+      "characters/kai.md progressions[1] makes kai deceased from chapter-04; set died-in: chapter-04 too so story continuity treats appearances after the death as errors",
+      "characters/old-tomas.md progressions[0] makes old-tomas deceased from chapter-02; set died-in: chapter-02 too so story continuity treats appearances after the death as errors"
+    ]);
+  });
+
   test("a death planned for a chapter number between written chapters applies after it", () => {
     const { root } = fixture({
       characters: { "ada-fenn": "status: alive\nprogressions:\n  - from: chapter-03\n    field: status\n    value: deceased" },

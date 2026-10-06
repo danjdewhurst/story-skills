@@ -8147,6 +8147,11 @@ function characterLifeline(character, bookChronology) {
   }
   return { deadAtStart, deadAtEnd: dead, events };
 }
+function diesAgainIn(lifeline, chapterId, bookChronology) {
+  const chronology = orderedChronology(bookChronology);
+  const first = lifeline.events.findIndex((event) => event.type === "death");
+  return first !== -1 && lifeline.events.some((event, index) => index > first && event.type === "revival" && happensAfter(chronology, chapterId, event.chapter));
+}
 function revivedBy(lifeline, chapterId, bookChronology) {
   const chronology = orderedChronology(bookChronology);
   return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
@@ -14325,7 +14330,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     if (deathWritten && !revivalWritten && character.status !== "deceased") {
       errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`, label));
     }
-    if (revivalWritten && character.status === "deceased") {
+    if (revivalWritten && character.status === "deceased" && !diesAgain(character, context.chronology)) {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
     }
     checkProgressionDeath(character, label, context.chronology, warnings);
@@ -14345,6 +14350,10 @@ function checkCharacterDeaths(project, context, errors, warnings) {
       }
     }
   }
+}
+function diesAgain(character, chronology) {
+  const lifeline = characterLifeline(character, chronology);
+  return lifeline.deadAtEnd && lifeline.events.at(-1)?.source === "progression";
 }
 function checkStatusAppearances(project, character, chronology, warnings) {
   if (statusProgressions(character).length === 0 && character.status !== "deceased") {
@@ -20648,8 +20657,13 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
+    let lifeline = null;
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
+        lifeline ??= characterLifeline(character, chronology);
+        if (diesAgainIn(lifeline, idText(item.from), chronology)) {
+          continue;
+        }
         warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity treats appearances after the death as errors`, label));
       }
     }

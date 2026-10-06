@@ -141,6 +141,16 @@ export function characterLifeline(character, bookChronology) {
   return { deadAtStart, deadAtEnd: dead, events };
 }
 
+// Whether a death from chapter `chapterId` (written, or a planned
+// `chapter-NN`) would follow a revival that ended an earlier death in the
+// book: a second death, which died-in cannot record, since it holds the
+// first.
+export function diesAgainIn(lifeline, chapterId, bookChronology) {
+  const chronology = orderedChronology(bookChronology);
+  const first = lifeline.events.findIndex((event) => event.type === "death");
+  return first !== -1 && lifeline.events.some((event, index) => index > first && event.type === "revival" && happensAfter(chronology, chapterId, event.chapter));
+}
+
 // Whether a lifeline has the character come back to life in or before
 // chapter `chapterId`: a revival event in that chapter or an earlier one. A
 // chapter the book does not have gets no revival.

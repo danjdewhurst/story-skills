@@ -4,6 +4,7 @@ import path from "node:path";
 import { parseCalendar } from "./calendar.js";
 import { idText, storyDateError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
+import { characterLifeline, diesAgainIn } from "./deaths.js";
 import { validateProgressions } from "./progressions.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
@@ -1191,9 +1192,16 @@ function validateCharacters(project, errors, warnings) {
     validateRelationships(data, label, errors);
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
     // Continuity checks a death from died-in fully (errors, state, series);
-    // a progression alone raises only warnings.
+    // a progression alone raises only warnings. A progression death after
+    // the character died and came back is a second death, which died-in
+    // cannot record, so it is not asked for.
+    let lifeline = null;
     for (const [index, item] of asArray(data.progressions).entries()) {
       if (item && typeof item === "object" && item.field === "status" && item.value === "deceased" && idText(item.from) !== character.diedIn) {
+        lifeline ??= characterLifeline(character, chronology);
+        if (diesAgainIn(lifeline, idText(item.from), chronology)) {
+          continue;
+        }
         warnings.push(warn("deceased-without-died-in", `${label} progressions[${index}] makes ${character.id} deceased from ${idText(item.from) || "?"}; set died-in: ${idText(item.from) || "<chapter>"} too so story continuity treats appearances after the death as errors`, label));
       }
     }

@@ -602,7 +602,7 @@ arc: redemption
 | `locations` | list of location ids | no | Places the character is tied to. Each location must list the character in `notable-characters`. |
 | `tags` | list of strings | no | Free labels. |
 | `died-in` | chapter id | no | Chapter in which the character dies on the page. Set it with `status: deceased` once that chapter is drafted. |
-| `revived-in` | chapter id | no | Chapter in which a character who died in `died-in` comes back. It ends the dead window, so casts from this chapter on are allowed again. Set `status: alive` once that chapter is drafted. |
+| `revived-in` | chapter id | no | Chapter in which a character who died in `died-in` comes back. It ends the dead window, so casts from this chapter on are allowed again. Set `status: alive` once that chapter is drafted, unless a `status` progression after it makes the character `deceased` again (a second death). |
 | `arc` | string | no | Short theme label for the personal arc, such as `redemption`. Free text: `story links` does not check it as an arc id. Set it with `story add character --arc <theme>`. If the value happens to equal an arc id, `story rename arc` and `story remove arc` update or clear it. |
 | `arc-type` | enum | no | `change-positive`, `change-negative`, or `flat`. |
 | `lie` | string | no | The false belief that drives the character. |
