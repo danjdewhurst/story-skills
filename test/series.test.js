@@ -520,11 +520,11 @@ describe("series traversal limits", () => {
         ? "follows:\n" + names.slice(1).map((other) => `  - ../${other}\n`).join("")
         : `precedes:\n  - ../${names[0]}\n`;
       fs.mkdirSync(path.join(cwd, name));
-      fs.writeFileSync(path.join(cwd, name, "story.md"), `---\ntitle: Saga ${index}\n${links}---\n`, "utf8");
+      fs.writeFileSync(path.join(cwd, name, "story.md"), `---\nschema-version: 2\ntitle: Saga ${index}\n${links}---\n`, "utf8");
     }
     const report = seriesReport(path.join(cwd, names[0]));
     expect(report.books).toHaveLength(100);
-    expect(messages(report.errors).join("\n")).not.toContain("book limit");
+    expect(messages(report.errors)).toEqual([]);
   });
 
   test("follows a long linear chain to its end", () => {
