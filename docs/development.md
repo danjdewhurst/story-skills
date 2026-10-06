@@ -357,21 +357,20 @@ bun run test:coverage
 
 This runs the suite with lcov output into `coverage/`, then `node scripts/check-coverage.js coverage/lcov.info src scripts:85 evals:85`, then `check:fallback`. Each argument after the report names a folder to gate, and every `.js` file in it and its subfolders must have a coverage record:
 
-- A bare folder (`src`) is gated at 100%: every line and every function in each file must be hit. If the lcov report includes branch records (`BRDA`, or `BRF`/`BRH`), branches must be at 100% too.
+- A bare folder (`src`) is gated at 100%: every line and every function in each file must be hit. Branches are not gated, because Bun's lcov reporter writes no branch records: an untaken `??`, `||`, or ternary arm on a line that ran still counts as covered, so a test for each arm is up to the author.
 - `folder:N` (`scripts:85`, `evals:85`) requires each file to have at least N% of its lines hit. The check scripts, the release script, and the eval runners are gated this way rather than at 100% because each has a CLI entry block that only runs as a process, and some have small branches for platform or runtime errors. Their logic is still tested in-process: each exports its entry point with the commands it runs (git, gh, npm, bun, tar, or `claude`) passed in, so tests stub them. No test cuts a release, pushes, publishes, or calls a model.
 
-Bun's lcov reporter does not currently emit branch records, so the branch gate is skipped with a note:
+A passing run ends:
 
 ```text
-Note: coverage/lcov.info contains no branch records, so the branch gate was skipped. Use a coverage reporter that emits BRDA/BRF/BRH records to enforce branch coverage.
-Coverage is 100% for src line and function coverage.
+Coverage is 100% for src line and function coverage; branch coverage is not gated.
 Line coverage is at least 85% for every file in scripts.
 Line coverage is at least 85% for every file in evals.
 $ node scripts/check-fallback.js
 Bundled story-maintenance fallback is up to date.
 ```
 
-A failure prints `Coverage is below the gate:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage`, `branch coverage`, or `has no coverage record`) for a 100% folder, or `/path/to/story-skills/scripts/release.js line coverage 80.0% (240/300) is below 85%` for a floor, and exits with status 1. A new script in `scripts/` or `evals/` needs a test that imports it, or it fails with `has no coverage record`. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
+A failure prints `Coverage is below the gate:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage` or `has no coverage record`) for a 100% folder, or `/path/to/story-skills/scripts/release.js line coverage 80.0% (240/300) is below 85%` for a floor, and exits with status 1. A new script in `scripts/` or `evals/` needs a test that imports it, or it fails with `has no coverage record`. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
 
 ## Examples check
 

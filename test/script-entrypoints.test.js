@@ -73,13 +73,17 @@ describe("check-coverage gates", () => {
 
     const passing = run(lcovFor([[fullFile, 4, 4], [partialFile, 10, 9]]), path.join(dir, "full"), `${path.join(dir, "partial")}:80`);
     expect(passing.status).toBe(0);
-    expect(passing.out).toContain(`Coverage is 100% for ${path.join(dir, "full")} line and function coverage.`);
+    expect(passing.out).toContain(`Coverage is 100% for ${path.join(dir, "full")} line and function coverage; branch coverage is not gated.`);
     expect(passing.out).toContain(`Line coverage is at least 80% for every file in ${path.join(dir, "partial")}.`);
-    expect(passing.err).toContain("contains no branch records");
+    expect(passing.err).toBe("");
 
-    const branches = run(`TN:\nSF:${fullFile}\nFNF:0\nFNH:0\nLF:1\nLH:1\nBRF:1\nBRH:1\nend_of_record\n`, path.join(dir, "full"));
-    expect(branches.out).toBe(`Coverage is 100% for ${path.join(dir, "full")} line, function, branch coverage.`);
-    expect(branches.err).toBe("");
+    // #570: branch records never claim or fail a branch gate.
+    const branches = run(`TN:\nSF:${fullFile}\nFNF:0\nFNH:0\nLF:1\nLH:1\nBRDA:1,0,0,-\nBRF:1\nBRH:0\nend_of_record\n`, path.join(dir, "full"));
+    expect(branches).toEqual({
+      status: 0,
+      out: `Coverage is 100% for ${path.join(dir, "full")} line and function coverage; branch coverage is not gated.`,
+      err: ""
+    });
 
     const failing = run(lcovFor([[fullFile, 4, 3], [partialFile, 10, 5]]), path.join(dir, "full"), `${path.join(dir, "partial")}:80`);
     expect(failing.status).toBe(1);
