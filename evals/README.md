@@ -38,11 +38,12 @@ drafts, since a pass count says nothing about whether the prose reads well.
 
 Before saving a draft, the runner unwraps a reply that is one fenced block.
 It drops a lead-in of one or two lines ending in a colon ("Here's the
-draft:") and a one-line sign-off after the fence, then strips the outer
-fence: backticks or tildes, three or more, with any info string. Fences
-inside the draft stay. A reply with several top-level blocks, more than a
-line after the closing fence, or a longer lead-in is saved as written, and a
-heading or frontmatter `---` is never taken for a lead-in. Earlier runs
+draft:") and a one-line sign-off addressed to the user after the fence ("Let
+me know if you want changes."), then strips the outer fence: backticks or
+tildes, three or more, with any info string. Fences inside the draft stay. A
+reply with several top-level blocks, any other text after the closing fence
+(it may be the draft's last line), or a longer lead-in is saved as written,
+and a heading or frontmatter `---` is never taken for a lead-in. Earlier runs
 stripped a fence only at the very start of the reply, so a fenced draft
 after a lead-in kept its fence and the checker skipped the fenced prose; such
 drafts now score on their content.
