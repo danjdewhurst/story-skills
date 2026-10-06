@@ -212,6 +212,17 @@ describe("story diagram", () => {
     ]);
   });
 
+  test("chapter labels are strings with whitespace closed up, as drawn", () => {
+    const { root } = diagramFixture();
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: \"  Two   words \"\nnumber: 1\nstatus: draft", "Words.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: 42\nnumber: 2\nstatus: draft", "Words.\n");
+    const diagram = diagramProject(root, { kind: "arcs" });
+    const labels = Object.fromEntries(diagram.nodes.filter((node) => node.kind === "chapter").map((node) => [node.id, node.label]));
+    expect(labels).toMatchObject({ "chapter-01": "Two words", "chapter-02": "42" });
+    expect(diagram.text).toContain("  chapter_01[\"1. Two words\"]\n");
+    expect(diagram.text).toContain("  chapter_02[\"2. 42\"]\n");
+  });
+
   // The Mermaid text is rendered from the node and edge model; these golden
   // files pin it byte for byte for every kind on every example. A deliberate
   // change to the output updates the matching file in test/fixtures/diagrams.
