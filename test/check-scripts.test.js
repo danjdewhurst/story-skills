@@ -11,6 +11,7 @@ import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVer
 import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
 import { PREFLIGHT } from "../scripts/release.js";
+import { relativeLinks } from "../scripts/check-package.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
 import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
@@ -926,5 +927,35 @@ describe("locale-sensitive comparisons", () => {
     expect(pinning("new Intl.Collator(pack.locale)")).toEqual([true]);
     expect(pinning("value.toLocaleLowerCase(locale)")).toEqual([false]);
     expect(localeCallSites("const label = \"no comparison here\";")).toEqual([]);
+  });
+});
+
+describe("the published README only links to files the package ships (#401)", () => {
+  test("relativeLinks finds markdown and HTML paths, not URLs, anchors, or code", () => {
+    const markdown = [
+      '<img src="assets/a.svg"> [docs](docs/x.md#part) [site](https://example.com/y.md)',
+      "[top](#top) [mail](mailto:a@b.c) [abs](/root.md) [space](docs/a%20b.md)",
+      "```shell",
+      "[not](code/link.md)",
+      "```"
+    ].join("\n");
+    expect(relativeLinks(markdown)).toEqual(["assets/a.svg", "docs/a b.md", "docs/x.md"]);
+  });
+
+  test("every relative README link is inside package.json files", () => {
+    const pkg = JSON.parse(readRepo("package.json"));
+    const shipped = new Set([...pkg.files, "package.json"]);
+    const outside = relativeLinks(readRepo("README.md")).filter((link) => {
+      const top = link.replace(/^\.\//, "").split("/")[0];
+      return !shipped.has(top) || !fs.existsSync(path.join(repoRoot, link));
+    });
+    expect(outside).toEqual([]);
+  });
+
+  test("exports exposes package.json and the schemas, not src", () => {
+    expect(JSON.parse(readRepo("package.json")).exports).toEqual({
+      "./package.json": "./package.json",
+      "./schemas/*": "./schemas/*"
+    });
   });
 });
