@@ -93,9 +93,16 @@ describe("rename and remove reference rewriting", () => {
     writeMarkdown(path.join(root, "characters", "vale.md"), "name: Vale\nrole: supporting\nstatus: alive", "\n# Vale\n");
     createEntity(root, { kind: "artifact", name: "Ring", owner: "vale" });
 
-    renameEntity(root, { kind: "character", id: "vale", name: "Vale Two" });
+    const result = renameEntity(root, { kind: "character", id: "vale", name: "Vale Two" });
 
     expect(read(root, "worldbuilding", "artifacts", "ring.md")).toContain("owner: vale");
+    // ...but not silently (#579).
+    expect(result.warnings).toEqual([{
+      code: "ambiguous-references",
+      message: "controlled-by and owner references to vale in worldbuilding/artifacts/ring.md could mean the character or faction vale, and rename left them alone, so they now name the faction: change any that meant the character to vale-two",
+      file: "worldbuilding/artifacts/ring.md",
+      chapter: null
+    }]);
   });
 
   test("remove clears nested fields but keeps continuity entries unless the entry is about the removed entity (findings 2, 7)", () => {
@@ -283,7 +290,7 @@ describe("edits saved while rename, remove, or move runs", () => {
   });
 });
 
-describe("interrupted renames (#579)", () => {
+describe("interrupted renames and ids two kinds share (#579)", () => {
   // Runs a rename that is killed once it has deleted the old file, at the
   // first registry write of its reindex.
   function killedBeforeReindex(oldFile, run) {
@@ -319,9 +326,36 @@ describe("interrupted renames (#579)", () => {
     killedBeforeReindex(path.join(root, "characters", "mara-quill.md"), () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }));
     expect(read(root, "characters", "_index.md")).toContain("| Mara Quill | supporting | alive | [mara-tide](mara-tide.md) |");
 
-    expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toMatchObject({ id: "mara-tide", resumed: true });
+    expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toMatchObject({ id: "mara-tide", resumed: true, warnings: [] });
     expect(read(root, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
     // Finished, the rename leaves no evidence, so a rerun is refused.
     expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toThrow("character mara-quill does not exist");
+  });
+
+  test("rename and remove say which mentions they left on an id a character and an artifact share", () => {
+    const root = project("Shared Mentions");
+    const handMade = () => writeMarkdown(path.join(root, "characters", "blackened-crown.md"), "name: Blackened Crown\nrole: supporting\nstatus: alive", "# Blackened Crown\n");
+    createEntity(root, { kind: "artifact", name: "Blackened Crown" });
+    handMade();
+    // Nothing references the shared id yet, so there is nothing to warn about.
+    expect(renameEntity(root, { kind: "character", id: "blackened-crown", name: "Crown Knight" }).warnings).toEqual([]);
+
+    handMade();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, mention: "blackened-crown" });
+    const renamed = renameEntity(root, { kind: "character", id: "blackened-crown", name: "Black Knight" });
+    expect(read(root, "chapters", "chapter-01.md")).toContain("mentions:\n  - blackened-crown\n");
+    expect(renamed.warnings).toEqual([{
+      code: "ambiguous-references",
+      message: "mentions references to blackened-crown in chapters/chapter-01.md could mean the character or artifact blackened-crown, and rename left them alone, so they now name the artifact: change any that meant the character to black-knight",
+      file: "chapters/chapter-01.md",
+      chapter: null
+    }]);
+
+    handMade();
+    const removed = removeEntity(root, { kind: "character", id: "blackened-crown" });
+    expect(read(root, "chapters", "chapter-01.md")).toContain("mentions:\n  - blackened-crown\n");
+    expect(removed.warnings.filter((finding) => finding.code === "ambiguous-references").map((finding) => finding.message)).toEqual([
+      "mentions references to blackened-crown in chapters/chapter-01.md could mean the character or artifact blackened-crown, and remove left them alone, so they now name the artifact: delete any that meant the character"
+    ]);
   });
 });

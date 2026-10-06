@@ -571,6 +571,7 @@ var FINDING_CODES = {
   "field-below-minimum": "error",
   "unsupported-value": "error",
   "id-not-kebab": "error",
+  "shared-id": "warning",
   "near-miss-key": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
@@ -785,6 +786,7 @@ var FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  "ambiguous-references": "warning",
   "split-references": "warning",
   "split-scenes": "warning",
   "merge-conflicts": "warning",
@@ -13239,6 +13241,11 @@ function entityConfig(kind) {
   };
   return configs[kind];
 }
+var MULTI_KIND_REFERENCE_FIELDS = {
+  "controlled-by": ["faction", "character"],
+  mentions: ["character", "artifact"],
+  owner: ["character", "faction"]
+};
 var KIND_ALIASES = {
   character: "character",
   characters: "character",
@@ -20606,6 +20613,7 @@ function validateProjectOf(project) {
       warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));
     }
   }
+  validateSharedIds(project, warnings);
   const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path11.basename(item.file)})`, projectPath(projectRoot, item.file)]);
   const indexChecks = [
     ["characters/_index.md", linksFor(project.characters)],
@@ -21329,6 +21337,28 @@ function validateStoryFrontmatter(project, errors, warnings) {
     errors.push(err("schema-too-new", newerSchemaMessage(newerSchemaVersion(data["schema-version"])), "story.md"));
   } else if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(err("schema-version-mismatch", `story.md schema-version must be ${STORY_SCHEMA_VERSION}`, "story.md"));
+  }
+}
+function validateSharedIds(project, warnings) {
+  const entities = { character: project.characters, faction: project.factions, artifact: project.artifacts };
+  const order = Object.keys(entities);
+  const pairs = new Map;
+  for (const [field, kinds] of Object.entries(MULTI_KIND_REFERENCE_FIELDS)) {
+    const named = order.filter((kind) => kinds.includes(kind));
+    named.forEach((first, index) => {
+      for (const second of named.slice(index + 1)) {
+        const key = `${first} ${second}`;
+        pairs.set(key, (pairs.get(key) ?? []).concat(field));
+      }
+    });
+  }
+  for (const [key, fields] of pairs) {
+    const [first, second] = key.split(" ");
+    const others = new Map(entities[second].map((entity) => [entity.id, entity]));
+    for (const entity of entities[first].filter((item) => others.has(item.id))) {
+      const file = relative(project, entity.file);
+      warnings.push(warn("shared-id", `${file} and ${relative(project, others.get(entity.id).file)} share the id ${entity.id}, so ${fields.join(" and ")} references to it could mean either, and rename and remove leave them alone: give one of them another id with story rename`, file));
+    }
   }
 }
 function validatePortablePaths(project, warnings) {
@@ -23494,7 +23524,8 @@ function renameEntity(root, options) {
   if (!fs8.existsSync(oldFile)) {
     if (newFile !== oldFile && fs8.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && registryAwaitsRetitle(project.root, kind, newFile, name) && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
       const reindexed = reindexProject(project.root);
-      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
+      const warnings = ambiguousReferenceWarnings(project.root, kind, oldId, newFile, newId);
+      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true, warnings };
     }
     throw usageError(`${kind} ${oldId} does not exist`);
   }
@@ -23532,6 +23563,7 @@ function renameEntity(root, options) {
       assertUnambiguousId(project.root, kind, newId);
       warnings = adoptedReferenceWarnings(project.root, kind, newId, oldFile, "rename");
     }
+    warnings = warnings.concat(ambiguousReferenceWarnings(project.root, kind, oldId, oldFile, newId));
     assertWritable(project.root, [...plan.keys(), oldFile], interrupted ? [] : [newFile]);
     commitWrites(() => {
       writeReferencePlan(project.root, plan);
@@ -23562,6 +23594,23 @@ function registryAwaitsRetitle(root, kind, file, name) {
   const cell = `[${path12.basename(file, ".md")}](${projectPath(path12.dirname(registryPath), file)}) |`;
   const row = safeRead(registryPath, root).split(/\r?\n/).find((line) => line.startsWith("| ") && line.trimEnd().endsWith(cell));
   return row !== undefined && !row.startsWith(`| ${registryCell(name)} |`);
+}
+function ambiguousReferenceWarnings(root, kind, id, excludedFile, newId = null) {
+  const warnings = [];
+  for (const [other, fields] of kindsSharingFields(kind)) {
+    if (!fs8.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`))) {
+      continue;
+    }
+    const context = { ...entityReferenceContext(root, kind, id), isReferenceKey: (key) => fields.includes(key) };
+    const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), idRenamer(id, `${id}-ambiguous-probe`), (body) => body);
+    if (plan.size === 0) {
+      continue;
+    }
+    const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
+    const action = newId === null ? `remove left them alone, so they now name the ${other}: delete any that meant the ${kind}` : `rename left them alone, so they now name the ${other}: change any that meant the ${kind} to ${newId}`;
+    warnings.push(warn("ambiguous-references", `${fields.join(" and ")} references to ${id} in ${files.join(", ")} could mean the ${kind} or ${other} ${id}, and ${action}`, files.length === 1 ? files[0] : null));
+  }
+  return warnings;
 }
 function planProseRename(project, kind, id, name) {
   if (!MENTION_KINDS.includes(kind)) {
@@ -23653,11 +23702,13 @@ function leftoverReferenceWarnings(root, kind, id) {
   const probe = `${id}-leftover-probe`;
   const numbered = kind === "chapter" || kind === "scene";
   let files = [];
+  let ambiguous = [];
   try {
     files = [...planReferenceRewrites(root, context, new Map, (value) => value, (body, file) => {
       const relinked = renameLinkTargets(root, file, body, context, probe);
       return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
     }).keys()].map((file) => projectPath(root, file)).sort();
+    ambiguous = ambiguousReferenceWarnings(root, kind, id, context.entityFile);
   } catch {}
   if (files.length > 0) {
     warnings.push(warn("leftover-references", `${files.join(", ")} still ${files.length === 1 ? "mentions" : "mention"} ${kind} ${id} in ${numbered ? "links or ids" : "links"} in the text, which remove does not change: edit ${files.length === 1 ? "it" : "them"}, then run story links`, files.length === 1 ? files[0] : null));
@@ -23670,7 +23721,7 @@ function leftoverReferenceWarnings(root, kind, id) {
     const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
-  return warnings;
+  return warnings.concat(ambiguous);
 }
 var EXEMPTION_TEXT_KEYS = ["pattern", "file", "chapter"];
 function exemptionEntries(root) {
@@ -24544,7 +24595,7 @@ var REFERENCE_FIELD_KINDS = {
   chapter: ["chapter"],
   character: ["character"],
   characters: ["character"],
-  "controlled-by": ["faction", "character"],
+  "controlled-by": MULTI_KIND_REFERENCE_FIELDS["controlled-by"],
   "died-in": ["chapter"],
   "revived-in": ["chapter"],
   introduced: ["chapter"],
@@ -24553,9 +24604,9 @@ var REFERENCE_FIELD_KINDS = {
   location: ["location"],
   locations: ["location"],
   members: ["character"],
-  mentions: ["character", "artifact"],
+  mentions: MULTI_KIND_REFERENCE_FIELDS.mentions,
   "notable-characters": ["character"],
-  owner: ["character", "faction"],
+  owner: MULTI_KIND_REFERENCE_FIELDS.owner,
   payoff: ["chapter"],
   planted: ["chapter"],
   pov: ["character"],

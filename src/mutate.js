@@ -118,6 +118,7 @@ import {
   requireSingleLineName,
   buildEntity,
   entityConfig,
+  MULTI_KIND_REFERENCE_FIELDS,
   KIND_ALIASES,
   normalizeKind,
   assertPortableFolderName,
@@ -1030,8 +1031,8 @@ function kindsSharingFields(kind) {
 
 // An id already used by a kind that shares a reference field would make
 // those references ambiguous, and rename and remove skip ambiguous
-// references, so a later rename or its undo would silently leave them on
-// the other entity.
+// references, so a later rename or its undo would leave them on the other
+// entity, with only a warning.
 function assertUnambiguousId(root, kind, id) {
   for (const [other, fields] of kindsSharingFields(kind)) {
     if (fs.existsSync(path.join(root, entityConfig(other).dir, `${id}.md`))) {
@@ -1263,7 +1264,9 @@ export function renameEntity(root, options) {
       && registryAwaitsRetitle(project.root, kind, newFile, name)
       && replaceEntityReferences(project.root, kind, oldId, newId, new Map()).size === 0) {
       const reindexed = reindexProject(project.root);
-      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
+      // The killed run never printed its warnings.
+      const warnings = ambiguousReferenceWarnings(project.root, kind, oldId, newFile, newId);
+      return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true, warnings };
     }
     throw usageError(`${kind} ${oldId} does not exist`);
   }
@@ -1310,6 +1313,7 @@ export function renameEntity(root, options) {
       assertUnambiguousId(project.root, kind, newId);
       warnings = adoptedReferenceWarnings(project.root, kind, newId, oldFile, "rename");
     }
+    warnings = warnings.concat(ambiguousReferenceWarnings(project.root, kind, oldId, oldFile, newId));
 
     assertWritable(project.root, [...plan.keys(), oldFile], interrupted ? [] : [newFile]);
     // References first, the entity file last: if the command is killed
@@ -1350,6 +1354,29 @@ function registryAwaitsRetitle(root, kind, file, name) {
   const cell = `[${path.basename(file, ".md")}](${projectPath(path.dirname(registryPath), file)}) |`;
   const row = safeRead(registryPath, root).split(/\r?\n/).find((line) => line.startsWith("| ") && line.trimEnd().endsWith(cell));
   return row !== undefined && !row.startsWith(`| ${registryCell(name)} |`);
+}
+
+// A field that can name another kind too (mentions, owner, controlled-by)
+// is left alone by rename and remove when an entity of that kind has the
+// same id, since the reference could mean either. Lists the files that hold
+// such references, so the writer can check which entity each one meant;
+// `newId` is the rename's new id, or null for a remove.
+function ambiguousReferenceWarnings(root, kind, id, excludedFile, newId = null) {
+  const warnings = [];
+  for (const [other, fields] of kindsSharingFields(kind)) {
+    if (!fs.existsSync(path.join(root, entityConfig(other).dir, `${id}.md`))) {
+      continue;
+    }
+    const context = { ...entityReferenceContext(root, kind, id), isReferenceKey: (key) => fields.includes(key) };
+    const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), idRenamer(id, `${id}-ambiguous-probe`), (body) => body);
+    if (plan.size === 0) {
+      continue;
+    }
+    const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
+    const action = newId === null ? `remove left them alone, so they now name the ${other}: delete any that meant the ${kind}` : `rename left them alone, so they now name the ${other}: change any that meant the ${kind} to ${newId}`;
+    warnings.push(warn("ambiguous-references", `${fields.join(" and ")} references to ${id} in ${files.join(", ")} could mean the ${kind} or ${other} ${id}, and ${action}`, files.length === 1 ? files[0] : null));
+  }
+  return warnings;
 }
 
 // rename --prose: the chapter prose edits for the new name (see
@@ -1477,19 +1504,22 @@ export function removeEntity(root, options) {
 
 // What remove leaves for the author: body links and bare chapter or scene ids
 // (the ones `story links` checks, plus links in a registry's own sections),
-// which it never edits, and exemption patterns naming the id, which no longer
-// match anything.
+// which it never edits, exemption patterns naming the id, which no longer
+// match anything, and references another kind's entity with the id may
+// mean (see ambiguousReferenceWarnings).
 function leftoverReferenceWarnings(root, kind, id) {
   const warnings = [];
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-leftover-probe`;
   const numbered = kind === "chapter" || kind === "scene";
   let files = [];
+  let ambiguous = [];
   try {
     files = [...planReferenceRewrites(root, context, new Map(), (value) => value, (body, file) => {
       const relinked = renameLinkTargets(root, file, body, context, probe);
       return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
     }).keys()].map((file) => projectPath(root, file)).sort();
+    ambiguous = ambiguousReferenceWarnings(root, kind, id, context.entityFile);
   } catch {
     // Every file parsed before the remove; a file broken since is reported
     // by validate.
@@ -1507,7 +1537,7 @@ function leftoverReferenceWarnings(root, kind, id) {
     const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
   }
-  return warnings;
+  return warnings.concat(ambiguous);
 }
 
 // The exemption keys that name ids and paths as text: a pattern quotes
@@ -2610,7 +2640,7 @@ const REFERENCE_FIELD_KINDS = {
   chapter: ["chapter"],
   character: ["character"],
   characters: ["character"],
-  "controlled-by": ["faction", "character"],
+  "controlled-by": MULTI_KIND_REFERENCE_FIELDS["controlled-by"],
   "died-in": ["chapter"],
   "revived-in": ["chapter"],
   introduced: ["chapter"],
@@ -2619,9 +2649,9 @@ const REFERENCE_FIELD_KINDS = {
   location: ["location"],
   locations: ["location"],
   members: ["character"],
-  mentions: ["character", "artifact"],
+  mentions: MULTI_KIND_REFERENCE_FIELDS.mentions,
   "notable-characters": ["character"],
-  owner: ["character", "faction"],
+  owner: MULTI_KIND_REFERENCE_FIELDS.owner,
   payoff: ["chapter"],
   planted: ["chapter"],
   pov: ["character"],
@@ -2652,9 +2682,9 @@ const NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
 
 // Describes the entity being renamed or removed. A frontmatter key counts as
 // a reference to it only when the key can point at its kind. A key that may
-// point at several kinds (owner, controlled-by) is left alone when another of
-// those kinds has an entity with the same id, because the reference is then
-// ambiguous.
+// point at several kinds (owner, controlled-by, mentions) is left alone when
+// another of those kinds has an entity with the same id, because the
+// reference is then ambiguous (see ambiguousReferenceWarnings).
 function entityReferenceContext(root, kind, id) {
   const otherExists = new Map();
   const existsAs = (other) => {

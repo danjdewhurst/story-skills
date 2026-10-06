@@ -83,6 +83,7 @@ import {
   fileErrorMessage,
   relativePathError,
   ENTITY_SCAN_DIRS,
+  MULTI_KIND_REFERENCE_FIELDS,
   asArray,
   coverImage,
   substituteStoryIdWarnings,
@@ -193,6 +194,7 @@ export function validateProjectOf(project) {
       warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));
     }
   }
+  validateSharedIds(project, warnings);
 
   // Each registry link as [needle, file]: the needle is the link target the
   // registry must contain, the file is what the warning names.
@@ -1098,6 +1100,33 @@ function validateStoryFrontmatter(project, errors, warnings) {
     errors.push(err("schema-too-new", newerSchemaMessage(newerSchemaVersion(data["schema-version"])), "story.md"));
   } else if (data["schema-version"] !== undefined && data["schema-version"] !== STORY_SCHEMA_VERSION) {
     errors.push(err("schema-version-mismatch", `story.md schema-version must be ${STORY_SCHEMA_VERSION}`, "story.md"));
+  }
+}
+
+// Two kinds a reference field can both name (owner: a character or a
+// faction) must not share an id, or the reference could mean either one.
+// add refuses such an id, so it comes from a file made by hand. `entities`
+// holds every kind MULTI_KIND_REFERENCE_FIELDS names.
+function validateSharedIds(project, warnings) {
+  const entities = { character: project.characters, faction: project.factions, artifact: project.artifacts };
+  const order = Object.keys(entities);
+  const pairs = new Map();
+  for (const [field, kinds] of Object.entries(MULTI_KIND_REFERENCE_FIELDS)) {
+    const named = order.filter((kind) => kinds.includes(kind));
+    named.forEach((first, index) => {
+      for (const second of named.slice(index + 1)) {
+        const key = `${first} ${second}`;
+        pairs.set(key, (pairs.get(key) ?? []).concat(field));
+      }
+    });
+  }
+  for (const [key, fields] of pairs) {
+    const [first, second] = key.split(" ");
+    const others = new Map(entities[second].map((entity) => [entity.id, entity]));
+    for (const entity of entities[first].filter((item) => others.has(item.id))) {
+      const file = relative(project, entity.file);
+      warnings.push(warn("shared-id", `${file} and ${relative(project, others.get(entity.id).file)} share the id ${entity.id}, so ${fields.join(" and ")} references to it could mean either, and rename and remove leave them alone: give one of them another id with story rename`, file));
+    }
   }
 }
 
