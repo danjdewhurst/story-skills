@@ -43,12 +43,6 @@ export function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
-    // A given name is looked for only when it is a whole word of the name as
-    // spaced: 大島源治 is split into characters to find one, but has no word
-    // to be known by.
-    if (entry.name !== entry.full && !entry.full.split(/\s+/u).includes(entry.name)) {
-      continue;
-    }
     add(entry.kind, entry.id, entry.name);
     const words = entry.name.split(/\s+/);
     const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));

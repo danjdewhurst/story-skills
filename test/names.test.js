@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { checkNames, formatNames } from "../src/names.js";
+import { checkNames, formatNames, givenName, nameWords } from "../src/names.js";
 import { createEntity, createStoryProject, namesReport } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -53,6 +53,57 @@ describe("story names", () => {
       "\"Ilyana\" looks like character ilya-venn (Ilya Venn)"
     ]);
     expect(formatNames(report)).toBe("Maro: check\nSaltmarch: check\nMilo: check\nZander: clear\nIlyana: check\nBo: clear\n");
+  });
+
+  test("a name in a script written without spaces is one word unless spaces or an interpunct part it", () => {
+    expect(nameWords("大島源治")).toEqual(["大島源治"]);
+    expect(nameWords("大島 源治")).toEqual(["大島", "源治"]);
+    expect(nameWords("王小明")).toEqual(["王小明"]);
+    expect(nameWords("哈利·波特")).toEqual(["哈利", "波特"]);
+    expect(nameWords("ジョン・スミス")).toEqual(["ジョン", "スミス"]);
+    expect(nameWords("สมชายใจดี")).toEqual(["สมชายใจดี"]);
+    expect(nameWords("สมชาย ใจดี")).toEqual(["สมชาย", "ใจดี"]);
+    expect(nameWords("김민준")).toEqual(["김민준"]);
+    expect(nameWords("김 민준")).toEqual(["김", "민준"]);
+    expect(nameWords("Dr. O'Neil-Smith")).toEqual(["Dr", "O'Neil-Smith"]);
+    expect(givenName("大島源治")).toBe("大島源治");
+    expect(givenName("ジョン・スミス")).toBe("ジョン");
+  });
+
+  test("an unspaced Japanese or Chinese name is compared whole, not character by character", () => {
+    const cwd = makeTempDir();
+    const ja = createStoryProject({ cwd, title: "霧見", dir: "kirimi", force: false, language: "ja" }).root;
+    writeMarkdown(path.join(ja, "characters", "oshima-genji.md"), "name: 大島源治\nrole: supporting\nstatus: alive", "# 大島\n");
+    writeMarkdown(path.join(ja, "characters", "morita-haruka.md"), "name: 森田遥\nrole: protagonist\nstatus: alive", "# 森田\n");
+    const jaReport = namesReport(ja, ["大", "源治", "大島源治", "大島源太", "森田"]);
+    expect(messages(jaReport.errors)).toEqual(["\"大島源治\" clashes with character oshima-genji (大島源治)"]);
+    expect(messages(jaReport.warnings)).toEqual([
+      "\"大島源太\" looks like character oshima-genji (大島源治)",
+      "\"森田\" shares an initial with protagonist morita-haruka (森田遥)"
+    ]);
+    expect(formatNames(jaReport)).toBe("大: clear\n源治: clear\n大島源治: taken\n大島源太: check\n森田: check\n");
+
+    const zh = createStoryProject({ cwd, title: "灯塔", dir: "dengta", force: false, language: "zh" }).root;
+    writeMarkdown(path.join(zh, "characters", "wang-xiaoming.md"), "name: 王小明\nrole: supporting\nstatus: alive", "# 王\n");
+    writeMarkdown(path.join(zh, "characters", "harry.md"), "name: 哈利·波特\nrole: minor\nstatus: alive", "# 哈利\n");
+    const zhReport = namesReport(zh, ["王", "小明", "王小明", "哈利", "波"]);
+    expect(messages(zhReport.errors)).toEqual([
+      "\"王小明\" clashes with character wang-xiaoming (王小明)",
+      "\"哈利\" clashes with character harry (哈利)"
+    ]);
+    expect(formatNames(zhReport)).toBe("王: clear\n小明: clear\n王小明: taken\n哈利: taken\n波: clear\n");
+  });
+
+  test("Korean names split at their spaces and unspaced Thai names stay whole", () => {
+    const cwd = makeTempDir();
+    const ko = createStoryProject({ cwd, title: "등대", dir: "deungdae", force: false, language: "ko" }).root;
+    writeMarkdown(path.join(ko, "characters", "kim-minjun.md"), "name: 김 민준\nrole: supporting\nstatus: alive", "# 김\n");
+    expect(messages(namesReport(ko, ["김", "민준"]).errors)).toEqual(["\"김\" clashes with character kim-minjun (김)"]);
+
+    const th = createStoryProject({ cwd, title: "ประภาคาร", dir: "prapakan", force: false, language: "th" }).root;
+    writeMarkdown(path.join(th, "characters", "somchai.md"), "name: สมชายใจดี\nrole: supporting\nstatus: alive", "# สมชาย\n");
+    const thReport = namesReport(th, ["สมชาย", "ใจดี", "สมชายใจดี"]);
+    expect(messages(thReport.errors)).toEqual(["\"สมชายใจดี\" clashes with character somchai (สมชายใจดี)"]);
   });
 
   test("checkNames skips blank candidates and trims the rest", () => {

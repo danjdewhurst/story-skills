@@ -114,9 +114,10 @@ describe("story mentions <kind> <id>", () => {
     const report = mentionsReport(root, { kind: "character", id: "oshima-genji" });
     expect(report.names).toEqual(["大島源治", "大島"]);
     expect(report.matches.map((match) => match.text)).toEqual(["大島"]);
-    // Written with a space, the name is still not split into characters.
+    // Written with a space, the name is known by its first word, not its
+    // first character.
     writeMarkdown(path.join(root, "characters", "morita-fumi.md"), "name: 森田 ふみ\nrole: supporting\nstatus: alive", "# 森田\n");
-    expect(mentionsReport(root, { kind: "character", id: "morita-fumi" }).names).toEqual(["森田 ふみ"]);
+    expect(mentionsReport(root, { kind: "character", id: "morita-fumi" }).names).toEqual(["森田 ふみ", "森田"]);
     expect(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "named-not-listed")).toEqual([]);
   });
 
