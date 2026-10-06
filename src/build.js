@@ -5,6 +5,7 @@ import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
 import { lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
+import { PROGRESS_FILE } from "./progress.js";
 import {
   chapterHeading,
   chapterProse,
@@ -192,17 +193,30 @@ function buildPdf(project, format, trim, output, options) {
 }
 
 // `build --format codex`: the story bible as linked pages in a folder,
-// dist/codex/ by default. A rebuild first clears the pages an earlier codex
-// wrote there, so a removed character's page does not linger; a folder that
-// holds anything else is refused rather than mixed into.
+// dist/codex/ by default. A rebuild removes the pages an earlier codex wrote
+// there that this one does not, so a removed character's page does not
+// linger; a folder that holds anything else is refused rather than mixed
+// into.
 function buildCodex(project, out, spoilers) {
   assertProjectParses(project, "build");
+  // The progress page reads the session log, so an unreadable one stops
+  // the build rather than leaving the log off without a word.
+  const progressError = project.fileErrors.find((error) => error.file === PROGRESS_FILE);
+  if (progressError) {
+    throw projectError(`Cannot build the codex: fix this file first (story validate reports it):\n- ${progressError.message}`);
+  }
   const output = resolveOutputDirectory(project, out, "dist/codex");
   const pages = codexPages(project, { spoilers });
-  clearEarlierCodex(output.directory);
+  // Each page replaces its old copy in one rename, and stale pages go only
+  // once every new one is written, so the folder always holds a whole
+  // codex and its index.html, even after a failed build.
+  const written = new Set();
   for (const page of pages) {
-    writeFile(path.join(output.directory, ...page.path.split("/")), page.html, output.writeOptions);
+    const file = path.join(output.directory, ...page.path.split("/"));
+    writeFile(file, page.html, output.writeOptions);
+    written.add(file);
   }
+  removeStaleCodexPages(output.directory, written);
   return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
 }
 
@@ -236,33 +250,35 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
 }
 
 function isCodexFolder(directory) {
+  return isCodexPage(path.join(directory, "index.html"));
+}
+
+function isCodexPage(file) {
   try {
-    return fs.readFileSync(path.join(directory, "index.html"), "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return fs.readFileSync(file, "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }
 }
 
-// Removes the pages an earlier codex wrote: .html files at the top of the
-// folder and in its entity folders, and those folders once empty.
-function clearEarlierCodex(directory) {
-  if (lstatIfExists(directory) === null) {
-    return;
-  }
-  const htmlFiles = (folder) => fs.readdirSync(folder, { withFileTypes: true })
+// Removes the pages an earlier codex wrote that this build did not: an
+// .html file at the top of the folder or in an entity folder that carries
+// the codex generator tag, so a page someone added by hand stays. An
+// entity folder left empty goes too.
+function removeStaleCodexPages(directory, written) {
+  const stalePages = (folder) => fs.readdirSync(folder, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
-    .map((entry) => path.join(folder, entry.name));
-  for (const kind of CODEX_KINDS) {
-    const folder = path.join(directory, kind.dir);
+    .map((entry) => path.join(folder, entry.name))
+    .filter((file) => !written.has(file) && isCodexPage(file));
+  for (const folder of [directory, ...CODEX_KINDS.map((kind) => path.join(directory, kind.dir))]) {
     if (lstatIfExists(folder)?.isDirectory() !== true) {
       continue;
     }
-    htmlFiles(folder).forEach((file) => removeFile(file));
-    if (fs.readdirSync(folder).length === 0) {
+    stalePages(folder).forEach((file) => removeFile(file));
+    if (folder !== directory && fs.readdirSync(folder).length === 0) {
       fs.rmdirSync(folder);
     }
   }
-  htmlFiles(directory).forEach((file) => removeFile(file));
 }
 
 // The chapter graph and IFID behind the twee and ink builds, which refuse

@@ -18732,11 +18732,11 @@ ${rows.join(`
 `)}
 </tbody></table></div>`);
   }
-  const sessions = cleanSessions(project.progressLog?.data.sessions);
+  const sessions = cleanSessions(project.progressLog?.data.sessions).filter((session) => !characterBook || session.characters !== null);
   if (sessions.length > 0) {
     body.push(`<h2>Session log</h2>
 <table><thead><tr><th>Date</th><th>${characterBook ? "Characters" : "Words"}</th></tr></thead><tbody>
-${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters ?? "" : session.words}</td></tr>`).join(`
+${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters : session.words}</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
@@ -18871,7 +18871,16 @@ function notesHtml(site, entity) {
   let fence = null;
   const flushParagraph = () => {
     if (paragraph.length > 0) {
-      out.push(`<p>${inlineHtml(plainLinks(paragraph.join(" ").trim()))}</p>`);
+      const text = paragraph.map((line, index) => {
+        if (index === paragraph.length - 1) {
+          return line.trim();
+        }
+        if (/\\$/.test(line)) {
+          return `${line.slice(0, -1).trim()}${LINE_BREAK}`;
+        }
+        return / {2,}$/.test(line) ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
+      }).join("");
+      out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];
     }
   };
@@ -18907,7 +18916,8 @@ ${body.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`
   let titleSkipped = false;
   for (const line of lines) {
     if (fence !== null) {
-      if (line.trim().startsWith(fence.marker)) {
+      const closing = line.trim();
+      if (closing.length >= fence.marker.length && closing === fence.marker[0].repeat(closing.length)) {
         out.push(`<pre><code>${escapeHtml(fence.lines.join(`
 `))}</code></pre>`);
         fence = null;
@@ -18967,7 +18977,7 @@ ${body.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`
       out.push(`<blockquote><p>${inlineHtml(plainLinks(quote[1]))}</p></blockquote>`);
       continue;
     }
-    paragraph.push(line.trim());
+    paragraph.push(line);
   }
   if (fence !== null) {
     out.push(`<pre><code>${escapeHtml(fence.lines.join(`
@@ -19314,12 +19324,20 @@ function buildPdf(project, format, trim, output, options) {
 }
 function buildCodex(project, out, spoilers) {
   assertProjectParses(project, "build");
+  const progressError = project.fileErrors.find((error) => error.file === PROGRESS_FILE);
+  if (progressError) {
+    throw projectError(`Cannot build the codex: fix this file first (story validate reports it):
+- ${progressError.message}`);
+  }
   const output = resolveOutputDirectory(project, out, "dist/codex");
   const pages = codexPages(project, { spoilers });
-  clearEarlierCodex(output.directory);
+  const written = new Set;
   for (const page of pages) {
-    writeFile(path12.join(output.directory, ...page.path.split("/")), page.html, output.writeOptions);
+    const file = path12.join(output.directory, ...page.path.split("/"));
+    writeFile(file, page.html, output.writeOptions);
+    written.add(file);
   }
+  removeStaleCodexPages(output.directory, written);
   return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
 }
 function resolveOutputDirectory(project, out, defaultRelativePath) {
@@ -19349,28 +19367,26 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
   return { directory, writeOptions: enforceRoot ? { root: project.root } : {} };
 }
 function isCodexFolder(directory) {
+  return isCodexPage(path12.join(directory, "index.html"));
+}
+function isCodexPage(file) {
   try {
-    return fs11.readFileSync(path12.join(directory, "index.html"), "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return fs11.readFileSync(file, "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }
 }
-function clearEarlierCodex(directory) {
-  if (lstatIfExists(directory) === null) {
-    return;
-  }
-  const htmlFiles = (folder) => fs11.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => path12.join(folder, entry.name));
-  for (const kind of CODEX_KINDS) {
-    const folder = path12.join(directory, kind.dir);
+function removeStaleCodexPages(directory, written) {
+  const stalePages = (folder) => fs11.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => path12.join(folder, entry.name)).filter((file) => !written.has(file) && isCodexPage(file));
+  for (const folder of [directory, ...CODEX_KINDS.map((kind) => path12.join(directory, kind.dir))]) {
     if (lstatIfExists(folder)?.isDirectory() !== true) {
       continue;
     }
-    htmlFiles(folder).forEach((file) => removeFile(file));
-    if (fs11.readdirSync(folder).length === 0) {
+    stalePages(folder).forEach((file) => removeFile(file));
+    if (folder !== directory && fs11.readdirSync(folder).length === 0) {
       fs11.rmdirSync(folder);
     }
   }
-  htmlFiles(directory).forEach((file) => removeFile(file));
 }
 function interactiveStory(project, manuscript, format) {
   const branches = branchGraph(project);
