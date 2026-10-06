@@ -1016,6 +1016,8 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 **References.**
 
 - [`continuity-checks.md`](../skills/story-maintenance/references/continuity-checks.md): the rules behind each check command, `continuity` (deaths and revivals, ledgers, `continuity/state.md`, prop custody, clock and route plausibility, exemptions), `clues`, `add clue`, `pacing`, `voices`, `prose`, `names`, `timeline`, `knowledge`, `context`, `passes`, `compare`, and `similarity`.
+- [`editing-commands.md`](../skills/story-maintenance/references/editing-commands.md): how `add`, `rename`, `remove`, `move`, `split`, `merge`, `add matter`, and `add research` behave, what they rewrite or refuse, and what to check after them.
+- [`builds.md`](../skills/story-maintenance/references/builds.md): what each `story build` format writes and the flags and `story.md` fields it reads: `html` review copies, `print` interiors and `--pdf`, `narration`, `metadata`, `twee`, `ink`, `codex`, `epub`, and `shunn`, and the `build-style` block.
 
 **Files.** [`scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the bundled Node fallback of the CLI, generated from `src/` by `bun run build:fallback` (see the [Development guide](development.md#the-bundled-fallback)).
 

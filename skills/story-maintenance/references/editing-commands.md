@@ -1,0 +1,53 @@
+# Editing Commands
+
+How the commands that create, rename, move, split, merge, and remove entity files behave, and what to check after them. `SKILL.md` says when to run each command; read the matching section here before running one or explaining its result. Run any of them with `--dry-run` first when the change touches many files. `docs/cli-reference.md` lists every flag.
+
+## add, rename, and remove
+
+`add`, `rename`, `move`, and `remove` for deterministic entity file operations when they fit the requested change.
+
+- `add` takes ids, not names, for reference options (`--planted chapter-01`, `--pov mara-quill`), and `add scene` needs its chapter to exist, so add the chapter first.
+- Ids stay ASCII kebab-case. Cyrillic and Greek names are transliterated (`story add character "Пётр"` writes `characters/petr.md` and keeps `name: Пётр`), but a name in a script with no transliteration table (`李明`) needs the id by hand: `story add character "李明" --id li-ming` writes `characters/li-ming.md`, and `story rename <kind> <id> "<New Name>" --id <new-id>` does the same on a rename. `--id` is refused for chapters and scenes, whose ids come from their numbers.
+- `remove chapter` refuses while scene files point at the chapter, so remove those scenes first; it walks back ledger statuses that relied on the chapter (planted to planned, paid-off to planted or planned, answered or resolved questions to open), so review the ledgers afterwards.
+
+## move
+
+`move` whenever a chapter's number or a scene's chapter or position changes, never a hand rename: chapter and scene ids encode their numbers.
+
+- `story move chapter <id> --number <n>` renames the chapter and its scene files, sets `number` and the `# Chapter N:` heading, and rewrites every reference to the old id (scene `chapter`, clue and promise `planted`/`payoff`, question `introduced`/`resolved`, research `used-in`, `died-in`, `continuity/state.md` `since`/`learned-in` and `current-chapter`, markdown links, and bare ids in `plot/timeline.md` and arc bodies).
+- A taken number is refused (`chapter-05 already exists: move it first. To make room, renumber from the highest chapter down`), so to insert a chapter move the later chapters up one, highest first, then `add chapter --number <n>`.
+- `story move scene <id> --chapter <chapter-id>` moves a scene to the next free number in that chapter (`--scene <n>` picks the number, and `--scene` alone reorders within the chapter) and adds its location and characters to the new chapter; give at least one of the two.
+- `move` works only on chapters and scenes (use `rename` for other ids), never edits prose or outline beats that mention a chapter number, and reindexes.
+- References are written before the files move, so rerun an interrupted move.
+
+## split and merge
+
+`split` and `merge` to split a chapter in two or join two neighbouring chapters, instead of moving prose and renumbering by hand.
+
+- `story split <chapter-id> --at <marker>` keeps the text before the marker and makes the rest the next chapter (`--title` names it; default `<title> (continued)`), moving the later chapters up one. The marker is a scene break number (`--at 2`), a heading, or a unique line of the chapter text. Scene records after the split move with their text, by order.
+- `story merge <chapter-id> <next-chapter-id>` appends the second chapter's prose after a scene break, adds its outline beats, notes, scenes, and list fields to the first, points every reference to it at the first, and moves the later chapters down one.
+- Both refuse a branching book (one with `choices`).
+- Run `--dry-run` first and show the user the list: a split or merge stopped part way cannot be finished by a rerun.
+- Then work through the warnings: `split-references` lists files that still name the split chapter (a clue, death, or progression there may now belong to the new chapter, which the CLI cannot tell), `split-scenes` says scene records were assigned by order, and `merge-conflicts` lists fields the two chapters set differently.
+- Neither edits prose, so reread for chapter numbers in the text.
+
+See the `revision-continuity` skill.
+
+## add matter
+
+`add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page.
+
+- Pages live in `matter/` (indexed in `matter/_index.md` by reindex) with `title`, `placement` (`front` or `back`), `order`, and `heading` (pass `--heading false` for a dedication or epigraph, or edit the scaffolded `heading:` key; never add a second one).
+- Write the page text directly in the file; unwritten pages are left out of builds and `validate` warns about them.
+- Never invent acknowledgments, biographical facts, or copyright details: ask the user for them.
+- Matter pages that quote others' work (an epigraph, song lyrics) may record `permission` (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`, and `credit`; `validate` warns when `permission: pending` remains on a complete story and when `granted` has no `rights-holder`.
+
+See the `editorial-review` skill.
+
+## add research
+
+`add research` when the story relies on a real-world fact: notes live in `research/` with `status` (`open`, `verified`, `disputed`), whole-citation `sources`, and `used-in` chapter ids, plus optional `--accuracy` (`must-be-accurate`, `blended`, `invented`), `--confidence` (`high`, `medium`, `low`), `--method` (`fact`, `interview`, `site-visit`, `expert-review`, `reading`), and repeatable `--risk` (`legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical`).
+
+`validate` warns when a final chapter relies on open or disputed research (invented notes never trigger this), and when a note with a `risk` is used in a final or complete chapter with no `reviewed-by`.
+
+See the `research` skill.
