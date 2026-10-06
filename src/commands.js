@@ -13,7 +13,7 @@ import { currentText, planChanges, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
-import { isTruthy } from "./options.js";
+import { isTruthy, optionValues } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
@@ -79,15 +79,28 @@ import { EXIT_CODES, usageError } from "./exit-codes.js";
 // How --json names a piped passage in a diagnostic, as the text output does.
 const STDIN_LABEL = "stdin";
 
-// Options accepted by `story add`; each entity kind reads the ones it needs.
-const ADD_OPTIONS = [
-  "id", "number", "chapter", "scene", "type", "role", "status", "mode", "date", "time", "travel-hours", "dilemma",
-  "sequel", "outcome", "hook", "location", "locations", "character", "characters", "mention", "mentions",
-  "member", "members", "owner", "arc", "arcs", "introduced", "resolved", "planted", "payoff",
-  "significance-delayed", "red-herring", "category", "alias", "aliases", "region", "population",
-  "controlled-by", "prevalence", "acts", "act", "placement", "order", "heading", "source", "sources", "used-in",
-  "accuracy", "confidence", "method", "risk", "theme", "themes", "pov"
-];
+// The options each kind of `story add` reads. Every kind also takes --id (a
+// chapter or scene refuses it, as its id comes from its number), --dry-run,
+// and --json; an option only other kinds read is an error.
+const ADD_KIND_OPTIONS = {
+  character: ["role", "status", "location", "locations", "arc"],
+  location: ["type", "status", "region", "population", "controlled-by", "character", "characters"],
+  system: ["type", "prevalence"],
+  faction: ["type", "status", "member", "members", "character", "characters", "location", "locations"],
+  artifact: ["type", "status", "owner", "location"],
+  arc: ["type", "status", "character", "characters", "theme", "themes", "acts", "act"],
+  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
+  scene: [
+    "chapter", "scene", "pov", "location", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "date", "time",
+    "travel-hours", "sequel", "outcome", "dilemma"
+  ],
+  question: ["status", "introduced", "resolved", "character", "characters"],
+  promise: ["status", "planted", "payoff", "arc", "arcs", "character", "characters"],
+  clue: ["status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
+  term: ["category", "alias", "aliases"],
+  matter: ["placement", "order", "heading"],
+  research: ["status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
+};
 
 // The flags of every command that writes the project in place: --dry-run
 // previews the changes and --json reports them (see runWrite).
@@ -99,7 +112,9 @@ const WRITE_OPTIONS = ["dry-run", "json"];
 // new project and refuses --path. `args` caps the positional arguments after
 // the command name (default: 1 for "positional", 0 otherwise) and `options`
 // lists the flags the command reads besides --path, so a stray argument or
-// flag is an error rather than silently ignored. `run` receives
+// flag is an error rather than silently ignored. `kinds`, for a command whose
+// first argument is an entity kind, maps each kind to the flags it reads, so
+// a flag meant for another kind is an error too. `run` receives
 // { parsed, io, cwd, root, overrides, defaulted }, where root() resolves
 // the project path and overrides holds the story.md severity overrides and
 // the exemptions that name a code (see findingOverrides), passed to
@@ -832,7 +847,8 @@ export const COMMANDS = [
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
     args: Infinity,
-    options: [...ADD_OPTIONS, ...WRITE_OPTIONS],
+    options: ["id", ...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
+    kinds: ADD_KIND_OPTIONS,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -1346,11 +1362,9 @@ function reportGitignore(io, result) {
   }
 }
 
+// --theme keeps each value whole; --themes splits on commas.
 function collectThemes(options) {
-  return []
-    .concat(options.theme ?? [])
-    .concat(options.themes ?? [])
-    .filter((value) => value !== undefined && value !== true);
+  return optionValues(options, "theme").concat(optionValues(options, "themes"));
 }
 
 // validate, links, and continuity: the findings are the whole result, so

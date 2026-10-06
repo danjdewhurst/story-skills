@@ -794,7 +794,7 @@ relationships:
 locations: []
 `, "# Keeper");
 
-    createEntity(created.root, { kind: "chapter", name: "One", number: 1, pov: "rival", character: "rival,keeper" });
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1, pov: "rival", characters: "rival,keeper" });
 
     removeEntity(created.root, { kind: "artifact", id: "lost" });
 
@@ -907,7 +907,7 @@ word-count: 0
     const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });
     createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
     createEntity(created.root, { kind: "character", name: "Mara Quill", role: "supporting" });
-    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, pov: "mara-quill", character: "mara-quill,mara" });
+    createEntity(created.root, { kind: "chapter", name: "Arrival", number: 1, pov: "mara-quill", characters: "mara-quill,mara" });
     const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
     fs.appendFileSync(chapterPath, "The marathon passed mara on the docks. See [mara](../characters/mara.md) and [Mara](../characters/mara.md).\n", "utf8");
 

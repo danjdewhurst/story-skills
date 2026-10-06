@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { BUILD_EXTENSIONS, BUILD_FORMAT_ALIASES } from "../src/build.js";
 import { COMMANDS } from "../src/commands.js";
-import { OPTIONS } from "../src/options.js";
+import { OPTIONS, documentedOptions } from "../src/options.js";
 
 // docs/cli-reference.md is written by hand, so these tests keep its command
 // lists in step with the registries the CLI is generated from.
@@ -74,6 +74,17 @@ describe("docs/cli-reference.md", () => {
     const list = paragraph.slice(paragraph.indexOf("It works on"), paragraph.indexOf("Other commands refuse it"));
     const withJson = COMMANDS.filter((command) => (command.options ?? []).includes("json")).map((command) => command.name);
     expect(sorted(codeWords(list))).toEqual(sorted(withJson));
+  });
+
+  test("the add options-by-kind table lists the options each kind accepts", () => {
+    const add = COMMANDS.find((command) => command.name === "add");
+    const table = section("### add").split("Options by kind:")[1];
+    for (const [kind, names] of Object.entries(add.kinds)) {
+      const row = table.split("\n").find((line) => line.startsWith(`| \`${kind}\` |`));
+      // Cell 2 lists the options; the defaults cell may name some too.
+      const flags = codeWords(row.split(" | ")[1]).filter((word) => word.startsWith("--")).map((word) => word.slice(2).split("=")[0]);
+      expect(sorted(flags)).toEqual(sorted(documentedOptions(names)));
+    }
   });
 
   test("every build format is in the command summary, the --format help, and the formats table", () => {

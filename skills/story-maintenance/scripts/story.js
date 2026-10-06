@@ -11344,7 +11344,7 @@ var OPTIONS = [
   { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
   { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
   { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "themes", value: "<a,b>", repeatable: true, commas: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
@@ -11420,16 +11420,16 @@ var OPTIONS = [
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
   { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true, aliasOf: "location" },
+  { name: "locations", value: "<ids>", repeatable: true, commas: true, aliasOf: "location" },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true, aliasOf: "character" },
+  { name: "characters", value: "<ids>", repeatable: true, commas: true, aliasOf: "character" },
   { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true, aliasOf: "mention" },
+  { name: "mentions", value: "<ids>", repeatable: true, commas: true, aliasOf: "mention" },
   { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true, aliasOf: "member" },
+  { name: "members", value: "<ids>", repeatable: true, commas: true, aliasOf: "member" },
   { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
   { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true, aliasOf: "arc" },
+  { name: "arcs", value: "<ids>", repeatable: true, commas: true, aliasOf: "arc" },
   { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
   { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
   { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
@@ -11438,12 +11438,12 @@ var OPTIONS = [
   { name: "red-herring", help: ["Mark add clue as a red herring"] },
   { name: "category", value: "<name>", help: ["Category for add term"] },
   { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true, aliasOf: "alias" },
+  { name: "aliases", value: "<names>", repeatable: true, commas: true, aliasOf: "alias" },
   { name: "region", value: "<name>", help: ["Region for add location"] },
   { name: "population", value: "<name>", help: ["Population for add location"] },
   { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
   { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
-  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
+  { name: "acts", value: "<a,b>", repeatable: true, commas: true, help: ["Comma-separated acts for add arc; repeatable"] },
   { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
@@ -11459,10 +11459,14 @@ var OPTIONS = [
 var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefined).map((option) => option.name));
 var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
 var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+var COMMA_OPTIONS = new Set(OPTIONS.filter((option) => option.commas).map((option) => option.name));
 function takesValue(name) {
   return VALUE_OPTIONS.has(name);
 }
 var OPTION_COLUMN = 28;
+function documentedOptions(names) {
+  return OPTIONS.filter((option) => option.help && names.includes(option.name)).map((option) => option.name);
+}
 function formatOptionsHelp(names = null) {
   const rows = OPTIONS.filter((option) => option.help && (names === null || names.includes(option.name))).map((option) => ({ flag: `--${option.name}${option.value ? ` ${option.value}` : ""}`, help: option.help })).concat([
     { flag: "-h, --help", help: ["Show this help"] },
@@ -11530,6 +11534,12 @@ function isTruthy(value) {
     return true;
   }
   return Boolean(current);
+}
+function optionValues(options, name) {
+  const value = options[name];
+  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
+  const parts = COMMA_OPTIONS.has(name) ? values.flatMap((item) => String(item).split(",")) : values.map(String);
+  return parts.map((part) => part.trim()).filter(Boolean);
 }
 function optionFamily(name) {
   const canonical = OPTIONS.find((option) => option.name === name)?.aliasOf ?? name;
@@ -13956,26 +13966,13 @@ function asArray(value) {
 function listOption(options, ...names) {
   const list = [];
   for (const name of names) {
-    for (const value of normalizeList(options[name], [])) {
+    for (const value of optionValues(options, name)) {
       if (!list.includes(value)) {
         list.push(value);
       }
     }
   }
   return list;
-}
-function normalizeList(value, fallback) {
-  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
-  const list = [];
-  for (const valueItem of values) {
-    for (const part of String(valueItem).split(",")) {
-      const trimmed = part.trim();
-      if (trimmed) {
-        list.push(trimmed);
-      }
-    }
-  }
-  return list.length > 0 ? list : fallback;
 }
 function coverIsReady(project) {
   if (project.story.data.cover === undefined) {
@@ -22038,7 +22035,8 @@ function createStoryProject(options) {
   const series = resolveSeriesOptions(root, cwd, options);
   const inherited = series.linked[0]?.data ?? {};
   const backlinks = planSeriesBacklinks(root, series);
-  const themes = normalizeList(options.themes, ["change"]);
+  const givenThemes = asArray(options.themes).map((theme) => String(theme).trim()).filter(Boolean);
+  const themes = givenThemes.length > 0 ? givenThemes : ["change"];
   options.beforeWrite?.(root, existingStory !== null);
   for (const directory of PROJECT_DIRECTORIES) {
     makeDirectories(path12.join(root, directory));
@@ -22636,7 +22634,7 @@ function assertReferenceOptions(kind, options) {
     if (kind === "character" && (option === "arc" || option === "arcs")) {
       continue;
     }
-    for (const value of normalizeList(options[option], [])) {
+    for (const value of optionValues(options, option)) {
       if (!isKebabId(value)) {
         throw usageError(`--${option} "${value}" must be a kebab-case id (such as ${REFERENCE_EXAMPLES[option] ?? "mara-quill"})`);
       }
@@ -22661,7 +22659,7 @@ function normalizeScalarOptions(kind, options) {
     if (options[option] === undefined || options[option] === true) {
       continue;
     }
-    const values = normalizeList(options[option], []);
+    const values = optionValues(options, option);
     if (values.length > 1) {
       throw usageError(`--${option} takes one id for ${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}, got ${values.join(", ")}`);
     }
@@ -22694,7 +22692,7 @@ var CHAPTER_REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "
 function assertChapterReferences(project, options) {
   const byNumber = new Map(project.chapters.map((chapter) => [chapter.number, chapter.id]));
   for (const option of CHAPTER_REFERENCE_OPTIONS) {
-    for (const value of normalizeList(options[option], [])) {
+    for (const value of optionValues(options, option)) {
       const match = /^chapter-(\d+)$/.exec(value);
       if (!match || project.chapters.some((chapter) => chapter.id === value)) {
         continue;
@@ -27903,62 +27901,40 @@ function action2(title, detail) {
 
 // src/commands.js
 var STDIN_LABEL = "stdin";
-var ADD_OPTIONS = [
-  "id",
-  "number",
-  "chapter",
-  "scene",
-  "type",
-  "role",
-  "status",
-  "mode",
-  "date",
-  "time",
-  "travel-hours",
-  "dilemma",
-  "sequel",
-  "outcome",
-  "hook",
-  "location",
-  "locations",
-  "character",
-  "characters",
-  "mention",
-  "mentions",
-  "member",
-  "members",
-  "owner",
-  "arc",
-  "arcs",
-  "introduced",
-  "resolved",
-  "planted",
-  "payoff",
-  "significance-delayed",
-  "red-herring",
-  "category",
-  "alias",
-  "aliases",
-  "region",
-  "population",
-  "controlled-by",
-  "prevalence",
-  "acts",
-  "act",
-  "placement",
-  "order",
-  "heading",
-  "source",
-  "sources",
-  "used-in",
-  "accuracy",
-  "confidence",
-  "method",
-  "risk",
-  "theme",
-  "themes",
-  "pov"
-];
+var ADD_KIND_OPTIONS = {
+  character: ["role", "status", "location", "locations", "arc"],
+  location: ["type", "status", "region", "population", "controlled-by", "character", "characters"],
+  system: ["type", "prevalence"],
+  faction: ["type", "status", "member", "members", "character", "characters", "location", "locations"],
+  artifact: ["type", "status", "owner", "location"],
+  arc: ["type", "status", "character", "characters", "theme", "themes", "acts", "act"],
+  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
+  scene: [
+    "chapter",
+    "scene",
+    "pov",
+    "location",
+    "character",
+    "characters",
+    "mention",
+    "mentions",
+    "arc",
+    "arcs",
+    "status",
+    "date",
+    "time",
+    "travel-hours",
+    "sequel",
+    "outcome",
+    "dilemma"
+  ],
+  question: ["status", "introduced", "resolved", "character", "characters"],
+  promise: ["status", "planted", "payoff", "arc", "arcs", "character", "characters"],
+  clue: ["status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
+  term: ["category", "alias", "aliases"],
+  matter: ["placement", "order", "heading"],
+  research: ["status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
+};
 var WRITE_OPTIONS = ["dry-run", "json"];
 var COMMANDS = [
   {
@@ -28673,7 +28649,8 @@ var COMMANDS = [
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
     args: Infinity,
-    options: [...ADD_OPTIONS, ...WRITE_OPTIONS],
+    options: ["id", ...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
+    kinds: ADD_KIND_OPTIONS,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -29099,7 +29076,7 @@ function reportGitignore(io, result) {
   }
 }
 function collectThemes(options) {
-  return [].concat(options.theme ?? []).concat(options.themes ?? []).filter((value) => value !== undefined && value !== true);
+  return optionValues(options, "theme").concat(optionValues(options, "themes"));
 }
 function reportCheck(parsed, io, command, result, successMessage, failureMessage) {
   if (wantsJson(parsed)) {
@@ -29189,6 +29166,8 @@ function findingLine(finding) {
 // src/cli.js
 var COMMANDS_BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
 var COMMAND_COLUMN = 21;
+var KIND_COLUMN = 14;
+var HELP_WIDTH = 80;
 var HELP = [
   "Usage: story <command> [options]",
   "",
@@ -29209,11 +29188,29 @@ function formatCommandHelp(command) {
     "",
     command.summary.join(" "),
     "",
+    ...command.kinds === undefined ? [] : [...formatKindsHelp(command.kinds, options), ""],
     "Options:",
     ...formatOptionsHelp(options),
     ""
   ].join(`
 `);
+}
+function formatKindsHelp(kinds, options) {
+  const kindOptions = new Set(Object.values(kinds).flat());
+  const shared = documentedOptions(options.filter((name) => !kindOptions.has(name))).map((name) => `--${name}`);
+  const lines = [`Options by kind (every kind also takes ${shared.slice(0, -1).join(", ")}, and ${shared.at(-1)}):`];
+  for (const [kind, names] of Object.entries(kinds)) {
+    let line = `  ${kind}`.padEnd(KIND_COLUMN);
+    for (const flag of documentedOptions(names).map((name) => `--${name}`)) {
+      if (line.length > KIND_COLUMN && line.length + 1 + flag.length > HELP_WIDTH) {
+        lines.push(line);
+        line = " ".repeat(KIND_COLUMN);
+      }
+      line += line.length > KIND_COLUMN ? ` ${flag}` : flag;
+    }
+    lines.push(line);
+  }
+  return lines;
 }
 function formatCommandsHelp() {
   const lines = [];
@@ -29383,6 +29380,25 @@ function commandUsageError(command, parsed) {
     if (key !== "help" && key !== "version" && !allowed.has(key)) {
       return `--${key} does not apply to story ${command.name}`;
     }
+  }
+  return kindUsageError(command, parsed) ?? emptyPathError(command, parsed);
+}
+function kindUsageError(command, parsed) {
+  const word = String(parsed.positionals[1] ?? "").trim().toLowerCase();
+  if (command.kinds === undefined || !Object.hasOwn(KIND_ALIASES, word)) {
+    return null;
+  }
+  const kind = KIND_ALIASES[word];
+  const kindOptions = new Set(Object.values(command.kinds).flat());
+  const stray = Object.keys(parsed.options).find((key) => kindOptions.has(key) && !command.kinds[kind].includes(key));
+  return stray === undefined ? null : `--${stray} does not apply to story ${command.name} ${kind}: story help ${command.name} lists the options each kind reads`;
+}
+function emptyPathError(command, parsed) {
+  if (parsed.options.path !== undefined && String(lastOptionValue(parsed.options.path)).trim() === "") {
+    return "--path cannot be empty: give the project folder, or leave --path out to use the current directory";
+  }
+  if (command.project === "positional" && parsed.positionals[1]?.trim() === "") {
+    return "The project path cannot be empty: give the project folder, or leave it out to use the current directory";
   }
   return null;
 }

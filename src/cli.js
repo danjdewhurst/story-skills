@@ -2,7 +2,8 @@ import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { NO_OVERRIDES, applyDefaults, findingOverrides, readCliConfig } from "./config.js";
 import { failureDiagnostic, writeJsonResult } from "./json.js";
-import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
+import { documentedOptions, formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
+import { KIND_ALIASES } from "./scan.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
 import { FILE_ERROR_REASONS, portablePath } from "./files.js";
@@ -11,6 +12,8 @@ export { isTruthy, parseArgs };
 
 const COMMANDS_BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
 const COMMAND_COLUMN = 21;
+const KIND_COLUMN = 14;
+const HELP_WIDTH = 80;
 
 // Help is generated from the command and option tables, so a command cannot
 // be dispatched without being documented, or documented without being wired.
@@ -34,10 +37,32 @@ function formatCommandHelp(command) {
     "",
     command.summary.join(" "),
     "",
+    ...(command.kinds === undefined ? [] : [...formatKindsHelp(command.kinds, options), ""]),
     "Options:",
     ...formatOptionsHelp(options),
     ""
   ].join("\n");
+}
+
+// The options each kind reads, for `story help add`. Aliases such as
+// --characters stay out, as in the options list, and the options every kind
+// takes are named once.
+function formatKindsHelp(kinds, options) {
+  const kindOptions = new Set(Object.values(kinds).flat());
+  const shared = documentedOptions(options.filter((name) => !kindOptions.has(name))).map((name) => `--${name}`);
+  const lines = [`Options by kind (every kind also takes ${shared.slice(0, -1).join(", ")}, and ${shared.at(-1)}):`];
+  for (const [kind, names] of Object.entries(kinds)) {
+    let line = `  ${kind}`.padEnd(KIND_COLUMN);
+    for (const flag of documentedOptions(names).map((name) => `--${name}`)) {
+      if (line.length > KIND_COLUMN && line.length + 1 + flag.length > HELP_WIDTH) {
+        lines.push(line);
+        line = " ".repeat(KIND_COLUMN);
+      }
+      line += line.length > KIND_COLUMN ? ` ${flag}` : flag;
+    }
+    lines.push(line);
+  }
+  return lines;
 }
 
 function formatCommandsHelp() {
@@ -255,6 +280,33 @@ function commandUsageError(command, parsed) {
     if (key !== "help" && key !== "version" && !allowed.has(key)) {
       return `--${key} does not apply to story ${command.name}`;
     }
+  }
+  return kindUsageError(command, parsed) ?? emptyPathError(command, parsed);
+}
+
+// A command with `kinds` reads its first argument as an entity kind, and an
+// option only other kinds read does not apply: `story add scene` refuses
+// --number rather than ignore it. An unknown kind is left for the command to
+// report.
+function kindUsageError(command, parsed) {
+  const word = String(parsed.positionals[1] ?? "").trim().toLowerCase();
+  if (command.kinds === undefined || !Object.hasOwn(KIND_ALIASES, word)) {
+    return null;
+  }
+  const kind = KIND_ALIASES[word];
+  const kindOptions = new Set(Object.values(command.kinds).flat());
+  const stray = Object.keys(parsed.options).find((key) => kindOptions.has(key) && !command.kinds[kind].includes(key));
+  return stray === undefined ? null : `--${stray} does not apply to story ${command.name} ${kind}: story help ${command.name} lists the options each kind reads`;
+}
+
+// An empty project path, such as `--path "$UNSET"`, would quietly mean the
+// current directory, so it is refused, as an empty --out is.
+function emptyPathError(command, parsed) {
+  if (parsed.options.path !== undefined && String(lastOptionValue(parsed.options.path)).trim() === "") {
+    return "--path cannot be empty: give the project folder, or leave --path out to use the current directory";
+  }
+  if (command.project === "positional" && parsed.positionals[1]?.trim() === "") {
+    return "The project path cannot be empty: give the project folder, or leave it out to use the current directory";
   }
   return null;
 }

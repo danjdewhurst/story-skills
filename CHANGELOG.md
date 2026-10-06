@@ -11,6 +11,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Changed
 
 - A boolean flag takes a value only as `--flag=value`, so the next word is never read as its value: `story add chapter --dry-run No Way Back` now previews a chapter titled "No Way Back" instead of writing one titled "Way Back". A bare `true` or `false` after a flag is refused (`--heading false is ambiguous: write --heading=false ...`), so write `--heading=false`, `--baseline=false`, or `--json=false` instead. ([#549](https://github.com/danjdewhurst/story-skills/issues/549))
+- `story add` refuses an option the kind does not read, with exit code 2 (`--number does not apply to story add scene`), where it used to ignore it, and `story help add` lists each kind's options. Only the plural list flags (`--characters`, `--aliases`, `--themes`, and the like) split on commas, so `--alias "Rite of Ash, the"` is one alias; a comma in a singular id flag such as `--character` or `--used-in` is now an error. ([#576](https://github.com/danjdewhurst/story-skills/issues/576))
+
+### Fixed
+
+- An empty `--path` or positional project path is a usage error instead of the current directory, so `story reindex --path "$UNSET"` changes nothing, as `--out ""` already did. ([#576](https://github.com/danjdewhurst/story-skills/issues/576))
 
 ### Fixed
 

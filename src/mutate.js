@@ -21,6 +21,7 @@ import {
   writeFile
 } from "./files.js";
 import { withProjectLock } from "./lock.js";
+import { optionValues } from "./options.js";
 import {
   chapterHeading,
   chapterProse,
@@ -134,7 +135,6 @@ import {
   ENTITY_SCAN_DIRS,
   SOURCE_ROOT_FILES,
   asArray,
-  normalizeList,
   relative
 } from "./scan.js";
 
@@ -214,7 +214,9 @@ export function createStoryProject(options) {
   // Compute every backlink and confirm each linked story.md is writable
   // before creating anything, so a failure cannot leave a half-linked book.
   const backlinks = planSeriesBacklinks(root, series);
-  const themes = normalizeList(options.themes, ["change"]);
+  // The CLI has already split --themes on commas and kept each --theme whole.
+  const givenThemes = asArray(options.themes).map((theme) => String(theme).trim()).filter(Boolean);
+  const themes = givenThemes.length > 0 ? givenThemes : ["change"];
   // A last check before anything is written, such as the parse check import
   // runs on an existing project.
   options.beforeWrite?.(root, existingStory !== null);
@@ -942,7 +944,7 @@ function assertReferenceOptions(kind, options) {
     if (kind === "character" && (option === "arc" || option === "arcs")) {
       continue;
     }
-    for (const value of normalizeList(options[option], [])) {
+    for (const value of optionValues(options, option)) {
       if (!isKebabId(value)) {
         throw usageError(`--${option} "${value}" must be a kebab-case id (such as ${REFERENCE_EXAMPLES[option] ?? "mara-quill"})`);
       }
@@ -953,7 +955,7 @@ function assertReferenceOptions(kind, options) {
   }
 }
 
-// Fields that hold one id: a repeated flag or a comma list cannot fit.
+// Fields that hold one id: a repeated flag cannot fit.
 const SCALAR_REFERENCE_OPTIONS = {
   scene: ["chapter", "location", "pov"],
   chapter: ["pov"],
@@ -970,7 +972,7 @@ function normalizeScalarOptions(kind, options) {
     if (options[option] === undefined || options[option] === true) {
       continue;
     }
-    const values = normalizeList(options[option], []);
+    const values = optionValues(options, option);
     if (values.length > 1) {
       throw usageError(`--${option} takes one id for ${/^[aeiou]/.test(kind) ? "an" : "a"} ${kind}, got ${values.join(", ")}`);
     }
@@ -1015,7 +1017,7 @@ const CHAPTER_REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced",
 function assertChapterReferences(project, options) {
   const byNumber = new Map(project.chapters.map((chapter) => [chapter.number, chapter.id]));
   for (const option of CHAPTER_REFERENCE_OPTIONS) {
-    for (const value of normalizeList(options[option], [])) {
+    for (const value of optionValues(options, option)) {
       const match = /^chapter-(\d+)$/.exec(value);
       if (!match || project.chapters.some((chapter) => chapter.id === value)) {
         continue;
