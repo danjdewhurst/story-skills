@@ -1558,7 +1558,7 @@ Actions:
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
 ```
 
-`doctor` also reads the GitHub Actions workflows in the project's `.github/workflows/` and in the git repository root above it. A `STORY_VERSION` older than the running CLI gets a `[P3] Update workflow CLI version` action, and a legacy `STORY_REF` a `[P3] Rename workflow STORY_REF` action, each naming the file, line, and the line to write. It matches only those env lines and skips a missing folder; `next` and `report` leave these actions out. See [Upgrading the workflows](automation.md#upgrading-the-workflows).
+`doctor` also reads the GitHub Actions workflows in the project's `.github/workflows/` and in the git repository root above it. A `STORY_VERSION` older than the running CLI gets a `[P3] Update workflow CLI version` action, and a legacy `STORY_REF` a `[P3] Rename workflow STORY_REF` action, each naming the file, line, and the line to write. A workflow with an active `STORY_PACKAGE` override gets no `STORY_VERSION` note, and with any workflow note the `Project is mechanically healthy` action is left out. It matches only those env lines and skips a missing folder; `next` and `report` leave these actions out. See [Upgrading the workflows](automation.md#upgrading-the-workflows).
 
 `--fix` first applies the repairs that are mechanical and safe to repeat, each only when the checks raised a finding it fixes, then runs the checks again and prints the report for what remains:
 
