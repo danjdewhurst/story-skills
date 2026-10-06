@@ -39,7 +39,8 @@ redoing the adaptation; say so if `status` is not `revising` or `complete`.
 - Nonfiction and poetry collections are outside the story project model.
   The CLI checks fiction entities (characters, chapters, scenes,
   continuity); do not force a poetry collection or nonfiction book into
-  it.
+  it. A short-story collection does fit: see `docs/series.md`, Short-story
+  collections and anthologies.
 
 ## Hard Rules
 

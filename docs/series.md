@@ -1,6 +1,6 @@
 # Series
 
-This page is for writers working on more than one book in the same world: sequels, prequels, and trilogies. It covers how books link to each other, how `story init` creates a linked book, what `story series` checks, and how to carry characters and facts from one book to the next.
+This page is for writers working on more than one book in the same world: sequels, prequels, and trilogies. It covers how books link to each other, how `story init` creates a linked book, what `story series` checks, and how to carry characters and facts from one book to the next. It also shows how to lay out a short-story collection or anthology, which gathers several story projects into one book.
 
 **On this page**
 
@@ -13,6 +13,7 @@ This page is for writers working on more than one book in the same world: sequel
 - [Writing against canon](#writing-against-canon)
 - [The series-continuity skill](#the-series-continuity-skill)
 - [Maintenance checklist](#maintenance-checklist)
+- [Short-story collections and anthologies](#short-story-collections-and-anthologies)
 
 ## How a series is modelled
 
@@ -409,6 +410,86 @@ story series .
 ```
 
 `reindex` rebuilds the registries after you copy entity files in, `links` checks series links and carried references, `validate` checks the series fields, `continuity` checks fact ids within the book, and `series` checks canon across books. To run them in CI, see [Automation and CI](automation.md).
+
+## Short-story collections and anthologies
+
+There is no `collection` or `anthology` form. A collection works today as two layers: each story is its own project, and the collection is one more project with each story as a chapter.
+
+```text
+salt-and-lantern/
+├── low-tide/          # one story: form: short-story
+├── salt/              # one story: form: flash
+└── collection/        # the book: one chapter per story, no form
+    ├── story.md
+    ├── chapters/
+    │   ├── chapter-01.md   # title: Low Tide
+    │   └── chapter-02.md   # title: Salt
+    └── matter/
+        └── acknowledgements.md
+```
+
+**Write and submit each story in its own project.** Create it with `story init "Low Tide" --form short-story` (or `flash`, `novelette`, `novella`). The form gives the story its own word-count range, and `story build . --format shunn` (or `--format docx --shunn`) then uses Shunn's short-story layout, which is what magazines and contests want. Its characters, continuity, and submission history stay with the story.
+
+**Assemble the book in a collection project.** When the stories are finished, gather them into a project of their own:
+
+1. Copy each story's chapter file into one folder, named so the files sort in reading order (`01-low-tide.md`, `02-salt.md`), and import the folder:
+
+   ```shell
+   story import stories/ --title "Salt and Lantern" --dir collection
+   ```
+
+   A chapter file in Story Skills' own layout imports as one chapter, titled by its `title` frontmatter (see [Importing a folder of chapter files](manuscripts.md#importing-a-folder-of-chapter-files)). This works best when each story is a single chapter, with section breaks as scene breaks (`* * *`). A story split into several chapters imports as several chapters, so join its prose into one file first. You can also create the chapters with `story add chapter "Low Tide"` and paste each story's prose under `## Chapter Text`.
+
+2. Leave `form` out of the collection's `story.md`. `story import`, and `story init` without `--form`, leave it unset. Every form describes a single work: `short-story` or `flash` would run the whole book together in the Shunn builds, and `novel` would apply a novel's word-count range.
+
+3. Head each story with its title alone, not `Chapter 1: Low Tide`, by adding a `chapter-heading` label to `story.md` (see [Build labels](manuscripts.md#build-labels)):
+
+   ```yaml
+   author: Ada Writer
+   labels:
+     - chapter-heading: "{title}"
+   ```
+
+   Every build then heads each story with its title, and the EPUB, HTML, and print contents list the story titles. Setting `numbered: false` on every chapter gives the same headings. The chapter `number` still sets the order; reorder stories with `story move chapter --number`.
+
+4. Add the book's pages as matter: a dedication, an introduction, and the previously-published acknowledgements as a back-matter page.
+
+   ```shell
+   story add matter "Acknowledgements" --placement back
+   ```
+
+   Write one credit line per story, such as `"Low Tide" first appeared in Harbour Review, 2024.` The [`submission`](../skills/submission/SKILL.md) skill drafts these from your tracker's publication history.
+
+5. Run the maintenance checks, then build:
+
+   ```shell
+   story wordcount . --write
+   story validate .
+   story build . --format epub
+   story build . --format shunn
+   ```
+
+The EPUB, DOCX, HTML, print, and markdown builds give each story its own heading and table of contents entry, with the matter pages around them. The Shunn builds put the collection's title and byline on the title page, start each story on a new page under its title, and leave out the matter pages, as a manuscript submission expects. `story wordcount` lists each story's length.
+
+**Anthologies.** For a book of several authors' stories, set `author` in `story.md` to the editor, and change the Shunn title page's `by` to suit:
+
+```yaml
+author: Cara Editor
+labels:
+  - by: Edited by
+  - chapter-heading: "{title}"
+```
+
+There is no field for a story's own author. Put the contributor's byline as the first line of the story's prose, such as `*by Ben Other*`. It then prints under the story's heading in every build, and it counts toward the word count.
+
+**Linked collections.** Stories that share characters or a world can link their story projects as a series with `follows` and `precedes` (see [How a series is modelled](#how-a-series-is-modelled)), so `story series` checks their shared canon. Keep the collection project to prose and matter pages. Its stories would share one set of character and location ids, so unrelated stories with a character of the same name would collide, and `story continuity` would read the stories as one timeline.
+
+**What does not work yet:**
+
+- No command assembles story projects into a collection. The collection's chapters are copies, so an edit to a story after assembly must be made in both projects, or the chapter imported again.
+- A build covers the whole project, so a single story's submission manuscript comes from its own project, not from the collection.
+- The EPUB and other metadata name one author or a list of co-authors. There is no editor role and no per-story author metadata.
+- Poetry and nonfiction collections are outside the story project model: the EPUB, HTML, and Shunn builds join the lines of a paragraph, so a poem loses its line breaks.
 
 ## See also
 
