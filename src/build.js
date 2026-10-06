@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeFile, writeFile } from "./files.js";
+import { isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -191,7 +191,8 @@ function buildPdf(project, format, trim, output, options) {
   const manuscript = manuscriptParts(project);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
   const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project));
-  writeFile(output.outFile, renderPdf(html, engine), output.writeOptions);
+  // A --dry-run finds the engine but does not run it.
+  writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
 

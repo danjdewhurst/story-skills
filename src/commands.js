@@ -9,9 +9,9 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
-import { recordChanges } from "./files.js";
+import { planChanges, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
-import { previewChanges } from "./preview.js";
+import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
@@ -51,6 +51,7 @@ import {
   migrateProject,
   moveEntity,
   namesReport,
+  newProjectRoot,
   pacingReport,
   projectCheck,
   projectPasses,
@@ -112,10 +113,16 @@ export const COMMANDS = [
     summary: ["Scaffold a story project"],
     project: "none",
     args: Infinity,
-    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force"],
+    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", "dry-run"],
     run({ parsed, io, cwd }) {
-      const result = createStoryProject({
-        title: parsed.positionals.slice(1).join(" "),
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const title = parsed.positionals.slice(1).join(" ");
+      // The changes are listed relative to the new project's folder. init
+      // writes nothing it reads back, so a --dry-run plans the writes
+      // without making them (planChanges).
+      const base = newProjectRoot({ title, cwd, dir: parsed.options.dir }) ?? cwd;
+      const { result, changes } = runOrPlan(dryRun, base, () => createStoryProject({
+        title,
         cwd,
         dir: parsed.options.dir,
         genre: parsed.options.genre,
@@ -131,10 +138,17 @@ export const COMMANDS = [
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
-      });
-      io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}\n`);
+      }));
+      if (dryRun) {
+        io.stdout.write(formatPreview("init", changes));
+      } else {
+        io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}\n`);
+      }
       reportKeptStory(io, result, "the title");
       reportGitignore(io, result);
+      if (dryRun) {
+        return 0;
+      }
       for (const linkedBook of result.linkedBooks) {
         io.stdout.write(`Updated series links in ${path.join(linkedBook, "story.md")}\n`);
       }
@@ -147,9 +161,10 @@ export const COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force"],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", "dry-run"],
     run({ parsed, io, cwd }) {
-      const result = importManuscript({
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const options = {
         source: parsed.positionals[1],
         readStdin: () => pipedText(io, "import"),
         title: parsed.options.title,
@@ -164,17 +179,14 @@ export const COMMANDS = [
         synopsis: parsed.options.synopsis,
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
-      });
+      };
+      if (dryRun) {
+        return previewImport(io, options);
+      }
+      const result = importManuscript(options);
       const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}\n`);
-      reportKeptStory(io, result, "--title");
-      reportGitignore(io, result);
-      for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${findingLine(warning)}\n`);
-      }
-      if (result.keptStory) {
-        io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
-      }
+      reportImportNotes(io, result);
       if (result.candidates.length > 0) {
         io.stdout.write("Entity candidates (review, then create with story add):\n");
         for (const candidate of result.candidates) {
@@ -387,13 +399,22 @@ export const COMMANDS = [
       "writing streak; --log records today"
     ],
     project: "positional",
-    options: ["log", "date", "json"],
+    options: ["log", "date", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
-      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), overrides);
-      if (wantsJson(parsed)) {
-        return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
+      const log = isTruthy(parsed.options.log);
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      if (!log && dryRun) {
+        throw usageError("--dry-run previews progress --log: add --log");
       }
-      if (progress.logged) {
+      const projectRoot = root();
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date }));
+      const progress = applySeverity(result, overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "progress", { ...progress, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
+      }
+      if (dryRun) {
+        io.stdout.write(formatPreview("progress", changes));
+      } else if (progress.logged) {
         const { characterCount, words } = progress.logged;
         io.stdout.write(`Logged ${characterCount === null ? `${words} words` : `${characterCount} characters`} for ${progress.logged.date} in ${progress.logged.file}\n`);
       }
@@ -454,16 +475,19 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["out", "json"],
+    options: ["out", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
       const kind = parsed.positionals[1];
-      const result = diagramProject(root(), { kind, out: parsed.options.out });
+      const dryRun = outputDryRun(parsed, "diagram");
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => diagramProject(projectRoot, { kind, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
-        return reportJson(io, "diagram", { ...result, kind, outFile }, { writes: outFile === null ? [] : [outFile] });
+        return reportJson(io, "diagram", { ...result, kind, outFile, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
       }
       if (result.ok) {
-        io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
+        io.stdout.write(dryRun ? formatPreview("diagram", changes)
+          : result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}\n`);
         return 0;
       }
       return reportResult(io, result, "Diagram built", "Diagram failed");
@@ -650,27 +674,30 @@ export const COMMANDS = [
       "mark a pass"
     ],
     project: "positional",
-    options: ["init", "start", "done", "json"],
+    options: ["init", "start", "done", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
+      const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      if (dryRun && !change.init && change.start === undefined && change.done === undefined) {
+        throw usageError("--dry-run previews passes --init, --start, or --done: add one");
+      }
       const projectRoot = root();
-      const result = projectPasses(projectRoot, {
-        init: isTruthy(parsed.options.init),
-        start: parsed.options.start,
-        done: parsed.options.done
-      });
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectPasses(target, change));
       const where = shellWord(displayPath(parsed));
       if (wantsJson(parsed)) {
         return writeJsonResult(io, {
           command: "passes",
           ok: true,
-          data: passesData(result, where),
-          writes: result.changed ? [path.join(projectRoot, "story.md")] : []
+          data: { ...passesData(result, where), dryRun, changes },
+          writes: dryRun ? [] : writtenFiles(projectRoot, changes)
         });
       }
       for (const note of result.notes ?? []) {
         io.stderr.write(`note: ${note}\n`);
       }
-      if (result.changed) {
+      if (dryRun) {
+        io.stdout.write(formatPreview("passes", changes));
+      } else if (result.changed) {
         io.stdout.write("Updated revision-passes in story.md\n");
       }
       io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
@@ -912,10 +939,12 @@ export const COMMANDS = [
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out"],
+    options: ["out", "dry-run"],
     run({ parsed, io, root, overrides }) {
-      const result = exportManuscript(root(), { out: parsed.options.out });
-      io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}\n`);
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out }));
+      io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}\n`);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
   },
@@ -934,10 +963,14 @@ export const COMMANDS = [
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers"],
+    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
-      const result = buildBook(root(), {
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const projectRoot = root();
+      // A build only writes its output, so a --dry-run plans the writes
+      // without making them, and finds the PDF engine without running it.
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => buildBook(projectRoot, {
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
@@ -949,7 +982,11 @@ export const COMMANDS = [
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
         spoilers: isTruthy(parsed.options.spoilers)
-      });
+      }));
+      if (dryRun) {
+        io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)\n` : ""}${formatPreview("build", changes)}`);
+        return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex"
         ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
@@ -962,14 +999,18 @@ export const COMMANDS = [
     usage: "synopsis [path]",
     summary: ["Build a deterministic 1- or 3-page synopsis from arcs"],
     project: "positional",
-    options: ["pages", "out", "json"],
+    options: ["pages", "out", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
-      const result = synopsisBook(root(), { pages: parsed.options.pages, out: parsed.options.out });
+      const dryRun = outputDryRun(parsed, "synopsis");
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => synopsisBook(projectRoot, { pages: parsed.options.pages, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
-        return writeJsonResult(io, { command: "synopsis", ok: true, data: { ...result, outFile }, writes: outFile === null ? [] : [outFile] });
+        return writeJsonResult(io, { command: "synopsis", ok: true, data: { ...result, outFile, dryRun, changes }, writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
       }
-      if (result.outFile === undefined) {
+      if (dryRun) {
+        io.stdout.write(formatPreview("synopsis", changes));
+      } else if (result.outFile === undefined) {
         io.stdout.write(result.text);
       } else {
         io.stdout.write(`Wrote synopsis to ${result.outFile}\n`);
@@ -1032,7 +1073,7 @@ function passageRoot(parsed, cwd, required) {
 function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
-  const { result, changes } = dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+  const { result, changes } = runOrPreview(dryRun, projectRoot, write);
   const findings = checkedWarnings(result.warnings, overrides);
   if (wantsJson(parsed)) {
     return writeJsonResult(io, {
@@ -1047,6 +1088,58 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   return writeFindings(io, findings);
 }
 
+// Runs `write(projectRoot)`, recording the changes it makes, or with
+// --dry-run runs it on a copy of the project (previewChanges): for a command
+// that reads back what it writes.
+function runOrPreview(dryRun, projectRoot, write) {
+  return dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+}
+
+// Runs `run()`, recording the changes it makes relative to `base`, or with
+// --dry-run plans them without writing (planChanges): for a command that
+// only writes files it never reads back, a build or a new project.
+function runOrPlan(dryRun, base, run) {
+  return dryRun ? planChanges(base, run) : recordChanges(base, run);
+}
+
+// --dry-run for diagram and synopsis, which write only with --out.
+function outputDryRun(parsed, command) {
+  const dryRun = isTruthy(parsed.options["dry-run"]);
+  if (dryRun && parsed.options.out === undefined) {
+    throw usageError(`--dry-run previews ${command} --out: add --out`);
+  }
+  return dryRun;
+}
+
+// story import --dry-run: the import runs on a copy of the folder it would
+// fill (previewNewProject), since it reindexes the chapters it writes. The
+// source is read where it is.
+function previewImport(io, options) {
+  const { cwd } = options;
+  const source = String(options.source ?? "").trim();
+  const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
+  const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path.resolve(cwd, source), dir });
+  // Without a folder the import is refused before it writes anything.
+  const { result, changes } = target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
+  io.stdout.write(formatPreview("import", changes));
+  reportImportNotes(io, result);
+  return 0;
+}
+
+// The options a kept story.md did not take, a kept .gitignore that misses
+// dist/, the warnings import found in the manuscript, and what replacing an
+// existing project's chapters may have broken.
+function reportImportNotes(io, result) {
+  reportKeptStory(io, result, "--title");
+  reportGitignore(io, result);
+  for (const warning of result.warnings) {
+    io.stderr.write(`warning: ${findingLine(warning)}\n`);
+  }
+  if (result.keptStory) {
+    io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
+  }
+}
+
 // story doctor --fix: applies the safe repairs under the project lock (or,
 // with --dry-run, on a copy, as runWrite does), then prints what it changed
 // and the diagnosis that remains. Unlike doctor, it exits 1 while any check
@@ -1055,7 +1148,7 @@ function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
-  const { result: report, changes } = dryRun ? previewChanges(projectRoot, fix) : recordChanges(projectRoot, () => fix(projectRoot));
+  const { result: report, changes } = runOrPreview(dryRun, projectRoot, fix);
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
   const { repairs, stopped, ...rest } = report;
   // Read from the real project, since a --dry-run diagnoses a copy.
@@ -1106,7 +1199,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 
 // The absolute paths of the files a run created or updated, for --json writes.
 function writtenFiles(projectRoot, changes) {
-  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.join(projectRoot, change.path));
+  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.resolve(projectRoot, change.path));
 }
 
 // The changes a --dry-run would make, one per line, then a summary.

@@ -295,7 +295,7 @@ Every result has the same envelope:
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
-| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, and every file a write command changed. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
+| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, and every file a write command changed. `passes`, `progress`, `diagram`, and `synopsis` also list these changes in `data.changes`, as the write commands do. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
@@ -338,7 +338,7 @@ The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reinde
 
 ### Previewing changes with --dry-run
 
-`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, and `snapshot` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, `snapshot`, `passes` (with `--init`, `--start`, or `--done`), `progress --log`, `diagram --out`, `synopsis --out`, `export`, `build`, `init`, and `import` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
 ```text
 $ story rename character edran-vale "Edran Vane" --dry-run
@@ -356,7 +356,19 @@ Dry run: story rename would make 9 changes; nothing was written
 
 The preview is the command itself, run on a temporary copy of the project that is deleted afterwards, so it lists exactly what the real run would change, the registries it reindexes included, and prints the same warnings and exits with the same code. A command the real run would refuse (an id that is taken, a file or folder you cannot write to) is refused the same way, naming the project's files. The project is only read: the dry run does not take the [lock](#where-commands-write) and does not wait for a command that holds it. The copy holds only what a write command reads: it leaves out `dist/`, `node_modules/`, dot-folders such as `.git/`, subfolders with their own `story.md`, and folders more than 10 levels deep, and every file other than a markdown file under 5 MiB is copied as a blank sparse file of the same size and permissions, so a folder of cover images or audio takes no space. In a [series](series.md), the books the project links to through `follows` and `precedes`, and those its sibling books link to (up to the series limit of 100 books), are copied the same way, each at its own path relative to the copy, with symlinks kept, so cross-book links and series checks resolve as in the real run. These copies are scratch files too, so no linked book is written.
 
-With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)). `wordcount --dry-run` without `--write` is a usage error, and `cli-defaults` in `story.md` cannot set `dry-run`.
+`export`, `build`, `diagram --out`, `synopsis --out`, and `init` only write files they never read back, so their dry run needs no copy: the command runs on the project itself, and each write, delete, and new folder is checked as the real run checks it (a path outside the project, a symlink, a file or folder you cannot write to) and listed instead of made. An `--out` outside the project is listed relative to it, such as `create  ../outbox/book.md`. A build lists every file it would rewrite as `update`, even one that would come out byte-identical, and a codex rebuild lists the stale pages it would delete. `build --pdf --dry-run` finds the PDF engine, as the real build does, and names it without running it:
+
+```text
+$ story build --format print --pdf --dry-run
+PDF engine: weasyprint (not run)
+mkdir   dist
+create  dist/the-unraveled-thread.pdf
+Dry run: story build would make 2 changes; nothing was written
+```
+
+`init` and `import` list their changes relative to the new project's folder, which is `.` when it would be made (`mkdir   .`); `init --follows` or `--precedes` also lists the linked book's `story.md` it would add the backlink to, such as `update  ../the-last-ember/story.md`. `import` reindexes the chapters it writes, so its dry run runs on a copy of the folder it would fill (the copy is empty for a new project, and copied as above for `--force` into an existing one), reading the manuscript where it is. Both print the same warnings and notes as the real run, but not the `Created` or `Imported` line or the entity candidates.
+
+With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, and `synopsis` report `dryRun` and `changes` on every run. `export`, `build`, `init`, and `import` have no `--json`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
 
 ### Where commands write
 
@@ -430,6 +442,7 @@ Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`,
 | `--follows <path>` | This book is set after the story at `<path>`; repeatable | |
 | `--precedes <path>` | This book is set before the story at `<path>`; repeatable | |
 | `--force` | Use an existing directory: add missing starter files, never overwrite existing ones | Off |
+| `--dry-run` | List the files and folders it would create, and the linked books it would update, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 
 An empty `--genre`, `--pov`, or `--tense` (such as `--tense=` from an unset shell variable) is refused with `--tense cannot be empty: leave it out to use the default`; `import` does the same.
 
@@ -538,7 +551,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
-`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, and `--force`, with the same meaning as for `init`, and writes the same `.gitignore` (or prints the same note about a kept one). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
+`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, `--force`, and `--dry-run`, with the same meaning as for `init`, and writes the same `.gitignore` (or prints the same note about a kept one). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
 `--language <tag>` names the manuscript's language, a BCP 47 tag such as `fr` or `pt-BR`; a value that is not one is a usage error. It picks the language pack whose heading words (`Chapter`, `Prologue`, `Part`, spelled-out numbers) split the chapters and whose stopwords filter the entity candidates: English, Spanish (`Capítulo veintiuno`, `Prólogo`), French (`Chapitre vingt et un`, `Prologue`), and German (`Kapitel Einundzwanzig`, `Erstes Kapitel`, `1. Kapitel`, `Prolog`) have them, with ordinal-first part headings (`Primera parte`, `Première partie`, `Erster Teil`), and German leaves out capitalised common nouns (`die Tür`) from the candidates. In another language only the markdown or text structure is used, never English headings, unless the project's `style-sheet.md` supplies the words (see [Word lists](project-format.md#word-lists)); `import --force` into an existing project reads its style sheet. A new project records the tag as `language` in its `story.md`. Without `--language`, `import --force` into an existing project uses that project's `story.md` `language`, and a new project uses English and writes no `language`. A `--language` that differs from a kept `story.md` is named in the `kept-story-options` warning, since `story.md` is not changed.
 
@@ -1238,7 +1251,7 @@ $ story similarity --against ../notes --min-words 3
 ### progress
 
 ```text
-story progress [path] [--log] [--date <YYYY-MM-DD>]
+story progress [path] [--log] [--date <YYYY-MM-DD>] [--dry-run] [--json]
 ```
 
 Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks; see [Story progress](continuity.md#story-progress) for how each is counted.
@@ -1251,6 +1264,7 @@ A book [counted in characters](project-format.md#counting-in-characters) reports
 |---|---|
 | `--log` | Record today's total word count in `progress.md`, creating the file if needed. A second log on the same date replaces the first |
 | `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline, today's words, the streak, the weekly history, and `--log`. Default: the local date |
+| `--dry-run` | With `--log`, list the file it would write, print the report as it would be after logging, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 
 `--log` refuses to rewrite a `progress.md` that does not parse or has malformed sessions, and names each problem.
 
@@ -1963,7 +1977,7 @@ Mentions checked: 0 errors, 0 warnings, 0 dismissed
 ### diagram
 
 ```text
-story diagram <kind> [--out <file>] [--json] [--path <project>]
+story diagram <kind> [--out <file>] [--dry-run] [--json] [--path <project>]
 ```
 
 Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmatter. The source is plain text, so it diffs cleanly and renders on GitHub and in most markdown editors. Regenerate it whenever the bible changes rather than editing it. Node ids are entity ids with hyphens turned into underscores; an id that is a Mermaid keyword, such as `end` or `graph`, gets `_node` appended.
@@ -1979,7 +1993,8 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 | Option | Effect | Default |
 |---|---|---|
 | `--out <file>` | Write the source to this path, relative to the project root, instead of stdout. Project source paths are refused (see [Where commands write](#where-commands-write)) | Print to stdout |
-| `--json` | Print a JSON result: `data.kind`, `data.text` (the Mermaid source, also when `--out` writes it), and `data.outFile` (the absolute path written, or `null`), with the file in `writes` (see [JSON output](#json-output)) | Off |
+| `--dry-run` | With `--out`, list the file it would write and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: `data.kind`, `data.text` (the Mermaid source, also when `--out` writes it), `data.outFile` (the absolute path written, or `null`), `data.dryRun`, and `data.changes`, with the file in `writes` (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
@@ -2034,7 +2049,7 @@ Mermaid's timeline syntax treats a colon as a separator, so colons in times and 
 ### passes
 
 ```text
-story passes [path] [--init] [--start <pass>] [--done <pass>] [--json]
+story passes [path] [--init] [--start <pass>] [--done <pass>] [--dry-run] [--json]
 ```
 
 Shows the named revision passes recorded in `revision-passes` in `story.md`, and with an option, updates them. Revising in separate passes, each looking for one kind of problem, works from the largest problems to the smallest. The default ladder is:
@@ -2055,6 +2070,7 @@ Shows the named revision passes recorded in `revision-passes` in `story.md`, and
 | `--init` | Add every default pass that is missing, as `pending`, after any passes already recorded |
 | `--start <pass>` | Mark a pass `in-progress`, adding it if it is new |
 | `--done <pass>` | Mark a pass `done`, adding it if it is new |
+| `--dry-run` | With `--init`, `--start`, or `--done`, list the file it would change, print the passes as they would be, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--json` | Print the passes as a JSON result (see below) |
 
 Pass names are kebab-case; any name works, so you can add your own, such as `sensitivity-read`. Adding a name outside the default ladder prints a note on stderr, with a suggestion when the name is within two edits of a default pass, so a typo does not slip in unnoticed:
@@ -2067,7 +2083,7 @@ Updated revision-passes in story.md
 
 When a change is made, `passes` prints `Updated revision-passes in story.md` before the list. It rewrites only the `revision-passes` entry and refuses to change a `story.md` that fails to parse or has malformed passes. Without options it only reads. The next pass is the one in progress, or else the first one not done; `story next` suggests it when `story.md` has `status: revising` (see [next](#next)).
 
-With `--json`, `data.passes` lists each recorded pass as `pass`, `status`, and, for a default pass, its `focus` and `checks` (the helping commands, pointed at the path you typed); both are `null` for a custom pass. `data.done` counts the passes done, `data.next` names the next pass or is `null`, `data.changed` says whether `story.md` was rewritten (it is then in `writes`), and `data.notes` holds the notes the text output prints on stderr. With no passes recorded, `data.passes` is empty.
+With `--json`, `data.passes` lists each recorded pass as `pass`, `status`, and, for a default pass, its `focus` and `checks` (the helping commands, pointed at the path you typed); both are `null` for a custom pass. `data.done` counts the passes done, `data.next` names the next pass or is `null`, `data.changed` says whether `story.md` was rewritten (it is then in `writes`), `data.notes` holds the notes the text output prints on stderr, and `data.dryRun` and `data.changes` are as for the [write commands](#previewing-changes-with---dry-run). With no passes recorded, `data.passes` is empty.
 
 With no passes recorded, `passes` lists the default ladder and suggests `--init`. The suggested commands repeat the path you typed, so `story passes drafts/salt-road` suggests `story passes drafts/salt-road --init` and `mark it with story passes drafts/salt-road --done <pass>`; with no path, or `.`, they read `story passes`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
 
@@ -2633,7 +2649,7 @@ These commands produce files for reading or submission. The source of truth stay
 ### export
 
 ```text
-story export [path] [--out <file>]
+story export [path] [--out <file>] [--dry-run]
 ```
 
 Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
@@ -2641,6 +2657,7 @@ Writes one markdown manuscript: the story title, front matter pages, every chapt
 | Option | Effect | Default |
 |---|---|---|
 | `--out <file>` | Output path, relative to the project root | `dist/manuscript.md` |
+| `--dry-run` | List the file and folders it would write, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 
 ```text
 $ story export
@@ -2663,7 +2680,7 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--out <file>]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--out <file>] [--dry-run]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -2679,6 +2696,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
 | `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter hooks and outcomes, and how questions and promises resolve. An error with any other format | Off |
 | `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
+| `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 
 | Format | Default output | Contents |
 |---|---|---|
@@ -2815,7 +2833,7 @@ Like `export`, `build` refuses to run while a project file fails to parse, and r
 ### synopsis
 
 ```text
-story synopsis [path] [--pages 1|3] [--out <file>] [--json]
+story synopsis [path] [--pages 1|3] [--out <file>] [--dry-run] [--json]
 ```
 
 Builds a mechanical synopsis from the project: a `Logline:` line (the first sentence of the `## Synopsis` section in `story.md`, or `No logline recorded.`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a whole common opener such as `She` or `The` but not a name (`A.J.` and `He-Man` keep their capitals). Titles such as `Dr.`, `e.g.`, initials, and dotted initialisms such as `U.S.` never end a sentence; `No.`, `vs.`, `etc.`, `a.m.`, and `p.m.` end one unless the next word starts in lower case or with a digit. `--pages 3` takes up to four Setup sentences, eight Rising Action sentences, and two each from Climax and Resolution. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
@@ -2824,7 +2842,8 @@ Builds a mechanical synopsis from the project: a `Logline:` line (the first sent
 |---|---|---|
 | `--pages <n>` | `1` (500-word budget) or `3` (1,500-word budget) | `1` |
 | `--out <file>` | Write to this path, relative to the project root, instead of stdout | Print to stdout |
-| `--json` | Print a JSON result: `data.title`, `logline`, `pages`, `budget` (in words), `words`, `sections` (each arc's `arc` id, `name`, and the `text` under its heading, leaving out an arc that truncation cut), `text` (the whole synopsis, also when `--out` writes it), and `outFile` (the absolute path written, or `null`), with the file in `writes` (see [JSON output](#json-output)) | Off |
+| `--dry-run` | With `--out`, list the file it would write and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: `data.title`, `logline`, `pages`, `budget` (in words), `words`, `sections` (each arc's `arc` id, `name`, and the `text` under its heading, leaving out an arc that truncation cut), `text` (the whole synopsis, also when `--out` writes it), `outFile` (the absolute path written, or `null`), `dryRun`, and `changes`, with the file in `writes` (see [JSON output](#json-output)) | Off |
 
 ```shell
 story synopsis

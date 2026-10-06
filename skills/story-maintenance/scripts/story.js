@@ -108,7 +108,11 @@ function invalidUtf8Offset(buffer) {
 function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
   try {
-    writeWholeFile(filePath, contents, options);
+    if (planning > 0) {
+      planWrite(filePath, options);
+    } else {
+      writeWholeFile(filePath, contents, options);
+    }
   } catch (error) {
     throw withExitCode(error, EXIT_CODES.refused);
   }
@@ -116,7 +120,16 @@ function writeFile(filePath, contents, options = {}) {
 }
 function removeFile(filePath, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
-  fs.rmSync(filePath, { force: Boolean(options.force) });
+  if (planning > 0) {
+    if (!existed && !options.force) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, lstat '${filePath}'`), { code: "ENOENT", path: filePath, syscall: "lstat" });
+    }
+    if (existed) {
+      fs.accessSync(path.dirname(path.resolve(filePath)), fs.constants.W_OK);
+    }
+  } else {
+    fs.rmSync(filePath, { force: Boolean(options.force) });
+  }
   if (existed) {
     record(filePath, true, "delete");
   }
@@ -144,13 +157,25 @@ function recordChanges(root, run) {
   }
   return { result, changes: summarizeJournal(root, journal) };
 }
+function planChanges(root, run) {
+  planning += 1;
+  try {
+    return recordChanges(root, run);
+  } finally {
+    planning -= 1;
+  }
+}
+function isPlanning() {
+  return planning > 0;
+}
+var planning = 0;
 function summarizeJournal(root, journal) {
   const base = path.resolve(root);
   const changes = [];
   for (const [file, { existed, action }] of journal) {
     const kind = action === "mkdir" ? "mkdir" : action === "delete" ? existed ? "delete" : null : existed ? "update" : "create";
     if (kind !== null) {
-      changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") });
+      changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") || "." });
     }
   }
   return changes.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
@@ -188,6 +213,21 @@ function writeWholeFile(filePath, contents, options) {
     throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
 }
+function planWrite(filePath, options) {
+  const target = prepareWriteTarget(filePath, options.root);
+  const existing = lstatIfExists(target);
+  try {
+    if (existing?.isDirectory()) {
+      throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
+    }
+    fs.accessSync(existing ? target : nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
+  } catch (error) {
+    throw Object.assign(new Error(`Cannot write to ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+  }
+  if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
+    throw new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`);
+  }
+}
 function currentText(target) {
   try {
     return fs.readFileSync(target, "utf8");
@@ -204,10 +244,12 @@ function prepareWriteTarget(filePath, root) {
   const target = path.resolve(filePath);
   if (root) {
     assertLexicallyInsideRoot(target, root);
-    assertExistingAncestorInsideRoot(path.dirname(target), root);
+    if (planning === 0 || lstatIfExists(path.resolve(root)) !== null) {
+      assertExistingAncestorInsideRoot(path.dirname(target), root);
+    }
   }
   makeDirectories(path.dirname(target));
-  if (root) {
+  if (root && lstatIfExists(path.dirname(target)) !== null) {
     assertSafeProjectParent(target, root);
   }
   rejectSymlinkTarget(target, "write");
@@ -275,6 +317,21 @@ function makeDirectories(directory) {
   const { ancestor, missing } = nearestExistingAncestor(directory);
   if (missing.length === 0 && fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() !== true) {
     throw directoryError(ancestor, "ENOTDIR");
+  }
+  if (planning > 0) {
+    if (missing.length > 0) {
+      try {
+        fs.accessSync(ancestor, fs.constants.W_OK);
+      } catch (error) {
+        throw directoryError(path.join(ancestor, missing[0]), error.code ?? error.message);
+      }
+    }
+    let planned = ancestor;
+    for (const name of missing) {
+      planned = path.join(planned, name);
+      record(planned, false, "mkdir");
+    }
+    return;
   }
   let current = ancestor;
   for (const name of missing) {
@@ -8994,7 +9051,7 @@ var OPTIONS = [
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
-  { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, or snapshot would create, update,", "or delete, and change nothing"] },
+  { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, snapshot, passes, progress --log,", "diagram or synopsis --out, export, build, init,", "or import would create, update, or delete, and", "change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
@@ -19842,7 +19899,7 @@ function buildPdf(project, format, trim, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project));
-  writeFile(output.outFile, renderPdf(html, engine), output.writeOptions);
+  writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
 function buildCodex(project, out, spoilers) {
@@ -23747,7 +23804,7 @@ function importManuscript(options) {
     if (!/^chapter-\d+\.md$/i.test(name)) {
       continue;
     }
-    fs14.unlinkSync(path16.join(chaptersDir, name));
+    removeFile(path16.join(chaptersDir, name));
   }
   for (const chapter of chapterFiles) {
     writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
@@ -24288,21 +24345,52 @@ import path17 from "node:path";
 function previewChanges(root, run) {
   const projectRoot = path17.resolve(root);
   requireStoryFile(projectRoot);
-  const scratch = fs15.realpathSync(fs15.mkdtempSync(path17.join(os4.tmpdir(), "story-dry-run-")));
-  const fsRoot = path17.parse(projectRoot).root;
-  const atRoot = projectRoot === fsRoot;
-  const mirror = (target) => {
-    const drive = path17.parse(target).root;
-    return path17.join(scratch, drive.replace(/[:\\/]/g, ""), target.slice(drive.length));
-  };
-  const copyRoot = atRoot ? path17.join(scratch, "project") : mirror(projectRoot);
-  const [from, to] = atRoot ? [copyRoot, projectRoot] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
-  try {
-    fs15.mkdirSync(path17.dirname(copyRoot), { recursive: true });
+  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
     }
+  });
+}
+function previewNewProject(root, run) {
+  const target = path17.resolve(root);
+  if (target === path17.parse(target).root) {
+    throw usageError(`--dry-run cannot preview a project made at ${target}`);
+  }
+  return inScratch(target, run, (copyRoot, mirror) => {
+    for (let folder = path17.dirname(target);; folder = path17.dirname(folder)) {
+      const story = path17.join(folder, "story.md");
+      if (fs15.statSync(story, { throwIfNoEntry: false })?.isFile()) {
+        fs15.mkdirSync(mirror(folder), { recursive: true });
+        copyFile(story, mirror(story));
+      }
+      if (path17.dirname(folder) === folder) {
+        break;
+      }
+    }
+    const stats = lstatIfExists(target);
+    if (stats?.isSymbolicLink()) {
+      fs15.symlinkSync(path17.join(path17.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
+    } else if (stats?.isDirectory()) {
+      copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot });
+    } else if (stats) {
+      copyFile(target, copyRoot);
+    }
+  });
+}
+function inScratch(target, run, prepare) {
+  const scratch = fs15.realpathSync(fs15.mkdtempSync(path17.join(os4.tmpdir(), "story-dry-run-")));
+  const fsRoot = path17.parse(target).root;
+  const atRoot = target === fsRoot;
+  const mirror = (file) => {
+    const drive = path17.parse(file).root;
+    return path17.join(scratch, drive.replace(/[:\\/]/g, ""), file.slice(drive.length));
+  };
+  const copyRoot = atRoot ? path17.join(scratch, "project") : mirror(target);
+  const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
+  try {
+    fs15.mkdirSync(path17.dirname(copyRoot), { recursive: true });
+    prepare(copyRoot, mirror, atRoot);
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
   } catch (error) {
@@ -24372,7 +24460,7 @@ function copyProject(source, target, roots, depth = 0) {
 }
 function copyFile(from, to) {
   const { size } = fs15.statSync(from);
-  if (from.endsWith(".md") && size <= MAX_READ_BYTES && allowed(from, fs15.constants.R_OK)) {
+  if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs15.constants.R_OK)) {
     fs15.copyFileSync(from, to);
   } else {
     fs15.writeFileSync(to, "");
@@ -24615,10 +24703,13 @@ var COMMANDS = [
     summary: ["Scaffold a story project"],
     project: "none",
     args: Infinity,
-    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force"],
+    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", "dry-run"],
     run({ parsed, io, cwd }) {
-      const result = createStoryProject({
-        title: parsed.positionals.slice(1).join(" "),
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const title = parsed.positionals.slice(1).join(" ");
+      const base = newProjectRoot({ title, cwd, dir: parsed.options.dir }) ?? cwd;
+      const { result, changes } = runOrPlan(dryRun, base, () => createStoryProject({
+        title,
         cwd,
         dir: parsed.options.dir,
         genre: parsed.options.genre,
@@ -24634,11 +24725,18 @@ var COMMANDS = [
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
-      });
-      io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}
+      }));
+      if (dryRun) {
+        io.stdout.write(formatPreview("init", changes));
+      } else {
+        io.stdout.write(`${result.keptStory ? "Updated" : "Created"} story project: ${result.root}
 `);
+      }
       reportKeptStory(io, result, "the title");
       reportGitignore(io, result);
+      if (dryRun) {
+        return 0;
+      }
       for (const linkedBook of result.linkedBooks) {
         io.stdout.write(`Updated series links in ${path19.join(linkedBook, "story.md")}
 `);
@@ -24652,9 +24750,10 @@ var COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force"],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", "dry-run"],
     run({ parsed, io, cwd }) {
-      const result = importManuscript({
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const options = {
         source: parsed.positionals[1],
         readStdin: () => pipedText(io, "import"),
         title: parsed.options.title,
@@ -24669,20 +24768,15 @@ var COMMANDS = [
         synopsis: parsed.options.synopsis,
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
-      });
+      };
+      if (dryRun) {
+        return previewImport(io, options);
+      }
+      const result = importManuscript(options);
       const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}
 `);
-      reportKeptStory(io, result, "--title");
-      reportGitignore(io, result);
-      for (const warning of result.warnings) {
-        io.stderr.write(`warning: ${findingLine(warning)}
-`);
-      }
-      if (result.keptStory) {
-        io.stderr.write(`note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.
-`);
-      }
+      reportImportNotes(io, result);
       if (result.candidates.length > 0) {
         io.stdout.write(`Entity candidates (review, then create with story add):
 `);
@@ -24894,13 +24988,22 @@ var COMMANDS = [
       "writing streak; --log records today"
     ],
     project: "positional",
-    options: ["log", "date", "json"],
+    options: ["log", "date", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
-      const progress = applySeverity(projectProgress(root(), { log: isTruthy(parsed.options.log), date: parsed.options.date }), overrides);
-      if (wantsJson(parsed)) {
-        return reportJson(io, "progress", progress, { writes: progress.logged ? [progress.logged.file] : [] });
+      const log = isTruthy(parsed.options.log);
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      if (!log && dryRun) {
+        throw usageError("--dry-run previews progress --log: add --log");
       }
-      if (progress.logged) {
+      const projectRoot = root();
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date }));
+      const progress = applySeverity(result, overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "progress", { ...progress, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
+      }
+      if (dryRun) {
+        io.stdout.write(formatPreview("progress", changes));
+      } else if (progress.logged) {
         const { characterCount, words } = progress.logged;
         io.stdout.write(`Logged ${characterCount === null ? `${words} words` : `${characterCount} characters`} for ${progress.logged.date} in ${progress.logged.file}
 `);
@@ -24958,16 +25061,18 @@ var COMMANDS = [
     ],
     project: "flag",
     args: 1,
-    options: ["out", "json"],
+    options: ["out", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
       const kind = parsed.positionals[1];
-      const result = diagramProject(root(), { kind, out: parsed.options.out });
+      const dryRun = outputDryRun(parsed, "diagram");
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => diagramProject(projectRoot, { kind, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
-        return reportJson(io, "diagram", { ...result, kind, outFile }, { writes: outFile === null ? [] : [outFile] });
+        return reportJson(io, "diagram", { ...result, kind, outFile, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
       }
       if (result.ok) {
-        io.stdout.write(result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}
+        io.stdout.write(dryRun ? formatPreview("diagram", changes) : result.outFile === undefined ? result.text : `Wrote ${parsed.positionals[1]} diagram to ${result.outFile}
 `);
         return 0;
       }
@@ -25148,28 +25253,31 @@ var COMMANDS = [
       "mark a pass"
     ],
     project: "positional",
-    options: ["init", "start", "done", "json"],
+    options: ["init", "start", "done", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
+      const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      if (dryRun && !change.init && change.start === undefined && change.done === undefined) {
+        throw usageError("--dry-run previews passes --init, --start, or --done: add one");
+      }
       const projectRoot = root();
-      const result = projectPasses(projectRoot, {
-        init: isTruthy(parsed.options.init),
-        start: parsed.options.start,
-        done: parsed.options.done
-      });
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectPasses(target, change));
       const where = shellWord(displayPath2(parsed));
       if (wantsJson(parsed)) {
         return writeJsonResult(io, {
           command: "passes",
           ok: true,
-          data: passesData(result, where),
-          writes: result.changed ? [path19.join(projectRoot, "story.md")] : []
+          data: { ...passesData(result, where), dryRun, changes },
+          writes: dryRun ? [] : writtenFiles(projectRoot, changes)
         });
       }
       for (const note of result.notes ?? []) {
         io.stderr.write(`note: ${note}
 `);
       }
-      if (result.changed) {
+      if (dryRun) {
+        io.stdout.write(formatPreview("passes", changes));
+      } else if (result.changed) {
         io.stdout.write(`Updated revision-passes in story.md
 `);
       }
@@ -25406,10 +25514,12 @@ var COMMANDS = [
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out"],
+    options: ["out", "dry-run"],
     run({ parsed, io, root, overrides }) {
-      const result = exportManuscript(root(), { out: parsed.options.out });
-      io.stdout.write(`Exported ${result.chapters} chapters to ${result.outFile}
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out }));
+      io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}
 `);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
@@ -25429,10 +25539,12 @@ var COMMANDS = [
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers"],
+    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
-      const result = buildBook(root(), {
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => buildBook(projectRoot, {
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
@@ -25443,7 +25555,12 @@ var COMMANDS = [
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
         spoilers: isTruthy(parsed.options.spoilers)
-      });
+      }));
+      if (dryRun) {
+        io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)
+` : ""}${formatPreview("build", changes)}`);
+        return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex" ? `Built a codex of ${result.pages} pages to ${result.outFile}
 ` : `Built ${result.chapters} chapters as ${as} to ${result.outFile}
@@ -25456,14 +25573,18 @@ var COMMANDS = [
     usage: "synopsis [path]",
     summary: ["Build a deterministic 1- or 3-page synopsis from arcs"],
     project: "positional",
-    options: ["pages", "out", "json"],
+    options: ["pages", "out", ...WRITE_OPTIONS],
     run({ parsed, io, root }) {
-      const result = synopsisBook(root(), { pages: parsed.options.pages, out: parsed.options.out });
+      const dryRun = outputDryRun(parsed, "synopsis");
+      const projectRoot = root();
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => synopsisBook(projectRoot, { pages: parsed.options.pages, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
-        return writeJsonResult(io, { command: "synopsis", ok: true, data: { ...result, outFile }, writes: outFile === null ? [] : [outFile] });
+        return writeJsonResult(io, { command: "synopsis", ok: true, data: { ...result, outFile, dryRun, changes }, writes: dryRun ? [] : writtenFiles(projectRoot, changes) });
       }
-      if (result.outFile === undefined) {
+      if (dryRun) {
+        io.stdout.write(formatPreview("synopsis", changes));
+      } else if (result.outFile === undefined) {
         io.stdout.write(result.text);
       } else {
         io.stdout.write(`Wrote synopsis to ${result.outFile}
@@ -25504,7 +25625,7 @@ function passageRoot(parsed, cwd, required) {
 function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
-  const { result, changes } = dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+  const { result, changes } = runOrPreview(dryRun, projectRoot, write);
   const findings = checkedWarnings(result.warnings, overrides);
   if (wantsJson(parsed)) {
     return writeJsonResult(io, {
@@ -25518,11 +25639,46 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
   io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
   return writeFindings(io, findings);
 }
+function runOrPreview(dryRun, projectRoot, write) {
+  return dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+}
+function runOrPlan(dryRun, base, run) {
+  return dryRun ? planChanges(base, run) : recordChanges(base, run);
+}
+function outputDryRun(parsed, command) {
+  const dryRun = isTruthy(parsed.options["dry-run"]);
+  if (dryRun && parsed.options.out === undefined) {
+    throw usageError(`--dry-run previews ${command} --out: add --out`);
+  }
+  return dryRun;
+}
+function previewImport(io, options) {
+  const { cwd } = options;
+  const source = String(options.source ?? "").trim();
+  const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
+  const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path19.resolve(cwd, source), dir });
+  const { result, changes } = target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
+  io.stdout.write(formatPreview("import", changes));
+  reportImportNotes(io, result);
+  return 0;
+}
+function reportImportNotes(io, result) {
+  reportKeptStory(io, result, "--title");
+  reportGitignore(io, result);
+  for (const warning of result.warnings) {
+    io.stderr.write(`warning: ${findingLine(warning)}
+`);
+  }
+  if (result.keptStory) {
+    io.stderr.write(`note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.
+`);
+  }
+}
 function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
-  const { result: report, changes } = dryRun ? previewChanges(projectRoot, fix) : recordChanges(projectRoot, () => fix(projectRoot));
+  const { result: report, changes } = runOrPreview(dryRun, projectRoot, fix);
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
   const { repairs, stopped, ...rest } = report;
   const diagnosis = withWorkflowPins(rest, projectRoot, cwd);
@@ -25567,7 +25723,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 `;
 }
 function writtenFiles(projectRoot, changes) {
-  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path19.join(projectRoot, change.path));
+  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path19.resolve(projectRoot, change.path));
 }
 function formatPreview(command, changes) {
   const lines = changes.map((change) => `${change.action.padEnd(7)} ${change.path}
