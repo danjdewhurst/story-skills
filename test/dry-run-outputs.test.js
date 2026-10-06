@@ -157,16 +157,26 @@ describe("--dry-run for builds and exports", () => {
     }
   });
 
-  test("a dry run is refused when a folder holds the write's temporary file's place", () => {
+  test("a folder left at an old temporary file's name does not stop a write or its dry run", () => {
     const { root } = copyExample();
-    fs.mkdirSync(path.join(root, "dist", `.book.md.story-${process.pid}.tmp`), { recursive: true });
+    const leftover = path.join(root, "dist", `.book.md.story-${process.pid}.tmp`);
+    fs.mkdirSync(leftover, { recursive: true });
     const preview = invoke(root, ["export", "--out", "dist/book.md", "--dry-run"]);
+    expect(preview.code).toBe(0);
+    expect(preview.err).toBe("");
     const real = invoke(root, ["export", "--out", "dist/book.md"]);
-    expect(preview.code).toBe(4);
-    // The real write fails cleaning up its temporary file, with a less
-    // helpful message; both are refused writes.
-    expect(preview.code).toBe(real.code);
-    expect(preview.err).toBe("Cannot write to dist/book.md: it is a folder, not a file\n");
+    expect(real.code).toBe(0);
+    expect(fs.lstatSync(path.join(root, "dist", "book.md")).isFile()).toBe(true);
+    expect(fs.lstatSync(leftover).isDirectory()).toBe(true);
+  });
+
+  test("a planned write is refused when a folder holds the target's place", () => {
+    const { root } = copyExample();
+    const target = path.join(root, "dist", "book.md");
+    fs.mkdirSync(target, { recursive: true });
+    // A folder's link count can be over one, so the message may name it as
+    // hard-linked; the reason is what matters.
+    expect(() => planChanges(root, () => writeFile(target, "text", { root }))).toThrow(`${target}: EISDIR`);
   });
 
   // A stub engine is a script with a shebang, which Windows cannot run.

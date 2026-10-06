@@ -8,6 +8,7 @@ import fs17 from "node:fs";
 import path19 from "node:path";
 
 // src/files.js
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer as Buffer2 } from "node:buffer";
@@ -196,24 +197,27 @@ function writeWholeFile(filePath, contents, options) {
   }
   const mode = existing ? existing.mode & 511 : 438;
   const temporary = temporaryPath(target);
+  let created = false;
   try {
-    const descriptor = fs.openSync(temporary, "w", mode);
+    const descriptor = fs.openSync(temporary, "wx", mode);
+    created = true;
     try {
       fs.writeFileSync(descriptor, contents, "utf8");
+      if (existing) {
+        fs.fchmodSync(descriptor, mode);
+      }
       fs.fsyncSync(descriptor);
     } finally {
       fs.closeSync(descriptor);
     }
-    if (existing) {
-      fs.chmodSync(temporary, mode);
-    }
     if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
-      fs.rmSync(temporary, { force: true });
       throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
     }
     fs.renameSync(temporary, target);
   } catch (error) {
-    fs.rmSync(temporary, { force: true });
+    if (created) {
+      fs.rmSync(temporary, { force: true });
+    }
     if (error.changedOnDisk) {
       throw error;
     }
@@ -229,7 +233,7 @@ function planWrite(filePath, options) {
   }
   try {
     fs.accessSync(nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
-    if (lstatIfExists(temporaryPath(target))?.isDirectory() || existing?.isDirectory()) {
+    if (existing?.isDirectory()) {
       throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
     }
   } catch (error) {
@@ -247,10 +251,10 @@ function currentText(target) {
     return null;
   }
 }
-var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-\d+\.tmp$/;
+var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 function temporaryPath(target) {
   const name = path.basename(target).slice(0, 200);
-  return path.join(path.dirname(target), `.${name}.story-${process.pid}.tmp`);
+  return path.join(path.dirname(target), `.${name}.story-${crypto.randomBytes(8).toString("hex")}.tmp`);
 }
 function prepareWriteTarget(filePath, root) {
   const target = path.resolve(filePath);
@@ -11524,14 +11528,14 @@ function formRangeWarning(form, count, label, ranges = STORY_FORMS, unit = COUNT
 }
 
 // src/twee.js
-import crypto from "node:crypto";
+import crypto2 from "node:crypto";
 var TWEE_LINK_UNSAFE = /[[\]|\r\n]|->|<-|<$/;
 var UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function isIfid(value) {
   return typeof value === "string" && UUID_V4.test(value);
 }
 function derivedIfid(storyId) {
-  const hex = crypto.createHash("sha256").update(`story-skills-ifid:${storyId}`).digest("hex").slice(0, 32).split("");
+  const hex = crypto2.createHash("sha256").update(`story-skills-ifid:${storyId}`).digest("hex").slice(0, 32).split("");
   hex[12] = "4";
   hex[16] = (Number.parseInt(hex[16], 16) & 3 | 8).toString(16);
   const text = hex.join("");
