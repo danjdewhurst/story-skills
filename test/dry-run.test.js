@@ -218,6 +218,47 @@ describe("--dry-run", () => {
     ].sort((a, b) => (a.path < b.path ? -1 : 1)));
   });
 
+  test("a dry run meets what the real run meets: unreadable and oversized notes, other projects, assets, and unwritable folders", () => {
+    if (process.getuid?.() === 0) {
+      return;
+    }
+    const root = copyExample("the-unraveled-thread");
+    const notes = path.join(root, "notes");
+    fs.mkdirSync(notes);
+    // Over the scan limit: a real rename skips it by size, unread.
+    fs.writeFileSync(path.join(notes, "huge.md"), "");
+    fs.truncateSync(path.join(notes, "huge.md"), 6 * 1024 * 1024);
+    fs.chmodSync(path.join(notes, "huge.md"), 0o000);
+    fs.writeFileSync(path.join(root, "cover.png"), "");
+    fs.truncateSync(path.join(root, "cover.png"), 20 * 1024 * 1024);
+    // Another project, which no command walks into, with a folder no one
+    // can read.
+    writeMarkdown(path.join(root, "sequel", "story.md"), "title: Sequel");
+    fs.mkdirSync(path.join(root, "sequel", "locked"));
+    fs.chmodSync(path.join(root, "sequel", "locked"), 0o000);
+    try {
+      const argv = ["rename", "character", "edran-vale", "Edran Vane", "--json"];
+      const before = snapshot(path.join(root, "chapters"));
+      const preview = invokeJson(root, [...argv, "--dry-run"]);
+      expect(preview.code).toBe(0);
+      expect(snapshot(path.join(root, "chapters"))).toEqual(before);
+      const real = invokeJson(root, argv);
+      expect(real.code).toBe(0);
+      expect(preview.envelope.data).toEqual({ ...real.envelope.data, dryRun: true });
+
+      fs.chmodSync(path.join(root, "characters"), 0o555);
+      const refusedPreview = invoke(root, ["rename", "character", "edran-vane", "Edran Vale", "--dry-run"]);
+      const refused = invoke(root, ["rename", "character", "edran-vane", "Edran Vale"]);
+      expect(refused.code).toBe(4);
+      expect(refusedPreview.code).toBe(4);
+      expect(refusedPreview.err).toBe(refused.err);
+    } finally {
+      fs.chmodSync(path.join(root, "characters"), 0o755);
+      fs.chmodSync(path.join(root, "sequel", "locked"), 0o755);
+      fs.chmodSync(path.join(notes, "huge.md"), 0o644);
+    }
+  });
+
   test("wordcount --dry-run needs --write, and story.md cannot default it", () => {
     const root = copyExample("the-unraveled-thread");
     const usage = invoke(root, ["wordcount", "--dry-run"]);
