@@ -74,7 +74,7 @@ story-skills/
 ├── CHANGELOG.md                  # user-visible changes per release (Keep a Changelog)
 ├── CONTRIBUTING.md               # short contributor guide that points here
 ├── CODE_OF_CONDUCT.md            # Contributor Covenant 2.1
-├── .github/                      # CI, publish workflow, Dependabot
+├── .github/                      # CI, publish workflow, Dependabot, issue forms, PR template
 ├── .claude-plugin/               # Claude Code plugin and marketplace manifests
 ├── .codex-plugin/                # Codex plugin manifest
 ├── .agents/plugins/              # Codex marketplace manifest

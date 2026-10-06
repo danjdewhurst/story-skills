@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a new skill, CLI command, check, or change to the project format.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The writing task or workflow, and where Story Skills falls short of it today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would help
+      description: The skill, command, flag, check, or frontmatter field you have in mind, and how you would use it.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - A skill
+        - The story CLI
+        - The project format (frontmatter and schema)
+        - Builds and exports
+        - GitHub templates for story repositories
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you have tried instead
+      description: Workarounds, other tools, or other ways to get the same result.
+    validations:
+      required: false

@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a problem with the story CLI, a skill, or the project format.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Report security issues privately, as described in [SECURITY.md](https://github.com/danjdewhurst/story-skills/blob/main/SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `story --version`, or of `node <skills-directory>/story-maintenance/scripts/story.js --version` for skills installed without the CLI.
+      placeholder: "0.21.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Claude Code plugin
+        - Codex plugin
+        - Agent Skills CLI (npx skills or bunx skills)
+        - Gemini CLI (gemini skills install)
+        - Skills copied by hand
+        - npm or Bun package (npx, bunx, or npm install -g)
+        - Homebrew
+        - Release binary
+        - From a clone of this repository
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: The agent and model you used, if a skill was involved. Leave it blank for a problem with the CLI alone.
+      placeholder: Claude Code with Claude Sonnet
+    validations:
+      required: false
+  - type: input
+    id: area
+    attributes:
+      label: Command or skill
+      description: The `story` command or the skill where the problem shows up.
+      placeholder: story continuity, chapter-writing
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Include the full command, its output, and any error message.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest project that shows the problem helps most, such as the frontmatter of the files involved, or one of the projects under `examples/`.
+    validations:
+      required: false
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Your operating system, and the Node or Bun version if you run the CLI with one.
+      placeholder: macOS 15, Node 22.11.0
+    validations:
+      required: false

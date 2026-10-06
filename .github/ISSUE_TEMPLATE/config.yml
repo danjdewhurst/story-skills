@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/danjdewhurst/story-skills/security/advisories/new
+    about: Report security issues privately, as described in SECURITY.md, not in a public issue.
+  - name: Ask a question
+    url: https://github.com/danjdewhurst/story-skills/discussions
+    about: Ask how to use the skills or the CLI.
+  - name: Read the documentation
+    url: https://github.com/danjdewhurst/story-skills/tree/main/docs
+    about: Getting started, the project format, the CLI reference, and the skills catalogue.
