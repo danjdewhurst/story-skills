@@ -232,7 +232,10 @@ or contests, follow `references/short-fiction-markets.md` instead of steps
 2 to 6: the story goes out in full with a short cover letter. Use the
 short-fiction tracker columns (submission type, rights offered) and the
 publication history section from that reference, and check the tracker
-before suggesting a market so an exclusive submission is never doubled.
+before suggesting a market: a story with an open exclusive submission goes
+nowhere else, and an exclusive market needs a story with no open
+submissions. For a market that reads anonymously, tell the user to strip
+the name, contact block, and byline from the Shunn build.
 To assemble a collection, follow its "Assemble a collection" section:
 choose the stories, find the linking threads, propose an order, and draft
 the acknowledgements from the publication history.

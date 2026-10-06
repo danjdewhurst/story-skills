@@ -15,8 +15,13 @@ too often to trust.
   history if the author has any, and thanks. No pitch, synopsis, or comps
   unless the guidelines ask for them.
 - The manuscript is the Shunn build with `form: short-story` or `form: flash`
-  in `story.md` (see Build the manuscript in `SKILL.md`). Strip the author's
-  name from the file when a market reads anonymously; the guidelines say so.
+  in `story.md` (see Build the manuscript in `SKILL.md`). When a market reads
+  anonymously (its guidelines say so), the Shunn build is not anonymous: its
+  first page carries the author's name, contact block, and byline. The build
+  has no option to drop them, so tell the user to remove all three from the
+  built file in `dist/`, and anything else that names them, such as a page
+  header they added, before sending. Follow the market's own anonymity
+  rules.
 - Word-count limits are the market's own. `word-count-norms.md` gives the
   usual bands for short story, novelette, and novella; a story that sits
   over a market's limit does not go to that market.
@@ -34,9 +39,16 @@ too often to trust.
 - **Multiple:** more than one story sent to the same market at once. Most
   markets forbid it unless their guidelines say otherwise.
 
-Record which applies on every tracker row. Before suggesting a new market for
-a story, check the tracker: a story with an open exclusive submission is not
-free to send anywhere else.
+Record which applies on every tracker row. Before suggesting a market for a
+story, check the tracker's open rows (`submitted` or `held`) for that story:
+
+- If any open submission is exclusive, the story is not free to send
+  anywhere.
+- If the new market is exclusive, the story must have no open submissions at
+  all; otherwise wait or choose a market that takes simultaneous
+  submissions.
+- If the market forbids multiple submissions, check that no other story is
+  open there.
 
 ## Rights
 
@@ -79,7 +91,18 @@ skill does not give legal advice.
 Use the same `submission/tracker.md` from `tracker-template.md`, with the
 short-fiction columns below. Every row still comes from the user. A writer
 with many stories may keep one tracker per story project, or one shared
-tracker in a plain folder outside any project; ask which they want.
+tracker in a plain folder outside any project; ask which they want. A
+tracker inside a project keeps the template's frontmatter, with `story` set
+to that project's id. A shared tracker covers several stories, so leave out
+`story`, title it `# Submission Tracker: Short Fiction`, and let the Story
+column identify each row:
+
+```markdown
+---
+type: submission-tracker
+updated: YYYY-MM-DD
+---
+```
 
 ```markdown
 | Market | Story | Date Sent | Type | Rights Offered | Status | Response Date | Notes |
