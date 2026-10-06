@@ -946,7 +946,7 @@ samples:
   - chapters/chapter-01.md
 ```
 
-A chapter listed as a sample is part of the profile, so it is not compared with it. Naming `chapters/` as a whole warns `style-sample-own-chapters`, since every chapter would be compared with itself.
+A chapter listed as a sample is part of the profile, so it is not compared with it. Naming `chapters/` as a whole warns `style-sample-own-chapters`, since every chapter would be compared with itself. Each file counts once: an entry that names the same file as an earlier one (`./chapters/chapter-01.md` after `chapters/chapter-01.md`) warns `style-sample-duplicate`.
 
 `story prose` then builds a profile from the samples. It covers sentence length and spread, paragraph length, the share of words in dialogue, filter-word and adverb rates, and the 20 content words you use most. The report prints the profile above the chapters. A chapter that drifts too far from it, either way, warns: `chapters/chapter-07.md sentences average 14.2 words, longer than your samples' 9.8 (tolerance 30%) [prose-baseline-sentences]`. With samples, your own filter-word and adverb rates replace the fixed limits.
 

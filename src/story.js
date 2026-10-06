@@ -71,6 +71,8 @@ import {
 } from "./scan.js";
 import {
   sessionsWithoutCharacters,
+  sampleDuplicate,
+  samplePath,
   sampleProblem,
   validateDailyTarget,
   validateDeadline,
@@ -966,7 +968,9 @@ function lintProse(label, title, prose, rules, thresholds, profile, warnings, sa
 // on whenever samples are listed, unless --baseline=false turns it off.
 // --baseline with no samples is a usage error, since there is nothing to
 // compare with. A chapter of this project named on its own is a sample; its
-// real path goes into `sampled`, so the report does not judge it.
+// real path goes into `sampled`, so the report does not judge it. Each file
+// counts once, however often the entries name it: twice under two spellings,
+// or on its own and inside a listed folder.
 function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
   const listed = asArray(project?.styleSheet?.data?.samples).filter((entry) => typeof entry === "string" && entry.trim() !== "");
   const wanted = options.baseline === undefined ? listed.length > 0 : isTruthy(options.baseline);
@@ -979,13 +983,15 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
   const samples = [];
   const self = canonicalPath(project.root);
   const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+  const entries = new Map();
+  const read = new Set();
   for (const entry of listed) {
     const sample = entry.trim();
     if (path.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} must be a path relative to the project folder, such as ../book-one, so it is left out`, STYLE_SHEET_FILE));
       continue;
     }
-    const problem = sampleProblem(project, sample);
+    const problem = sampleProblem(project, sample) ?? sampleDuplicate(project, sample, entries);
     if (problem !== null) {
       warnings.push(problem);
       continue;
@@ -1007,6 +1013,11 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
       continue;
     }
     for (const document of documents) {
+      const file = samplePath(document.path);
+      if (read.has(file)) {
+        continue;
+      }
+      read.add(file);
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join("\n\n");
       samples.push({ file: document.file, analysis: analyzeChapter(prose, rules), sentenceLengths: sentenceLengths(prose, rules.pack), contentWords: contentWords(prose, rules) });
     }

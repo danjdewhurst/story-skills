@@ -748,6 +748,34 @@ export function sampleProblem(project, sample) {
   return null;
 }
 
+// A samples entry that names the same file or folder as an earlier one
+// (`./chapters/chapter-01.md` after `chapters/chapter-01.md`), as a warning,
+// or null. `seen` maps the samplePath of each entry so far to the entry as
+// written. validate and prose share it, so both say the same thing.
+export function sampleDuplicate(project, sample, seen) {
+  const real = samplePath(path.resolve(project.root, sample));
+  const first = seen.get(real);
+  if (first === undefined) {
+    seen.set(real, sample);
+    return null;
+  }
+  const repeat = sample === first ? "is already listed" : `names the same file or folder as ${first}`;
+  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose reads it once: remove one of them`, STYLE_SHEET_FILE);
+}
+
+// A sample file or folder as one path however it is spelled: `./` and
+// repeated slashes resolve away, symlinks are followed, and the native real
+// path takes the case the disk stores, so on a case-insensitive disk
+// `Chapters/Chapter-01.md` is `chapters/chapter-01.md`. A path that cannot be
+// resolved (a symlink loop) stands as it is; prose reports it unreadable.
+export function samplePath(file) {
+  try {
+    return fs.realpathSync.native(file);
+  } catch {
+    return file;
+  }
+}
+
 function readRegistryValidationData(file, root, label, errors) {
   const count = errors.length;
   const data = readValidationData(file, root, label, errors);
@@ -1717,6 +1745,7 @@ function validateStyleSheet(project, errors, warnings) {
     validateStyleLists(data, field, label, errors, warnings);
   }
   validateStringArray(data, "samples", label, errors);
+  const seen = new Map();
   for (const entry of asArray(data.samples)) {
     if (typeof entry !== "string" || entry.trim() === "") {
       continue;
@@ -1725,7 +1754,7 @@ function validateStyleSheet(project, errors, warnings) {
     if (path.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
     } else {
-      const problem = sampleProblem(project, sample);
+      const problem = sampleProblem(project, sample) ?? sampleDuplicate(project, sample, seen);
       if (problem !== null) {
         warnings.push(problem);
       }
