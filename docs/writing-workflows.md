@@ -53,7 +53,7 @@ flowchart LR
 | Find the idea | `premise-workshop` | `story init --form`, `story names` |
 | Set up | `story-init` | `story init`, `story validate`, `story next` |
 | Plan | `plot-structure`, `character-management`, `worldbuilding`, `theme-craft`, `genre-craft` | `story reindex`, `story links`, `story validate`, `story names`, `story diagram`, `story clues` |
-| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft` | `story wordcount --write`, `story continuity`, `story pacing`, `story progress --log` |
+| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft`; `interactive-fiction` for a branching book | `story wordcount --write`, `story continuity`, `story pacing`, `story progress --log` |
 | Keep it consistent | `voice-style`, `research` | `story prose`, `story voices`, `story validate` |
 | Revise | `revision-continuity`, `theme-craft` (theme audit) | `story passes`, `story next`, `story continuity`, `story pacing`, `story clues`, `story doctor`, `story compare` |
 | Polish | `line-editing` | `story prose`, `story voices`, `story build --format narration`/`html`/`print` |

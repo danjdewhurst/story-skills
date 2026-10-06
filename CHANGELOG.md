@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- New `interactive-fiction` skill for planning, drafting, and revising a branching book whose chapters carry `choices`. It plans the choice graph (structure, numbering, rejoins, and endings) and scaffolds it before any prose, with `story links` checking reachability. It drafts each passage from `story context`, writing prose at a rejoin that holds on every incoming path. For continuity it follows the paths: one `knowledge-state` entry per branch, fixing `state-differs-by-path` in the story rather than the snapshot, and exempting `clock-backward` findings that only reflect branch order. It lists the hand checks for what still reads chapter numbers, and builds with `--format twee` or `ink`. Its references are `choice-graph.md` and `path-continuity.md`. `chapter-writing`, `revision-continuity`, `story-maintenance`, and `adaptation` point branching books to it, and a new `branch-rejoin` eval fixture tests rejoin prose. ([#384](https://github.com/danjdewhurst/story-skills/issues/384))
+
 ### Fixed
 
 - Skill descriptions route requests more cleanly. genre-craft, discovery-drafting, and theme-craft read "asks about" instead of the ungrammatical "asks to" before a noun. "Character arc" now triggers only character-management; theme-craft lists "thematic arc" instead and points character records back. chapter-writing, discovery-drafting, story-init, and series-continuity gain NOT clauses, and chapter-writing ("write a scene") and scene-craft ("plan a scene") now point at each other. ([#389](https://github.com/danjdewhurst/story-skills/issues/389))
