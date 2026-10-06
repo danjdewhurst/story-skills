@@ -14,6 +14,7 @@ import {
   kebabCase,
   scanComments,
   titleCaseSlug,
+  trimBlankLines,
   wordCount
 } from "./markdown.js";
 import { chapterByline, copyrightPage, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
@@ -704,8 +705,9 @@ export function bookChapters(project, action = "build") {
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
-      // LF only, so a CRLF checkout builds the same bytes as an LF one.
-      body: chapterProse(markdown.body).replace(/\r\n?/g, "\n").trim()
+      // LF only, so a CRLF checkout builds the same bytes as an LF one. The
+      // first paragraph keeps a typed indent (see trimBlankLines).
+      body: trimBlankLines(chapterProse(markdown.body).replace(/\r\n?/g, "\n"))
     };
     chapters.push({ ...entry, key: chapterKey(entry, keys) });
     if (wordCount(entry.body) === 0) {
@@ -732,7 +734,7 @@ export function manuscriptParts(project, action = "build") {
       title: entry.title,
       heading: entry.heading,
       copyright: isCopyrightMatter(entry),
-      body: chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, "\n").trim()
+      body: trimBlankLines(chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, "\n"))
     }));
 
   const front = matter("front");

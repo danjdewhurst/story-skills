@@ -9505,6 +9505,38 @@ function isSceneBreak(paragraph) {
   const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
   return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
+var SOURCE_SPACE = new Set([" ", "\t", `
+`, "\v", "\f", "\r", "\u2028", "\u2029"]);
+var SOURCE_SPACE_RUN = /[ \t\n\v\f\r\u2028\u2029]+/g;
+function collapseSourceSpace(text) {
+  return String(text).replace(SOURCE_SPACE_RUN, " ");
+}
+function trimSourceSpace(text) {
+  const value = String(text);
+  let start = 0;
+  let end = value.length;
+  while (start < end && SOURCE_SPACE.has(value[start])) {
+    start += 1;
+  }
+  while (end > start && SOURCE_SPACE.has(value[end - 1])) {
+    end -= 1;
+  }
+  return value.slice(start, end);
+}
+function trimBlankLines(text) {
+  const lines = String(text).split(`
+`);
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start].trim() === "") {
+    start += 1;
+  }
+  while (end > start && lines[end - 1].trim() === "") {
+    end -= 1;
+  }
+  return trimSourceSpace(lines.slice(start, end).join(`
+`));
+}
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
@@ -18086,9 +18118,11 @@ function markdownParagraphs(markdown) {
       }
       return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
     }).join("");
-    const text = joined.replace(/\s+/g, " ").replace(new RegExp(` *${LINE_BREAK} *`, "g"), LINE_BREAK).replace(new RegExp(`^${LINE_BREAK}+|${LINE_BREAK}+$`, "g"), "").trim();
+    const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
+    const blank = (part) => part.trim() === "";
+    const text = parts.slice(parts.findIndex((part) => !blank(part)), parts.findLastIndex((part) => !blank(part)) + 1).join(LINE_BREAK);
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
   };
   const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, `
 `))));
@@ -24948,7 +24982,7 @@ function pronunciationGuide(project) {
 function narrationBody(body) {
   return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
 `))).replace(/\\\n/g, `
-`).split(/\n[ \t]*\n\s*/).map((paragraph) => paragraph.trim()).filter(Boolean).map((paragraph) => isSceneBreak(paragraph) ? "[pause]" : paragraph).join(`
+`).split(/\n[ \t]*\n[ \t\n\v\f\r\u2028\u2029]*/).map(trimSourceSpace).filter((paragraph) => paragraph.trim() !== "").map((paragraph) => isSceneBreak(paragraph) ? "[pause]" : paragraph).join(`
 
 `);
 }
@@ -25593,8 +25627,8 @@ function bookChapters(project, action = "build") {
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
-      body: chapterProse(markdown.body).replace(/\r\n?/g, `
-`).trim()
+      body: trimBlankLines(chapterProse(markdown.body).replace(/\r\n?/g, `
+`))
     };
     chapters.push({ ...entry, key: chapterKey(entry, keys) });
     if (wordCount(entry.body) === 0) {
@@ -25615,8 +25649,8 @@ function manuscriptParts(project, action = "build") {
     title: entry.title,
     heading: entry.heading,
     copyright: isCopyrightMatter(entry),
-    body: chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, `
-`).trim()
+    body: trimBlankLines(chapterProse(readMarkdown(entry.file, project.root).body).replace(/\r\n?/g, `
+`))
   }));
   const front = matter("front");
   const back = matter("back");

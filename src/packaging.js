@@ -10,7 +10,7 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { characterCount, flattenHeadings, isSceneBreak, plainLinks, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreak, plainLinks, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -869,15 +869,17 @@ function markdownParagraphs(markdown) {
       }
       return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
     }).join("");
-    const text = joined
-      .replace(/\s+/g, " ")
-      .replace(new RegExp(` *${LINE_BREAK} *`, "g"), LINE_BREAK)
-      .replace(new RegExp(`^${LINE_BREAK}+|${LINE_BREAK}+$`, "g"), "")
-      .trim();
+    // Only layout whitespace collapses, so a typed no-break or ideographic
+    // space reaches the book (see collapseSourceSpace). A hard-broken line
+    // of nothing but whitespace at either end of the paragraph goes.
+    const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
+    const blank = (part) => part.trim() === "";
+    const text = parts.slice(parts.findIndex((part) => !blank(part)), parts.findLastIndex((part) => !blank(part)) + 1).join(LINE_BREAK);
     // The last line is never blank (a blank line flushes), so text is never
-    // empty here.
+    // empty here. A break spaced with typed spaces (`*\u00a0*\u00a0*`) is
+    // still a break.
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
   };
   const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, "\n"))));
   for (const rawLine of source.split("\n")) {
