@@ -652,6 +652,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
+| `--paper <letter\|a4>` | With `--format shunn --pdf` or `--format docx --shunn`, the manuscript's paper: `letter` (US Letter) or `a4`. Case-insensitive. Defaults to `letter`. An error with every other build, including the Shunn markdown file, which has no pages. See [Paper size](#paper-size). |
 | `--pdf` | With `--format print` or `--format shunn`, render to PDF with an installed engine. An error with every other format. See [PDF output](#pdf-output). |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
 | `--spoilers` | With `--format codex`, include notes, statuses, deaths, knowledge, clues, and resolutions. An error with every other format. |
@@ -784,9 +785,28 @@ The grove was quieter than it should have been.
 
 In the `.shunn.md` file, a form-feed character (`\f`) on its own line before each chapter heading marks the page break, and each prose paragraph is joined onto one line with a blank line after it. Markdown emphasis such as `*italic*` is left as written.
 
-The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It does not add a running header, page numbers, or custom margins. Add those in a word processor if a market requires them, and check each market's own guidelines.
+The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It sets the page to US Letter (or A4 with `--paper a4`) with 1 in margins. It does not add a running header or page numbers. Add those in a word processor if a market requires them, and check each market's own guidelines.
 
-The PDF is laid out as Shunn sets a manuscript page: US Letter with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and a running head of the author, title, and page number at the top right of every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
+The PDF is laid out as Shunn sets a manuscript page: US Letter (or A4 with `--paper a4`) with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and a running head of the author, title, and page number at the top right of every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
+
+#### Paper size
+
+Shunn's format is set on US Letter, which North American agents and magazines expect, so the PDF and DOCX use it unless you ask for A4, the paper most markets elsewhere print on:
+
+```shell
+story build . --format shunn --pdf --paper a4
+story build . --format docx --shunn --paper a4
+```
+
+Only the page changes: the margins stay 1 in (about 25 mm) on either paper, as Shunn sets them, and the text, spacing, and title page are the same. The paper is not taken from the book's `language`, because a writer's language does not say where they are submitting: a British writer may send to an American magazine on Letter, and a book in French may go to a Canadian market that wants Letter too. Check the market's guidelines. To use A4 for every build, set it once in `story.md`:
+
+```yaml
+cli-defaults:
+  - command: build
+    paper: a4
+```
+
+Like a default `--pdf-engine`, a default paper waits for a build it applies to: the Shunn PDF and DOCX use it, and every other build ignores it, so `story build . --format epub` still works. `story validate` reports a default paper other than `letter` or `a4`.
 
 The [`submission`](../skills/submission/SKILL.md) skill runs these builds as part of preparing a submission package.
 
@@ -1392,6 +1412,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |
 | `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
+| `Unsupported paper: <paper>. ...` | An unknown `--paper` with the Shunn PDF or DOCX | Use `letter` or `a4`. |
+| `--paper applies only to --format shunn --pdf and --format docx --shunn ...` | `--paper` with another build | Leave it out, or use `--trim` to size a print interior. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `<path>: Refusing to write through symlink` | The `--out` file is a symlink | Delete the symlink or choose another file. |

@@ -971,7 +971,7 @@ export const COMMANDS = [
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -983,6 +983,8 @@ export const COMMANDS = [
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
         trim: parsed.options.trim,
+        paper: parsed.options.paper,
+        paperDefaulted: defaulted.has("paper"),
         stamp: parsed.options.stamp,
         noteUrl: parsed.options["note-url"],
         pdf,

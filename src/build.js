@@ -22,7 +22,7 @@ import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { derivedIfid, isIfid, tweeSource } from "./twee.js";
-import { htmlBook, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { DEFAULT_PAPER, htmlBook, SHUNN_PAPERS, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { renderPdf, resolvePdfEngine } from "./pdf.js";
 import { buildStyle, styleSheetFile, validateBuildStyle } from "./build-style.js";
 import { wordSpans } from "./words.js";
@@ -80,6 +80,18 @@ export function buildBook(root, options = {}) {
   if (!TRIM_SIZES.has(trim)) {
     throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
   }
+  // --paper sets the page of the two Shunn builds that have pages: the PDF
+  // and the DOCX. A story.md default waits for one of them, as a default
+  // --pdf-engine waits for --pdf, so a writer can set A4 once.
+  const shunnPages = (format === "shunn" && Boolean(options.pdf)) || (format === "docx" && Boolean(options.shunn));
+  const rawPaper = options.paperDefaulted && !shunnPages ? undefined : options.paper;
+  if (rawPaper !== undefined && !shunnPages) {
+    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)");
+  }
+  const paper = rawPaper === undefined ? DEFAULT_PAPER : String(rawPaper).trim().toLowerCase();
+  if (!SHUNN_PAPERS.has(paper)) {
+    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`);
+  }
   if (options.stamp !== undefined && format !== "html") {
     throw usageError("--stamp applies only to --format html");
   }
@@ -117,7 +129,7 @@ export function buildBook(root, options = {}) {
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
 
   if (options.pdf) {
-    return buildPdf(project, format, trim, output, options);
+    return buildPdf(project, format, { trim, paper }, output, options);
   }
 
   if (format === "markdown") {
@@ -174,7 +186,7 @@ export function buildBook(root, options = {}) {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
   } else if (options.shunn) {
-    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
+    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
@@ -186,11 +198,11 @@ export function buildBook(root, options = {}) {
 // installed engine. The engine is found before the manuscript is assembled,
 // so a machine without one fails fast, and the PDF is written like any other
 // build, only once the engine has made it.
-function buildPdf(project, format, trim, output, options) {
+function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
-  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project));
+  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project), paper);
   // A --dry-run finds the engine but does not run it.
   writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
