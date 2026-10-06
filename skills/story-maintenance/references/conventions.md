@@ -5,7 +5,7 @@ These conventions apply across all story skills. Every `SKILL.md` links here and
 ## Files and identifiers
 
 - **Kebab-case filenames** for all entity files (e.g., `sera-voss.md`, `ashen-citadel.md`)
-- **YAML frontmatter** on every file for structured metadata
+- **YAML frontmatter** on every file in a story project for structured metadata (a standalone piece saved outside a project, such as a single poem, needs none)
 - **Schema version** - `story.md` frontmatter includes `schema-version: 2`
 - **Character identifiers** use the kebab-case filename without extension (e.g., `sera-voss`)
 - **Scene identifiers** use `chapter-{NN}-scene-{NN}` and live in `scenes/`
