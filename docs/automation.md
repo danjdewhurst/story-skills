@@ -134,7 +134,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-The check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `synopsis`, `passes`, and the commands that write the project take `--json`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+The check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `synopsis`, `passes`, and the commands that write the project take `--json`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {
@@ -166,6 +166,12 @@ jq -e '[.diagnostics[] | select(.severity == "warning")] | length == 0' validate
 ```
 
 `jq -e` exits 1 when the expression is false, and `story validate` has already exited 1 if there were errors. Filter on `code` to fail on one kind of warning, such as `select(.code == "todo-markers")`, or promote it in `story.md` as below.
+
+To act on a set of files without parsing their YAML, ask [`story list`](cli-reference.md#list) for them. This prints the file of every chapter still in draft that Ilse narrates:
+
+```shell
+story list chapters --where status=draft --where pov=ilse --json | jq -r '.data.items[].file'
+```
 
 ### Failing on warnings
 

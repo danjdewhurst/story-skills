@@ -79,6 +79,7 @@ const OK_ARGS = {
   pacing: () => ["pacing"],
   clues: () => ["clues"],
   grid: () => ["grid"],
+  list: () => ["list", "characters", "--where", "name"],
   voices: () => ["voices"],
   series: () => ["series"],
   passes: () => ["passes", "--init"],
@@ -112,6 +113,7 @@ const FINDINGS_ARGS = {
   pacing: ["pacing"],
   clues: ["clues"],
   grid: ["grid"],
+  list: ["list", "chapters"],
   voices: ["voices"],
   series: ["series"]
 };
@@ -317,6 +319,10 @@ describe("exit codes", () => {
       ["diagram", "weather"],
       ["grid", "--format", "pdf"],
       ["grid", "--from", "chapter-09"],
+      ["list"],
+      ["list", "glass"],
+      ["list", "chapters", "--where", "stauts=draft"],
+      ["list", "chapters", "--where", "status="],
       ["knowledge", "nobody", "--at", "chapter-01"],
       ["knowledge", "mara-quill"],
       ["context", "chapter-09"],

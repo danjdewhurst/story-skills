@@ -40,7 +40,7 @@ describe("--json on names, compare, passes, diagram, and synopsis", () => {
   test("every example matches the result schema", () => {
     for (const name of examples) {
       const root = path.join(examplesRoot, name);
-      for (const argv of [["names", "Zebulon"], ["passes"], ["grid"], ["synopsis"], ["synopsis", "--pages", "3"], ...["relationships", "locations", "timeline", "clues", "arcs"].map((kind) => ["diagram", kind])]) {
+      for (const argv of [["names", "Zebulon"], ["passes"], ["grid"], ["list", "chapters"], ["list", "scenes", "--where", "status"], ["synopsis"], ["synopsis", "--pages", "3"], ...["relationships", "locations", "timeline", "clues", "arcs"].map((kind) => ["diagram", kind])]) {
         const { envelope } = invokeJson(root, [...argv, "--json"]);
         expect(envelope.command).toBe(argv[0]);
         expect(envelope.writes).toEqual([]);

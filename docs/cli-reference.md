@@ -10,7 +10,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Command summary](#command-summary)
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
-- [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`
+- [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `remove`
@@ -51,6 +51,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
 | | [`check [path]`](#check) | Run `validate`, `links`, and `continuity` in one scan | No |
+| | [`list <kind>`](#list) | List the chapters, scenes, characters, or other entities whose frontmatter matches every `--where` filter | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, marked reader-knowledge or character-knowledge | No |
 | | [`context <id>`](#context) | Pack drafting context for a chapter or scene; unread flashback facts are marked do not reveal | No |
@@ -130,7 +131,7 @@ Every command except `init` and `import` works on one story project: a directory
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `context`, `names`, `mentions`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or a diagram kind | Current directory |
+| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `add`, `rename`, `move`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
 | `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -259,7 +260,7 @@ The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, `continuity`, and `check` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
-- `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, and `grid` the plot grid. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
+- `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
 - With `--json`, the command prints one JSON object to stdout and nothing to stderr. See [JSON output](#json-output).
@@ -280,7 +281,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -804,6 +805,45 @@ Checks passed: 0 errors, 0 warnings, 0 dismissed
 ```
 
 With `--json`, each diagnostic's `check` names the check that raised it, and `data` holds the counts of those diagnostics, `strict`, and `checks`: each check's own `ok` and counts, as `story validate`, `links`, or `continuity` would report them alone (so `--strict` and the duplicates left out above do not change them).
+
+### list
+
+```text
+story list <kind> [--where <filter>]... [--json] [--path <path>]
+```
+
+Lists the files of one entity kind whose frontmatter matches every `--where` filter, so a script or agent can pick out "the draft chapters Ilse narrates" without parsing YAML itself. The kinds are `chapters`, `scenes`, `characters`, `locations`, `systems`, `factions`, `artifacts`, `arcs`, `questions`, `promises`, `clues`, `terms`, `research`, and `matter`; the singular (`chapter`) works too.
+
+Each line gives the id, the title (or name, or term), the file relative to the project root, and the value of each filtered key that is set. Matches come in book order: chapters by number, scenes by chapter and scene, front and back matter by `order`, and everything else by file name. A count such as `2 of 4 scenes matched` goes to stderr, so stdout is only the matches. No matches prints nothing and still exits 0.
+
+| Filter | Matches when |
+|---|---|
+| `key=value` | The key's value is `value`, or the key is a list that contains `value`. Numbers and booleans compare as text, so `number=3` and `sequel=true` work |
+| `key!=value` | The key is not `value` and is not a list that contains it, including when the key is unset |
+| `key` | The key is set and not empty |
+| `!key` | The key is unset or empty. Quote it in the shell: `--where '!hook'` |
+
+Repeat `--where` for more filters: a file must match every one. A key must be one the [project format](project-format.md) defines for the kind or one some file of the kind sets, so a custom field works and a typo is a usage error (exit 2) with the nearest key: `Unknown key "stauts" for chapters: no chapter file sets it and the schema does not define it; did you mean "status"?`. An unknown kind exits 2 too. Values are compared with the frontmatter as written, so `--where chapter=chapter-03` on scenes matches only the scenes that set `chapter`, not ones that take it from their file name. Like `grid`, `list` prints nothing while any project file fails to parse, because the list would silently leave that file out; it reports the parse errors on stderr and exits 1.
+
+| Option | Effect | Default |
+|---|---|---|
+| `--where <filter>` | A filter from the table above; repeatable | None: every file of the kind |
+| `--json` | Print a JSON result: `data.kind` (the plural kind), `data.where` (each filter's `key`, `op` (`eq`, `ne`, `present`, or `absent`), and `value`), `data.total` (files of the kind), and `data.items` (each match's `id`, `file`, `title`, and `fields`, the frontmatter value of each filtered key, `null` when unset) (see [JSON output](#json-output)) | Off |
+| `--path <path>` | Project root | Current directory |
+
+Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
+
+```shell
+story list scenes --where pov=jonas-reed --where characters=edran-vale
+```
+
+```text
+chapter-01-scene-01  The Ash and the Ledger  scenes/chapter-01-scene-01.md  pov=jonas-reed  characters=jonas-reed,edran-vale
+chapter-02-scene-01  The Millpond            scenes/chapter-02-scene-01.md  pov=jonas-reed  characters=jonas-reed,edran-vale
+2 of 4 scenes matched
+```
+
+To keep a query you run often, give it a name in a shell alias or a CI step, or read `data.items[].file` from `story list chapters --where status=draft --json` in a script.
 
 ## Analysis commands
 
@@ -3007,6 +3047,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
+| `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
 | `--at` | `<chapter-id>` | `knowledge` | Required for `knowledge` |
 | `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
 | `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |

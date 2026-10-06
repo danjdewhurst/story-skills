@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid", "list"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -38,6 +38,7 @@
     { "if": { "properties": { "command": { "const": "diagram" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-diagram" } } } },
     { "if": { "properties": { "command": { "const": "synopsis" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-synopsis" } } } },
     { "if": { "properties": { "command": { "const": "grid" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-grid" } } } },
+    { "if": { "properties": { "command": { "const": "list" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-list" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -602,6 +603,41 @@
               "status": { "type": ["string", "null"], "description": "Null for an id no arc file defines." },
               "known": { "type": "boolean", "description": "False when chapters or scenes advance an arc id with no file in plot/arcs." },
               "cells": { "type": "array", "items": { "type": "boolean" }, "description": "One cell per entry in chapters, in the same order: true when the chapter or one of its scenes lists the arc in arcs-advanced." }
+            }
+          }
+        }
+      }
+    },
+    "data-list": {
+      "type": "object",
+      "required": ["kind", "where", "total", "items"],
+      "properties": {
+        "kind": { "enum": ["chapters", "scenes", "characters", "locations", "systems", "factions", "artifacts", "arcs", "questions", "promises", "clues", "terms", "research", "matter"], "description": "The kind listed, by its plural name." },
+        "where": {
+          "type": "array",
+          "description": "The --where filters, in the order given; an item matches only when it matches every one.",
+          "items": {
+            "type": "object",
+            "required": ["key", "op", "value"],
+            "properties": {
+              "key": { "type": "string" },
+              "op": { "enum": ["eq", "ne", "present", "absent"], "description": "eq for key=value, ne for key!=value, present for key, absent for !key." },
+              "value": { "type": ["string", "null"], "description": "The value compared; null for present and absent." }
+            }
+          }
+        },
+        "total": { "$ref": "#/$defs/count", "description": "Files of the kind, matched or not." },
+        "items": {
+          "type": "array",
+          "description": "The matches in book order: chapters by number, scenes by chapter and scene, matter by order, the rest by file name.",
+          "items": {
+            "type": "object",
+            "required": ["id", "file", "title", "fields"],
+            "properties": {
+              "id": { "type": "string" },
+              "file": { "type": "string", "description": "The file, relative to the project root, with / separators." },
+              "title": { "type": "string", "description": "The title, or the name for characters, places, and other bible entries, or the term for glossary terms." },
+              "fields": { "type": "object", "description": "The frontmatter value of each filtered key, as written; null when the file does not set it." }
             }
           }
         }
