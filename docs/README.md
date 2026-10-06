@@ -105,6 +105,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Put together a short-story collection or anthology | [Series](series.md#short-story-collections-and-anthologies) |
 | Build an EPUB, DOCX, or submission manuscript | [Import, export, and builds](manuscripts.md#build-a-book) |
 | Build an HTML review copy, a print interior, a narration script, a retailer metadata sheet, or a screenplay skeleton | [Import, export, and builds](manuscripts.md) |
+| Browse or share the story bible as a website | [Story bible site](manuscripts.md#story-bible-site-codex) |
 | Self-publish: metadata, ISBNs, copyright page, print, launch | [Writing workflows](writing-workflows.md), [Import, export, and builds](manuscripts.md), and the publishing entry in the [Skills catalogue](skills.md) |
 | Adapt the book for audio, screen, comics, or translation | [Writing workflows](writing-workflows.md) and the adaptation entry in the [Skills catalogue](skills.md) |
 | Run the checks on every pull request | [Automation and CI](automation.md) |

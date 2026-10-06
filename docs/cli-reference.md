@@ -80,7 +80,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`merge <chapter-id> <next-chapter-id>`](#merge) | Merge the next chapter into a chapter, update references, and renumber the chapters after it | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink` output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 
 ## How the CLI behaves
@@ -2662,21 +2662,22 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--out <file>]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--out <file>]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
 
 | Option | Effect | Default |
 |---|---|---|
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, or `ink` | `markdown` |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
 | `--note-url <url>` | With `--format html`, add a faint **Note** link beside every paragraph label, to this http or https address with `title=[<label>] `, `anchor=<label>`, `build=<stamp>` (with `--stamp`), and `quote=<first six words>` appended as URL-encoded query parameters. Pointed at `https://github.com/<owner>/<repo>/issues/new?template=manuscript-note.yml`, it opens the [manuscript-note form](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) already filled in. An error with any other format or another kind of address. Builds without it are unchanged | None |
 | `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
-| `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
+| `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter hooks and outcomes, and how questions and promises resolve. An error with any other format | Off |
+| `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
 
 | Format | Default output | Contents |
 |---|---|---|
@@ -2692,6 +2693,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
 | `twee` | `dist/<story-id>.twee` | A Twine story in Twee 3: `StoryTitle`, `StoryData` with the IFID (`ifid` in `story.md`, or one derived from the story id, with a warning giving the line to pin it) and the first chapter as the start, then one passage per chapter, named by its id, ending in a `[[text->chapter-NN]]` link for each of its [`choices`](project-format.md#branching-chapters). With no choices anywhere, each chapter links to the next. No matter pages. Refuses to build, exiting 3, while a choice is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed, and warns about chapters no choice path reaches. See [Twine story](manuscripts.md#twine-story) |
 | `ink` | `dist/<story-id>.ink` | An ink story for Inky and inklecate from the same chapters and choices, with the same checks as `twee`: `# title`, `# author`, and `# ifid` global tags, a divert to the first chapter, then one knot per chapter (`chapter-03` becomes `chapter_03`), ending in a sticky `+ [text] -> knot` choice for each of its `choices`, or `-> END` when it has none. With no choices anywhere, each chapter diverts to the next. Prose and choice text are escaped so ink reads them as text. See [ink story](manuscripts.md#ink-story) |
+| `codex` | `dist/codex/` | A story bible as a static site: `index.html` with every entity listed, a page per character, location, faction, artifact, system, and arc (`characters/<id>.html`) with its fields, relationships, the chapters it appears in, and the pages that link to it, and `timeline.html`, `threads.html` (open questions and promises), and `progress.html` (length, chapter targets, plot grid, session log). Plain HTML and inline CSS: no script, no external asset, no date. Spoiler-safe unless `--spoilers` is given. See [Story bible site](manuscripts.md#story-bible-site-codex) |
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
 
@@ -2737,11 +2739,14 @@ Built 1 chapters as print PDF (weasyprint) to ~/stories/the-last-ember/dist/the-
 $ story build --format shunn --pdf
 Built 1 chapters as shunn PDF (weasyprint) to ~/stories/the-last-ember/dist/the-last-ember.shunn.pdf
 
+$ story build --format codex
+Built a codex of 13 pages to ~/stories/the-last-ember/dist/codex
+
 $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
 $ story build --format pdf
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, codex
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
@@ -3236,11 +3241,12 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--snapshot` | `<name>` | `compare` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
-| `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root |
-| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`. For `grid`: `markdown` (default), `csv` |
+| `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
+| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
+| `--spoilers` | | `build` | Boolean; only with `--format codex` |
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |

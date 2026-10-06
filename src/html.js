@@ -316,7 +316,7 @@ function joinSentences(sentences) {
 
 // The root element: `dir="rtl"` for a right-to-left language, since
 // browsers and paged-media engines do not infer direction from `lang`.
-function htmlRoot(language) {
+export function htmlRoot(language) {
   const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
   return `<html lang="${escapeHtml(language)}"${dir}>`;
 }

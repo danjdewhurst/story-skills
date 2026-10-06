@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { lstatIfExists, nearestExistingAncestor, portablePath, projectPath, writeFile } from "./files.js";
+import { lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeFile, writeFile } from "./files.js";
+import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import {
   chapterHeading,
   chapterProse,
@@ -103,7 +104,13 @@ export function buildBook(root, options = {}) {
   if (options.pdfEngine !== undefined && !options.pdf) {
     throw usageError("--pdf-engine applies only with --pdf");
   }
+  if (options.spoilers && format !== "codex") {
+    throw usageError("--spoilers applies only to --format codex");
+  }
   const project = scanProject(root);
+  if (format === "codex") {
+    return buildCodex(project, options.out, Boolean(options.spoilers));
+  }
   const extension = options.pdf ? PDF_EXTENSIONS[format] : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
 
@@ -182,6 +189,80 @@ function buildPdf(project, format, trim, output, options) {
   const html = format === "print" ? printHtml(htmlBook(manuscript), trim) : shunnHtml(manuscript, shunnMeta(project));
   writeFile(output.outFile, renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
+}
+
+// `build --format codex`: the story bible as linked pages in a folder,
+// dist/codex/ by default. A rebuild first clears the pages an earlier codex
+// wrote there, so a removed character's page does not linger; a folder that
+// holds anything else is refused rather than mixed into.
+function buildCodex(project, out, spoilers) {
+  assertProjectParses(project, "build");
+  const output = resolveOutputDirectory(project, out, "dist/codex");
+  const pages = codexPages(project, { spoilers });
+  clearEarlierCodex(output.directory);
+  for (const page of pages) {
+    writeFile(path.join(output.directory, ...page.path.split("/")), page.html, output.writeOptions);
+  }
+  return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
+}
+
+// The codex folder: outside the project's source and not holding the
+// project, and either new, empty, or an earlier codex.
+function resolveOutputDirectory(project, out, defaultRelativePath) {
+  const rawOut = out ?? defaultRelativePath;
+  if (String(rawOut).trim() === "") {
+    throw usageError("--out needs a folder path");
+  }
+  const directory = path.resolve(project.root, rawOut);
+  const enforceRoot = !path.isAbsolute(String(rawOut));
+  const toRoot = path.relative(directory, project.root);
+  if (!toRoot.startsWith("..") && !path.isAbsolute(toRoot)) {
+    throw refusedError(`Refusing to write the codex to ${rawOut}: it holds the project. Use a folder such as dist/codex instead`);
+  }
+  let stats;
+  try {
+    assertNotProjectSource(project, directory);
+    stats = lstatIfExists(directory);
+  } catch (error) {
+    throw withDefaultExitCode(error, EXIT_CODES.refused);
+  }
+  if (stats !== null && !stats.isDirectory()) {
+    throw usageError(`--out ${rawOut} is not a folder: give a folder for --format codex`);
+  }
+  if (stats !== null && fs.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
+    throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
+  }
+  return { directory, writeOptions: enforceRoot ? { root: project.root } : {} };
+}
+
+function isCodexFolder(directory) {
+  try {
+    return fs.readFileSync(path.join(directory, "index.html"), "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+  } catch {
+    return false;
+  }
+}
+
+// Removes the pages an earlier codex wrote: .html files at the top of the
+// folder and in its entity folders, and those folders once empty.
+function clearEarlierCodex(directory) {
+  if (lstatIfExists(directory) === null) {
+    return;
+  }
+  const htmlFiles = (folder) => fs.readdirSync(folder, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".html"))
+    .map((entry) => path.join(folder, entry.name));
+  for (const kind of CODEX_KINDS) {
+    const folder = path.join(directory, kind.dir);
+    if (lstatIfExists(folder)?.isDirectory() !== true) {
+      continue;
+    }
+    htmlFiles(folder).forEach((file) => removeFile(file));
+    if (fs.readdirSync(folder).length === 0) {
+      fs.rmdirSync(folder);
+    }
+  }
+  htmlFiles(directory).forEach((file) => removeFile(file));
 }
 
 // The chapter graph and IFID behind the twee and ink builds, which refuse
@@ -727,7 +808,9 @@ export const BUILD_EXTENSIONS = {
   metadata: "metadata.md",
   fountain: "fountain",
   twee: "twee",
-  ink: "ink"
+  ink: "ink",
+  // A folder of pages, dist/codex/, rather than one file.
+  codex: ""
 };
 
 // The file extension of each format --pdf renders.
