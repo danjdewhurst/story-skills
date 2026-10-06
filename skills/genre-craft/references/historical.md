@@ -40,7 +40,10 @@ Anachronisms come in three kinds; check all three.
   theory, modern psychology, present-day politics in period dress).
 - **Dates and travel:** record `setting-era` in `story.md`, keep real
   events on their real dates in `plot/timeline.md`, and record routes with
-  period travel times so `story continuity` checks journeys against them.
+  period travel times. Give the scenes on either end of a journey a
+  `date`, `location`, and `characters` (or `pov`) so `story continuity`
+  checks the journey against them; undated or chapter-level journeys are
+  not checked.
 
 ## Invented vs. real people
 
