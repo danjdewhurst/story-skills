@@ -78,35 +78,66 @@ describe("releaseSchedule", () => {
     expect(messages(releaseSchedule({ data, chapters: chapters.slice(0, 2), today: "2026-09-18" }).warnings)).toEqual(["episode 3 releases today (2026-09-18) and has no chapter yet"]);
   });
 
-  test("a complete story stops the cadence at its last chapter, and keeps the releases still to come", () => {
+  describe("in a complete story", () => {
     const done = { ...data, status: "complete" };
     const drafted = [episode("chapter-01", "", true), episode("chapter-02", "", true), episode("chapter-03", "", true)];
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: drafted, today: "2026-09-05" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-11, in 6 days (drafted)");
-    const last = releaseSchedule({ data: done, chapters: drafted, today: "2026-09-12" });
-    expect(last).toMatchObject({ every: 7, complete: true, next: { episode: 3, chapter: "chapter-03", date: "2026-09-18", daysUntil: 6 }, warnings: [] });
-    expect(formatNextRelease(last)).toBe("Next release: episode 3 (chapter-03) on 2026-09-18, in 6 days (drafted, the last episode)");
 
-    // Long after the last chapter, no episode is projected or warned about.
-    const after = releaseSchedule({ data: done, chapters: drafted, today: "2026-10-06" });
-    expect(after.next).toBeNull();
-    expect(after.warnings).toEqual([]);
-    expect(after.episodes.map((entry) => entry.episode)).toEqual([1, 2, 3]);
-    expect(formatNextRelease(after)).toBe("Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last");
-    expect(releaseSchedule({ data: { ...data, status: "drafting" }, chapters: drafted, today: "2026-10-06" })).toMatchObject({ complete: false, next: { episode: 6, chapter: null } });
+    test("keeps the releases still to come, and marks the last", () => {
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: drafted, today: "2026-09-05" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-11, in 6 days (drafted)");
+      const last = releaseSchedule({ data: done, chapters: drafted, today: "2026-09-12" });
+      expect(last).toMatchObject({ every: 7, complete: true, last: 3, next: { episode: 3, chapter: "chapter-03", date: "2026-09-18", daysUntil: 6 }, warnings: [] });
+      expect(formatNextRelease(last)).toBe("Next release: episode 3 (chapter-03) on 2026-09-18, in 6 days (drafted, the last episode)");
+    });
 
-    // A chapter of a complete story with no prose is still warned about.
-    const undrafted = releaseSchedule({ data: done, chapters, today: "2026-09-19" });
-    expect(undrafted.next).toBeNull();
-    expect(messages(undrafted.warnings)).toEqual(["chapters/chapter-03.md (episode 3) was due 2026-09-18, 1 day ago, and has no prose yet"]);
+    test("marks an undrafted last chapter and warns about it until it has prose", () => {
+      const soon = releaseSchedule({ data: done, chapters, today: "2026-09-15" });
+      expect(formatNextRelease(soon)).toBe("Next release: episode 3 (chapter-03) on 2026-09-18, in 3 days (not drafted, the last episode)");
+      expect(messages(soon.warnings)).toEqual(["chapters/chapter-03.md (episode 3) releases 2026-09-18, in 3 days, and has no prose yet"]);
+      const late = releaseSchedule({ data: done, chapters, today: "2026-09-19" });
+      expect(late.next).toBeNull();
+      expect(messages(late.warnings)).toEqual(["chapters/chapter-03.md (episode 3) was due 2026-09-18, 1 day ago, and has no prose yet"]);
+    });
 
-    // The last episode is the last to go out, in reading order on the same day.
-    const moved = [episode("chapter-01", "", true), episode("chapter-02", "2026-09-20", true), episode("chapter-03", "", true)];
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: moved, today: "2026-09-19" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-20, in 1 day (drafted, the last episode)");
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: moved, today: "2026-09-21" }))).toBe("Next release: none, the story is complete; episode 2 (chapter-02) on 2026-09-20 was the last");
-    const tied = [episode("chapter-01", "", true), episode("chapter-02", "2026-09-18", true), episode("chapter-03", "", true)];
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: tied, today: "2026-09-12" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-18, in 6 days (drafted)");
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: tied, today: "2026-09-19" }))).toBe("Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last");
-    expect(formatNextRelease(releaseSchedule({ data: done, chapters: [], today: "2026-08-01" }))).toBe("Next release: none, the story is complete");
+    test("projects no episode past the last chapter, and says the story is complete", () => {
+      const after = releaseSchedule({ data: done, chapters: drafted, today: "2026-10-06" });
+      expect(after).toMatchObject({ complete: true, last: 3, next: null, warnings: [] });
+      expect(after.episodes.map((entry) => entry.episode)).toEqual([1, 2, 3]);
+      expect(formatNextRelease(after)).toBe("Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last");
+    });
+
+    test("the last episode is the last to go out, in reading order on the same day", () => {
+      const moved = [episode("chapter-01", "", true), episode("chapter-02", "2026-09-20", true), episode("chapter-03", "", true)];
+      expect(releaseSchedule({ data: done, chapters: moved, today: "2026-09-19" }).last).toBe(2);
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: moved, today: "2026-09-19" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-20, in 1 day (drafted, the last episode)");
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: moved, today: "2026-09-21" }))).toBe("Next release: none, the story is complete; episode 2 (chapter-02) on 2026-09-20 was the last");
+      const tied = [episode("chapter-01", "", true), episode("chapter-02", "2026-09-18", true), episode("chapter-03", "", true)];
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: tied, today: "2026-09-12" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-18, in 6 days (drafted)");
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: tied, today: "2026-09-19" }))).toBe("Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last");
+    });
+
+    test("names no last episode while a chapter is out of the schedule", () => {
+      // Without a cadence, chapters 4 and 5 have no release date and could go out after episode 3.
+      const five = [episode("chapter-01", "", true), episode("chapter-02", "", true), episode("chapter-03", "2026-10-10", true), episode("chapter-04", "", true), episode("chapter-05", "", true)];
+      const before = releaseSchedule({ data: { status: "complete" }, chapters: five, today: "2026-10-06" });
+      expect(before).toMatchObject({ every: null, complete: true, last: null, next: { episode: 3, date: "2026-10-10" } });
+      expect(formatNextRelease(before)).toBe("Next release: episode 3 (chapter-03) on 2026-10-10, in 4 days (drafted)");
+      expect(formatNextRelease(releaseSchedule({ data: { status: "complete" }, chapters: five, today: "2026-10-20" }))).toBe("Next release: none scheduled after today");
+
+      // Under a cadence, an invalid release-date leaves its chapter out the same way.
+      const invalid = [episode("chapter-01", "", true), episode("chapter-02", "", true), episode("chapter-03", "2026-02-30", true)];
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: invalid, today: "2026-09-08" }))).toBe("Next release: episode 2 (chapter-02) on 2026-09-11, in 3 days (drafted)");
+      expect(releaseSchedule({ data: done, chapters: invalid, today: "2026-09-12" })).toMatchObject({ last: null, next: null, warnings: [] });
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: invalid, today: "2026-09-12" }))).toBe("Next release: none scheduled after today");
+      expect(formatNextRelease(releaseSchedule({ data: done, chapters: [], today: "2026-08-01" }))).toBe("Next release: none scheduled after today");
+    });
+
+    test("only status complete stops the cadence: an abandoned story still projects", () => {
+      for (const status of ["drafting", "abandoned"]) {
+        const release = releaseSchedule({ data: { ...data, status }, chapters: drafted, today: "2026-10-06" });
+        expect(release).toMatchObject({ complete: false, last: null, next: { episode: 6, chapter: null } });
+        expect(messages(release.warnings)).toEqual(["episode 4 was due 2026-09-25, 11 days ago, and has no chapter yet (and 2 more scheduled episodes after it)"]);
+      }
+    });
   });
 
   test("a chapter release-date moves that episode only, and works without a cadence", () => {
@@ -199,31 +230,73 @@ describe("release schedule in the project", () => {
     expect(projectProgress(plainRoot, {}).release).toBeNull();
   });
 
-  test("a complete serial schedules no episode past its last chapter, in progress, next, and JSON", () => {
-    const { root, cwd } = serialProject();
-    writeChapter(root, 3, 100, "");
-    const storyPath = path.join(root, "story.md");
-    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^status: .*$/m, "status: complete"), "utf8");
-    expect(invoke(cwd, ["progress", root, "--date", "2026-09-16"]).out).toContain("Next release: episode 3 (chapter-03) on 2026-09-18, in 2 days (drafted, the last episode)\n");
+  describe("a complete serial", () => {
+    function completeSerial(storyFields) {
+      const project = serialProject(storyFields);
+      const storyPath = path.join(project.root, "story.md");
+      fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^status: .*$/m, "status: complete"), "utf8");
+      return project;
+    }
 
-    const ended = "Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last\n";
-    const progress = invoke(cwd, ["progress", root, "--date", "2026-10-06"]);
-    expect(progress.code).toBe(0);
-    expect(progress.out).toContain(ended);
-    expect(progress.err).not.toContain("release-undrafted");
-    const json = JSON.parse(invoke(cwd, ["progress", root, "--date", "2026-10-06", "--json"]).out);
-    expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
-    expect(json.data.release).toMatchObject({ every: 7, complete: true, next: null });
-    expect(json.data.release.episodes.map((entry) => entry.episode)).toEqual([1, 2, 3]);
-    expect(json.diagnostics.some((entry) => entry.code === "release-undrafted")).toBe(false);
+    test("next marks the last episode before it goes out, in text and JSON", () => {
+      const { root, cwd } = completeSerial();
+      writeChapter(root, 3, 100, "");
+      const line = "Next release: episode 3 (chapter-03) on 2026-09-18, in 2 days (drafted, the last episode)\n";
+      expect(invoke(cwd, ["progress", root, "--date", "2026-09-16"]).out).toContain(line);
+      expect(invoke(cwd, ["next", root, "--date", "2026-09-16"]).out).toContain(line);
+      const json = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-16", "--json"]).out);
+      expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+      expect(json.data.release).toMatchObject({ every: 7, complete: true, last: 3, next: { episode: 3, chapter: "chapter-03", file: "chapters/chapter-03.md", daysUntil: 2, drafted: true } });
+    });
 
-    const next = invoke(cwd, ["next", root, "--date", "2026-10-06"]);
-    expect(next.out).toContain(ended);
-    expect(next.out).not.toContain("Draft the scheduled episode");
-    const nextJson = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-10-06", "--json"]).out);
-    expect(validateAgainstSchema(nextJson, resultSchema)).toEqual([]);
-    expect(nextJson.data.release).toMatchObject({ complete: true, next: null });
-    expect(nextJson.diagnostics.some((entry) => entry.code === "release-undrafted")).toBe(false);
+    test("schedules no episode past its last chapter, in progress, next, and JSON", () => {
+      const { root, cwd } = completeSerial();
+      writeChapter(root, 3, 100, "");
+      const ended = "Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last\n";
+      const progress = invoke(cwd, ["progress", root, "--date", "2026-10-06"]);
+      expect(progress.code).toBe(0);
+      expect(progress.out).toContain(ended);
+      expect(progress.err).not.toContain("release-undrafted");
+      const json = JSON.parse(invoke(cwd, ["progress", root, "--date", "2026-10-06", "--json"]).out);
+      expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+      expect(json.data.release).toMatchObject({ every: 7, complete: true, last: 3, next: null });
+      expect(json.data.release.episodes.map((entry) => entry.episode)).toEqual([1, 2, 3]);
+      expect(json.diagnostics.some((entry) => entry.code === "release-undrafted")).toBe(false);
+
+      const next = invoke(cwd, ["next", root, "--date", "2026-10-06"]);
+      expect(next.out).toContain(ended);
+      expect(next.out).not.toContain("Draft the scheduled episode");
+      const nextJson = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-10-06", "--json"]).out);
+      expect(validateAgainstSchema(nextJson, resultSchema)).toEqual([]);
+      expect(nextJson.data.release).toMatchObject({ complete: true, last: 3, next: null });
+      expect(nextJson.diagnostics.some((entry) => entry.code === "release-undrafted")).toBe(false);
+    });
+
+    test("with release dates and no cadence, names the last episode only once every chapter has one", () => {
+      const { root, cwd } = completeSerial("season-goal: Find the owner of every bag");
+      writeChapter(root, 1, 100, "release-date: 2026-09-04");
+      writeChapter(root, 3, 100, "release-date: 2026-09-18");
+      const partial = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-12", "--json"]).out);
+      expect(validateAgainstSchema(partial, resultSchema)).toEqual([]);
+      expect(partial.data.release).toMatchObject({ every: null, start: null, complete: true, last: null, next: { episode: 3, chapter: "chapter-03" } });
+      expect(invoke(cwd, ["progress", root, "--date", "2026-09-20"]).out).toContain("Next release: none scheduled after today\n");
+
+      writeChapter(root, 2, 100, "release-date: 2026-09-11");
+      const json = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-12", "--json"]).out);
+      expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+      expect(json.data.release).toMatchObject({ every: null, start: null, complete: true, last: 3, next: { episode: 3, chapter: "chapter-03" } });
+      expect(invoke(cwd, ["next", root, "--date", "2026-09-12"]).out).toContain("Next release: episode 3 (chapter-03) on 2026-09-18, in 6 days (drafted, the last episode)\n");
+      expect(invoke(cwd, ["progress", root, "--date", "2026-09-20"]).out).toContain("Next release: none, the story is complete; episode 3 (chapter-03) on 2026-09-18 was the last\n");
+    });
+
+    test("next still turns a due undrafted chapter into a P1 action", () => {
+      const { root, cwd } = completeSerial();
+      const text = invoke(cwd, ["next", root, "--date", "2026-09-16"]);
+      expect(text.out).toContain("Next release: episode 3 (chapter-03) on 2026-09-18, in 2 days (not drafted, the last episode)\n");
+      expect(text.out).toContain("- [P1] Draft the scheduled episode: chapters/chapter-03.md (episode 3) releases 2026-09-18, in 2 days, and has no prose yet: draft it under ## Chapter Text, then run story wordcount ");
+      const json = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-16", "--json"]).out);
+      expect(json.diagnostics.filter((entry) => entry.code === "release-undrafted")).toEqual([expect.objectContaining({ severity: "warning", file: "chapters/chapter-03.md", check: "next" })]);
+    });
   });
 
   test("story.md severity can turn the warning off or into an error", () => {
