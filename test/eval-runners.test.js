@@ -164,31 +164,38 @@ describe("a fixture's keep option", () => {
     expect(baseline.calls[0].system).toContain("frontmatter included");
   });
 
-  test("branch-choices fails a lazy chapter file and a prose-only reply", () => {
+  test("branch-choices passes quoted YAML and fails lazy or malformed chapter files", () => {
     const { checks, inputText } = loadFixture(path.join(repoRoot, "evals", "fixtures", "branch-choices"));
     const failed = (draft) => checkDraft(checks, inputText, draft).filter(([ok]) => !ok).map(([, desc]) => desc);
+    const [titleRe, toFiveRe, toSixRe] = checks.required_regex.map((pattern) => `canon kept: /${pattern}/`);
     expect(failed(goodChapterFile)).toEqual([]);
+    expect(failed(goodChapterFile.replace("title: The Storm", "title: 'The Storm'").replace("to: chapter-05", 'to: "chapter-05"'))).toEqual([]);
 
     const lazy = goodChapterFile
       .replace("text: Ring the storm bell", 'text: "[[Ring the storm bell->chapter-05]]"')
       .replace("to: chapter-06", "to: chapter-04");
     const lazyFailures = failed(lazy);
-    expect(lazyFailures).toContain('canon kept: "to: chapter-06"');
+    expect(lazyFailures).toContain(toSixRe);
     expect(lazyFailures).toContain("trap avoided: /\\[\\[/");
     expect(lazyFailures.some((d) => d.startsWith("trap avoided: /(?:^|\\n)[ \\t-]*text:"))).toBe(true);
     expect(lazyFailures.some((d) => d.startsWith("trap avoided: /(?:^|\\n)[ \\t-]*to:"))).toBe(true);
 
-    expect(failed(goodChapterFile.replace(/to: chapter-05/, "to: chapter-09"))).toEqual([
-      expect.stringContaining('canon kept: "to: chapter-05"'),
+    expect(failed(goodChapterFile.replace("to: chapter-05", "to: chapter-09"))).toEqual([
+      toFiveRe,
       expect.stringMatching(/^trap avoided: .*to:/),
     ]);
+    // No frontmatter delimiters, or the second ending outside the choices list.
+    expect(failed(goodChapterFile.replace(/^---\n/gm, ""))).toEqual([titleRe, toFiveRe, toSixRe]);
+    const outside = goodChapterFile
+      .replace("  - text: Keep the lamp burning\n    to: chapter-06\n", "")
+      .replace("---\n\n#", "next:\n  to: chapter-06\n---\n\n#");
+    expect(failed(outside)).toEqual([toSixRe]);
+    // The 150-word cap counts the prose under ## Chapter Text, not the frontmatter.
+    const padded = `${goodChapterFile}\n${"The wind keeps on at the glass. ".repeat(10)}\n`;
+    expect(failed(padded)).toEqual([expect.stringMatching(/^length of the chapter text 1\d\d words <= 150/)]);
+    expect(padded.split(/\s+/).filter(Boolean).length).toBeLessThan(230);
 
-    const proseOnly = stripPreamble(goodChapterFile);
-    expect(failed(proseOnly)).toEqual(expect.arrayContaining([
-      'canon kept: "choices"',
-      'canon kept: "to: chapter-05"',
-      'canon kept: "title: The Storm"',
-    ]));
+    expect(failed(stripPreamble(goodChapterFile))).toEqual(expect.arrayContaining([titleRe, toFiveRe, toSixRe, 'canon kept: "Chapter Text"']));
   });
 });
 

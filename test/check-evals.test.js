@@ -56,6 +56,7 @@ describe("check-evals", () => {
     addFixture(root, "ok", { ...good, banned: ["Thursday"] });
     addFixture(root, "whole-file", { ...good, keep: "file" });
     addFixture(root, "prose", { ...good, keep: "chapter-text" });
+    addFixture(root, "pattern", { brief: "Draft.", skill: "chapter-writing", required_regex: ["^---\\n"] });
     const result = run(root);
     expect(result.status).toBe(0);
     expect(result.out).toContain('WARN ok: banned phrase "Thursday" appears in input.md');
@@ -77,7 +78,8 @@ describe("check-evals", () => {
       language: "not a tag",
       keep: "whole",
       voice_drift: { hedge_rate: "high", tone: 1 },
-      banned_regex: ["(unclosed", 7]
+      banned_regex: ["(unclosed", 7],
+      required_regex: ["[a-"]
     });
     addFixture(root, "empty", { brief: "Draft.", skill: "chapter-writing", voice_drift: [] });
     addFixture(root, "voice", { brief: "Draft.", skill: "chapter-writing", voice_drift: { mean_word_length: 4.2 } });
@@ -104,8 +106,9 @@ describe("check-evals", () => {
       "FAIL fields/checks.json: voice_drift[hedge_rate] must be numeric",
       "FAIL fields/checks.json: voice_drift must include a known numeric marker",
       "FAIL fields/checks.json: banned_regex /(unclosed/ does not compile",
+      "FAIL fields/checks.json: required_regex /[a-/ does not compile",
       "FAIL empty/checks.json: voice_drift must be an object",
-      "FAIL empty/checks.json: defines no required, banned, banned_regex, length, structural, or voice_drift checks",
+      "FAIL empty/checks.json: defines no required, required_regex, banned, banned_regex, length, structural, or voice_drift checks",
       "FAIL evals/examples/stray.md: no matching fixture"
     ]) {
       expect(result.out).toContain(line);

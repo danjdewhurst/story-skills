@@ -327,6 +327,17 @@ function isNumber(v) {
   return typeof v === "number" && !Number.isNaN(v);
 }
 
+// The prose under a `## Chapter Text` heading, or the whole text when it has
+// none. A fixture with `"keep": "file"` scores the whole chapter file, but
+// its brief's length limit is about the prose, so its length checks count
+// only this.
+const CHAPTER_TEXT_RE = /^##\s+chapter text\b[^\n]*$/im;
+
+export function chapterText(text) {
+  const m = CHAPTER_TEXT_RE.exec(text);
+  return m ? text.slice(m.index + m[0].length) : text;
+}
+
 export function checkDraft(checks, inputText, draftText) {
   const results = [];
   const normDraft = normalizeApos(draftText);
@@ -356,6 +367,21 @@ export function checkDraft(checks, inputText, draftText) {
       !phraseFound(phrase, normDraft, true, checks.language),
       `trap avoided: "${phrase}"`,
     ]);
+  }
+
+  for (const pattern of checks.required_regex || []) {
+    if (typeof pattern !== "string") {
+      results.push([false, `required pattern must be a string, got ${pattern}`]);
+      continue;
+    }
+    let ok;
+    try {
+      ok = new RegExp(pattern, "iu").test(normDraft);
+    } catch (err) {
+      results.push([false, `required pattern invalid: /${pattern}/ (${err})`]);
+      continue;
+    }
+    results.push([ok, `canon kept: /${pattern}/`]);
   }
 
   for (const pattern of checks.banned_regex || []) {
@@ -425,28 +451,31 @@ export function checkDraft(checks, inputText, draftText) {
     ]);
   }
   const unit = lengthUnit(checks.language);
+  const proseOnlyLength = checks.keep === "file" && CHAPTER_TEXT_RE.test(draftText);
+  const lengthText = proseOnlyLength ? chapterText(draftText) : draftText;
+  const lengthOf = proseOnlyLength ? " of the chapter text" : "";
   if (checks.max_words !== undefined) {
-    const count = unit.count(draftText);
+    const count = unit.count(lengthText);
     results.push([
       count <= checks.max_words,
-      `length ${count} ${unit.name} <= ${checks.max_words} (absolute cap)`,
+      `length${lengthOf} ${count} ${unit.name} <= ${checks.max_words} (absolute cap)`,
     ]);
   }
 
   const maxRatio = checks.max_words_ratio;
   const minRatio = checks.min_words_ratio;
   if (maxRatio !== undefined || minRatio !== undefined) {
-    const ratio = unit.count(draftText) / Math.max(unit.count(inputText), 1);
+    const ratio = unit.count(lengthText) / Math.max(unit.count(inputText), 1);
     if (maxRatio !== undefined) {
       results.push([
         ratio <= maxRatio,
-        `length ratio ${ratio.toFixed(2)} <= ${maxRatio} (no padding)`,
+        `length ratio${lengthOf} ${ratio.toFixed(2)} <= ${maxRatio} (no padding)`,
       ]);
     }
     if (minRatio !== undefined) {
       results.push([
         ratio >= minRatio,
-        `length ratio ${ratio.toFixed(2)} >= ${minRatio} (no over-cutting)`,
+        `length ratio${lengthOf} ${ratio.toFixed(2)} >= ${minRatio} (no over-cutting)`,
       ]);
     }
   }
