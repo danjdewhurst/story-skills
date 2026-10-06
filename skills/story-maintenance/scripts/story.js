@@ -27420,7 +27420,7 @@ import fs16 from "node:fs";
 import path18 from "node:path";
 
 // src/version.js
-var VERSION = "0.21.0";
+var VERSION = "0.22.0";
 
 // src/workflows.js
 var ENV_LINE = /^\s*(STORY_VERSION|STORY_REF|STORY_PACKAGE)\s*:\s*["']?([^"'\s#]*)/;

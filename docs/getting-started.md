@@ -184,7 +184,7 @@ story --version
 ```
 
 ```text
-0.21.0
+0.22.0
 ```
 
 The skills look for the CLI in this order: `story`, then `bun run story --` from a Story Skills checkout, then the bundled `scripts/story.js` run with Node. If none is available, they make the same changes by hand. The rest of this page writes `story`; substitute whichever form you use. Every command and option is listed in the [CLI reference](cli-reference.md).
@@ -213,11 +213,11 @@ The bundled CLI at `story-maintenance/scripts/story.js` lives inside the skill f
 |------|---------|
 | Update a global install | `npm install -g story-skills@latest` |
 | Update a Homebrew install | `brew upgrade story-skills` |
-| Pin a global install to one release | `npm install -g story-skills@0.21.0` |
-| Run one release without installing | `npx story-skills@0.21.0 --help` |
+| Pin a global install to one release | `npm install -g story-skills@0.22.0` |
+| Run one release without installing | `npx story-skills@0.22.0 --help` |
 | Remove a global install | `npm uninstall -g story-skills` |
 
-Pass `@latest` or a version to `npx` when you need to be sure which release runs, because `npx` can reuse a copy it downloaded earlier. To pin the skills for a manual copy, run `git checkout v0.21.0` in the clone before you copy the folders.
+Pass `@latest` or a version to `npx` when you need to be sure which release runs, because `npx` can reuse a copy it downloaded earlier. To pin the skills for a manual copy, run `git checkout v0.22.0` in the clone before you copy the folders.
 
 ## Your first session
 

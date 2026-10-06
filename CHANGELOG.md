@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-06
+
 ### Added
 
 - Collections and anthologies can credit each story's writer and the book's editor (#473). A chapter's new `author` field (a name, or a list) prints under the story's heading as `by Ines Calder` in the markdown, EPUB, DOCX, HTML review, print, and Shunn builds and the codex, and never counts toward word counts. `story.md`'s new `editor` field credits the editor as `Edited by Miriam Hale` on the HTML, print, codex, and Shunn title pages, heads the print and Shunn running heads when no author is set, and joins the metadata sheet. The EPUB names editors as creators and story authors as contributors, each with its MARC role (`edt`, `aut`); a book by its authors alone keeps its plain `dc:creator` entries. The `byline` and `edited-by` build labels are translated in every language pack that has labels. `story validate`, the schema, and the known frontmatter keys cover both fields. The collections guide in docs/series.md uses them instead of a byline in the prose, and a new `examples/salt-and-lantern` anthology shows them.
@@ -352,7 +354,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/danjdewhurst/story-skills/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/danjdewhurst/story-skills/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/danjdewhurst/story-skills/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/danjdewhurst/story-skills/compare/v0.18.0...v0.19.0
