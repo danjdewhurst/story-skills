@@ -227,10 +227,12 @@ const FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx
 
 // A file-system error from Node names a syscall and an absolute path; say
 // what failed in plain words, with the path relative to where the user is.
-// A `hint` on the error (a rename stopped partway) follows the message.
+// A `reason` on the error (a temporary file's name already taken) stands in
+// for FILE_ERROR_REASONS. A `hint` on the error (a rename stopped partway)
+// follows the message.
 function describeError(error, cwd) {
   const hint = typeof error.hint === "string" ? `. ${error.hint}` : "";
-  const reason = FILE_ERROR_REASONS[error.code];
+  const reason = typeof error.reason === "string" ? error.reason : FILE_ERROR_REASONS[error.code];
   if (!reason || typeof error.path !== "string") {
     return `${error.message}${hint}`;
   }

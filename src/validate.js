@@ -842,7 +842,10 @@ function collectStrayFileWarnings(project, warnings) {
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   for (const [leftover, kind] of leftovers) {
     if (kind) {
-      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}, which story never makes; delete it`, leftover));
+      // Under the same code as a leftover: writeFile only makes new files at
+      // fresh random names, so an entry put here cannot redirect a write and
+      // needs the same clearing up. `level: off` still lists it as dismissed.
+      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}`, leftover));
       continue;
     }
     const name = TEMPORARY_FILE_PATTERN.exec(path.posix.basename(leftover))?.[1];
@@ -853,8 +856,9 @@ function collectStrayFileWarnings(project, warnings) {
 
 // Every entry at a temporary file's name, as [path, kind]: kind is null for
 // a regular file, which writeFile leaves when a process is killed before its
-// rename, and says what else is there otherwise (a symlink or folder put at
-// the name, say). `.story-<pid>.tmp` is the older name without the target.
+// rename, and otherwise says what else is there (a symlink or folder put at
+// the name, say) and how to clear it. `.story-<pid>.tmp` is the older name
+// without the target.
 function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
   for (const entry of fs.readdirSync(path.join(root, relativeDir), { withFileTypes: true })) {
@@ -870,16 +874,20 @@ function temporaryFiles(root, depth = 0, relativeDir = "") {
   return found;
 }
 
-// What a temporary file's name holds when it is not a regular file. The
-// type comes from the entry itself, so a symlink is never followed.
+// What a temporary file's name holds when it is not a regular file, and
+// how to clear it. The type comes from the entry itself, so a symlink is
+// never followed.
 function entryKind(entry) {
   if (entry.isFile()) {
     return null;
   }
   if (entry.isSymbolicLink()) {
-    return "a symlink";
+    // Deleting through it (`rm -r name/`) would empty the folder it names.
+    return "a symlink, which story never makes; delete the link itself, not what it points to";
   }
-  return entry.isDirectory() ? "a folder" : "not a regular file";
+  return entry.isDirectory()
+    ? "a folder, which story never makes; it may hold files, so check them before you delete it"
+    : "not a regular file, which story never makes; delete it";
 }
 
 function checkIdReference(errors, label, value, kind, exists, file = label) {
