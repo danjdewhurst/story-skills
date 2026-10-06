@@ -60,7 +60,17 @@ export const PDF_ENGINES = [
 const ENGINE_NAMES = PDF_ENGINES.map((engine) => engine.name);
 
 // Names --pdf-engine accepts for an engine besides its own.
-const ENGINE_ALIASES = { chromium: "chrome", pagedjs: "pagedjs-cli", "paged.js": "pagedjs-cli", edge: "chrome", msedge: "chrome" };
+// `chromium` and `msedge` are not aliases of chrome: as command names they
+// run that browser and no other (see engineForExecutable).
+const ENGINE_ALIASES = { pagedjs: "pagedjs-cli", "paged.js": "pagedjs-cli" };
+
+// Whether a value names an engine rather than an executable: the only kind
+// of pdf-engine a story.md default may give, since a path or command name
+// there would let a project choose a program for `story build` to run.
+export function isPdfEngineName(value) {
+  const name = String(value).trim().toLowerCase();
+  return ENGINE_NAMES.includes(name) || Object.prototype.hasOwnProperty.call(ENGINE_ALIASES, name);
+}
 
 // Browsers that install outside PATH: checked after the PATH search for
 // chrome, only where they exist.
@@ -227,7 +237,9 @@ export function windowsScriptCommand(file, args, env) {
 // Renders `html` to PDF bytes with `engine` ({ name, file }). The HTML and
 // the PDF live in a temporary folder that is removed afterwards. A failed
 // run, or one that leaves no PDF, is a refused write carrying the engine's
-// last lines of output.
+// last lines of output. The engine writes that output to a log file, not a
+// pipe, so a helper it leaves running (Chrome starts several) cannot hold
+// the build open, and killTree then ends any such helper.
 export function renderPdf(html, engine, { env = process.env, platform = process.platform, timeout = ENGINE_TIMEOUT_MS } = {}) {
   const spec = PDF_ENGINES.find((entry) => entry.name === engine.name);
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-pdf-"));
@@ -239,31 +251,65 @@ export function renderPdf(html, engine, { env = process.env, platform = process.
     const run = platform === "win32" && /\.(?:cmd|bat)$/i.test(engine.file)
       ? windowsScriptCommand(engine.file, args, env)
       : { command: engine.file, args, options: {} };
-    const result = spawnSync(run.command, run.args, {
-      ...run.options,
-      cwd: work,
-      env,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout,
-      maxBuffer: 64 * 1024 * 1024,
-      windowsHide: true
-    });
-    const detail = lastLines(`${result.stderr ?? ""}\n${result.stdout ?? ""}`);
+    const logFile = path.join(work, "engine.log");
+    const log = fs.openSync(logFile, "w");
+    let result;
+    try {
+      result = spawnSync(run.command, run.args, {
+        ...run.options,
+        cwd: work,
+        env,
+        stdio: ["ignore", log, log],
+        timeout,
+        killSignal: "SIGKILL",
+        detached: platform !== "win32",
+        windowsHide: true
+      });
+    } finally {
+      fs.closeSync(log);
+    }
+    killTree(result.pid, platform, Boolean(result.error));
+    const detail = lastLines(fs.readFileSync(logFile, "utf8"));
+    const withDetail = (message) => `${message}${detail === "" ? "" : `:\n${detail}`}`;
     if (result.error) {
       const reason = result.error.code === "ETIMEDOUT" ? `did not finish within ${timeout / 1000} seconds` : `could not be run (${result.error.message})`;
-      throw refusedError(`PDF engine ${engine.name} (${engine.file}) ${reason}`);
+      throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs.existsSync(output) ? fs.readFileSync(output) : null;
     if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer.from("%PDF-"))) {
       const outcome = result.status !== 0
         ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}`
         : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
-      throw refusedError(`PDF engine ${engine.name} (${engine.file}) ${outcome}${detail === "" ? "" : `:\n${detail}`}`);
+      throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
     return pdf;
   } finally {
-    fs.rmSync(work, { recursive: true, force: true });
+    // A file a surviving helper still holds open (Windows) must not hide the
+    // build's own result; the system clears its temporary folder later.
+    try {
+      fs.rmSync(work, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      // Left behind in the temporary folder.
+    }
+  }
+}
+
+// Ends whatever the engine left running. On POSIX the engine led its own
+// process group (`detached`), so the whole group goes, and ESRCH means it
+// is already empty. On Windows a timed-out engine's tree is ended with
+// taskkill.
+function killTree(pid, platform, failed) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+  if (platform !== "win32") {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // No process is left in the group.
+    }
+  } else if (failed) {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
   }
 }
 

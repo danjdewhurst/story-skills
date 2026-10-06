@@ -2573,7 +2573,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
 | `--note-url <url>` | With `--format html`, add a faint **Note** link beside every paragraph label, to this http or https address with `title=[<label>] `, `anchor=<label>`, `build=<stamp>` (with `--stamp`), and `quote=<first six words>` appended as URL-encoded query parameters. Pointed at `https://github.com/<owner>/<repo>/issues/new?template=manuscript-note.yml`, it opens the [manuscript-note form](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) already filled in. An error with any other format or another kind of address. Builds without it are unchanged | None |
 | `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
-| `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome` (`chromium` also works), or the path to its executable. An error without `--pdf`, unless it comes from `cli-defaults` | The first engine found |
+| `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
 | `--out <file>` | Output path, relative to the project root | `dist/<story-id>.<ext>` |
 
 | Format | Default output | Contents |
@@ -2659,7 +2659,7 @@ On Windows each name is tried with every `PATHEXT` extension, so `pagedjs-cli` f
 
 The CLI writes the HTML to a temporary folder, runs the engine on it there with an argument list (never a shell command line, so no title or file name reaches one), and removes the folder afterwards. Only a PDF the engine actually wrote is copied to `--out` or the default path; no `.print.html` file is left in `dist/`. Engines stamp their own creation dates, so PDF output is not byte-identical between builds.
 
-`--pdf-engine` names the engine, or the path to its executable, whose file name must say which engine it is (`/opt/prince/bin/prince`, `C:\Tools\weasyprint.exe`, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). A relative path is read from the current directory. Set a default for the project in `story.md` with `cli-defaults` (`- command: build` with `pdf-engine: prince`); a default engine is ignored by builds without `--pdf`.
+`--pdf-engine` names the engine, or the command name or path of its executable, whose file name must say which engine it is (`chromium` runs Chromium, `msedge` runs Edge, `/opt/prince/bin/prince`, `C:\Tools\weasyprint.exe`, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). A relative path is read from the current directory. Set a default for the project in `story.md` with `cli-defaults` (`- command: build` with `pdf-engine: prince`); a default engine is ignored by builds without `--pdf`. A default may only name one of the four engines, never a path or command, so a project you clone cannot choose a program for `story build` to run; `story validate` reports any other value as `invalid-cli-config`.
 
 The Shunn PDF is US Letter with 1 in margins, Courier New 12 pt, double-spaced, with half-inch paragraph indents. The first page has the contact lines at the top left, the length at the top right, and the title and byline centred below; every later page has a running head of the author, title, and page number at the top right. A novel starts each chapter on a new page, a third of the way down, under a bold centred heading; a [short story or flash piece](#build) runs on after the byline with `#` between sections.
 
@@ -2671,7 +2671,7 @@ $ story build --format epub --pdf
 --pdf applies only to --format print and --format shunn
 ```
 
-A missing engine, an engine that exits with an error, that runs more than 10 minutes, or that writes no PDF stops the build with exit code `4`, quoting the engine's last lines of output. An unknown `--pdf-engine` name is a usage error (exit `2`).
+A missing engine, an engine that exits with an error, that runs more than 10 minutes, or that writes no PDF stops the build with exit code `4`, quoting the engine's last lines of output. When the engine exits or is stopped, any helper process it left running (Chrome starts several) is ended too, on Windows only after a timeout. An unknown `--pdf-engine` name is a usage error (exit `2`).
 
 The start of the metadata sheet for [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose `story.md` sets `author`, `language`, `description`, `keywords`, and `subjects`:
 

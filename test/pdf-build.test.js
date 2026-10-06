@@ -191,12 +191,68 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(runWith(env, ["build", root, "--format", "print", "--pdf"], root).out).toContain("(prince)");
     expect(runWith(env, ["build", root, "--format", "print", "--pdf", "--pdf-engine", "weasyprint"], root).out).toContain("(weasyprint)");
   });
+
+  test("a story.md default cannot name a program for build to run", () => {
+    const root = pdfProject("cli-defaults:\n  - command: build\n    format: print\n    pdf: true\n    pdf-engine: ./tools/prince\n");
+    const tools = path.join(root, "tools");
+    const log = path.join(makeTempDir(), "log.jsonl");
+    fakeEngine(tools, "prince");
+
+    const build = runWith({ PATH: makeTempDir(), FAKE_PDF_LOG: log, FAKE_PDF_MODE: "" }, ["build", root], root);
+    expect(build.code).toBe(3);
+    expect(build.err).toContain("cli-defaults[0] pdf-engine must name an engine (prince, weasyprint, pagedjs-cli, chrome)");
+    expect(readLog(log)).toEqual([]);
+
+    const validate = runWith({}, ["validate", root], root);
+    expect(validate.code).toBe(1);
+    expect(validate.err).toContain("pdf-engine must name an engine");
+  });
+
+  test("the engine's output is kept when it times out, and helpers it left running are ended", () => {
+    const dir = makeTempDir();
+    const pidFile = path.join(dir, "helper.pid");
+    const file = path.join(dir, "chromium");
+    // Starts a helper that would outlive it by 20 seconds, holding the log
+    // open, then exits after writing a PDF.
+    fs.writeFileSync(file, `#!${process.execPath}
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const helper = spawn(${JSON.stringify(process.execPath)}, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "inherit" });
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(helper.pid));
+helper.unref();
+const out = process.argv.find((arg) => arg.startsWith("--print-to-pdf=")).slice("--print-to-pdf=".length);
+fs.writeFileSync(out, "%PDF-1.7\\n");
+`, { mode: 0o755 });
+    const started = Date.now();
+    expect(renderPdf("<p>x</p>", { name: "chrome", file }).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(Date.now() - started).toBeLessThan(15000);
+    const pid = Number(fs.readFileSync(pidFile, "utf8"));
+    let alive = true;
+    for (let tries = 0; tries < 50 && alive; tries += 1) {
+      try {
+        process.kill(pid, 0);
+        Bun.sleepSync(20);
+      } catch {
+        alive = false;
+      }
+    }
+    expect(alive).toBe(false);
+
+    const slow = path.join(dir, "weasyprint");
+    fs.writeFileSync(slow, `#!${process.execPath}\nprocess.stderr.write("loading fonts\\n");\nsetTimeout(() => {}, 10000);\n`, { mode: 0o755 });
+    expect(() => renderPdf("<p>x</p>", { name: "weasyprint", file: slow }, { timeout: 1000 })).toThrow("did not finish within 1 seconds:\nloading fonts");
+    // As Windows runs it: taskkill ends the tree (and, missing here, fails
+    // harmlessly), and the timeout is still reported.
+    expect(() => renderPdf("<p>x</p>", { name: "weasyprint", file: slow }, { timeout: 500, platform: "win32" })).toThrow("did not finish within 0.5 seconds");
+  });
 });
 
 describe("build --pdf errors", () => {
-  test("no engine installed stops with install hints and exit 4", () => {
+  // Chrome or Edge in the usual Windows install folders, or in
+  // /Applications on macOS (as on CI runners), would count as an engine.
+  test.skipIf(process.platform === "darwin")("no engine installed stops with install hints and exit 4", () => {
     const root = pdfProject();
-    const result = runWith({ PATH: makeTempDir() }, ["build", root, "--format", "print", "--pdf"], root);
+    const result = runWith({ PATH: makeTempDir(), ProgramFiles: "", "ProgramFiles(x86)": "", LOCALAPPDATA: "" }, ["build", root, "--format", "print", "--pdf"], root);
 
     expect(result.code).toBe(4);
     expect(result.err).toContain("No PDF engine found on PATH (looked for prince, weasyprint, pagedjs-cli, chrome)");
@@ -265,8 +321,12 @@ describe("PDF engine lookup", () => {
     fs.mkdirSync(path.dirname(chrome), { recursive: true });
     fs.writeFileSync(chrome, "");
     expect(resolvePdfEngine(undefined, { env: { PATH: "", ProgramFiles: programs }, platform: "win32" })).toEqual({ name: "chrome", file: chrome });
-    expect(() => resolvePdfEngine("edge", { env: { PATH: "" }, platform: "win32" })).toThrow("PDF engine chrome was not found");
-    expect(() => resolvePdfEngine(undefined, { env: { PATH: "" }, platform: "darwin" })).toThrow("No PDF engine found");
+    expect(() => resolvePdfEngine("chrome", { env: { PATH: "" }, platform: "win32" })).toThrow("PDF engine chrome was not found");
+    expect(() => resolvePdfEngine("edge", { env: { PATH: "" }, platform: "win32" })).toThrow("Unknown PDF engine: edge");
+    // macOS looks in /Applications, where a Mac (or CI runner) may have Chrome.
+    if (process.platform !== "darwin") {
+      expect(() => resolvePdfEngine(undefined, { env: { PATH: "" }, platform: "darwin" })).toThrow("No PDF engine found");
+    }
   });
 
   test.skipIf(!posix)("--pdf-engine reads the engine from an executable's file name, as a path or a command", () => {
@@ -299,13 +359,6 @@ describe("PDF engine lookup", () => {
     }
     expect(error.exitCode).toBe(4);
     expect(error.message).toContain("could not be run");
-  });
-
-  test.skipIf(!posix)("an engine that outlives the timeout is stopped", () => {
-    const dir = makeTempDir();
-    const file = path.join(dir, "weasyprint");
-    fs.writeFileSync(file, `#!${process.execPath}\nsetTimeout(() => {}, 10000);\n`, { mode: 0o755 });
-    expect(() => renderPdf("<p>x</p>", { name: "weasyprint", file }, { timeout: 300 })).toThrow("did not finish within 0.3 seconds");
   });
 
   test("engines are tried in the documented order", () => {
