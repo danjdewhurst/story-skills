@@ -43,7 +43,7 @@ export function checkFallback({
     const generated = fs.readFileSync(generatedPath);
 
     if (!committed.equals(generated)) {
-      error(`Bundled story-maintenance fallback is out of date: ${path.relative(repoRoot, committedPath)} does not match a fresh build of bin/story.js.`);
+      error(`Bundled story-maintenance fallback is out of date: ${path.relative(repoRoot, committedPath).split(path.sep).join("/")} does not match a fresh build of bin/story.js.`);
       error("Run: bun run build:fallback");
       return 1;
     }

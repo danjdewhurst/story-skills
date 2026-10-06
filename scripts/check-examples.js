@@ -80,7 +80,7 @@ export function staleRegistries(root) {
   try {
     const copy = path.join(scratch, path.basename(root));
     fs.cpSync(root, copy, { recursive: true });
-    return reindexProject(copy).changed.map((file) => path.relative(copy, file));
+    return reindexProject(copy).changed.map((file) => path.relative(copy, file).split(path.sep).join("/"));
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
