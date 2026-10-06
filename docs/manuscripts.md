@@ -950,7 +950,7 @@ The [`publishing`](../skills/publishing/SKILL.md) skill covers choosing a trim, 
 1. [Prince](https://www.princexml.com/) (`prince`): commercial, free for non-commercial use with a watermark on the first page.
 2. [WeasyPrint](https://weasyprint.org/) (`weasyprint`): free; `pip install weasyprint`.
 3. [Paged.js CLI](https://pagedjs.org/) (`pagedjs-cli`): free; `npm install -g pagedjs-cli`.
-4. Chrome, Chromium, or Edge, in headless mode: a fallback that prints running heads and page numbers only from Chrome 131 and does not leave blank pages to start chapters on the right.
+4. Chrome, Chromium, or Edge, in headless mode: a fallback that prints running heads and page numbers only from Chrome 131, leaves the contents page without page numbers, and does not leave blank pages to start chapters on the right.
 
 ```shell
 story build . --format print --trim 6x9 --pdf
