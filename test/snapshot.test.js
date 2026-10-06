@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { createEntity, createStoryProject } from "../src/story.js";
 import { listSnapshots, snapshotId, snapshotProject } from "../src/snapshots.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { git, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -330,6 +330,25 @@ describe("story snapshot --restore", () => {
     expect(failed.err).toContain("The project is part restored (");
     expect(failed.err).toContain("Snapshot before-restore-draft-one-1 holds the project as it was before: story snapshot --restore before-restore-draft-one-1 puts it back");
     expect(fs.readFileSync(path.join(root, ".snapshots", "before-restore-draft-one-1", "chapters", "chapter-01.md"), "utf8")).toContain("Rewritten opening.");
+  });
+
+  test("never replaces or deletes a file saved after the restore read it (#547)", () => {
+    for (const name of ["chapter-01.md", "chapter-03.md"]) {
+      const { cwd, root } = revised();
+      // Chapter 1 is written back first; chapter 3 is deleted after it.
+      const file = path.join(root, "chapters", name);
+      const saved = `${fs.readFileSync(file, "utf8")}\nSaved meanwhile.\n`;
+      const spy = whileWriting(path.join(root, "chapters", "chapter-01.md"), () => fs.writeFileSync(file, saved));
+      let result;
+      try {
+        result = invoke(cwd, ["snapshot", "--restore", "draft-one", "--path", root]);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(result.code).toBe(4);
+      expect(result.err).toContain(`Restoring snapshot draft-one stopped: chapters/${name} changed on disk while story was ${name === "chapter-01.md" ? "updating" : "deleting"} it, so it was left as it is`);
+      expect(fs.readFileSync(file, "utf8")).toBe(saved);
+    }
   });
 
   test("refuses a missing or incomplete snapshot, and misplaced flags, before changing anything", () => {

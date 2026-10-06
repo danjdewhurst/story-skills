@@ -24,7 +24,7 @@ import {
   validateProjectOf
 } from "../src/story.js";
 import { CLUE_STATUSES, PROMISE_STATUSES, QUESTION_STATUSES } from "../src/scan.js";
-import { makeTempDir, readArchiveText, writeMarkdown, messages } from "./helpers.js";
+import { makeTempDir, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function addStoryEntities(root) {
   writeMarkdown(path.join(root, "characters", "sera-voss.md"), `
@@ -2140,5 +2140,54 @@ status: alive
     const errors = messages(validateProject(root).errors).join("\n");
     expect(errors).toContain("characters/_index.md");
     expect(errors).toContain("exceeds the");
+  });
+});
+
+// An editor saves a file after the command read it: the command must not
+// overwrite the save (#547).
+describe("writes keep a file saved meanwhile", () => {
+  function newProject(title) {
+    return createStoryProject({ cwd: makeTempDir(), title }).root;
+  }
+
+  // Runs `command`, saving `saved` to `file` just before the command
+  // replaces it, and returns what the command threw.
+  function savedDuring(file, saved, command) {
+    const spy = whileWriting(file, () => fs.writeFileSync(file, saved));
+    try {
+      command();
+    } catch (error) {
+      return error.message;
+    } finally {
+      spy.mockRestore();
+    }
+    throw new Error("the command did not stop");
+  }
+
+  test("reindex keeps a registry saved after it was read", () => {
+    const root = newProject("Saved Registry");
+    writeMarkdown(path.join(root, "characters", "bo.md"), "name: Bo\nrole: supporting\nstatus: alive", "\n# Bo\n");
+    const registry = path.join(root, "characters", "_index.md");
+    const saved = `${fs.readFileSync(registry, "utf8")}\n## Notes\n\nSaved meanwhile.\n`;
+    expect(savedDuring(registry, saved, () => reindexProject(root))).toBe("characters/_index.md changed on disk while story was updating it, so it was left as it is. Run the command again");
+    expect(fs.readFileSync(registry, "utf8")).toBe(saved);
+  });
+
+  test("migrate keeps story.md saved after it was read", () => {
+    const root = newProject("Saved Migrate");
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2", "schema-version: 1"));
+    const saved = fs.readFileSync(storyPath, "utf8").replace("schema-version: 1\n", "schema-version: 1\ndeadline: 2027-01-01\n");
+    expect(savedDuring(storyPath, saved, () => migrateProject(root))).toContain("story.md changed on disk while story was updating it");
+    expect(fs.readFileSync(storyPath, "utf8")).toBe(saved);
+  });
+
+  test("add keeps a file it adds a backlink to when it is saved meanwhile", () => {
+    const root = newProject("Saved Backlink");
+    createEntity(root, { kind: "location", name: "Dock" });
+    const dock = path.join(root, "worldbuilding", "locations", "dock.md");
+    const saved = `${fs.readFileSync(dock, "utf8")}\nSaved meanwhile.\n`;
+    expect(savedDuring(dock, saved, () => createEntity(root, { kind: "character", name: "Ann", locations: ["dock"] }))).toContain("worldbuilding/locations/dock.md changed on disk");
+    expect(fs.readFileSync(dock, "utf8")).toBe(saved);
   });
 });

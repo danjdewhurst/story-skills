@@ -167,11 +167,17 @@ const REFUSED = {
 // Commands that change project files hold the project lock, so a held lock
 // refuses them.
 const LOCKED = {
+  init: ["init", "Exit Codes", "--dir", ".", "--force"],
   reindex: ["reindex"],
   wordcount: ["wordcount", "--write"],
+  progress: ["progress", "--log"],
+  passes: ["passes", "--init"],
   migrate: ["migrate"],
   doctor: ["doctor", "--fix"],
+  add: ["add", "character", "Tobin Reed"],
+  rename: ["rename", "character", "mara-quill", "Mara Vell"],
   remove: ["remove", "character", "mara-quill"],
+  move: ["move", "chapter", "chapter-01", "--number", "2"],
   snapshot: ["snapshot", "draft"],
   split: ["split", "chapter-01", "--at", "1"],
   merge: ["merge", "chapter-01", "chapter-02"]
@@ -264,6 +270,20 @@ describe("exit codes", () => {
       expect(result.code).toBe(refused);
     });
   }
+
+  test("a run of a write command that only reads neither takes nor waits for the lock", () => {
+    const root = newProject();
+    expect(invoke(root, ["snapshot", "draft"]).code).toBe(ok);
+    const lock = `${process.pid}\nhost\n`;
+    fs.writeFileSync(path.join(root, LOCK_FILE), lock);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    for (const args of [["wordcount"], ["progress"], ["passes"], ["snapshot", "--list"], ["doctor"], ["rename", "character", "mara-quill", "Mara Vell", "--dry-run"]]) {
+      const result = invoke(root, args);
+      expect(result.err).not.toContain("is modifying this project");
+      expect(result.code).toBe(ok);
+    }
+    expect(fs.readFileSync(path.join(root, LOCK_FILE), "utf8")).toBe(lock);
+  });
 
   test.skipIf(CHMOD_IGNORED)("a write the file system refuses exits 4", () => {
     const root = newProject();

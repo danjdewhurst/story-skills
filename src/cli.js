@@ -7,6 +7,7 @@ import { KIND_ALIASES } from "./scan.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
 import { FILE_ERROR_REASONS, portablePath } from "./files.js";
+import { withProjectLock } from "./lock.js";
 
 export { isTruthy, parseArgs };
 
@@ -148,7 +149,11 @@ export function runCli(argv, io) {
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
-    return command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
+    const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
+    // A command that changes the project in place holds its lock for the
+    // whole run, so two cannot plan from the same files (see lock.js). A
+    // --dry-run only reads the project.
+    return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
@@ -158,6 +163,14 @@ export function runCli(argv, io) {
     io.stderr.write(`${message}\n`);
     return exitCode;
   }
+}
+
+// Whether this run of the command changes the project in place: its
+// `writes` is true, or a function of the options that returns true, and
+// --dry-run is off.
+function writesInPlace(command, options) {
+  const writes = typeof command.writes === "function" ? command.writes(options) : command.writes === true;
+  return writes && !isTruthy(options["dry-run"]);
 }
 
 // The project whose story.md holds the config. A passage piped to `story

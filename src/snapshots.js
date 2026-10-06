@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { assertSafeProjectDirectory, currentText, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
-import { withProjectLock } from "./lock.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
 import { EXIT_CODES, exitCodeFor, refusedError, usageError } from "./exit-codes.js";
@@ -48,10 +47,6 @@ export function snapshotId(name, id) {
 // .snapshots/<id>/ under the same paths, with a snapshot.json manifest. An
 // existing snapshot is refused unless `force`, which replaces it whole.
 export function snapshotProject(root, options = {}) {
-  return withProjectLock(root, () => snapshotProjectUnlocked(root, options));
-}
-
-function snapshotProjectUnlocked(root, options) {
   const id = snapshotId(options.name, options.id);
   const project = scanProject(root);
   // A chapter that fails to parse would be missing from the word count, and
@@ -233,10 +228,6 @@ export function existingSnapshot(root, value) {
 // names it. The registries are rebuilt afterwards when every restored file
 // parses.
 export function restoreSnapshot(root, options = {}) {
-  return withProjectLock(root, () => restoreSnapshotUnlocked(root, options));
-}
-
-function restoreSnapshotUnlocked(root, options) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
@@ -259,29 +250,33 @@ function restoreSnapshotUnlocked(root, options) {
     const existing = lstatIfExists(target);
     // A file that cannot be read as text (swapped for a symlink or a FIFO
     // since the check, say) is written rather than followed or read whole.
-    if (existing?.isFile() && currentText(target) === text) {
+    const current = existing?.isFile() ? currentText(target) : null;
+    if (current === text) {
       continue;
     }
-    writes.push({ path: relative, target, text, created: existing === null });
+    // The text read here is the one replaced, so an edit saved meanwhile
+    // stops the restore rather than being lost.
+    writes.push({ path: relative, target, text, created: existing === null, original: current });
   }
   const deletes = markdownFiles(projectRoot)
     .map((file) => ({ path: projectPath(projectRoot, file), target: file }))
-    .filter((file) => !saved.has(file.path));
+    .filter((file) => !saved.has(file.path))
+    .map((file) => ({ ...file, original: readTextFile(file.target) }));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
     return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
   }
 
   const safetyId = nextSafetyId(projectRoot, id);
-  const safety = snapshotProjectUnlocked(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
+  const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
   const done = { created: [], updated: [], deleted: [] };
   try {
     for (const write of writes) {
-      writeFile(write.target, write.text, { root: projectRoot });
+      writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
       done[write.created ? "created" : "updated"].push(write.path);
     }
     for (const file of deletes) {
-      removeFile(file.target);
+      removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
       done.deleted.push(file.path);
     }
     if (parses) {

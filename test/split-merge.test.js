@@ -15,7 +15,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
@@ -414,6 +414,21 @@ describe("story merge", () => {
     expect(() => mergeChapters(root, { id: "chapter-02" })).toThrow("merge requires two chapter ids");
     expect(() => mergeChapters(root, { id: "chapter-02", next: "chapter-09" })).toThrow("chapter chapter-09 does not exist");
     expect(snapshot(root)).toEqual(before);
+  });
+
+  test("keeps the merged-away chapter when it is saved meanwhile (#547)", () => {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Saved Merge" }).root;
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "\n# Chapter 1: One\n\n## Chapter Text\n\nFirst words.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "\n# Chapter 2: Two\n\n## Chapter Text\n\nSecond words.\n");
+    const second = path.join(root, "chapters", "chapter-02.md");
+    const saved = `${read(root, "chapters", "chapter-02.md")}\nSaved meanwhile.\n`;
+    const spy = whileWriting(path.join(root, "chapters", "chapter-01.md"), () => fs.writeFileSync(second, saved));
+    try {
+      expect(() => mergeChapters(root, { id: "chapter-01", next: "chapter-02" })).toThrow("chapters/chapter-02.md changed on disk while story was deleting it, so it was left as it is");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(second, "utf8")).toBe(saved);
   });
 
   test("a chapter with no notes or prose merges cleanly", () => {

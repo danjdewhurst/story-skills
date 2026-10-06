@@ -1,12 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
+import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
 import { buildBook, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages } from "./helpers.js";
+import { OTHER_LIVE_PID, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -100,6 +102,69 @@ describe("init", () => {
     const report = buildSeries(path.join(cwd, "book-one"), scanProject);
     expect(report.ok).toBe(false);
     expect(messages(report.errors).join("\n")).toContain("share book-number 1");
+  });
+});
+
+describe("init and the project lock", () => {
+  const savedWait = process.env.STORY_LOCK_WAIT_MS;
+  afterEach(() => {
+    if (savedWait === undefined) {
+      delete process.env.STORY_LOCK_WAIT_MS;
+    } else {
+      process.env.STORY_LOCK_WAIT_MS = savedWait;
+    }
+  });
+
+  function holdLock(dir) {
+    const lock = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    fs.writeFileSync(path.join(dir, LOCK_FILE), lock);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    return lock;
+  }
+
+  test("--force locks an existing folder that has no story.md yet (#601)", () => {
+    const cwd = makeTempDir();
+    const dir = path.join(cwd, "draft");
+    fs.mkdirSync(dir);
+    fs.writeFileSync(path.join(dir, "notes.md"), "Notes.\n");
+    const lock = holdLock(dir);
+    const held = invoke(cwd, ["init", "Draft", "--dir", "draft", "--force"]);
+    expect(held.code).toBe(4);
+    expect(held.err).toContain("is modifying this project; nothing was changed");
+    expect(fs.readdirSync(dir).sort()).toEqual([LOCK_FILE, "notes.md"]);
+    // A dry run is planned without writing, so it takes no lock.
+    expect(invoke(cwd, ["init", "Draft", "--dir", "draft", "--force", "--dry-run"]).code).toBe(0);
+    expect(fs.readFileSync(path.join(dir, LOCK_FILE), "utf8")).toBe(lock);
+    fs.rmSync(path.join(dir, LOCK_FILE));
+    expect(invoke(cwd, ["init", "Draft", "--dir", "draft", "--force"]).code).toBe(0);
+    expect(fs.existsSync(path.join(dir, "story.md"))).toBe(true);
+    expect(fs.existsSync(path.join(dir, LOCK_FILE))).toBe(false);
+  });
+
+  test("a linked book's lock is held before anything is created, and its backlink keeps an edit saved meanwhile", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Book One"]).code).toBe(0);
+    const one = path.join(cwd, "book-one");
+    const story = path.join(one, "story.md");
+    holdLock(one);
+    const held = invoke(cwd, ["init", "Book Two", "--follows", "book-one"]);
+    expect(held.code).toBe(4);
+    expect(held.err).toContain("is modifying this project; nothing was changed");
+    expect(fs.existsSync(path.join(cwd, "book-two"))).toBe(false);
+    fs.rmSync(path.join(one, LOCK_FILE));
+
+    const saved = `${fs.readFileSync(story, "utf8")}\nSaved meanwhile.\n`;
+    const spy = whileWriting(story, () => fs.writeFileSync(story, saved));
+    let result;
+    try {
+      result = invoke(cwd, ["init", "Book Two", "--follows", "book-one"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("story.md changed on disk while story was updating it, so it was left as it is");
+    expect(fs.readFileSync(story, "utf8")).toBe(saved);
+    expect(fs.existsSync(path.join(one, LOCK_FILE))).toBe(false);
   });
 });
 

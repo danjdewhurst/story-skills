@@ -160,13 +160,14 @@ export function importManuscript(options) {
   // not hold it.
   const piped = fromStdin ? options.readStdin() : null;
 
-  // --force into an existing project deletes and rewrites its chapters, so
+  // --force into an existing folder deletes and rewrites its chapters, so
   // it holds the project lock from reading the project's language, count
   // unit, and style sheet to the reindex, as the other write commands do: a
   // command already running refuses this one before it reads or changes
   // anything, and the chapters are never built from settings that changed
-  // meanwhile. A symlinked folder is refused unlocked by createStoryProject,
-  // so no lock file is written through it.
+  // meanwhile. A folder without story.md is locked too, so two imports
+  // into it cannot interleave. A symlinked folder is refused unlocked by
+  // createStoryProject, so no lock file is written through it.
   const run = () => {
     const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
     const rules = importRules(pack);
@@ -252,7 +253,7 @@ export function importManuscript(options) {
     }
 
     for (const chapter of chapterFiles) {
-      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
+      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root, unchangedFrom: null });
     }
 
     reindexProject(created.root);
@@ -271,7 +272,7 @@ export function importManuscript(options) {
     };
   };
   const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
-  return locked ? withProjectLock(target, run) : run();
+  return locked ? withProjectLock(target, run, { folder: true }) : run();
 }
 
 // A capitalised name word in any script: "Élodie", "O’Brien", "McAllister",

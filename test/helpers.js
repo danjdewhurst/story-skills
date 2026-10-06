@@ -1,9 +1,11 @@
+import { spyOn } from "bun:test";
 import { Buffer } from "node:buffer";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
+import { TEMPORARY_FILE_PATTERN } from "../src/files.js";
 
 const tempDirs = [];
 
@@ -12,6 +14,28 @@ const tempDirs = [];
 // and is ignored on folders). Tests that make a file or folder unreadable or
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
+
+// A live process other than this one, whose pid stands in for another
+// story command holding a project lock: a lock with this process's own pid
+// is stale (see src/lock.js). The test runner's parent waits for it.
+export const OTHER_LIVE_PID = process.ppid;
+
+// Runs `save` once, when a story command opens the temporary file it
+// writes `target` through: after the command has read the project, just
+// before it replaces the target. A test saves a file there as an editor
+// would while the command runs. Call mockRestore() on the returned spy.
+export function whileWriting(target, save) {
+  const open = fs.openSync;
+  let pending = true;
+  return spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
+    if (pending && typeof file === "string" && path.dirname(file) === path.dirname(target)
+      && TEMPORARY_FILE_PATTERN.exec(path.basename(file))?.[1] === path.basename(target)) {
+      pending = false;
+      save();
+    }
+    return open(file, ...rest);
+  });
+}
 
 // Removes every temp dir made so far. test/setup.js runs it after each test,
 // so repeated runs do not fill the disk.

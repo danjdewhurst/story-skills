@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { refusedError } from "./exit-codes.js";
-import { readFileAndStats } from "./files.js";
+import { FILE_ERROR_REASONS, isPlanning, readFileAndStats, refuseWrites } from "./files.js";
 
 // The lock a write command holds on its project, so two commands (two agent
 // sessions, or an editor hook running reindex while the user runs rename)
@@ -13,6 +13,12 @@ export const LOCK_FILE = ".story.lock";
 // STORY_LOCK_WAIT_MS overrides it (0 refuses at once).
 const DEFAULT_WAIT_MS = 10000;
 const POLL_MS = 50;
+
+// A lock that cannot be created for any reason but one already being there
+// is tried again for this long before the command gives up on it: on
+// Windows, a lock another command has just deleted refuses a new one while
+// a virus scanner still has it open.
+const CREATE_RETRY_MS = 200;
 
 // A lock from another host (a container, a cloud agent, or a share) cannot
 // be checked by pid. One older than this is taken over. Ten minutes is
@@ -30,11 +36,17 @@ export const FOREIGN_LOCK_STALE_MS = 10 * 60 * 1000;
 export const TAKEOVER_FILE = ".story-takeover.tmp";
 const TAKEOVER_STALE_MS = 2000;
 
-// Projects this process already holds, so a command that calls another
-// locked one (add reindexes) does not wait on itself.
+// Projects this process already holds, so a lock taken inside another on
+// the same project (import --force fills its folder as init --force does)
+// does not wait on itself.
 const held = new Map();
 
-export function withProjectLock(root, run) {
+// Runs `run` holding the project's lock. A folder that is not a project
+// needs none: the command refuses it, or writes nothing. With `folder`, an
+// existing folder is locked whether or not it holds story.md yet, since
+// init --force and import --force fill one. A planned --dry-run writes
+// nothing, so it takes no lock.
+export function withProjectLock(root, run, options = {}) {
   const projectRoot = path.resolve(root);
   const key = realPath(projectRoot);
   if (held.has(key)) {
@@ -46,11 +58,18 @@ export function withProjectLock(root, run) {
     }
   }
   const lockPath = path.join(projectRoot, LOCK_FILE);
-  // A folder that is not a project, or one this user cannot write to, gets
-  // its own error from the command (or needs no write at all).
-  const ours = fs.existsSync(path.join(projectRoot, "story.md")) && acquire(lockPath);
-  if (!ours) {
+  const lockable = options.folder ? isDirectory(projectRoot) : fs.existsSync(path.join(projectRoot, "story.md"));
+  if (!lockable || isPlanning()) {
     return run();
+  }
+  const ours = acquire(lockPath);
+  if (typeof ours !== "string") {
+    // The lock cannot be made (a folder this user cannot write to, a
+    // read-only file system), so nothing keeps another command out. The
+    // command still runs, as one that finds nothing to change needs no
+    // lock, but its first write is refused.
+    const reason = FILE_ERROR_REASONS[ours.code] ?? ours.code ?? ours.message;
+    return refuseWrites(projectRoot, `Cannot create the project lock ${LOCK_FILE} (${reason}), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again`, run);
   }
   held.set(key, 1);
   try {
@@ -64,14 +83,22 @@ export function withProjectLock(root, run) {
   }
 }
 
-// Returns the text of the lock once this call creates it, false when the
-// folder cannot take one. Throws when another live command keeps it past
-// the wait.
+// Returns the text of the lock once this call creates it, or the error
+// when the folder cannot take one. Throws when another live command keeps
+// it past the wait.
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
+  const retryUntil = Date.now() + CREATE_RETRY_MS;
   let removedStale = false;
   let created;
-  while ((created = tryCreate(lockPath)) === null) {
+  while (typeof (created = tryCreate(lockPath)) !== "string") {
+    if (created !== null) {
+      if (Date.now() >= retryUntil) {
+        return created;
+      }
+      sleep(POLL_MS);
+      continue;
+    }
     const owner = readOwner(lockPath);
     if (owner && !owner.alive && !removedStale && removeStale(lockPath, owner.text)) {
       removedStale = true;
@@ -97,7 +124,7 @@ function removeStale(lockPath, staleText) {
     fs.rmSync(guard, { force: true });
     created = tryCreate(guard);
   }
-  if (!created) {
+  if (typeof created !== "string") {
     return false;
   }
   try {
@@ -111,7 +138,7 @@ function removeStale(lockPath, staleText) {
 }
 
 // The text written when this call created the lock, null when one already
-// exists, false when the folder cannot take one.
+// exists, or the error when the folder cannot take one.
 function tryCreate(lockPath) {
   try {
     const descriptor = fs.openSync(lockPath, "wx", 0o644);
@@ -123,7 +150,7 @@ function tryCreate(lockPath) {
     }
     return text;
   } catch (error) {
-    return error.code === "EEXIST" ? null : false;
+    return error.code === "EEXIST" ? null : error;
   }
 }
 
@@ -172,7 +199,13 @@ function modifiedAt(file) {
   }
 }
 
+// A lock with this process's own pid is stale: one this process holds is
+// in `held` and never checked here, so it was left by an earlier process
+// that had the same pid, as a container's story command often does.
 function processAlive(pid) {
+  if (pid === process.pid) {
+    return false;
+  }
   try {
     process.kill(pid, 0);
     return true;
@@ -188,6 +221,10 @@ function lockWaitMs() {
 
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function isDirectory(target) {
+  return fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
 function realPath(target) {

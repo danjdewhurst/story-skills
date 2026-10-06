@@ -6,7 +6,7 @@ import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
+import { OTHER_LIVE_PID, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -459,8 +459,8 @@ describe("import --force into an existing project", () => {
   }
 
   function holdLock(root) {
-    // A live command (this process) holds the lock.
-    const lock = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    // A live command holds the lock.
+    const lock = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     fs.writeFileSync(path.join(root, LOCK_FILE), lock);
     return lock;
   }
@@ -492,6 +492,24 @@ describe("import --force into an existing project", () => {
     expect(early.code).toBe(4);
     expect(early.err).toContain("is modifying this project; nothing was changed");
     expect(treeSnapshot(root)).toEqual(before);
+  });
+
+  test("a folder without story.md is locked too, so two imports into it cannot interleave (#601)", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: One\n\nOne two three.\n", "utf8");
+    const root = path.join(cwd, "folder");
+    fs.mkdirSync(root);
+    const lock = holdLock(root);
+    const argv = ["import", "draft.md", "--title", "Folder", "--dir", "folder", "--force"];
+    const held = withNoLockWait(() => invoke(cwd, argv));
+    expect(held.code).toBe(4);
+    expect(held.err).toContain("is modifying this project; nothing was changed");
+    expect(fs.readdirSync(root)).toEqual([LOCK_FILE]);
+    expect(fs.readFileSync(path.join(root, LOCK_FILE), "utf8")).toBe(lock);
+    fs.rmSync(path.join(root, LOCK_FILE));
+    expect(invoke(cwd, argv).code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("One two three.");
+    expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
   });
 
   test.skipIf(process.platform === "win32")("a symlinked target is refused without taking the lock through the link", () => {
