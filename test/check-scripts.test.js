@@ -563,7 +563,7 @@ describe("check-links", () => {
       "ci.yml": ""
     });
     const { files, failures } = checkLinks(root);
-    expect(files.map((file) => path.relative(root, file))).toEqual([
+    expect(files.map((file) => path.relative(root, file).split(path.sep).join("/"))).toEqual([
       "README.md",
       "CONTRIBUTING.md",
       "docs/guide.md",

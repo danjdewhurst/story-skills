@@ -230,7 +230,7 @@ function decode(value) {
 export function checkFile(file, root = ROOT, cache = new Map()) {
   const failures = [];
   const text = fs.readFileSync(file, "utf8");
-  const relative = path.relative(root, file);
+  const relative = path.relative(root, file).split(path.sep).join("/");
   const anchors = (target) => {
     if (!cache.has(target)) {
       cache.set(target, anchorsFor(fs.readFileSync(target, "utf8")));
@@ -261,7 +261,7 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
       continue;
     }
     if (!anchors(resolved).has(fragment.toLowerCase()) && !anchors(resolved).has(fragment)) {
-      failures.push(`${relative}:${line}: ${target} has no heading or anchor #${fragment} in ${path.relative(root, resolved)}`);
+      failures.push(`${relative}:${line}: ${target} has no heading or anchor #${fragment} in ${path.relative(root, resolved).split(path.sep).join("/")}`);
     }
   }
   return failures;
