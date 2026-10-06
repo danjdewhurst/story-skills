@@ -87,7 +87,7 @@ outline-first drafting workflow.
    drafting workflow; theme-audit findings feed revision-continuity. When a
    scene decision changes canon (new knowledge, moved objects, changed
    relationships), update `continuity/state.md` and the affected entity
-   files (bidirectional links, per the story-init conventions).
+   files (bidirectional links, per the shared story conventions).
 
 ## Conventions
 
@@ -127,3 +127,7 @@ story pacing .
 - **`references/exposition.md`** - Drip-feed, conflict-carried exposition, in-world documents, info-dump warning
 - **`references/flashbacks-time.md`** - Flashback entry/exit mechanics, tension-cheat warning, time-skip conventions
 - **`references/openings.md`** - In medias res, "enter late, leave early", first-page hook check, character introduction technique
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

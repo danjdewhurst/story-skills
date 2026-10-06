@@ -160,3 +160,7 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 - **`references/relationship-types.md`** - Complete relationship type reference with inverse pairs
 - **`references/ensemble-cast.md`** - Managing multi-character casts: anchor character, A/B/C story braiding, thematic relevance, merge-characters discipline
 - **`references/supporting-characters.md`** - Role vocabulary (mentor, foil, confidant, love interest, comic relief, threshold guardian) and requirements for supporting roles
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

@@ -119,3 +119,7 @@ story clues .     # mystery: fair-play matrix and warnings
 - **`references/mg-ya.md`** - Word-count norms, age-appropriate voice/stakes, minimized adult involvement, content boundaries
 - **`references/scifi-pipeline.md`** - Speculative element must be load-bearing, rules stated before exploited, worldbuilding→plot pipeline
 - **`references/serial-episodic.md`** - Season/volume goal, per-episode dramatic question, a reward in every installment, recap discipline
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

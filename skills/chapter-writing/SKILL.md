@@ -159,3 +159,7 @@ Use the Story CLI when it is available. If `story` is not installed, use `bun ru
 - **`references/chapter-template.md`** - Frontmatter and structure template for chapter files
 - **`references/scene-template.md`** - Machine-readable continuity template for scenes
 - **`references/writing-guidelines.md`** - Quick-reference prose craft: show-don't-tell, POV, dialogue, pacing, scene structure, continuity. For the deep reference — the Scene/Sequel unit, dialogue subtext and voice-differentiation, deep POV and psychic distance — use the `scene-craft` skill.
+
+## Shared Conventions
+
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).
