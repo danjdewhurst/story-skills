@@ -165,13 +165,14 @@
     "release": {
       "type": ["object", "null"],
       "description": "The serial release schedule on --date, or null when story.md sets no release-every cadence and no chapter has a release-date. Each chapter is an episode, in reading order.",
-      "required": ["every", "start", "next", "episodes"],
+      "required": ["every", "start", "complete", "next", "episodes"],
       "properties": {
         "every": { "type": ["integer", "null"], "minimum": 1, "description": "story.md release-every, or null without a cadence." },
         "start": { "type": ["string", "null"], "description": "story.md release-start, or null without a cadence." },
+        "complete": { "type": "boolean", "description": "True when story.md has status: complete. The chapters are then every episode there is: the cadence stops at the last one, and nothing is scheduled past it." },
         "next": {
           "type": ["object", "null"],
-          "description": "The first release today or later, or null when none is scheduled. chapter and file are null for an episode the cadence schedules past the last chapter.",
+          "description": "The first release today or later, or null when none is scheduled. chapter and file are null for an episode the cadence schedules past the last chapter, which a complete story never has.",
           "required": ["episode", "chapter", "file", "date", "drafted", "daysUntil"],
           "properties": {
             "episode": { "type": "integer", "minimum": 1 },

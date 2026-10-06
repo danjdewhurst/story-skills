@@ -20,7 +20,9 @@ Release dates are always Gregorian, even when the book has a story
 `calendar`. Run `story progress .` or `story next .` to see the next
 episode due; both warn (`release-undrafted`) when an episode due within
 three days, or already past, has no prose or no chapter yet. Draft that
-episode first.
+episode first. When the last episode is written, set `status: complete` in
+`story.md`: the cadence then stops at the last chapter, so the commands stop
+scheduling episodes past it and stop warning about them.
 
 ## The season/volume goal
 

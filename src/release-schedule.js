@@ -49,16 +49,19 @@ export function releaseCadence(data) {
   return Number.isInteger(every) && every >= 1 && start ? { every, start: start.text, startDays: start.days } : null;
 }
 
-// The release schedule as { every, start, next, episodes, warnings }, or
-// null when the book sets no cadence and no chapter has a release-date.
-// `chapters` are { id, file, releaseDate, drafted } in reading order, with
-// `releaseDate` the raw frontmatter value or undefined; the episode number
-// is the chapter's position. An episode whose release-date is not a real
-// day is left out rather than put back on the cadence (validate reports it). With a cadence, the episodes
-// after the last chapter are projected too, so `next` can be one with no
-// chapter yet (`chapter` and `file` null).
+// The release schedule as { every, start, complete, next, episodes,
+// warnings }, or null when the book sets no cadence and no chapter has a
+// release-date. `chapters` are { id, file, releaseDate, drafted } in reading
+// order, with `releaseDate` the raw frontmatter value or undefined; the
+// episode number is the chapter's position. An episode whose release-date is
+// not a real day is left out rather than put back on the cadence (validate
+// reports it). With a cadence, the episodes after the last chapter are
+// projected too, so `next` can be one with no chapter yet (`chapter` and
+// `file` null), unless story.md has `status: complete`: then the chapters
+// are every episode there is, and the cadence stops at the last one.
 export function releaseSchedule({ data, chapters, today }) {
   const cadence = releaseCadence(data);
+  const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
@@ -76,7 +79,8 @@ export function releaseSchedule({ data, chapters, today }) {
 
   // Past the last chapter, a cadence keeps scheduling episodes: those due
   // by today plus RELEASE_SOON_DAYS have no chapter to draft yet, and the
-  // first one today or later can be the next release.
+  // first one today or later can be the next release. A complete story
+  // has no episode past its last chapter, so nothing is projected.
   // A projection past LAST_DAY is null.
   const projected = (index) => {
     const days = cadence.startDays + index * cadence.every;
@@ -85,7 +89,7 @@ export function releaseSchedule({ data, chapters, today }) {
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
-  if (cadence !== null) {
+  if (cadence !== null && !complete) {
     const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
     if (upcoming !== null) {
       candidates.push(upcoming);
@@ -112,6 +116,7 @@ export function releaseSchedule({ data, chapters, today }) {
   return {
     every: cadence?.every ?? null,
     start: cadence?.start ?? null,
+    complete,
     next,
     episodes: episodes.map(({ days, ...episode }) => episode),
     warnings
@@ -129,18 +134,26 @@ function releaseWhen(date, daysUntil) {
   return daysUntil > 0 ? `releases ${date}, in ${plural(daysUntil, "day")},` : `was due ${date}, ${plural(-daysUntil, "day")} ago,`;
 }
 
-// The next release as a report line, or null without a schedule.
+// The next release as a report line, or null without a schedule. In a
+// complete story, the line marks the last episode, and once it is out says
+// the serial has ended rather than that nothing is scheduled.
 export function formatNextRelease(release) {
   if (!release) {
     return null;
   }
   if (release.next === null) {
-    return "Next release: none scheduled after today";
+    if (!release.complete) {
+      return "Next release: none scheduled after today";
+    }
+    const last = release.episodes.reduce((latest, entry) => (latest === null || entry.date >= latest.date ? entry : latest), null);
+    return `Next release: none, the story is complete${last === null ? "" : `; episode ${last.episode} (${last.chapter}) on ${last.date} was the last`}`;
   }
   const { episode, chapter, date, daysUntil, drafted } = release.next;
   const when = daysUntil === 0 ? "today" : `in ${plural(daysUntil, "day")}`;
   const state = chapter === null ? "no chapter yet" : drafted ? "drafted" : "not drafted";
-  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state})`;
+  // Episodes due the same day go out in reading order, as `next` picks them.
+  const last = release.complete && !release.episodes.some((entry) => entry.date > date || (entry.date === date && entry.episode > episode));
+  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state}${last ? ", the last episode" : ""})`;
 }
 
 function formatDate(days) {
