@@ -75,6 +75,18 @@ describe("html and print builds", () => {
     expect(estimatePages(3000, "unknown")).toBe(11);
   });
 
+  // CSS reads a form feed as a line break, which ended the running head's
+  // string: the rule after it hid the body, and WeasyPrint and Chrome
+  // printed one blank page.
+  test("the running head keeps form feeds and other control characters inside its CSS string", () => {
+    const title = "Ann\f}} body { display: none } x {\r\n\u0000\u000b\u001f\u007f\\\"<>&";
+    const html = printHtml({ title, authors: [], language: "en", words: 100, parts: [{ key: "ch01", kind: "chapter", title: "C", heading: true, words: 100, paragraphs: [] }] });
+    // A CSS string token: anything but a quote, backslash, or line break,
+    // or a backslash and the character it escapes.
+    const head = /@top-center \{ content: ("(?:[^"\\\n\r\f]|\\[\s\S])*"); font: /.exec(html);
+    expect(head?.[1]).toBe('"Ann }} body { display: none } x { \\0 \\B \\1F \\7F \\\\\\"\\3C \\3E \\26 "');
+  });
+
   test("the CLI builds both formats and reports unsupported ones", () => {
     const { root, cwd } = project();
     expect(invoke(cwd, ["build", root, "--format", "html"]).out).toContain("as html to");

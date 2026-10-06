@@ -168,7 +168,8 @@ function renderTimeline({ title, nodes }) {
   for (const node of nodes) {
     if (node.date !== section) {
       section = node.date;
-      lines.push(`  section ${node.date}`);
+      // A calendar's month and era names may hold a colon or a `#`.
+      lines.push(`  section ${timelineText(node.date)}`);
     }
     const note = node.toldLateIn === null ? "" : ` (told in chapter ${node.toldLateIn})`;
     lines.push(`    ${timelineText(node.time ?? "day")} : ${timelineText(`${node.label}${note}`)}`);
@@ -312,15 +313,18 @@ function plainText(text) {
   return String(text).replace(/\s+/g, " ").trim();
 }
 
+// Characters Mermaid reads as syntax in a quoted label, each written as an
+// entity code that renders as the character: `"` ends the label and `|` an
+// edge label; `#`, a word, and `;` is itself an entity code ("Room #101;"
+// would show "Room e"); `%` can spell a %%{init}%% directive, which Mermaid
+// obeys anywhere in the source; a label in backticks is markdown; `:` lets
+// Mermaid's pass for `style ... :#colour;` lines drop the `;` that ends an
+// entity code; and `&`, `<`, and `>` are HTML. One pass, so no code is
+// escaped twice.
+const LABEL_ESCAPES = { "#": "#35;", "\"": "#quot;", "|": "#124;", "%": "#37;", "`": "#96;", ":": "#58;", "&": "&amp;", "<": "&lt;", ">": "&gt;" };
+
 function label(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "#quot;")
-    .replace(/\|/g, "#124;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(text).replace(/\s+/g, " ").trim().replace(/[#"|%`:&<>]/g, (char) => LABEL_ESCAPES[char]);
 }
 
 // Edge labels are quoted so brackets and parentheses in them ("(red
@@ -330,6 +334,10 @@ function edgeLabel(text) {
 }
 
 // Mermaid timeline syntax splits on colons, so they become a similar mark.
+// `#` and `;` start a comment or end the text in some Mermaid versions, and
+// `#` and `%` form entity codes and directives as in a label, and `<br>`
+// breaks the line, so those four are numeric entity codes, the only kind a
+// timeline renders.
 function timelineText(text) {
-  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
+  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim().replace(/[#;%<]/g, (char) => `#${char.charCodeAt(0)};`);
 }

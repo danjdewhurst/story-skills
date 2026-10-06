@@ -2060,7 +2060,7 @@ timeline
     evening : The Salt Gate
 ```
 
-Mermaid's timeline syntax treats a colon as a separator, so colons in times and titles become `∶` (a ratio sign).
+Mermaid's timeline syntax treats a colon as a separator, so colons in times, titles, and dates become `∶` (a ratio sign). Other characters Mermaid would read as syntax are written as Mermaid entity codes, which render as the character itself: `#`, `%`, `:`, backticks, quotes, `|`, `&`, `<`, and `>` in labels (`#35;` for `#`, `&lt;` for `<`), and `#`, `;`, `%`, and `<` in timeline text and dates.
 
 ### passes
 

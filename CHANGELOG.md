@@ -16,6 +16,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Security
 
 - The Publish workflow publishes a tag to npm only if it is on the release commit of its `package.json` version on `main`, and only after that commit's CI run on `main` has passed. npm now goes after the binaries and release assets, from a job in the `npm` environment, and a manual run must be dispatched on `main` or on the tag. A later push to `main` no longer cancels the CI run of the commit before it. ([#544](https://github.com/danjdewhurst/story-skills/issues/544))
+- Names and titles can no longer break out of the print and Shunn running heads or `story diagram` labels. A form feed or other control character in the title or author now stays inside the running head's CSS string; before, `author: "Ann\f}} body { display: none } x {"` printed one blank page. `story diagram` writes `#`, `%`, `:`, and backticks in labels, and `#`, `;`, `%`, and `<` in timeline text and dates, as Mermaid entity codes, so `Unit #101; East` no longer renders as `Unit e East`, a `%%{init}%%` in a name no longer changes the diagram's theme, and a colon in a calendar date no longer stops the timeline rendering. ([#590](https://github.com/danjdewhurst/story-skills/issues/590))
 
 ## [0.22.1] - 2026-10-06
 
