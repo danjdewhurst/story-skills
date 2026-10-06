@@ -143,7 +143,7 @@ describe("story grid", () => {
     expect(json.code).toBe(1);
     const envelope = JSON.parse(json.out);
     expect(validateAgainstSchema(envelope, schema)).toEqual([]);
-    expect(envelope.diagnostics.some((entry) => entry.file === path.join("chapters", "chapter-04.md"))).toBe(true);
+    expect(envelope.diagnostics.some((entry) => entry.file === "chapters/chapter-04.md")).toBe(true);
   });
 
   test("--json reports the chapters and arc rows", () => {
