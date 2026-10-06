@@ -165,7 +165,22 @@ jobs:
       # Signed SLSA build provenance for each archive and the checksums file,
       # so `gh attestation verify <file> --repo danjdewhurst/story-skills`
       # proves a download was built by this workflow from this repository.
+      # The attestation names the run's ref and commit, so it is made only
+      # when the run is on the release tag. A manual run from a branch builds
+      # the tag but would attest the branch; dispatch it on the tag instead:
+      # `gh workflow run publish.yml --ref vX.Y.Z -f tag=vX.Y.Z`.
+      - name: Check the run is on the release tag
+        id: provenance
+        run: |
+          if [ "$GITHUB_REF" = "refs/tags/$TAG" ]; then
+            echo "attest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::This run is on $GITHUB_REF, not refs/tags/$TAG, so the binaries were not attested. Re-run with: gh workflow run publish.yml --ref $TAG -f tag=$TAG"
+            echo "attest=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Attest build provenance
+        if: steps.provenance.outputs.attest == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/binaries/story-skills_*
