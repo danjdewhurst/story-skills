@@ -369,7 +369,7 @@ The three permission fields are for your records; no build prints them. `story v
 
 A matter page whose id is `copyright`, or whose title contains the word "Copyright" in any letter case, counts as the book's copyright page. The EPUB marks it as a copyright page wherever it sits. When it is front matter, the print interior places it before the contents and the narration script skips it; a back-matter copyright page stays at the end of the print interior and is narrated.
 
-Matter file names must be kebab-case, because they become EPUB file names. A build stops on a name such as `matter/About_Me.md` with `matter/About_Me.md: matter file names must be kebab-case to build`.
+Matter file names must be kebab-case, because they become EPUB file names. A build stops on a name such as `matter/About_Me.md` with `matter/About_Me.md: matter file names must be kebab-case to build`. A page with text also needs a title, even with `heading: false`, since the title names the page in the EPUB contents. Export and every build stop on a blank one with `matter/dedication.md: a matter page needs a title to build`, and `story validate` reports it as a missing field.
 
 The page text is found with the same rule as chapter prose. For a normal matter page, that is the file body with its leading `# ` heading removed, so the heading in the file is for you and the `heading` field decides what readers see. A page with no text is left out of every export and build, and `story validate` warns about it:
 
@@ -620,7 +620,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `ink` | ink story for inkle's Inky and inklecate: one knot per chapter, with chapter `choices` as choices | `dist/<story-id>.ink` | No |
 | `codex` | Story bible as a static site of linked HTML pages: characters, places, factions, artifacts, systems, arcs, timeline, threads, and progress | `dist/codex/` (a folder) | No prose at all |
 
-The story id is the kebab-case title from `story.md`. Build every format of the example *The Last Ember* like this:
+The story id is the kebab-case title from `story.md` (see [Identifiers and filenames](project-format.md#identifiers-and-filenames) for titles without ASCII letters or digits). Build every format of the example *The Last Ember* like this:
 
 ```shell
 story build .
@@ -703,10 +703,12 @@ author: Ada Writer
 cover: art/cover.png
 ```
 
-The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, and not a symlink. `story validate` checks the path, and an EPUB build stops if it is wrong:
+The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, and not a symlink, and its path must not hold control characters. Its first bytes must be the signature of the image its extension names, since the EPUB declares the image type from the extension. `story validate` checks the path and the file, and an EPUB build stops if either is wrong:
 
 ```text
 story.md cover art/cover.png does not exist
+story.md cover art/cover.png holds a JPEG image, not a PNG one: rename it to end in .jpeg or .jpg
+story.md cover art/cover.png does not hold a PNG image: its first bytes are not the PNG signature
 ```
 
 Other formats do not read the image, so a DOCX build succeeds even with a broken cover path. With the cover and author set, *The Last Ember* builds to these entries:
@@ -1251,11 +1253,11 @@ Without `build-style`, or with `preset: classic` and nothing else, every build i
 
 **Other scripts.** A preset's fonts are Latin fonts, so a book in another script keeps the fonts for its script (see [Typesetting other scripts](#typesetting-other-scripts)) and takes the rest of the preset. A `body-font` or `heading-font` you name comes first, followed by the script's fonts, so a character your font lacks still has one. Small capitals and drop caps need a script with capitals, as the enlarged first letter does, and are left out of vertical text.
 
-**The extra stylesheet.** `css` names a UTF-8 `.css` file inside the project, no larger than 5 MiB, and not a symlink. The review copy and print interior carry it in a second `<style>` element after their own; the EPUB stores it as `extra.css`, lists it in the package manifest, and links it from every document after `style.css`. One file serves all three formats, so scope a rule when it should reach only one: `main` exists only in the review copy, `.title-page` only in the print interior, and `@page` rules matter only to a paged-media engine. Keep the file self-contained: an `@import` or `url()` that points at another file is not packaged. Line endings and a byte order mark are normalised, so the build is the same on every system.
+**The extra stylesheet.** `css` names a UTF-8 `.css` file inside the project, no larger than 5 MiB, and not a symlink. The review copy and print interior carry it in a second `<style>` element after their own; the EPUB stores it as `extra.css`, lists it in the package manifest, and links it from every document after `style.css`. One file serves all three formats, so scope a rule when it should reach only one: `main` exists only in the review copy, `.title-page` only in the print interior, and `@page` rules matter only to a paged-media engine. Keep the file self-contained: an `@import` or `url()` that points at another file is not packaged. Line endings and a byte order mark are normalised, so the build is the same on every system. A build's `--out` never replaces this file.
 
 The Shunn manuscript (`--format shunn`, `--format docx --shunn`, and their PDFs) follows a fixed submission format, and the DOCX build uses Word styles you change in Word, so neither reads `build-style`.
 
-`story validate` reports `invalid-build-style` for a value that is not a list of entries, an unknown key, a key set twice, a preset, heading style, or paragraph style it does not know, a font list with characters CSS could misread (`;`, `{`, `}`, `<`, `>`, `/`, `\`, or parentheses), a blank or multi-line scene break, a `drop-caps` other than `true` or `false`, and a `css` path that is not a `.css` file, is outside the project, is missing, is a symlink, or contains `</style`. The EPUB, HTML, and print builds stop on the same problems:
+`story validate` reports `invalid-build-style` for a value that is not a list of entries, an unknown key, a key set twice, a preset, heading style, or paragraph style it does not know, a font list with characters CSS could misread (`;`, `{`, `}`, `<`, `>`, `/`, `\`, or parentheses), a blank or multi-line scene break, a `drop-caps` other than `true` or `false`, and a `css` path that holds a control character, is not a `.css` file, is outside the project, is missing, is a symlink, or contains `</style`. The EPUB, HTML, and print builds stop on the same problems:
 
 ```text
 Cannot build until story.md build-style is fixed:
@@ -1405,6 +1407,11 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```
 
   Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused. The real path is compared in any letter case too, on every system, so on a case-insensitive disk such as the macOS default an absolute path typed in another case (`/users/me/book/chapters/x.md` for a project at `/Users/me/Book`) is refused. On a case-sensitive disk this errs on the safe side: a sibling folder that differs from the project only in case is refused as well. Names are also compared as a disk may read them, on every system (see the `.git` rule below), so `story.md.`, `story.md::$DATA` (the file's text on NTFS), `chapters::$INDEX_ALLOCATION/x.md`, `chapters` with a zero-width character in it, and the NTFS short names `CHAPTE~1/x.md` and `STYLE-~1.MD` are refused too. The hashed short name NTFS falls back to once four names in a folder start with the same six letters (`CH1A2B~1`) is not recognised.
+- The files `story.md` names for a build to read, the `cover` image and the `build-style` `css` stylesheet, are refused the same way, in any letter case, as a disk may read their names, through a symlinked folder, and wherever they are, outside the project too, so `--out cover.png` cannot replace the cover:
+
+  ```text
+  Refusing to write generated output to art/cover.png: story.md names it as the cover. Use a path such as dist/ instead
+  ```
 - A path inside a `.git` folder, typed in any letter case or reached through a symlinked folder, is refused for every `--out`, so a build can never replace a repository's own files such as `.git/config`. Every name a disk reads as `.git` counts too: `.git.` and `.git ` (Windows, vfat, and exFAT drop trailing dots and spaces), the short name `GIT~1`, a name with a stream after a colon such as `.git::$INDEX_ALLOCATION` (NTFS reads it as the folder itself), and `.git` with zero-width or other ignorable characters in it, such as a zero-width non-joiner (U+200C) after the `g` (HFS+ leaves those characters out when it looks a name up). These count on every system, since Linux reaches the same disks through WSL's `/mnt/c`, a USB stick, or an `hfsplus` mount. Only the folders below the project (or, for a path outside it, below the folder the two share) are checked, so a book that itself sits inside a folder named `.git` still builds to its own `dist/`:
 
   ```text
@@ -1439,7 +1446,8 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
-| `story.md cover <path> ...` | The cover path is missing, outside the project, or not a supported image | Fix `cover` in `story.md`, or remove it. |
+| `story.md cover <path> ...` | The cover path is missing, outside the project, holds a control character, or is not a supported image, or the file's contents are not the image its extension names | Fix `cover` in `story.md`, or remove it; save the cover again, or rename it to match its format. |
+| `<file>: a matter page needs a title to build` | A `matter/` page with text has a blank `title` | Give the page a `title`. |
 | `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. |
 | `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |
 | `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
@@ -1451,6 +1459,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `<path>: Refusing to write through symlink` | The `--out` file is a symlink | Delete the symlink or choose another file. |
 | `Refusing to write generated output to <path>: it is project source. ...` | `--out` names a project file or a path inside an entity folder | Write to `dist/` or another folder outside the project source. |
 | `Refusing to write generated output to <path>: it is inside a .git folder. ...` | `--out` names a path inside a `.git` folder | Write to a folder outside `.git`, such as the project's `dist/`. |
+| `Refusing to write generated output to <path>: story.md names it as the cover. ...` (or `as the build-style css`) | `--out` names the cover image or the extra stylesheet | Write to `dist/` or another file. |
 | `Refusing to overwrite <path>: files in feedback/, submission/, ... may hold hand-written work. ...` | `--out` names an existing file in a skill-owned folder | Delete the file first if you mean to regenerate it, or write to `dist/`. |
 | `--out <path> is a directory: give a file path` | `--out` names a directory, such as `dist` | Add a file name, such as `dist/book.epub`. |
 | `Cannot export: fix this file first ...`, `Cannot build: ...`, or `Cannot build a synopsis: ...` | An entity file, registry, or `story.md` fails to parse | Fix the listed files; `story validate` reports them too. |

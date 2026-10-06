@@ -44,7 +44,8 @@ import {
   asArray,
   coverIsReady,
   coverImage,
-  relative
+  relative,
+  substituteStoryIdWarnings
 } from "./scan.js";
 
 export function exportManuscript(root, options = {}) {
@@ -128,9 +129,12 @@ export function buildBook(root, options = {}) {
   }
   const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
+  // A substitute story id names the file (and the EPUB identifier and IFID),
+  // so every build that uses it says so.
+  const withIdWarnings = (result) => ({ ...result, warnings: [...substituteStoryIdWarnings(project), ...result.warnings] });
 
   if (options.pdf) {
-    return buildPdf(project, format, { trim, paper }, output, options);
+    return withIdWarnings(buildPdf(project, format, { trim, paper }, output, options));
   }
 
   if (format === "markdown") {
@@ -139,7 +143,7 @@ export function buildBook(root, options = {}) {
       generatedBy: "story build",
       enforceRoot: output.enforceRoot
     });
-    return { ...result, format };
+    return withIdWarnings({ ...result, format });
   }
 
   // The screenplay skeleton reads chapters and scene records, not matter
@@ -147,7 +151,7 @@ export function buildBook(root, options = {}) {
   if (format === "fountain") {
     const screenplay = screenplayOutline(project, bookChapters(project));
     writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
-    return { outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings };
+    return withIdWarnings({ outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings });
   }
 
   const manuscript = manuscriptParts(project);
@@ -192,7 +196,7 @@ export function buildBook(root, options = {}) {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
 
-  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+  return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
 }
 
 // `--pdf`: the print interior or Shunn manuscript as HTML, rendered by an
@@ -728,9 +732,14 @@ export function manuscriptParts(project, action = "build") {
   const { meta, chapters, warnings } = bookChapters(project, action);
 
   // Matter ids become EPUB manifest ids and file names, so they must be safe.
+  // A page's title is its EPUB <title> and contents entry, even without a
+  // heading, and the EPUB is invalid where either is blank.
   for (const entry of project.matter) {
     if (!isKebabId(entry.id)) {
       throw projectError(`${relative(project, entry.file)}: matter file names must be kebab-case to build`);
+    }
+    if (!entry.empty && entry.title.trim() === "") {
+      throw projectError(`${relative(project, entry.file)}: a matter page needs a title to build`);
     }
   }
   // Unwritten matter (a scaffold with only its heading) stays out of the book.
@@ -799,6 +808,8 @@ function assertNotProjectSource(project, outFile) {
   // The path as typed is checked before anything resolves it, so a name a
   // file system reads its own way (`story.md::$DATA`,
   // `.git::$INDEX_ALLOCATION`) is refused before the file system sees it.
+  const referenced = referencedFiles(project);
+  assertNotReferencedPath(project, outFile, outFile, referenced);
   assertNotSourcePath(project, outFile, project.root, outFile);
   if (isInsideGitDirectory(outFile, project.root)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
@@ -808,6 +819,7 @@ function assertNotProjectSource(project, outFile) {
   // can name the project at `/Users/me/Book`.
   const realRoot = fs.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
+  assertNotReferencedPath(project, outFile, realTarget, referenced);
   assertNotSourcePath(project, outFile, realRoot, realTarget);
   assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
 }
@@ -841,6 +853,45 @@ function assertNotSourcePath(project, outFile, root, target) {
 function realPathThroughAncestors(target) {
   const { ancestor, missing } = nearestExistingAncestor(target, fs.existsSync);
   return path.join(fs.realpathSync.native(ancestor), ...missing);
+}
+
+// The files story.md names that a build reads, the cover and the
+// build-style stylesheet: each absolute path, as written and through any
+// symlinked folder, as the names a file system looks up (see
+// lookedUpNames). Each is trimmed as coverImage and styleSheetFile trim it;
+// a path holding a control character names no file a build reads.
+function referencedFiles(project) {
+  const files = [];
+  const add = (value, label) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text === "" || /[\u0000-\u001f\u007f]/u.test(text)) {
+      return;
+    }
+    const file = path.resolve(project.root, text);
+    for (const form of [file, realPathThroughAncestors(file)]) {
+      files.push({ names: lookedUpNames(form), label });
+    }
+  };
+  add(project.story.data.cover, "cover");
+  add(buildStyle(project.story.data).css, "build-style css");
+  return files;
+}
+
+// The names of an absolute path as a file system may look each one up.
+function lookedUpNames(file) {
+  return file.split(path.sep).map(fileSystemName);
+}
+
+// `target` (the --out path as typed, or its real path) is a file story.md
+// names for a build to read, wherever it is: each name matches as a file
+// system looks it up (`Cover.PNG`, `cover.png::$DATA`, `cover.png.`) or as
+// its NTFS short name (`COVER~1.PNG`).
+function assertNotReferencedPath(project, outFile, target, referenced) {
+  const names = lookedUpNames(target);
+  const file = referenced.find((entry) => entry.names.length === names.length && names.every((name, index) => name === entry.names[index] || isShortNameOf(name, entry.names[index])));
+  if (file !== undefined) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: story.md names it as the ${file.label}. Use a path such as dist/ instead`);
+  }
 }
 
 export function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {

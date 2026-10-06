@@ -54,6 +54,7 @@ export const FINDING_CODES = {
   "near-miss-key": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
+  "substitute-story-id": "warning",
   "entry-not-mapping": "error",
   "schema-too-new": "error",
   "schema-version-mismatch": "error",

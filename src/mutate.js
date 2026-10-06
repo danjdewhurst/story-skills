@@ -85,6 +85,7 @@ import {
   RESEARCH_METHODS,
   RESEARCH_DIR,
   existingStoryData,
+  asciiStoryId,
   deriveStoryId,
   scanProject,
   assertProjectParses,
@@ -169,7 +170,9 @@ export function createStoryProject(options) {
   // `--force` keeps an existing story.md, so new registries take the story id
   // from its title, and the options it would have set are reported unused.
   const existingStory = existingStoryData(root);
-  const storyId = deriveStoryId(existingStory ? existingStory.title : title, root);
+  // A new project gets an id from its title or folder name, never the
+  // substitute scanProject falls back to for a folder renamed later.
+  const storyId = asciiStoryId(existingStory ? existingStory.title : title, root);
   // The story id names the default folder and every build file.
   assertPortableId(storyId, "story");
   assertPortableFolderName(path.basename(root));

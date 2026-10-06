@@ -224,6 +224,21 @@ describe("--dry-run", () => {
     }
   });
 
+  test("a dry run checks the cover's first bytes as the real run does", () => {
+    const root = copyExample("the-unraveled-thread");
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncover: cover.png\n"));
+    // A PNG, then a review copy saved over it.
+    for (const [bytes, broken] of [[Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), false], [Buffer.from("<!DOCTYPE html>\n"), true]]) {
+      fs.writeFileSync(path.join(root, "cover.png"), bytes);
+      const preview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
+      const real = invokeJson(root, ["doctor", "--fix", "--json"]);
+      expect(real.envelope.diagnostics.some((finding) => finding.code === "invalid-cover")).toBe(broken);
+      expect(preview.envelope.data.checks).toEqual(real.envelope.data.checks);
+      expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
+    }
+  });
+
   test("a dry run in a series book sees its linked books, as the real run does, and writes none of them", () => {
     const parent = makeTempDir();
     for (const name of ["the-last-ember", "the-fall-of-the-citadel", "the-unraveled-thread"]) {

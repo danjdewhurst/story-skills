@@ -236,6 +236,26 @@ describe("build-style css", () => {
     expect(messages(validateProject(root).errors)).toEqual([expect.stringMatching(/^story\.md build-style css linked\.css: Refusing to read through symlink$/)]);
     expect(() => buildBook(root, { format: "epub" })).toThrow(/symlink/);
   });
+
+  test("a stylesheet path with a control character is refused, named, before any file is read", () => {
+    const root = project('build-style:\n  - css: "a\\u0000.css"\n');
+    const message = 'story.md build-style css "a\\u0000.css" must not contain control characters';
+    expect(messages(validateProject(root).errors.filter((error) => error.code === "invalid-build-style"))).toEqual([message]);
+    const io = memoryIo(root);
+    expect(runCli(["build", "--format", "html"], io)).toBe(3);
+    expect(io.error()).toContain(`Cannot build until story.md build-style is fixed:\n${message}`);
+  });
+
+  test("--out never replaces the stylesheet story.md names", () => {
+    const root = project("build-style:\n  - css: styles/book.css\n");
+    fs.mkdirSync(path.join(root, "styles"));
+    fs.writeFileSync(path.join(root, "styles", "book.css"), "p { color: navy; }\n");
+    expect(() => buildBook(root, { format: "html", out: "styles/book.css" })).toThrow("Refusing to write generated output to styles/book.css: story.md names it as the build-style css. Use a path such as dist/ instead");
+    expect(() => buildBook(root, { format: "markdown", out: path.join(root, "Styles", "Book.CSS") })).toThrow("story.md names it as the build-style css");
+    const io = memoryIo(root);
+    expect(runCli(["build", "--format", "print", "--out", "./styles/book.css"], io)).toBe(4);
+    expect(fs.readFileSync(path.join(root, "styles", "book.css"), "utf8")).toBe("p { color: navy; }\n");
+  });
 });
 
 describe("build-style validation", () => {
