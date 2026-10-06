@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
@@ -208,24 +209,32 @@ function writeWholeFile(filePath, contents, options) {
   }
   const mode = existing ? existing.mode & 0o777 : 0o666;
   const temporary = temporaryPath(target);
+  let created = false;
   try {
-    const descriptor = fs.openSync(temporary, "w", mode);
+    // "wx" makes a new file or fails: whatever is already at the name, a
+    // symlink included, is never opened, so the write cannot land anywhere
+    // but the new file. Its mode is set through the descriptor for the
+    // same reason.
+    const descriptor = fs.openSync(temporary, "wx", mode);
+    created = true;
     try {
       fs.writeFileSync(descriptor, contents, "utf8");
+      if (existing) {
+        fs.fchmodSync(descriptor, mode);
+      }
       fs.fsyncSync(descriptor);
     } finally {
       fs.closeSync(descriptor);
     }
-    if (existing) {
-      fs.chmodSync(temporary, mode);
-    }
     if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
-      fs.rmSync(temporary, { force: true });
       throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
     }
     fs.renameSync(temporary, target);
   } catch (error) {
-    fs.rmSync(temporary, { force: true });
+    // Only a file this write made is removed.
+    if (created) {
+      fs.rmSync(temporary, { force: true });
+    }
     if (error.changedOnDisk) {
       throw error;
     }
@@ -236,10 +245,10 @@ function writeWholeFile(filePath, contents, options) {
 }
 
 // writeWholeFile's checks, without the write: the target is inside the
-// root and not a symlink, an existing file is writable and unchanged, and
-// the folder the temporary file goes in (or, for a new folder, its nearest
-// existing ancestor) is writable, with no folder in the temporary file's
-// place. A refusal names the target as writeWholeFile's does.
+// root and not a symlink or a folder, an existing file is writable and
+// unchanged, and the folder the temporary file goes in (or, for a new
+// folder, its nearest existing ancestor) is writable. A refusal names the
+// target as writeWholeFile's does.
 function planWrite(filePath, options) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
@@ -248,8 +257,8 @@ function planWrite(filePath, options) {
   }
   try {
     fs.accessSync(nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
-    // Opening the temporary file, or renaming it over a folder, fails.
-    if (lstatIfExists(temporaryPath(target))?.isDirectory() || existing?.isDirectory()) {
+    // Renaming the temporary file over a folder fails.
+    if (existing?.isDirectory()) {
       throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
     }
   } catch (error) {
@@ -270,14 +279,16 @@ function currentText(target) {
   }
 }
 
-// `.chapter-01.md.story-1234.tmp`: hidden, never scanned as markdown, and
-// named after its target so validate can say what an interrupted write
-// left behind.
-export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-\d+\.tmp$/;
+// `.chapter-01.md.story-9f2c41d07a3b6e85.tmp`: hidden, never scanned as
+// markdown, and named after its target so validate can say what an
+// interrupted write left behind. The suffix is random, so nothing can be
+// put at the name before the write makes it; older versions used the
+// process id, which the pattern still matches.
+export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 
 function temporaryPath(target) {
   const name = path.basename(target).slice(0, 200);
-  return path.join(path.dirname(target), `.${name}.story-${process.pid}.tmp`);
+  return path.join(path.dirname(target), `.${name}.story-${crypto.randomBytes(8).toString("hex")}.tmp`);
 }
 
 function prepareWriteTarget(filePath, root) {

@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -100,12 +101,107 @@ describe("atomic writes (#190, #197)", () => {
     } finally {
       fs.renameSync = original;
     }
-    expect(renames).toEqual([[`.chapter.md.story-${process.pid}.tmp`, "chapter.md"]]);
+    expect(renames).toHaveLength(1);
+    expect(renames[0][0]).toMatch(/^\.chapter\.md\.story-[0-9a-f]{16}\.tmp$/);
+    expect(renames[0][1]).toBe("chapter.md");
     expect(fs.readFileSync(target, "utf8")).toBe("new");
     if (!CHMOD_IGNORED) {
       expect(fs.statSync(target).mode & 0o777).toBe(0o640);
     }
     expect(fs.readdirSync(dir)).toEqual(["chapter.md"]);
+  });
+
+  test("each write gets a new random temporary name", () => {
+    const dir = makeTempDir();
+    const target = path.join(dir, "chapter.md");
+    const names = [];
+    const original = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      names.push(path.basename(from));
+      return original(from, to);
+    };
+    try {
+      writeFile(target, "one");
+      writeFile(target, "two");
+    } finally {
+      fs.renameSync = original;
+    }
+    expect(names).toHaveLength(2);
+    expect(names[0]).not.toBe(names[1]);
+    expect(names.some((name) => name.includes(String(process.pid)))).toBe(false);
+  });
+
+  // Windows makes symlinks only with extra privileges.
+  test.skipIf(process.platform === "win32")("a symlink at the old process-id temporary name is never written through", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outside = path.join(makeTempDir(), "outside.txt");
+    fs.writeFileSync(outside, "untouched\n");
+    fs.chmodSync(outside, 0o600);
+    const planted = path.join(root, "chapters", `.chapter-01.md.story-${process.pid}.tmp`);
+    fs.symlinkSync(outside, planted);
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapter, "\nThe ember woke.\n");
+
+    expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
+    expect(fs.readFileSync(outside, "utf8")).toBe("untouched\n");
+    if (!CHMOD_IGNORED) {
+      expect(fs.statSync(outside).mode & 0o777).toBe(0o600);
+    }
+    expect(fs.lstatSync(chapter).isFile()).toBe(true);
+    expect(read(root, "chapters/chapter-01.md")).toContain("word-count: 3");
+    // Not this write's file, so it is left where it is.
+    expect(fs.lstatSync(planted).isSymbolicLink()).toBe(true);
+  });
+
+  test.skipIf(process.platform === "win32")("a symlink at the very name a write picks is refused, not written through or removed", () => {
+    const dir = makeTempDir();
+    const target = path.join(dir, "chapter.md");
+    fs.writeFileSync(target, "old");
+    const outside = path.join(makeTempDir(), "outside.txt");
+    fs.writeFileSync(outside, "untouched");
+    const bytes = Buffer.from("0123456789abcdef", "hex");
+    const planted = path.join(dir, `.chapter.md.story-${bytes.toString("hex")}.tmp`);
+    fs.symlinkSync(outside, planted);
+    const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
+    try {
+      expect(() => writeFile(target, "new")).toThrow(`Cannot write to ${target}: EEXIST`);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.readFileSync(outside, "utf8")).toBe("untouched");
+    expect(fs.readFileSync(target, "utf8")).toBe("old");
+    expect(fs.lstatSync(planted).isSymbolicLink()).toBe(true);
+  });
+
+  test.skipIf(process.platform === "win32")("a dry run never writes through a symlink the project holds at a temporary name", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "\nThe ember woke.\n");
+    const outside = path.join(makeTempDir(), "outside.txt");
+    fs.writeFileSync(outside, "untouched\n");
+    fs.symlinkSync(outside, path.join(root, "chapters", `.chapter-01.md.story-${process.pid}.tmp`));
+    const bytes = Buffer.from("fedcba9876543210", "hex");
+    fs.symlinkSync(outside, path.join(root, "chapters", `.chapter-01.md.story-${bytes.toString("hex")}.tmp`));
+
+    // The copy holds both links; a write there picks a fresh name.
+    const preview = invoke(root, ["wordcount", "--write", "--dry-run"]);
+    expect(preview.code).toBe(0);
+    expect(preview.out).toMatch(/^update +chapters\/chapter-01\.md$/m);
+    expect(fs.readFileSync(outside, "utf8")).toBe("untouched\n");
+
+    // Even when the copy's write picks the very name a link holds.
+    const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
+    let refused;
+    try {
+      refused = invoke(root, ["wordcount", "--write", "--dry-run"]);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(refused.code).toBe(4);
+    expect(refused.err).toContain(`${path.join("chapters", "chapter-01.md")}: EEXIST`);
+    expect(fs.readFileSync(outside, "utf8")).toBe("untouched\n");
+    expect(read(root, "chapters/chapter-01.md")).not.toContain("word-count: 3");
   });
 
   test("a read-only file stays refused", () => {
