@@ -5,6 +5,7 @@ import { characterLifeline, revivedBy } from "./deaths.js";
 import { err, warn } from "./findings.js";
 import { languagePack } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
+import { nfc } from "./unicode.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { portablePath, projectPath, readTextFile } from "./files.js";
 
@@ -476,12 +477,12 @@ function checkCanonNames(book, earlierBooks, warnings) {
 }
 
 function pronunciationText(value) {
-  return typeof value === "string" ? value.trim().normalize("NFC") : "";
+  return typeof value === "string" ? nfc(value.trim()) : "";
 }
 
 // NFC and NFD spellings of one name (macOS files, pasted text) are the same.
 function canonText(value) {
-  return typeof value === "string" ? value.normalize("NFC") : value;
+  return typeof value === "string" ? nfc(value) : value;
 }
 
 // A character who dies in an earlier book stays dead: the later book must mark

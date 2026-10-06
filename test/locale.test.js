@@ -58,9 +58,10 @@ describe("locale-aware text", () => {
     expect(same.text).toBe("ışık ince");
     expect(same.original(5, 9)).toEqual([5, 9]);
     expect(matchingCase("İNCE", languagePack("az-Latn-AZ"))).toBe("ince");
-    // Turkish drops a dot written after I, one shorter.
+    // I and a dot above compose to İ, which Turkish lower-cases to i, one
+    // shorter. I and a dot below compose to Ị, which keeps the dot above.
     const turkish = matchingText("Bir I\u0307nce yol, I\u0130\u0307 I\u0323\u0307", languagePack("tr"));
-    expect(turkish.text).toBe("bir ince yol, \u0131i\u0307 i\u0323");
+    expect(turkish.text).toBe("bir ince yol, \u0131i\u0307 \u1ecb\u0307");
     expect(turkish.original(4, 8)).toEqual([4, 9]);
     expect(turkish.original(9, 12)).toEqual([10, 13]);
     expect(turkish.original(4, 5)).toEqual([4, 6]);
@@ -69,6 +70,15 @@ describe("locale-aware text", () => {
     expect(turkish.original(18, 20)).toEqual([19, 22]);
     expect(turkish.original(18, 19)).toEqual([19, 22]);
     expect(turkish.original(19, 20)).toEqual([19, 22]);
+    // NFC composes I with a dot above wherever Turkish casing would drop
+    // the dot, so lower-casing composed text never changes its length.
+    for (let code = 0x300; code <= 0x36f; code += 1) {
+      const mark = String.fromCodePoint(code);
+      for (const written of [`I${mark}\u0307`, `I\u0307${mark}`, `I${mark}${mark}\u0307`]) {
+        const { text } = matchingText(written, languagePack("tr"));
+        expect(text.length).toBe(written.normalize("NFC").length);
+      }
+    }
   });
 
   test("leaves text as written for matching outside Turkish and Azerbaijani", () => {

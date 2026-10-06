@@ -1934,6 +1934,7 @@ The names looked for are the entity's `name`, its `aliases` (characters and glos
 
 - **Within a paragraph.** The words of a name may wrap onto the next line, but a name never runs across a blank line, a comment, or a fence.
 - **As written.** A character called `Rose` is not found in "a rose". Only the first letter of a name of two or more words may be either case, so `The Hollow` matches "the Hollow"; a one-word name written in lower case also matches with a capital.
+- **In either Unicode form.** An accented or voiced letter may be typed as one character or as a letter and a combining mark (`é` or `e` + U+0301, `が` or `か` + U+3099, as macOS file names and some input methods write them); both forms match each other, and lines, columns, and excerpts are those of the file as written.
 - **As whole words.** `Bath` does not match "Bathsheba". Possessives (`Maren's`) and hyphenated compounds count. In Chinese and Japanese a name matches inside a run of characters, and in Thai at the word breaks the segmenter finds, as for [`prose`](#prose) watch words.
 - **Once per place.** Where names overlap, the longest wins, so `Edran Vale` is not also a mention of a location called `Vale`. A name two entities share counts for both.
 

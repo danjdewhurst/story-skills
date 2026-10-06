@@ -978,7 +978,7 @@ allow-words:
 | `watch-words` | Counted in every chapter, as a reminder of your own tics. |
 | `allow-words` | Silences a word as a filter word, said-bookism, adverb, or echo. Naming either spelling of a built-in dialect pair turns that pair off. |
 
-Matches are case-insensitive whole words, with Turkish and Azerbaijani casing in a book in those languages (Turkish `ILIK` is a use of `ılık`), so `grey-haired` still counts as a use of `grey`, and a straight apostrophe in the style sheet also matches a curly one in the manuscript (`don't` counts `don’t`). A capitalised word that is part of a name in the bible (`Dorian Gray`, `Center Point`) is not counted as an avoided spelling, and a `preferred` entry whose `use` and `avoid` are the same word is skipped. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
+Matches are case-insensitive whole words, with Turkish and Azerbaijani casing in a book in those languages (Turkish `ILIK` is a use of `ılık`), so `grey-haired` still counts as a use of `grey`, and a straight apostrophe in the style sheet also matches a curly one in the manuscript (`don't` counts `don’t`). An accented letter typed as one character matches the same letter typed with a combining mark (`café` counts `cafe` + U+0301), and the other way round. A capitalised word that is part of a name in the bible (`Dorian Gray`, `Center Point`) is not counted as an avoided spelling, and a `preferred` entry whose `use` and `avoid` are the same word is skipped. `story validate` checks the style sheet's shape: `type: style-sheet`, a known `dialect`, and a non-empty, different `use` and `avoid` in each `preferred` entry.
 
 ### Acting on the report
 
@@ -1036,7 +1036,7 @@ voice-avoid:
   - good
 ```
 
-`voice-words` are words and phrases the character does say; `voice-avoid` are ones they would never say. Both are lists of strings, matched as whole words or phrases, case-insensitively (with Turkish and Azerbaijani casing in a book in those languages), with either straight or curly apostrophes. The [`voice-style`](../skills/voice-style/SKILL.md) skill records them.
+`voice-words` are words and phrases the character does say; `voice-avoid` are ones they would never say. Both are lists of strings, matched as whole words or phrases, case-insensitively (with Turkish and Azerbaijani casing in a book in those languages), with either straight or curly apostrophes, and with an accented letter matching it typed either as one character or with a combining mark. The [`voice-style`](../skills/voice-style/SKILL.md) skill records them.
 
 ### Voice findings
 
@@ -1110,7 +1110,7 @@ story mentions --path .
 
 `story mentions <kind> <id>` lists every place a drafted chapter's prose names one character, location, faction, artifact, system, or glossary term, with its file, line, and column, and says which chapters name it without listing it in their frontmatter, or list it without naming it. Run it before `story rename` or `story remove`, which change ids but never prose.
 
-It looks for the entity's `name`, its `aliases`, a character's given name, and each of these without leading titles or articles (`Hollow` for `The Hollow`; the titles come from the language pack). Only chapter prose is read: outline chapters, the outline, HTML comments, and code fences are skipped, and a name never runs across a blank line, a comment, or a fence. Names match as written and as whole words: a character called Rose is not found in "a rose", and a place called Bath is not found in "Bathsheba", but `Maren's` and `Vale-born` count. Only the first letter of a name of two or more words may differ in case. Where two names overlap, the longest wins, so `Edran Vale` is not also a mention of a place called Vale. Chinese and Japanese names match inside a run of characters, and Thai names at the segmenter's word breaks.
+It looks for the entity's `name`, its `aliases`, a character's given name, and each of these without leading titles or articles (`Hollow` for `The Hollow`; the titles come from the language pack). Only chapter prose is read: outline chapters, the outline, HTML comments, and code fences are skipped, and a name never runs across a blank line, a comment, or a fence. Names match as written and as whole words: a character called Rose is not found in "a rose", and a place called Bath is not found in "Bathsheba", but `Maren's` and `Vale-born` count. Only the first letter of a name of two or more words may differ in case. Where two names overlap, the longest wins, so `Edran Vale` is not also a mention of a place called Vale. Chinese and Japanese names match inside a run of characters, and Thai names at the segmenter's word breaks. An accented or voiced letter may be typed as one character or as a letter and a combining mark (`é` or `e` + U+0301, `が` or `か` + U+3099, as macOS file names and some input methods write them); both forms match each other, and lines, columns, and excerpts are those of the file as written.
 
 `story continuity` runs half of this on every drafted chapter: it warns `named-not-listed` when the prose names a character that `pov`, `characters`, and `mentions` all leave out (see [Casts and locations](#casts-and-locations)). To keep it quiet on ordinary prose:
 

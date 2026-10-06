@@ -1,3 +1,4 @@
+import { composedText, nfc } from "../unicode.js";
 import { languagePack } from "./index.js";
 
 // Locale-aware text for a language pack: the order names and words are
@@ -39,79 +40,23 @@ function casesDotlessI(pack) {
 
 // Author-supplied words (watch words, avoided spellings, voice phrases) and
 // the prose they are looked for in, made ready for a case-insensitive (`i`)
-// regex. In Turkish and Azerbaijani both are lower-cased with the pack, so
-// ILIK finds ılık and İnce finds ince but not ınce; every other language
-// matches the text as written, with the `i` flag alone.
+// regex, in NFC. In Turkish and Azerbaijani both are lower-cased with the
+// pack, so ILIK finds ılık and İnce finds ince but not ınce; every other
+// language matches the text as written, with the `i` flag alone.
 export function matchingCase(phrase, pack = languagePack()) {
-  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
+  const composed = nfc(phrase);
+  return casesDotlessI(pack) ? lowerCase(composed, pack) : composed;
 }
 
 // `text` as matchingCase gives it, with `original(start, end)` mapping a
-// span of it back to the text as written, for excerpts and offsets: a
-// Turkish lower-casing drops a dot written after I (I followed by U+0307 is
-// i), so the text can come out shorter.
+// span of it back to the text as written, for excerpts and offsets:
+// composing e + U+0301 into é makes the text shorter (see ../unicode.js).
+// Turkish lower-casing drops a dot above only after an I that no mark of
+// class 0 or 230 parts from it, which is just when NFC has already composed
+// the two into İ, so in composed text it never changes the length.
 export function matchingText(text, pack = languagePack()) {
-  const source = String(text);
-  const same = { text: source, original: (start, end) => [start, end] };
-  if (!casesDotlessI(pack)) {
-    return same;
-  }
-  const lower = lowerCase(source, pack);
-  if (lower.length === source.length) {
-    return { ...same, text: lower };
-  }
-  // Only an I with marks after it can change length, so each is a piece of
-  // its own, lower-cased alone; the runs between keep their length.
-  let folded = "";
-  const starts = [];
-  const sources = [];
-  const add = (from, value) => {
-    starts.push(folded.length);
-    sources.push(from);
-    folded += lowerCase(value, pack);
-  };
-  let last = 0;
-  for (const match of source.matchAll(/I\p{M}+/gu)) {
-    if (match.index > last) {
-      add(last, source.slice(last, match.index));
-    }
-    add(match.index, match[0]);
-    last = match.index + match[0].length;
-  }
-  if (last < source.length) {
-    add(last, source.slice(last));
-  }
-  starts.push(folded.length);
-  sources.push(source.length);
-  // The last piece starting at or before `offset`, by binary search.
-  const piece = (offset) => {
-    let low = 0;
-    let high = starts.length - 1;
-    while (low < high) {
-      const middle = (low + high + 1) >> 1;
-      if (starts[middle] <= offset) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-    return low;
-  };
-  // An offset inside a piece that kept its length maps across exactly;
-  // inside one that changed, it moves to the piece's start, or its end
-  // for the end of a span, so the span takes in the whole piece as written.
-  const at = (offset, end) => {
-    const index = piece(offset);
-    const inside = offset - starts[index];
-    if (inside === 0) {
-      return sources[index];
-    }
-    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
-      return sources[index] + inside;
-    }
-    return sources[end ? index + 1 : index];
-  };
-  return { text: folded, original: (start, end) => [at(start, false), at(end, true)] };
+  const composed = composedText(text);
+  return casesDotlessI(pack) ? { ...composed, text: lowerCase(composed.text, pack) } : composed;
 }
 
 const NUMBER_FORMATS = new Map();

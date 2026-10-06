@@ -5,6 +5,7 @@ import { compareText, lowerCase, matchingCase, matchingText } from "./languages/
 import { escapeRegExp, scanComments, splitWords, withoutFenceMarkers } from "./markdown.js";
 import { givenName } from "./names.js";
 import { splitSentences } from "./sentences.js";
+import { nfc } from "./unicode.js";
 import { narrationOnly, quoteMatches, replaceQuotes } from "./voices.js";
 import { wholeWords, wordMatcher } from "./words.js";
 
@@ -555,10 +556,11 @@ function isName(word, rules) {
   return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word, rules.pack));
 }
 
-// Lower case with curly apostrophes made straight, so style-sheet entries
-// typed with ' match manuscripts that use ’.
+// Lower case in NFC with curly apostrophes made straight, so style-sheet
+// entries typed with ' match manuscripts that use ’, and names typed with é
+// match prose written with e + U+0301.
 function normalizeWord(word, pack) {
-  return lowerCase(word, pack).replace(/’/g, "'");
+  return lowerCase(nfc(word), pack).replace(/’/g, "'");
 }
 
 function nameKey(word, pack) {
@@ -621,10 +623,11 @@ function countMatching(words, predicate, pack) {
 
 // A watch word or avoided spelling, for wordMatcher on matchingText.
 function phrasePattern(phrase, pack) {
-  const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+  const trimmed = nfc(phrase.trim());
+  const body = matchingCase(trimmed, pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
   // Letter boundaries only, so compounds ("grey-haired") and possessives
   // still count as uses of the word.
-  return new RegExp(wholeWords(body, phrase.trim()), "giu");
+  return new RegExp(wholeWords(body, trimmed), "giu");
 }
 
 // A rate printed on the warned side of its threshold: 4.975 against "under

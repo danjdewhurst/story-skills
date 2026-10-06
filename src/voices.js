@@ -6,6 +6,7 @@ import { givenName } from "./names.js";
 import { plural } from "./plural.js";
 import { EXCLAMATION_MARKS, QUESTION_MARKS, anyOf, charClass, punctuation } from "./punctuation.js";
 import { splitSentences } from "./sentences.js";
+import { nfc } from "./unicode.js";
 import { UNSPACED_LETTERS, wholeWords, wordMatcher } from "./words.js";
 
 // Dialogue voice fingerprints for `story voices`. Speech is attributed only
@@ -249,7 +250,7 @@ function speakerPatterns(characters, pack, rules) {
     .filter((character) => character.status !== "cut")
     .map((character) => {
       const names = new Set();
-      const full = String(character.name ?? "").trim();
+      const full = nfc(String(character.name ?? "").trim());
       if (full !== "") {
         names.add(full);
         const first = givenName(full, pack);
@@ -258,7 +259,7 @@ function speakerPatterns(characters, pack, rules) {
         }
       }
       for (const alias of stringList(character.aliases)) {
-        names.add(alias);
+        names.add(nfc(alias));
       }
       const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
       if (alternatives === "") {
@@ -288,7 +289,8 @@ const SPACED_LETTER = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
 const UNSPACED_LETTER = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 
 function attribute(paragraph, allSpeakers, pack) {
-  const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
+  // In NFC, as the names are, so either spelling of é or が finds the other.
+  const narration = nfc(`${splitOpenSpeech(paragraph, pack).narration} `);
   // Test only speakers whose name could appear, so the per-speaker patterns
   // run for a handful of speakers rather than the whole cast. A name in an
   // unspaced script is not split from the words around it, so it is looked
@@ -668,7 +670,7 @@ function similarVoices(left, right) {
 // A voice-words or voice-avoid phrase as whole words, for wordMatcher on
 // matchingText.
 function phrasePattern(phrase, pack) {
-  const trimmed = String(phrase).trim();
+  const trimmed = nfc(String(phrase).trim());
   return new RegExp(wholeWords(escape(matchingCase(trimmed, pack)).replace(/['’]/g, "['’]"), trimmed), "giu");
 }
 

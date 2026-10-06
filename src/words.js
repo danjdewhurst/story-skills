@@ -1,3 +1,5 @@
+import { composedText } from "./unicode.js";
+
 // Words in scripts written without spaces between them. Every word count and
 // word comparison goes through wordSpans, so `story wordcount`, `compare`,
 // `similarity`, and the prose checks split these scripts the same way.
@@ -127,13 +129,15 @@ export function wholeWords(body, phrase) {
 // letters of an unspaced script fall between two of its words, so a Chinese
 // or Japanese phrase matches at any character and a Thai one only at the
 // segmenter's word boundaries. Matches do not overlap; with `first`, only
-// the first is returned. With `cased`, `text` as matchingText gives it,
-// patterns run on that and their spans map back to `text`. The boundaries
+// the first is returned. Patterns run on `text` in NFC (composedText), or
+// on `cased`, `text` as matchingText gives it, so they must be in NFC too;
+// their spans map back to `text` as written. The boundaries
 // are found once, the first time an edge needs them, so one finder serves
 // every pattern looked for in the same text.
 export function wordMatcher(text, cased = null) {
   const source = String(text);
-  const searched = cased?.text ?? source;
+  const view = cased ?? composedText(source);
+  const searched = view.text;
   let boundaries = null;
   return (pattern, { first = false } = {}) => {
     const spans = [];
@@ -141,7 +145,7 @@ export function wordMatcher(text, cased = null) {
     let match;
     while ((match = pattern.exec(searched)) !== null) {
       const end = match.index + match[0].length;
-      const span = cased === null ? [match.index, end] : cased.original(match.index, end);
+      const span = view.original(match.index, end);
       const edges = span.map((offset) => joinedEdge(source, offset)).filter(Boolean);
       if (edges.length > 0) {
         boundaries ??= unspacedBoundaries(source);

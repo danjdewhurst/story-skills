@@ -5935,58 +5935,49 @@ function storyOrder(chronology) {
   return [...chronology.numbers.keys()].sort((left, right) => chronology.numbers.get(left) - chronology.numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0)).sort((left, right) => chronology.after(left, right) ? 1 : chronology.after(right, left) ? -1 : 0);
 }
 
-// src/languages/locale.js
-var COMPARERS = new Map;
-function compareText(pack = languagePack()) {
-  if (!COMPARERS.has(pack.locale)) {
-    const collator = new Intl.Collator(pack.locale);
-    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
-  }
-  return COMPARERS.get(pack.locale);
+// src/unicode.js
+function nfc(value) {
+  return String(value).normalize("NFC");
 }
-function lowerCase(text, pack = languagePack()) {
-  return String(text).toLocaleLowerCase(pack.locale);
-}
-function upperCase(text, pack = languagePack()) {
-  return String(text).toLocaleUpperCase(pack.locale);
-}
-var DOTLESS_I = new Set(["tr", "az"]);
-function casesDotlessI(pack) {
-  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
-}
-function matchingCase(phrase, pack = languagePack()) {
-  return casesDotlessI(pack) ? lowerCase(phrase, pack) : String(phrase);
-}
-function matchingText(text, pack = languagePack()) {
+var SAME = (start, end) => [start, end];
+var CLUSTER = /\P{M}?[\p{M}\u1160-\u11FF\uD7B0-\uD7FF]+/gu;
+function composedText(text) {
   const source = String(text);
-  const same = { text: source, original: (start, end) => [start, end] };
-  if (!casesDotlessI(pack)) {
-    return same;
+  if (nfc(source) === source) {
+    return { text: source, original: SAME };
   }
-  const lower = lowerCase(source, pack);
-  if (lower.length === source.length) {
-    return { ...same, text: lower };
-  }
-  let folded = "";
+  let composed = "";
   const starts = [];
   const sources = [];
   const add = (from, value) => {
-    starts.push(folded.length);
+    starts.push(composed.length);
     sources.push(from);
-    folded += lowerCase(value, pack);
+    composed += value;
+  };
+  const addRun = (from, run) => {
+    const value = nfc(run);
+    if (value.length === run.length) {
+      add(from, value);
+      return;
+    }
+    let offset = from;
+    for (const character of run) {
+      add(offset, nfc(character));
+      offset += character.length;
+    }
   };
   let last = 0;
-  for (const match of source.matchAll(/I\p{M}+/gu)) {
+  for (const match of source.matchAll(CLUSTER)) {
     if (match.index > last) {
-      add(last, source.slice(last, match.index));
+      addRun(last, source.slice(last, match.index));
     }
-    add(match.index, match[0]);
+    add(match.index, nfc(match[0]));
     last = match.index + match[0].length;
   }
   if (last < source.length) {
-    add(last, source.slice(last));
+    addRun(last, source.slice(last));
   }
-  starts.push(folded.length);
+  starts.push(composed.length);
   sources.push(source.length);
   const piece = (offset) => {
     let low = 0;
@@ -6012,7 +6003,35 @@ function matchingText(text, pack = languagePack()) {
     }
     return sources[end ? index + 1 : index];
   };
-  return { text: folded, original: (start, end) => [at(start, false), at(end, true)] };
+  return { text: composed, original: (start, end) => [at(start, false), at(end, true)] };
+}
+
+// src/languages/locale.js
+var COMPARERS = new Map;
+function compareText(pack = languagePack()) {
+  if (!COMPARERS.has(pack.locale)) {
+    const collator = new Intl.Collator(pack.locale);
+    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
+  }
+  return COMPARERS.get(pack.locale);
+}
+function lowerCase(text, pack = languagePack()) {
+  return String(text).toLocaleLowerCase(pack.locale);
+}
+function upperCase(text, pack = languagePack()) {
+  return String(text).toLocaleUpperCase(pack.locale);
+}
+var DOTLESS_I = new Set(["tr", "az"]);
+function casesDotlessI(pack) {
+  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
+}
+function matchingCase(phrase, pack = languagePack()) {
+  const composed = nfc(phrase);
+  return casesDotlessI(pack) ? lowerCase(composed, pack) : composed;
+}
+function matchingText(text, pack = languagePack()) {
+  const composed = composedText(text);
+  return casesDotlessI(pack) ? { ...composed, text: lowerCase(composed.text, pack) } : composed;
 }
 var NUMBER_FORMATS = new Map;
 function formatNumber(value, pack = languagePack()) {
@@ -6397,10 +6416,10 @@ function checkCanonNames(book, earlierBooks, warnings) {
   }
 }
 function pronunciationText(value) {
-  return typeof value === "string" ? value.trim().normalize("NFC") : "";
+  return typeof value === "string" ? nfc(value.trim()) : "";
 }
 function canonText(value) {
-  return typeof value === "string" ? value.normalize("NFC") : value;
+  return typeof value === "string" ? nfc(value) : value;
 }
 function checkCanonDeaths(book, earlierBooks, errors) {
   const deaths = deathsBefore(earlierBooks);
@@ -7115,7 +7134,8 @@ function wholeWords(body, phrase) {
 }
 function wordMatcher(text, cased = null) {
   const source = String(text);
-  const searched = cased?.text ?? source;
+  const view = cased ?? composedText(source);
+  const searched = view.text;
   let boundaries = null;
   return (pattern, { first = false } = {}) => {
     const spans = [];
@@ -7123,7 +7143,7 @@ function wordMatcher(text, cased = null) {
     let match;
     while ((match = pattern.exec(searched)) !== null) {
       const end = match.index + match[0].length;
-      const span = cased === null ? [match.index, end] : cased.original(match.index, end);
+      const span = view.original(match.index, end);
       const edges = span.map((offset) => joinedEdge(source, offset)).filter(Boolean);
       if (edges.length > 0) {
         boundaries ??= unspacedBoundaries(source);
@@ -7569,7 +7589,7 @@ var UNSPACED_LETTER2 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 var NAME_DOT = /[・·()（）[\]［］【】「」『』]/u;
 var EDGE_PUNCTUATION = /^[^\p{L}\p{M}\p{N}]+|[^\p{L}\p{M}\p{N}]+$/gu;
 function nameWords(name) {
-  const text = String(name);
+  const text = nfc(name);
   if (!UNSPACED_LETTER2.test(text)) {
     return splitWords(text);
   }
@@ -7595,7 +7615,7 @@ function existingNames(project, { cut = false } = {}) {
       continue;
     }
     const first = givenName(character.name, pack);
-    const single = first !== "" && first === String(character.name).trim();
+    const single = first !== "" && first === nfc(String(character.name).trim());
     add("character", character, String(character.name), character.role, single);
     if (first !== "" && !single) {
       add("character", character, first, character.role, true, character.name);
@@ -8039,7 +8059,7 @@ function speakerPatterns(characters, pack, rules) {
   const verbs = rules.verbs === null ? null : rules.verbs.flatMap((verb) => [verb, `${verb[0].toUpperCase()}${verb.slice(1)}`]).map(listWord).join("|") || NEVER2;
   return characters.filter((character) => character.status !== "cut").map((character) => {
     const names = new Set;
-    const full = String(character.name ?? "").trim();
+    const full = nfc(String(character.name ?? "").trim());
     if (full !== "") {
       names.add(full);
       const first = givenName(full, pack);
@@ -8048,7 +8068,7 @@ function speakerPatterns(characters, pack, rules) {
       }
     }
     for (const alias of stringList(character.aliases)) {
-      names.add(alias);
+      names.add(nfc(alias));
     }
     const alternatives = [...names].sort((left, right) => right.length - left.length).map(escape).join("|");
     if (alternatives === "") {
@@ -8068,7 +8088,7 @@ var NON_WORD = /[^\p{L}\p{N}]+/u;
 var SPACED_LETTER2 = `(?![${UNSPACED_LETTERS}])[\\p{L}\\p{N}]`;
 var UNSPACED_LETTER3 = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
 function attribute(paragraph, allSpeakers, pack) {
-  const narration = `${splitOpenSpeech(paragraph, pack).narration} `;
+  const narration = nfc(`${splitOpenSpeech(paragraph, pack).narration} `);
   const words = new Set(narration.split(NON_WORD));
   const speakers = allSpeakers.filter((speaker) => [...speaker.keys].some((key) => key === "" || words.has(key) || UNSPACED_LETTER3.test(key) && narration.includes(key)));
   for (const form of ["subject", "inverted"]) {
@@ -8351,7 +8371,7 @@ function similarVoices(left, right) {
   return close(left.sentenceLength, right.sentenceLength, limits.sentenceLength) && (left.contractions === null || close(left.contractions, right.contractions, limits.contractions)) && close(left.questions, right.questions, limits.questions) && close(left.exclamations, right.exclamations, limits.exclamations);
 }
 function phrasePattern(phrase, pack) {
-  const trimmed = String(phrase).trim();
+  const trimmed = nfc(String(phrase).trim());
   return new RegExp(wholeWords(escape(matchingCase(trimmed, pack)).replace(/['’]/g, "['’]"), trimmed), "giu");
 }
 function listWord(word) {
@@ -8806,7 +8826,7 @@ function isName2(word, rules) {
   return rules.nameTokens.has(word) || rules.nameTokens.has(nameKey(word, rules.pack));
 }
 function normalizeWord(word, pack) {
-  return lowerCase(word, pack).replace(/’/g, "'");
+  return lowerCase(nfc(word), pack).replace(/’/g, "'");
 }
 function nameKey(word, pack) {
   return normalizeWord(word, pack).replace(/'s$/, "");
@@ -8859,8 +8879,9 @@ function countMatching(words, predicate, pack) {
   return sortCounts(counts, pack);
 }
 function phrasePattern2(phrase, pack) {
-  const body = matchingCase(phrase.trim(), pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
-  return new RegExp(wholeWords(body, phrase.trim()), "giu");
+  const trimmed = nfc(phrase.trim());
+  const body = matchingCase(trimmed, pack).split(/\s+/).map((word) => escapeRegExp(word).replace(/['’]/g, "['’]")).join("\\s+");
+  return new RegExp(wholeWords(body, trimmed), "giu");
 }
 function formatAgainst(value, threshold, side) {
   for (let places = 1;places < 6; places += 1) {
@@ -11469,8 +11490,9 @@ function mentionNames(project) {
     }
   };
   for (const entry of existingNames(project, { cut: true })) {
-    add(entry.kind, entry.id, entry.name);
-    const words = entry.name.split(/\s+/);
+    const name = nfc(entry.name);
+    add(entry.kind, entry.id, name);
+    const words = name.split(/\s+/);
     const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
     if (titles && first > 0) {
       add(entry.kind, entry.id, words.slice(first).join(" "));
@@ -11540,8 +11562,9 @@ function ambiguousMention(text, mention, pack, find = wordMatcher(text)) {
   if (/\s/u.test(mention.text)) {
     return false;
   }
-  const lower = lowerCase(mention.text, pack);
-  if (lower === mention.text || !opensSentence(text, mention.start)) {
+  const written = nfc(mention.text);
+  const lower = lowerCase(written, pack);
+  if (lower === written || !opensSentence(text, mention.start)) {
     return false;
   }
   return find(new RegExp(wholeWords(escapeRegExp(lower), lower), "gu"), { first: true }).length > 0;
@@ -18525,7 +18548,7 @@ function validateStyleSheet(project, errors, warnings) {
         errors.push(err("missing-field", `${entryLabel} requires a non-empty ${field}`, label));
       }
     }
-    if (typeof entry.use === "string" && typeof entry.avoid === "string" && lowerCase(entry.use.trim(), project.pack) === lowerCase(entry.avoid.trim(), project.pack)) {
+    if (typeof entry.use === "string" && typeof entry.avoid === "string" && lowerCase(nfc(entry.use.trim()), project.pack) === lowerCase(nfc(entry.avoid.trim()), project.pack)) {
       errors.push(err("style-use-equals-avoid", `${entryLabel} use and avoid must differ`, label));
     }
   });
