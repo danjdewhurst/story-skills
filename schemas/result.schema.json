@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -30,6 +30,7 @@
     { "if": { "properties": { "command": { "const": "clues" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-clues" } } } },
     { "if": { "properties": { "command": { "const": "progress" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-progress" } } } },
     { "if": { "properties": { "command": { "const": "similarity" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-similarity" } } } },
+    { "if": { "properties": { "command": { "enum": ["add", "rename", "remove", "move", "reindex", "migrate", "wordcount"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-write" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -360,6 +361,26 @@
         "date": { "type": "string" },
         "time": { "type": "string" },
         "reading": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-write": {
+      "type": "object",
+      "$comment": "The write commands. The rest of data is the command's result: kind, id, and file (relative to the project root) for add, rename, remove, and move, plus oldId for rename and move; chapters and total for wordcount.",
+      "required": ["dryRun", "changes"],
+      "properties": {
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": {
+          "type": "array",
+          "description": "Every file the command created, updated, or deleted, and every folder it made, sorted by path.",
+          "items": {
+            "type": "object",
+            "required": ["action", "path"],
+            "properties": {
+              "action": { "enum": ["create", "update", "delete", "mkdir"] },
+              "path": { "type": "string", "minLength": 1, "description": "Relative to the project root, with / separators." }
+            }
+          }
+        }
       }
     },
     "data-similarity": {

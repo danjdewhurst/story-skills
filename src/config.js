@@ -118,6 +118,8 @@ function parseCommandDefaults(command, item, label, errors) {
     const option = OPTIONS.find((entry) => entry.name === key);
     if (key === "json") {
       errors.push(`${label} sets json, which changes the output a script reads: pass --json on the command line`);
+    } else if (key === "dry-run") {
+      errors.push(`${label} sets dry-run, which would stop the command changing anything: pass --dry-run on the command line`);
     } else if (key === "path") {
       errors.push(`${label} sets path: the project is the folder story.md is in`);
     } else if (!accepted.includes(key)) {

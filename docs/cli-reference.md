@@ -198,7 +198,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
+- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They also accept an explicit value, inline or as the next argument: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write false` turns writing off, while `--write=maybe` is an error.
 - Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -278,7 +278,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`. Other commands refuse it (`--json does not apply to story wordcount`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -289,7 +289,7 @@ Every result has the same envelope:
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
-| `writes` | Absolute paths of the files the command wrote. Only `progress --log` writes. |
+| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, and every file a write command changed. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
@@ -326,7 +326,31 @@ story continuity examples/the-unraveled-thread --json
 }
 ```
 
+The write commands (`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
+
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
+
+### Previewing changes with --dry-run
+
+`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount --write` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+
+```text
+$ story rename character edran-vale "Edran Vane" --dry-run
+update  chapters/chapter-01.md
+update  chapters/chapter-02.md
+update  chapters/chapter-04.md
+update  characters/_index.md
+delete  characters/edran-vale.md
+create  characters/edran-vane.md
+update  scenes/chapter-01-scene-01.md
+update  scenes/chapter-02-scene-01.md
+update  worldbuilding/artifacts/vales-compass.md
+Dry run: story rename would make 9 changes; nothing was written
+```
+
+The preview is the command itself, run on a temporary copy of the project that is deleted afterwards, so it lists exactly what the real run would change, the registries it reindexes included, and prints the same warnings and exits with the same code. A command the real run would refuse (an id that is taken, a read-only file) is refused the same way, naming the project's files. The project is only read: the dry run does not take the [lock](#where-commands-write) and does not wait for a command that holds it. The copy leaves out `dist/`, `node_modules/`, and dot-folders such as `.git/`, which no write command reads.
+
+With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)). `wordcount --dry-run` without `--write` is a usage error, and `cli-defaults` in `story.md` cannot set `dry-run`.
 
 ### Where commands write
 
@@ -342,7 +366,7 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. Generated and rewritten files are written whole or not at all: the new contents go to a hidden temporary file beside the target (`.chapter-01.md.story-<pid>.tmp`), which is flushed to disk and then renamed over it. A full disk, a failed write, or a killed process leaves the old file intact rather than truncated, and the error names the target, not the temporary file (`Cannot write to chapters/chapter-01.md: no space left on the device`). An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`), and the folder must be writable too. A target that is a hard link, such as an `--out` path linked to a chapter, is replaced rather than written through, so the linked file is left unchanged. If a process is killed before the rename, `story validate` warns about the leftover temporary file (`<path> was left by an interrupted write to <target>; delete it once the files beside it look right`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
-Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`, `migrate`, and `wordcount --write`) hold a lock file, `.story.lock` in the project root, while they run. Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
+Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`, `migrate`, and `wordcount --write`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
 
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
@@ -533,7 +557,7 @@ See [Import, export, and builds](manuscripts.md) for the full import workflow.
 ### migrate
 
 ```text
-story migrate [path]
+story migrate [path] [--dry-run] [--json]
 ```
 
 Upgrades a project to the current schema (version 2). It creates every folder `story init` creates when it is missing, and any missing v2 starter files (`plot/timeline.md`, `scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change. A `story.md` that fails to parse stops it with `Cannot migrate: fix this file first`, and a `schema-version` newer than 2 is refused rather than downgraded: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`.
@@ -625,7 +649,7 @@ The field rules are in the [Project format reference](project-format.md).
 ### reindex
 
 ```text
-story reindex [path]
+story reindex [path] [--dry-run] [--json]
 ```
 
 Rebuilds every registry table from the entity files on disk: `characters/_index.md`, `worldbuilding/_index.md`, `plot/_index.md`, `chapters/_index.md`, `scenes/_index.md`, the question, promise, and clue registries under `continuity/`, and `glossary/_index.md`. It also rebuilds `matter/_index.md` and `research/_index.md` when those folders exist, and sets the `story` field in `plot/timeline.md` and `continuity/state.md` to the current story id.
@@ -634,7 +658,7 @@ Hand-written sections of the registries survive a reindex: `## Relationship Map`
 
 `reindex` refuses to run while an entity file, registry, or `story.md` fails to parse, because the rebuilt registry would drop that file; see [Files that fail to parse](#files-that-fail-to-parse).
 
-Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `move`, `remove`, `migrate`, and `wordcount --write` reindex for you.
+Run it after you create, rename, or delete an entity file by hand. `add`, `rename`, `move`, `remove`, `migrate`, and `wordcount --write` reindex for you. Every command that rewrites the project takes `--dry-run` to list the files it would change first; see [Previewing changes](#previewing-changes-with---dry-run).
 
 ```shell
 story reindex
@@ -655,7 +679,7 @@ Registries already up to date
 ### wordcount
 
 ```text
-story wordcount [path] [--write]
+story wordcount [path] [--write] [--dry-run] [--json]
 ```
 
 Counts the prose words in each chapter and prints a total. Only the chapter's prose counts: the text after `## Chapter Text`; failing that, the text after the first `---` divider below `## Outline` (or everything after `## Outline` if there is no divider); failing that, the body without its leading `#` heading. HTML comments, inline code, code between `` ``` `` fences, images, link targets, and markdown symbols are ignored (a `<!--` written inside a code block or an inline code span is code, not a comment). Only a `` ``` `` fence that closes hides its contents; a `~~~` line is a scene break, not a fence. A backslash escape counts as the character it escapes, and hyphenated words and contractions count once, so `didn\'t` is one word.
@@ -663,6 +687,8 @@ Counts the prose words in each chapter and prints a total. Only the chapter's pr
 | Option | Effect |
 |---|---|
 | `--write` | Write each changed count into the chapter's `word-count` frontmatter, then reindex so `chapters/_index.md` shows the new totals |
+| `--dry-run` | With `--write`, list the files it would change and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
+| `--json` | Print the counts as a JSON result, with `data.chapters` and `data.total` (see [JSON output](#json-output)) |
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/) after adding a 20-word paragraph to chapter 3:
 
@@ -1868,7 +1894,7 @@ Created character li-ming: ~/stories/the-salt-road/characters/li-ming.md
 ### add
 
 ```text
-story add <kind> <name> [options] [--path <project>]
+story add <kind> <name> [options] [--dry-run] [--json] [--path <project>]
 ```
 
 Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Options that belong to another kind are ignored; an option no kind reads, such as `--trim`, is an error (`--trim does not apply to story add`). A missing or unknown kind is also an error:
@@ -2055,7 +2081,7 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 ### rename
 
 ```text
-story rename <kind> <id> <new name> [--id <kebab-id>] [--path <project>]
+story rename <kind> <id> <new name> [--id <kebab-id>] [--dry-run] [--json] [--path <project>]
 ```
 
 Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed, so update names in the chapter text yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
@@ -2094,8 +2120,8 @@ References are rewritten before the entity file is moved, so if the command is i
 ### move
 
 ```text
-story move chapter <id> --number <n> [--path <project>]
-story move scene <id> [--chapter <chapter-id>] [--scene <n>] [--path <project>]
+story move chapter <id> --number <n> [--dry-run] [--json] [--path <project>]
+story move scene <id> [--chapter <chapter-id>] [--scene <n>] [--dry-run] [--json] [--path <project>]
 ```
 
 Chapter and scene ids come from their numbers, so reordering the book changes ids. `move` renames the files and rewrites every reference to the old id, so you never renumber by hand. It works only on chapters and scenes; use [`rename`](#rename) to change any other id.
@@ -2166,7 +2192,7 @@ As with `rename`, every file is parsed before anything is written, so a file tha
 ### remove
 
 ```text
-story remove <kind> <id> [--path <project>]
+story remove <kind> <id> [--dry-run] [--json] [--path <project>]
 ```
 
 Deletes the entity file and scrubs its id from every reference field, searching the same markdown files as `rename`. List entries are removed, single-value fields are cleared, and whole entries in `relationships`, `character-state`, `knowledge-state`, `object-state`, location `routes`, and chapter `choices` are dropped when they are about the removed entity. Removing a chapter that `choices` lead to also warns, naming the chapters that lost a choice, since one left with none becomes an ending, or, when those were the last choices in the book, that the book is linear again. A `progressions` entry whose `value` was the removed id keeps its chapter and field, with the value cleared. Prose and markdown links in file bodies are never changed, so `remove` lists the files that still link to the removed file (a registry's own sections included) or, for a chapter or scene, still name its id in `plot/timeline.md`, `plot/_index.md`, or an arc, and any `continuity/exemptions.md` entries whose `pattern` or `file` names the id, which no longer match anything (`warning: characters/_index.md, plot/arcs/main.md still mention character bo in links in the text, which remove does not change: edit them, then run story links`). Names in prose are not listed; find them by hand, for example with `grep -rn brass-sounding-line .`. As with `rename`, every file is parsed before anything is deleted, so a file that fails to parse, or an entity file, registry, or fixed project file with no frontmatter, leaves the project unchanged. References are scrubbed before the entity file is deleted, so an interrupted `remove` can simply be run again.

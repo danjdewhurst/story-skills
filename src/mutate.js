@@ -13,9 +13,11 @@ import {
   lstatIfExists,
   makeDirectories,
   readTextFile,
+  removeFile,
   writeFile
 } from "./files.js";
 import { withProjectLock } from "./lock.js";
+import { sourceRoot } from "./preview.js";
 import {
   chapterProse,
   characterCount,
@@ -1143,7 +1145,7 @@ function renameEntityUnlocked(root, options) {
       if (!interrupted) {
         writeFile(newFile, renamedContents, { root: project.root });
       }
-      fs.rmSync(oldFile);
+      removeFile(oldFile);
     });
   }
 
@@ -1168,14 +1170,16 @@ const SERIES_CANON_COLLECTIONS = {
 function linkedBookIdWarnings(project, kind, oldId, newId) {
   const collection = SERIES_CANON_COLLECTIONS[kind];
   const data = project.story.data ?? {};
-  if (!collection || (seriesLinks(project.root, data, "follows").length === 0 && seriesLinks(project.root, data, "precedes").length === 0)) {
+  // A --dry-run runs on a copy; the linked books sit beside the project.
+  const root = sourceRoot(project.root);
+  if (!collection || (seriesLinks(root, data, "follows").length === 0 && seriesLinks(root, data, "precedes").length === 0)) {
     return [];
   }
-  const own = canonicalPath(project.root);
-  const { books } = discoverSeriesBooks(project.root, scanProject);
+  const own = canonicalPath(root);
+  const { books } = discoverSeriesBooks(root, scanProject);
   return books
     .filter((book) => book.key !== own && book.project[collection].some((entity) => entity.id === oldId))
-    .map((book) => warn("linked-book-id", `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(project.root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`));
+    .map((book) => warn("linked-book-id", `${kind} ${oldId} is also defined in linked book ${book.title} (${seriesLinkPath(root, book.root)}); story series matches shared canon by id, so rename it there to ${newId} too, or keep the old id`));
 }
 
 // Updates the first heading that shows the old name (`# Old Name`, or
@@ -1248,7 +1252,7 @@ function removeEntityUnlocked(root, options) {
   // References first, the file last, so an interrupted remove can be rerun.
   commitWrites(() => {
     writeReferencePlan(project.root, plan);
-    fs.rmSync(file, { force: true });
+    removeFile(file, { force: true });
   });
   const reindexed = reindexProject(project.root);
   const warnings = leftoverReferenceWarnings(project.root, kind, id);
@@ -1620,7 +1624,7 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
     // A chapter's scenes go before the chapter, so a rerun still finds the
     // chapter and its remaining scenes.
     for (const move of [...moves].reverse()) {
-      fs.rmSync(move.oldFile);
+      removeFile(move.oldFile);
     }
   });
 }
