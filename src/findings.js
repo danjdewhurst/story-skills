@@ -271,6 +271,7 @@ export const FINDING_CODES = {
   // story add, rename, move, and remove
   "unknown-reference": "warning",
   "adopted-references": "warning",
+  "prose-name-shared": "warning",
   "linked-book-id": "warning",
   "choices-dropped": "warning",
   "leftover-references": "warning",

@@ -73,7 +73,16 @@ After adding or editing progressions, run `story validate .`, `story links .`, a
 
 ## Renaming or Killing Off a Character
 
-To rename, run `story rename character {id} "{New Name}"`. It sets `name`, renames the file when the id changes, and rewrites the id in every frontmatter field and markdown link target. Prose and hand-written registry sections (such as Family Trees in `characters/_index.md`) keep the old display name: search for it (`grep -rn "Old Name" .`) and update each hit by hand, including chapter text and link labels.
+To rename:
+
+1. Check the new name with `story names "{New Name}"`, and list where the prose uses the old one with `story mentions character {id}`.
+2. Preview with `story rename character {id} "{New Name}" --prose --dry-run`. It prints each replacement in drafted chapter prose (`file:line:column: old → new`) and the files it would change. The full name becomes the new name, the given name alone becomes the new given name, and possessives keep their `'s`. Aliases and nicknames are left as written; outlines, HTML comments, and code fences are never touched. It refuses a name or given name another entity already has; pick another name or ask the user.
+3. Show the user the replacements before running it for real, then run the same command without `--dry-run`. It also sets `name`, renames the file when the id changes, and rewrites the id in every frontmatter field and markdown link target.
+4. A `prose-name-shared` warning lists places another entity shares the name, which were left alone: read each one and edit it by hand if it means this character. Update any alias that should change in the character file and in the prose yourself.
+5. Hand-written registry sections (such as Family Trees in `characters/_index.md`), link labels, and outline beats keep the old display name: search for it (`grep -rn "Old Name" .`) and update each hit by hand.
+6. Run `story wordcount --write`, `story links .`, and `story validate .`.
+
+Without `--prose`, `rename` leaves the chapter text alone, for when the user wants to revise those passages by hand.
 
 To kill a character off:
 

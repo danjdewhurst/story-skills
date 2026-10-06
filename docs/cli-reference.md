@@ -332,7 +332,7 @@ story continuity examples/the-unraveled-thread --json
 }
 ```
 
-The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
+The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
 
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
 
@@ -1942,7 +1942,7 @@ warning: "Marek" looks like character lord-maren (Lord Maren) [name-look-alike]
 story mentions [<kind> <id>] [--json] [--path <project>]
 ```
 
-With a kind and id, lists every place the prose of a drafted chapter (any `status` but `outline`) names that entity, one line per match on stdout: the chapter file, line, and column, the name as written, and the line around it. The kind is `character`, `location`, `faction`, `artifact`, `system`, or `term` (plurals work too). A summary line follows, then each chapter whose frontmatter lists the entity but whose prose never names it, and each chapter that names it without listing it (`pov`, `characters`, or `mentions` for a character, `locations` for a location, `mentions` for an artifact). Use it before a [`rename`](#rename) or [`remove`](#remove), since neither changes prose.
+With a kind and id, lists every place the prose of a drafted chapter (any `status` but `outline`) names that entity, one line per match on stdout: the chapter file, line, and column, the name as written, and the line around it. The kind is `character`, `location`, `faction`, `artifact`, `system`, or `term` (plurals work too). A summary line follows, then each chapter whose frontmatter lists the entity but whose prose never names it, and each chapter that names it without listing it (`pov`, `characters`, or `mentions` for a character, `locations` for a location, `mentions` for an artifact). Use it before a [`remove`](#remove), which never changes prose, or a [`rename`](#rename) without `--prose`.
 
 The names looked for are the entity's `name`, its `aliases` (characters and glossary terms), a character's given name (`Edran` for `Captain Edran Vale`), and any name without its leading titles or articles (`Hollow` for `The Hollow`), from the language pack's title list. Only chapter prose is read: not the outline, HTML comments, or code fences. A name matches:
 
@@ -2403,10 +2403,10 @@ Fill in the body sections by hand, or ask an agent to, after `add`. For what eac
 ### rename
 
 ```text
-story rename <kind> <id> <new name> [--id <kebab-id>] [--dry-run] [--json] [--path <project>]
+story rename <kind> <id> <new name> [--id <kebab-id>] [--prose] [--dry-run] [--json] [--path <project>]
 ```
 
-Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Prose is never changed: list the old name's places in the chapter text with [`story mentions`](#mentions) before renaming, and update them yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
+Sets the entity's name or title and, when the new name gives a different id, renames the file and rewrites every reference to the old id. References are the id-valued frontmatter fields (such as `characters`, `pov`, `locations`, `owner`, `planted`, `learned-in`, a location route's `to`, and the entries in `continuity/state.md`) and markdown links that resolve to the entity's file. It looks for them in every markdown file in the project except under `dist/`, `node_modules/`, dot-folders, and folders nested more than 10 levels deep, which are skipped silently. Without `--prose`, prose is never changed: list the old name's places in the chapter text with [`story mentions`](#mentions) and update them yourself. A `pattern`, `file`, or `chapter` in `continuity/exemptions.md` that names the old id as a whole token (`chapters/chapter-02.md has POV ann`, `characters/ann.md`) is updated to the new id, so each dismissal stays with its finding; `move` does the same.
 
 Chapter and scene ids come from their numbers, so renaming one changes only its title; to change the number, use [`move`](#move). `rename` also updates the entity's first heading when it shows the old name, such as `# Ilse Marrow` or `# Chapter 1: Low Tide`.
 
@@ -2431,6 +2431,32 @@ Renamed character ilse-marrow to ilse-varrow: ~/stories/the-salt-road/characters
 
 $ story rename chapter chapter-01 "Slack Water"
 Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapter-01.md
+```
+
+`--prose` also replaces the old name in the prose of every drafted chapter (not `outline` ones), at each place [`story mentions`](#mentions) finds it for a character, location, faction, artifact, system, or glossary term, so outlines, HTML comments, and code fences are left alone and names match in NFC, as written, and as whole words. What each match becomes:
+
+- The full name becomes the new name, and the name without its leading titles or articles ("Edran Vale" of "Captain Edran Vale", "Hollow" of "The Hollow") becomes the new name without its titles.
+- A character's given name alone ("Edran") becomes the new name's given name.
+- Aliases are left as written, since a nickname usually outlives a change of name, and the end of the line reports how many.
+- A possessive or hyphenated suffix stays (`Edran's` becomes `Mara's`, `Vale-born` keeps `-born`).
+- A first letter cased differently from the name is cased the same way in the replacement ("the Hollow" becomes "the Deep"). Other case is not matched, so a name in all capitals is left as written.
+- A name wrapped across lines keeps its line break between the new name's words.
+- The replacement is written as you typed the new name.
+- A place two entities' names share (two characters called Ann, say) is left as written, with a `prose-name-shared` warning that lists it.
+
+Each replacement is printed as `file:line:column: old → new`, with the old file's line and column, and with `--dry-run` before the list of files; `--json` gives them in `data.prose.edits` (`file`, `line`, `column`, `from`, `to`), with `data.prose.aliases` and `data.prose.shared` counting the matches left alone. `--prose` refuses (exit 4, nothing changed) a new name, or a character's new given name, that another entity already has as a name, given name, or alias, as [`story names`](#names) reports a clash, since the text would then give two entities one name; it is a usage error for chapters and scenes.
+
+```text
+$ story rename character ilse-marrow "Ilse Varrow" --prose --dry-run
+chapters/chapter-01.md:12:1: Ilse Marrow → Ilse Varrow
+chapters/chapter-03.md:40:17: Ilse Marrow → Ilse Varrow
+Renamed 2 names in 2 chapters; left 1 alias as written
+update  chapters/chapter-01.md
+update  chapters/chapter-03.md
+update  characters/_index.md
+delete  characters/ilse-marrow.md
+create  characters/ilse-varrow.md
+Dry run: story rename would make 5 changes; nothing was written
 ```
 
 When references to the new id already exist (a planned character in `mentions`, or a link `remove` left behind), they now name the renamed entity, so `rename` lists those files in a warning: `warning: bo was already referenced before this rename, and those references now point at the renamed character: chapters/chapter-04.md. Check them`.
@@ -3204,6 +3230,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 |---|---|---|
 | `unknown-reference` | warning | `add` records an id that does not exist yet. |
 | `adopted-references` | warning | `rename` or `move` gives an entity an id the project already referenced. |
+| `prose-name-shared` | warning | `rename --prose` left a name in chapter prose as written because another entity shares it. |
 | `linked-book-id` | warning | `rename` changes an id a linked book also defines. |
 | `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |
 | `leftover-references` | warning | `remove` left mentions of the removed entity in prose links or ids. |

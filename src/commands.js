@@ -844,7 +844,7 @@ export const COMMANDS = [
     summary: ["Rename an entity and update id references"],
     project: "flag",
     args: Infinity,
-    options: ["id", ...WRITE_OPTIONS],
+    options: ["id", "prose", ...WRITE_OPTIONS],
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -854,10 +854,12 @@ export const COMMANDS = [
         // the id it moves to instead of one derived from the new name.
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: nameWords(parsed, 3, cwd, "rename").join(" ")
+        name: nameWords(parsed, 3, cwd, "rename").join(" "),
+        prose: isTruthy(parsed.options.prose)
       };
       return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options),
-        (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
+        (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n${formatProseRenames(result)}`,
+        formatProseRenames);
     }
   },
   {
@@ -1070,7 +1072,10 @@ function passageRoot(parsed, cwd, required) {
 // (previewChanges) and the changes it made there are printed: the project
 // is only read and its lock is not taken. The warnings it raises, and the
 // exit code, are those of the real run.
-function runWrite({ parsed, io, root, overrides }, command, write, describe) {
+// `detail`, when given, describes what the command changed inside the files
+// (rename --prose lists each name it replaced), printed before a
+// --dry-run's list of files.
+function runWrite({ parsed, io, root, overrides }, command, write, describe, detail = () => "") {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const { result, changes } = runOrPreview(dryRun, projectRoot, write);
@@ -1084,7 +1089,7 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
       writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
-  io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
+  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result));
   return writeFindings(io, findings);
 }
 
@@ -1138,6 +1143,20 @@ function reportImportNotes(io, result) {
   if (result.keptStory) {
     io.stderr.write("note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.\n");
   }
+}
+
+// rename --prose: each name replaced in chapter prose, as file:line:column,
+// then a count. A name wrapped across lines prints on one.
+function formatProseRenames(result) {
+  if (!result.prose) {
+    return "";
+  }
+  const { edits, aliases } = result.prose;
+  const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
+  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}\n`);
+  const files = new Set(edits.map((edit) => edit.file)).size;
+  const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
+  return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}\n`;
 }
 
 // story doctor --fix: applies the safe repairs under the project lock (or,
