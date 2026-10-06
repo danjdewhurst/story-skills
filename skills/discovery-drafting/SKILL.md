@@ -1,6 +1,6 @@
 ---
 name: discovery-drafting
-description: This skill should be used when the user asks to "pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "reverse outline", "cut a subplot", "dead end", "drafting sprint", "writing cadence", or wants to draft a story by discovery with retrospective bible reconciliation.
+description: This skill should be used when the user asks about "pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "reverse outline", "cut a subplot", "dead end", "drafting sprint", "writing cadence", or wants to draft a story by discovery with retrospective bible reconciliation. NOT for outline-first drafting, or mysteries and other clue-dependent genres where setup must come before payoff (use chapter-writing).
 ---
 
 # Discovery Drafting

@@ -1,6 +1,6 @@
 ---
 name: genre-craft
-description: This skill should be used when the user asks to "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project.
+description: This skill should be used when the user asks about "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project.
 ---
 
 # Genre Craft

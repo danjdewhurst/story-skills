@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Fixed
+
+- Skill descriptions route requests more cleanly. genre-craft, discovery-drafting, and theme-craft read "asks about" instead of the ungrammatical "asks to" before a noun. "Character arc" now triggers only character-management; theme-craft lists "thematic arc" instead and points character records back. chapter-writing, discovery-drafting, story-init, and series-continuity gain NOT clauses, and chapter-writing ("write a scene") and scene-craft ("plan a scene") now point at each other. ([#389](https://github.com/danjdewhurst/story-skills/issues/389))
+
 ## [0.21.0] - 2026-10-04
 
 ### Added
