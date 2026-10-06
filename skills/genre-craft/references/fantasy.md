@@ -19,8 +19,11 @@ is not a plot until it changes the travellers.
   The climax must engage it: reach it, fail it with consequences, or reveal
   the goal was the wrong one (planted fairly, as with any twist).
 - **Distance is plot.** Record routes and travel times in location files
-  (see `worldbuilding/references/maps-and-routes.md`); `story continuity`
-  flags a character who crosses the map faster than any route allows.
+  (see `worldbuilding/references/maps-and-routes.md`), and give the scenes
+  on either end of a journey a `date`, `location`, and `characters` (or
+  `pov`). `story continuity` then flags a character who crosses the map
+  faster than any route allows; it reads scene fields only, so undated or
+  chapter-level journeys are not checked.
 - **The road back.** The journey home, or the end of the road, shows what
   the quest cost. Pair with the Hero's Journey in
   `plot-structure/references/structure-models.md` when it fits, but the
