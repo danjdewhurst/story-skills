@@ -134,6 +134,14 @@ function removeFile(filePath, options = {}) {
     record(filePath, true, "delete");
   }
 }
+function removeDirectory(directory) {
+  if (planning > 0) {
+    fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
+  } else {
+    fs.rmdirSync(directory);
+  }
+  record(directory, true, "delete");
+}
 var journals = [];
 function record(target, existed, action) {
   const key = path.resolve(target);
@@ -216,13 +224,17 @@ function writeWholeFile(filePath, contents, options) {
 function planWrite(filePath, options) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
+  if (existing) {
+    fs.accessSync(target, fs.constants.W_OK);
+  }
   try {
-    if (existing?.isDirectory()) {
+    fs.accessSync(nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
+    if (lstatIfExists(temporaryPath(target))?.isDirectory() || existing?.isDirectory()) {
       throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
     }
-    fs.accessSync(existing ? target : nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
   } catch (error) {
-    throw Object.assign(new Error(`Cannot write to ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+    const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
+    throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
   if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
     throw new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`);
@@ -19962,9 +19974,10 @@ function removeStaleCodexPages(directory, written) {
     if (lstatIfExists(folder)?.isDirectory() !== true) {
       continue;
     }
-    stalePages(folder).forEach((file) => removeFile(file));
-    if (folder !== directory && fs11.readdirSync(folder).length === 0) {
-      fs11.rmdirSync(folder);
+    const stale = stalePages(folder);
+    stale.forEach((file) => removeFile(file));
+    if (folder !== directory && fs11.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
+      removeDirectory(folder);
     }
   }
 }
@@ -24346,6 +24359,7 @@ function previewChanges(root, run) {
   const projectRoot = path17.resolve(root);
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
+    fs15.mkdirSync(path17.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
@@ -24358,9 +24372,16 @@ function previewNewProject(root, run) {
     throw usageError(`--dry-run cannot preview a project made at ${target}`);
   }
   return inScratch(target, run, (copyRoot, mirror) => {
+    const stats = lstatIfExists(target);
+    const ancestor = stats ? path17.dirname(target) : nearestExistingAncestor(target).ancestor;
+    const isFolder = fs15.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() === true;
+    fs15.mkdirSync(isFolder ? mirror(ancestor) : path17.dirname(mirror(ancestor)), { recursive: true });
+    if (!isFolder) {
+      fs15.symlinkSync(path17.join(path17.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
+    }
     for (let folder = path17.dirname(target);; folder = path17.dirname(folder)) {
       const story = path17.join(folder, "story.md");
-      if (fs15.statSync(story, { throwIfNoEntry: false })?.isFile()) {
+      if (lstatIfExists(story)?.isFile()) {
         fs15.mkdirSync(mirror(folder), { recursive: true });
         copyFile(story, mirror(story));
       }
@@ -24368,13 +24389,15 @@ function previewNewProject(root, run) {
         break;
       }
     }
-    const stats = lstatIfExists(target);
     if (stats?.isSymbolicLink()) {
       fs15.symlinkSync(path17.join(path17.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
     } else if (stats?.isDirectory()) {
       copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot });
     } else if (stats) {
       copyFile(target, copyRoot);
+    }
+    if (isFolder) {
+      fs15.chmodSync(mirror(ancestor), copyMode(ancestor, true));
     }
   });
 }
@@ -24389,7 +24412,6 @@ function inScratch(target, run, prepare) {
   const copyRoot = atRoot ? path17.join(scratch, "project") : mirror(target);
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
-    fs15.mkdirSync(path17.dirname(copyRoot), { recursive: true });
     prepare(copyRoot, mirror, atRoot);
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };

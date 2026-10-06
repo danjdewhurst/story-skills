@@ -113,6 +113,18 @@ export function removeFile(filePath, options = {}) {
   }
 }
 
+// Deletes an empty folder, recording it like a deleted file (a stale codex
+// folder a build emptied). Planned, it checks only that the folder's parent
+// is writable, since the files that would empty it are still there.
+export function removeDirectory(directory) {
+  if (planning > 0) {
+    fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
+  } else {
+    fs.rmdirSync(directory);
+  }
+  record(directory, true, "delete");
+}
+
 // Every file a write command creates, rewrites, or deletes goes through
 // writeFile, removeFile, or makeDirectories, which report it to the
 // journals open here. recordChanges opens one, so a command's --json result
@@ -224,18 +236,25 @@ function writeWholeFile(filePath, contents, options) {
 }
 
 // writeWholeFile's checks, without the write: the target is inside the
-// root and not a symlink, an existing file is writable and unchanged, and a
-// new one's nearest existing folder is writable.
+// root and not a symlink, an existing file is writable and unchanged, and
+// the folder the temporary file goes in (or, for a new folder, its nearest
+// existing ancestor) is writable, with no folder in the temporary file's
+// place. A refusal names the target as writeWholeFile's does.
 function planWrite(filePath, options) {
   const target = prepareWriteTarget(filePath, options.root);
   const existing = lstatIfExists(target);
+  if (existing) {
+    fs.accessSync(target, fs.constants.W_OK);
+  }
   try {
-    if (existing?.isDirectory()) {
+    fs.accessSync(nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
+    // Opening the temporary file, or renaming it over a folder, fails.
+    if (lstatIfExists(temporaryPath(target))?.isDirectory() || existing?.isDirectory()) {
       throw Object.assign(new Error("EISDIR"), { code: "EISDIR" });
     }
-    fs.accessSync(existing ? target : nearestExistingAncestor(path.dirname(target)).ancestor, fs.constants.W_OK);
   } catch (error) {
-    throw Object.assign(new Error(`Cannot write to ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
+    const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
+    throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
   if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
     throw new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`);

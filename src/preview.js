@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, isPathInside, lstatIfExists, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { MAX_SCAN_DEPTH, SKIPPED_SCAN_DIRECTORIES, requireStoryFile } from "./scan.js";
@@ -27,6 +27,7 @@ export function previewChanges(root, run) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
+    fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath(projectRoot), copyRoot });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
@@ -39,16 +40,29 @@ export function previewChanges(root, run) {
 // may be a project or other folder that --force fills. Whatever is there is
 // copied as previewChanges copies a project, and the story.md of each
 // folder above it too, so the check that refuses a project inside another
-// project answers as in the real run.
+// project answers as in the real run. Of a folder that does not exist, only
+// its nearest existing ancestor is made in the copy, with that ancestor's
+// access, so the run makes (and lists) the same missing folders, or is
+// refused the same way.
 export function previewNewProject(root, run) {
   const target = path.resolve(root);
   if (target === path.parse(target).root) {
     throw usageError(`--dry-run cannot preview a project made at ${target}`);
   }
   return inScratch(target, run, (copyRoot, mirror) => {
+    const stats = lstatIfExists(target);
+    const ancestor = stats ? path.dirname(target) : nearestExistingAncestor(target).ancestor;
+    // A dangling symlink in the way stays one, so making a folder through
+    // it fails in the copy too.
+    const isFolder = fs.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() === true;
+    fs.mkdirSync(isFolder ? mirror(ancestor) : path.dirname(mirror(ancestor)), { recursive: true });
+    if (!isFolder) {
+      fs.symlinkSync(path.join(path.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
+    }
     for (let folder = path.dirname(target); ; folder = path.dirname(folder)) {
       const story = path.join(folder, "story.md");
-      if (fs.statSync(story, { throwIfNoEntry: false })?.isFile()) {
+      // A symlinked story.md does not make a project, so it is not copied.
+      if (lstatIfExists(story)?.isFile()) {
         fs.mkdirSync(mirror(folder), { recursive: true });
         copyFile(story, mirror(story));
       }
@@ -56,7 +70,6 @@ export function previewNewProject(root, run) {
         break;
       }
     }
-    const stats = lstatIfExists(target);
     if (stats?.isSymbolicLink()) {
       // A symlinked project folder is refused; the copy is a link to
       // nowhere, so nothing can be written through it.
@@ -66,12 +79,16 @@ export function previewNewProject(root, run) {
     } else if (stats) {
       copyFile(target, copyRoot);
     }
+    if (isFolder) {
+      fs.chmodSync(mirror(ancestor), copyMode(ancestor, true));
+    }
   });
 }
 
 // Runs `run(copyRoot)` in a scratch folder that stands in for the
 // filesystem root, after `prepare(copyRoot, mirror, atRoot)` copies into it
-// what the command reads, and removes the folder afterwards.
+// what the command reads (and makes the folders above copyRoot), and
+// removes the folder afterwards.
 function inScratch(target, run, prepare) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "story-dry-run-")));
   const fsRoot = path.parse(target).root;
@@ -87,7 +104,6 @@ function inScratch(target, run, prepare) {
   // finding about a linked book names the real book too.
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
-    fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
     prepare(copyRoot, mirror, atRoot);
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
