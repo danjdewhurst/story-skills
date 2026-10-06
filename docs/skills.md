@@ -375,7 +375,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Purpose.** Genre packs that turn each genre's conventions into checkable rules, ledgers, and revision audits. Use it when setting a project up and again in revision.
 
-**Triggers.** "Mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "serial", "episodic", "web serial", "genre conventions".
+**Triggers.** "Mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "fantasy", "quest", "chosen one", "historical fiction", "period voice", "anachronism", "serial", "episodic", "web serial", "genre conventions".
 
 **Not for.** Genre voice at the sentence level (that is the `better-writing` skill's job) or literary fiction, whose conventions don't reduce to checkable rules.
 
@@ -388,6 +388,8 @@ It never fixes an audit finding by adding a speech or narration that explains th
    - **Serial:** records `season-goal` in `story.md` and `episode-question` in each installment.
    - **MG/YA:** records `target-words` in `story.md` and checks protagonist age and how much adults are involved.
    - **Science fiction:** writes the speculative element's rules, costs, and limits in `worldbuilding/systems/` before the climax relies on them.
+   - **Fantasy:** writes the magic's rules, costs, and limits in `worldbuilding/systems/` (designed with [worldbuilding](#worldbuilding)) and logs the quest goal and any prophecy in `continuity/promises/`.
+   - **Historical:** records `setting-era` in `story.md`, the period register in the style sheet, and a [research](#research) note for every fact the plot leans on and every real person. Anyone living or recently dead goes through the [editorial-review](#editorial-review) real-people pass.
 3. Drafts alongside [chapter-writing](#chapter-writing) and [scene-craft](#scene-craft).
 4. Runs the pack's audit checklist during a developmental revision pass.
 5. Records any deliberate departure from the pack in `story.md` with the reason, so a later audit doesn't undo it.
@@ -406,6 +408,8 @@ It never fixes an audit finding by adding a speech or narration that explains th
 - [`horror.md`](../skills/genre-craft/references/horror.md): ordering dread, terror, and gross-out, the uncanny, monster rules stated early, and recovery periods.
 - [`mg-ya.md`](../skills/genre-craft/references/mg-ya.md): word-count norms, voice and stakes by age, keeping adults out of the way, and content boundaries.
 - [`scifi-pipeline.md`](../skills/genre-craft/references/scifi-pipeline.md): the load-bearing test, rules stated before they are exploited, and the worldbuilding-to-plot pipeline.
+- [`fantasy.md`](../skills/genre-craft/references/fantasy.md): quest and journey structure, magic rules stated before the climax relies on them, cost and limits, secondary-world exposition, and chosen-one pitfalls.
+- [`historical.md`](../skills/genre-craft/references/historical.md): period voice against readability, anachronism checks for things, words, and ideas, invented and real people, the ethics of the real past, and the author's note.
 - [`serial-episodic.md`](../skills/genre-craft/references/serial-episodic.md): the season goal, the question each episode asks, a reward in every installment, recap discipline, and arc-specific stakes that prevent endless escalation. Book-level canon across a series belongs to [series-continuity](#series-continuity).
 
 ### research
