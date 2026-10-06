@@ -8198,13 +8198,13 @@ function composedText(text) {
     composed += value;
   };
   const addRun = (from, run) => {
-    const value = nfc(run);
-    if (value.length === run.length) {
-      add(from, value);
+    const characters = Array.from(run);
+    if (characters.every((character) => nfc(character).length === character.length)) {
+      add(from, nfc(run));
       return;
     }
     let offset = from;
-    for (const character of run) {
+    for (const character of characters) {
       add(offset, nfc(character));
       offset += character.length;
     }
@@ -11069,7 +11069,7 @@ function formatProseReport(report) {
 `;
 }
 function proseParagraphs(prose) {
-  return withoutFenceMarkers(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^\s{0,3}#/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
+  return withoutFenceMarkers(scanComments(String(prose), " ").text).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.split(/\r?\n/).filter((line) => !/^[ \t]{0,3}#{1,6}(?:\s|$)/.test(line)).join(" ")).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !/^([*_-])( ?\1){2,}$/.test(paragraph));
 }
 function dialogueTags(paragraphs, rules) {
   const plain = new Map;

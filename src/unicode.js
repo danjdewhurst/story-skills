@@ -33,17 +33,18 @@ export function composedText(text) {
     sources.push(from);
     composed += value;
   };
-  // A run between clusters that changes length (a CJK compatibility
-  // ideograph outside the Basic Multilingual Plane composes to one inside
-  // it) is split into code points.
+  // A run between clusters with a code point that changes length (a CJK
+  // compatibility ideograph outside the Basic Multilingual Plane composes
+  // to one inside it, and one inside may compose to one outside) is split
+  // into code points, even when the run as a whole keeps its length.
   const addRun = (from, run) => {
-    const value = nfc(run);
-    if (value.length === run.length) {
-      add(from, value);
+    const characters = Array.from(run);
+    if (characters.every((character) => nfc(character).length === character.length)) {
+      add(from, nfc(run));
       return;
     }
     let offset = from;
-    for (const character of run) {
+    for (const character of characters) {
       add(offset, nfc(character));
       offset += character.length;
     }
