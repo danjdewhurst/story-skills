@@ -41,7 +41,7 @@ instruction.
   locally, not in the repo.
 - Interviewee: charge nurse, 14 years cardiac (anonymous by request).
 - > "You hear the arrest bell before you think. Your feet are already
-  >  moving." (00:12:40)
+  > moving." (00:12:40)
 - Handover at 07:30 takes about 40 minutes; night staff rarely leave on
   time.
 - Would not say what drugs are given first; follow up with a published
