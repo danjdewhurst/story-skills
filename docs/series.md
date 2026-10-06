@@ -392,6 +392,8 @@ The [`series-continuity`](../skills/series-continuity/SKILL.md) skill runs this 
 4. Carries the entities you choose, following the rules above, and assigns `fact` ids.
 5. Runs the maintenance checks.
 
+Its [`series-bible.md`](../skills/series-continuity/references/series-bible.md) reference maps each part of a series bible to the files above, and covers planning a multi-book series and pitching it.
+
 Other skills defer to it: `story-init` sends sequel and prequel requests there, `chapter-writing` gives series-relevant reveals a `fact` id when `story.md` has `follows` or `precedes`, and `revision-continuity` and `story-maintenance` add `story series .` to their checks for linked books. See the [Skills catalogue](skills.md#series-continuity).
 
 ## Maintenance checklist
