@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, currentText, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, assertWriteAllowed, currentText, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
 import { EXIT_CODES, exitCodeFor, refusedError, usageError } from "./exit-codes.js";
@@ -62,6 +62,9 @@ export function snapshotProject(root, options = {}) {
   if (existing && !options.force) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
   }
+  // The backup and the rollback below are not made through writeFile, so a
+  // project whose lock could not be made is refused before them.
+  assertWriteAllowed(target);
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
   // The snapshot being replaced is kept aside until the new one is whole,
   // so a failed write (a full disk, an unreadable file) leaves it as it was.

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { createEntity, createStoryProject, moveEntity, removeEntity, renameEntity } from "../src/story.js";
@@ -198,7 +198,8 @@ describe("edits saved while rename, remove, or move runs", () => {
     const oldFile = path.join(root, "characters", "ann.md");
     const newFile = path.join(root, "characters", "anna.md");
     const { error, saved } = withSave(newFile, oldFile, () => renameEntity(root, { kind: "character", id: "ann", name: "Anna" }));
-    expect(error.message).toBe("characters/ann.md changed on disk while story was deleting it, so it was left as it is. Run the command again");
+    expect(error.message).toBe("characters/ann.md changed on disk while story was deleting it, so it was left as it is, and the copy written at characters/anna.md was removed");
+    expect(error.hint).toBe("Run the same command again to finish with the change");
     expect(error.exitCode).toBe(4);
     expect(fs.readFileSync(oldFile, "utf8")).toBe(saved);
     // The copy made from the text before the save is gone.
@@ -214,7 +215,8 @@ describe("edits saved while rename, remove, or move runs", () => {
     createEntity(root, { kind: "artifact", name: "Seal", owner: "guard" });
     const file = path.join(root, "worldbuilding", "factions", "guard.md");
     const { error, saved } = withSave(path.join(root, "worldbuilding", "artifacts", "seal.md"), file, () => removeEntity(root, { kind: "faction", id: "guard" }));
-    expect(error.message).toBe("worldbuilding/factions/guard.md changed on disk while story was deleting it, so it was left as it is. Run the command again");
+    expect(error.message).toBe("worldbuilding/factions/guard.md changed on disk while story was deleting it, so it was left as it is");
+    expect(error.hint).toBe("Some files were already updated: fix the problem and run the same command again to finish");
     expect(fs.readFileSync(file, "utf8")).toBe(saved);
     removeEntity(root, { kind: "faction", id: "guard" });
     expect(fs.existsSync(file)).toBe(false);
@@ -227,13 +229,43 @@ describe("edits saved while rename, remove, or move runs", () => {
     const oldFile = path.join(root, "chapters", "chapter-01.md");
     const newFile = path.join(root, "chapters", "chapter-03.md");
     const { error, saved } = withSave(newFile, oldFile, () => moveEntity(root, { kind: "chapter", id: "chapter-01", number: "3" }));
-    expect(error.message).toBe("chapters/chapter-01.md changed on disk while story was deleting it, so it was left as it is. Run the command again");
+    expect(error.message).toBe("chapters/chapter-01.md changed on disk while story was deleting it, so it was left as it is, and the copy written at chapters/chapter-03.md was removed");
+    expect(error.hint).toBe("Run the same command again to finish with the change");
     expect(fs.readFileSync(oldFile, "utf8")).toBe(saved);
     expect(fs.existsSync(newFile)).toBe(false);
     moveEntity(root, { kind: "chapter", id: "chapter-01", number: "3" });
     expect(fs.existsSync(oldFile)).toBe(false);
     expect(read(root, "chapters", "chapter-03.md")).toContain("Saved meanwhile.");
     expect(fs.readdirSync(path.join(root, "scenes")).sort()).toEqual(["_index.md", "chapter-03-scene-01.md"]);
+  });
+
+  test("move keeps a save made while it planned, after it read the chapter", () => {
+    const root = project("Planned Move");
+    createEntity(root, { kind: "chapter", name: "One" });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const saved = `${read(root, "chapters", "chapter-01.md")}\nSaved meanwhile.\n`;
+    // The scan reads the chapter, then move reads it for its frontmatter;
+    // the save lands as the reference plan reads its first other file.
+    const open = fs.openSync;
+    let reads = 0;
+    let pending = true;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, flags, ...rest) => {
+      if (flags !== "wx" && file === chapter) {
+        reads += 1;
+      } else if (flags !== "wx" && reads === 2 && pending && String(file).endsWith(".md")) {
+        pending = false;
+        fs.writeFileSync(chapter, saved);
+      }
+      return open(file, flags, ...rest);
+    });
+    try {
+      expect(() => moveEntity(root, { kind: "chapter", id: "chapter-01", number: "2" })).toThrow("chapters/chapter-01.md changed on disk while story was deleting it, so it was left as it is");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(pending).toBe(false);
+    expect(fs.readFileSync(chapter, "utf8")).toBe(saved);
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(false);
   });
 
   test("move never replaces a file made at the new path meanwhile", () => {

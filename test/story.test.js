@@ -2173,6 +2173,28 @@ describe("writes keep a file saved meanwhile", () => {
     expect(fs.readFileSync(registry, "utf8")).toBe(saved);
   });
 
+  test("reindex keeps the story field it refreshes, and a registry made meanwhile", () => {
+    const root = newProject("Saved Refresh");
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("title: Saved Refresh", "title: Renamed Book"));
+    const timelinePath = path.join(root, "plot", "timeline.md");
+    const saved = `${fs.readFileSync(timelinePath, "utf8")}\nSaved meanwhile.\n`;
+    expect(savedDuring(timelinePath, saved, () => reindexProject(root))).toBe("plot/timeline.md changed on disk while story was updating it, so it was left as it is. Run the command again");
+    expect(fs.readFileSync(timelinePath, "utf8")).toBe(saved);
+
+    const scenes = path.join(root, "scenes", "_index.md");
+    fs.rmSync(scenes);
+    expect(savedDuring(scenes, "Made meanwhile.\n", () => reindexProject(root))).toBe("scenes/_index.md changed on disk while story was updating it, so it was left as it is. Run the command again");
+    expect(fs.readFileSync(scenes, "utf8")).toBe("Made meanwhile.\n");
+  });
+
+  test("add never replaces an entity file made at its name meanwhile", () => {
+    const root = newProject("Taken Add");
+    const file = path.join(root, "characters", "bo.md");
+    expect(savedDuring(file, "Mine.\n", () => createEntity(root, { kind: "character", name: "Bo" }))).toBe("characters/bo.md changed on disk while story was updating it, so it was left as it is. Run the command again");
+    expect(fs.readFileSync(file, "utf8")).toBe("Mine.\n");
+  });
+
   test("migrate keeps story.md saved after it was read", () => {
     const root = newProject("Saved Migrate");
     const storyPath = path.join(root, "story.md");

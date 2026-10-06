@@ -199,7 +199,7 @@ function removeFile(filePath, options = {}) {
   const existed = lstatIfExists(target) !== null;
   assertWriteAllowed(target);
   if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
-    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is. Run the command again`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
+    throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was deleting it, so it was left as it is`), { changedOnDisk: true, exitCode: EXIT_CODES.refused });
   }
   if (planning > 0) {
     if (!existed && !options.force) {
@@ -19090,11 +19090,12 @@ function withProjectLock(root, run, options = {}) {
 }
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
-  const retryUntil = Date.now() + CREATE_RETRY_MS;
+  let retryUntil = null;
   let removedStale = false;
   let created;
   while (typeof (created = tryCreate(lockPath)) !== "string") {
     if (created !== null) {
+      retryUntil ??= Date.now() + CREATE_RETRY_MS;
       if (Date.now() >= retryUntil) {
         return created;
       }
@@ -19113,6 +19114,10 @@ function acquire(lockPath) {
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
   }
   return created;
+}
+function withProjectLocks(locks, run) {
+  const order = (lock) => realPath(path10.resolve(lock.root));
+  return [...locks].sort((left, right) => order(left) < order(right) ? -1 : order(left) > order(right) ? 1 : 0).reduceRight((inner, lock) => () => withProjectLock(lock.root, inner, lock), run)();
 }
 function removeStale(lockPath, staleText) {
   const guard = path10.join(path10.dirname(lockPath), TAKEOVER_FILE);
@@ -19136,10 +19141,12 @@ function removeStale(lockPath, staleText) {
 function tryCreate(lockPath) {
   try {
     const descriptor = fs5.openSync(lockPath, "wx", 420);
+    const identity = ownIdentity();
     const text = `${process.pid}
 ${os2.hostname()}
 ${new Date().toISOString()}
-`;
+${identity === null ? "" : `${identity}
+`}`;
     try {
       fs5.writeFileSync(descriptor, text, "utf8");
     } finally {
@@ -19161,14 +19168,49 @@ function readOwner(lockPath) {
   } catch {
     return null;
   }
-  const [pidText, host, writtenAt] = text.split(`
+  const [pidText, host, writtenAt, identity] = text.split(`
 `);
   const pid = Number.parseInt(pidText, 10);
   if (!Number.isInteger(pid) || pid <= 0) {
     return { text, pid: null, host: null, alive: true };
   }
   const foreign = host && host !== os2.hostname();
-  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
+  return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : sameHostAlive(pid, identity, Date.parse(writtenAt), modified) };
+}
+function sameHostAlive(pid, recorded, written, modified) {
+  const own = ownIdentity();
+  const comparable = own !== null && IDENTITY_PATTERN.test(recorded ?? "");
+  const [boot, namespace, started] = comparable ? recorded.split(" ") : [];
+  const [ownBoot, ownNamespace, ownStarted] = comparable ? own.split(" ") : [];
+  if (comparable && boot !== ownBoot) {
+    return false;
+  }
+  if (comparable && namespace !== ownNamespace) {
+    return !foreignLockStale(written, modified);
+  }
+  if (pid !== process.pid) {
+    return processAlive(pid);
+  }
+  return comparable ? started === ownStarted : !foreignLockStale(written, modified);
+}
+var IDENTITY_PATTERN = /^[0-9a-f-]+ pid:\[\d+\] \d+$/;
+function processIdentity(proc = "/proc") {
+  try {
+    const stat = readTextFile(path10.join(proc, "self", "stat"));
+    const started = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    const boot = readTextFile(path10.join(proc, "sys", "kernel", "random", "boot_id")).trim();
+    const identity = `${boot} ${fs5.readlinkSync(path10.join(proc, "self", "ns", "pid"))} ${started}`;
+    return IDENTITY_PATTERN.test(identity) ? identity : null;
+  } catch {
+    return null;
+  }
+}
+var identityRead;
+function ownIdentity() {
+  if (identityRead === undefined) {
+    identityRead = processIdentity();
+  }
+  return identityRead;
 }
 function foreignLockStale(written, modified) {
   return Number.isFinite(written) && Date.now() - Math.max(written, modified) > FOREIGN_LOCK_STALE_MS;
@@ -19181,9 +19223,6 @@ function modifiedAt(file) {
   }
 }
 function processAlive(pid) {
-  if (pid === process.pid) {
-    return false;
-  }
   try {
     process.kill(pid, 0);
     return true;
@@ -22122,9 +22161,11 @@ function createStoryProject(options) {
   if (options.language !== undefined && !isLanguageTag(options.language)) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
-  const fill = () => fillStoryProject(root, title, cwd, options);
-  const filled = options.force && lstatIfExists(root)?.isDirectory() ? () => withProjectLock(root, fill, { folder: true }) : fill;
-  return ["follows", "precedes"].flatMap((field) => asArray(options[field]).filter((value) => typeof value === "string" && value.trim() !== "")).reduce((run, value) => () => withProjectLock(path12.resolve(cwd, value), run), filled)();
+  const locks = ["follows", "precedes"].flatMap((field) => asArray(options[field]).filter((value) => typeof value === "string" && value.trim() !== "")).map((value) => ({ root: path12.resolve(cwd, value) }));
+  if (options.force && lstatIfExists(root)?.isDirectory()) {
+    locks.push({ root, folder: true });
+  }
+  return withProjectLocks(locks, () => fillStoryProject(root, title, cwd, options));
 }
 function fillStoryProject(root, title, cwd, options) {
   const existingStory = existingStoryData(root);
@@ -22209,7 +22250,15 @@ function fillStoryProject(root, title, cwd, options) {
     if (existingLinks && !linksInclude(existingLinks[book.field], book.root)) {
       continue;
     }
-    writeFile(path12.join(book.root, "story.md"), updated, { root: book.root, unchangedFrom: original });
+    const storyPath = path12.join(book.root, "story.md");
+    try {
+      writeFile(storyPath, updated, { root: book.root, unchangedFrom: original });
+    } catch (error) {
+      if (error.changedOnDisk) {
+        error.message = `${storyPath} changed on disk while story was adding the series backlink, so it was left as it is. The new book in ${root} was made without it: run the same story init with --force to add it`;
+      }
+      throw error;
+    }
     linkedBooks.push(book.root);
   }
   return {
@@ -22412,6 +22461,11 @@ function planSeriesBacklinks(root, series) {
       fs8.accessSync(storyPath, fs8.constants.W_OK);
     } catch {
       throw refusedError(`Cannot add the series backlink to ${storyPath}: the file is not writable; nothing was created`);
+    }
+    try {
+      assertWriteAllowed(storyPath);
+    } catch (error) {
+      throw refusedError(`Cannot add the series backlink to ${storyPath}: ${error.message}`);
     }
     planned.push({ book, original, updated });
   }
@@ -23346,7 +23400,7 @@ function restructureWrites(root, write) {
     }
   });
   if (error !== null) {
-    if (changes.length > 0) {
+    if (changes.length > 0 && !error.resumable) {
       error.hint = RESTRUCTURE_HINT;
     }
     throw error;
@@ -23689,7 +23743,19 @@ function mergeChapters(root, options) {
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);
     writeReferencePlan(project.root, plan);
-    removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
+    try {
+      removeFile(second.file, { root: project.root, unchangedFrom: gone.rawMarkdown });
+    } catch (error) {
+      if (error.changedOnDisk) {
+        undoReferencePlan(project.root, plan);
+        Object.assign(error, {
+          message: `${relative(project, second.file)} changed on disk while story was merging it into ${first.id}, so it was left as it is and ${relative(project, first.file)} was put back`,
+          hint: "Run the same command again to merge it with the change",
+          resumable: true
+        });
+      }
+      throw error;
+    }
     shiftChapters(project.root, run, -1, warnings);
   });
   const reindexed = reindexProject(project.root);
@@ -23958,6 +24024,8 @@ function removeMovedFile(root, { oldFile, original, newFile, written }) {
   } catch (error) {
     if (error.changedOnDisk) {
       removeFile(newFile, { root, unchangedFrom: written });
+      error.message = `${error.message}, and the copy written at ${projectPath(root, newFile)} was removed`;
+      error.hint = "Run the same command again to finish with the change";
     }
     throw error;
   }
@@ -24176,6 +24244,11 @@ function writeReferencePlan(root, plan) {
     writeFile(file, contents, { root, unchangedFrom: plan.originals?.get(file) });
   }
 }
+function undoReferencePlan(root, plan) {
+  for (const [file, contents] of plan) {
+    writeFile(file, plan.originals.get(file), { root, unchangedFrom: contents });
+  }
+}
 var UNWRITABLE_REASONS = { EACCES: "permission denied", EPERM: "permission denied", EROFS: "the file system is read-only" };
 function assertWritable(root, changed, created = []) {
   const problems = new Map;
@@ -24210,10 +24283,19 @@ function assertWritable(root, changed, created = []) {
   }
 }
 function commitWrites(write) {
-  try {
-    return write();
-  } catch (error) {
-    throw Object.assign(error, { hint: "Some files were already updated: fix the problem and run the same command again to finish" });
+  const { result: error, changes } = recordChanges(process.cwd(), () => {
+    try {
+      write();
+      return null;
+    } catch (caught) {
+      return caught;
+    }
+  });
+  if (error !== null) {
+    if (changes.length > 0 && error.hint === undefined) {
+      error.hint = "Some files were already updated: fix the problem and run the same command again to finish";
+    }
+    throw error;
   }
 }
 function transformReferences(data, transform, context, identityKey = null, listKey = null) {
@@ -24347,6 +24429,7 @@ function snapshotProject(root, options = {}) {
   if (existing && !options.force) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
   }
+  assertWriteAllowed(target);
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
   const backup = existing ? path13.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
   if (backup !== null) {

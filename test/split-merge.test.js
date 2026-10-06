@@ -19,6 +19,12 @@ import { makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
 function read(root, ...parts) {
   return fs.readFileSync(path.join(root, ...parts), "utf8");
 }
@@ -416,19 +422,30 @@ describe("story merge", () => {
     expect(snapshot(root)).toEqual(before);
   });
 
-  test("keeps the merged-away chapter when it is saved meanwhile (#547)", () => {
+  test("keeps the merged-away chapter when it is saved meanwhile, puts the merged one back, and a rerun merges the save (#547)", () => {
     const root = createStoryProject({ cwd: makeTempDir(), title: "Saved Merge" }).root;
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "\n# Chapter 1: One\n\n## Chapter Text\n\nFirst words.\n");
     writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "\n# Chapter 2: Two\n\n## Chapter Text\n\nSecond words.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: Three\nnumber: 3\nstatus: draft", "\n# Chapter 3: Three\n\n## Chapter Text\n\nThird words.\n");
+    const first = path.join(root, "chapters", "chapter-01.md");
     const second = path.join(root, "chapters", "chapter-02.md");
-    const saved = `${read(root, "chapters", "chapter-02.md")}\nSaved meanwhile.\n`;
-    const spy = whileWriting(path.join(root, "chapters", "chapter-01.md"), () => fs.writeFileSync(second, saved));
+    const before = read(root, "chapters", "chapter-01.md");
+    const saved = read(root, "chapters", "chapter-02.md").replace("Second words.", "Second words, saved.");
+    const spy = whileWriting(first, () => fs.writeFileSync(second, saved));
+    let result;
     try {
-      expect(() => mergeChapters(root, { id: "chapter-01", next: "chapter-02" })).toThrow("chapters/chapter-02.md changed on disk while story was deleting it, so it was left as it is");
+      result = invoke(root, ["merge", "chapter-01", "chapter-02"]);
     } finally {
       spy.mockRestore();
     }
+    expect(result.code).toBe(4);
+    expect(result.err).toBe("chapters/chapter-02.md changed on disk while story was merging it into chapter-01, so it was left as it is and chapters/chapter-01.md was put back. Run the same command again to merge it with the change\n");
     expect(fs.readFileSync(second, "utf8")).toBe(saved);
+    expect(fs.readFileSync(first, "utf8")).toBe(before);
+    expect(invoke(root, ["merge", "chapter-01", "chapter-02"]).code).toBe(0);
+    expect(prose(root, "chapter-01")).toBe("First words.\n\n* * *\n\nSecond words, saved.");
+    expect(fs.readdirSync(path.join(root, "chapters")).sort()).toEqual(["_index.md", "chapter-01.md", "chapter-02.md"]);
+    expect(prose(root, "chapter-02")).toBe("Third words.");
   });
 
   test("a chapter with no notes or prose merges cleanly", () => {

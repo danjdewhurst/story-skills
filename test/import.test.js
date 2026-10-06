@@ -6,7 +6,7 @@ import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { OTHER_LIVE_PID, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
+import { otherLivePid, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -460,7 +460,7 @@ describe("import --force into an existing project", () => {
 
   function holdLock(root) {
     // A live command holds the lock.
-    const lock = `${OTHER_LIVE_PID}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    const lock = `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`;
     fs.writeFileSync(path.join(root, LOCK_FILE), lock);
     return lock;
   }
