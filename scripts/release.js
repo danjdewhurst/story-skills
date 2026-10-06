@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
 import { missingBunMessage } from "./bun-missing.js";
-import { CHANGELOG_FILE, promoteUnreleased, unreleasedEntries } from "./changelog.js";
+import { CHANGELOG_FILE, hasVersionSection, promoteUnreleased, unreleasedEntries } from "./changelog.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const VERSION_FILES = ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"];
@@ -34,6 +34,10 @@ export function isAbsentNpmVersion(error) {
 // pointing at a commit that is not on main.
 export function releasePushArgs(tag) {
   return ["push", "--atomic", "origin", RELEASE_BRANCH, tag];
+}
+
+function githubReleaseArgs(tag) {
+  return ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"];
 }
 
 // Semver forbids leading zeros: npm would publish 0.11.01 as 0.11.1 while the
@@ -102,7 +106,8 @@ function compareVersions(a, b) {
 
 // Everything that reaches outside the process goes through these, so tests
 // drive the whole release with a stubbed `run` and a temporary root: a test
-// never starts a real git, gh, npm, or bun process.
+// never starts a real gh, npm, or bun process, and runs git only in
+// throwaway repositories.
 export function releaseDeps(overrides = {}) {
   const root = overrides.root ?? repoRoot;
   return {
@@ -130,6 +135,12 @@ function fail(message) {
 
 function git(deps, ...args) {
   return deps.run("git", args).trim();
+}
+
+// What a failed step said: a piped command's stderr, or the error's message
+// when the command's output already went to the terminal.
+function reason(error) {
+  return String(error.stderr || error.message).trim();
 }
 
 // Releases are cut with Bun, so a missing binary should read as a setup problem
@@ -170,10 +181,11 @@ function preflight(deps, nextVersion, tag, name) {
     fail("working tree is not clean. Commit or stash your changes first.");
   }
   git(deps, "fetch", "origin", RELEASE_BRANCH, "--tags");
-  if (git(deps, "rev-parse", "HEAD") !== git(deps, "rev-parse", `origin/${RELEASE_BRANCH}`)) {
+  const head = git(deps, "rev-parse", "HEAD");
+  if (head !== git(deps, "rev-parse", `origin/${RELEASE_BRANCH}`)) {
     fail(`local ${RELEASE_BRANCH} does not match origin/${RELEASE_BRANCH}. Pull or push first.`);
   }
-  const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(deps.root, CHANGELOG_FILE), "utf8"));
+  const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(deps.root, CHANGELOG_FILE), "utf8"), nextVersion);
   if (changelogProblem) {
     fail(changelogProblem);
   }
@@ -206,14 +218,21 @@ function preflight(deps, nextVersion, tag, name) {
     runBun(deps, ["run", script], { inherit: true });
   }
   deps.log(`\nPreflight passed for ${nextVersion}.`);
+  return head;
 }
 
-// A release with nothing under Unreleased would publish an empty changelog
-// section, so the preflight refuses it before any slow check runs.
-export function changelogProblemFor(text) {
-  return unreleasedEntries(text).length === 0
-    ? `${CHANGELOG_FILE} has no entries under "## [Unreleased]". Add the user-visible changes first.`
-    : null;
+// The two ways the changelog rewrite can refuse, checked before any slow
+// check runs and in --dry-run too, so a dry run that passes means the real
+// run's rewrite will not refuse. Nothing under Unreleased would publish an
+// empty section, and a section for the new version would be a duplicate.
+export function changelogProblemFor(text, nextVersion) {
+  if (unreleasedEntries(text).length === 0) {
+    return `${CHANGELOG_FILE} has no entries under "## [Unreleased]". Add the user-visible changes first.`;
+  }
+  if (hasVersionSection(text, nextVersion)) {
+    return `${CHANGELOG_FILE} already has a section for ${nextVersion}. Move its entries back under "## [Unreleased]" and remove its heading, or release a later version.`;
+  }
+  return null;
 }
 
 export function updateChangelog(root, currentVersion, nextVersion, date) {
@@ -262,8 +281,8 @@ export function updateVersionFiles(root, nextVersion) {
 }
 
 function writeVersions(deps, currentVersion, nextVersion) {
-  // The changelog goes first: it is the one rewrite that can refuse (a section
-  // for this version already exists), and it should refuse before any bump.
+  // The changelog goes first: it is the one rewrite that can refuse, and the
+  // preflight has already checked that it will not.
   const date = deps.today();
   const changelog = updateChangelog(deps.root, currentVersion, nextVersion, date);
   deps.log(`Moved the Unreleased entries in ${CHANGELOG_FILE} under ${nextVersion} - ${date}`);
@@ -279,8 +298,9 @@ function writeVersions(deps, currentVersion, nextVersion) {
 }
 
 // Runs the release and returns its exit status. Bad arguments print the usage
-// and a refused check prints "Release aborted: ..."; both return 1. Any other
-// error propagates, as an uncaught exception did before.
+// and a refused check or a failed release step prints "Release aborted: ..."
+// with what to do next; both return 1. Any other error, such as a failing
+// preflight check whose output is already on the terminal, propagates.
 export function runRelease(argv, overrides = {}) {
   const deps = releaseDeps(overrides);
   let bump;
@@ -314,23 +334,90 @@ function release(deps, bump, dryRun) {
   const tag = `v${nextVersion}`;
   deps.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 
-  preflight(deps, nextVersion, tag, packageJson.name);
+  const head = preflight(deps, nextVersion, tag, packageJson.name);
   if (dryRun) {
     deps.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_VERSION templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
   }
 
-  const updated = writeVersions(deps, packageJson.version, nextVersion);
-  git(deps, "add", ...updated, FALLBACK_FILE);
-  git(deps, "commit", "-m", `chore: release ${nextVersion}`);
-  git(deps, "tag", "-a", tag, "-m", tag);
-  git(deps, ...releasePushArgs(tag));
+  // Until the push everything is local, so a failure puts main and every
+  // file back at `head`, the commit whose clean tree the preflight checked.
+  try {
+    const updated = writeVersions(deps, packageJson.version, nextVersion);
+    git(deps, "add", ...updated, FALLBACK_FILE);
+    git(deps, "commit", "-m", `chore: release ${nextVersion}`);
+    git(deps, "tag", "-a", tag, "-m", tag);
+  } catch (error) {
+    rollBack(deps, head, null, `the release failed before anything was pushed: ${reason(error)}`);
+  }
+  pushRelease(deps, head, tag);
   deps.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);
 
-  const releaseUrl = deps.run("gh", ["release", "create", tag, "--title", tag, "--generate-notes", "--verify-tag"]).trim();
+  // The tag is on origin now, and tag rules stop anyone moving or deleting
+  // it, so from here a failure is finished by hand, never rolled back.
+  let releaseUrl;
+  try {
+    releaseUrl = deps.run("gh", githubReleaseArgs(tag)).trim();
+  } catch (error) {
+    fail(
+      `${RELEASE_BRANCH} and ${tag} are on origin, but \`gh release create\` failed: ${reason(error)}\n` +
+        `Do not run the release again, and leave ${tag} where it is. The Publish workflow runs for ${tag} anyway: once CI and the binaries pass, its release-assets job waits five minutes for the GitHub release, and npm publishes only after that job passes.\n` +
+        `Create the release now: gh ${githubReleaseArgs(tag).join(" ")}\n` +
+        "If release-assets has already failed, re-run the failed jobs of that Publish run: `gh run list --workflow publish.yml` lists the runs, then `gh run rerun <run-id> --failed`."
+    );
+  }
   deps.log(`Created GitHub release: ${releaseUrl}`);
 
   deps.log(`The Publish workflow publishes ${packageJson.name}@${nextVersion} to npm once CI passes on ${RELEASE_BRANCH} for the release commit: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
+}
+
+// Undoes a release that never reached origin: deletes the local tag, if one
+// was made, and resets main and every file to `head`. The preflight saw a
+// clean tree there, so the reset discards only what the release wrote.
+function rollBack(deps, head, tag, problem) {
+  const steps = [...(tag ? [["tag", "-d", tag]] : []), ["reset", "--hard", head]];
+  try {
+    for (const args of steps) {
+      git(deps, ...args);
+    }
+  } catch (error) {
+    fail(`${problem}\nThe rollback failed too: ${reason(error)}\nUndo the release by hand with ${steps.map((args) => `\`git ${args.join(" ")}\``).join(" and ")}, then run the release again.`);
+  }
+  fail(`${problem}\nRolled back: ${RELEASE_BRANCH} is at ${head} again${tag ? `, the local ${tag} tag is deleted,` : ""} and the bumped files are restored. Fix the problem, then run the release again.`);
+}
+
+// --atomic means origin takes both refs or neither, so a refused push leaves
+// nothing there and is rolled back. A dropped connection can hide a push that
+// landed, though, so ask origin for the tag before undoing anything.
+function pushRelease(deps, head, tag) {
+  let pushError;
+  try {
+    git(deps, ...releasePushArgs(tag));
+    return;
+  } catch (error) {
+    pushError = error;
+  }
+  let remoteTag;
+  try {
+    remoteTag = git(deps, "ls-remote", "origin", `refs/tags/${tag}`).split(/\s/)[0];
+  } catch (error) {
+    fail(
+      `\`git push\` failed: ${reason(pushError)}\nCould not ask origin whether the push landed: ${reason(error)}\n` +
+        `Run \`git ls-remote origin refs/tags/${tag}\`. If it prints nothing, the push did not land: run \`git tag -d ${tag}\` and \`git reset --hard ${head}\`, then run the release again. ` +
+        `If it prints the tag, the push landed: create the GitHub release with \`gh ${githubReleaseArgs(tag).join(" ")}\`.`
+    );
+  }
+  if (remoteTag !== "" && remoteTag === git(deps, "rev-parse", tag)) {
+    deps.log(`\`git push\` reported an error, but origin has ${tag}, so the push landed: ${reason(pushError)}`);
+    return;
+  }
+  rollBack(
+    deps,
+    head,
+    tag,
+    `\`git push\` failed and origin does not have this release's ${tag}, so the atomic push changed nothing there: ${reason(pushError)}\n` +
+      `If origin/${RELEASE_BRANCH} has moved on, pull it first. Only a repository admin can push a v* tag.`
+  );
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

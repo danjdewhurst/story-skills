@@ -30,6 +30,11 @@ export function unreleasedEntries(text) {
     .filter((line) => /^[-*] \S/.test(line));
 }
 
+// Whether the changelog already has a `## [version]` section.
+export function hasVersionSection(text, version) {
+  return new RegExp(`^## \\[${version.replaceAll(".", "\\.")}\\]`, "m").test(text);
+}
+
 // Move the Unreleased entries under `## [next] - date`, leave an empty
 // Unreleased section above it, and update the compare links at the foot.
 export function promoteUnreleased(text, current, next, date) {
@@ -40,7 +45,7 @@ export function promoteUnreleased(text, current, next, date) {
   if (unreleasedEntries(text).length === 0) {
     throw new Error(`${CHANGELOG_FILE} has no entries under "## [Unreleased]".`);
   }
-  if (new RegExp(`^## \\[${next.replaceAll(".", "\\.")}\\]`, "m").test(text)) {
+  if (hasVersionSection(text, next)) {
     throw new Error(`${CHANGELOG_FILE} already has a section for ${next}.`);
   }
   const body = text.slice(bounds.start, bounds.end).trim();
