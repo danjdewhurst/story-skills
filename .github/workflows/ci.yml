@@ -80,7 +80,7 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      # test/setup.js gives every test 60s rather than Bun's 5s default, since
+      # `bun run test` gives every test 60s rather than Bun's 5s default, since
       # file-system calls are several times slower on these runners.
       - name: Run tests
         run: bun run test
