@@ -183,6 +183,22 @@ describe("unreadable files name their path once (#383)", () => {
       expect(errors).toContain(`${path.join("characters", "mara.md")}: Cannot read: permission denied`);
     }
   });
+
+  test("an unreadable optional registry or timeline is reported once", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), Buffer.from([0xff]));
+    fs.mkdirSync(path.join(root, "matter"));
+    fs.writeFileSync(path.join(root, "matter", "_index.md"), Buffer.from([0x2d, 0xff]));
+    fs.mkdirSync(path.join(root, "research"));
+    fs.symlinkSync(path.join(root, "story.md"), path.join(root, "research", "_index.md"));
+    const once = (errors, label) => errors.filter((error) => error.startsWith(`${label}: `));
+    const errors = messages(validateProject(root).errors);
+    expect(once(errors, path.join("plot", "timeline.md"))).toHaveLength(1);
+    expect(once(errors, path.join("matter", "_index.md"))).toEqual([`${path.join("matter", "_index.md")}: is not valid UTF-8 (byte 0xff at offset 1): re-save it as UTF-8 (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(errors, path.join("research", "_index.md"))).toEqual([`${path.join("research", "_index.md")}: Refusing to read through symlink (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(messages(validateLinks(root).errors), path.join("plot", "timeline.md"))).toHaveLength(1);
+  });
 });
 
 describe("interrupted rename (#181, #192)", () => {
