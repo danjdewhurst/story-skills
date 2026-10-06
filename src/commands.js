@@ -396,11 +396,12 @@ export const COMMANDS = [
     usage: "progress [path]",
     summary: [
       "Show words against target-words, deadline, chapter",
-      "targets, logged sessions, the daily target, and the",
-      "writing streak; --log records today"
+      "targets, logged sessions, the daily target, the",
+      "writing streak, and weekly totals (--weeks);",
+      "--log records today"
     ],
     project: "positional",
-    options: ["log", "date", ...WRITE_OPTIONS],
+    options: ["log", "date", "weeks", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -408,7 +409,7 @@ export const COMMANDS = [
         throw usageError("--dry-run previews progress --log: add --log");
       }
       const projectRoot = root();
-      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date }));
+      const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date, weeks: parsed.options.weeks }));
       const progress = applySeverity(result, overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "progress", { ...progress, dryRun, changes }, { writes: dryRun ? [] : writtenFiles(projectRoot, changes) });

@@ -1252,12 +1252,12 @@ $ story similarity --against ../notes --min-words 3
 ### progress
 
 ```text
-story progress [path] [--log] [--date <YYYY-MM-DD>] [--dry-run] [--json]
+story progress [path] [--log] [--date <YYYY-MM-DD>] [--weeks <n>] [--dry-run] [--json]
 ```
 
-Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks; see [Story progress](continuity.md#story-progress) for how each is counted.
+Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks (`--weeks` for more or fewer); see [Story progress](continuity.md#story-progress) for how each is counted.
 
-In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
+In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, one per `--weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
 
 A book [counted in characters](project-format.md#counting-in-characters) reports characters against `target-characters` instead (`Progress: 52,300 of 120,000 characters (43.6%)`), and `--log` records `characters` beside `words` in the session. In `--json`, `data.unit` is `words` or `characters`. `words` is the word count in every book, and `characterCount` (top level, `logged`, each chapter, and `lastSession`) the character count, or null in a book counted in words; `target`, `percent`, `remaining`, `perDay`, `since`, and `pace` are in the unit. Sessions logged with no `characters` are left out of the pace and reported as a `session-without-characters` warning.
 
@@ -1265,6 +1265,7 @@ A book [counted in characters](project-format.md#counting-in-characters) reports
 |---|---|
 | `--log` | Record today's total word count in `progress.md`, creating the file if needed. A second log on the same date replaces the first |
 | `--date <YYYY-MM-DD>` | Use this date as "today", for the deadline, today's words, the streak, the weekly history, and `--log`. Default: the local date |
+| `--weeks <n>` | How many weeks of history to show, ending with the current week: a whole number 1 to 52, default `4`. With `1` the heading reads `This week:`. Anything else is a usage error (exit 2). A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
 | `--dry-run` | With `--log`, list the file it would write, print the report as it would be after logging, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
 
 `--log` refuses to rewrite a `progress.md` that does not parse or has malformed sessions, and names each problem.
@@ -3341,6 +3342,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
 | `--baseline` | | `prose` | Boolean; on by default when `style-sheet.md` lists `samples` |
 | `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
+| `--weeks` | `<n>` | `progress` | Whole number 1 to 52; default `4` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |

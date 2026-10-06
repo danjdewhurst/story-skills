@@ -9,6 +9,7 @@ import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
 import { PDF_ENGINES, isPdfEngineName } from "./pdf.js";
+import { historyWeeks } from "./progress.js";
 import { proseThresholds } from "./prose.js";
 import { similarityOptions } from "./similarity.js";
 
@@ -101,9 +102,10 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    // The prose and similarity thresholds are checked here too, so story
-    // validate catches a bad one before a CI run of the command does.
-    const thresholds = { prose: proseThresholds, similarity: similarityOptions }[name];
+    // The prose and similarity thresholds and progress --weeks are checked
+    // here too, so story validate catches a bad one before a CI run of the
+    // command does.
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks }[name];
     if (thresholds !== undefined) {
       try {
         thresholds(defaults[name]);

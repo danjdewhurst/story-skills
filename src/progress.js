@@ -1,4 +1,5 @@
 import { parseClockDate } from "./continuity.js";
+import { usageError } from "./exit-codes.js";
 
 // Progress in words or characters against the book target, per-chapter targets, the
 // deadline, and the session log in progress.md. Pure functions: story.js
@@ -7,6 +8,20 @@ import { parseClockDate } from "./continuity.js";
 export const PROGRESS_FILE = "progress.md";
 const PACE_SESSIONS = 7;
 const HISTORY_WEEKS = 4;
+const MAX_HISTORY_WEEKS = 52;
+
+// The weeks of history from --weeks: a whole number 1 to 52, default 4.
+export function historyWeeks(options = {}) {
+  const raw = options.weeks;
+  if (raw === undefined) {
+    return HISTORY_WEEKS;
+  }
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
+    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`);
+  }
+  return Number(text);
+}
 
 // story.md writing-days entries, Monday first. Full names are accepted too.
 export const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -82,7 +97,7 @@ export function cleanSessions(value) {
 // the last session carry both counts too. A session without the unit's
 // count (one logged before the book was counted in characters) is left out
 // of `sessions`, the last session, and the pace.
-export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null }) {
+export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => (characterBook ? entry.characters ?? null : entry.words);
   const length = characterBook ? characters : words;
@@ -109,7 +124,7 @@ export function computeProgress({ unit = "words", words, characters = null, targ
     lastSession: null,
     pace: null,
     projected: null,
-    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled })
+    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled, weeks })
   };
 
   const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
@@ -150,7 +165,7 @@ export function computeProgress({ unit = "words", words, characters = null, targ
 // counts toward the streak when it gained words (at least the daily target,
 // when one is set). Days outside writing-days never break a streak, and
 // today does not break it before it is written.
-function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
+function computeDaily({ measured, length, todayDays, dailyTarget, scheduled, weeks: historyLength }) {
   const byDay = new Map();
   for (const session of measured) {
     const days = parseClockDate(session.date).days;
@@ -196,7 +211,7 @@ function computeDaily({ measured, length, todayDays, dailyTarget, scheduled }) {
   const written = gains.has(todayDays) ? gains.get(todayDays) : null;
   const monday = todayDays - weekdayIndex(todayDays);
   const weeks = [];
-  for (let back = HISTORY_WEEKS - 1; back >= 0; back -= 1) {
+  for (let back = historyLength - 1; back >= 0; back -= 1) {
     const start = monday - back * 7;
     let total = 0;
     let days = 0;
@@ -300,7 +315,7 @@ function formatDaily(daily, hasSessions, noun) {
   }
   const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
   lines.push(`Streak: ${plural(daily.streak.current, "day")} (longest ${formatNumber(daily.streak.longest)}${days})`);
-  lines.push("", `Last ${daily.weeks.length} weeks:`);
+  lines.push("", daily.weeks.length === 1 ? "This week:" : `Last ${daily.weeks.length} weeks:`);
   for (const week of daily.weeks) {
     const amount = week.target === null ? formatNumber(week.written) : `${formatNumber(week.written)} of ${formatNumber(week.target)}`;
     lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural(week.days, "day")}`);
