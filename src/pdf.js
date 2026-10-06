@@ -313,6 +313,12 @@ function killTree(pid, platform, failed) {
   }
 }
 
+// The engine's last lines of output, led by its first fatal or error line
+// when that came earlier: a crashing browser ends on a stack trace, and the
+// line that says why (`FATAL: No usable sandbox!`) is above it.
 function lastLines(text, count = 10) {
-  return text.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line !== "").slice(-count).join("\n");
+  const lines = text.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line !== "");
+  const tail = lines.slice(-count);
+  const cause = lines.slice(0, -count).find((line) => /\b(?:FATAL|ERROR|Error)\b/.test(line));
+  return (cause === undefined ? tail : [cause, "...", ...tail]).join("\n");
 }
