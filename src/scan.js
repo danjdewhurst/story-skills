@@ -962,9 +962,10 @@ Why each \`watch-words\` entry is there.
 }
 
 // A name is one line: a line break would split the entity's heading and its
-// registry row.
+// registry row. U+2028 and U+2029 count, as JavaScript and many editors read
+// them as line breaks.
 export function requireSingleLineName(name, kind) {
-  if (/[\r\n]/.test(name)) {
+  if (/[\r\n\u2028\u2029]/.test(name)) {
     throw usageError(`A ${kind} name must be a single line`);
   }
 }

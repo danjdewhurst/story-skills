@@ -1306,15 +1306,12 @@ function replaceFrontmatter(markdown, data, bodyOverride) {
 }
 var FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
 function stringifyEntry(key, value, original = {}, lineEnd = "") {
-  if (!Array.isArray(value)) {
-    return [`${key}: ${formatScalar(value)}${lineEnd}`];
-  }
-  if (value.length === 0) {
-    return [`${key}: []${lineEnd}`];
+  if (!Array.isArray(value) || value.length === 0 || original.flow && !value.some(isNested)) {
+    return [`${key}: ${inlineText(value, original)}${lineEnd}`];
   }
   const originalItems = original.items ?? [];
   const indent = original.indent ?? "  ";
-  const lines = [`${key}:${lineEnd}`, ...original.leading ?? []];
+  const lines = [`${key}:${original.comment ?? ""}${lineEnd}`, ...original.leading ?? []];
   const unused = new Map;
   for (const candidate of originalItems) {
     const itemKey = valueKey(candidate.value);
@@ -1340,45 +1337,56 @@ function stringifyEntry(key, value, original = {}, lineEnd = "") {
       return;
     }
     const partial = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate) && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.childIndent === indent.length + 2) : undefined;
-    const fresh = stringifyItem(key, item, indent).map((line) => `${line}${lineEnd}`);
     if (partial) {
       reused.add(partial);
       lines.push(...partial.before);
+      const fresh = stringifyItem(key, item, indent, partial.keyLines);
       Object.keys(item).forEach((childKey, childIndex) => {
         const source = partial.keyLines[childIndex];
         lines.push(...source.before);
-        lines.push(...isDeepEqual(partial.value[childKey], item[childKey]) ? source.lines : [fresh[childIndex]]);
+        lines.push(...isDeepEqual(partial.value[childKey], item[childKey]) ? source.lines : [`${fresh[childIndex]}${lineEnd}`]);
       });
       return;
     }
     const positional = originalItems[index];
+    let sources = [];
     if (positional && !reused.has(positional)) {
       reused.add(positional);
       lines.push(...positional.before);
+      sources = positional.keyLines ?? [positional];
     }
-    lines.push(...fresh);
+    lines.push(...stringifyItem(key, item, indent, sources).map((line) => `${line}${lineEnd}`));
   });
   return lines;
+}
+function inlineText(value, source = {}) {
+  const text = source.flow && Array.isArray(value) ? flowText(value, source.flow) : formatScalar(value);
+  return `${text}${source.comment ?? ""}`;
+}
+function flowText(value, entries) {
+  const unused = [...entries];
+  return `[${value.map((item) => {
+    const at = unused.findIndex((entry) => isDeepEqual(entry.value, item));
+    return at < 0 ? formatFlowEntry(item) : unused.splice(at, 1)[0].text;
+  }).join(", ")}]`;
+}
+function isNested(value) {
+  return Array.isArray(value) || isPlainObject(value);
 }
 function sameKeys(left, right) {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
   return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
 }
-function stringifyItem(key, item, indent = "  ") {
+function stringifyItem(key, item, indent = "  ", sources = []) {
   if (!isPlainObject(item)) {
-    return [`${indent}- ${formatScalar(item)}`];
+    return [`${indent}- ${inlineText(item, sources[0])}`];
   }
   const entries = Object.entries(item);
   if (entries.length === 0) {
     throw new Error("Cannot stringify empty mapping in " + key);
   }
-  const [firstKey, firstValue] = entries[0];
-  const lines = [`${indent}- ${firstKey}: ${formatScalar(firstValue)}`];
-  for (const [childKey, childValue] of entries.slice(1)) {
-    lines.push(`${indent}  ${childKey}: ${formatScalar(childValue)}`);
-  }
-  return lines;
+  return entries.map(([childKey, childValue], index) => `${indent}${index === 0 ? "- " : "  "}${childKey}: ${inlineText(childValue, sources[index])}`);
 }
 function valueKey(value) {
   return JSON.stringify(value) ?? String(value);
@@ -1400,9 +1408,9 @@ function isDeepEqual(left, right) {
 function parseYaml(source) {
   return parseYamlBlocks(source).data;
 }
-var KEY_PATTERN = /^([A-Za-z0-9_-]+):(.*)$/;
-var ITEM_KEY_PATTERN = /^([A-Za-z0-9_-]+):(\s.*)?$/;
-var LIST_ITEM_PATTERN = /^( *)-(\s.*)?$/;
+var KEY_PATTERN = /^([A-Za-z0-9_-]+):([^\r]*)$/;
+var ITEM_KEY_PATTERN = /^([A-Za-z0-9_-]+):(\s[^\r]*)?$/;
+var LIST_ITEM_PATTERN = /^( *)-(\s[^\r]*)?$/;
 var BLOCK_HEADER_PATTERN = /^([|>])(?:([-+])([1-9])?|([1-9])([-+])?)?$/;
 function parseYamlBlocks(source, firstLine = 2) {
   const rawLines = source === "" ? [] : source.split(`
@@ -1413,6 +1421,10 @@ function parseYamlBlocks(source, firstLine = 2) {
   const fail = (index, hint, problem = `Unsupported frontmatter line: ${lines[index].trim()}`) => {
     throw projectError(`${problem} (line ${index + firstLine}). ${hint}`);
   };
+  const strayReturn = lines.findIndex((line) => line.includes("\r"));
+  if (strayReturn >= 0) {
+    fail(strayReturn, 'Remove it, or write it as \\r inside a double-quoted value, such as note: "a\\rb"', "Unsupported line break: a carriage return with no line feed after it");
+  }
   const nextContent = (index) => {
     let next = index;
     while (next < lines.length && isBlankOrComment(lines[next])) {
@@ -1421,9 +1433,9 @@ function parseYamlBlocks(source, firstLine = 2) {
     return next;
   };
   const inlineValue = (text, index) => {
-    const value = withoutComment(text);
+    const { value, comment } = splitComment(text);
     if (value === "") {
-      return { empty: true };
+      return { empty: true, comment };
     }
     const first = value[0];
     if (first === "|" || first === ">") {
@@ -1431,10 +1443,11 @@ function parseYamlBlocks(source, firstLine = 2) {
       if (!header) {
         fail(index, `Quote a value that starts with ${first}, such as epigraph: "${first} text", or put ${first} alone after the colon and the text on indented lines below`);
       }
-      return { header };
+      return { header, comment };
     }
     if (first === "[" && !/^\[TODO\b/i.test(value)) {
-      return { value: parseFlowList(value, index) };
+      const entries = parseFlowList(value, index);
+      return { value: entries.map((entry) => entry.value), flow: entries.length > 0 ? entries : undefined, comment };
     }
     if (first === "{") {
       fail(index, 'Flow mappings are not supported. Quote the value, such as type: "{family}", or write a list of key: value items, such as relationships: then   - character: sera-voss on the next line');
@@ -1442,7 +1455,7 @@ function parseYamlBlocks(source, firstLine = 2) {
     if (first === "&" || first === "*" || first === "!") {
       fail(index, `Anchors, aliases, and tags are not supported. Quote the value, such as note: ${JSON.stringify(value)}`);
     }
-    return { value: parseScalar(value) };
+    return { value: parseScalar(value), comment };
   };
   const parseFlowList = (value, index) => {
     if (!value.endsWith("]")) {
@@ -1492,7 +1505,7 @@ function parseYamlBlocks(source, firstLine = 2) {
           fail(index, `Anchors, aliases, and tags are not supported. Quote the entry, such as tags: [${JSON.stringify(item)}]`);
         }
       }
-      items.push(parseScalar(item));
+      items.push({ value: parseScalar(item), text: item });
       if (value[at] === ",") {
         at += 1;
       }
@@ -1540,13 +1553,15 @@ function parseYamlBlocks(source, firstLine = 2) {
   };
   const readValue = (target, key, text, index, indent) => {
     const parsed = inlineValue(text, index);
+    const source = { end: index + 1, comment: parsed.comment, flow: parsed.flow };
     if (parsed.header) {
       const block = blockScalar(parsed.header, index, indent);
       target[key] = block.value;
-      return block.end;
+      source.end = block.end;
+    } else {
+      target[key] = parsed.empty ? "" : parsed.value;
     }
-    target[key] = parsed.empty ? "" : parsed.value;
-    return index + 1;
+    return source;
   };
   const nestedHint = (line) => {
     const text = line.trim();
@@ -1591,16 +1606,18 @@ function parseYamlBlocks(source, firstLine = 2) {
           fail(index, nestedHint(itemText));
         }
         const holder = Object.create(null);
-        index = readValue(holder, "item", rest, index, indent);
+        const { end, comment, flow } = readValue(holder, "item", rest, index, indent);
+        index = end;
         items.push(holder.item);
-        sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent });
+        sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent, comment, flow });
         gap = index;
         continue;
       }
       const item = Object.create(null);
-      index = readValue(item, objectMatch[1], objectMatch[2] ?? "", index, childIndent);
-      const keyLines = [{ before: [], lines: rawLines.slice(itemStart, index) }];
-      const childPattern = new RegExp(`^ {${childIndent}}([A-Za-z0-9_-]+):(.*)$`);
+      const { end, comment, flow } = readValue(item, objectMatch[1], objectMatch[2] ?? "", index, childIndent);
+      index = end;
+      const keyLines = [{ before: [], lines: rawLines.slice(itemStart, index), comment, flow }];
+      const childPattern = new RegExp(`^ {${childIndent}}([A-Za-z0-9_-]+):([^\\r]*)$`);
       while (index < lines.length) {
         const next = nextContent(index);
         const child = next < lines.length ? childPattern.exec(lines[next]) : null;
@@ -1611,8 +1628,9 @@ function parseYamlBlocks(source, firstLine = 2) {
           fail(next, "Remove or rename one of the two keys in this list item", `Duplicate frontmatter key: ${child[1]}`);
         }
         const keyGap = index;
-        index = readValue(item, child[1], child[2], next, childIndent);
-        keyLines.push({ before: rawLines.slice(keyGap, next), lines: rawLines.slice(next, index) });
+        const source = readValue(item, child[1], child[2], next, childIndent);
+        index = source.end;
+        keyLines.push({ before: rawLines.slice(keyGap, next), lines: rawLines.slice(next, index), comment: source.comment, flow: source.flow });
       }
       items.push(item);
       sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent, keyLines });
@@ -1636,16 +1654,17 @@ function parseYamlBlocks(source, firstLine = 2) {
       fail(index, "Remove or rename one of the two entries", `Duplicate frontmatter key: ${key}`);
     }
     const parsed = inlineValue(after, index);
+    const { comment } = parsed;
     if (parsed.header) {
       const block = blockScalar(parsed.header, index, 0);
       data[key] = block.value;
-      blocks.push({ key, lines: rawLines.slice(index, block.end), items: [] });
+      blocks.push({ key, lines: rawLines.slice(index, block.end), items: [], comment });
       index = block.end;
       continue;
     }
     if (!parsed.empty) {
       data[key] = parsed.value;
-      blocks.push({ key, lines: [rawLines[index]], items: [] });
+      blocks.push({ key, lines: [rawLines[index]], items: [], comment, flow: parsed.flow });
       index += 1;
       continue;
     }
@@ -1653,7 +1672,7 @@ function parseYamlBlocks(source, firstLine = 2) {
     const first = next < lines.length ? LIST_ITEM_PATTERN.exec(lines[next]) : null;
     if (!first) {
       data[key] = "";
-      blocks.push({ key, lines: [rawLines[index]], items: [] });
+      blocks.push({ key, lines: [rawLines[index]], items: [], comment });
       index += 1;
       continue;
     }
@@ -1666,6 +1685,7 @@ function parseYamlBlocks(source, firstLine = 2) {
       lines: rawLines.slice(index, list.nextIndex),
       indent: first[1],
       leading,
+      comment,
       items: list.items.map((item, itemIndex) => ({ value: toPlainObject(item), ...list.sources[itemIndex] }))
     });
     index = list.nextIndex;
@@ -1692,7 +1712,7 @@ function topLevelHint(line) {
   }
   return "Write each field as key: value, with a key of letters, digits, - and _, such as title: The Bell";
 }
-function withoutComment(text) {
+function splitComment(text) {
   const value = text.trimStart();
   let close = -1;
   if (value[0] === '"' || value[0] === "'") {
@@ -1700,11 +1720,16 @@ function withoutComment(text) {
   } else if (value[0] === "[") {
     close = flowListEnd(value);
   }
-  if (close >= 0 && /^(?:\s+#.*|\s*)$/.test(value.slice(close + 1))) {
-    return value.slice(0, close + 1);
+  const rest = value.slice(close + 1);
+  if (close >= 0 && /^(?:\s+#[^\r]*|\s*)$/.test(rest)) {
+    return { value: value.slice(0, close + 1), comment: rest.includes("#") ? rest : "" };
   }
-  const comment = /\s#/.exec(text);
-  return (comment ? text.slice(0, comment.index) : text).trim();
+  const hash = /\s#/.exec(text);
+  if (!hash) {
+    return { value: text.trim(), comment: "" };
+  }
+  const before = text.slice(0, hash.index);
+  return { value: before.trim(), comment: text.slice(before.replace(/[ \t]+$/, "").length) };
 }
 function quoteEnd(text, start) {
   const quote = text[start];
@@ -1801,10 +1826,10 @@ function parseScalar(value) {
   if (/^(?:~|null|Null|NULL)$/.test(trimmed)) {
     return "";
   }
-  if (trimmed === "true") {
+  if (/^(?:true|True|TRUE)$/.test(trimmed)) {
     return true;
   }
-  if (trimmed === "false") {
+  if (/^(?:false|False|FALSE)$/.test(trimmed)) {
     return false;
   }
   if (/^-?\d+$/.test(trimmed)) {
@@ -1829,7 +1854,10 @@ function formatScalar(value) {
   if (Array.isArray(value)) {
     return `[${value.map(formatFlowEntry).join(", ")}]`;
   }
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "number") {
+    return formatNumber(value);
+  }
+  if (typeof value === "boolean") {
     return String(value);
   }
   if (value === null || value === undefined) {
@@ -1837,19 +1865,33 @@ function formatScalar(value) {
   }
   const text = String(value);
   if (needsQuotes(text)) {
-    return JSON.stringify(text);
+    return quote(text);
   }
   return text;
+}
+function formatNumber(value) {
+  const match = /^(-?)(\d)(?:\.(\d+))?e([-+]\d+)$/.exec(String(value));
+  if (!match) {
+    return String(value);
+  }
+  const [, sign, lead, rest = "", exponent] = match;
+  const digits = `${lead}${rest}`;
+  const shift = Number(exponent);
+  return shift > 0 ? `${sign}${digits}${"0".repeat(shift + 1 - digits.length)}` : `${sign}0.${"0".repeat(-shift - 1)}${digits}`;
+}
+var UNESCAPED_PATTERN = /[\u007f-\u009f\u2028\u2029\ufeff\ufffe\uffff]/g;
+function quote(text) {
+  return JSON.stringify(text).replace(UNESCAPED_PATTERN, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 function formatFlowEntry(value) {
   if (Array.isArray(value) || isPlainObject(value)) {
     throw new Error("Cannot stringify a list or mapping inside a nested list");
   }
   const text = formatScalar(value);
-  return text === "" || typeof value === "string" && /[,[\]{}]/.test(text) && !text.startsWith('"') ? JSON.stringify(String(value ?? "")) : text;
+  return text === "" || typeof value === "string" && /[,[\]{}]/.test(text) && !text.startsWith('"') ? quote(String(value ?? "")) : text;
 }
 function needsQuotes(text) {
-  return text === "" || /^\s|\s$/.test(text) || /[:#"'\u0000-\u001f\u007f]/.test(text) || /^[-?,[\]{}&*!|>%@`]/.test(text) || /^(true|false|null|yes|no|on|off|~)$/i.test(text) || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text) || /^[-+]?0[xob][0-9a-f_]+$/i.test(text) || /^[-+]?\.(inf|nan)$/i.test(text);
+  return text === "" || /^\s|\s$/.test(text) || /[:#"'\u0000-\u001f]/.test(text) || text.search(UNESCAPED_PATTERN) >= 0 || /^[-?,[\]{}&*!|>%@`]/.test(text) || /^(true|false|null|yes|no|on|off|~)$/i.test(text) || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text) || /^[-+]?0[xob][0-9a-f_]+$/i.test(text) || /^[-+]?\.(inf|nan)$/i.test(text);
 }
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -8305,7 +8347,7 @@ function matchingText(text, pack = languagePack()) {
   return casesDotlessI(pack) ? { ...composed, text: lowerCase(composed.text, pack) } : composed;
 }
 var NUMBER_FORMATS = new Map;
-function formatNumber(value, pack = languagePack()) {
+function formatNumber2(value, pack = languagePack()) {
   if (!NUMBER_FORMATS.has(pack.locale)) {
     NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
   }
@@ -12162,10 +12204,10 @@ function formatProgress(progress) {
   const count = (entry) => characters ? entry.characterCount : entry.words;
   const lines = [];
   if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber2(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
+    lines.push(`Progress: ${formatNumber3(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
   } else {
-    lines.push(`Progress: ${formatNumber2(count(progress))} of ${formatNumber2(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber2)}`);
+    lines.push(`Progress: ${formatNumber3(count(progress))} of ${formatNumber3(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber3)}`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
@@ -12174,9 +12216,9 @@ function formatProgress(progress) {
     } else if (perDay === null) {
       lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
     } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber2)} needed`);
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber3)} needed`);
     } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} ${noun}s a day needed`);
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber3(perDay)} ${noun}s a day needed`);
     }
   }
   const release = formatNextRelease(progress.release);
@@ -12185,12 +12227,12 @@ function formatProgress(progress) {
   }
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber2(since)} ${noun}s since)`);
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber3(since)} ${noun}s since)`);
   } else {
     lines.push("Sessions: none logged (run story progress --log after a writing session)");
   }
   if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber2(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+    lines.push(`Pace: ${formatNumber3(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
   }
   if (progress.projected) {
     lines.push(`Projected finish at this pace: ${progress.projected}`);
@@ -12199,7 +12241,7 @@ function formatProgress(progress) {
   if (progress.chapters.length > 0) {
     lines.push("", "Chapter targets:");
     for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber2(count(chapter))} of ${formatNumber2(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
+      lines.push(`- ${chapter.id}: ${formatNumber3(count(chapter))} of ${formatNumber3(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
     }
   }
   return `${lines.join(`
@@ -12215,24 +12257,24 @@ function formatDaily(daily, hasSessions, noun) {
   const off = today.scheduled ? "" : " (not a writing day)";
   if (today.written === null) {
     if (target !== null) {
-      lines.push(`Today: ${formatNumber2(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
+      lines.push(`Today: ${formatNumber3(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
     }
   } else {
-    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber2(today.written)}`;
+    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber3(today.written)}`;
     if (target === null) {
       lines.push(`Today: ${gained} ${noun}s${off}`);
     } else {
-      lines.push(`Today: ${gained} of ${formatNumber2(target)} ${noun}s (${today.met ? "target met" : `${formatNumber2(today.remaining)} to go`})${off}`);
+      lines.push(`Today: ${gained} of ${formatNumber3(target)} ${noun}s (${today.met ? "target met" : `${formatNumber3(today.remaining)} to go`})${off}`);
     }
   }
   if (!hasSessions) {
     return lines;
   }
   const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
-  lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber2(daily.streak.longest)}${days})`);
+  lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber3(daily.streak.longest)}${days})`);
   lines.push("", daily.weeks.length === 1 ? "This week:" : `Last ${daily.weeks.length} weeks:`);
   for (const week of daily.weeks) {
-    const amount = week.target === null ? formatNumber2(week.written) : `${formatNumber2(week.written)} of ${formatNumber2(week.target)}`;
+    const amount = week.target === null ? formatNumber3(week.written) : `${formatNumber3(week.written)} of ${formatNumber3(week.target)}`;
     lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural2(week.days, "day")}`);
   }
   return lines;
@@ -12263,7 +12305,7 @@ function formatPercent(percent, places) {
   }
   return value.toFixed(places);
 }
-function formatNumber2(value) {
+function formatNumber3(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -13077,7 +13119,7 @@ Why each \`watch-words\` entry is there.
 `;
 }
 function requireSingleLineName(name, kind) {
-  if (/[\r\n]/.test(name)) {
+  if (/[\r\n\u2028\u2029]/.test(name)) {
     throw usageError(`A ${kind} name must be a single line`);
   }
 }
@@ -17487,7 +17529,7 @@ function formatComparison(comparison, label) {
   const lines = [
     `Compared with ${label}`,
     `Chapters: ${comparison.beforeChapters} then, ${comparison.afterChapters} now (${added} added, ${removed} removed${moved > 0 ? `, ${moved} moved` : ""})`,
-    `Words: ${formatNumber3(comparison.beforeWords)} then, ${formatNumber3(comparison.afterWords)} now (${signed(comparison.afterWords - comparison.beforeWords)})`,
+    `Words: ${formatNumber4(comparison.beforeWords)} then, ${formatNumber4(comparison.afterWords)} now (${signed(comparison.afterWords - comparison.beforeWords)})`,
     ""
   ];
   if (comparison.chapters.length === 0) {
@@ -17496,13 +17538,13 @@ function formatComparison(comparison, label) {
   for (const chapter of comparison.chapters) {
     const name = `${chapter.id} ${chapter.title}${chapter.movedFrom ? ` (moved from ${chapter.movedFrom})` : ""}`;
     if (chapter.status === "added") {
-      lines.push(`- ${name}: added (${formatNumber3(chapter.after)} words)`);
+      lines.push(`- ${name}: added (${formatNumber4(chapter.after)} words)`);
     } else if (chapter.status === "removed") {
-      lines.push(`- ${name}: removed (was ${formatNumber3(chapter.before)} words)`);
+      lines.push(`- ${name}: removed (was ${formatNumber4(chapter.before)} words)`);
     } else if (chapter.status === "unchanged") {
-      lines.push(`- ${name}: unchanged (${formatNumber3(chapter.after)} words)`);
+      lines.push(`- ${name}: unchanged (${formatNumber4(chapter.after)} words)`);
     } else {
-      lines.push(`- ${name}: ${formatNumber3(chapter.before)} -> ${formatNumber3(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
+      lines.push(`- ${name}: ${formatNumber4(chapter.before)} -> ${formatNumber4(chapter.after)} words (${signed(chapter.after - chapter.before)}), ${formatPercent(chapter.unchanged * 100, 0)}% of paragraphs unchanged`);
     }
   }
   return `${lines.join(`
@@ -17595,9 +17637,9 @@ function formatLabelMapping(mapping, label) {
 `;
 }
 function signed(value) {
-  return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber3(Math.abs(value))}`;
+  return `${value > 0 ? "+" : value < 0 ? "-" : "±"}${formatNumber4(Math.abs(value))}`;
 }
-function formatNumber3(value) {
+function formatNumber4(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -18517,7 +18559,7 @@ function shunnChapterHeadingXml(script, text) {
 function shunnWordCount(words, pack = languagePack()) {
   const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
   const rounded = Math.round(words / step) * step;
-  return formatNumber(rounded, pack);
+  return formatNumber2(rounded, pack);
 }
 function shunnLength(meta) {
   return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
@@ -19118,12 +19160,12 @@ function describe(document, from, length) {
   };
 }
 function count(value, noun) {
-  return `${formatNumber3(value)} ${value === 1 ? noun : `${noun}s`}`;
+  return `${formatNumber4(value)} ${value === 1 ? noun : `${noun}s`}`;
 }
 function place(location) {
   return location.from === location.to ? location.from : `${location.from} to ${location.to}`;
 }
-function quote(text) {
+function quote2(text) {
   const words = text.split(" ");
   return words.length > QUOTE_WORDS ? `${words.slice(0, QUOTE_WORDS).join(" ")}…` : text;
 }
@@ -19145,7 +19187,7 @@ function compareSimilarity(chapters, references, { minWords, label }) {
       reference: { file: target.file, from: there.from, to: there.to, text: there.text }
     };
   });
-  const warnings = passages.map((passage) => warn("similarity-shared-passage", `${passage.file} (${place(passage)}) shares ${count(passage.words, "word")} with ${passage.reference.file} (${place(passage.reference)}): "${quote(passage.text)}"`, passage.file));
+  const warnings = passages.map((passage) => warn("similarity-shared-passage", `${passage.file} (${place(passage)}) shares ${count(passage.words, "word")} with ${passage.reference.file} (${place(passage.reference)}): "${quote2(passage.text)}"`, passage.file));
   const summary = sources.map((source) => {
     const own = passages.filter((passage) => passage.file === source.file);
     return {
@@ -19188,7 +19230,7 @@ function formatSimilarity(report) {
     const passages = chapter.passages === 0 ? "no shared passages" : `${count(chapter.passages, "shared passage")}, ${count(chapter.sharedWords, "word")} (${percent(chapter.sharedWords, chapter.words)})`;
     lines.push(`- ${chapter.file}: ${passages}`);
   }
-  lines.push("", `Total: ${formatNumber3(report.sharedWords)} of ${count(report.words, "word")} shared (${percent(report.sharedWords, report.words)})`);
+  lines.push("", `Total: ${formatNumber4(report.sharedWords)} of ${count(report.words, "word")} shared (${percent(report.sharedWords, report.words)})`);
   lines.push("Shared text is a place to look, not proof of copying: check each passage in context.");
   return `${lines.join(`
 `)}
@@ -19883,7 +19925,7 @@ function formatTimeline(timeline, totalChapters) {
   const length = povLength(timeline.unit);
   const shares = roundedShares(timeline.pov.map(length));
   for (const [index, entry] of timeline.pov.entries()) {
-    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber4(length(entry))} ${timeline.unit === "characters" ? "characters" : "words"} (${shares[index]}%)`);
+    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber5(length(entry))} ${timeline.unit === "characters" ? "characters" : "words"} (${shares[index]}%)`);
   }
   lines.push("", "Character presence:");
   if (timeline.presence.length === 0) {
@@ -19923,7 +19965,7 @@ function describe2(entry) {
 function plural3(count, noun) {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
-function formatNumber4(value) {
+function formatNumber5(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -25068,9 +25110,9 @@ function formatRestorePreview(result) {
 `;
 }
 function formatSnapshot(result) {
-  const counts = [`${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"}`, `${formatNumber3(result.words)} words`];
+  const counts = [`${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"}`, `${formatNumber4(result.words)} words`];
   if (result.characters !== undefined) {
-    counts.push(`${formatNumber3(result.characters)} characters`);
+    counts.push(`${formatNumber4(result.characters)} characters`);
   }
   return `${result.replaced ? "Replaced" : "Saved"} snapshot ${result.id} in ${result.dir}/ (${counts.join(", ")}; ${result.files} ${result.files === 1 ? "file" : "files"})
 Compare with it later: story compare --snapshot ${result.id}
@@ -25083,7 +25125,7 @@ function formatSnapshotList(report) {
   }
   const lines = report.snapshots.map((snapshot) => {
     const when = snapshot.created === null ? "unknown date" : `${snapshot.created.slice(0, 16).replace("T", " ")} UTC`;
-    const words = snapshot.words === null ? "? words" : `${formatNumber3(snapshot.words)} words`;
+    const words = snapshot.words === null ? "? words" : `${formatNumber4(snapshot.words)} words`;
     const chapters = snapshot.chapters === null ? "? chapters" : `${snapshot.chapters} ${snapshot.chapters === 1 ? "chapter" : "chapters"}`;
     const label = snapshot.name === snapshot.id ? snapshot.id : `${snapshot.id} (${snapshot.name})`;
     return `- ${label}: ${when}, ${chapters}, ${words}`;
