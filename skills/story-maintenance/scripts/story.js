@@ -24726,7 +24726,7 @@ function copyProject(source, target, roots, depth = 0) {
         copyProject(from, to, roots, depth + 1);
       }
     } else if (entry.isSymbolicLink()) {
-      fs15.symlinkSync(linkTarget(fs15.readlinkSync(from), roots), to);
+      fs15.symlinkSync(linkTarget(fs15.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
       copyFile(from, to);
     }
