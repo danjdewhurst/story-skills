@@ -152,7 +152,8 @@ Report the result honestly:
 Follow `references/editor-rounds.md`:
 
 1. Snapshot and tag the draft sent (`sent-to-editor-1`) with the user's
-   approval, then build the file the editor wants:
+   approval, committing the project folder only (`git add -A -- .`,
+   `git commit -m "…" -- .`), then build the file the editor wants:
    `story build . --format docx` (Word with Track Changes) or `story
    build . --format shunn` for manuscript format.
 2. When edits come back, the author accepts or rejects them in Word; the
