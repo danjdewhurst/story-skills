@@ -1,6 +1,6 @@
 ---
 name: series-continuity
-description: This skill should be used when the user asks to "write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible", or needs to keep canon consistent across multiple Story Skills projects.
+description: This skill should be used when the user asks to "write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible", or needs to keep canon consistent across multiple Story Skills projects. NOT for a standalone book (use story-init) or continuity within one book (use revision-continuity).
 ---
 
 # Series Continuity

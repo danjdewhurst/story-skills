@@ -16,7 +16,7 @@ This page is for writers and agent operators who want to know what each of the 2
 
 Each skill is a folder under [`skills/`](../skills/) containing a `SKILL.md` file and, usually, a `references/` folder. The `SKILL.md` frontmatter has a `name` and a `description`. The description lists the phrases that should trigger the skill ("start a new story", "write the next chapter", "continuity check"), and your agent matches your request against those descriptions to decide which skill to load. You don't need to name a skill. Asking in plain words is enough, though naming one ("use the scene-craft skill") also works.
 
-Nearly every trigger phrase belongs to one skill (the exception is "character arc", which both character-management and theme-craft list), and most descriptions end with a "NOT for" line that points neighbouring requests elsewhere. That is why similar-sounding requests can land on different skills: "premise" goes to premise-workshop but "controlling idea" to theme-craft, "pacing" and "sagging middle" go to plot-structure but "chapter hook" to scene-craft, and "voice fingerprints" goes to voice-style but "everyone sounds the same" to line-editing. The **Triggers** and **Not for** lines below list them for each skill.
+Each trigger phrase belongs to one skill, and most descriptions end with a "NOT for" line that points neighbouring requests elsewhere. That is why similar-sounding requests can land on different skills: "premise" goes to premise-workshop but "controlling idea" to theme-craft, "pacing" and "sagging middle" go to plot-structure but "chapter hook" to scene-craft, and "voice fingerprints" goes to voice-style but "everyone sounds the same" to line-editing. The **Triggers** and **Not for** lines below list them for each skill.
 
 Once loaded, a skill tells the agent what to read, what to ask you, which files to edit, and which maintenance commands to run afterwards. Reference files hold templates and craft guidance that the skill loads when it needs them, so the main instructions stay short.
 
@@ -339,9 +339,9 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and the
 
 **Purpose.** Treats theme as a working mechanism: a controlling idea, lie/truth character arcs, the antagonist as the counter-argument, motifs, and a theme audit after the draft.
 
-**Triggers.** "Theme", "controlling idea", "thematic argument", "moral argument", "character arc", "flat arc", "negative arc", "the lie", "antagonist design", "motif", "symbolism", "theme audit".
+**Triggers.** "Theme", "controlling idea", "thematic argument", "moral argument", "thematic arc", "flat arc", "negative arc", "the lie", "antagonist design", "motif", "symbolism", "theme audit".
 
-**Not for.** Finding or testing a story premise before a project exists ([premise-workshop](#premise-workshop)). The word "premise" on its own triggers premise-workshop; ask for the controlling idea or the thematic argument to reach this skill.
+**Not for.** Finding or testing a story premise before a project exists ([premise-workshop](#premise-workshop)), or a character's profile, relationships, or "character arc" record ([character-management](#character-management)). The word "premise" on its own triggers premise-workshop; ask for the controlling idea or the thematic argument to reach this skill.
 
 **Workflow.**
 
@@ -441,6 +441,8 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Triggers.** "Write a chapter", "next chapter", "chapter outline", "draft chapter", "continue the story", "write a scene", "outline a chapter".
 
+**Not for.** Planning a scene's structure, subtext, or outcome ([scene-craft](#scene-craft)), drafting without an outline ([discovery-drafting](#discovery-drafting)), or revising existing chapters ([revision-continuity](#revision-continuity)).
+
 **Prerequisites.** `story.md` and at least one character. A plot structure is recommended but not required for early chapters.
 
 **Workflow.** Five steps every time: gather context, scope the chapter, agree a beat-by-beat outline, write, then update the dependent records. [Writing workflows](writing-workflows.md#6-write-chapters-outline-first) walks through each step. Four details matter for the files it produces:
@@ -507,7 +509,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Triggers.** "Plan a scene", "scene structure", "sequel scene", "dialogue subtext", "deep POV", "psychic distance", "try fail", "scene cards", "exposition", "info dump", "flashback", "time skip", "story opening", "first page hook", "introduce a character", "scene outcome", "yes-but no-and", "chapter hook".
 
-**Not for.** Book-level pacing or act structure ([plot-structure](#plot-structure)).
+**Not for.** Book-level pacing or act structure ([plot-structure](#plot-structure)), or drafting the prose of a scene or chapter ([chapter-writing](#chapter-writing)).
 
 **Workflow.**
 
