@@ -691,7 +691,9 @@ export function resolveOutputPath(project, out, defaultRelativePath, enforceRoot
   };
 }
 
-const BUILD_EXTENSIONS = {
+// The file extension of each build format; its keys are the formats
+// --format accepts (plus the md alias for markdown).
+export const BUILD_EXTENSIONS = {
   markdown: "md",
   epub: "epub",
   docx: "docx",
