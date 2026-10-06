@@ -108,7 +108,7 @@ in the built Twine or ink file; record the decision in
 | Finding | From | Fix |
 |---------|------|-----|
 | `unreachable-chapter` | `story links`, Twee and ink builds | Add a choice that leads to the chapter, or remove it |
-| A choice to a missing chapter | `story links` (error), builds refuse | Write the chapter, or point `to` at one that exists |
+| A choice to a missing chapter | `story links` (error, except a `chapter-NN` with no file yet, which it allows as scheduled), builds refuse every one | Write the chapter, or point `to` at one that exists |
 | Malformed `choices` (no `text`, link syntax in `text`, a `to` that is not kebab-case) | `story validate` | Fix the entry |
 | Choices dropped by `story remove chapter` | `story remove` (warning) | Give each named chapter a new choice unless it is now a deliberate ending |
 

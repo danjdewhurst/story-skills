@@ -85,9 +85,14 @@ numbering. Then:
    story add chapter "The Landing" --number 1 --status outline --pov ada-fenn --character ada-fenn --hook decision --path .
    ```
 
-4. Check the skeleton before writing prose. `story links .` errors on a
-   choice to a missing chapter and warns `unreachable-chapter` for every
-   chapter no path from the start reaches.
+4. Check the skeleton before writing prose. `story links .` warns
+   `unreachable-chapter` for every chapter no path from the start reaches,
+   and errors on a choice to a missing chapter, except a `chapter-NN` with
+   no file yet, which it allows as scheduled. So a typo such as
+   `chapter-09` for `chapter-08` passes: compare every `to` with the
+   planned passage list by hand, and once every passage has a file, run
+   `story build . --format twee`, which refuses any choice to a missing
+   chapter.
 5. Record the state choices set that the CLI does not track (flags,
    trust, items the reader can carry down one branch) in
    `notes/branch-map.md`, a working file the CLI ignores: a table of each
