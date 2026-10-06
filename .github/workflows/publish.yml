@@ -132,7 +132,7 @@ jobs:
           fi
 
       - name: Keep the archive for the release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-${{ matrix.target }}
           path: dist/binaries/story-skills_*
@@ -209,7 +209,7 @@ jobs:
           exit 1
 
       - name: Keep the checksums for the tap
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: checksums
           path: dist/binaries/story-skills_*_checksums.txt
