@@ -195,6 +195,66 @@ describe("story prose with samples", () => {
     expect(validation.warnings.map((warning) => warning.code)).toContain("style-sample-missing");
   });
 
+  test("a sample listed twice, however it is spelled, counts once and warns (#523)", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 8) });
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - research/samples.txt\n  - ./research/samples.txt\n  - research//samples.txt\n  - \"research/samples.txt  \"\n  - ../gone\n  - ./../gone", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["research/samples.txt"]);
+    expect(report.baseline.words).toBe(400 * 8);
+    const duplicates = [
+      "style-sheet.md samples entry ./research/samples.txt names the same file or folder as research/samples.txt, so story prose reads it once: remove one of them",
+      "style-sheet.md samples entry research//samples.txt names the same file or folder as research/samples.txt, so story prose reads it once: remove one of them",
+      "style-sheet.md samples entry research/samples.txt is already listed, so story prose reads it once: remove one of them"
+    ];
+    expect(report.warnings.filter((warning) => warning.code === "style-sample-duplicate").map((warning) => warning.message)).toEqual(duplicates);
+    // An entry that names nothing is missing each time, not a duplicate.
+    expect(codes(report).filter((code) => code === "style-sample-missing")).toHaveLength(2);
+    const validation = validateProject(root);
+    expect(validation.ok).toBe(true);
+    expect(validation.warnings.filter((warning) => warning.code === "style-sample-duplicate").map((warning) => warning.message)).toEqual(duplicates);
+    expect(validateAgainstSchema(JSON.parse(invoke(root, ["prose", "--json"]).out), schema)).toEqual([]);
+  });
+
+  test("a sample file inside a listed folder counts once, without a warning", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 8) });
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - research/samples.txt\n  - research", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["research/samples.txt"]);
+    expect(report.baseline.words).toBe(400 * 8);
+    expect(codes(report)).not.toContain("style-sample-duplicate");
+    expect(validateProject(root).warnings.map((warning) => warning.code)).not.toContain("style-sample-duplicate");
+  });
+
+  test("an approved chapter listed twice is one sample and is still not compared with itself", () => {
+    const { root } = project({ chapter: prose(400, 8) });
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - chapters/chapter-01.md\n  - ./chapters//chapter-01.md", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.samples).toEqual(["chapters/chapter-01.md"]);
+    expect(report.chapters[0].sample).toBe(true);
+    expect(codes(report)).toContain("style-sample-duplicate");
+  });
+
+  // Only where the disk and the runtime agree that RESEARCH/SAMPLES.TXT is
+  // research/samples.txt (macOS and Windows by default).
+  const caseFolded = (() => {
+    const dir = makeTempDir();
+    fs.writeFileSync(path.join(dir, "probe.txt"), "");
+    try {
+      return fs.realpathSync.native(path.join(dir, "PROBE.TXT")) === fs.realpathSync.native(path.join(dir, "probe.txt"));
+    } catch {
+      return false;
+    }
+  })();
+
+  test.skipIf(!caseFolded)("on a case-insensitive disk, a sample named in another case is a duplicate", () => {
+    const { root } = project({ samples: prose(400, 8), chapter: prose(40, 8) });
+    writeMarkdown(path.join(root, "style-sheet.md"), "type: style-sheet\ndialect: unspecified\nsamples:\n  - research/samples.txt\n  - RESEARCH/SAMPLES.TXT", "# Style Sheet\n");
+    const report = proseReport(root);
+    expect(report.baseline.words).toBe(400 * 8);
+    expect(codes(report)).toContain("style-sample-duplicate");
+    expect(validateProject(root).warnings.map((warning) => warning.code)).toContain("style-sample-duplicate");
+  });
+
   test("validate refuses samples that are not a list of relative paths", () => {
     const { root } = project({ chapter: prose(40, 8) });
     const withSamples = (yaml) => {

@@ -609,6 +609,7 @@ var FINDING_CODES = {
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",
   "style-sample-own-chapters": "warning",
+  "style-sample-duplicate": "warning",
   "unknown-word-list": "warning",
   "duplicate-session-date": "error",
   "research-no-sources": "warning",
@@ -20614,6 +20615,23 @@ function sampleProblem(project, sample) {
   }
   return null;
 }
+function sampleDuplicate(project, sample, seen) {
+  const real = samplePath(path11.resolve(project.root, sample));
+  const first = seen.get(real);
+  if (first === undefined) {
+    seen.set(real, sample);
+    return null;
+  }
+  const repeat = sample === first ? "is already listed" : `names the same file or folder as ${first}`;
+  return warn("style-sample-duplicate", `${STYLE_SHEET_FILE} samples entry ${sample} ${repeat}, so story prose reads it once: remove one of them`, STYLE_SHEET_FILE);
+}
+function samplePath(file) {
+  try {
+    return fs7.realpathSync.native(file);
+  } catch {
+    return file;
+  }
+}
 function readRegistryValidationData(file, root, label, errors) {
   const count = errors.length;
   const data = readValidationData(file, root, label, errors);
@@ -21457,6 +21475,7 @@ function validateStyleSheet(project, errors, warnings) {
     validateStyleLists(data, field, label, errors, warnings);
   }
   validateStringArray(data, "samples", label, errors);
+  const seen = new Map;
   for (const entry of asArray(data.samples)) {
     if (typeof entry !== "string" || entry.trim() === "") {
       continue;
@@ -21465,7 +21484,7 @@ function validateStyleSheet(project, errors, warnings) {
     if (path11.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
     } else {
-      const problem = sampleProblem(project, sample);
+      const problem = sampleProblem(project, sample) ?? sampleDuplicate(project, sample, seen);
       if (problem !== null) {
         warnings.push(problem);
       }
@@ -26983,13 +27002,15 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set) {
   const samples = [];
   const self = canonicalPath(project.root);
   const own = new Set(project.chapters.map((chapter) => canonicalPath(chapter.file)));
+  const entries = new Map;
+  const read = new Set;
   for (const entry of listed) {
     const sample = entry.trim();
     if (path15.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       warnings.push(warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} must be a path relative to the project folder, such as ../book-one, so it is left out`, STYLE_SHEET_FILE));
       continue;
     }
-    const problem = sampleProblem(project, sample);
+    const problem = sampleProblem(project, sample) ?? sampleDuplicate(project, sample, entries);
     if (problem !== null) {
       warnings.push(problem);
       continue;
@@ -27007,6 +27028,11 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set) {
       continue;
     }
     for (const document of documents) {
+      const file = samplePath(document.path);
+      if (read.has(file)) {
+        continue;
+      }
+      read.add(file);
       const prose = document.paragraphs.map((paragraph) => paragraph.text).join(`
 
 `);
