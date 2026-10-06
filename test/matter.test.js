@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
-import { buildBook, createEntity, createStoryProject, exportManuscript, removeEntity, renameEntity, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, readArchiveEntries, readArchiveText, writeMarkdown, messages } from "./helpers.js";
+import { buildBook, compareProject, createEntity, createStoryProject, exportManuscript, removeEntity, renameEntity, validateProject } from "../src/story.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, readArchiveEntries, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -107,6 +107,9 @@ describe("story add matter", () => {
     expect(result.code).toBe(3);
     expect(result.err).toContain(refusal);
     expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
+    // Paragraph labels key matter by id, so compare --anchor still maps them.
+    fs.cpSync(root, path.join(cwd, "old"), { recursive: true });
+    expect(compareProject(root, { against: "old", cwd, anchors: ["ch01-p1"] }).anchors.map((anchor) => anchor.status)).toEqual(["unchanged"]);
     writeMatter(root, "dedication", 'title: "  "\nplacement: front', "For the lamplighters.\n");
     expect(() => buildBook(root, { format: "epub" })).toThrow(refusal);
     // An unwritten page stays out of the book, so its title cannot reach it.
@@ -205,6 +208,9 @@ describe("matter validation", () => {
     replaceCover("cover: cover.webp");
     fs.writeFileSync(path.join(root, "cover.webp"), "GIF89a");
     expect(coverErrors()).toEqual(["story.md cover cover.webp holds a GIF image, not a WebP one: rename it to end in .gif"]);
+    // A RIFF file of another kind: a WAVE sound.
+    fs.writeFileSync(path.join(root, "cover.webp"), Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x24, 0, 0, 0]), Buffer.from("WAVEfmt ")]));
+    expect(coverErrors()).toEqual(["story.md cover cover.webp does not hold a WebP image: its first bytes are not the WebP signature"]);
 
     const images = {
       "cover.png": PNG_BYTES,
@@ -228,6 +234,31 @@ describe("matter validation", () => {
     const result = invoke(cwd, ["build", root, "--format", "epub"]);
     expect(result.code).toBe(3);
     expect(result.err).toContain(message);
+    // C0 and C1 controls, DEL, and the bidirectional marks and controls.
+    const storyPath = path.join(root, "story.md");
+    for (const code of ["0001", "001f", "007f", "0080", "0085", "009f", "061c", "200e", "200f", "202a", "202e", "2066", "2069"]) {
+      fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^cover:.*$/m, `cover: "a\\u${code}.png"`), "utf8");
+      expect(messages(validateProject(root).errors)).toContain(`story.md cover "a\\u${code}.png" must not contain control characters`);
+    }
+  });
+
+  test("an unreadable cover is reported by name, in plain words", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const { root, cwd } = matterProject();
+    fs.writeFileSync(path.join(root, "cover.png"), PNG_BYTES);
+    setStoryFields(root, "cover: cover.png");
+    fs.chmodSync(path.join(root, "cover.png"), 0o000);
+    try {
+      const message = "story.md cover cover.png: Cannot read: permission denied";
+      expect(messages(validateProject(root).errors)).toContain(message);
+      const result = invoke(cwd, ["build", root, "--format", "epub"]);
+      expect(result.code).toBe(3);
+      expect(result.err).toBe(`${message}\n`);
+    } finally {
+      fs.chmodSync(path.join(root, "cover.png"), 0o644);
+    }
   });
 });
 
@@ -313,6 +344,23 @@ describe("matter in export and build", () => {
     expect(result.code).toBe(4);
     expect(result.err).toContain(refusal);
     expect(fs.readFileSync(path.join(root, "art", "cover.png")).equals(PNG_BYTES)).toBe(true);
+    // The path is trimmed as the build trims it: a folded `cover: >` ends in a
+    // line break.
+    const storyPath = path.join(root, "story.md");
+    const replaceCover = (value) => fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^cover:.*\n(?: {2}.*\n)*/m, `${value}\n`), "utf8");
+    replaceCover("cover: >\n  art/cover.png");
+    expect(validateProject(root).errors.filter((error) => error.code === "invalid-cover")).toEqual([]);
+    expect(() => buildBook(root, { format: "html", out: "art/cover.png" })).toThrow(refusal);
+    // story.md in another letter case than --out.
+    replaceCover("cover: Art/Cover.PNG");
+    expect(() => buildBook(root, { format: "html", out: "art/cover.png" })).toThrow(refusal);
+    // A cover outside the project, which an absolute --out can reach.
+    const outside = path.join(makeTempDir(), "cover.png");
+    fs.writeFileSync(outside, PNG_BYTES);
+    replaceCover(`cover: ${outside}`);
+    expect(() => buildBook(root, { format: "markdown", out: outside })).toThrow("story.md names it as the cover");
+    expect(fs.readFileSync(outside).equals(PNG_BYTES)).toBe(true);
+    replaceCover("cover: art/cover.png");
     try {
       fs.symlinkSync(path.join(root, "art"), path.join(root, "images"));
     } catch {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -163,67 +164,87 @@ describe("ids recomputed on every run do not change", () => {
 
 describe("a project whose title and folder name have no ASCII letters or digits", () => {
   // Made with an ASCII --dir, as init requires, then moved to a folder
-  // named after the title (a clone, say), with `title` set as given.
+  // named after the title (a clone, say), with `title` set as given (null
+  // for none) and no reindex since.
   function movedProject(title, folder) {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Placeholder", dir: "book" });
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    const storyPath = path.join(root, "story.md");
-    const text = fs.readFileSync(storyPath, "utf8");
-    fs.writeFileSync(storyPath, title === null ? text.replace(/^title: .*\n/m, "") : text.replace(/^title: .*$/m, `title: ${title}`), "utf8");
+    setTitle(root, title);
     fs.renameSync(root, path.join(cwd, folder));
     return path.join(cwd, folder);
   }
 
-  const substitute = (id, from) => `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`;
+  function setTitle(root, title) {
+    const storyPath = path.join(root, "story.md");
+    const text = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, title === null ? text.replace(/^title: .*\n/m, "") : text.replace(/^title: .*$/m, `title: ${title}`), "utf8");
+  }
+
+  const substitute = (id, from) => `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, hashed from ${from}; rename the folder with ASCII letters or digits to choose the id, then run story reindex`;
+  const codes = (findings) => findings.map((finding) => finding.code);
 
   test("init still refuses to make one", () => {
     expect(() => createStoryProject({ cwd: makeTempDir(), title: "東京物語", dir: "東京" })).toThrow("Cannot derive a story id");
   });
 
-  test("the story id is a hash of the title, the same on every run, and names the builds", () => {
+  test("the story id is a hash of the title, the same in every run and runtime, and names the builds", () => {
     const root = movedProject("東京物語", "東京");
-    const { storyId } = scanProject(root);
-    expect(storyId).toMatch(/^story-[0-9a-f]{8}$/);
-    expect(scanProject(root).storyId).toBe(storyId);
+    expect(scanProject(root).storyId).toBe("story-d209412e");
     const epub = buildBook(root, { format: "epub" });
-    expect(path.relative(root, epub.outFile)).toBe(path.join("dist", `${storyId}.epub`));
-    expect(readArchiveText(epub.outFile)).toContain(`<dc:identifier id="book-id">${storyId}</dc:identifier>`);
-    expect(messages(epub.warnings)).toContain(substitute(storyId, "hashed from the title"));
-    expect(messages(buildBook(root, { format: "fountain" }).warnings)).toContain(substitute(storyId, "hashed from the title"));
+    expect(path.relative(root, epub.outFile)).toBe(path.join("dist", "story-d209412e.epub"));
+    expect(readArchiveText(epub.outFile)).toContain('<dc:identifier id="book-id">story-d209412e</dc:identifier>');
+    for (const format of ["epub", "markdown", "fountain"]) {
+      expect(messages(buildBook(root, { format }).warnings)).toContain(substitute("story-d209412e", "the title"));
+    }
     reindexProject(root);
-    expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toContain(`story: ${storyId}\n`);
+    expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toContain("story: story-d209412e\n");
     const validation = validateProject(root);
     expect(messages(validation.errors)).toEqual([]);
-    expect(messages(validation.warnings)).toContain(substitute(storyId, "hashed from the title"));
+    expect(messages(validation.warnings)).toContain(substitute("story-d209412e", "the title"));
+    // The Node fallback CLI hashes the same.
+    const bundle = path.resolve(import.meta.dir, "..", "skills", "story-maintenance", "scripts", "story.js");
+    const node = spawnSync("node", [bundle, "build", root, "--format", "epub", "--out", "dist/node.epub"], { encoding: "utf8" });
+    if (node.error?.code !== "ENOENT") {
+      expect(node.status).toBe(0);
+      expect(node.stderr).toContain(substitute("story-d209412e", "the title"));
+    }
   });
 
   test("each title hashes to its own id, in either Unicode form, and no title hashes the folder name", () => {
-    const tokyo = scanProject(movedProject("東京物語", "東京")).storyId;
-    expect(scanProject(movedProject("京都物語", "東京")).storyId).not.toBe(tokyo);
+    expect(scanProject(movedProject("京都物語", "東京")).storyId).toBe("story-46087463");
     // が as one code point, and as か and a combining mark.
-    expect(scanProject(movedProject("がっこう".normalize("NFD"), "学校")).storyId).toBe(scanProject(movedProject("がっこう", "学校")).storyId);
+    expect(scanProject(movedProject("がっこう".normalize("NFD"), "学校")).storyId).toBe("story-95ec5cbb");
+    expect(scanProject(movedProject("がっこう", "学校")).storyId).toBe("story-95ec5cbb");
     const untitled = movedProject(null, "東京");
-    const { storyId } = scanProject(untitled);
-    expect(storyId).toMatch(/^story-[0-9a-f]{8}$/);
-    expect(storyId).not.toBe(tokyo);
-    expect(messages(validateProject(untitled).warnings)).toContain(substitute(storyId, "hashed from the folder name"));
+    expect(scanProject(untitled).storyId).toBe("story-130016b2");
+    expect(messages(validateProject(untitled).warnings)).toContain(substitute("story-130016b2", "the folder name"));
   });
 
-  test("a Cyrillic title or folder name is transliterated, unless that gives a name Windows reserves", () => {
-    const fromTitle = movedProject("Война и мир", "Война");
-    expect(scanProject(fromTitle).storyId).toBe("voyna-i-mir");
-    expect(messages(validateProject(fromTitle).warnings)).toContain(substitute("voyna-i-mir", "transliterated from the title"));
-    const fromFolder = movedProject("東京物語", "Токио");
-    expect(scanProject(fromFolder).storyId).toBe("tokio");
-    expect(messages(validateProject(fromFolder).warnings)).toContain(substitute("tokio", "transliterated from the folder name"));
-    expect(scanProject(movedProject("Нул", "Прн")).storyId).toMatch(/^story-[0-9a-f]{8}$/);
+  test("a Cyrillic title is hashed rather than transliterated, so a new transliteration cannot change the id", () => {
+    const root = movedProject("Война и мир", "Война");
+    expect(scanProject(root).storyId).toBe("story-f83d61d9");
+    expect(messages(validateProject(root).warnings)).toContain(substitute("story-f83d61d9", "the title"));
+  });
+
+  test("registries are checked against the substitute id, which follows the title", () => {
+    const root = movedProject("東京物語", "東京");
+    const stale = (id) => ["chapters/_index.md", "scenes/_index.md", "continuity/state.md", "plot/timeline.md"]
+      .map((file) => `${file} story must be ${id} (run story reindex after changing the story.md title)`);
+    expect(messages(validateProject(root).errors)).toEqual(expect.arrayContaining(stale("story-d209412e")));
+    reindexProject(root);
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    setTitle(root, "京都物語");
+    expect(messages(validateProject(root).errors)).toEqual(expect.arrayContaining(stale("story-46087463")));
+    reindexProject(root);
+    expect(fs.readFileSync(path.join(root, "continuity", "state.md"), "utf8")).toContain("story: story-46087463\n");
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
   test("an ASCII title or folder name gives the id with no warning", () => {
     const root = movedProject("東京物語", "tokyo");
     expect(scanProject(root).storyId).toBe("tokyo");
-    expect(validateProject(root).warnings.map((warning) => warning.code)).not.toContain("substitute-story-id");
-    expect(buildBook(root, { format: "epub" }).warnings.map((warning) => warning.code)).not.toContain("substitute-story-id");
+    expect(codes(validateProject(root).warnings)).not.toContain("substitute-story-id");
+    expect(codes(buildBook(root, { format: "epub" }).warnings)).not.toContain("substitute-story-id");
   });
 });

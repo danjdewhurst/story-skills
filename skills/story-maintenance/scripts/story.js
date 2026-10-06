@@ -12441,16 +12441,8 @@ function asciiStoryId(title, root) {
 }
 function substituteStoryId(title, root) {
   const text = String(title ?? "").trim();
-  const folder = path5.basename(root);
-  const usable = (value) => kebabCase(value) !== "" && !WINDOWS_RESERVED_ID.test(kebabCase(value));
-  if (usable(text)) {
-    return { id: kebabCase(text), from: "transliterated from the title" };
-  }
-  if (usable(folder)) {
-    return { id: kebabCase(folder), from: "transliterated from the folder name" };
-  }
-  const hash = crypto3.createHash("sha256").update((text || folder).normalize("NFC")).digest("hex").slice(0, 8);
-  return { id: `story-${hash}`, from: `hashed from the ${text === "" ? "folder name" : "title"}` };
+  const hash = crypto3.createHash("sha256").update((text || path5.basename(root)).normalize("NFC")).digest("hex").slice(0, 8);
+  return { id: `story-${hash}`, from: text === "" ? "the folder name" : "the title" };
 }
 function substituteStoryIdWarnings(project) {
   const title = project.story.data.title;
@@ -12458,7 +12450,12 @@ function substituteStoryIdWarnings(project) {
     return [];
   }
   const { id, from } = substituteStoryId(title, project.root);
-  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`, "story.md")];
+  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, hashed from ${from}; rename the folder with ASCII letters or digits to choose the id, then run story reindex`, "story.md")];
+}
+var PATH_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+function controlCharacterError(label, value) {
+  const shown = JSON.stringify(value).replace(/[\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  return projectError(`story.md ${label} ${shown} must not contain control characters`);
 }
 function chapterLength(unit, data, markdown) {
   const prose = chapterProse(markdown.body);
@@ -14029,8 +14026,8 @@ function coverIsReady(project) {
 }
 function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
-  if (/[\u0000-\u001f\u007f]/u.test(cover)) {
-    throw projectError(`story.md cover ${JSON.stringify(cover)} must not contain control characters`);
+  if (PATH_CONTROL_CHARACTERS.test(cover)) {
+    throw controlCharacterError("cover", cover);
   }
   const mediaType = COVER_MEDIA_TYPES[path5.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
@@ -14049,7 +14046,13 @@ function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  const held = coverFormat(filePath);
+  let held;
+  try {
+    held = coverFormat(filePath);
+  } catch (error) {
+    const reason = FILE_ERROR_REASONS[error.code];
+    throw projectError(`story.md cover ${cover}: ${reason ? `Cannot read: ${reason}` : String(error.message).replace(`${filePath}: `, "")}`);
+  }
   if (held !== mediaType) {
     throw projectError(held === null ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature` : `story.md cover ${cover} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
   }
@@ -16882,8 +16885,8 @@ function styleFonts(style, type) {
 }
 function styleSheetFile(root, value) {
   const css = String(value).trim();
-  if (/[\u0000-\u001f\u007f]/u.test(css)) {
-    throw projectError(`story.md build-style css ${JSON.stringify(css)} must not contain control characters`);
+  if (PATH_CONTROL_CHARACTERS.test(css)) {
+    throw controlCharacterError("build-style css", css);
   }
   if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
     throw projectError(`story.md build-style css ${css} must be a .css file`);
@@ -20666,7 +20669,8 @@ function idTokensOutsideLinks(body, pattern) {
   return found;
 }
 function storyIdIsFallback(project) {
-  return Boolean(project.story.unreadable) || kebabCase(String(project.story.data.title ?? ""), { transliterate: false }) === "";
+  const title = project.story.data.title;
+  return Boolean(project.story.unreadable) || String(title ?? "").trim() === "" || kebabCase(String(title), { transliterate: false }) === "" && asciiStoryId(title, project.root) !== "";
 }
 var TEXT_FIELDS = {
   characters: ["pronunciation", "name", "died-in", "revived-in", "arc", "lie", "truth", "ghost-wound"],
@@ -25478,6 +25482,7 @@ var MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
+  assertMatterTitles(project);
   const output = resolveOutputPath(project, options.out, EXPORT_FILE, options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
   const lines = [`# ${manuscript.title}`, "", `<!-- Generated by ${generatedBy}. -->`, ""];
@@ -25566,6 +25571,7 @@ function buildBook(root, options = {}) {
     return withIdWarnings({ outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings });
   }
   const manuscript = manuscriptParts(project);
+  assertMatterTitles(project);
   if (format === "metadata") {
     const book = htmlBook(manuscript);
     const words = manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0);
@@ -25608,6 +25614,7 @@ function buildBook(root, options = {}) {
 function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
+  assertMatterTitles(project);
   const style = projectBuildStyle(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
@@ -26064,9 +26071,6 @@ function manuscriptParts(project, action = "build") {
     if (!isKebabId(entry.id)) {
       throw projectError(`${relative(project, entry.file)}: matter file names must be kebab-case to build`);
     }
-    if (!entry.empty && entry.title.trim() === "") {
-      throw projectError(`${relative(project, entry.file)}: a matter page needs a title to build`);
-    }
   }
   const matter = (placement) => project.matter.filter((entry) => entry.placement === placement && !entry.empty).map((entry) => ({
     id: entry.id,
@@ -26092,6 +26096,13 @@ function manuscriptParts(project, action = "build") {
     back,
     warnings
   };
+}
+function assertMatterTitles(project) {
+  for (const entry of project.matter) {
+    if (!entry.empty && entry.title.trim() === "") {
+      throw projectError(`${relative(project, entry.file)}: a matter page needs a title to build`);
+    }
+  }
 }
 function chapterKey(chapter, keys) {
   if (chapter.numbered) {
@@ -26145,7 +26156,7 @@ function referencedFiles(project) {
   const files = [];
   const add = (value, label) => {
     const text = typeof value === "string" ? value.trim() : "";
-    if (text === "" || /[\u0000-\u001f\u007f]/u.test(text)) {
+    if (text === "" || PATH_CONTROL_CHARACTERS.test(text)) {
       return;
     }
     const file = path14.resolve(project.root, text);
@@ -27621,7 +27632,7 @@ function previewChanges(root, run) {
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
     fs13.mkdirSync(path17.dirname(copyRoot), { recursive: true });
-    copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot });
+    copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot, cover: coverOf(projectRoot) });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
     }
@@ -27653,7 +27664,7 @@ function previewNewProject(root, run) {
     if (stats?.isSymbolicLink()) {
       fs13.symlinkSync(path17.join(path17.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
     } else if (stats?.isDirectory()) {
-      copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot });
+      copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot, cover: coverOf(target) });
     } else if (stats) {
       copyRegularFile(target, copyRoot);
     }
@@ -27847,21 +27858,26 @@ function copyProject(source, target, roots, depth = 0) {
     } else if (entry.isSymbolicLink()) {
       fs13.symlinkSync(linkTarget(fs13.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyRegularFile(from, to);
+      copyRegularFile(from, to, Boolean(roots.cover) && realPath2(from).toLowerCase() === roots.cover);
     }
   }
   fs13.chmodSync(target, copyMode(source, true));
 }
-function copyRegularFile(from, to) {
+function copyRegularFile(from, to, keepHead = false) {
   const { size } = fs13.statSync(from);
   const readable = allowed(from, fs13.constants.R_OK);
   if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && readable) {
     fs13.writeFileSync(to, readFileBytes(from));
   } else {
-    fs13.writeFileSync(to, readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
+    fs13.writeFileSync(to, keepHead && readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs13.truncateSync(to, size);
   }
   fs13.chmodSync(to, copyMode(from, false));
+}
+function coverOf(root) {
+  const cover = existingStoryData(root)?.cover;
+  const text = typeof cover === "string" ? cover.trim() : "";
+  return text === "" || PATH_CONTROL_CHARACTERS.test(text) ? null : realPath2(path17.resolve(root, text)).toLowerCase();
 }
 function copyMode(source, directory) {
   let mode = fs13.statSync(source).mode & 4095;

@@ -2,6 +2,7 @@ import path from "node:path";
 import { err } from "./findings.js";
 import { assertSafeProjectPath, isPathInside, lstatIfExists, readTextFile } from "./files.js";
 import { projectError } from "./exit-codes.js";
+import { controlCharacterError, PATH_CONTROL_CHARACTERS } from "./scan.js";
 
 // story.md `build-style`: how the EPUB, HTML review copy, and print interior
 // look. A preset sets several choices at once, and each other key overrides
@@ -116,8 +117,8 @@ export function styleSheetFile(root, value) {
   const css = String(value).trim();
   // Before any file-system call, which would throw on a NUL with a message
   // that names neither story.md nor the setting.
-  if (/[\u0000-\u001f\u007f]/u.test(css)) {
-    throw projectError(`story.md build-style css ${JSON.stringify(css)} must not contain control characters`);
+  if (PATH_CONTROL_CHARACTERS.test(css)) {
+    throw controlCharacterError("build-style css", css);
   }
   if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
     throw projectError(`story.md build-style css ${css} must be a .css file`);

@@ -703,7 +703,7 @@ author: Ada Writer
 cover: art/cover.png
 ```
 
-The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, and not a symlink, and its path must not hold control characters. Its first bytes must be the signature of the image its extension names, since the EPUB declares the image type from the extension. `story validate` checks the path and the file, and an EPUB build stops if either is wrong:
+The cover must be a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, and not a symlink, and its path must not hold a control character (C0, DEL, C1, or a bidirectional mark or control). Its first bytes must be the signature of the image its extension names, since the EPUB declares the image type from the extension. `story validate` checks the path and the file, and an EPUB build stops if either is wrong:
 
 ```text
 story.md cover art/cover.png does not exist
@@ -1446,7 +1446,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
-| `story.md cover <path> ...` | The cover path is missing, outside the project, holds a control character, or is not a supported image, or the file's contents are not the image its extension names | Fix `cover` in `story.md`, or remove it; save the cover again, or rename it to match its format. |
+| `story.md cover <path> ...` | The cover path is missing, outside the project, holds a control character, or is not a supported image, or the file cannot be read or its contents are not the image its extension names | Fix `cover` in `story.md`, or remove it; save the cover again, or rename it to match its format. |
 | `<file>: a matter page needs a title to build` | A `matter/` page with text has a blank `title` | Give the page a `title`. |
 | `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. |
 | `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |

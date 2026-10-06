@@ -244,6 +244,11 @@ describe("build-style css", () => {
     const io = memoryIo(root);
     expect(runCli(["build", "--format", "html"], io)).toBe(3);
     expect(io.error()).toContain(`Cannot build until story.md build-style is fixed:\n${message}`);
+    // C0 and C1 controls, DEL, and the bidirectional marks and controls.
+    for (const code of ["0001", "001f", "007f", "0085", "009f", "200f", "202e", "2066"]) {
+      const marked = project(`build-style:\n  - css: "a\\u${code}.css"\n`);
+      expect(messages(validateProject(marked).errors)).toEqual([`story.md build-style css "a\\u${code}.css" must not contain control characters`]);
+    }
   });
 
   test("--out never replaces the stylesheet story.md names", () => {
@@ -255,6 +260,9 @@ describe("build-style css", () => {
     const io = memoryIo(root);
     expect(runCli(["build", "--format", "print", "--out", "./styles/book.css"], io)).toBe(4);
     expect(fs.readFileSync(path.join(root, "styles", "book.css"), "utf8")).toBe("p { color: navy; }\n");
+    // story.md in another letter case than --out.
+    const upper = project("build-style:\n  - css: Styles/Book.CSS\n");
+    expect(() => buildBook(upper, { format: "html", out: "styles/book.css" })).toThrow("Refusing to write generated output to styles/book.css: story.md names it as the build-style css");
   });
 });
 
