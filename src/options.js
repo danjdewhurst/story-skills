@@ -7,6 +7,8 @@ import { usageError } from "./exit-codes.js";
 // (plural forms such as --characters) that stay out of the help text.
 // `aliasOf` names the flag an alias shares its value with, so a flag given
 // on the command line overrides a story.md default set through either name.
+// `commas` marks a plural list form (--characters a,b) whose values split on
+// commas; every other flag keeps each value whole (see optionValues).
 export const OPTIONS = [
   { name: "title", value: "<name>", help: ["Story title for import; title of the new chapter", "for split"] },
   { name: "dir", value: "<path>", help: ["Target directory for init or import"] },
@@ -14,7 +16,7 @@ export const OPTIONS = [
   { name: "sub-genre", value: "<name>", help: ["Story sub-genre for init or import"] },
   { name: "setting-era", value: "<name>", help: ["Setting era for init or import"] },
   { name: "theme", value: "<name>", repeatable: true, help: ["Theme for init, import, or add arc; repeatable"] },
-  { name: "themes", value: "<a,b>", repeatable: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
+  { name: "themes", value: "<a,b>", repeatable: true, commas: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
@@ -90,16 +92,16 @@ export const OPTIONS = [
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
   { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
-  { name: "locations", value: "<ids>", repeatable: true, aliasOf: "location" },
+  { name: "locations", value: "<ids>", repeatable: true, commas: true, aliasOf: "location" },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
-  { name: "characters", value: "<ids>", repeatable: true, aliasOf: "character" },
+  { name: "characters", value: "<ids>", repeatable: true, commas: true, aliasOf: "character" },
   { name: "mention", value: "<id>", repeatable: true, help: ["Mentioned character for add chapter/scene;", "repeatable"] },
-  { name: "mentions", value: "<ids>", repeatable: true, aliasOf: "mention" },
+  { name: "mentions", value: "<ids>", repeatable: true, commas: true, aliasOf: "mention" },
   { name: "member", value: "<id>", repeatable: true, help: ["Faction member reference for add faction; repeatable"] },
-  { name: "members", value: "<ids>", repeatable: true, aliasOf: "member" },
+  { name: "members", value: "<ids>", repeatable: true, commas: true, aliasOf: "member" },
   { name: "owner", value: "<id>", help: ["Owner reference for add artifact"] },
   { name: "arc", value: "<id>", repeatable: true, help: ["Arc reference for add (arc theme for add", "character); repeatable"] },
-  { name: "arcs", value: "<ids>", repeatable: true, aliasOf: "arc" },
+  { name: "arcs", value: "<ids>", repeatable: true, commas: true, aliasOf: "arc" },
   { name: "introduced", value: "<id>", help: ["Chapter id for add question"] },
   { name: "resolved", value: "<id>", help: ["Chapter id for add question"] },
   { name: "planted", value: "<id>", help: ["Chapter id for add promise/clue"] },
@@ -108,12 +110,12 @@ export const OPTIONS = [
   { name: "red-herring", help: ["Mark add clue as a red herring"] },
   { name: "category", value: "<name>", help: ["Category for add term"] },
   { name: "alias", value: "<name>", repeatable: true, help: ["Alias for add term; repeatable"] },
-  { name: "aliases", value: "<names>", repeatable: true, aliasOf: "alias" },
+  { name: "aliases", value: "<names>", repeatable: true, commas: true, aliasOf: "alias" },
   { name: "region", value: "<name>", help: ["Region for add location"] },
   { name: "population", value: "<name>", help: ["Population for add location"] },
   { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
   { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
-  { name: "acts", value: "<a,b>", repeatable: true, help: ["Comma-separated acts for add arc; repeatable"] },
+  { name: "acts", value: "<a,b>", repeatable: true, commas: true, help: ["Comma-separated acts for add arc; repeatable"] },
   { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
@@ -132,6 +134,7 @@ const VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefi
 // Any option not marked repeatable keeps the last value given, so
 // `--out a.md --out b.md` writes b.md.
 const REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
+const COMMA_OPTIONS = new Set(OPTIONS.filter((option) => option.commas).map((option) => option.name));
 
 // Whether --name reads the next argument as its value.
 export function takesValue(name) {
@@ -139,6 +142,12 @@ export function takesValue(name) {
 }
 
 const OPTION_COLUMN = 28;
+
+// The named options that have help lines, in help order: aliases such as
+// --characters are left out.
+export function documentedOptions(names) {
+  return OPTIONS.filter((option) => option.help && names.includes(option.name)).map((option) => option.name);
+}
 
 // Help lines for every option, or only the named ones (per-command help).
 export function formatOptionsHelp(names = null) {
@@ -218,6 +227,16 @@ export function isTruthy(value) {
     return true;
   }
   return Boolean(current);
+}
+
+// The values given for one flag, trimmed, without empty ones. Only a plural
+// list form splits on commas (`--characters a,b`); a singular flag keeps each
+// value whole, so `--alias "Rite of Ash, the"` is one alias.
+export function optionValues(options, name) {
+  const value = options[name];
+  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
+  const parts = COMMA_OPTIONS.has(name) ? values.flatMap((item) => String(item).split(",")) : values.map(String);
+  return parts.map((part) => part.trim()).filter(Boolean);
 }
 
 // A flag and its aliases, which share one value: `character` and

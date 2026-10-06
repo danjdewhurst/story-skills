@@ -128,8 +128,10 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "location", name: "Salt Market" });
     createEntity(root, { kind: "chapter", name: "One" });
     expect(() => createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for a scene, got port-kestrel, salt-market");
-    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: "port-kestrel,salt-market" })).toThrow("--location takes one id for an artifact");
-    expect(() => createEntity(root, { kind: "location", name: "Keep", "controlled-by": "ann,bo" })).toThrow("--controlled-by takes one id");
+    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for an artifact");
+    expect(() => createEntity(root, { kind: "location", name: "Keep", "controlled-by": ["ann", "bo"] })).toThrow("--controlled-by takes one id");
+    // A singular flag keeps a comma, so a comma list is not an id.
+    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: "port-kestrel,salt-market" })).toThrow('--location "port-kestrel,salt-market" must be a kebab-case id');
     createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel"] });
     expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("location: port-kestrel\n");
 

@@ -4,6 +4,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isTruthy, parseArgs, runCli } from "../src/cli.js";
+import { COMMANDS } from "../src/commands.js";
+import { parseFrontmatter } from "../src/frontmatter.js";
+import { KIND_ALIASES } from "../src/scan.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -305,6 +308,73 @@ describe("cli", () => {
     expect(help).toContain("--travel-hours <n>");
     expect(help).toContain("--dilemma <text>");
     expect(help).toContain("--sequel");
+  });
+
+  test("add refuses an option that only another kind reads (#576)", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Watch"]).code).toBe(0);
+    const root = path.join(cwd, "watch");
+    expect(invoke(root, ["add", "chapter", "One"]).code).toBe(0);
+    const scene = invoke(root, ["add", "scene", "Night Watch", "--chapter", "chapter-01", "--number", "5"]);
+    expect(scene.code).toBe(2);
+    expect(scene.err).toBe("--number does not apply to story add scene: story help add lists the options each kind reads\n");
+    expect(fs.existsSync(path.join(root, "scenes", "chapter-01-scene-01.md"))).toBe(false);
+    // Kinds match as add matches them: plural, in any case.
+    expect(invoke(root, ["add", "Characters", "Mira", "--hook", "cliffhanger"]).err).toContain("--hook does not apply to story add character:");
+    expect(invoke(root, ["add", "artifact", "Key", "--locations", "port"]).err).toContain("--locations does not apply to story add artifact:");
+    expect(fs.existsSync(path.join(root, "characters", "mira.md"))).toBe(false);
+    // An unknown kind is reported as one, not as a stray option.
+    expect(invoke(root, ["add", "villain", "Maren", "--hook", "cliffhanger"]).err).toContain("Unsupported entity kind: villain");
+    // --id, --dry-run, and --json apply to every kind.
+    expect(invoke(root, ["add", "term", "Ember Rite", "--id", "rite", "--dry-run"]).code).toBe(0);
+    expect(invoke(root, ["add", "scene", "Night Watch", "--chapter", "chapter-01", "--scene", "5"]).code).toBe(0);
+    const help = invoke(root, ["help", "add"]).out;
+    expect(help).toContain("Options by kind (every kind also takes --path, --json, --dry-run, and --id):\n");
+    expect(help).toContain("\n  system      --type --prevalence\n");
+    expect(help).not.toContain("--characters");
+  });
+
+  test("every add kind has its own option list", () => {
+    const add = COMMANDS.find((command) => command.name === "add");
+    expect(Object.keys(add.kinds).sort()).toEqual([...new Set(Object.values(KIND_ALIASES))].sort());
+    for (const options of Object.values(add.kinds)) {
+      expect(options.every((name) => add.options.includes(name))).toBe(true);
+    }
+  });
+
+  test("only the plural list flags split on commas (#576)", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Ash", "--theme", "Love, loss", "--themes", "grief,hope"]).code).toBe(0);
+    const root = path.join(cwd, "ash");
+    const frontmatter = (...parts) => parseFrontmatter(fs.readFileSync(path.join(root, ...parts), "utf8")).data;
+    expect(frontmatter("story.md").themes).toEqual(["Love, loss", "grief", "hope"]);
+    expect(invoke(root, ["add", "term", "Ember Rite", "--alias", "Rite of Ash, the", "--aliases", "Ash Rite,Burning"]).code).toBe(0);
+    expect(frontmatter("glossary", "terms", "ember-rite.md").aliases).toEqual(["Ash Rite", "Burning", "Rite of Ash, the"]);
+    expect(invoke(root, ["add", "arc", "Long Road", "--act", "Act I, the fall", "--acts", "II,III", "--theme", "Ash, salt"]).code).toBe(0);
+    expect(frontmatter("plot", "arcs", "long-road.md")).toMatchObject({ acts: ["II", "III", "Act I, the fall"], themes: ["Ash, salt"] });
+    // A comma in a singular id flag is not an id, so it is refused.
+    const ids = invoke(root, ["add", "chapter", "One", "--character", "mara,ivo"]);
+    expect(ids.code).toBe(2);
+    expect(ids.err).toContain('--character "mara,ivo" must be a kebab-case id');
+  });
+
+  test("an empty --path or project path is refused, as an empty --out is (#576)", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Here"]).code).toBe(0);
+    const root = path.join(cwd, "here");
+    for (const argv of [["reindex", "--path", ""], ["reindex", "--path="], ["add", "character", "Mira", "--path", " "]]) {
+      const result = invoke(root, argv);
+      expect(result.code).toBe(2);
+      expect(result.err).toBe("--path cannot be empty: give the project folder, or leave --path out to use the current directory\n");
+    }
+    expect(fs.existsSync(path.join(root, "characters", "mira.md"))).toBe(false);
+    const positional = invoke(root, ["validate", ""]);
+    expect(positional.code).toBe(2);
+    expect(positional.err).toBe("The project path cannot be empty: give the project folder, or leave it out to use the current directory\n");
+    const json = invoke(root, ["check", "", "--json"]);
+    expect(json.code).toBe(2);
+    expect(JSON.parse(json.out).diagnostics[0].message).toContain("The project path cannot be empty");
+    expect(invoke(root, ["validate"]).code).toBe(0);
   });
 
   test("parses mention options and writes them for new chapters", () => {

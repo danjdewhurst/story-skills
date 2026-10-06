@@ -14,7 +14,7 @@ import {
   projectPath,
   readTextFile
 } from "./files.js";
-import { isTruthy } from "./options.js";
+import { isTruthy, optionValues } from "./options.js";
 import {
   chapterHeading,
   chapterProse,
@@ -2016,31 +2016,18 @@ export function asArray(value) {
 }
 
 // A list option with its singular and plural flags merged, duplicates
-// dropped: `--character a --characters b` keeps both.
+// dropped: `--character a --characters b` keeps both. Only the plural flag
+// splits on commas (see optionValues).
 function listOption(options, ...names) {
   const list = [];
   for (const name of names) {
-    for (const value of normalizeList(options[name], [])) {
+    for (const value of optionValues(options, name)) {
       if (!list.includes(value)) {
         list.push(value);
       }
     }
   }
   return list;
-}
-
-export function normalizeList(value, fallback) {
-  const values = value === undefined || value === true ? [] : Array.isArray(value) ? value : [value];
-  const list = [];
-  for (const valueItem of values) {
-    for (const part of String(valueItem).split(",")) {
-      const trimmed = part.trim();
-      if (trimmed) {
-        list.push(trimmed);
-      }
-    }
-  }
-  return list.length > 0 ? list : fallback;
 }
 
 // Whether story.md names a cover the EPUB build would accept.

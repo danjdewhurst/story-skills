@@ -87,7 +87,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 
 ### Help and version
 
-`story --help`, `story -h`, `story help`, and `story` with no command all print the usage summary, with every command and option, to stdout and exit 0. `story help <command>` and `story <command> --help` print that command's usage line, summary, and only the options it reads, plus `--path` (for commands that take a project), `-h`, and `-v`:
+`story --help`, `story -h`, `story help`, and `story` with no command all print the usage summary, with every command and option, to stdout and exit 0. `story help <command>` and `story <command> --help` print that command's usage line, summary, and only the options it reads, plus `--path` (for commands that take a project), `-h`, and `-v`. `story help add` also lists the options each entity kind reads:
 
 ```shell
 story help validate
@@ -155,6 +155,8 @@ story validate the-last-ember --path the-salt-road
 Conflicting project paths: the-last-ember and --path the-salt-road. Use either a positional path or --path, not both.
 ```
 
+An empty path is a usage error rather than the current directory, so a script that runs `story reindex --path "$BOOK"` with `BOOK` unset changes nothing: `--path cannot be empty: give the project folder, or leave --path out to use the current directory`. An empty positional path is refused the same way.
+
 `prose -` and `voices -` read a passage from stdin instead of the chapters. The `-` takes the place of the positional path, so give the project with `--path` or run from its directory (see [Reading from stdin](#reading-from-stdin)).
 
 `init` and `import` refuse `--path` so it cannot be mistaken for the target directory:
@@ -205,7 +207,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
 - Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, so `story add chapter --dry-run No Way Back` previews a chapter titled `No Way Back` and writes nothing. A bare `true` or `false` there is refused rather than read as an argument (`--heading false is ambiguous: write --heading=false to set the flag, or put false after -- to keep it as an argument`).
-- Repeatable options collect every value, and list options also split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. `--source`, `--follows`, and `--precedes` keep each value whole.
+- Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
 - Unknown options, missing values, extra positional arguments, and options the command does not read are errors. Each command accepts only its own options plus `--path`:
@@ -2265,7 +2267,17 @@ Created character li-ming: ~/stories/the-salt-road/characters/li-ming.md
 story add <kind> <name> [options] [--dry-run] [--json] [--path <project>]
 ```
 
-Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Options that belong to another kind are ignored; an option no kind reads, such as `--trim`, is an error (`--trim does not apply to story add`). A missing or unknown kind is also an error:
+Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Each kind accepts only its own options (see the table below) plus `--id`, `--dry-run`, `--json`, and `--path`, and `story help add` lists them. An option that only another kind reads is an error, as is one no kind reads:
+
+```text
+$ story add scene "Night Watch" --chapter chapter-01 --number 5
+--number does not apply to story add scene: story help add lists the options each kind reads
+
+$ story add character Mira --trim 6x9
+--trim does not apply to story add
+```
+
+A missing or unknown kind is also an error:
 
 ```text
 $ story add
@@ -2372,7 +2384,7 @@ A status that says the chapter is on the page needs it written, as `story links`
 
 Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag or a comma list: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
 
-`--source` keeps each value whole, because citations contain commas. Repeat the flag for more sources. Other list options split on commas.
+`--source` and `--sources` keep each value whole, because citations contain commas. Repeat the flag for more sources. The other plural list options split on commas.
 
 Examples, run in The Salt Road:
 
@@ -3384,12 +3396,12 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--sequel` | | `add scene` | Boolean |
 | `--outcome` | `<name>` | `add scene` | `yes`, `no`, `yes-but`, `no-and` |
 | `--hook` | `<name>` | `add chapter` | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` |
-| `--location` | `<id>` | `add character`, `faction`, `artifact`, `chapter`, `scene` | Repeatable; alias `--locations`. For `add artifact` and `add scene` it sets one location id: give it once; `--locations` is ignored there |
+| `--location` | `<id>` | `add character`, `faction`, `artifact`, `chapter`, `scene` | Repeatable; alias `--locations`. For `add artifact` and `add scene` it sets one location id: give it once; `--locations` is an error there |
 | `--character` | `<id>` | `add location`, `faction`, `arc`, `chapter`, `scene`, `question`, `promise`, `clue` | Repeatable; alias `--characters` |
 | `--mention` | `<id>` | `add chapter`, `add scene` | Repeatable; alias `--mentions` |
 | `--member` | `<id>` | `add faction` | Repeatable; alias `--members` |
 | `--owner` | `<id>` | `add artifact` | |
-| `--arc` | `<id>` | `add character`, `chapter`, `scene`, `promise`, `clue` | Repeatable; alias `--arcs`. For `add character` it sets the single `arc` theme label: give it once; `--arcs` is ignored there |
+| `--arc` | `<id>` | `add character`, `chapter`, `scene`, `promise`, `clue` | Repeatable; alias `--arcs`. For `add character` it sets the single `arc` theme label: give it once; `--arcs` is an error there |
 | `--introduced` | `<id>` | `add question` | Chapter id |
 | `--resolved` | `<id>` | `add question` | Chapter id; defaults `status` to `answered` |
 | `--planted` | `<id>` | `add promise`, `add clue` | Chapter id |
@@ -3415,7 +3427,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `-h`, `--help` | | Any | Print help |
 | `-v`, `--version` | | Any | Print version |
 
-The plural aliases (`--locations`, `--characters`, `--mentions`, `--members`, `--arcs`, `--act`, `--aliases`, `--sources`) are accepted but left out of `--help`.
+The aliases (`--locations`, `--characters`, `--mentions`, `--members`, `--arcs`, `--act`, `--aliases`, `--sources`) are accepted but left out of `--help`. [Option syntax](#option-syntax) says which flags split on commas.
 
 ## The bundled fallback
 
