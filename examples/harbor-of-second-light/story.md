@@ -23,6 +23,9 @@ keywords:
 subjects:
   - FIC028000
   - FIC022000
+build-style:
+  - preset: elegant
+    scene-break: "~"
 cli-defaults:
   - command: build
     format: html

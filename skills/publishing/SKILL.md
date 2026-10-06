@@ -145,6 +145,25 @@ story build . --format metadata
 
 ### 4. Ebook
 
+First agree the look of the ebook, review copy, and print interior with
+the author. Without a `build-style` block in `story.md` they keep the
+classic look (Georgia, centred headings, indented paragraphs, `* * *`
+scene breaks). To change it, add one entry, for example:
+
+```yaml
+build-style:
+  - preset: elegant
+    scene-break: "~"
+```
+
+`preset` is `classic`, `modern`, or `elegant`; `body-font`,
+`heading-font`, `heading-style`, `scene-break`, `drop-caps`, and
+`paragraphs` override it, and `css` adds a `.css` file from the project.
+Never set a font the author has not chosen, and remind them that an
+ebook reader can replace the fonts. The Shunn manuscript and DOCX builds
+ignore the block. Run `story validate` after editing it: a bad value
+stops the EPUB, HTML, and print builds.
+
 ```shell
 story build . --format epub
 ```

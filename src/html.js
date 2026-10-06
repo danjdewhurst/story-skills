@@ -5,6 +5,7 @@
 // The print interior is HTML with CSS paged media, rendered to PDF by a
 // paged-media engine such as Paged.js, WeasyPrint, or Prince.
 import { typesetting } from "./typesetting.js";
+import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { usageError } from "./exit-codes.js";
 import { fillLabel, joinNames } from "./languages/index.js";
 import { wordSpans } from "./words.js";
@@ -78,12 +79,15 @@ function noteHref(noteUrl, label, stamp, text) {
 // plain text, or null for a scene break. Consecutive quoted paragraphs share
 // one <blockquote>. With `noteUrl`, each label gets a "Note" link to that
 // form, prefilled with the label, the stamp, and the paragraph's first words.
-export function reviewHtml(book, { stamp = "", noteUrl = "" } = {}) {
+// `style` is story.md build-style (build-style.js), with the extra
+// stylesheet's text as `cssText`.
+export function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = {}) {
   const labels = book.labels;
   const label = (key, values) => fillLabel(labels, key, values);
   const contents = label("contents");
   const type = typesetting(book.language, book.writingMode);
   const rtl = type.rtl;
+  const fonts = styleFonts(style, type);
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -128,7 +132,7 @@ ${htmlRoot(book.language)}
 :root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${type.fonts.body}; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${fonts.body}; }
 main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
 header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
 .byline, .note { color: var(--muted); margin: 0 0 1rem; }
@@ -143,7 +147,7 @@ p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
 p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
 .scene-break { border: 0; text-align: center; margin: 2rem 0; }
-.scene-break::after { content: "* * *"; color: var(--muted); }
+.scene-break::after { content: "${cssString(style.sceneBreak ?? "* * *")}"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 @media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
 ${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
@@ -154,8 +158,8 @@ p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 [dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
 @media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
 ${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}</style>
-</head>
+`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts)}</style>
+${extraStyle(style)}</head>
 <body>
 <main>
 <header>
@@ -197,7 +201,80 @@ blockquote { margin: 1.5em 0.8em; }
 p.scene-break { margin: 0 0.8em; }
 `;
 
-export function printHtml(book, trimName = DEFAULT_TRIM) {
+// story.md build-style rules for the review copy, after its own: "" when
+// the style leaves every choice to the review copy's defaults.
+function reviewStyleRules(style, type, fonts) {
+  const rules = [];
+  if (fonts.heading !== null) {
+    rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`section > h2 { ${heading} }`);
+  }
+  if (style.paragraphs === "indented") {
+    rules.push(
+      "section p { margin-block-end: 0; text-indent: 1.5em; }",
+      "section > h2 + p, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }",
+      "section.front p, section.back p { margin-block-end: 1rem; }"
+    );
+  }
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    // Only beside the margin labels: on a narrow screen a label opens the
+    // paragraph and would take the initial.
+    rules.push(`@media (min-width: 52.01rem) { section.chapter > h2 + p::first-letter { ${DROP_CAP_RULE} } }`);
+  }
+  return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
+}
+
+// The declarations for a heading-style, or "" for the build's own heading.
+// `left` sets the heading flush with the start of the line: the right in a
+// right-to-left book.
+export function headingRule(headingStyle, type) {
+  if (headingStyle === "centered") {
+    return "text-align: center; font-weight: normal;";
+  }
+  if (headingStyle === "small-caps") {
+    return `text-align: center; font-weight: normal;${type.cased ? " font-variant: small-caps; letter-spacing: 0.08em;" : ""}`;
+  }
+  if (headingStyle === "left") {
+    return `text-align: ${type.rtl ? "right" : "left"}; font-weight: bold;`;
+  }
+  return "";
+}
+
+// A drop cap about three lines deep. Only a script with capitals sets one,
+// and every such script runs left to right.
+export const DROP_CAP_RULE = "float: left; font-size: 3.2em; line-height: 0.8; margin: 0.08em 0.08em 0 0;";
+
+// The extra stylesheet as a second <style> element, after the build's own
+// rules so it can override them.
+function extraStyle(style) {
+  return style.cssText ? `<style>\n${style.cssText}</style>\n` : "";
+}
+
+// story.md build-style rules for the print interior, after its own: ""
+// when the style leaves every choice to the interior's defaults.
+function printStyleRules(style, type, fonts) {
+  const rules = [];
+  if (fonts.heading !== null) {
+    rules.push(`h1 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`section.chapter > h1, section.front > h1, section.back > h1 { ${heading} }`);
+  }
+  if (style.paragraphs === "block") {
+    rules.push(`p { text-indent: 0; ${type.vertical ? "margin-left" : "margin-bottom"}: 0.7em; }`);
+  }
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`section.chapter > h1 + p.first::first-letter { ${DROP_CAP_RULE} }`);
+  }
+  return rules.length === 0 ? "" : `${rules.join("\n")}\n`;
+}
+
+// `style` is story.md build-style, as for reviewHtml.
+export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
     throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
@@ -210,12 +287,14 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
   // swap. The margins follow the physical page, so the spine side does not
   // change.
   const type = typesetting(book.language, book.writingMode);
+  const fonts = styleFonts(style, type);
   const rtl = type.rtl;
   const recto = rtl || type.vertical ? "left" : "right";
   const verso = rtl || type.vertical ? "right" : "left";
   // Running heads are italic, and small caps and the raised initial set,
   // only in a script with capitals and italics to set them in.
-  const heads = `${type.cased ? "italic " : ""}9pt ${type.fonts.heads}`;
+  const heads = `${type.cased ? "italic " : ""}9pt ${fonts.heads}`;
+  const sceneBreak = style.sceneBreak === null ? "*&#8195;*&#8195;*" : escapeHtml(style.sceneBreak);
   const toc = [];
   const sections = [];
   for (const part of book.parts) {
@@ -223,7 +302,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM) {
     let first = true;
     for (const paragraph of part.paragraphs) {
       if (paragraph === null) {
-        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">*&#8195;*&#8195;*</p>` });
+        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">${sceneBreak}</p>` });
         first = true;
         continue;
       }
@@ -265,10 +344,10 @@ ${type.vertical ? "     Vertical text needs an engine that sets it, such as Vivl
   @top-center { content: "${cssString(author || book.title)}"; font: ${heads}; } }
 @page :${recto} {
   @top-center { content: string(chapter-title, first-except); font: ${heads}; } }
-@page chapter { @bottom-center { content: counter(page); font: 9pt ${type.fonts.heads}; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt ${fonts.heads}; } }
 @page :blank { @top-center { content: none; } @bottom-center { content: none; } }
 @page front { @top-center { content: none; } @bottom-center { content: none; } }
-html { font: 11pt/1.4 ${type.fonts.body}; }
+html { font: 11pt/1.4 ${fonts.body}; }
 body { margin: 0; hyphens: auto; }
 .title-page, .toc, section.front { page: front; break-before: ${recto}; }
 section.front.copyright-page { break-before: page; font-size: 9pt; }
@@ -285,7 +364,7 @@ section.chapter > h1, section.back > h1, section.back > .running-head { string-s
 h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
 p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
 p.first, p.scene-break + p { text-indent: 0; }
-${type.cased ? `/* A raised initial: floated drop caps render inconsistently across engines. */
+${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
 section.chapter > h1 + p.first::first-letter { font-size: 2.4em; line-height: 1; }
 ` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
 blockquote { margin: 0.8em 1.5em; }
@@ -294,8 +373,8 @@ section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-ali
 section.front:not(.copyright-page) p { text-align: center; }
 @media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
 ${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
-` : ""}</style>
-</head>
+` : ""}${printStyleRules(style, type, fonts)}</style>
+${extraStyle(style)}</head>
 <body>
 <section class="title-page"><h1>${escapeHtml(book.title)}</h1>${author === "" ? "" : `<p class="author">${escapeHtml(author)}</p>`}</section>
 ${beforeToc.join("\n")}

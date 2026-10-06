@@ -2907,6 +2907,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-book-number` | error | `story.md` `book-number` is not a number 0 or more. |
 | `invalid-ifid` | error | `story.md` `ifid` is not a version 4 UUID. |
 | `invalid-cover` | error | `story.md` `cover` is not an image inside the project. |
+| `invalid-build-style` | error | `story.md` `build-style` has an unknown key, a bad value, or a `css` path that is not a `.css` file inside the project. See [Build styles](manuscripts.md#build-styles). |
 | `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day, or a chapter or scene `date` shaped `YYYY-MM-DD` is not a real day (`2024-13-45`). Under a story [`calendar`](project-format.md#custom-calendars), a chapter or scene `date` that starts with a digit or a weekday is not a day of that calendar (`31 Thaw 302 AE` in a 30-day month). |
 | `invalid-calendar` | error | The `story.md` `calendar` is not a valid list of months, weekdays, and eras. See [Custom calendars](project-format.md#custom-calendars). |
 | `invalid-cli-config` | error | `story.md` `cli-defaults` or `severity` is invalid. See [Defaults and severity](#defaults-and-severity-from-storymd). |

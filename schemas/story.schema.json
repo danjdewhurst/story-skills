@@ -94,6 +94,23 @@
             }
           }
         },
+        "build-style": {
+          "type": "array",
+          "description": "How the EPUB, HTML review copy, and print interior look: a list of mappings, usually one, whose keys together give a preset and any overrides. Unset, builds keep their classic look. The Shunn manuscript and DOCX builds never read it. story validate rejects an unknown key, a key set twice, and a css file that is missing or outside the project.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "preset": { "enum": ["classic", "modern", "elegant"], "description": "classic (the default look), modern, or elegant." },
+              "body-font": { "type": "string", "pattern": "^\\s*(?:\"[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*\"|'[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*'|[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*)\\s*(?:,\\s*(?:\"[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*\"|'[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*'|[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*)\\s*)*$", "description": "The body text font for the EPUB, HTML review copy, and print interior: comma-separated font names, such as Iowan Old Style, Georgia, serif." },
+              "heading-font": { "type": "string", "pattern": "^\\s*(?:\"[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*\"|'[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*'|[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*)\\s*(?:,\\s*(?:\"[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*\"|'[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*'|[^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*[^\\s,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f][^,\"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]*)\\s*)*$", "description": "The chapter heading font for the EPUB, HTML review copy, and print interior: comma-separated font names, such as Iowan Old Style, Georgia, serif." },
+              "heading-style": { "enum": ["centered", "small-caps", "left"], "description": "Chapter headings centred, centred in small capitals, or bold and flush with the start of the line." },
+              "scene-break": { "type": "string", "pattern": "^[^\\u0000-\\u001f\\u007f]*[^\\s\\u0000-\\u001f\\u007f][^\\u0000-\\u001f\\u007f]*$", "description": "The text a scene break prints, such as * * * or a fleuron: one line." },
+              "drop-caps": { "type": "boolean", "description": "A drop cap at the start of each chapter, in a script with capitals." },
+              "paragraphs": { "enum": ["indented", "block"], "description": "Paragraphs with a first-line indent, or as blocks with space between them." },
+              "css": { "type": "string", "pattern": "[^/\\\\]\\.[Cc][Ss][Ss]\\s*$", "description": "An extra stylesheet relative to story.md, inside the project, added after the build's own rules. story validate also checks the file exists." }
+            }
+          }
+        },
         "cli-defaults": {
           "type": "array",
           "description": "Default flags per story command. Each entry names a command that takes a project; its other keys are flags that command accepts, without the leading --. A flag given on the command line always wins. story validate rejects unknown commands and flags.",

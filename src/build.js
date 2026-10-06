@@ -24,6 +24,7 @@ import { inkSource } from "./ink.js";
 import { derivedIfid, isIfid, tweeSource } from "./twee.js";
 import { htmlBook, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { renderPdf, resolvePdfEngine } from "./pdf.js";
+import { buildStyle, styleSheetFile, validateBuildStyle } from "./build-style.js";
 import { wordSpans } from "./words.js";
 import { fillLabel, joinNames } from "./languages/index.js";
 import { endsSentence, splitSentences } from "./sentences.js";
@@ -164,13 +165,14 @@ export function buildBook(root, options = {}) {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
     const book = htmlBook(manuscript);
-    const text = format === "html" ? reviewHtml(book, { stamp, noteUrl }) : printHtml(book, trim);
+    const style = projectBuildStyle(project);
+    const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
-    writeEpub(output.outFile, project.storyId, { ...manuscript, cover }, output.writeOptions);
+    writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else {
@@ -187,7 +189,8 @@ export function buildBook(root, options = {}) {
 function buildPdf(project, format, trim, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
-  const html = format === "print" ? printHtml(htmlBook(manuscript), trim) : shunnHtml(manuscript, shunnMeta(project));
+  // The Shunn manuscript keeps its fixed format: build-style never reaches it.
+  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project));
   writeFile(output.outFile, renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
@@ -279,6 +282,19 @@ function removeStaleCodexPages(directory, written) {
       fs.rmdirSync(folder);
     }
   }
+}
+
+// story.md build-style for the EPUB, review copy, and print interior, with
+// its extra stylesheet read (`cssText`). A problem stops the build, since a
+// style quietly dropped would ship a book that looks wrong.
+function projectBuildStyle(project) {
+  const errors = [];
+  validateBuildStyle(project.story.data, errors, project.root);
+  if (errors.length > 0) {
+    throw projectError(`Cannot build until story.md build-style is fixed:\n${errors.map((error) => error.message).join("\n")}`);
+  }
+  const style = buildStyle(project.story.data);
+  return { ...style, cssText: style.css === null ? "" : styleSheetFile(project.root, style.css).text };
 }
 
 // The chapter graph and IFID behind the twee and ink builds, which refuse

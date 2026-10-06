@@ -60,6 +60,7 @@ export const FINDING_CODES = {
   "invalid-book-number": "error",
   "invalid-ifid": "error",
   "invalid-cover": "error",
+  "invalid-build-style": "error",
   "invalid-date": "error",
   "invalid-calendar": "error",
   "invalid-cli-config": "error",
