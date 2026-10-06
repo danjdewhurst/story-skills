@@ -24237,9 +24237,13 @@ ${timeline.undated.map(row).join(`
 </tbody></table></div>`);
   }
   if (timeline.pov.length > 0) {
+    const characterBook = site.project.unit.name === "characters";
+    const length = (entry) => characterBook ? site.project.chapters.filter((chapter) => (chapter.pov || "unspecified") === entry.pov).reduce((sum, chapter) => sum + chapter.count, 0) : entry.words;
+    const total = timeline.pov.reduce((sum, entry) => sum + length(entry), 0);
+    const share = (entry) => characterBook ? total === 0 ? 0 : Math.round(length(entry) * 100 / total) : Math.round(entry.share);
     body.push(`<h2>${label2(site, "codex-point-of-view")}</h2>
-<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", "codex-words", "codex-share"])}</tr></thead><tbody>
-${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label2(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${entry.words}</td><td>${Math.round(entry.share)}%</td></tr>`).join(`
+<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", characterBook ? "codex-character-count" : "codex-words", "codex-share"])}</tr></thead><tbody>
+${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label2(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${length(entry)}</td><td>${share(entry)}%</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }
