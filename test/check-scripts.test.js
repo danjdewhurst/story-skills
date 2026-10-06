@@ -739,12 +739,34 @@ describe("check-links", () => {
     fs.mkdirSync(path.join(root, "docs"), { recursive: true });
     fs.writeFileSync(path.join(root, "README.md"), "[out](../outside.md) [abs](/../outside.md#outside) [up](..) [in](docs/../README.md) [root](./)\n");
     fs.writeFileSync(path.join(root, "docs", "guide.md"), "[deep](../../outside.md)\n<img src=\"../../outside.md\">\n");
+    // A name that only starts with two dots is inside the repository.
+    fs.writeFileSync(path.join(root, "..notes.md"), "notes\n");
+    fs.writeFileSync(path.join(root, "CONTRIBUTING.md"), "[dots](..notes.md) [gone](../missing-outside.md)\n");
     expect(checkLinks(root).failures).toEqual([
+      "CONTRIBUTING.md:1: ../missing-outside.md points outside the repository",
       "README.md:1: ../outside.md points outside the repository",
       "README.md:1: /../outside.md#outside points outside the repository",
       "README.md:1: .. points outside the repository",
       "docs/guide.md:1: ../../outside.md points outside the repository",
       "docs/guide.md:2: ../../outside.md points outside the repository"
+    ]);
+  });
+
+  // Windows needs Developer Mode to create a symlink.
+  test.skipIf(process.platform === "win32")("rejects links that leave the repository through a symlink (#570)", () => {
+    const parent = makeTempDir("story-links-symlink-");
+    fs.writeFileSync(path.join(parent, "outside.md"), "# Outside\n");
+    const root = path.join(parent, "repo");
+    fs.mkdirSync(path.join(root, "docs"), { recursive: true });
+    fs.mkdirSync(path.join(root, "plugins"));
+    fs.symlinkSync("../..", path.join(root, "docs", "up"));
+    fs.symlinkSync("../outside.md", path.join(root, "esc.md"));
+    // plugins/story-skills points back at the root, which is still inside.
+    fs.symlinkSync("..", path.join(root, "plugins", "story-skills"));
+    fs.writeFileSync(path.join(root, "README.md"), "# Top\n\n[a](docs/up/outside.md#outside) [b](esc.md) [c](plugins/story-skills/README.md#top)\n");
+    expect(checkLinks(root).failures).toEqual([
+      "README.md:3: docs/up/outside.md#outside points outside the repository through a symlink",
+      "README.md:3: esc.md points outside the repository through a symlink"
     ]);
   });
 
@@ -754,8 +776,8 @@ describe("check-links", () => {
       "CHANGELOG.md": "[c](CONTRIBUTING.md#nope)\n",
       "CONTRIBUTING.md": "# Contributing\n",
       "SECURITY.md": "[s](gone-security.md)\n",
-      ".github/PULL_REQUEST_TEMPLATE.md": "[p](../gone-template.md)\n",
-      ".github/ISSUE_TEMPLATE/notes.md": "[i](gone-issue.md)\n",
+      ".github/SUPPORT.md": "[g](../gone-support.md) [ok](../CONTRIBUTING.md#contributing)\n",
+      ".github/ISSUE_TEMPLATE/notes.md": "# Notes\n\n[n](https://example.com/notes) [top](#notes)\n",
       "evals/README.md": "[e](fixtures/gone/)\n",
       "evals/examples/draft.md": "[x](gone-draft.md)\n"
     });
@@ -771,15 +793,37 @@ describe("check-links", () => {
       "CHANGELOG.md",
       "CONTRIBUTING.md",
       "SECURITY.md",
-      ".github/PULL_REQUEST_TEMPLATE.md",
+      ".github/ISSUE_TEMPLATE/notes.md",
+      ".github/SUPPORT.md",
       "evals/README.md"
     ]);
     expect(failures).toEqual([
       "AGENTS.md:1: gone-agents.md points at a missing file",
       "CHANGELOG.md:1: CONTRIBUTING.md#nope has no heading or anchor #nope in CONTRIBUTING.md",
       "SECURITY.md:1: gone-security.md points at a missing file",
-      ".github/PULL_REQUEST_TEMPLATE.md:1: ../gone-template.md points at a missing file",
+      ".github/SUPPORT.md:1: ../gone-support.md points at a missing file",
       "evals/README.md:1: fixtures/gone/ points at a missing file"
+    ]);
+  });
+
+  // A template's relative link resolves against the pull request or issue
+  // page, so it is broken there even when the file exists in the repository.
+  test("pull request and issue templates need full URLs (#570)", () => {
+    const root = linkRepo({
+      "CONTRIBUTING.md": "# Contributing\n",
+      ".github/PULL_REQUEST_TEMPLATE.md": "# Summary\n\n[guide](../CONTRIBUTING.md) [top](#summary) [web](https://example.com)\n",
+      ".github/PULL_REQUEST_TEMPLATE/release.md": "[r](../../CONTRIBUTING.md#contributing)\n",
+      ".github/ISSUE_TEMPLATE/bug.md": "<a href=\"../../CONTRIBUTING.md\">guide</a>\n",
+      "docs/pull_request_template.md": "[d](../CONTRIBUTING.md)\n",
+      "pull_request_template.md": "[p](CONTRIBUTING.md)\n"
+    });
+    const message = "is relative, but this template is shown on the pull request or issue page; use a full https:// URL";
+    expect(checkLinks(root).failures).toEqual([
+      `pull_request_template.md:1: CONTRIBUTING.md ${message}`,
+      `.github/ISSUE_TEMPLATE/bug.md:1: ../../CONTRIBUTING.md ${message}`,
+      `.github/PULL_REQUEST_TEMPLATE/release.md:1: ../../CONTRIBUTING.md#contributing ${message}`,
+      `.github/PULL_REQUEST_TEMPLATE.md:3: ../CONTRIBUTING.md ${message}`,
+      `docs/pull_request_template.md:1: ../CONTRIBUTING.md ${message}`
     ]);
   });
 

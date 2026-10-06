@@ -2,15 +2,17 @@
 /**
  * Check relative links and #anchors in the repository's markdown.
  *
- * Covers the .md files at the repository root and directly in .github/,
- * every .md file under docs/, skills/, and templates/, and README.md files
- * under examples/ and evals/. A link to a file or folder must exist inside
- * the repository, since GitHub cannot serve a path above it; a #fragment on
- * a link to a markdown file (or on a bare #fragment link) must match a
- * heading slug or an explicit <a id/name> anchor there. Fenced code, inline
- * code, HTML comments, links with a scheme (https:, mailto:), and template
- * placeholders such as {name-kebab}.md are skipped. Run from anywhere; exits
- * non-zero on failure.
+ * Covers the .md files at the repository root, every .md file under
+ * .github/, docs/, skills/, and templates/, and README.md files under
+ * examples/ and evals/. A link to a file or folder must exist inside the
+ * repository, since GitHub cannot serve a path above it; a #fragment on a
+ * link to a markdown file (or on a bare #fragment link) must match a heading
+ * slug or an explicit <a id/name> anchor there. A pull request or issue
+ * template is shown on the pull request or issue page, where a relative link
+ * resolves against that page, so its links must be full URLs. Fenced code,
+ * inline code, HTML comments, links with a scheme (https:, mailto:), and
+ * template placeholders such as {name-kebab}.md are skipped. Run from
+ * anywhere; exits non-zero on failure.
  */
 
 import fs from "node:fs";
@@ -19,16 +21,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Folders whose own .md files are checked, without their subfolders.
-const SHALLOW_DIRS = [".", ".github"];
-const MARKDOWN_DIRS = ["docs", "skills", "templates"];
+const MARKDOWN_DIRS = [".github", "docs", "skills", "templates"];
 const README_DIRS = ["examples", "evals"];
+// Where GitHub reads pull request and issue templates from.
+const PAGE_TEMPLATE = /^(?:(?:\.github|docs)\/)?(?:pull_request_template\.md|pull_request_template\/[^/]+\.md)$|^\.github\/issue_template\/[^/]+\.md$/i;
 
 function entries(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-// Only regular files, so CLAUDE.md, a symlink to AGENTS.md, is checked once.
+// The .md files directly in `dir`. Only regular files, so CLAUDE.md, a
+// symlink to AGENTS.md, is checked once.
 function shallow(dir, out) {
   if (!fs.existsSync(dir)) {
     return out;
@@ -62,10 +65,7 @@ function walk(dir, accept, out) {
 }
 
 export function markdownFiles(root = ROOT) {
-  const files = [];
-  for (const dir of SHALLOW_DIRS) {
-    shallow(path.join(root, dir), files);
-  }
+  const files = shallow(root, []);
   for (const dir of MARKDOWN_DIRS) {
     walk(path.join(root, dir), (name) => name.endsWith(".md"), files);
   }
@@ -250,10 +250,19 @@ function decode(value) {
   }
 }
 
+// True when `target` is above `root` or on another drive. A name that only
+// starts with two dots (..notes.md) is inside.
+function isOutside(root, target) {
+  const fromRoot = path.relative(root, target);
+  return fromRoot === ".." || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot);
+}
+
 export function checkFile(file, root = ROOT, cache = new Map()) {
   const failures = [];
+  const realRoot = fs.realpathSync(root);
   const text = fs.readFileSync(file, "utf8");
   const relative = path.relative(root, file).split(path.sep).join("/");
+  const pageTemplate = PAGE_TEMPLATE.test(relative);
   const anchors = (target) => {
     if (!cache.has(target)) {
       cache.set(target, anchorsFor(fs.readFileSync(target, "utf8")));
@@ -264,6 +273,10 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
     if (isSkipped(target)) {
       continue;
     }
+    if (pageTemplate && !target.startsWith("#")) {
+      failures.push(`${relative}:${line}: ${target} is relative, but this template is shown on the pull request or issue page; use a full https:// URL`);
+      continue;
+    }
     const hashAt = target.indexOf("#");
     const filePart = decode(hashAt === -1 ? target : target.slice(0, hashAt)).replace(/\?.*$/, "");
     const fragment = hashAt === -1 ? null : decode(target.slice(hashAt + 1));
@@ -272,14 +285,19 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
       : filePart.startsWith("/")
         ? path.join(root, filePart)
         : path.resolve(path.dirname(file), filePart);
-    // A target above the root may exist on this disk, but GitHub cannot serve it.
-    const fromRoot = path.relative(path.resolve(root), resolved);
-    if (fromRoot === ".." || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot)) {
+    // A target above the root may exist on this disk, but GitHub cannot serve
+    // it, and a symlink on the way (docs/up -> ../..) can lead there too.
+    // plugins/story-skills -> .. resolves to the root itself, which is inside.
+    if (isOutside(path.resolve(root), resolved)) {
       failures.push(`${relative}:${line}: ${target} points outside the repository`);
       continue;
     }
     if (!fs.existsSync(resolved)) {
       failures.push(`${relative}:${line}: ${target} points at a missing file`);
+      continue;
+    }
+    if (isOutside(realRoot, fs.realpathSync(resolved))) {
+      failures.push(`${relative}:${line}: ${target} points outside the repository through a symlink`);
       continue;
     }
     if (fragment === null || fragment === "" || !resolved.endsWith(".md") || !fs.statSync(resolved).isFile()) {
