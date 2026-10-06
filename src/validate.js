@@ -5,6 +5,7 @@ import { idText, storyDateError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
 import { validateProgressions } from "./progressions.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { FRONTMATTER_KEYS, nearMissKey } from "./frontmatter-keys.js";
 import { isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
@@ -147,22 +148,22 @@ export function validateProjectOf(project) {
   for (const scanError of project.fileErrors ?? []) {
     errors.push(scanError);
   }
-  validateStoryFrontmatter(project, errors);
+  validateStoryFrontmatter(project, errors, warnings);
   validateIndexFrontmatter(project, errors);
   validateCharacters(project, errors, warnings);
   validateLocations(project, errors, warnings);
-  validateSystems(project, errors);
-  validateFactions(project, errors);
-  validateArtifacts(project, errors);
-  validateArcs(project, errors);
+  validateSystems(project, errors, warnings);
+  validateFactions(project, errors, warnings);
+  validateArtifacts(project, errors, warnings);
+  validateArcs(project, errors, warnings);
   validateChapters(project, errors, warnings);
-  validateScenes(project, errors);
+  validateScenes(project, errors, warnings);
   validateContinuityState(project, errors, warnings);
-  validateQuestions(project, errors);
-  validatePromises(project, errors);
-  validateClues(project, errors);
+  validateQuestions(project, errors, warnings);
+  validatePromises(project, errors, warnings);
+  validateClues(project, errors, warnings);
   validateExemptions(project, errors, warnings);
-  validateGlossaryTerms(project, errors);
+  validateGlossaryTerms(project, errors, warnings);
   validateStyleSheet(project, errors, warnings);
   validateMatter(project, errors, warnings);
   validateResearch(project, errors, warnings);
@@ -742,6 +743,16 @@ function readValidationData(file, root, label, errors) {
   }
 }
 
+// An entity file's frontmatter, with a warning for each key that looks like a
+// misspelling of one its kind defines.
+function readEntityData(file, root, label, errors, warnings, kind) {
+  const data = readValidationData(file, root, label, errors);
+  if (data) {
+    warnNearMissKeys(data, FRONTMATTER_KEYS[kind], label, warnings);
+  }
+  return data;
+}
+
 // Whether a finding with this text was already reported, so a file that
 // fails to parse is not reported twice.
 function hasMessage(findings, message) {
@@ -938,13 +949,14 @@ function validateTextFields(project, errors) {
   }
 }
 
-function validateStoryFrontmatter(project, errors) {
+function validateStoryFrontmatter(project, errors, warnings) {
   // An unreadable story.md is already reported; checking the stand-in data
   // would only add a missing-field error per field.
   if (project.story.unreadable) {
     return;
   }
   const data = project.story.data;
+  warnNearMissKeys(data, FRONTMATTER_KEYS.story, "story.md", warnings);
   requireFields(data, ["title", "schema-version", "genre", "status", "themes", "pov", "tense"], "story.md", errors);
   requireScalar(data, "title", "story.md", errors);
   requireScalar(data, "genre", "story.md", errors);
@@ -1116,7 +1128,7 @@ function validateCharacters(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const character of project.characters) {
     const label = relative(project, character.file);
-    const data = readValidationData(character.file, project.root, label, errors);
+    const data = readEntityData(character.file, project.root, label, errors, warnings, "character");
     if (!data) {
       continue;
     }
@@ -1143,7 +1155,6 @@ function validateCharacters(project, errors, warnings) {
     validateStringArray(data, "voice-words", label, errors);
     validateStringArray(data, "voice-avoid", label, errors);
     validateRelationships(data, label, errors);
-    warnNearMissKeys(data, ["died-in", "revived-in"], label, warnings);
     validateProgressions(data, label, PROGRESSION_RULES.character, chronology, errors);
     // Continuity checks a death from died-in fully (errors, state, series);
     // a progression alone raises only warnings.
@@ -1159,7 +1170,7 @@ function validateLocations(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const location of project.locations) {
     const label = relative(project, location.file);
-    const data = readValidationData(location.file, project.root, label, errors);
+    const data = readEntityData(location.file, project.root, label, errors, warnings, "location");
     if (!data) {
       continue;
     }
@@ -1198,10 +1209,10 @@ function validateLocations(project, errors, warnings) {
   }
 }
 
-function validateSystems(project, errors) {
+function validateSystems(project, errors, warnings) {
   for (const system of project.systems) {
     const label = relative(project, system.file);
-    const data = readValidationData(system.file, project.root, label, errors);
+    const data = readEntityData(system.file, project.root, label, errors, warnings, "system");
     if (!data) {
       continue;
     }
@@ -1215,11 +1226,11 @@ function validateSystems(project, errors) {
   }
 }
 
-function validateFactions(project, errors) {
+function validateFactions(project, errors, warnings) {
   const chronology = chapterChronology(project);
   for (const faction of project.factions) {
     const label = relative(project, faction.file);
-    const data = readValidationData(faction.file, project.root, label, errors);
+    const data = readEntityData(faction.file, project.root, label, errors, warnings, "faction");
     if (!data) {
       continue;
     }
@@ -1237,10 +1248,10 @@ function validateFactions(project, errors) {
   }
 }
 
-function validateArtifacts(project, errors) {
+function validateArtifacts(project, errors, warnings) {
   for (const artifact of project.artifacts) {
     const label = relative(project, artifact.file);
-    const data = readValidationData(artifact.file, project.root, label, errors);
+    const data = readEntityData(artifact.file, project.root, label, errors, warnings, "artifact");
     if (!data) {
       continue;
     }
@@ -1257,10 +1268,10 @@ function validateArtifacts(project, errors) {
   }
 }
 
-function validateArcs(project, errors) {
+function validateArcs(project, errors, warnings) {
   for (const arc of project.arcs) {
     const label = relative(project, arc.file);
-    const data = readValidationData(arc.file, project.root, label, errors);
+    const data = readEntityData(arc.file, project.root, label, errors, warnings, "arc");
     if (!data) {
       continue;
     }
@@ -1283,7 +1294,7 @@ function validateChapters(project, errors, warnings) {
 
   for (const chapter of project.chapters) {
     const label = relative(project, chapter.file);
-    const data = readValidationData(chapter.file, project.root, label, errors);
+    const data = readEntityData(chapter.file, project.root, label, errors, warnings, "chapter");
     if (!data) {
       continue;
     }
@@ -1369,11 +1380,11 @@ function validateChapters(project, errors, warnings) {
   }
 }
 
-function validateScenes(project, errors) {
+function validateScenes(project, errors, warnings) {
   const seenKeys = new Map();
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
-    const data = readValidationData(scene.file, project.root, label, errors);
+    const data = readEntityData(scene.file, project.root, label, errors, warnings, "scene");
     if (!data) {
       continue;
     }
@@ -1448,9 +1459,9 @@ function validateScenes(project, errors) {
 // known before the story), so a misspelling asserts the opposite of what
 // was meant.
 const STATE_ENTRY_KEYS = {
-  "character-state": ["character", "location", "physical", "emotional", "knowledge"],
-  "object-state": ["artifact", "owner", "location", "status", "since"],
-  "knowledge-state": ["character", "knows", "learned-in", "fact"]
+  "character-state": FRONTMATTER_KEYS.characterState,
+  "object-state": FRONTMATTER_KEYS.objectState,
+  "knowledge-state": FRONTMATTER_KEYS.knowledgeState
 };
 
 function validateContinuityState(project, errors, warnings) {
@@ -1492,10 +1503,10 @@ function validateContinuityState(project, errors, warnings) {
   }
 }
 
-function validateQuestions(project, errors) {
+function validateQuestions(project, errors, warnings) {
   for (const question of project.questions) {
     const label = relative(project, question.file);
-    const data = readValidationData(question.file, project.root, label, errors);
+    const data = readEntityData(question.file, project.root, label, errors, warnings, "question");
     if (!data) {
       continue;
     }
@@ -1510,10 +1521,10 @@ function validateQuestions(project, errors) {
   }
 }
 
-function validatePromises(project, errors) {
+function validatePromises(project, errors, warnings) {
   for (const promise of project.promises) {
     const label = relative(project, promise.file);
-    const data = readValidationData(promise.file, project.root, label, errors);
+    const data = readEntityData(promise.file, project.root, label, errors, warnings, "promise");
     if (!data) {
       continue;
     }
@@ -1529,10 +1540,10 @@ function validatePromises(project, errors) {
   }
 }
 
-function validateClues(project, errors) {
+function validateClues(project, errors, warnings) {
   for (const clue of project.clues) {
     const label = relative(project, clue.file);
-    const data = readValidationData(clue.file, project.root, label, errors);
+    const data = readEntityData(clue.file, project.root, label, errors, warnings, "clue");
     if (!data) {
       continue;
     }
@@ -1598,10 +1609,10 @@ function validateExemptions(project, errors, warnings) {
   }
 }
 
-function validateGlossaryTerms(project, errors) {
+function validateGlossaryTerms(project, errors, warnings) {
   for (const term of project.glossaryTerms) {
     const label = relative(project, term.file);
-    const data = readValidationData(term.file, project.root, label, errors);
+    const data = readEntityData(term.file, project.root, label, errors, warnings, "term");
     if (!data) {
       continue;
     }
@@ -1742,7 +1753,7 @@ function validateResearch(project, errors, warnings) {
   const chapterStatus = new Map(project.chapters.map((chapter) => [chapter.id, chapter.status]));
   for (const note of project.research) {
     const label = relative(project, note.file);
-    const data = readValidationData(note.file, project.root, label, errors);
+    const data = readEntityData(note.file, project.root, label, errors, warnings, "research");
     if (!data) {
       continue;
     }
@@ -1787,7 +1798,7 @@ function validateMatter(project, errors, warnings) {
     if (matter.empty) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
-    const data = readValidationData(matter.file, project.root, label, errors);
+    const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;
     }
@@ -1871,17 +1882,13 @@ function validateStringArray(data, field, label, errors) {
   }
 }
 
-// Warns about a key that is a near miss for a checked one, such as
-// `learned_in`, `Learned-In`, or `since_chapter`. Free-form keys stay allowed.
-const PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
-
+// Warns about a key that is a near miss for a known one, such as
+// `learned_in`, `Learned-In`, `since_chapter`, or `stauts`, which would
+// otherwise be ignored. Keys far from every known one stay allowed as
+// custom fields, and so does a near miss whose intended key is also set.
 function warnNearMissKeys(data, keys, label, warnings, file = label) {
   for (const key of Object.keys(data)) {
-    if (keys.includes(key)) {
-      continue;
-    }
-    const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
-    const intended = keys.find((known) => normalized === known || (PREFIX_KEYS.has(known) && normalized.startsWith(`${known}-`)) || normalized === known.replace(/-/g, ""));
+    const intended = nearMissKey(key, keys);
     if (intended !== undefined && !Object.hasOwn(data, intended)) {
       warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended}?`, file));
     }
