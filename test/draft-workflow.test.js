@@ -238,9 +238,9 @@ describe("draft-next-chapter guardrails (#294)", () => {
 
   describe("the publish job's story checks", () => {
     const script = stepScript("Run the story checks");
-    const PATH = fakeTools();
 
     test("a clean chapter inside the word range passes", () => {
+      const PATH = fakeTools();
       const { repo } = storyRepo();
       writeChapterProse(repo, 30);
       execFileSync(process.execPath, [path.join(repoRoot, "bin", "story.js"), "wordcount", repo, "--write"]);
@@ -253,6 +253,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     });
 
     test("a chapter outside the word range, or with errors, fails the checks but still reports", () => {
+      const PATH = fakeTools();
       const { repo } = storyRepo();
       writeChapterProse(repo, 30);
       const short = run(script, repo, { PATH, BRANCH: "draft/chapter-1", MIN_WORDS: "500", MAX_WORDS: "900" });
@@ -270,6 +271,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     });
 
     test("a project the CLI cannot use stops the job", () => {
+      const PATH = fakeTools();
       const cwd = makeTempDir();
       const result = run(script, cwd, { PATH, BRANCH: "draft/chapter-1" });
       expect(result.status).toBe(1);

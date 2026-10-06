@@ -330,7 +330,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 
 `test/helpers.js` provides the shared fixtures:
 
-- `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes every one after the run, so create test directories with it rather than `fs.mkdtempSync`.
+- `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes them after each test, so create test directories with it rather than `fs.mkdtempSync`, and inside the test rather than in a `describe` body. The same file raises the per-test timeout to 60 seconds for slow CI runners.
 - `memoryIo(cwd)` is an in-memory `io` object for `runCli`, with `output()` and `error()` accessors.
 - `writeMarkdown(filePath, frontmatter, body)` writes a markdown file with frontmatter, creating parent directories.
 

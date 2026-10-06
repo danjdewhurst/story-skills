@@ -12,8 +12,8 @@ const tempDirs = [];
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
 
-// Removes every temp dir made so far. test/setup.js runs it after the whole
-// test run, so repeated runs do not fill the disk.
+// Removes every temp dir made so far. test/setup.js runs it after each test,
+// so repeated runs do not fill the disk.
 export function removeTempDirs() {
   for (const dir of tempDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
