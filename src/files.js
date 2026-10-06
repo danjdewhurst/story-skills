@@ -79,11 +79,73 @@ function invalidUtf8Offset(buffer) {
 // it), so the save is not overwritten. Any failure, a refusal or the file
 // system's, exits as a refused write.
 export function writeFile(filePath, contents, options = {}) {
+  const existed = lstatIfExists(path.resolve(filePath)) !== null;
   try {
     writeWholeFile(filePath, contents, options);
   } catch (error) {
     throw withExitCode(error, EXIT_CODES.refused);
   }
+  record(filePath, existed, "write");
+}
+
+// Deletes a project file, recording it like a write. `force` ignores a file
+// that is already gone, as fs.rmSync does.
+export function removeFile(filePath, options = {}) {
+  const existed = lstatIfExists(path.resolve(filePath)) !== null;
+  fs.rmSync(filePath, { force: Boolean(options.force) });
+  if (existed) {
+    record(filePath, true, "delete");
+  }
+}
+
+// Every file a write command creates, rewrites, or deletes goes through
+// writeFile, removeFile, or makeDirectories, which report it to the
+// journals open here. recordChanges opens one, so a command's --json result
+// and its --dry-run preview (see preview.js) list what it did from the same
+// calls that did it, and the two cannot drift apart.
+const journals = [];
+
+function record(target, existed, action) {
+  const key = path.resolve(target);
+  for (const journal of journals) {
+    const entry = journal.get(key);
+    if (entry) {
+      entry.action = action;
+    } else {
+      journal.set(key, { existed, action });
+    }
+  }
+}
+
+// Runs `run` and returns its result with the changes it made: { action,
+// path } entries sorted by path, where action is create, update, delete, or
+// mkdir (a folder made) and path is relative to `root` with / separators.
+// A file created and then deleted by the same run is left out. Calls nest:
+// an inner call's changes are recorded in the outer one too.
+export function recordChanges(root, run) {
+  const journal = new Map();
+  journals.push(journal);
+  let result;
+  try {
+    result = run();
+  } finally {
+    journals.splice(journals.indexOf(journal), 1);
+  }
+  return { result, changes: summarizeJournal(root, journal) };
+}
+
+function summarizeJournal(root, journal) {
+  const base = path.resolve(root);
+  const changes = [];
+  for (const [file, { existed, action }] of journal) {
+    const kind = action === "mkdir" ? "mkdir"
+      : action === "delete" ? (existed ? "delete" : null)
+        : existed ? "update" : "create";
+    if (kind !== null) {
+      changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") });
+    }
+  }
+  return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
 function writeWholeFile(filePath, contents, options) {
@@ -250,6 +312,7 @@ export function makeDirectories(directory) {
     current = path.join(current, name);
     try {
       fs.mkdirSync(current);
+      record(current, false, "mkdir");
     } catch (error) {
       if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
         throw directoryError(current, error.code ?? error.message);

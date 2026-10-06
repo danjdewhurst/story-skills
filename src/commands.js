@@ -7,7 +7,9 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
+import { recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
+import { previewChanges } from "./preview.js";
 import { isTruthy } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { formatNames } from "./names.js";
@@ -74,6 +76,10 @@ const ADD_OPTIONS = [
   "controlled-by", "prevalence", "acts", "act", "placement", "order", "heading", "source", "sources", "used-in",
   "accuracy", "confidence", "method", "risk", "theme", "themes", "pov"
 ];
+
+// The flags of every command that writes the project in place: --dry-run
+// previews the changes and --json reports them (see runWrite).
+const WRITE_OPTIONS = ["dry-run", "json"];
 
 // Every CLI command, in help order. `project` says how the command finds its
 // story project: "positional" takes an optional path as its first argument
@@ -180,29 +186,28 @@ export const COMMANDS = [
     usage: "reindex [path]",
     summary: ["Rebuild registry tables from markdown files"],
     project: "positional",
-    run({ io, root }) {
-      const result = reindexProject(root());
-      io.stdout.write(result.changed.length === 0
-        ? "Registries already up to date\n"
-        : `Updated ${result.changed.length} registries\n`);
-      return 0;
-    }
+    options: WRITE_OPTIONS,
+    run: (context) => runWrite(context, "reindex", reindexProject, (result) => (result.changed.length === 0
+      ? "Registries already up to date\n"
+      : `Updated ${result.changed.length} registries\n`))
   },
   {
     name: "wordcount",
     usage: "wordcount [path]",
     summary: ["Count chapter prose words"],
     project: "positional",
-    options: ["write"],
-    run({ parsed, io, root }) {
-      const result = computeWordCounts(root(), { write: isTruthy(parsed.options.write) });
-      // A project counted in characters prints characters, and says so.
-      const characters = result.unit === "characters";
-      for (const chapter of result.chapters) {
-        io.stdout.write(`${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}\n`);
+    options: ["write", ...WRITE_OPTIONS],
+    run(context) {
+      const write = isTruthy(context.parsed.options.write);
+      if (!write && isTruthy(context.parsed.options["dry-run"])) {
+        throw usageError("--dry-run previews wordcount --write: add --write");
       }
-      io.stdout.write(`Total: ${result.total}${characters ? " characters" : ""}\n`);
-      return 0;
+      return runWrite(context, "wordcount", (projectRoot) => computeWordCounts(projectRoot, { write }), (result) => {
+        // A project counted in characters prints characters, and says so.
+        const characters = result.unit === "characters";
+        return result.chapters.map((chapter) => `${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}\n`).join("")
+          + `Total: ${result.total}${characters ? " characters" : ""}\n`;
+      });
     }
   },
   {
@@ -605,13 +610,10 @@ export const COMMANDS = [
     usage: "migrate [path]",
     summary: ["Upgrade a project to the current schema"],
     project: "positional",
-    run({ io, root }) {
-      const result = migrateProject(root());
-      io.stdout.write(result.changed.length === 0
-        ? "Project already uses the current schema\n"
-        : `Migrated project to current schema: ${result.changed.length} changes\n`);
-      return 0;
-    }
+    options: WRITE_OPTIONS,
+    run: (context) => runWrite(context, "migrate", migrateProject, (result) => (result.changed.length === 0
+      ? "Project already uses the current schema\n"
+      : `Migrated project to current schema: ${result.changed.length} changes\n`))
   },
   {
     name: "add",
@@ -619,15 +621,16 @@ export const COMMANDS = [
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
     args: Infinity,
-    options: ADD_OPTIONS,
-    run({ parsed, io, cwd, root, overrides }) {
-      const result = createEntity(root(), {
-        ...parsed.options,
+    options: [...ADD_OPTIONS, ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed, cwd } = context;
+      const options = {
+        ...entityOptions(parsed),
         kind: parsed.positionals[1],
         name: nameWords(parsed, 2, cwd, "add").join(" ")
-      });
-      io.stdout.write(`${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      };
+      return runWrite(context, "add", (projectRoot) => createEntity(projectRoot, options),
+        (result) => `${result.resumed ? "Finished an interrupted add of" : "Created"} ${result.kind} ${result.id}: ${result.file}\n`);
     }
   },
   {
@@ -636,19 +639,20 @@ export const COMMANDS = [
     summary: ["Rename an entity and update id references"],
     project: "flag",
     args: Infinity,
-    options: ["id"],
-    run({ parsed, io, cwd, root, overrides }) {
-      const result = renameEntity(root(), {
-        ...parsed.options,
+    options: ["id", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed, cwd } = context;
+      const options = {
+        ...entityOptions(parsed),
         kind: parsed.positionals[1],
         // The positional names the entity being renamed; --id, when given, is
         // the id it moves to instead of one derived from the new name.
         id: parsed.positionals[2],
         newId: parsed.options.id,
         name: nameWords(parsed, 3, cwd, "rename").join(" ")
-      });
-      io.stdout.write(`${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      };
+      return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options),
+        (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n`);
     }
   },
   {
@@ -657,16 +661,13 @@ export const COMMANDS = [
     summary: ["Remove an entity and scrub id references"],
     project: "flag",
     args: 2,
-    run({ parsed, io, root, overrides }) {
-      const result = removeEntity(root(), {
-        ...parsed.options,
-        kind: parsed.positionals[1],
-        id: parsed.positionals[2]
-      });
-      io.stdout.write(result.alreadyGone
+    options: WRITE_OPTIONS,
+    run(context) {
+      const { parsed } = context;
+      const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
+      return runWrite(context, "remove", (projectRoot) => removeEntity(projectRoot, options), (result) => (result.alreadyGone
         ? `Removed references to ${result.kind} ${result.id}: its file was already gone\n`
-        : `Removed ${result.kind} ${result.id}: ${result.file}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+        : `Removed ${result.kind} ${result.id}: ${result.file}\n`));
     }
   },
   {
@@ -679,17 +680,18 @@ export const COMMANDS = [
     ],
     project: "flag",
     args: 2,
-    options: ["number", "chapter", "scene"],
-    run({ parsed, io, root, overrides }) {
-      const result = moveEntity(root(), {
+    options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed } = context;
+      const options = {
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
         number: parsed.options.number,
         chapter: parsed.options.chapter,
         scene: parsed.options.scene
-      });
-      io.stdout.write(`Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      };
+      return runWrite(context, "move", (projectRoot) => moveEntity(projectRoot, options),
+        (result) => `Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
     }
   },
   {
@@ -782,6 +784,51 @@ function passageRoot(parsed, cwd, required) {
 
 // Warnings a command reports after its own output, with the story.md
 // severity overrides and code exemptions applied.
+// Runs a write command: `write(projectRoot)` makes the changes and
+// `describe(result)` is the text output. Every file it creates, updates, or
+// deletes is recorded as it happens (recordChanges), so --json lists them.
+// With --dry-run the same command runs on a copy of the project instead
+// (previewChanges) and the changes it made there are printed: the project
+// is only read and its lock is not taken. The warnings it raises, and the
+// exit code, are those of the real run.
+function runWrite({ parsed, io, root, overrides }, command, write, describe) {
+  const projectRoot = root();
+  const dryRun = isTruthy(parsed.options["dry-run"]);
+  const { result, changes } = dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+  const findings = checkedWarnings(result.warnings, overrides);
+  if (wantsJson(parsed)) {
+    return writeJsonResult(io, {
+      command,
+      ok: findings.ok,
+      data: { ...writeResultData(projectRoot, result), dryRun, changes },
+      diagnostics: diagnosticsFrom(findings, command),
+      writes: dryRun ? [] : changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.join(projectRoot, change.path))
+    });
+  }
+  io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
+  return writeFindings(io, findings);
+}
+
+// The changes a --dry-run would make, one per line, then a summary.
+function formatPreview(command, changes) {
+  const lines = changes.map((change) => `${change.action.padEnd(7)} ${change.path}\n`).join("");
+  const count = changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`;
+  return `${lines}Dry run: story ${command} would make ${count}; nothing was written\n`;
+}
+
+// A write command's result as --json data: its file relative to the
+// project, without the absolute paths that data.changes replaces.
+function writeResultData(projectRoot, result) {
+  const { warnings, changed, root, ...data } = result;
+  return typeof data.file === "string" ? { ...data, file: path.relative(projectRoot, data.file).split(path.sep).join("/") } : data;
+}
+
+// The parsed options an entity command passes on, without the output flags.
+function entityOptions(parsed) {
+  const { json, "dry-run": dryRun, ...options } = parsed.options;
+  return options;
+}
+
 function checkedWarnings(warnings = [], overrides) {
   return applySeverity({ ok: true, errors: [], warnings }, overrides);
 }

@@ -199,10 +199,10 @@ describe("--json result envelope", () => {
   });
 
   test("--json on a command without JSON output is refused", () => {
-    const result = invoke(makeTempDir(), ["wordcount", "--json"]);
+    const result = invoke(makeTempDir(), ["export", "--json"]);
     expect(result.code).toBe(2);
     expect(result.out).toBe("");
-    expect(result.err).toBe("--json does not apply to story wordcount\n");
+    expect(result.err).toBe("--json does not apply to story export\n");
   });
 
   test("progress --log --json reports the file it wrote", () => {
