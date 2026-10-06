@@ -1,5 +1,5 @@
-import path from "node:path";
 import { warn } from "./findings.js";
+import { projectPath } from "./files.js";
 import { checkSet, languagePack } from "./languages/index.js";
 import { lowerCase, upperCase } from "./languages/locale.js";
 import { escapeRegExp, maskMarkup, proseStart } from "./markdown.js";
@@ -222,7 +222,7 @@ export function auditMentions(project, { unnamed = false } = {}) {
     if (prose === null || prose.text.trim() === "") {
       continue;
     }
-    const label = path.relative(project.root, chapter.file);
+    const label = projectPath(project.root, chapter.file);
     const find = wordMatcher(prose.text);
     const mentions = findMentions(prose.text, names);
     const named = new Set();
@@ -276,7 +276,7 @@ export function entityMentions(project, kind, id) {
     if (prose === null) {
       continue;
     }
-    const file = path.relative(project.root, chapter.file).split(path.sep).join("/");
+    const file = projectPath(project.root, chapter.file);
     const found = locateMentions(prose, findMentions(prose.text, entries).filter((mention) => mention.entities.some((entity) => entity.kind === kind && entity.id === id)));
     const listed = listedIds(chapter, kind);
     if (found.length > 0 || listed?.has(id)) {
