@@ -592,7 +592,7 @@ Run a batch review of chapters 4 to 7. Anything dead?
 
 The agent rereads the post-hoc notes, sweeps the promise and question ledgers for setups with no plausible payoff, and applies the [dead-ends reference](../skills/discovery-drafting/references/dead-ends.md). A thread is a dead end when it meets two of three tests: it has not advanced for two consecutive chapters, removing it changes nothing downstream, and the post-hoc notes say the interest is gone. A thread with a payoff recorded in `continuity/promises/` is a slow burn, not a dead end. For each dead end you decide with the agent whether to cut it clean, fold its best element into another thread, or prune it to a single scene or mention.
 
-Cut threads are logged, not deleted. An abandoned promise, question, or clue keeps its file with `status: abandoned` and a recorded reason, and a cut character keeps their file with `status: cut` and is dropped from casts, relationships, and arcs. `story validate` accepts both statuses. Each cut also goes into a `## Cut Threads` log in the project notes, so a later book can find the material.
+Cut threads are logged, not deleted. An abandoned promise, question, or clue keeps its file with `status: abandoned`, a recorded reason, and the chapters it was planned for, even ones never written. A cut character keeps their file with `status: cut` and is dropped from casts, relationships, and arcs. `story validate` accepts both statuses, and `story links` accepts the unwritten chapters of an abandoned thread. Each cut also goes into a `## Cut Threads` log in the project notes, so a later book can find the material.
 
 At the midpoint and at draft completion, the skill hands the batch to `revision-continuity` for developmental checks before you continue.
 

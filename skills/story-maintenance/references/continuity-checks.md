@@ -44,7 +44,7 @@ It reuses the promise-ordering machinery for the clue ledger (`continuity/clues/
 - A promise or clue with `status: planned` and a `planted` chapter warns ("records planted chapter X but status is still planned") only once chapter X has prose, so `--status planned --planted chapter-NN` schedules a setup ahead.
 - Both warnings read the named chapter's own `status`: an `outline` planted or payoff chapter does not count as drafted, even when later chapters are.
 - A recorded payoff chapter that is not drafted yet suppresses the "no payoff yet" warning.
-- `story links` accepts a scheduled `chapter-NN` that has no chapter file yet in `payoff`, in `planted` while the status is `planned`, and in a research note's `used-in`, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01` is reported as missing); once the status is `planted` or `paid-off` the planted chapter must exist, and once `paid-off` the payoff chapter must too.
+- `story links` accepts a scheduled `chapter-NN` that has no chapter file yet in `payoff`, in `planted` while the status is `planned`, in any chapter field of an `abandoned` promise, clue, or question, and in a research note's `used-in`, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01` is reported as missing); once the status is `planted`, `paid-off`, or `dropped` the planted chapter must exist, and once `paid-off` the payoff chapter must too. Cutting a planned thread needs only `status: abandoned`: leave its chapters in place.
 
 ### Prop custody
 
