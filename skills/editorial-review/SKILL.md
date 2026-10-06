@@ -151,11 +151,17 @@ Report the result honestly:
 
 Follow `references/editor-rounds.md`:
 
-1. Snapshot and tag the draft sent (`sent-to-editor-1`) with the user's
-   approval, committing the project folder only (`git add -A -- .`,
-   `git commit -m "…" -- .`), then build the file the editor wants:
-   `story build . --format docx` (Word with Track Changes) or `story
-   build . --format shunn` for manuscript format.
+1. Snapshot and tag the draft sent (`sent-to-editor-1`). From the
+   book's folder (the one with `story.md`), check that `.gitignore`
+   lists `dist/`, show the user `git status --untracked-files=all -- .`,
+   and ask about any private file it lists (a `.env`, keys, scans). With
+   the user's approval, commit the book's folder only and tag it:
+   `git add -A -- . && git commit -m "…" -- . && git tag sent-to-editor-1`.
+   When the status lists nothing, run only the tag; if the user declines
+   the commit, or it fails, never tag over the uncommitted tree. Then
+   build the file the editor wants: `story build . --format docx` (Word
+   with Track Changes) or `story build . --format shunn` for manuscript
+   format.
 2. When edits come back, the author accepts or rejects them in Word; the
    agent transfers the accepted text into the chapter markdown, chapter
    by chapter, never by a bulk script. Queries that change events go to
