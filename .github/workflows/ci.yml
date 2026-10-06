@@ -8,9 +8,12 @@ on:
 permissions:
   contents: read
 
+# A pull request run cancels the one it replaces. Each push to main gets a
+# group of its own, so a main run is never cancelled or left pending by a
+# later push: the Publish workflow needs a finished run for the release commit.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:

@@ -20,25 +20,29 @@ function gitIn(dir, ...args) {
   }).trim();
 }
 
-// main has v1.0.0 (package.json 1.0.0) and v2.0.0 (the same commit, so the
-// wrong version). A side branch off it has v1.0.1, which never reached main.
+// main is 0.9.0, then the 1.0.0 release commit (tagged v1.0.0, and v2.0.0,
+// the wrong version), then a later commit still at 1.0.0. A side branch off
+// the release has v1.0.1, which never reached main.
 function releaseRepo() {
   const dir = makeTempDir("story-publish-gate-");
   gitIn(dir, "init", "-q", "-b", "main");
-  const commit = (version) => {
+  const commit = (version, message = `release ${version}`) => {
     fs.writeFileSync(path.join(dir, "package.json"), `{\n  "name": "story-skills",\n  "version": "${version}"\n}\n`);
-    gitIn(dir, "add", "package.json");
-    gitIn(dir, "commit", "-q", "-m", `release ${version}`);
+    fs.writeFileSync(path.join(dir, "notes.txt"), `${message}\n`);
+    gitIn(dir, "add", "package.json", "notes.txt");
+    gitIn(dir, "commit", "-q", "-m", message);
     return gitIn(dir, "rev-parse", "HEAD");
   };
+  commit("0.9.0");
   const onMain = commit("1.0.0");
   gitIn(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
   gitIn(dir, "tag", "-a", "v2.0.0", "-m", "v2.0.0");
-  gitIn(dir, "update-ref", "refs/remotes/origin/main", onMain);
-  gitIn(dir, "checkout", "-q", "-b", "side");
+  const later = commit("1.0.0", "docs: after the release");
+  gitIn(dir, "update-ref", "refs/remotes/origin/main", later);
+  gitIn(dir, "checkout", "-q", "-b", "side", onMain);
   const offMain = commit("1.0.1");
   gitIn(dir, "tag", "-a", "v1.0.1", "-m", "v1.0.1");
-  return { dir, onMain, offMain };
+  return { dir, onMain, later, offMain, retag: (tag, sha) => gitIn(dir, "tag", "-f", "-a", tag, "-m", tag, sha) };
 }
 
 function verifyIn(dir, env) {
@@ -54,12 +58,14 @@ function ciRun(id, status, conclusion = null) {
   return { id, status, conclusion, html_url: `https://github.com/danjdewhurst/story-skills/actions/runs/${id}` };
 }
 
-function response(status, body = {}) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+// An API answer; the stub builds a fresh Response from it for each request.
+function response(status, body = {}, headers = {}) {
+  return { status, body, headers };
 }
 
-// Answers each API call with the next reply (the last one repeats), on a
-// clock that sleep() moves forward.
+// Answers each API call with the next reply (the last one repeats): a list of
+// runs, a response(), an Error to throw, or a function of the request options.
+// sleep() moves a fake clock forward.
 function stubGitHub(replies) {
   const requests = [];
   let clock = 0;
@@ -67,13 +73,20 @@ function stubGitHub(replies) {
   const errors = [];
   const deps = gateDeps({
     env: { GITHUB_REPOSITORY: "danjdewhurst/story-skills", GITHUB_TOKEN: "token", GITHUB_API_URL: "https://api.github.test" },
-    fetch: async (url, options) => {
-      requests.push({ url, options });
-      const reply = replies[Math.min(requests.length, replies.length) - 1];
+    fetch: async (url, requestOptions) => {
+      requests.push({ url, options: requestOptions });
+      let reply = replies[Math.min(requests.length, replies.length) - 1];
       if (reply instanceof Error) {
         throw reply;
       }
-      return Array.isArray(reply) ? response(200, { workflow_runs: reply }) : reply;
+      if (typeof reply === "function") {
+        return reply(requestOptions);
+      }
+      if (Array.isArray(reply)) {
+        reply = response(200, { workflow_runs: reply });
+      }
+      const body = typeof reply.body === "string" ? reply.body : JSON.stringify(reply.body);
+      return new Response(body, { status: reply.status, headers: reply.headers });
     },
     sleep: async (ms) => {
       clock += ms;
@@ -146,6 +159,33 @@ describe("verify checks the tagged commit", () => {
     );
   });
 
+  test("a tag on a later commit that keeps the version is refused: it is not the release commit", () => {
+    const { dir, later, retag } = releaseRepo();
+    retag("v1.0.0", later);
+    for (const env of [
+      { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0", GITHUB_SHA: later },
+      { GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main", GITHUB_SHA: later, TAG_INPUT: "v1.0.0" }
+    ]) {
+      expect(() => verifyIn(dir, env)).toThrow(
+        `tag v1.0.0 points at ${later}, but its parent already has version 1.0.0, so it is not the release commit. Tag the commit that sets the version, as bun run release does.`
+      );
+    }
+  });
+
+  test("a tag on a commit with no parent is refused", () => {
+    const dir = makeTempDir("story-publish-gate-root-");
+    gitIn(dir, "init", "-q", "-b", "main");
+    fs.writeFileSync(path.join(dir, "package.json"), '{ "version": "1.0.0" }\n');
+    gitIn(dir, "add", "package.json");
+    gitIn(dir, "commit", "-q", "-m", "first");
+    gitIn(dir, "tag", "-a", "v1.0.0", "-m", "v1.0.0");
+    const root = gitIn(dir, "rev-parse", "HEAD");
+    gitIn(dir, "update-ref", "refs/remotes/origin/main", root);
+    expect(() => verifyIn(dir, { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0", GITHUB_SHA: root })).toThrow(
+      `could not read package.json in the parent of ${root}, so it is not a release commit:`
+    );
+  });
+
   test("a missing tag, or one moved since the run started, is refused", () => {
     const { dir, onMain, offMain } = releaseRepo();
     expect(() => verifyIn(dir, { GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_REF: "refs/heads/main", TAG_INPUT: "v9.9.9" })).toThrow("tag v9.9.9 does not exist.");
@@ -189,17 +229,25 @@ describe("the CI verdict for the release commit", () => {
     expect(verdict.state).toBe("fail");
     expect(verdict.message).toBe(
       `CI run https://github.com/danjdewhurst/story-skills/actions/runs/7 for ${SHA} was cancelled, so it never passed. ` +
-        "ci.yml cancels a run on main when a newer push starts one. Re-run it with gh run rerun 7, then re-run this workflow's failed jobs."
+        "Re-run it with gh run rerun 7, then re-run this workflow's failed jobs. " +
+        "GitHub re-runs a run only within 30 days of it; after that, cut a new patch release."
     );
   });
 
   test("any other finished run fails, named by the newest", () => {
     for (const conclusion of ["failure", "timed_out", "action_required", "skipped", "neutral", "startup_failure"]) {
-      const verdict = ciVerdict([ciRun(9, "completed", conclusion), ciRun(8, "completed", "cancelled")], SHA);
-      expect(verdict.state).toBe("fail");
-      expect(verdict.message).toContain(`/runs/9 for ${SHA} finished as ${conclusion}. Fix main and cut a new release`);
-      expect(verdict.message).toContain("gh run rerun 9 --failed");
+      // The newest run decides, whichever order the API lists them in.
+      for (const runs of [
+        [ciRun(9, "completed", conclusion), ciRun(8, "completed", "cancelled")],
+        [ciRun(8, "completed", "cancelled"), ciRun(9, "completed", conclusion)]
+      ]) {
+        const verdict = ciVerdict(runs, SHA);
+        expect(verdict.state).toBe("fail");
+        expect(verdict.message).toContain(`/runs/9 for ${SHA} finished as ${conclusion}. Fix main and cut a new release`);
+        expect(verdict.message).toContain("gh run rerun 9 --failed (within 30 days of the run)");
+      }
     }
+    expect(ciVerdict([ciRun(3, "completed", "failure"), ciRun(4, "completed", "cancelled")], SHA).message).toContain("/runs/4 for");
   });
 });
 
@@ -212,6 +260,7 @@ describe("waiting for CI", () => {
     expect(`${url.origin}${url.pathname}`).toBe("https://api.github.test/repos/danjdewhurst/story-skills/actions/workflows/ci.yml/runs");
     expect(Object.fromEntries(url.searchParams)).toEqual({ head_sha: SHA, branch: "main", event: "push", per_page: "100" });
     expect(github.requests[0].options.headers.authorization).toBe("Bearer token");
+    expect(github.requests[0].options.signal).toBeInstanceOf(AbortSignal);
     expect(github.logs).toEqual([`CI passed on main for ${SHA}: https://github.com/danjdewhurst/story-skills/actions/runs/1`]);
   });
 
@@ -248,9 +297,48 @@ describe("waiting for CI", () => {
   });
 
   test("a refused API call fails at once", async () => {
-    const github = stubGitHub([response(403)]);
-    await expect(waitForCi(github.deps, SHA)).rejects.toThrow("the GitHub API answered 403 when listing CI runs. The job needs the actions: read permission and GITHUB_TOKEN.");
-    expect(github.requests).toHaveLength(1);
+    for (const status of [401, 403, 404]) {
+      const github = stubGitHub([response(status, { message: "Resource not accessible by integration" })]);
+      await expect(waitForCi(github.deps, SHA)).rejects.toThrow(
+        `the GitHub API answered ${status} when listing CI runs. The job needs the actions: read permission and GITHUB_TOKEN.`
+      );
+      expect(github.requests).toHaveLength(1);
+    }
+  });
+
+  test("a rate limit is waited out, as a 429 or as a 403 that says so", async () => {
+    for (const limited of [
+      response(429),
+      response(403, { message: "Forbidden" }, { "x-ratelimit-remaining": "0" }),
+      response(403, { message: "Forbidden" }, { "retry-after": "60" }),
+      response(403, { message: "You have exceeded a secondary rate limit." })
+    ]) {
+      const github = stubGitHub([limited, [ciRun(1, "completed", "success")]]);
+      expect((await waitForCi(github.deps, SHA)).state).toBe("pass");
+      expect(github.logs[0]).toBe(`The GitHub API answered ${limited.status}. Checking again in 30 seconds.`);
+    }
+  });
+
+  test("an answer without workflow_runs counts as no run yet", async () => {
+    const github = stubGitHub([response(200, {}), [ciRun(1, "completed", "success")]]);
+    expect((await waitForCi(github.deps, SHA)).state).toBe("pass");
+    expect(github.logs[0]).toBe(`No CI run on main for ${SHA} yet. Checking again in 30 seconds.`);
+  });
+
+  test("a request that stalls is abandoned at its own deadline and tried again", async () => {
+    const stalled = ({ signal }) => new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason)));
+    const github = stubGitHub([stalled, [ciRun(1, "completed", "success")]]);
+    expect((await waitForCi(github.deps, SHA, { requestMs: 5 })).state).toBe("pass");
+    expect(github.requests).toHaveLength(2);
+    expect(github.logs[0]).toStartWith("Could not reach the GitHub API (");
+  });
+
+  test("an API that keeps failing until the deadline is blamed, not CI", async () => {
+    const github = stubGitHub([[ciRun(1, "in_progress")], response(503)]);
+    await expect(waitForCi(github.deps, SHA)).rejects.toThrow(
+      `could not list the CI runs for ${SHA} within 60 minutes. The GitHub API answered 503. Re-run this job once the GitHub API answers.`
+    );
+    expect(github.minutes()).toBe(CI_WAIT.timeoutMs / 60_000);
   });
 
   test("refuses anything but a full commit SHA before asking GitHub", async () => {
