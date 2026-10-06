@@ -2213,3 +2213,35 @@ describe("writes keep a file saved meanwhile", () => {
     expect(fs.readFileSync(dock, "utf8")).toBe(saved);
   });
 });
+
+describe("ids two kinds share (#579)", () => {
+  test("validate warns when a reference field could name either entity", () => {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Shared Ids", force: false }).root;
+    createEntity(root, { kind: "faction", name: "Vale" });
+    createEntity(root, { kind: "artifact", name: "Blackened Crown" });
+    // A location and a glossary term share no reference field, so their
+    // shared id is unambiguous.
+    createEntity(root, { kind: "location", name: "Harbor" });
+    createEntity(root, { kind: "term", name: "Harbor" });
+    expect(validateProject(root).warnings.filter((finding) => finding.code === "shared-id")).toEqual([]);
+
+    // add refuses these ids, so they are made by hand.
+    writeMarkdown(path.join(root, "characters", "vale.md"), "name: Vale\nrole: supporting\nstatus: alive", "# Vale\n");
+    writeMarkdown(path.join(root, "characters", "blackened-crown.md"), "name: Blackened Crown\nrole: supporting\nstatus: alive", "# Blackened Crown\n");
+    reindexProject(root);
+    expect(validateProject(root).warnings.filter((finding) => finding.code === "shared-id")).toEqual([
+      {
+        code: "shared-id",
+        message: "characters/vale.md and worldbuilding/factions/vale.md share the id vale, so controlled-by and owner references to it could mean either, and rename and remove leave them alone: give one of them another id with story rename",
+        file: "characters/vale.md",
+        chapter: null
+      },
+      {
+        code: "shared-id",
+        message: "characters/blackened-crown.md and worldbuilding/artifacts/blackened-crown.md share the id blackened-crown, so mentions references to it could mean either, and rename and remove leave them alone: give one of them another id with story rename",
+        file: "characters/blackened-crown.md",
+        chapter: null
+      }
+    ]);
+  });
+});

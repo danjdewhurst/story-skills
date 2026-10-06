@@ -51,6 +51,7 @@ export const FINDING_CODES = {
   "field-below-minimum": "error",
   "unsupported-value": "error",
   "id-not-kebab": "error",
+  "shared-id": "warning",
   "near-miss-key": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
@@ -280,6 +281,7 @@ export const FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  "ambiguous-references": "warning",
   // story split and story merge
   "split-references": "warning",
   "split-scenes": "warning",

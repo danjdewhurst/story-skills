@@ -1056,6 +1056,16 @@ export function entityConfig(kind) {
   return configs[kind];
 }
 
+// The frontmatter reference fields that can name more than one kind, with
+// the kinds each names. An id two of those kinds share leaves such a
+// reference ambiguous: add refuses the id, validate warns about one made by
+// hand, and rename and remove leave the reference alone and say so.
+export const MULTI_KIND_REFERENCE_FIELDS = {
+  "controlled-by": ["faction", "character"],
+  mentions: ["character", "artifact"],
+  owner: ["character", "faction"]
+};
+
 export const KIND_ALIASES = {
   character: 'character',
   characters: 'character',
