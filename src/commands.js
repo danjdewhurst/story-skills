@@ -3,6 +3,7 @@ import path from "node:path";
 import { formatClueMatrix } from "./clues.js";
 import { formatKnowledgeMark } from "./chronology.js";
 import { formatContext } from "./context.js";
+import { formatGrid, gridFormat } from "./grid.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
@@ -33,6 +34,7 @@ import {
   createStoryProject,
   diagramProject,
   entityStateAtChapter,
+  gridReport,
   draftingContext,
   exportManuscript,
   formatActionReport,
@@ -509,6 +511,32 @@ export const COMMANDS = [
       }
       io.stdout.write(formatClueMatrix(report));
       return reportResult(io, report, "Clue check complete", "Clue check failed");
+    }
+  },
+  {
+    name: "grid",
+    usage: "grid [path]",
+    summary: [
+      "Print the plot grid: arcs by chapter from",
+      "arcs-advanced, with each chapter's hook and scene",
+      "outcomes, as a markdown table or --format csv"
+    ],
+    project: "positional",
+    options: ["format", "from", "to", "json"],
+    run({ parsed, io, root }) {
+      const format = gridFormat(parsed.options.format);
+      const report = gridReport(root(), { from: parsed.options.from, to: parsed.options.to });
+      if (wantsJson(parsed)) {
+        return reportJson(io, "grid", report);
+      }
+      // A grid drawn from a partly unreadable project would silently drop
+      // chapters, so, as with diagram, nothing is printed until the scan is
+      // clean.
+      if (report.ok) {
+        io.stdout.write(formatGrid(report, format));
+        return 0;
+      }
+      return reportResult(io, report, "Grid built", "Grid failed");
     }
   },
   {

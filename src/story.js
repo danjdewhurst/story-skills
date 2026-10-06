@@ -17,6 +17,7 @@ import { isTruthy } from "./options.js";
 import { chapterProse, characterCount, titleCaseSlug, wordCount } from "./markdown.js";
 import { buildTimeline } from "./timeline.js";
 import { buildClueMatrix } from "./clues.js";
+import { buildGrid } from "./grid.js";
 import { buildDiagram } from "./diagram.js";
 import { buildVoices } from "./voices.js";
 import { checkNames, existingNames } from "./names.js";
@@ -712,6 +713,13 @@ export function clueReport(root) {
   const project = scanProject(root);
   const matrix = buildClueMatrix(project);
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], ...matrix };
+}
+
+// The plot grid: arcs by chapter, with each chapter's hook and scene
+// outcomes. `from` and `to` narrow the chapters shown.
+export function gridReport(root, options = {}) {
+  const project = scanProject(root);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, options) };
 }
 
 // Mermaid source for one diagram kind, printed or written to --out.

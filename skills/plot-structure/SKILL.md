@@ -68,6 +68,7 @@ When adding events:
 When reviewing the timeline:
 - Run `story timeline .` to see written scenes in story-time order from their `date`/`time` fields, with scenes told out of order marked, and compare it with `plot/timeline.md`
 - Run `story diagram timeline` for a Mermaid timeline of dated scenes and chapters, and `story diagram arcs` for which chapters advance each arc (add `--out dist/<name>.mmd` to save either; keep generated diagrams out of entity folders)
+- Run `story grid .` for the plot grid: arcs as rows, chapters as columns, an `x` where a chapter or its scenes list the arc in `arcs-advanced`, plus each chapter's hook and scene outcomes. Use `--format csv` for a spreadsheet and `--from`/`--to` for a range of chapters. An empty row is an arc no chapter advances, a long gap is an arc the reader may forget, and an `(unknown)` row is an `arcs-advanced` id with no arc file
 - Check for chronological consistency
 - Identify pacing issues (too many events clustered, long gaps)
 - Flag arcs that haven't progressed

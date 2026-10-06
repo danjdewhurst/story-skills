@@ -1,6 +1,6 @@
 # Continuity and analysis
 
-This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, clock, and route travel), exemptions, and the analysis commands: `knowledge`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `diagram`, `progress`, `compare`, `passes`, `report`, `next`, and `doctor`.
+This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, clock, and route travel), exemptions, and the analysis commands: `knowledge`, `timeline`, `pacing`, `clues`, `grid`, `prose`, `voices`, `names`, `diagram`, `progress`, `compare`, `passes`, `report`, `next`, and `doctor`.
 
 All of them are read-only except three:
 
@@ -22,6 +22,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 - [Story timeline](#story-timeline)
 - [Story pacing](#story-pacing)
 - [Story clues](#story-clues)
+- [Story grid](#story-grid)
 - [Story prose](#story-prose)
 - [Story voices](#story-voices)
 - [Story names](#story-names)
@@ -43,6 +44,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story timeline [path]`](#story-timeline) | What order do events happen in story time? Whose book is it? Who disappears? |
 | [`story pacing [path]`](#story-pacing) | Do scenes cost the characters enough, do chapters end with a pull, and are any chapters out of proportion? |
 | [`story clues [path]`](#story-clues) | Where is each clue planted and revealed, and does the mystery play fair? |
+| [`story grid [path]`](#story-grid) | Which chapters advance each arc, and how does each chapter end? |
 | [`story prose [path\|-]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
 | [`story voices [path\|-]`](#story-voices) | How does each character talk, and do any two sound alike? |
 | [`story names <name...>`](#story-names) | Is this candidate name already taken, or too close to one in use? |
@@ -803,6 +805,24 @@ The columns are chapter numbers, in order. Rows are sorted by the chapter that p
 | `no clue is significance-delayed: every clue announces its meaning when planted` | Appears once the book has three or more live clues that are not red herrings and none has `significance-delayed: true`. Hide at least one clue in plain sight, and set the flag. |
 
 To see the same plant-to-reveal flow as a picture, run [`story diagram clues`](#story-diagram). The [`genre-craft`](../skills/genre-craft/SKILL.md) skill's [mystery fair-play reference](../skills/genre-craft/references/mystery-fair-play.md) covers planting technique and red-herring discipline.
+
+## Story grid
+
+```shell
+story grid .
+story grid . --format csv --from 10 --to 20
+```
+
+Prints the plot grid of arcs by chapter, the outliner view Plottr and Scrivener give: a row per arc with an `x` in each chapter whose frontmatter, or one of whose scenes, lists the arc in `arcs-advanced`, then a `(hook)` row of chapter hooks and an `(outcomes)` row of scene outcomes. It is a markdown table by default and CSV with `--format csv`; `--from` and `--to` narrow a wide book to a range of chapters. It raises no findings of its own.
+
+Read it for shape rather than errors:
+
+- **An empty row** is an arc in `plot/arcs/` that no chapter advances: a thread you planned and dropped, or one still to start.
+- **A long gap in a row** is an arc the reader may forget. Touch it, or decide it rests on purpose.
+- **A column with no `x`** is a chapter that moves no arc. Check that it earns its place, or list the arc it does advance.
+- **An `(unknown)` row** is an id in `arcs-advanced` with no arc file; `story validate` reports it as an error. Add the arc with `story add arc` or fix the id.
+
+The full option list is in the [CLI reference](cli-reference.md#grid). [`story diagram arcs`](#story-diagram) draws the same links as a Mermaid graph, and [`story pacing`](#story-pacing) checks the hooks and outcomes the grid lists.
 
 ## Books not in English
 

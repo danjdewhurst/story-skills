@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "compare", "passes", "diagram", "synopsis"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "compare", "passes", "diagram", "synopsis", "grid"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -36,6 +36,7 @@
     { "if": { "properties": { "command": { "const": "passes" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-passes" } } } },
     { "if": { "properties": { "command": { "const": "diagram" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-diagram" } } } },
     { "if": { "properties": { "command": { "const": "synopsis" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-synopsis" } } } },
+    { "if": { "properties": { "command": { "const": "grid" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-grid" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -517,6 +518,51 @@
         "kind": { "enum": ["relationships", "locations", "timeline", "clues", "arcs"] },
         "text": { "type": "string", "description": "The Mermaid source." },
         "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
+      }
+    },
+    "data-grid": {
+      "type": "object",
+      "required": ["range", "chapters", "rows"],
+      "properties": {
+        "range": {
+          "type": "object",
+          "required": ["from", "to", "total"],
+          "properties": {
+            "from": { "type": ["string", "null"], "description": "The first chapter shown, after --from; null when the book has no chapters." },
+            "to": { "type": ["string", "null"], "description": "The last chapter shown, after --to; null when the book has no chapters." },
+            "total": { "$ref": "#/$defs/count", "description": "Chapters in the whole book, shown or not." }
+          }
+        },
+        "chapters": {
+          "type": "array",
+          "description": "The columns, in chapter number order.",
+          "items": {
+            "type": "object",
+            "required": ["id", "number", "title", "hook", "outcomes"],
+            "properties": {
+              "id": { "type": "string" },
+              "number": { "type": "integer" },
+              "title": { "type": "string" },
+              "hook": { "type": "string", "description": "The chapter's hook, or an empty string." },
+              "outcomes": { "type": "array", "items": { "enum": ["yes", "no", "yes-but", "no-and"] }, "description": "The outcomes of the chapter's scenes, in scene order; sequels and scenes with no outcome are left out." }
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "description": "Arcs in the order the whole book first advances them, then arcs no chapter advances, then ids no arc file defines.",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "status", "known", "cells"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": ["string", "null"], "description": "Null for an id no arc file defines." },
+              "status": { "type": ["string", "null"], "description": "Null for an id no arc file defines." },
+              "known": { "type": "boolean", "description": "False when chapters or scenes advance an arc id with no file in plot/arcs." },
+              "cells": { "type": "array", "items": { "type": "boolean" }, "description": "One cell per entry in chapters, in the same order: true when the chapter or one of its scenes lists the arc in arcs-advanced." }
+            }
+          }
+        }
       }
     },
     "data-synopsis": {
