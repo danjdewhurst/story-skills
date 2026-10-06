@@ -1403,10 +1403,10 @@ The result is a draft, not submission copy. Literary agents expect present tense
   ```
 
   Folder names match in any letter case, so `Chapters/x.md` is refused too, and a path through a symlinked folder is checked against the real folder it points to: with `lnk` linked to `chapters`, `--out lnk/x.md` is refused. The real path is compared in any letter case too, on every system, so on a case-insensitive disk such as the macOS default an absolute path typed in another case (`/users/me/book/chapters/x.md` for a project at `/Users/me/Book`) is refused. On a case-sensitive disk this errs on the safe side: a sibling folder that differs from the project only in case is refused as well.
-- A path inside a `.git` folder, typed in any letter case or reached through a symlinked folder, is refused for every `--out`, so a build can never replace a repository's own files such as `.git/config`:
+- A path inside a `.git` folder, typed in any letter case or reached through a symlinked folder, is refused for every `--out`, so a build can never replace a repository's own files such as `.git/config`. On Windows `.git.`, `.git ` and the short name `GIT~1` count as `.git` too, since Windows reads them as the same folder. Only the folders below the project (or, for a path outside it, below the folder the two share) are checked, so a book that itself sits inside a folder named `.git` still builds to its own `dist/`:
 
   ```text
-  Refusing to write generated output to .git/config: it is inside a .git folder. Use a path such as dist/ instead
+  Refusing to write generated output to .git/config: it is inside a .git folder. Choose a path outside .git
   ```
 - The skill-owned folders `feedback/`, `submission/`, `publishing/`, and `adaptations/` take a new generated file, such as the synopsis draft in `submission/`, but an existing file there is never replaced, because it may be a reader's notes or a draft you have since rewritten. Delete it first to regenerate it:
 
@@ -1448,7 +1448,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `<path>: Refusing to write through symlink` | The `--out` file is a symlink | Delete the symlink or choose another file. |
 | `Refusing to write generated output to <path>: it is project source. ...` | `--out` names a project file or a path inside an entity folder | Write to `dist/` or another folder outside the project source. |
-| `Refusing to write generated output to <path>: it is inside a .git folder. ...` | `--out` names a path inside a `.git` folder | Write to `dist/` or another folder outside the repository's `.git`. |
+| `Refusing to write generated output to <path>: it is inside a .git folder. ...` | `--out` names a path inside a `.git` folder | Write to a folder outside `.git`, such as the project's `dist/`. |
 | `Refusing to overwrite <path>: files in feedback/, submission/, ... may hold hand-written work. ...` | `--out` names an existing file in a skill-owned folder | Delete the file first if you mean to regenerate it, or write to `dist/`. |
 | `--out <path> is a directory: give a file path` | `--out` names a directory, such as `dist` | Add a file name, such as `dist/book.epub`. |
 | `Cannot export: fix this file first ...`, `Cannot build: ...`, or `Cannot build a synopsis: ...` | An entity file, registry, or `story.md` fails to parse | Fix the listed files; `story validate` reports them too. |

@@ -23,7 +23,7 @@ function stepScript(name) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8" }).trim();
+  return execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", ...args], { cwd, encoding: "utf8", stdio: "pipe" }).trim();
 }
 
 // A PATH holding a `story` that runs this checkout's CLI, as the workflow's
@@ -88,6 +88,10 @@ describe("draft-next-chapter guardrails (#294)", () => {
     expect(allowed).toBe("Bash(story:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep");
     expect(/--disallowedTools "([^"]+)"/.exec(draft)[1]).toBe("Edit(.git/**),Write(.git/**)");
     expect(draft).toContain("GIT_CONFIG_PARAMETERS: \"'core.fsmonitor=false' 'core.hooksPath=/dev/null' 'commit.gpgsign=false'\"");
+    // The agent's git reads no global or system config, which an absolute
+    // --out could have written.
+    const agentEnv = draft.slice(draft.indexOf("- name: Draft the next chapter"), draft.indexOf("        with:\n          anthropic_api_key"));
+    expect(agentEnv).toContain("GIT_CONFIG_GLOBAL: /dev/null\n          GIT_CONFIG_NOSYSTEM: \"1\"\n");
     // The CLI is installed outside the repository before the agent starts,
     // so no npx run can read an .npmrc the agent wrote.
     expect(/npx --yes|--package/.test(WORKFLOW)).toBe(false);
@@ -167,6 +171,13 @@ describe("draft-next-chapter guardrails (#294)", () => {
     expect(bundled.output).toContain("drafted=true\nbranch=draft/chapter-1\n");
     expect(fs.existsSync(path.join(bundled.runnerTemp, "draft", "draft.bundle"))).toBe(true);
 
+    // A global or system config the agent wrote (through an absolute --out)
+    // is not read.
+    const home = makeTempDir("home-");
+    fs.writeFileSync(path.join(home, ".gitconfig"), "# Chapter 1\nnot a config line\n");
+    expect(spawnSync("git", ["status"], { cwd: repo, env: { ...process.env, HOME: home, XDG_CONFIG_HOME: home } }).status).not.toBe(0);
+    expect(run(script, repo, { BASE: base, HOME: home, XDG_CONFIG_HOME: home }).output).toContain("drafted=true\n");
+
     git(repo, "checkout", "-q", "-b", "main-ish");
     const wrong = run(script, repo, { BASE: base });
     expect(wrong.status).toBe(1);
@@ -211,7 +222,9 @@ describe("draft-next-chapter guardrails (#294)", () => {
       });
     }
 
-    test("refuses a merge commit, whose own changes a plain git log leaves out", () => {
+    // A draft branch whose merge commit adds package.json and CLAUDE.md of
+    // its own, bundled as the draft job would.
+    function evilMerge() {
       const { repo, base } = storyRepo();
       git(repo, "checkout", "-q", "-b", "side");
       writeChapterProse(repo, 20);
@@ -232,6 +245,11 @@ describe("draft-next-chapter guardrails (#294)", () => {
       git(repo, "bundle", "create", path.join(temp, "draft", "draft.bundle"), "refs/heads/draft/chapter-1", `^${base}`);
       git(repo, "checkout", "-q", base);
       git(repo, "branch", "-q", "-D", "draft/chapter-1", "side");
+      return { repo, base, temp };
+    }
+
+    test("refuses a merge commit, whose own changes a plain git log leaves out", () => {
+      const { repo, base, temp } = evilMerge();
       const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("draft/chapter-1 contains a merge commit");
@@ -239,8 +257,17 @@ describe("draft-next-chapter guardrails (#294)", () => {
       expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("HEAD");
     });
 
-    test("lists a merge's own changes too", () => {
-      expect(script).toContain('git log --format= --raw --no-renames -m "$BASE..$BRANCH"');
+    test("the file check lists a merge's own changes too", () => {
+      // Run the file check on a merge with the merge refusal taken out, so
+      // the -m guard stands on its own.
+      const refusal = /\n# A merge commit can carry[\s\S]*?\nfi\n/;
+      expect(script).toMatch(refusal);
+      const { repo, base, temp } = evilMerge();
+      const result = run(script.replace(refusal, "\n"), repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("The agent changed files a draft may not touch");
+      expect(result.stdout).toContain("package.json (not a markdown file)");
+      expect(result.stdout).toContain("CLAUDE.md (instructions for an agent)");
     });
 
     test("refuses a change outside STORY_DIR when the project is in a subfolder", () => {
@@ -275,6 +302,18 @@ describe("draft-next-chapter guardrails (#294)", () => {
     // An unset secret matches nothing, rather than everything.
     expect(run(script, repo, { BASE: base, SECRET_API_KEY: "" }).status).toBe(0);
     const leaked = run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-secret-value" });
+    expect(leaked.status).toBe(1);
+    expect(leaked.stdout).toContain("contain the value of ANTHROPIC_API_KEY");
+  });
+
+  test("the secret check reads a chapter git would call binary", () => {
+    const script = stepScript("Check the draft holds no secrets");
+    const { repo, base } = storyRepo();
+    git(repo, "checkout", "-q", "-b", "draft/chapter-1");
+    fs.appendFileSync(path.join(repo, "chapters", "chapter-01.md"), "\nThe tide\u0000 sk-ant-binary-value\n");
+    git(repo, "commit", "-qam", "Draft chapter 1: Opening");
+    expect(git(repo, "log", "-p", "--format=", `${base}..HEAD`)).toContain("Binary files");
+    const leaked = run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-binary-value" });
     expect(leaked.status).toBe(1);
     expect(leaked.stdout).toContain("contain the value of ANTHROPIC_API_KEY");
   });

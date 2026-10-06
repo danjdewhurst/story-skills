@@ -180,7 +180,7 @@ export function createStoryProject(options) {
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
   }
-  if (isInsideGitDirectory(root)) {
+  if (isInsideGitDirectory(root, cwd)) {
     throw refusedError(`Refusing to create a story project inside a .git folder: ${root}`);
   }
   if (fs.existsSync(root) && !options.force) {

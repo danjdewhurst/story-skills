@@ -182,6 +182,11 @@ jobs:
           # Overrides .git/config for the agent's git add and git commit, so a
           # config the agent wrote cannot run a command.
           GIT_CONFIG_PARAMETERS: "'core.fsmonitor=false' 'core.hooksPath=/dev/null' 'commit.gpgsign=false'"
+          # The agent's story commands can write outside the checkout (an
+          # absolute --out such as ~/.gitconfig), so its git reads no global
+          # or system config at all.
+          GIT_CONFIG_GLOBAL: /dev/null
+          GIT_CONFIG_NOSYSTEM: "1"
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -259,7 +264,9 @@ jobs:
         env:
           BASE: ${{ github.sha }}
         run: |
-          git() { command git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
+          # No config the agent could have written runs a command here: no
+          # global or system config, and no fsmonitor or hooks from .git/config.
+          git() { GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 command git -c core.fsmonitor=false -c core.hooksPath=/dev/null "$@"; }
           if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
             echo "The agent made no commit: there was nothing to draft."
             echo "drafted=false" >> "$GITHUB_OUTPUT"
@@ -387,7 +394,9 @@ jobs:
           SECRET_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # grep reads to the end (no -q), so git never sees a closed pipe.
-          if [ -n "$SECRET_API_KEY" ] && git log -p -m --format=%B "$BASE..HEAD" | grep -F -- "$SECRET_API_KEY" > /dev/null; then
+          # --text shows the changes of a file git would call binary (one NUL
+          # byte is enough), and -m those a merge commit makes on its own.
+          if [ -n "$SECRET_API_KEY" ] && git log -p -m --text --format=%B "$BASE..HEAD" | grep -F -a -- "$SECRET_API_KEY" > /dev/null; then
             echo "::error::The drafted commits contain the value of ANTHROPIC_API_KEY. Nothing was pushed; rotate the key."
             exit 1
           fi

@@ -493,15 +493,24 @@ export function isPathInside(root, target) {
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
 
-// A git folder on the way to a path, as typed or behind a symlinked folder
+// A folder name git reads as its own folder: `.git` in any letter case, and
+// on Windows also `.git.`, `.git ` and the short name `GIT~1`, which name
+// the same folder there but are other folders elsewhere.
+export function isGitDirectoryName(name, platform = process.platform) {
+  return platform === "win32" ? /^(?:\.git[. ]*|git~\d+)$/i.test(name) : name.toLowerCase() === ".git";
+}
+
+// A git folder on the way from `base` (the project, or the folder a new
+// project is made from) to `target`, as typed or behind a symlinked folder
 // (`lnk -> .git`). No story command writes a repository's own files, and a
 // generated file such as `--out .git/config` would replace git's settings.
-// Windows also reads `.git.`, `.git ` and the short name `GIT~1` as `.git`.
-const GIT_DIRECTORY_NAME = /^(?:\.git[. ]*|git~\d+)$/i;
-
-export function isInsideGitDirectory(target) {
+// Only the names below the folder the two paths share count, so a book that
+// itself sits under a folder named .git still writes its own dist/.
+export function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
   const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
   const real = path.join(fs.realpathSync.native(ancestor), ...missing);
-  return [resolved, real].some((candidate) => candidate.split(/[\\/]/).some((name) => GIT_DIRECTORY_NAME.test(name)));
+  const from = path.resolve(base);
+  return [[from, resolved], [fs.realpathSync.native(from), real]]
+    .some(([start, end]) => path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name)));
 }

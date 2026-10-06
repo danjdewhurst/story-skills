@@ -787,8 +787,8 @@ function isCopyrightMatter(entry) {
 const HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 
 function assertNotProjectSource(project, outFile) {
-  if (isInsideGitDirectory(outFile)) {
-    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Use a path such as dist/ instead`);
+  if (isInsideGitDirectory(outFile, project.root)) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
   // Check the path as typed and the real path behind any symlinked folder
   // (`lnk -> chapters`), case-insensitively for case-insensitive disks,
