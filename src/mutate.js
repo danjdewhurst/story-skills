@@ -10,6 +10,7 @@ import {
   assertLexicallyInsideRoot,
   assertSafeProjectDirectory,
   assertSafeProjectPath,
+  isInsideGitDirectory,
   lstatIfExists,
   makeDirectories,
   portablePath,
@@ -178,6 +179,9 @@ export function createStoryProject(options) {
   // files, so never follow a symlinked project root to another directory.
   if (lstatIfExists(root)?.isSymbolicLink()) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
+  }
+  if (isInsideGitDirectory(root)) {
+    throw refusedError(`Refusing to create a story project inside a .git folder: ${root}`);
   }
   if (fs.existsSync(root) && !options.force) {
     // import --force does more than init --force, so it says what.
