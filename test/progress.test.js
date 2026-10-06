@@ -279,6 +279,12 @@ describe("daily targets and streaks", () => {
     expect(projectProgress(bad.root, { date: "2026-09-21" }).ok).toBe(false);
     expect(messages(validateProject(progressProject("writing-days: fri").root).errors).join("\n")).toContain("writing-days must be a list of weekdays");
     expect(messages(validateProject(progressProject("writing-days: [1, mon]").root).errors).join("\n")).toContain("writing-days must be a list of weekdays");
+
+    // An empty list, which the schema allows, means every day, like none.
+    const empty = progressProject("writing-days: []");
+    expect(messages(validateProject(empty.root).errors)).toEqual([]);
+    expect(checkProjectSchema(empty.root)).toEqual([]);
+    expect(projectProgress(empty.root, { date: "2026-09-21" })).toMatchObject({ ok: true, daily: { writingDays: null } });
   });
 
   test("a book counted in words warns about daily-target-characters", () => {

@@ -1714,7 +1714,7 @@ export function validateDeadline(data, errors) {
 }
 
 // The daily targets, in either unit, and writing-days: the weekdays the
-// streak expects writing on.
+// streak expects writing on. An empty list, like none, means every day.
 export function validateDailyTarget(data, errors) {
   for (const unit of COUNT_UNITS.values()) {
     requireInteger(data, unit.dailyTargetField, "story.md", errors, 1);
@@ -1723,7 +1723,7 @@ export function validateDailyTarget(data, errors) {
   if (days === undefined) {
     return;
   }
-  if (!Array.isArray(days) || days.length === 0 || days.some((day) => weekdayName(day) === null)) {
+  if (!Array.isArray(days) || days.some((day) => weekdayName(day) === null)) {
     errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
   }
 }
