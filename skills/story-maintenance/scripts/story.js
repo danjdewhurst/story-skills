@@ -485,15 +485,24 @@ function isPathInside(root, target) {
   const relativePath = path.relative(root, target);
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
+var IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 function isGitDirectoryName(name, platform = process.platform) {
-  return platform === "win32" ? /^(?:\.git[. ]*|git~\d+)$/i.test(name) : name.toLowerCase() === ".git";
+  if (platform === "win32") {
+    return /^(?:\.git|git~\d+)[. ]*$/i.test(name.split(":")[0]);
+  }
+  return (platform === "darwin" ? name.replace(IGNORABLE_CHARACTERS, "") : name).toLowerCase() === ".git";
 }
 function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
-  const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
-  const real = path.join(fs.realpathSync.native(ancestor), ...missing);
   const from = path.resolve(base);
-  return [[from, resolved], [fs.realpathSync.native(from), real]].some(([start, end]) => path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name)));
+  if (hasGitDirectoryBelow(from, resolved)) {
+    return true;
+  }
+  const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
+  return hasGitDirectoryBelow(fs.realpathSync.native(from), path.join(fs.realpathSync.native(ancestor), ...missing));
+}
+function hasGitDirectoryBelow(start, end) {
+  return path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name));
 }
 
 // src/findings.js

@@ -624,11 +624,22 @@ export function isPathInside(root, target) {
   return !path.isAbsolute(relativePath) && (relativePath === "" || !relativePath.split(path.sep).includes(".."));
 }
 
+// Characters HFS+ leaves out of a name when it looks one up (zero-width
+// joiners, direction marks, the byte order mark), with the rest of
+// Unicode's default-ignorable code points, so `.g‌it` is `.git` there.
+const IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
+
 // A folder name git reads as its own folder: `.git` in any letter case, and
 // on Windows also `.git.`, `.git ` and the short name `GIT~1`, which name
-// the same folder there but are other folders elsewhere.
+// the same folder there but are other folders elsewhere. NTFS reads what
+// follows a colon as a stream of the folder (`.git::$INDEX_ALLOCATION` is
+// the folder itself), so on Windows the name ends at the first colon; on
+// macOS ignorable characters are dropped before the name is compared.
 export function isGitDirectoryName(name, platform = process.platform) {
-  return platform === "win32" ? /^(?:\.git[. ]*|git~\d+)$/i.test(name) : name.toLowerCase() === ".git";
+  if (platform === "win32") {
+    return /^(?:\.git|git~\d+)[. ]*$/i.test(name.split(":")[0]);
+  }
+  return (platform === "darwin" ? name.replace(IGNORABLE_CHARACTERS, "") : name).toLowerCase() === ".git";
 }
 
 // A git folder on the way from `base` (the project, or the folder a new
@@ -636,12 +647,19 @@ export function isGitDirectoryName(name, platform = process.platform) {
 // (`lnk -> .git`). No story command writes a repository's own files, and a
 // generated file such as `--out .git/config` would replace git's settings.
 // Only the names below the folder the two paths share count, so a book that
-// itself sits under a folder named .git still writes its own dist/.
+// itself sits under a folder named .git still writes its own dist/. The path
+// as typed is checked first, so a name the file system reads its own way
+// (`.git::$INDEX_ALLOCATION`) is refused before the file system sees it.
 export function isInsideGitDirectory(target, base) {
   const resolved = path.resolve(target);
-  const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
-  const real = path.join(fs.realpathSync.native(ancestor), ...missing);
   const from = path.resolve(base);
-  return [[from, resolved], [fs.realpathSync.native(from), real]]
-    .some(([start, end]) => path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name)));
+  if (hasGitDirectoryBelow(from, resolved)) {
+    return true;
+  }
+  const { ancestor, missing } = nearestExistingAncestor(resolved, fs.existsSync);
+  return hasGitDirectoryBelow(fs.realpathSync.native(from), path.join(fs.realpathSync.native(ancestor), ...missing));
+}
+
+function hasGitDirectoryBelow(start, end) {
+  return path.relative(start, end).split(path.sep).some((name) => name !== ".." && isGitDirectoryName(name));
 }

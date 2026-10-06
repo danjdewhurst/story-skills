@@ -676,6 +676,79 @@ describe("generated output and new projects stay out of .git", () => {
     }
   });
 
+  test("a stream name on Windows and characters HFS+ ignores on macOS still name .git (#603)", () => {
+    for (const name of [".git::$INDEX_ALLOCATION", ".GIT:$I30:$INDEX_ALLOCATION", ".git:notes", ".git. ::$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION", "GIT~1."]) {
+      expect(isGitDirectoryName(name, "win32"), name).toBe(true);
+    }
+    for (const name of [".g‌it", "﻿.git", ".GI‎T", ".git‍", ".‮g⁪it"]) {
+      expect(isGitDirectoryName(name, "darwin"), name).toBe(true);
+    }
+    // Each rule is its own file system's: elsewhere these are other folders.
+    for (const name of [".git::$INDEX_ALLOCATION", ".g‌it"]) {
+      expect(isGitDirectoryName(name, "linux"), name).toBe(false);
+    }
+    expect(isGitDirectoryName(".g‌it", "win32")).toBe(false);
+    expect(isGitDirectoryName(".git::$INDEX_ALLOCATION", "darwin")).toBe(false);
+    for (const name of [".github:x", ".gitignore::$DATA", "repo.git:x", "x:.git", "git:x"]) {
+      expect(isGitDirectoryName(name, "win32"), name).toBe(false);
+    }
+    for (const name of [".g‌ithub", "repo‌.git", ".gi​t­ignore"]) {
+      expect(isGitDirectoryName(name, "darwin"), name).toBe(false);
+    }
+  });
+
+  test("the path as typed is refused before the file system is asked to resolve it (#603)", () => {
+    const root = gitProject();
+    // A file system that cannot resolve the name (a stream name on a disk
+    // without streams, say) must not stand between the name and the check.
+    const realpath = spyOn(fs.realpathSync, "native").mockImplementation((target) => {
+      throw Object.assign(new Error(`EINVAL: invalid argument, realpath '${target}'`), { code: "EINVAL" });
+    });
+    try {
+      expect(isInsideGitDirectory(path.join(root, ".git", "config"), root)).toBe(true);
+      expect(realpath).not.toHaveBeenCalled();
+    } finally {
+      realpath.mockRestore();
+    }
+  });
+
+  // Only Windows reads stream names and only macOS drops ignorable
+  // characters, so the commands run there; the names are checked on every
+  // system above. A disk that will not take such a name at all fails the
+  // command instead, so each run is checked for what it wrote, not for its
+  // message: nothing, inside .git or beside it.
+  const strangeGitNames = {
+    win32: [".git::$INDEX_ALLOCATION", ".git:$I30:$INDEX_ALLOCATION", "GIT~1::$INDEX_ALLOCATION"],
+    darwin: [".g‌it", "﻿.git", ".GI‎T"]
+  }[process.platform] ?? [];
+
+  test.skipIf(strangeGitNames.length === 0)("--out, init and import never write into .git through a stream name or ignorable characters (#603)", () => {
+    const root = gitProject();
+    const manuscript = path.join(makeTempDir(), "book.md");
+    fs.writeFileSync(manuscript, "# Chapter 1\n\nThe tide came in.\n");
+    const tree = () => fs.readdirSync(root, { recursive: true }).map(String).sort();
+    const before = tree();
+    for (const name of strangeGitNames) {
+      expect(isInsideGitDirectory(path.join(root, name, "config"), root), name).toBe(true);
+      for (const out of [`${name}/config`, path.join(root, name, "config")]) {
+        for (const dryRun of [[], ["--dry-run"]]) {
+          for (const argv of [
+            ["export", ".", "--out", out],
+            ["build", ".", "--format", "html", "--out", out],
+            ["init", "Inner", "--dir", `${name}/inner`],
+            ["import", manuscript, "--title", "Inner", "--dir", `${name}/inner`]
+          ]) {
+            const result = invoke(root, [...argv, ...dryRun]);
+            expect(result.code, [...argv, ...dryRun].join(" ")).not.toBe(0);
+          }
+        }
+      }
+    }
+    expect(read(root, ".git/config")).toBe("[core]\n\tbare = false\n");
+    expect(listDir(root, ".git")).toEqual(["config"]);
+    expect(tree()).toEqual(before);
+  });
+
   test("a book that itself sits under a folder named .git still builds to its own dist/", () => {
     for (const parent of [[".git", "wt"], ["GIT~1"]]) {
       const cwd = path.join(makeTempDir(), ...parent);
