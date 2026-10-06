@@ -69,6 +69,12 @@ export function buildList(project, kindName, whereValues = []) {
   const entry = listKind(kindName);
   const filters = [whereValues].flat().filter((value) => value !== undefined && value !== true).map(parseWhere);
   const entities = project[entry.collection];
+  // A file that fails to parse is missing from the scan, so any list would
+  // be partial and a key only it sets would look like a typo: list nothing,
+  // and let the caller report the parse errors.
+  if ((project.fileErrors ?? []).length > 0) {
+    return { kind: entry.kind, where: filters, total: entities.length, items: [] };
+  }
 
   // A key the schema defines, or one any file of this kind sets, is a real
   // filter; anything else is most likely a typo.
@@ -134,9 +140,10 @@ export function formatList(report) {
   if (report.items.length === 0) {
     return "";
   }
-  const idWidth = Math.max(...report.items.map((item) => item.id.length));
-  const titleWidth = Math.max(...report.items.map((item) => item.title.length));
-  return report.items.map((item) => {
+  const rows = report.items.map((item) => ({ ...item, title: oneLine(item.title) }));
+  const idWidth = Math.max(...rows.map((item) => item.id.length));
+  const titleWidth = Math.max(...rows.map((item) => item.title.length));
+  return rows.map((item) => {
     const fields = Object.entries(item.fields)
       .filter(([, value]) => isSet(value))
       .map(([key, value]) => `${key}=${formatValue(value)}`);
@@ -144,9 +151,14 @@ export function formatList(report) {
   }).join("\n") + "\n";
 }
 
-// A list joins with commas; a multi-line value folds onto one line, so each
-// match stays one line.
+// A list joins with commas.
 function formatValue(value) {
   const text = (item) => (isScalar(item) ? String(item) : JSON.stringify(item));
-  return (Array.isArray(value) ? value.map(text).join(",") : text(value)).replace(/\s*\n\s*/g, " ");
+  return oneLine(Array.isArray(value) ? value.map(text).join(",") : text(value));
+}
+
+// A multi-line title or value folds onto one line, so each match stays one
+// line.
+function oneLine(text) {
+  return text.trim().replace(/\s*\n\s*/g, " ");
 }

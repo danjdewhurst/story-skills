@@ -13639,6 +13639,9 @@ function buildList(project, kindName, whereValues = []) {
   const entry = listKind(kindName);
   const filters = [whereValues].flat().filter((value) => value !== undefined && value !== true).map(parseWhere);
   const entities = project[entry.collection];
+  if ((project.fileErrors ?? []).length > 0) {
+    return { kind: entry.kind, where: filters, total: entities.length, items: [] };
+  }
   const known = [...FRONTMATTER_KEYS[entry.schema]];
   for (const entity of entities) {
     for (const key of Object.keys(entity.frontmatter ?? {})) {
@@ -13689,9 +13692,10 @@ function formatList(report) {
   if (report.items.length === 0) {
     return "";
   }
-  const idWidth = Math.max(...report.items.map((item) => item.id.length));
-  const titleWidth = Math.max(...report.items.map((item) => item.title.length));
-  return report.items.map((item) => {
+  const rows = report.items.map((item) => ({ ...item, title: oneLine(item.title) }));
+  const idWidth = Math.max(...rows.map((item) => item.id.length));
+  const titleWidth = Math.max(...rows.map((item) => item.title.length));
+  return rows.map((item) => {
     const fields = Object.entries(item.fields).filter(([, value]) => isSet(value)).map(([key, value]) => `${key}=${formatValue(value)}`);
     return [item.id.padEnd(idWidth), item.title.padEnd(titleWidth), item.file, ...fields].join("  ").trimEnd();
   }).join(`
@@ -13700,7 +13704,10 @@ function formatList(report) {
 }
 function formatValue(value) {
   const text = (item) => isScalar(item) ? String(item) : JSON.stringify(item);
-  return (Array.isArray(value) ? value.map(text).join(",") : text(value)).replace(/\s*\n\s*/g, " ");
+  return oneLine(Array.isArray(value) ? value.map(text).join(",") : text(value));
+}
+function oneLine(text) {
+  return text.trim().replace(/\s*\n\s*/g, " ");
 }
 
 // src/html.js

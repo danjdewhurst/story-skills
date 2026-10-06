@@ -629,7 +629,7 @@
         "total": { "$ref": "#/$defs/count", "description": "Files of the kind, matched or not." },
         "items": {
           "type": "array",
-          "description": "The matches in book order: chapters by number, scenes by chapter and scene, matter by order, the rest by file name.",
+          "description": "The matches in book order: chapters by number, scenes by chapter and scene, matter by order, the rest by file name. Empty when a project file fails to parse.",
           "items": {
             "type": "object",
             "required": ["id", "file", "title", "fields"],
