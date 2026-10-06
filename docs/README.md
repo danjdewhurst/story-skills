@@ -2,7 +2,7 @@
 
 This is the documentation for Story Skills: Agent Skills for writing fiction, plus the `story` CLI that checks and maintains the project files. Use this page to find the right guide, whether you are writing a book, looking up a command or field, or changing Story Skills itself.
 
-If you have not used Story Skills before, start with [Getting started](getting-started.md).
+If you have not used Story Skills before, start with [Getting started](getting-started.md). If you write in claude.ai and don't use a terminal, start with [Writers: start here](writers-start-here.md) instead.
 
 ## How the pieces fit
 
@@ -48,6 +48,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 | Page | What it covers |
 |------|----------------|
+| [Writers: start here](writers-start-here.md) | For writers without a terminal: downloading skill zips, uploading them to claude.ai, and what works without the CLI |
 | [Getting started](getting-started.md) | Installing the skills and CLI, and a first session from `story init` to a clean maintenance pass |
 | [Core concepts](concepts.md) | The project model: files, frontmatter, entity kinds, ids, registries, backlinks, word counts, and how the work is split between skills and CLI |
 | [Writing workflows](writing-workflows.md) | End-to-end sessions: testing a premise, plotting first, discovery drafting, scene craft, theme and voice, research, revision passes, line editing, feedback and editorial review, submission, self-publishing, and adaptation |
@@ -79,6 +80,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | You want to... | Read |
 |----------------|------|
 | Install Story Skills | [Getting started](getting-started.md#install-the-skills) |
+| Use the skills in claude.ai without a terminal | [Writers: start here](writers-start-here.md) |
 | Test whether an idea will carry a book, and pick its form | [Writing workflows](writing-workflows.md) and the premise-workshop entry in the [Skills catalogue](skills.md) |
 | Start a new book | [Getting started](getting-started.md#your-first-session), then [Writing workflows](writing-workflows.md#plotting-first-from-premise-to-chapter-one) |
 | Draft without an outline | [Writing workflows](writing-workflows.md#discovery-drafting) |

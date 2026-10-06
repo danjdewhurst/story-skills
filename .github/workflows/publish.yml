@@ -6,9 +6,11 @@ name: Publish
 #
 # It also builds the standalone `story` binaries, each on its own OS so it
 # can be smoke-tested there (and so macOS builds are signed as they need),
-# attests their build provenance, attaches them and a checksums file to the
-# GitHub release, and, when a HOMEBREW_TAP_DEPLOY_KEY secret is set, updates
-# the formula in danjdewhurst/homebrew-tap.
+# packs each skill as a zip for claude.ai's Skills upload (plus an
+# all-skills zip), attests the build provenance of the binaries and zips,
+# attaches them and a checksums file to the GitHub release, and, when a
+# HOMEBREW_TAP_DEPLOY_KEY secret is set, updates the formula in
+# danjdewhurst/homebrew-tap.
 on:
   push:
     tags: ["v*"]
@@ -151,6 +153,17 @@ jobs:
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
+      - name: Check out the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
       - name: Collect the archives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -158,17 +171,28 @@ jobs:
           path: dist/binaries
           merge-multiple: true
 
-      # One checksums file for every archive, in sha256sum format.
+      # One zip per skill, with the skill's folder at the top as claude.ai's
+      # Customize > Skills upload expects, plus all-skills.zip. They go beside
+      # the binaries so one checksums file and one attestation cover both.
+      - name: Pack the skill zips
+        run: node scripts/build-skill-zips.js --out dist/binaries
+
+      # One checksums file for every archive and skill zip, in sha256sum format:
+      # five binaries, one zip per skill folder, and all-skills.zip.
       - name: Write the checksums
         working-directory: dist/binaries
         run: |
           rm -f story-skills_*_checksums.txt
           version="${TAG#v}"
-          sha256sum story-skills_"$version"_* > "story-skills_${version}_checksums.txt"
-          cat "story-skills_${version}_checksums.txt"
-          [ "$(wc -l < "story-skills_${version}_checksums.txt")" -eq 5 ]
+          sums="story-skills_${version}_checksums.txt"
+          # The Windows archive matches both patterns; sort -u lists it once.
+          sha256sum story-skills_"$version"_* *.zip | LC_ALL=C sort -u -k2 > "$RUNNER_TEMP/$sums"
+          mv "$RUNNER_TEMP/$sums" "$sums"
+          cat "$sums"
+          skills="$(find ../../skills -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l)"
+          [ "$(wc -l < "$sums")" -eq "$((5 + skills + 1))" ]
 
-      # Signed SLSA build provenance for each archive and the checksums file,
+      # Signed SLSA build provenance for each archive, skill zip, and the checksums file,
       # so `gh attestation verify <file> --repo danjdewhurst/story-skills`
       # proves a download was built by this workflow from this repository.
       # The attestation names the run's ref and commit, so it is made only
@@ -181,7 +205,7 @@ jobs:
           if [ "$GITHUB_REF" = "refs/tags/$TAG" ]; then
             echo "attest=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::This run is on $GITHUB_REF, not refs/tags/$TAG, so the binaries were not attested. Re-run with: gh workflow run publish.yml --ref $TAG -f tag=$TAG"
+            echo "::warning::This run is on $GITHUB_REF, not refs/tags/$TAG, so the binaries and skill zips were not attested. Re-run with: gh workflow run publish.yml --ref $TAG -f tag=$TAG"
             echo "attest=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -189,11 +213,11 @@ jobs:
         if: steps.provenance.outputs.attest == 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/binaries/story-skills_*
+          subject-path: dist/binaries/*
 
       # `bun run release` creates the GitHub release right after pushing the
       # tag, so give it a few minutes to appear.
-      - name: Attach the binaries to the GitHub release
+      - name: Attach the binaries and skill zips to the GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

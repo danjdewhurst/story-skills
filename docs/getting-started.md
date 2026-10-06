@@ -2,6 +2,8 @@
 
 This page is for writers and developers who are new to Story Skills. It covers installing the skills in your agent, installing the optional `story` CLI, and a first session: creating a project, adding a character and a location, drafting chapter 1, and running the maintenance checks.
 
+If you write in claude.ai and don't use a terminal, [Writers: start here](writers-start-here.md) is the shorter route: download a skill as a zip and upload it to Claude.
+
 **On this page**
 
 - [What you need](#what-you-need)
@@ -102,7 +104,7 @@ For Gemini CLI, link the cloned folder instead of copying it: `gemini skills lin
 
 Copy whole folders, not just `SKILL.md`. Each skill's `references/` files, and the bundled CLI at `story-maintenance/scripts/story.js` with the `package.json` beside it, have to stay next to it.
 
-Outside coding agents, you can add a skill's `SKILL.md` and reference files to a Claude.ai or ChatGPT project as knowledge, or put them in a system prompt.
+On claude.ai, upload each skill's zip from the release page under **Customize > Skills**; [Writers: start here](writers-start-here.md) walks through it. Elsewhere, such as ChatGPT, you can add a skill's `SKILL.md` and reference files to a project as knowledge, or put them in a system prompt.
 
 ### Let your agent install it
 
