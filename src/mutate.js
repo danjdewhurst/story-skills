@@ -53,7 +53,6 @@ import { EXEMPTIONS_FILE, exemptionFile } from "./exemptions.js";
 import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
 import { projectActions } from "./report.js";
 import { MENTION_KINDS, proseRenames } from "./mentions.js";
-import { checkNames, existingNames } from "./names.js";
 import {
   STORY_SCHEMA_VERSION,
   REQUIRED_PATHS,
@@ -1286,12 +1285,11 @@ function planProseRename(project, kind, id, name) {
   if (!MENTION_KINDS.includes(kind)) {
     throw usageError(`--prose does not apply to a ${kind}: it renames a character, location, faction, artifact, system, or term in chapter prose`);
   }
-  const others = existingNames(project).filter((entry) => !(entry.kind === kind && entry.id === id));
-  const [clash] = checkNames([name], others, project.pack ?? languagePack()).errors;
-  if (clash) {
-    throw refusedError(`${clash.message}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
-  }
   const found = proseRenames(project, kind, id, name);
+  if (found.clash) {
+    const { clash } = found;
+    throw refusedError(`"${clash.name}" is already a name of ${clash.kind} ${clash.id}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
+  }
   const warnings = found.shared.length === 0 ? [] : [warn("prose-name-shared", `--prose left ${found.shared.length} ${found.shared.length === 1 ? "name" : "names"} that ${kind} ${id} shares with another entity as written: ${found.shared.map((entry) => `${entry.file}:${entry.line}:${entry.column}`).join(", ")}. Check them`)];
   return { ...found, warnings };
 }

@@ -65,7 +65,7 @@ describe("story rename --prose", () => {
     expect(fs.readFileSync(file, "utf8")).toContain("1. Edran arrives");
     expect(out).toContain("chapters/chapter-01.md:14:1: Captain Edran Vale → Captain Mara Holt\n");
     expect(out).toContain("chapters/chapter-01.md:14:29: Edran → Mara\n");
-    expect(out).toContain("chapters/chapter-01.md:15:15: Edran Vale → Mara Holt\n");
+    expect(out).toContain("chapters/chapter-01.md:15:15: Edran Vale → Mara Holt (wraps to line 16)\n");
     expect(out).toContain("Renamed 3 names in 1 chapter; left 1 alias as written\n");
   });
 
@@ -103,8 +103,8 @@ describe("story rename --prose", () => {
     const envelope = JSON.parse(real.out);
     expect(envelope.data.prose).toEqual({
       edits: [
-        { file: "chapters/chapter-01.md", line: 10, column: 1, from: "Edran Vale", to: "Mara Holt" },
-        { file: "chapters/chapter-01.md", line: 12, column: 1, from: "Edran", to: "Mara" }
+        { file: "chapters/chapter-01.md", line: 10, endLine: 10, column: 1, from: "Edran Vale", to: "Mara Holt" },
+        { file: "chapters/chapter-01.md", line: 12, endLine: 12, column: 1, from: "Edran", to: "Mara" }
       ],
       aliases: 0,
       shared: 0
@@ -147,14 +147,53 @@ describe("story rename --prose", () => {
     const before = fs.readFileSync(file, "utf8");
     const whole = invoke(root, ["rename", "character", "edran-vale", "Vale", "--prose"]);
     expect(whole.code).toBe(4);
-    expect(whole.err).toContain("\"Vale\" clashes with location vale (Vale), so --prose would give two entities one name in the text");
+    expect(whole.err).toContain("\"Vale\" is already a name of location vale, so --prose would give two entities one name in the text");
     const given = invoke(root, ["rename", "character", "edran-vale", "Ann Marsh", "--prose"]);
     expect(given.code).toBe(4);
-    expect(given.err).toContain("clashes with character ann-lee");
+    expect(given.err).toContain("\"Ann\" is already a name of character ann-lee");
     expect(fs.readFileSync(file, "utf8")).toBe(before);
     expect(fs.existsSync(path.join(root, "characters", "edran-vale.md"))).toBe(true);
     // Without --prose the name is the writer's call, as before.
     expect(invoke(root, ["rename", "character", "edran-vale", "Ann Marsh"]).code).toBe(0);
+  });
+
+  test("refuses a name the prose would share with a cut character or with another name's title-less form", () => {
+    const root = project();
+    writeMarkdown(path.join(root, "characters", "old-tom.md"), "name: Tom Reed\nrole: minor\nstatus: cut\naliases:\n  - Tommo", "\n# Tom\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "the-deep.md"), "name: The Deep\ntype: sea", "\n# The Deep\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "the-hollow.md"), "name: The Hollow\ntype: valley", "\n# The Hollow\n");
+    chapter(root, 1, "Edran nodded.");
+    const cut = invoke(root, ["rename", "character", "edran-vale", "Tommo", "--prose"]);
+    expect(cut.code).toBe(4);
+    expect(cut.err).toContain("\"Tommo\" is already a name of character old-tom");
+    // "Old" is a title word, so the prose would also call it "Deep".
+    const stripped = invoke(root, ["rename", "location", "the-hollow", "Old Deep", "--prose"]);
+    expect(stripped.code).toBe(4);
+    expect(stripped.err).toContain("\"Deep\" is already a name of location the-deep");
+  });
+
+  test("allows a name whose unchanged given name, or first word, another entity shares", () => {
+    const root = project();
+    character(root, "ann-lee", "name: Ann Lee");
+    character(root, "ann-moss", "name: Ann Moss");
+    character(root, "mara-holt", "name: Mara Holt");
+    const file = chapter(root, 1, "Ann Lee waved from Vale.");
+    expect(invoke(root, ["rename", "character", "ann-lee", "Ann Leigh", "--prose"]).code).toBe(0);
+    expect(invoke(root, ["rename", "location", "vale", "Mara Point", "--prose"]).code).toBe(0);
+    expect(prose(file)).toBe("Ann Leigh waved from Mara Point.\n");
+  });
+
+  test("never doubles a title the prose adds, and does not lower-case a new name that drops an article", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Titles", force: false });
+    character(root, "edran-vale", "name: Edran Vale");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "hollow.md"), "name: Hollow\ntype: valley", "\n# Hollow\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "the-marsh.md"), "name: The Marsh\ntype: fen", "\n# The Marsh\n");
+    const file = chapter(root, 1, "Captain Edran Vale crossed the Hollow and the Marsh.");
+    expect(invoke(root, ["rename", "character", "edran-vale", "Captain Mara Holt", "--prose"]).code).toBe(0);
+    expect(invoke(root, ["rename", "location", "hollow", "The Deep", "--prose"]).code).toBe(0);
+    expect(invoke(root, ["rename", "location", "the-marsh", "Fenwick", "--prose"]).code).toBe(0);
+    expect(prose(file)).toBe("Captain Mara Holt crossed the Deep and Fenwick.\n");
   });
 
   test("leaves a name two entities share as written, with a warning", () => {

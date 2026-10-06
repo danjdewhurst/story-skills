@@ -1146,14 +1146,15 @@ function reportImportNotes(io, result) {
 }
 
 // rename --prose: each name replaced in chapter prose, as file:line:column,
-// then a count. A name wrapped across lines prints on one.
+// then a count. A name wrapped across lines prints on one, with the last
+// line it changed.
 function formatProseRenames(result) {
   if (!result.prose) {
     return "";
   }
   const { edits, aliases } = result.prose;
   const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
-  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}\n`);
+  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}${edit.endLine > edit.line ? ` (wraps to line ${edit.endLine})` : ""}\n`);
   const files = new Set(edits.map((edit) => edit.file)).size;
   const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
   return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}\n`;
