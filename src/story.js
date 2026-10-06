@@ -773,11 +773,13 @@ export function listReport(root, kind, where = []) {
   return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where) };
 }
 
-// Mermaid source for one diagram kind, printed or written to --out.
+// Mermaid source for one diagram kind, printed or written to --out, with
+// the nodes and edges (and, for the timeline, groups) it was drawn from.
 export function diagramProject(root, options = {}) {
   const project = scanProject(root);
-  const text = buildDiagram(project, options.kind);
-  const result = { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], text };
+  const diagram = buildDiagram(project, options.kind);
+  const { text } = diagram;
+  const result = { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...diagram };
   // A diagram drawn from a partly unreadable project would silently drop
   // entities, so nothing is written until the scan is clean.
   if (options.out === undefined || !result.ok) {

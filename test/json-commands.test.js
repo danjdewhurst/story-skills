@@ -119,7 +119,8 @@ describe("--json on names, compare, passes, diagram, and synopsis", () => {
   test("diagram and synopsis give their text and the file --out wrote", () => {
     const root = path.join(examplesRoot, "the-unraveled-thread");
     const diagram = invokeJson(root, ["diagram", "arcs", "--json"]).envelope;
-    expect(diagram.data).toEqual({ kind: "arcs", text: invoke(root, ["diagram", "arcs"]).out, outFile: null, dryRun: false, changes: [] });
+    expect(diagram.data).toEqual({ kind: "arcs", text: invoke(root, ["diagram", "arcs"]).out, nodes: expect.any(Array), edges: expect.any(Array), outFile: null, dryRun: false, changes: [] });
+    expect(diagram.data.nodes.filter((node) => node.kind === "arc").map((node) => node.id)).toEqual(["the-ledger-trail"]);
     const synopsis = invokeJson(root, ["synopsis", "--json"]).envelope;
     expect(synopsis.data.text).toBe(invoke(root, ["synopsis"]).out);
     expect(synopsis.data).toMatchObject({ title: "The Unraveled Thread", pages: 1, budget: 500, outFile: null });

@@ -1,0 +1,13 @@
+flowchart LR
+  chapter_01["1. The Ledger in the Ash"]
+  chapter_02["2. The Millpond"]
+  chapter_03["3. The Dry Side of Mill Row"]
+  chapter_04["4. The Lock Gate"]
+  chapter_01 ~~~ chapter_02
+  chapter_02 ~~~ chapter_03
+  chapter_03 ~~~ chapter_04
+  chapter_01 -->|"Edran's Margin Notes"| chapter_04
+  chapter_03 -->|"The Burned Page"| chapter_04
+  chapter_02 -.->|"The Constable's Silence (red herring)"| unrevealed(("not yet revealed"))
+  classDef open stroke-dasharray: 4 4
+  class unrevealed open

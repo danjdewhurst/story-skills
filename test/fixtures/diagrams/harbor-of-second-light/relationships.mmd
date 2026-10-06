@@ -1,0 +1,9 @@
+flowchart LR
+  ilya_venn["Councillor Ilya Venn"]
+  mara_quill["Mara Quill"]
+  theo_quill["Theo Quill"]
+  ilya_venn -.-|"adversary"| mara_quill
+  ilya_venn -.-|"former-supervisor"| theo_quill
+  mara_quill ===|"sibling"| theo_quill
+  classDef deceased stroke-dasharray: 4 4,color:#888
+  class theo_quill deceased
