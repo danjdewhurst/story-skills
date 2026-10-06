@@ -286,8 +286,23 @@ function currentText(target) {
 // process id, which the pattern still matches.
 export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 
+// The most of the target's name the temporary name keeps, in UTF-8 bytes:
+// with the leading dot, `.story-`, the 16-character suffix, and `.tmp`, it
+// stays within the 255-byte name limit of common file systems.
+const TEMPORARY_NAME_BYTES = 255 - ".".length - ".story-".length - 16 - ".tmp".length;
+
 function temporaryPath(target) {
-  const name = path.basename(target).slice(0, 200);
+  // Cut by bytes, a whole character at a time, so a long name in a script
+  // of two- to four-byte characters still fits and stays valid text.
+  let name = "";
+  let bytes = 0;
+  for (const character of path.basename(target)) {
+    bytes += Buffer.byteLength(character, "utf8");
+    if (bytes > TEMPORARY_NAME_BYTES) {
+      break;
+    }
+    name += character;
+  }
   return path.join(path.dirname(target), `.${name}.story-${crypto.randomBytes(8).toString("hex")}.tmp`);
 }
 

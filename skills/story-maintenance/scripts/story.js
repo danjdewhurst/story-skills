@@ -252,8 +252,17 @@ function currentText(target) {
   }
 }
 var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
+var TEMPORARY_NAME_BYTES = 255 - ".".length - ".story-".length - 16 - ".tmp".length;
 function temporaryPath(target) {
-  const name = path.basename(target).slice(0, 200);
+  let name = "";
+  let bytes = 0;
+  for (const character of path.basename(target)) {
+    bytes += Buffer2.byteLength(character, "utf8");
+    if (bytes > TEMPORARY_NAME_BYTES) {
+      break;
+    }
+    name += character;
+  }
   return path.join(path.dirname(target), `.${name}.story-${crypto.randomBytes(8).toString("hex")}.tmp`);
 }
 function prepareWriteTarget(filePath, root) {

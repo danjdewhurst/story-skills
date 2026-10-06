@@ -128,7 +128,52 @@ describe("atomic writes (#190, #197)", () => {
     }
     expect(names).toHaveLength(2);
     expect(names[0]).not.toBe(names[1]);
-    expect(names.some((name) => name.includes(String(process.pid)))).toBe(false);
+    for (const name of names) {
+      const suffix = /^\.chapter\.md\.story-(.+)\.tmp$/.exec(name)?.[1];
+      expect(suffix).toMatch(/^[0-9a-f]{16}$/);
+      expect(suffix).not.toBe(String(process.pid));
+    }
+  });
+
+  test("a long name in two-byte characters keeps its temporary name within 255 bytes", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "\nThe ember woke.\n");
+    // 253 bytes: a name the file system accepts, too long to keep whole in
+    // the temporary name.
+    const name = `${"é".repeat(125)}.md`;
+    const temporary = [];
+    const original = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      temporary.push(path.basename(from));
+      return original(from, to);
+    };
+    let result;
+    try {
+      result = invoke(root, ["export", "--out", `dist/${name}`]);
+    } finally {
+      fs.renameSync = original;
+    }
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    expect(fs.lstatSync(path.join(root, "dist", name)).isFile()).toBe(true);
+    expect(temporary).toHaveLength(1);
+    // 113 whole characters (226 bytes); a 114th would pass the limit.
+    expect(temporary[0]).toMatch(new RegExp(`^\\.${"é".repeat(113)}\\.story-[0-9a-f]{16}\\.tmp$`));
+    expect(Buffer.byteLength(temporary[0], "utf8")).toBeLessThanOrEqual(255);
+  });
+
+  test("a rewrite keeps a mode the umask would have narrowed", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const dir = makeTempDir();
+    const target = path.join(dir, "chapter.md");
+    fs.writeFileSync(target, "old");
+    fs.chmodSync(target, 0o666);
+    writeFile(target, "new");
+    expect(fs.readFileSync(target, "utf8")).toBe("new");
+    expect(fs.statSync(target).mode & 0o777).toBe(0o666);
   });
 
   // Windows makes symlinks only with extra privileges.
@@ -222,7 +267,9 @@ describe("atomic writes (#190, #197)", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     fs.writeFileSync(path.join(root, "chapters", ".chapter-01.md.story-4242.tmp"), "partial");
     fs.writeFileSync(path.join(root, "chapters", ".story-687110.tmp"), "partial");
+    fs.writeFileSync(path.join(root, ".story.md.story-9f2c41d07a3b6e85.tmp"), "partial");
     const warnings = messages(validateProject(root).warnings);
+    expect(warnings).toContain(`${".story.md.story-9f2c41d07a3b6e85.tmp"} was left by an interrupted write to ${"story.md"}; delete it once the files beside it look right`);
     expect(warnings).toContain(`${"chapters/.chapter-01.md.story-4242.tmp"} was left by an interrupted write to ${"chapters/chapter-01.md"}; delete it once the files beside it look right`);
     expect(warnings).toContain(`${"chapters/.story-687110.tmp"} was left by an interrupted write; delete it once the files beside it look right`);
   });
