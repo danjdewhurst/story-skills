@@ -147,7 +147,7 @@ describe("story check", () => {
     expect(invoke(root, ["check"]).code).toBe(1);
     fs.writeFileSync(storyFile, original.replace(/^---\n/, "---\ncli-defaults:\n  - command: check\n    strict: true\n"), "utf8");
     expect(invoke(root, ["check"]).code).toBe(1);
-    expect(invoke(root, ["check", "--strict", "false"]).code).toBe(0);
+    expect(invoke(root, ["check", "--strict=false"]).code).toBe(0);
   });
 
   test("still runs while story.md severity is invalid, and reports it", () => {

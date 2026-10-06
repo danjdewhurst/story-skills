@@ -132,12 +132,12 @@ story build . --format metadata
    `references/copyright-page.md`:
 
    ```shell
-   story add matter "Copyright" --order 0 --heading false
+   story add matter "Copyright" --order 0 --heading=false
    ```
 
    Use an `order` lower than every other front page so it sits first
    (behind the title page); `story add matter` otherwise takes the next
-   free number. `--heading false` writes `heading: false` (on an existing
+   free number. `--heading=false` writes `heading: false` (on an existing
    page, edit its `heading:` key rather than adding a second one). Without this page, every build
    except Shunn generates a minimal one from `copyright`; write it by hand when the book needs credits, permissions,
    or a Library of Congress line.

@@ -11394,7 +11394,7 @@ var OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
   { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
-  { name: "baseline", help: ["Compare prose with style-sheet.md samples of your", "own writing (on when samples are listed; --baseline", "false turns it off)"] },
+  { name: "baseline", help: ["Compare prose with style-sheet.md samples of your", "own writing (on when samples are listed;", "--baseline=false turns it off)"] },
   { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
   { name: "min-words", value: "<n>", help: ["Shortest shared run of words similarity reports", "(default 8, at least 5)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
@@ -11447,7 +11447,7 @@ var OPTIONS = [
   { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
-  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
+  { name: "heading", help: ["Print the page title for add matter;", "--heading=false for a dedication or epigraph"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
   { name: "sources", value: "<texts>", repeatable: true, aliasOf: "source" },
   { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
@@ -11574,10 +11574,8 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
         continue;
       }
       const nextToken = argv[index + 1];
-      if (isBooleanLiteralToken(nextToken)) {
-        addOption(options, key, nextToken);
-        index += 1;
-        continue;
+      if (nextToken === "true" || nextToken === "false") {
+        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${nextToken} to set the flag, or put ${nextToken} after -- to keep it as an argument`);
       }
       addOption(options, key, true);
       continue;
@@ -29317,7 +29315,7 @@ function projectConfig(command, root) {
 function configuredHint(error, configured) {
   const message = String(error?.message);
   const named = configured.filter(([key, value]) => message.includes(`--${key}`) || typeof value === "string" && message.includes(value));
-  return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => value === true ? `--${key}` : `--${key} ${value}`).join(", ")})`;
+  return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => value === true ? `--${key}` : value === false ? `--${key}=false` : `--${key} ${value}`).join(", ")})`;
 }
 function commandWord(argv) {
   for (let index = 0;index < argv.length; index += 1) {
@@ -29339,8 +29337,7 @@ function jsonRequested(argv) {
   for (let index = 0;index < argv.length && argv[index] !== "--"; index += 1) {
     const arg = argv[index];
     if (arg === "--json") {
-      const next = argv[index + 1];
-      requested = isBooleanLiteralToken(next) ? isTruthy(next) : true;
+      requested = true;
     } else if (arg.startsWith("--json=")) {
       requested = isTruthy(arg.slice("--json=".length)) || !isBooleanLiteralToken(arg.slice("--json=".length).trim());
     }

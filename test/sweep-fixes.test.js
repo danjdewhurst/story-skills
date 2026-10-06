@@ -1161,9 +1161,9 @@ describe("round six", () => {
     expect(scanProject(first).story.data.series).toBe("tides");
   });
 
-  test("add matter --heading false makes a page without a title", () => {
+  test("add matter --heading=false makes a page without a title", () => {
     const root = newProject();
-    const result = invoke(path.dirname(root), ["add", "matter", "Dedication", "--heading", "false", "--path", root]);
+    const result = invoke(path.dirname(root), ["add", "matter", "Dedication", "--heading=false", "--path", root]);
     expect(result.code).toBe(0);
     expect(fs.readFileSync(path.join(root, "matter", "dedication.md"), "utf8")).toContain("heading: false");
   });

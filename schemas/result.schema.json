@@ -910,7 +910,7 @@
         "styleSheet": { "type": "boolean" },
         "baseline": {
           "type": ["object", "null"],
-          "description": "The profile built from style-sheet.md samples, or null when there are none or --baseline false.",
+          "description": "The profile built from style-sheet.md samples, or null when there are none or --baseline=false.",
           "required": ["samples", "words", "narrationWords", "sentences", "paragraphMean", "dialogueShare", "filterPerThousand", "adverbsPerThousand", "signatureWords", "usable"],
           "properties": {
             "samples": { "type": "array", "items": { "type": "string" }, "description": "Each sample document, relative to the project folder." },

@@ -1591,7 +1591,7 @@ function matterFile(project, title, options) {
       throw usageError(`matter order must be a non-negative integer, got ${options.order}`);
     }
   }
-  // --heading false suits a dedication or epigraph, which prints no title.
+  // --heading=false suits a dedication or epigraph, which prints no title.
   const heading = options.heading === undefined ? true : isTruthy(options.heading);
   return `${stringifyFrontmatter({ title, placement, order, heading })}# ${title}
 

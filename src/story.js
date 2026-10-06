@@ -961,7 +961,7 @@ function lintProse(label, title, prose, rules, thresholds, profile, warnings, sa
 }
 
 // The profile of the author's own prose, from the style sheet's `samples`:
-// on whenever samples are listed, unless --baseline false turns it off.
+// on whenever samples are listed, unless --baseline=false turns it off.
 // --baseline with no samples is a usage error, since there is nothing to
 // compare with. A chapter of this project named on its own is a sample; its
 // real path goes into `sampled`, so the report does not judge it.

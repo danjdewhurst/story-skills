@@ -64,7 +64,7 @@ export const OPTIONS = [
   { name: "done", value: "<pass>", help: ["Mark a revision pass done for passes"] },
   { name: "max-filter-words", value: "<n>", help: ["Warn above n filter words per 1,000 narration", "words for prose (default 10)"] },
   { name: "max-adverbs", value: "<n>", help: ["Warn above n -ly adverbs per 1,000 narration", "words for prose (default 12)"] },
-  { name: "baseline", help: ["Compare prose with style-sheet.md samples of your", "own writing (on when samples are listed; --baseline", "false turns it off)"] },
+  { name: "baseline", help: ["Compare prose with style-sheet.md samples of your", "own writing (on when samples are listed;", "--baseline=false turns it off)"] },
   { name: "max-bookisms", value: "<n>", help: ["Warn above n said-bookism tags in a chapter for", "prose (default 2)"] },
   { name: "min-words", value: "<n>", help: ["Shortest shared run of words similarity reports", "(default 8, at least 5)"] },
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
@@ -117,7 +117,7 @@ export const OPTIONS = [
   { name: "act", value: "<name>", repeatable: true, aliasOf: "acts" },
   { name: "placement", value: "<front|back>", help: ["Placement for add matter (default front)"] },
   { name: "order", value: "<n>", help: ["Order within its placement for add matter"] },
-  { name: "heading", help: ["Print the page title for add matter; --heading", "false for a dedication or epigraph"] },
+  { name: "heading", help: ["Print the page title for add matter;", "--heading=false for a dedication or epigraph"] },
   { name: "source", value: "<text>", repeatable: true, help: ["Source for add research; repeatable"] },
   { name: "sources", value: "<texts>", repeatable: true, aliasOf: "source" },
   { name: "used-in", value: "<chapter-id>", repeatable: true, help: ["Chapter that relies on add research; repeatable"] },
@@ -279,13 +279,13 @@ export function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.nam
         addOption(options, key, inlineValue);
         continue;
       }
-      // Accept a space-separated boolean literal (`--force false`) so it is
-      // not mistaken for a positional; anything else stays positional.
+      // A flag takes a value only as --flag=value, so the next word stays an
+      // argument: `add chapter --dry-run No Way Back` previews "No Way Back".
+      // A bare true or false there is the old `--flag false` form, refused
+      // rather than read as a title word or a project path.
       const nextToken = argv[index + 1];
-      if (isBooleanLiteralToken(nextToken)) {
-        addOption(options, key, nextToken);
-        index += 1;
-        continue;
+      if (nextToken === "true" || nextToken === "false") {
+        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${nextToken} to set the flag, or put ${nextToken} after -- to keep it as an argument`);
       }
       addOption(options, key, true);
       continue;

@@ -162,7 +162,7 @@ function projectConfig(command, root) {
 function configuredHint(error, configured) {
   const message = String(error?.message);
   const named = configured.filter(([key, value]) => message.includes(`--${key}`) || (typeof value === "string" && message.includes(value)));
-  return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => (value === true ? `--${key}` : `--${key} ${value}`)).join(", ")})`;
+  return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => (value === true ? `--${key}` : value === false ? `--${key}=false` : `--${key} ${value}`)).join(", ")})`;
 }
 
 // The command word, read from the raw arguments so it is known even when
@@ -192,9 +192,8 @@ function jsonRequested(argv) {
   for (let index = 0; index < argv.length && argv[index] !== "--"; index += 1) {
     const arg = argv[index];
     if (arg === "--json") {
-      // As parseArgs reads it: a boolean literal after the flag is its value.
-      const next = argv[index + 1];
-      requested = isBooleanLiteralToken(next) ? isTruthy(next) : true;
+      // A flag takes a value only as --json=value, as parseArgs reads it.
+      requested = true;
     } else if (arg.startsWith("--json=")) {
       // An invalid value (--json=maybe) is a parse error, reported as JSON.
       requested = isTruthy(arg.slice("--json=".length)) || !isBooleanLiteralToken(arg.slice("--json=".length).trim());

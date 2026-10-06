@@ -124,19 +124,45 @@ describe("cli", () => {
     expect(parseArgs(["init", "A", "--force=yes"]).options).toEqual({ force: true });
   });
 
-  test("consumes space-separated boolean literals without swallowing positionals", () => {
-    expect(parseArgs(["init", "A", "--force", "false"])).toEqual({
-      positionals: ["init", "A"],
-      options: { force: false }
+  test("a boolean flag takes a value only as --flag=value, never the next word (#549)", () => {
+    expect(parseArgs(["add", "chapter", "--dry-run", "No", "Way", "Back"])).toEqual({
+      positionals: ["add", "chapter", "No", "Way", "Back"],
+      options: { "dry-run": true }
     });
-    expect(parseArgs(["init", "A", "--force", "off"])).toEqual({
-      positionals: ["init", "A"],
-      options: { force: false }
+    expect(parseArgs(["init", "--force", "On", "the", "Road"])).toEqual({
+      positionals: ["init", "On", "the", "Road"],
+      options: { force: true }
     });
-    expect(parseArgs(["wordcount", "--write", "my-story"])).toEqual({
-      positionals: ["wordcount", "my-story"],
-      options: { write: true }
+    for (const word of ["yes", "no", "on", "off", "1", "0", "True", "FALSE"]) {
+      expect(parseArgs(["init", "--force", word]).positionals).toEqual(["init", word]);
+    }
+    // The old `--flag false` form is refused rather than read as a title word.
+    expect(() => parseArgs(["init", "A", "--force", "false"])).toThrow("--force false is ambiguous: write --force=false to set the flag, or put false after -- to keep it as an argument");
+    expect(() => parseArgs(["check", "--strict", "true"])).toThrow("--strict true is ambiguous: write --strict=true");
+    expect(parseArgs(["init", "--force", "--", "false", "start"])).toEqual({
+      positionals: ["init", "false", "start"],
+      options: { force: true }
     });
+  });
+
+  test("a dry run with a title that starts with a boolean word writes nothing (#549)", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Tide"]).code).toBe(0);
+    const root = path.join(cwd, "tide");
+    const preview = invoke(root, ["add", "chapter", "--dry-run", "No", "Way", "Back"]);
+    expect(preview.code).toBe(0);
+    expect(preview.out).toContain("create  chapters/chapter-01.md");
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-01.md"))).toBe(false);
+    const refused = invoke(root, ["add", "matter", "Dedication", "--heading", "false"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("write --heading=false");
+    expect(fs.existsSync(path.join(root, "matter", "dedication-false.md"))).toBe(false);
+    expect(invoke(cwd, ["init", "--force", "On", "the", "Road"]).code).toBe(0);
+    expect(fs.readFileSync(path.join(cwd, "on-the-road", "story.md"), "utf8")).toContain("title: On the Road");
+    // --json is on whatever follows it, so the refusal is a JSON envelope.
+    const json = invoke(root, ["validate", "--json", "false"]);
+    expect(json.code).toBe(2);
+    expect(JSON.parse(json.out).diagnostics[0].message).toContain("--json false is ambiguous");
   });
 
   test("isTruthy coerces strings, arrays, and misc values", () => {
