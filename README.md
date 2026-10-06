@@ -130,12 +130,12 @@ The optional `story` CLI handles deterministic project maintenance while the ski
 
 ```shell
 npx story-skills --help
-npm install -g story-skills   # then: story --help
+npm install -g story-skills   # then: story --help (Windows too)
 ```
 
 To try unreleased changes, run it straight from GitHub with `npx --yes --package github:danjdewhurst/story-skills story --help`.
 
-**Without Node.** Releases after 0.17.0 attach a standalone `story` binary for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Install it with Homebrew on macOS or Linux, or download the archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases), check it against the release's `story-skills_<version>_checksums.txt`, and put `story` on your `PATH` ([details](docs/getting-started.md#install-the-story-cli)):
+**Without Node.** Releases after 0.17.0 attach a standalone `story` binary for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Install it with Homebrew on macOS or Linux, or, on any system including Windows, download the archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases), check it against the release's `story-skills_<version>_checksums.txt`, and put `story` on your `PATH` ([details](docs/getting-started.md#install-the-story-cli)):
 
 ```shell
 brew install danjdewhurst/tap/story-skills   # then: story --help

@@ -133,7 +133,7 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 |--------|---------|
 | Run without installing (npm) | `npx story-skills --help` |
 | Run without installing (Bun) | `bunx story-skills --help` |
-| Install globally | `npm install -g story-skills`, then `story --help` |
+| Install globally (any system, Windows included) | `npm install -g story-skills`, then `story --help` |
 | Without Node: Homebrew (macOS, Linux) | `brew install danjdewhurst/tap/story-skills`, then `story --help` |
 | Without Node: download a binary | The archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases) |
 | Try unreleased changes from GitHub | `npx --yes --package github:danjdewhurst/story-skills story --help` |
@@ -153,7 +153,27 @@ Releases after 0.21.0 also carry a signed build provenance attestation for each 
 gh attestation verify story-skills_<version>_<os>_<arch>.tar.gz --repo danjdewhurst/story-skills
 ```
 
-Unpack it and put `story` somewhere on your `PATH`. On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The Linux binaries need glibc, so on Alpine and other musl systems use the npm package instead. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
+For Windows, pass the `.zip` in place of the `.tar.gz`. Without `sha256sum`, check the zip in PowerShell; `-eq` ignores case, so the lowercase hash in the checksums file matches the uppercase one `Get-FileHash` prints:
+
+```powershell
+$zip = "story-skills_<version>_windows_x64.zip"
+$line = Select-String -Path "story-skills_<version>_checksums.txt" -Pattern $zip -SimpleMatch
+(Get-FileHash $zip -Algorithm SHA256).Hash -eq ($line.Line -split "\s+")[0]   # True if it matches
+```
+
+Unpack it and put `story` somewhere on your `PATH`. On Windows, this PowerShell unpacks `story.exe` into a folder in your user profile and adds that folder to your user `PATH`; open a new terminal afterwards. `story.exe` is not code-signed, so SmartScreen or your antivirus may warn about it; `Unblock-File` clears the downloaded-file mark SmartScreen checks, so run it only once the checksum matches. Instead of the last four lines, you can add the folder in Settings: search for "Edit environment variables for your account" and add it to `Path`.
+
+```powershell
+Unblock-File $zip
+$dir = "$env:LOCALAPPDATA\Programs\story-skills"
+Expand-Archive $zip -DestinationPath $dir -Force
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if (($userPath -split ";") -notcontains $dir) {
+  [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User")
+}
+```
+
+On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The Linux binaries need glibc, so on Alpine and other musl systems use the npm package instead. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
 
 Check the installed version:
 
