@@ -180,7 +180,8 @@ export function createStoryProject(options) {
     throw refusedError(`Refusing to use symlinked project directory: ${root}`);
   }
   if (fs.existsSync(root) && !options.force) {
-    throw refusedError(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
+    // import --force does more than init --force, so it says what.
+    throw refusedError(`${root} already exists. ${options.forceHint ?? "Use --force to add missing starter files; existing files are never overwritten."}`);
   }
   // A project inside another project would be scanned, renamed, and removed
   // through by the outer one, so books sit side by side instead.
