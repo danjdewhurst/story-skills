@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { chapterChronology } from "../src/chronology.js";
+import { chapterChronology, chronologyFrom } from "../src/chronology.js";
 import { entityStateAt, formatStateChanges, sortProgressions, validateProgressions } from "../src/progressions.js";
 import {
   createStoryProject,
@@ -88,7 +88,7 @@ const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const read = (root, ...parts) => fs.readFileSync(path.join(root, ...parts), "utf8");
 
 describe("entityStateAt", () => {
-  const chronology = { numbers: new Map([["chapter-01", 1], ["chapter-02", 2], ["chapter-03", 3]]), after: (later, earlier) => chronology.numbers.get(later) > chronology.numbers.get(earlier) };
+  const chronology = chronologyFrom(new Map([["chapter-01", 1], ["chapter-02", 2], ["chapter-03", 3]]), new Map());
   const data = {
     name: "Mara",
     status: "alive",
@@ -130,7 +130,7 @@ describe("entityStateAt", () => {
   });
 
   test("uses story time for dated chapters", () => {
-    const dated = { numbers: chronology.numbers, after: (later, earlier) => ({ "chapter-01": 3, "chapter-02": 1, "chapter-03": 2 })[later] > ({ "chapter-01": 3, "chapter-02": 1, "chapter-03": 2 })[earlier] };
+    const dated = chronologyFrom(chronology.numbers, new Map([["chapter-01", 3], ["chapter-02", 1], ["chapter-03", 2]]));
     // chapter-01 is a flash-forward: both changes have happened by then.
     expect(entityStateAt(data, "chapter-01", dated).state.status).toBe("found");
   });
@@ -156,7 +156,7 @@ describe("entityStateAt", () => {
 });
 
 describe("validateProgressions", () => {
-  const chronology = { numbers: new Map([["chapter-01", 1], ["chapter-02", 2], ["chapter-03", 3]]), after: (later, earlier) => chronology.numbers.get(later) > chronology.numbers.get(earlier) };
+  const chronology = chronologyFrom(new Map([["chapter-01", 1], ["chapter-02", 2], ["chapter-03", 3]]), new Map());
   const rules = { lists: new Set(["tags"]), enums: new Map([["status", new Set(["alive", "missing"])]]) };
   const check = (progressions) => {
     const errors = [];
@@ -427,7 +427,7 @@ progressions:
   });
 
   test("sortProgressions orders by story time and keeps unknown chapters last", () => {
-    const chronology = { numbers: new Map([["chapter-01", 1], ["chapter-02", 2]]), after: (later, earlier) => chronology.numbers.get(later) > chronology.numbers.get(earlier) };
+    const chronology = chronologyFrom(new Map([["chapter-01", 1], ["chapter-02", 2]]), new Map());
     const list = [{ from: "typo" }, { from: "chapter-02", field: "a" }, "junk", { from: "chapter-01" }, { from: "chapter-02", field: "b" }];
     expect(sortProgressions(list, chronology)).toEqual([{ from: "chapter-01" }, { from: "chapter-02", field: "a" }, { from: "chapter-02", field: "b" }, { from: "typo" }, "junk"]);
   });

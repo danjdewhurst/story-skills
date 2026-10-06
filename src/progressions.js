@@ -1,3 +1,4 @@
+import { plannedChapterNumber } from "./chronology.js";
 import { idText } from "./continuity.js";
 import { usageError } from "./exit-codes.js";
 import { err } from "./findings.js";
@@ -46,11 +47,7 @@ function setOwn(target, key, value) {
 // chapter not written yet, the number in its planned `chapter-NN` id. NaN
 // for anything else.
 function chapterPosition(chronology, id) {
-  if (chronology.numbers.has(id)) {
-    return chronology.numbers.get(id);
-  }
-  const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+  return chronology.numbers.has(id) ? chronology.numbers.get(id) : plannedChapterNumber(id);
 }
 
 // True when chapter `later` comes strictly after `earlier` in story time.
@@ -74,23 +71,6 @@ export function happensAtOrBefore(chronology, earlier, later) {
   return !happensAfter(chronology, earlier, later);
 }
 
-// Story order for sorting: -1, 0, or 1. In a branching book, where chapters
-// on sibling branches have no order, two written chapters compare by date
-// when both are dated on different days and otherwise by the chronology's
-// total reading order, so the sort never mixes path order with a fallback
-// that could disagree with it.
-function storyCompare(chronology, left, right) {
-  if (chronology.rank && chronology.numbers.has(left) && chronology.numbers.has(right)) {
-    const leftDays = chronology.days.get(left);
-    const rightDays = chronology.days.get(right);
-    if (leftDays !== undefined && rightDays !== undefined && leftDays !== rightDays) {
-      return leftDays > rightDays ? 1 : -1;
-    }
-    return Math.sign(chronology.rank(left) - chronology.rank(right));
-  }
-  return happensAfter(chronology, left, right) ? 1 : happensAfter(chronology, right, left) ? -1 : 0;
-}
-
 // A `progressions` list in story order, stable, so entries from the same
 // chapter keep their file order. Entries with no known chapter keep their
 // place relative to each other at the end. Used by `story move chapter`,
@@ -102,7 +82,7 @@ export function sortProgressions(list, chronology) {
     const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
     (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
   }
-  known.sort((left, right) => storyCompare(chronology, left.from, right.from));
+  known.sort((left, right) => chronology.compare(left.from, right.from));
   return [...known, ...unknown].map((entry) => entry.item);
 }
 
@@ -129,7 +109,7 @@ export function entityStateAt(data, atChapterId, chronology) {
     .map(progressionEntry)
     .filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && happensAtOrBefore(chronology, entry.from, atChapterId));
   // Stable, so entries from the same chapter keep their file order.
-  entries.sort((left, right) => storyCompare(chronology, left.from, right.from));
+  entries.sort((left, right) => chronology.compare(left.from, right.from));
   const changes = [];
   for (const entry of entries) {
     changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });

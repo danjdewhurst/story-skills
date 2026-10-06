@@ -7956,11 +7956,7 @@ function setOwn(target, key, value) {
   Object.defineProperty(target, key, { value, enumerable: true, configurable: true, writable: true });
 }
 function chapterPosition(chronology, id) {
-  if (chronology.numbers.has(id)) {
-    return chronology.numbers.get(id);
-  }
-  const match = /^chapter-(\d+)$/.exec(id);
-  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+  return chronology.numbers.has(id) ? chronology.numbers.get(id) : plannedChapterNumber(id);
 }
 function happensAfter(chronology, later, earlier) {
   if (chronology.numbers.has(later) && chronology.numbers.has(earlier)) {
@@ -7974,17 +7970,6 @@ function happensAtOrBefore(chronology, earlier, later) {
   }
   return !happensAfter(chronology, earlier, later);
 }
-function storyCompare(chronology, left, right) {
-  if (chronology.rank && chronology.numbers.has(left) && chronology.numbers.has(right)) {
-    const leftDays = chronology.days.get(left);
-    const rightDays = chronology.days.get(right);
-    if (leftDays !== undefined && rightDays !== undefined && leftDays !== rightDays) {
-      return leftDays > rightDays ? 1 : -1;
-    }
-    return Math.sign(chronology.rank(left) - chronology.rank(right));
-  }
-  return happensAfter(chronology, left, right) ? 1 : happensAfter(chronology, right, left) ? -1 : 0;
-}
 function sortProgressions(list, chronology) {
   const known = [];
   const unknown = [];
@@ -7992,7 +7977,7 @@ function sortProgressions(list, chronology) {
     const from = item && typeof item === "object" && !Array.isArray(item) ? idText(item.from) : "";
     (Number.isNaN(chapterPosition(chronology, from)) ? unknown : known).push({ item, from });
   }
-  known.sort((left, right) => storyCompare(chronology, left.from, right.from));
+  known.sort((left, right) => chronology.compare(left.from, right.from));
   return [...known, ...unknown].map((entry) => entry.item);
 }
 function entityStateAt(data, atChapterId, chronology) {
@@ -8006,7 +7991,7 @@ function entityStateAt(data, atChapterId, chronology) {
     }
   }
   const entries = (Array.isArray(data?.progressions) ? data.progressions : []).map(progressionEntry).filter((entry) => entry !== null && !Number.isNaN(chapterPosition(chronology, entry.from)) && happensAtOrBefore(chronology, entry.from, atChapterId));
-  entries.sort((left, right) => storyCompare(chronology, left.from, right.from));
+  entries.sort((left, right) => chronology.compare(left.from, right.from));
   const changes = [];
   for (const entry of entries) {
     changes.push({ field: entry.field, value: entry.value, from: entry.from, previous: Object.hasOwn(state, entry.field) ? state[entry.field] : undefined });
@@ -8133,9 +8118,9 @@ function progressionDeathFrom(character, chapterId, chronology) {
   return deadFrom;
 }
 function characterLifeline(character, bookChronology) {
-  const chronology = bookChronology.linear ?? bookChronology;
+  const chronology = orderedChronology(bookChronology);
   const status = String(character.status ?? "");
-  const chapters = storyOrder(chronology);
+  const chapters = chronology.order;
   if (chapters.length === 0 || character.diedIn && !chronology.numbers.has(character.diedIn)) {
     const dead = status === "deceased";
     return { deadAtStart: dead, deadAtEnd: dead, events: [] };
@@ -8163,11 +8148,8 @@ function characterLifeline(character, bookChronology) {
   return { deadAtStart, deadAtEnd: dead, events };
 }
 function revivedBy(lifeline, chapterId, bookChronology) {
-  const chronology = bookChronology.linear ?? bookChronology;
+  const chronology = orderedChronology(bookChronology);
   return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
-}
-function storyOrder(chronology) {
-  return [...chronology.numbers.keys()].sort((left, right) => chronology.numbers.get(left) - chronology.numbers.get(right) || (left < right ? -1 : left > right ? 1 : 0)).sort((left, right) => chronology.after(left, right) ? 1 : chronology.after(right, left) ? -1 : 0);
 }
 
 // src/unicode.js
@@ -15026,7 +15008,7 @@ function goneWindows(project, context) {
   }
   const windows = [];
   for (const [artifact, history] of histories) {
-    history.sort((left, right) => compareSince(left.since, right.since, context));
+    history.sort((left, right) => (right.since === "") - (left.since === "") || (left.since === "" ? 0 : context.chronology.compare(left.since, right.since)));
     let open = null;
     for (const entry of history) {
       if (entry.gone && open === null) {
@@ -15573,17 +15555,18 @@ function pathChronology(linear, passages) {
       }
     }
   }
+  const plannedRank = (number) => Math.max(-1, ...ids.filter((id) => numbers.get(id) < number).map((id) => rank.get(id))) + number / (number + 1);
   return {
     numbers,
     days,
     branching: true,
     after,
+    compare: storyOrder(days, (id) => rank.has(id) ? rank.get(id) : plannedRank(plannedChapterNumber(id))),
     atOrBefore: (earlier, later) => earlier === later || after(later, earlier),
     readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && (earlier === later || readAfter(later, earlier)),
     readAfter: (later, earlier) => numbers.has(later) && numbers.has(earlier) && readAfter(later, earlier),
     placed,
-    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to),
-    rank: (id) => rank.get(id)
+    reachesAvoiding: (from, to, avoid) => reach(from, avoid).has(to)
   };
 }
 function chronologyFrom(numbers, days) {
@@ -15601,8 +15584,40 @@ function chronologyFrom(numbers, days) {
     branching: false,
     after,
     atOrBefore: (earlier, later) => !after(earlier, later),
-    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later)
+    readBy: (earlier, later) => numbers.has(earlier) && numbers.has(later) && numbers.get(earlier) <= numbers.get(later),
+    compare: storyOrder(days, (id) => numbers.has(id) ? numbers.get(id) : plannedChapterNumber(id))
   };
+}
+function plannedChapterNumber(id) {
+  const match = /^chapter-(\d+)$/.exec(id);
+  return match && Number(match[1]) > 0 ? Number(match[1]) : Number.NaN;
+}
+function storyOrder(days, position) {
+  const dated = [...days.keys()].sort((left, right) => days.get(left) - days.get(right) || position(left) - position(right) || (left < right ? -1 : left > right ? 1 : 0));
+  const keys = new Map;
+  let reached = -Infinity;
+  for (const [index, id] of dated.entries()) {
+    reached = Math.max(reached, position(id));
+    keys.set(id, [reached, 1, index]);
+  }
+  const key = (id) => keys.get(id) ?? [position(id), 0, id];
+  return (left, right) => {
+    const leftKey = key(left);
+    const rightKey = key(right);
+    const index = leftKey.findIndex((value, at) => value !== rightKey[at]);
+    return index === -1 ? 0 : leftKey[index] < rightKey[index] ? -1 : 1;
+  };
+}
+var ORDERED = new WeakMap;
+function orderedChronology(chronology) {
+  const base = chronology.linear ?? chronology;
+  if (!ORDERED.has(base)) {
+    const order = [...base.numbers.keys()].sort(base.compare);
+    const place = new Map(order.map((id, index) => [id, index]));
+    const after = (later, earlier) => place.get(later) > place.get(earlier);
+    ORDERED.set(base, { ...base, order, after, atOrBefore: (earlier, later) => !after(earlier, later) });
+  }
+  return ORDERED.get(base);
 }
 function knowledgeAudience(chronology, learnedIn, atChapterId) {
   if (learnedIn === "") {
