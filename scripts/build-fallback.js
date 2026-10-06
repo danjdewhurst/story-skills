@@ -25,7 +25,7 @@ export function buildFallback({ build = buildBundle, log = console.log, writeErr
     return result.status ?? 1;
   }
 
-  log(`Built ${path.relative(repoRoot, FALLBACK_PATH)}.`);
+  log(`Built ${path.relative(repoRoot, FALLBACK_PATH).split(path.sep).join("/")}.`);
   return 0;
 }
 
