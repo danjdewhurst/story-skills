@@ -75,6 +75,8 @@ import {
   MAX_SCAN_DEPTH,
   readMarkdown,
   safeRead,
+  fileErrorMessage,
+  relativePathError,
   ENTITY_SCAN_DIRS,
   asArray,
   coverImage,
@@ -214,8 +216,9 @@ export function validateProjectOf(project) {
     let markdown;
     try {
       markdown = safeRead(path.join(projectRoot, indexPath), projectRoot);
-    } catch (error) {
-      errors.push(err("unreadable-file", `${indexPath}: ${error.message}`, indexPath));
+    } catch {
+      // The registry frontmatter check reads each of these files the same
+      // way and has already reported one it could not read.
       continue;
     }
     for (const [link, file] of links) {
@@ -564,7 +567,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
         checkBodyLinkTarget(project, path.join("plot", "timeline.md"), target, errors);
       }
     } catch (error) {
-      const message = `${path.join("plot", "timeline.md")}: ${error.message}`;
+      const message = fileErrorMessage(path.join("plot", "timeline.md"), relativePathError(error, timelinePath, project.root));
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, path.join("plot", "timeline.md")));
       }
@@ -577,7 +580,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
     try {
       body = readMarkdown(arc.file, project.root).body ?? '';
     } catch (error) {
-      const message = label + ': ' + error.message;
+      const message = fileErrorMessage(label, error);
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, label));
       }
@@ -600,7 +603,7 @@ function validateMatterBodyLinks(project, errors) {
       body = readMarkdown(matter.file, project.root).body ?? "";
     } catch (error) {
       // The file changed or went missing after the scan.
-      const message = `${label}: ${error.message}`;
+      const message = fileErrorMessage(label, error);
       if (!hasMessage(errors, message)) {
         errors.push(err("unreadable-file", message, label));
       }
@@ -735,7 +738,7 @@ function readValidationData(file, root, label, errors) {
   try {
     return readMarkdown(file, root).data;
   } catch (error) {
-    const message = `${label}: ${error.message}`;
+    const message = fileErrorMessage(label, error);
     if (!hasMessage(errors, message)) {
       errors.push(err("unreadable-file", message, label));
     }

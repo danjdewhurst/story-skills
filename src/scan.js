@@ -6,6 +6,7 @@ import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
 import {
   assertSafeProjectDirectory,
   assertSafeProjectPath,
+  FILE_ERROR_REASONS,
   isPathInside,
   lstatIfExists,
   readTextFile
@@ -222,7 +223,7 @@ export function scanProject(root) {
   try {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `story.md: ${error.message}`, "story.md"));
+    scanErrors.push(err("unreadable-file", fileErrorMessage("story.md", error), "story.md"));
     story = { data: { title: path.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
@@ -234,7 +235,7 @@ export function scanProject(root) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
     } catch (error) {
-      scanErrors.push(err("unreadable-file", `${path.join("continuity", "state.md")}: ${error.message}`, path.join("continuity", "state.md")));
+      scanErrors.push(err("unreadable-file", fileErrorMessage(path.join("continuity", "state.md"), error), path.join("continuity", "state.md")));
       continuity = null;
     }
   }
@@ -1762,9 +1763,7 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     } catch (error) {
       // Every caller passes a scanErrors array, so per-file failures are
       // always collected instead of thrown.
-      // Parse errors name the absolute path; the label already names the file.
-      const message = error.message.startsWith(`${fullPath} `) ? error.message.slice(fullPath.length + 1) : error.message;
-      scanErrors.push(err("unreadable-file", `${label}: ${message}`, label));
+      scanErrors.push(err("unreadable-file", fileErrorMessage(label, error), label));
     }
   }
   return entities;
@@ -1819,7 +1818,7 @@ function readExemptions(root, scanErrors) {
   } catch (error) {
     // A refused file (a symlink, say) must not silently drop every
     // exemption, so continuity reports it like a parse error.
-    scanErrors.push(err("unreadable-file", `${path.join("continuity", "exemptions.md")}: ${relativePathError(error, exemptionsPath, root).message}`, path.join("continuity", "exemptions.md")));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(path.join("continuity", "exemptions.md"), relativePathError(error, exemptionsPath, root)), path.join("continuity", "exemptions.md")));
     return [];
   }
 
@@ -1846,7 +1845,7 @@ function readOptionalRootFile(root, name, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, rawMarkdown: markdown.rawMarkdown };
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${name}: ${error.message}`, name));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(name, error), name));
     return null;
   }
 }
@@ -1862,7 +1861,7 @@ function readStyleSheet(root, scanErrors) {
     const markdown = readMarkdown(filePath, root);
     return { file: filePath, data: markdown.data, body: markdown.body };
   } catch (error) {
-    scanErrors.push(err("unreadable-file", `${STYLE_SHEET_FILE}: ${error.message}`, STYLE_SHEET_FILE));
+    scanErrors.push(err("unreadable-file", fileErrorMessage(STYLE_SHEET_FILE, error), STYLE_SHEET_FILE));
     return null;
   }
 }
@@ -1887,10 +1886,28 @@ export function readMarkdown(filePath, root) {
 }
 
 // A refusal to read a project file (a symlink, a directory) names the file by
-// its path inside the project, so CI logs do not show home directories.
-function relativePathError(error, filePath, root) {
+// its path inside the project, so CI logs do not show home directories. A
+// file-system error (permission denied) is put in plain words after the path
+// rather than Node's "EACCES: ..., open '<path>'".
+export function relativePathError(error, filePath, root) {
   const relativePath = path.relative(root, filePath);
+  const reason = typeof error.code === "string" && error.path === filePath ? FILE_ERROR_REASONS[error.code] : undefined;
+  if (reason) {
+    return projectError(`${relativePath}: Cannot read: ${reason}`);
+  }
   return projectError(error.message.split(filePath).join(relativePath).split(path.resolve(root, relativePath)).join(relativePath));
+}
+
+// Labels a scan error with the file's project-relative path, once: a message
+// that already starts with that path (a read refusal, a non-UTF-8 file) drops
+// it rather than print it twice.
+export function fileErrorMessage(label, error) {
+  for (const prefix of [`${label}: `, `${label} `]) {
+    if (error.message.startsWith(prefix)) {
+      return `${label}: ${error.message.slice(prefix.length)}`;
+    }
+  }
+  return `${label}: ${error.message}`;
 }
 
 export function safeRead(filePath, root) {

@@ -5,6 +5,7 @@ import { failureDiagnostic, writeJsonResult } from "./json.js";
 import { formatOptionsHelp, isBooleanLiteralToken, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
+import { FILE_ERROR_REASONS } from "./files.js";
 
 export { isTruthy, parseArgs };
 
@@ -222,20 +223,6 @@ export function handleOutputError(error, proc) {
   proc.exit(1);
 }
 
-const FILE_ERROR_REASONS = {
-  EACCES: "permission denied",
-  EPERM: "permission denied",
-  ENOENT: "no such file or folder",
-  EISDIR: "it is a folder, not a file",
-  ENOTDIR: "a part of the path is not a folder",
-  EROFS: "the file system is read-only",
-  ENOSPC: "no space left on the device",
-  ENAMETOOLONG: "the name is too long",
-  EDQUOT: "the disk quota is exceeded",
-  EFBIG: "the file is too large",
-  EIO: "an input/output error",
-  EBUSY: "the file is in use"
-};
 const FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to", write: "write to", rm: "delete" };
 
 // A file-system error from Node names a syscall and an absolute path; say

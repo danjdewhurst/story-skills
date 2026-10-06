@@ -344,7 +344,7 @@ describe("#162 exemptions", () => {
     fs.mkdirSync(path.join(root, "continuity", "exemptions.md"));
     const result = checkProjectContinuity(root);
     const refusal = messages(result.errors).find((error) => error.startsWith("continuity/exemptions.md:"));
-    expect(refusal).toBe("continuity/exemptions.md: Refusing to read continuity/exemptions.md: not a regular file");
+    expect(refusal).toBe("continuity/exemptions.md: Refusing to read: not a regular file");
 
     const statePath = path.join(root, "continuity", "state.md");
     const outside = path.join(makeTempDir(), "state.md");
