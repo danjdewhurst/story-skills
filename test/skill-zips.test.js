@@ -138,6 +138,19 @@ describe("skill zips for claude.ai and release downloads (#394)", () => {
     expect(() => buildSkillZips(makeTempDir(), makeTempDir())).toThrow("no skills found");
   });
 
+  test("a rebuild removes the zip of a skill that is gone, and leaves release archives alone", () => {
+    const root = makeTempDir();
+    const out = makeTempDir();
+    writeSkill(root, "kept", { "SKILL.md": skillMd("kept") });
+    writeSkill(root, "dropped", { "SKILL.md": skillMd("dropped") });
+    buildSkillZips(root, out);
+    fs.writeFileSync(path.join(out, "story-skills_1.2.3_windows_x64.zip"), "binary");
+    fs.writeFileSync(path.join(out, "notes.txt"), "keep");
+    fs.rmSync(path.join(root, "dropped"), { recursive: true });
+    expect(buildSkillZips(root, out)).toEqual(["kept.zip", ALL_SKILLS_ZIP]);
+    expect(fs.readdirSync(out).sort()).toEqual([ALL_SKILLS_ZIP, "kept.zip", "notes.txt", "story-skills_1.2.3_windows_x64.zip"]);
+  });
+
   test("arguments take an output folder", () => {
     expect(parseArgs(["--out", "x"]).out).toBe(path.resolve("x"));
     expect(parseArgs([]).out).toBe(path.join(repoRoot, "dist", "skills"));

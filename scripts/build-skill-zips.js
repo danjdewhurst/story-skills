@@ -115,23 +115,31 @@ export function skillEntries(name, skillDir) {
   return [{ name: `${name}/`, content: Buffer.alloc(0), stored: true }, ...entries];
 }
 
-// Writes <name>.zip for every skill and all-skills.zip, and returns the file
-// names written.
+// A file name an earlier build could have written: a kebab-case skill name
+// and .zip. Release archives (story-skills_<version>_<os>_<arch>.zip) never
+// match, so the binaries the workflow packs beside the zips are left alone.
+const SKILL_ZIP_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*\.zip$/;
+
+// Writes <name>.zip for every skill and all-skills.zip, removes the zip of
+// any skill that no longer exists, and returns the file names written.
 export function buildSkillZips(skillsDir, out) {
-  fs.mkdirSync(out, { recursive: true });
-  const all = [];
-  const written = [];
-  for (const name of skillNames(skillsDir)) {
-    const entries = skillEntries(name, path.join(skillsDir, name));
-    writeZip(path.join(out, `${name}.zip`), entries);
-    written.push(`${name}.zip`);
-    all.push(...entries);
-  }
-  if (all.length === 0) {
+  const names = skillNames(skillsDir);
+  if (names.length === 0) {
     throw new Error(`no skills found in ${skillsDir}`);
   }
-  writeZip(path.join(out, ALL_SKILLS_ZIP), all);
-  written.push(ALL_SKILLS_ZIP);
+  // Check every skill before writing any zip.
+  const skills = names.map((name) => ({ name, entries: skillEntries(name, path.join(skillsDir, name)) }));
+  fs.mkdirSync(out, { recursive: true });
+  const written = [...names.map((name) => `${name}.zip`), ALL_SKILLS_ZIP];
+  for (const file of fs.readdirSync(out)) {
+    if (SKILL_ZIP_PATTERN.test(file) && !written.includes(file)) {
+      fs.rmSync(path.join(out, file));
+    }
+  }
+  for (const { name, entries } of skills) {
+    writeZip(path.join(out, `${name}.zip`), entries);
+  }
+  writeZip(path.join(out, ALL_SKILLS_ZIP), skills.flatMap((skill) => skill.entries));
   return written;
 }
 
