@@ -90,6 +90,20 @@ describe("html and print builds", () => {
     expect(head(printHtml({ title: name, authors: [], language: "en", words: 100, parts }))).toBe(expected);
   });
 
+  test("the print contents set a right-to-left book's page numbers at the left margin without a float (#591)", () => {
+    const book = (language) => ({ title: "T", authors: [], language, words: 100, parts: [{ key: "ch01", kind: "chapter", title: "C", heading: true, words: 100, paragraphs: [] }] });
+    // WeasyPrint drops a float that follows text on a right-to-left line.
+    const arabic = printHtml(book("ar"));
+    expect(arabic).toContain('<html lang="ar" dir="rtl">');
+    expect(arabic).toContain(".toc li { position: relative; padding-left: 2.5em; }\n.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }\n");
+    expect(arabic).not.toMatch(/\.toc a::after \{[^}]*float/);
+    expect(printHtml(book("he"))).toContain("page); position: absolute; left: 0; bottom: 0; }");
+    // Left to right, the number still floats to the right margin.
+    const english = printHtml(book("en"));
+    expect(english).toContain('.toc a::after { content: " " target-counter(attr(href), page); float: right; }\n');
+    expect(english).not.toContain(".toc li {");
+  });
+
   test("the CLI builds both formats and reports unsupported ones", () => {
     const { root, cwd } = project();
     expect(invoke(cwd, ["build", root, "--format", "html"]).out).toContain("as html to");
