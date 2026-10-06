@@ -302,12 +302,36 @@ export function synopsisBook(root, options = {}) {
     text = truncateWords(text, budget);
   }
 
+  const result = { title, logline: premise, pages, budget, words: wordCount(text), sections: synopsisSections(text, project.arcs), text };
   if (options.out === undefined) {
-    return { text };
+    return result;
   }
   const output = resolveOutputPath(project, options.out, path.join("dist", `${fileStem(project.storyId)}.synopsis.md`));
   writeFile(output.outFile, text, output.writeOptions);
-  return { text, outFile: output.outFile };
+  return { ...result, outFile: output.outFile };
+}
+
+// The text under each arc's heading in a rendered synopsis, in arc order.
+// Each heading is found after the one before it, so an arc name that also
+// appears in prose is not mistaken for one; an arc a truncated synopsis
+// lost is left out.
+function synopsisSections(text, arcs) {
+  const found = [];
+  let from = 0;
+  for (const arc of arcs) {
+    const heading = `\n## ${arc.name}\n`;
+    const at = text.indexOf(heading, from);
+    if (at === -1) {
+      break;
+    }
+    found.push({ arc, start: at + heading.length, headingAt: at });
+    from = at + heading.length;
+  }
+  return found.map((entry, index) => ({
+    arc: entry.arc.id,
+    name: String(entry.arc.name),
+    text: text.slice(entry.start, index + 1 < found.length ? found[index + 1].headingAt : text.length).trim()
+  }));
 }
 
 // Starter text that init, import, and add arc write. A synopsis must never

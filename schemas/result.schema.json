@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "reindex", "migrate", "wordcount", "names", "compare", "passes", "diagram", "synopsis"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -31,6 +31,11 @@
     { "if": { "properties": { "command": { "const": "progress" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-progress" } } } },
     { "if": { "properties": { "command": { "const": "similarity" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-similarity" } } } },
     { "if": { "properties": { "command": { "enum": ["add", "rename", "remove", "move", "reindex", "migrate", "wordcount"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-write" } } } },
+    { "if": { "properties": { "command": { "const": "names" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-names" } } } },
+    { "if": { "properties": { "command": { "const": "compare" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-compare" } } } },
+    { "if": { "properties": { "command": { "const": "passes" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-passes" } } } },
+    { "if": { "properties": { "command": { "const": "diagram" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-diagram" } } } },
+    { "if": { "properties": { "command": { "const": "synopsis" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-synopsis" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -405,6 +410,135 @@
           "description": "Every file the command created, updated, or deleted, and every folder it made, sorted by path.",
           "items": { "$ref": "#/$defs/change" }
         }
+      }
+    },
+    "name-match": {
+      "type": "object",
+      "required": ["kind", "id", "name", "full", "file"],
+      "properties": {
+        "kind": { "enum": ["character", "location", "faction", "artifact", "system", "term"] },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1, "description": "The existing name or alias matched: a character's given name when the match is on it." },
+        "full": { "type": "string", "minLength": 1, "description": "The whole name the matched name belongs to." },
+        "file": { "type": "string", "minLength": 1, "description": "The entity's file, relative to the project root, with / separators." }
+      }
+    },
+    "data-names": {
+      "type": "object",
+      "required": ["names"],
+      "properties": {
+        "names": {
+          "type": "array",
+          "description": "One entry per candidate name, in the order given.",
+          "items": {
+            "type": "object",
+            "required": ["name", "status", "clashes", "lookalikes", "initials"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "status": { "enum": ["clear", "check", "taken"], "description": "taken with a clash, check with only look-alikes or shared initials, else clear: the word the text output prints." },
+              "clashes": { "type": "array", "items": { "$ref": "#/$defs/name-match" }, "description": "Existing names it clashes with; each is a name-clash error." },
+              "lookalikes": { "type": "array", "items": { "$ref": "#/$defs/name-match" }, "description": "Existing names it looks like; each is a name-look-alike warning." },
+              "initials": { "type": "array", "items": { "$ref": "#/$defs/name-match" }, "description": "Major characters whose given name shares its initial; each is a name-shared-initial warning." }
+            }
+          }
+        }
+      }
+    },
+    "data-compare": {
+      "type": "object",
+      "$comment": "In chapters mode, anchors is null; with --anchor (anchors mode), chapters and the four totals are null.",
+      "required": ["mode", "label", "chapters", "beforeChapters", "afterChapters", "beforeWords", "afterWords", "anchors"],
+      "properties": {
+        "mode": { "enum": ["chapters", "anchors"] },
+        "label": { "type": "string", "description": "\"git ref <ref>\", or the absolute path of the --against project." },
+        "chapters": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "status", "before", "after", "unchanged", "movedFrom"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "status": { "enum": ["unchanged", "changed", "added", "removed"] },
+              "before": { "$ref": "#/$defs/count", "description": "Words in the earlier draft; 0 for an added chapter." },
+              "after": { "$ref": "#/$defs/count", "description": "Words now; 0 for a removed chapter." },
+              "unchanged": { "type": "number", "minimum": 0, "description": "The share of paragraphs unchanged, from 0 to 1." },
+              "movedFrom": { "type": ["string", "null"], "description": "The chapter's id in the earlier draft when it moved, else null." }
+            }
+          }
+        },
+        "beforeChapters": { "type": ["integer", "null"], "minimum": 0 },
+        "afterChapters": { "type": ["integer", "null"], "minimum": 0 },
+        "beforeWords": { "type": ["integer", "null"], "minimum": 0 },
+        "afterWords": { "type": ["integer", "null"], "minimum": 0 },
+        "anchors": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["label", "status", "to", "similarity", "excerpt"],
+            "properties": {
+              "label": { "type": "string" },
+              "status": { "enum": ["unchanged", "edited", "not-found", "unknown"] },
+              "to": { "type": ["string", "null"], "description": "The current label, for an unchanged or edited paragraph." },
+              "similarity": { "type": ["number", "null"], "description": "From 0 to 1, for an unchanged or edited paragraph." },
+              "excerpt": { "type": ["string", "null"], "description": "The opening words of a paragraph not found in the current text." }
+            }
+          }
+        }
+      }
+    },
+    "data-passes": {
+      "type": "object",
+      "required": ["passes", "done", "next", "changed", "notes"],
+      "properties": {
+        "passes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["pass", "status", "focus", "checks"],
+            "properties": {
+              "pass": { "type": "string", "minLength": 1 },
+              "status": { "type": "string", "description": "pending, in-progress, or done (as story.md records it)." },
+              "focus": { "type": ["string", "null"], "description": "What a default pass looks for; null for a custom pass." },
+              "checks": { "type": ["array", "null"], "items": { "type": "string" }, "description": "The commands that help with a default pass, pointed at the project; null for a custom pass." }
+            }
+          }
+        },
+        "done": { "$ref": "#/$defs/count" },
+        "next": { "type": ["string", "null"], "description": "The pass in progress, else the first not done; null when all are done or none are recorded." },
+        "changed": { "type": "boolean", "description": "True when --init, --start, or --done rewrote story.md." },
+        "notes": { "type": "array", "items": { "type": "string" }, "description": "The note: lines the text output prints, such as a custom pass that may be a typo." }
+      }
+    },
+    "data-diagram": {
+      "type": "object",
+      "required": ["kind", "text", "outFile"],
+      "properties": {
+        "kind": { "enum": ["relationships", "locations", "timeline", "clues", "arcs"] },
+        "text": { "type": "string", "description": "The Mermaid source." },
+        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
+      }
+    },
+    "data-synopsis": {
+      "type": "object",
+      "required": ["title", "logline", "pages", "budget", "words", "sections", "text", "outFile"],
+      "properties": {
+        "title": { "type": "string" },
+        "logline": { "type": "string" },
+        "pages": { "enum": [1, 3] },
+        "budget": { "$ref": "#/$defs/count", "description": "The word budget: 500 for one page, 1500 for three." },
+        "words": { "$ref": "#/$defs/count" },
+        "sections": {
+          "type": "array",
+          "description": "The text under each arc heading, in arc order; an arc a truncated synopsis lost is left out.",
+          "items": {
+            "type": "object",
+            "required": ["arc", "name", "text"],
+            "properties": { "arc": { "type": "string" }, "name": { "type": "string" }, "text": { "type": "string" } }
+          }
+        },
+        "text": { "type": "string", "description": "The synopsis markdown, as printed or written." },
+        "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote, else null." }
       }
     },
     "data-similarity": {

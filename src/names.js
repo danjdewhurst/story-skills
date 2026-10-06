@@ -1,3 +1,4 @@
+import path from "node:path";
 import { err, warn } from "./findings.js";
 import { checkSet, languagePack } from "./languages/index.js";
 import { lowerCase } from "./languages/locale.js";
@@ -28,10 +29,12 @@ export function existingNames(project) {
   const pack = project.pack ?? languagePack();
   const names = [];
   // `given` marks the one word a reader knows the name by; only character
-  // names have one. Every other entry is compared as a whole name.
-  const add = (kind, id, name, role = "", given = false, full = name) => {
+  // names have one. Every other entry is compared as a whole name. `file`
+  // is the entity's file, relative to the project root.
+  const add = (kind, entity, name, role = "", given = false, full = name) => {
     if (typeof name === "string" && name.trim() !== "") {
-      names.push({ kind, id, name: name.trim(), full: String(full).trim(), role, given });
+      const file = path.relative(project.root, entity.file).split(path.sep).join("/");
+      names.push({ kind, id: entity.id, name: name.trim(), full: String(full).trim(), role, given, file });
     }
   };
   for (const character of project.characters) {
@@ -40,23 +43,23 @@ export function existingNames(project) {
     }
     const first = givenName(character.name, pack);
     const single = first !== "" && first === String(character.name).trim();
-    add("character", character.id, String(character.name), character.role, single);
+    add("character", character, String(character.name), character.role, single);
     if (first !== "" && !single) {
-      add("character", character.id, first, character.role, true, character.name);
+      add("character", character, first, character.role, true, character.name);
     }
     for (const alias of character.aliases ?? []) {
-      add("character", character.id, alias, character.role);
+      add("character", character, alias, character.role);
     }
   }
   for (const [kind, list] of [["location", project.locations], ["faction", project.factions], ["artifact", project.artifacts], ["system", project.systems]]) {
     for (const entity of list) {
-      add(kind, entity.id, String(entity.name));
+      add(kind, entity, String(entity.name));
     }
   }
   for (const term of project.glossaryTerms) {
-    add("term", term.id, String(term.term));
+    add("term", term, String(term.term));
     for (const alias of term.aliases ?? []) {
-      add("term", term.id, alias);
+      add("term", term, alias);
     }
   }
   return names;
@@ -100,22 +103,29 @@ export function checkNames(candidates, names, pack = languagePack()) {
         seen.add(`initial ${entry.id}`);
       }
     }
+    // A look-alike of an entity the name clashes with, or a shared initial
+    // with a character it clashes with or looks like, is not reported again.
+    const reportedLookalikes = lookalikes.filter((entry) => !clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id));
+    const reportedInitials = initials.filter((entry) => !clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id));
     for (const entry of clashes) {
       errors.push(err("name-clash", `"${candidate}" clashes with ${entry.kind} ${entry.id} (${entry.name})`));
     }
-    for (const entry of lookalikes) {
-      if (!clashes.some((clash) => clash.kind === entry.kind && clash.id === entry.id)) {
-        warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
-      }
+    for (const entry of reportedLookalikes) {
+      warnings.push(warn("name-look-alike", `"${candidate}" looks like ${entry.kind} ${entry.id} (${entry.full})`));
     }
-    for (const entry of initials) {
-      if (!clashes.concat(lookalikes).some((other) => other.kind === "character" && other.id === entry.id)) {
-        warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
-      }
+    for (const entry of reportedInitials) {
+      warnings.push(warn("name-shared-initial", `"${candidate}" shares an initial with ${entry.role} ${entry.id} (${entry.full})`));
     }
-    results.push({ name: candidate, clashes: clashes.length, lookalikes: lookalikes.length, initials: initials.length });
+    const status = clashes.length > 0 ? "taken" : reportedLookalikes.length + reportedInitials.length > 0 ? "check" : "clear";
+    results.push({ name: candidate, status, clashes: clashes.map(match), lookalikes: reportedLookalikes.map(match), initials: reportedInitials.map(match) });
   }
   return { results, errors, warnings };
+}
+
+// An existing name a candidate matched, as story names --json lists it:
+// `name` is the name or alias matched and `full` the whole name it belongs to.
+function match(entry) {
+  return { kind: entry.kind, id: entry.id, name: entry.name, full: entry.full, file: entry.file };
 }
 
 function looksAlike(left, right) {
@@ -136,8 +146,7 @@ function normalize(value) {
 export function formatNames(report) {
   const lines = [];
   for (const result of report.results) {
-    const status = result.clashes > 0 ? "taken" : result.lookalikes + result.initials > 0 ? "check" : "clear";
-    lines.push(`${result.name}: ${status}`);
+    lines.push(`${result.name}: ${result.status}`);
   }
   return `${lines.join("\n")}\n`;
 }

@@ -278,7 +278,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, and `compare`; on the commands that print text to keep: `diagram`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -289,7 +289,7 @@ Every result has the same envelope:
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
-| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, and every file a write command changed. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
+| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, and every file a write command changed. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
@@ -1045,7 +1045,7 @@ It exits 2 with `Unknown chapter or scene <id>` for an id that is neither, with 
 ### compare
 
 ```text
-story compare [path] (--ref <git-ref> | --against <path>) [--anchor <label>...]
+story compare [path] (--ref <git-ref> | --against <path>) [--anchor <label>...] [--json]
 ```
 
 Compares the current chapters with an earlier draft and reports word changes per chapter, chapters added and removed, and the share of each changed chapter's paragraphs that are unchanged. With `--anchor`, it instead finds where paragraphs a reader cited in an earlier review copy are now. You must give exactly one source for the earlier draft.
@@ -1055,6 +1055,7 @@ Compares the current chapters with an earlier draft and reports word changes per
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
 | `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
 | `--anchor <label>` | A paragraph label from a review copy of the earlier draft, such as `ch03-p12` (repeatable). Prints where each paragraph is in the current text instead of the chapter comparison |
+| `--json` | Print the comparison as a JSON result (see below) |
 
 Chapters are matched by id (`chapter-01`, `chapter-02`, and so on), except that a chapter whose paragraphs match a chapter under another id better is paired with it and listed as `chapter-03 Title (moved from chapter-02): ...`, and the summary line adds `N moved`. That is how chapters renumbered by [`move`](#move) show up. A pair under different ids needs at least half the paragraphs of the longer version to match word for word. With `--ref`, old drafts without frontmatter are still compared. Every file in the current project, and with `--against` in the other project, must parse, or `compare` stops with an error. A chapter is `unchanged` only when its paragraphs are the same and in the same order; scene-break lines and code between closed fences are not compared.
 
@@ -1109,6 +1110,8 @@ ch01-p20 -> ch01-p20 (text unchanged)
 ch09-p3: no such label in git ref beta-round-1
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
+
+With `--json`, `data.mode` is `chapters` or, with `--anchor`, `anchors`, and `data.label` names the earlier draft (`git ref <ref>` or the absolute `--against` path). A chapter comparison fills `chapters` (each `id`, `title`, `status` of `unchanged`, `changed`, `added`, or `removed`, `before` and `after` words, `unchanged` as the share of paragraphs kept from 0 to 1, and `movedFrom`, the old id or `null`), `beforeChapters`, `afterChapters`, `beforeWords`, and `afterWords`, and sets `anchors` to `null`. A label mapping fills `anchors` (each `label`, `status` of `unchanged`, `edited`, `not-found`, or `unknown`, `to`, `similarity`, and `excerpt`, `null` where the status has none) and sets the chapter fields to `null`.
 
 Errors:
 
@@ -1779,7 +1782,7 @@ With no attributed dialogue it prints `- None: tag dialogue with a character's n
 ### names
 
 ```text
-story names <name...> [--path <project>]
+story names <name...> [--json] [--path <project>]
 ```
 
 Checks one or more candidate names against every name in the story bible: characters (full name, given name, and `aliases`, skipping characters with `status: cut`), locations, factions, artifacts, systems, and glossary terms with their aliases. Quote a name that contains spaces. Each candidate gets one status line on stdout:
@@ -1791,6 +1794,8 @@ Checks one or more candidate names against every name in the story bible: charac
 | `clear` | No clash or look-alike | Nothing |
 
 Titles such as `Lord`, `Captain`, or `The` are skipped when finding a given name, so `Lord Maren` is compared as `Maren`. The titles come from the language pack for `story.md` `language`; a language without a title list compares a name from its first word. `names` exits 1 when any candidate is `taken`, and with no names it prints its usage line and exits 2.
+
+With `--json`, `data.names` has one entry per candidate, in the order given: `name`, `status` (`taken`, `check`, or `clear`), and the existing names behind it as `clashes`, `lookalikes`, and `initials` (one per error or warning). Each match gives the entity's `kind`, `id`, `name` (the name or alias matched, such as a character's given name), `full` (the whole name), and `file` (relative to the project root).
 
 In The Salt Road:
 
@@ -1826,7 +1831,7 @@ warning: "Marek" looks like character lord-maren (Lord Maren) [name-look-alike]
 ### diagram
 
 ```text
-story diagram <kind> [--out <file>] [--path <project>]
+story diagram <kind> [--out <file>] [--json] [--path <project>]
 ```
 
 Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmatter. The source is plain text, so it diffs cleanly and renders on GitHub and in most markdown editors. Regenerate it whenever the bible changes rather than editing it. Node ids are entity ids with hyphens turned into underscores; an id that is a Mermaid keyword, such as `end` or `graph`, gets `_node` appended.
@@ -1842,6 +1847,7 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 | Option | Effect | Default |
 |---|---|---|
 | `--out <file>` | Write the source to this path, relative to the project root, instead of stdout. Project source paths are refused (see [Where commands write](#where-commands-write)) | Print to stdout |
+| `--json` | Print a JSON result: `data.kind`, `data.text` (the Mermaid source, also when `--out` writes it), and `data.outFile` (the absolute path written, or `null`), with the file in `writes` (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
@@ -1896,7 +1902,7 @@ Mermaid's timeline syntax treats a colon as a separator, so colons in times and 
 ### passes
 
 ```text
-story passes [path] [--init] [--start <pass>] [--done <pass>]
+story passes [path] [--init] [--start <pass>] [--done <pass>] [--json]
 ```
 
 Shows the named revision passes recorded in `revision-passes` in `story.md`, and with an option, updates them. Revising in separate passes, each looking for one kind of problem, works from the largest problems to the smallest. The default ladder is:
@@ -1917,6 +1923,7 @@ Shows the named revision passes recorded in `revision-passes` in `story.md`, and
 | `--init` | Add every default pass that is missing, as `pending`, after any passes already recorded |
 | `--start <pass>` | Mark a pass `in-progress`, adding it if it is new |
 | `--done <pass>` | Mark a pass `done`, adding it if it is new |
+| `--json` | Print the passes as a JSON result (see below) |
 
 Pass names are kebab-case; any name works, so you can add your own, such as `sensitivity-read`. Adding a name outside the default ladder prints a note on stderr, with a suggestion when the name is within two edits of a default pass, so a typo does not slip in unnoticed:
 
@@ -1927,6 +1934,8 @@ Updated revision-passes in story.md
 ```
 
 When a change is made, `passes` prints `Updated revision-passes in story.md` before the list. It rewrites only the `revision-passes` entry and refuses to change a `story.md` that fails to parse or has malformed passes. Without options it only reads. The next pass is the one in progress, or else the first one not done; `story next` suggests it when `story.md` has `status: revising` (see [next](#next)).
+
+With `--json`, `data.passes` lists each recorded pass as `pass`, `status`, and, for a default pass, its `focus` and `checks` (the helping commands, pointed at the path you typed); both are `null` for a custom pass. `data.done` counts the passes done, `data.next` names the next pass or is `null`, `data.changed` says whether `story.md` was rewritten (it is then in `writes`), and `data.notes` holds the notes the text output prints on stderr. With no passes recorded, `data.passes` is empty.
 
 With no passes recorded, `passes` lists the default ladder and suggests `--init`. The suggested commands repeat the path you typed, so `story passes drafts/salt-road` suggests `story passes drafts/salt-road --init` and `mark it with story passes drafts/salt-road --done <pass>`; with no path, or `.`, they read `story passes`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
 
@@ -2486,7 +2495,7 @@ Like `export`, `build` refuses to run while a project file fails to parse, and r
 ### synopsis
 
 ```text
-story synopsis [path] [--pages 1|3] [--out <file>]
+story synopsis [path] [--pages 1|3] [--out <file>] [--json]
 ```
 
 Builds a mechanical synopsis from the project: a `Logline:` line (the first sentence of the `## Synopsis` section in `story.md`, or `No logline recorded.`), then for each arc up to two sentences from `## Setup`, up to two from `## Rising Action`, and a line starting `Because` that joins the first sentence of `## Climax` and of `## Resolution`, lowercasing the climax's first word when it is a whole common opener such as `She` or `The` but not a name (`A.J.` and `He-Man` keep their capitals). Titles such as `Dr.`, `e.g.`, initials, and dotted initialisms such as `U.S.` never end a sentence; `No.`, `vs.`, `etc.`, `a.m.`, and `p.m.` end one unless the next word starts in lower case or with a digit. `--pages 3` takes up to four Setup sentences, eight Rising Action sentences, and two each from Climax and Resolution. If the text exceeds the page budget, it drops rising action, then resolution, then truncates with an ellipsis.
@@ -2495,6 +2504,7 @@ Builds a mechanical synopsis from the project: a `Logline:` line (the first sent
 |---|---|---|
 | `--pages <n>` | `1` (500-word budget) or `3` (1,500-word budget) | `1` |
 | `--out <file>` | Write to this path, relative to the project root, instead of stdout | Print to stdout |
+| `--json` | Print a JSON result: `data.title`, `logline`, `pages`, `budget` (in words), `words`, `sections` (each arc's `arc` id, `name`, and the `text` under its heading, leaving out an arc that truncation cut), `text` (the whole synopsis, also when `--out` writes it), and `outFile` (the absolute path written, or `null`), with the file in `writes` (see [JSON output](#json-output)) | Off |
 
 ```shell
 story synopsis
