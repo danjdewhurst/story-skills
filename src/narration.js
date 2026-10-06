@@ -117,5 +117,5 @@ export function formatRuntime(words, rate = NARRATION_WORDS_PER_MINUTE) {
 }
 
 function cell(value) {
-  return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
+  return String(value).replace(/\s+/g, " ").trim().replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }

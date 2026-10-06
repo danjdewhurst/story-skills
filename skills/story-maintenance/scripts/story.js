@@ -6525,7 +6525,7 @@ function metadataSheet(input) {
 `);
 }
 function tableCell(value) {
-  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return String(value).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 // src/typesetting.js
@@ -10949,7 +10949,7 @@ Add notes on the story's voice, texture, and emotional register.
 `;
 }
 function cell2(value) {
-  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/\|/g, "\\|");
+  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 function characterIndex(storyId, characters, relationshipMap, familyTrees) {
   const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);
@@ -17117,7 +17117,7 @@ function formatRuntime(words, rate = NARRATION_WORDS_PER_MINUTE) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 function cell3(value) {
-  return String(value).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|");
+  return String(value).replace(/\s+/g, " ").trim().replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 // src/ink.js
@@ -17558,8 +17558,11 @@ function truncateWords(text, budget) {
     }
     break;
   }
+  while (kept.length > 1 && /^(?:#|[ \t]*$)/.test(kept[kept.length - 1])) {
+    kept.pop();
+  }
   return `${kept.join(`
-`).replace(/(?:\n(?:#[^\n]*)?[ \t]*)+$/, "")}…
+`)}…
 `;
 }
 function shunnMeta(project) {

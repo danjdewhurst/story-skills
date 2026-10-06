@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { wordCount } from "../src/markdown.js";
+import { truncateWords } from "../src/build.js";
 import { createStoryProject, synopsisBook } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -269,5 +270,21 @@ The valley keeps its secret.`;
     const result = invoke(cwd, ["synopsis", root, "--pages", "2"]);
     expect(result.code).toBe(2);
     expect(result.err).toContain("Unsupported synopsis length: 2. Supported pages: 1, 3");
+  });
+});
+
+describe("#438 truncation drops trailing headings and blank lines quickly", () => {
+  test("a cut synopsis never ends on a heading or a blank line", () => {
+    expect(truncateWords("Opening line.\n\n## Act Two\n\nmore words here", 2)).toBe("Opening line.…\n");
+    expect(truncateWords("# Only\n\nalpha beta", 1)).toBe("# Only…\n");
+    expect(truncateWords("One two\n#\t\n   \nthree four", 3)).toBe("One two\n#\t\n   \nthree…\n");
+  });
+
+  test("a long run of heading and tab lines before the cut finishes fast", () => {
+    // The old trailing-lines regex backtracked exponentially on this input.
+    const text = `a\n${"#\t\n".repeat(5000)}b c`;
+    const started = performance.now();
+    expect(truncateWords(text, 2)).toBe(`a\n${"#\t\n".repeat(5000)}b…\n`);
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 });

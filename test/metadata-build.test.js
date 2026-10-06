@@ -50,6 +50,12 @@ ai-disclosure: No AI was used.`);
     expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
+  test("#438 a backslash before a pipe in a table cell is escaped too", () => {
+    const root = project("publisher: Back\\| Slash");
+    const text = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
+    expect(text).toContain("| Publisher | Back\\\\\\| Slash |");
+  });
+
   test("a copyright matter page counts, and an empty story.md lists everything missing", () => {
     const root = project("status-note: none");
     createEntity(root, { kind: "matter", name: "Copyright Page" });

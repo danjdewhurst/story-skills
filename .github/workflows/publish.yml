@@ -46,9 +46,15 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      # Trusted publishing needs npm 11.5.1 or later.
-      - name: Update npm
-        run: npm install --global npm@11
+      # Trusted publishing needs npm 11.5.1 or later. Node 24.5.0 and later
+      # bundle it, so use that npm rather than installing an unpinned one.
+      - name: Check npm supports trusted publishing
+        run: |
+          npm_version="$(npm --version)"
+          if ! node -e 'const [a, b, c] = process.argv[1].split(".").map(Number); process.exit(a > 11 || (a === 11 && (b > 5 || (b === 5 && c >= 1))) ? 0 : 1)' "$npm_version"; then
+            echo "::error::npm $npm_version is older than 11.5.1, which trusted publishing needs; raise node-version."
+            exit 1
+          fi
 
       - name: Check the tag matches package.json
         run: |

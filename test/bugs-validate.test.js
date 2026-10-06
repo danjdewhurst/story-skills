@@ -67,6 +67,17 @@ describe("#64 registry cells escape pipes and names are one line", () => {
     expect(chapters).toContain("| 1 | Either \\| Or |  | outline | 0 | [chapter-01](chapter-01.md) |");
   });
 
+  test("#438 a backslash before a | is escaped too, and reindex round-trips", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Ann \\| Bee" });
+    const index = path.join(root, "characters", "_index.md");
+    const first = fs.readFileSync(index, "utf8");
+    expect(first).toContain("| Ann \\\\\\| Bee | supporting | alive | [ann-bee](ann-bee.md) |");
+    reindexProject(root);
+    expect(fs.readFileSync(index, "utf8")).toBe(first);
+    expect(messages(validateProject(root).warnings)).toEqual([]);
+  });
+
   test("a hand-written multi-line title stays on one registry row", () => {
     const root = newProject();
     createEntity(root, { kind: "character", name: "Plain" });
