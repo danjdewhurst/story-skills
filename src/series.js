@@ -15,7 +15,7 @@ const SERIES_LINK_INVERSES = [["follows", "precedes"], ["precedes", "follows"]];
 
 // The book cap and the visited set bound the traversal, so a long linear
 // series is followed to its end from either book.
-const MAX_SERIES_BOOKS = 100;
+export const MAX_SERIES_BOOKS = 100;
 
 // Entity collections compared across books, with the field that names them.
 const SHARED_CANON = [

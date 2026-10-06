@@ -21182,13 +21182,19 @@ function previewChanges(root, run) {
   const projectRoot = path18.resolve(root);
   requireStoryFile(projectRoot);
   const scratch = fs13.realpathSync(fs13.mkdtempSync(path18.join(os3.tmpdir(), "story-dry-run-")));
-  const name = path18.basename(projectRoot);
-  const copyRoot = path18.join(scratch, name || "project");
-  const [from, to] = name ? [scratch, path18.dirname(projectRoot)] : [copyRoot, projectRoot];
+  const fsRoot = path18.parse(projectRoot).root;
+  const atRoot = projectRoot === fsRoot;
+  const mirror = (target) => {
+    const drive = path18.parse(target).root;
+    return path18.join(scratch, drive.replace(/[:\\/]/g, ""), target.slice(drive.length));
+  };
+  const copyRoot = atRoot ? path18.join(scratch, "project") : mirror(projectRoot);
+  const [from, to] = atRoot ? [copyRoot, projectRoot] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
+    fs13.mkdirSync(path18.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot });
-    if (name) {
-      copyLinkedBooks(projectRoot, scratch);
+    if (!atRoot) {
+      copyLinkedBooks(projectRoot, mirror);
     }
     const { result, changes } = recordChanges(copyRoot, () => run(copyRoot));
     return { result: mapPaths(result, from, to), changes };
@@ -21198,32 +21204,21 @@ function previewChanges(root, run) {
     removeScratch(scratch);
   }
 }
-function copyLinkedBooks(projectRoot, scratch) {
+function copyLinkedBooks(projectRoot, mirror) {
   const parent = path18.dirname(projectRoot);
   const realParent = realPath2(parent);
-  const queue = [projectRoot];
-  const seen = new Set([path18.basename(projectRoot)]);
-  const visit = (name) => {
-    if (seen.has(name)) {
-      return;
-    }
-    seen.add(name);
-    const source = path18.join(parent, name);
-    const target = path18.join(scratch, name);
-    const stat = fs13.lstatSync(source, { throwIfNoEntry: false });
-    if (stat?.isSymbolicLink()) {
-      const real = realPath2(source);
-      if (real !== source && path18.dirname(real) === realParent) {
-        fs13.symlinkSync(path18.basename(real), target);
-        visit(path18.basename(real));
-      }
-      return;
-    }
-    if (stat?.isDirectory() && fs13.existsSync(path18.join(source, "story.md"))) {
-      copyProject(source, target, { realSource: realPath2(source), copyRoot: target });
-      queue.push(source);
+  const home = (real) => isPathInside(realParent, real) ? path18.join(parent, path18.relative(realParent, real)) : real;
+  const alias = (link, book) => {
+    if (link !== book && !fs13.existsSync(mirror(link))) {
+      fs13.mkdirSync(path18.dirname(mirror(link)), { recursive: true });
+      fs13.symlinkSync(mirror(book), mirror(link));
     }
   };
+  const projectReal = realPath2(projectRoot);
+  const copies = new Map([[projectReal, projectRoot]]);
+  alias(home(projectReal), projectRoot);
+  const queued = new Set([projectReal]);
+  const queue = [projectRoot];
   while (queue.length > 0) {
     const book = queue.shift();
     let data;
@@ -21233,8 +21228,20 @@ function copyLinkedBooks(projectRoot, scratch) {
       continue;
     }
     for (const link of ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))) {
-      if (path18.dirname(link) === parent) {
-        visit(path18.basename(link));
+      const real = realPath2(link);
+      if (!copies.has(real)) {
+        const target = mirror(home(real));
+        if (copies.size > MAX_SERIES_BOOKS || !fs13.existsSync(path18.join(real, "story.md")) || fs13.existsSync(target)) {
+          continue;
+        }
+        fs13.mkdirSync(path18.dirname(target), { recursive: true });
+        copyProject(real, target, { realSource: real, copyRoot: target });
+        copies.set(real, home(real));
+      }
+      alias(link, copies.get(real));
+      if (path18.dirname(link) === parent && !queued.has(real)) {
+        queued.add(real);
+        queue.push(link);
       }
     }
   }
