@@ -3012,7 +3012,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-choice` | error | A chapter `choices` entry has no text, bad text, or no target. |
 | `invalid-route-hours` | error | A location route's `hours` is not a positive number. |
 | `duplicate-route` | warning | A location lists more than one route to the same place. |
-| `deceased-without-died-in` | warning | A progression makes a character deceased without a matching `died-in`. |
+| `deceased-without-died-in` | warning | A progression makes a character deceased without a matching `died-in`. A second death after a revival, which `died-in` cannot record, is not reported. |
 | `progression-fixed-field` | error | A progression changes a field that cannot change by chapter, such as `died-in`. |
 | `progression-list-field` | error | A progression changes a list field. |
 | `progression-duplicate` | error | Two progressions change the same field from the same chapter. |
@@ -3085,7 +3085,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `revived-in-missing-chapter` | error | `revived-in` names a chapter that does not exist. |
 | `revival-before-death` | error | A character is revived no later than they die. |
 | `death-status-mismatch` | error | A character has a written `died-in` but is not `status: deceased`. |
-| `revival-status-mismatch` | error | A revived character is still `status: deceased`. |
+| `revival-status-mismatch` | error | A revived character is still `status: deceased`, and no status progression after the revival makes them deceased again. |
 | `posthumous-appearance` | error | A chapter or scene lists a character after a written death. A `died-in` chapter still at `outline` is planned, so later casts are allowed. |
 | `deceased-in-cast` | warning | A chapter or scene lists a character who died before the story. |
 | `progression-deceased-in-cast` | warning | A chapter or scene lists a character, with no `died-in`, after a progression makes them `deceased`. |
