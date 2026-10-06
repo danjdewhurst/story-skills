@@ -229,9 +229,7 @@ jobs:
             5. Run the maintenance commands and make them pass:
                story wordcount ${{ env.STORY_DIR }} --write
                story reindex ${{ env.STORY_DIR }}
-               story validate ${{ env.STORY_DIR }}
-               story links ${{ env.STORY_DIR }}
-               story continuity ${{ env.STORY_DIR }}
+               story check ${{ env.STORY_DIR }}
             6. Commit everything on the branch with git commit -m. Make the
                message's first line "Draft chapter <number>: <title>" (or
                "Maintenance: <what you fixed>"), and its body a summary of the
