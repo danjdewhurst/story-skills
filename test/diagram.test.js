@@ -223,6 +223,48 @@ describe("story diagram", () => {
     expect(diagram.text).toContain("  chapter_02[\"2. 42\"]\n");
   });
 
+  // Each case changed what Mermaid 10, 11, and 12 drew before it was
+  // escaped: "#101;" drew "e", backticks made markdown, a %%{init}%%
+  // directive set the theme, and on a line holding "style" a colon let
+  // Mermaid drop the ";" that ends #quot;.
+  test("labels write Mermaid syntax as entity codes", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Mermaid", force: false });
+    const character = (id, name, extra = "") => writeMarkdown(path.join(root, "characters", `${id}.md`), `name: ${name}\nrole: supporting\nstatus: alive${extra}`, "# Name\n");
+    character("ada", "\"Unit #101; East\"", "\nrelationships:\n  - character: ben\n    type: \"friend #2\"");
+    character("ben", "\"`Ben`\"");
+    character("cy", "\"50% %%{init: {'theme':'dark'}}%% <b>&\"");
+    character("lifestyle-coach", "'Coach:\"Bob\"'");
+    const diagram = diagramProject(root, { kind: "relationships" });
+    expect(diagram.text).toBe(`flowchart LR
+  ada["Unit #35;101; East"]
+  ben["#96;Ben#96;"]
+  cy["50#37; #37;#37;{init#58; {'theme'#58;'dark'}}#37;#37; &lt;b&gt;&amp;"]
+  lifestyle_coach["Coach#58;#quot;Bob#quot;"]
+  ada -.-|"friend #35;2"| ben
+`);
+    expect(diagram.nodes.map((node) => node.label)).toEqual(["Unit #101; East", "`Ben`", "50% %%{init: {'theme':'dark'}}%% <b>&", "Coach:\"Bob\""]);
+  });
+
+  // Mermaid 10 ends timeline text at "#" or ";", "#5;" drew a control
+  // character, "<br>" broke the line, and a colon in a date section stopped
+  // the diagram rendering at all.
+  test("timeline text writes comment, entity, and directive marks as numeric entity codes", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Room #5; 50%", force: false });
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/\n---\n/, "\ncalendar:\n  - month: \"Thaw: Early\"\n    days: 30\n  - era: Age of Embers\n    abbrev: AE\n---\n"), "utf8");
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: \"Bell: a; b #1 <br> 5% %%{init: {'theme':'dark'}}%%\"\nchapter: chapter-01\nscene: 1\nstatus: draft\ndate: \"3 Thaw: Early, 12 AE\"", "# Scene\n");
+    const diagram = diagramProject(root, { kind: "timeline" });
+    expect(diagram.text).toBe(`timeline
+  title Room #35;5#59; 50#37;
+  section 3 Thaw∶ Early, 12 AE
+    day : Bell∶ a#59; b #35;1 #60;br> 5#37; #37;#37;{init∶ {'theme'∶'dark'}}#37;#37;
+`);
+    expect(diagram.groups).toEqual([{ label: "3 Thaw: Early, 12 AE", kind: "date", nodes: ["chapter-01-scene-01"] }]);
+  });
+
   // The Mermaid text is rendered from the node and edge model; these golden
   // files pin it byte for byte for every kind on every example. A deliberate
   // change to the output updates the matching file in test/fixtures/diagrams.

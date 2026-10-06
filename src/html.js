@@ -505,8 +505,11 @@ export function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-// CSS escapes keep a title or author from ending the string or, with "<",
-// closing the style element.
+// The text of a double-quoted CSS string. A quote or a line break ends the
+// string, and CSS reads CR, LF, and form feed all as line breaks, so each
+// run of them becomes a space and a quote or backslash is escaped. "<",
+// ">", and "&" are hex escapes, so the text cannot close the style element,
+// and so is every other control character, so none reaches the stylesheet.
 export function cssString(value) {
   return String(value)
     .replace(/\\/g, "\\\\")
@@ -514,5 +517,6 @@ export function cssString(value) {
     .replace(/</g, "\\3C ")
     .replace(/>/g, "\\3E ")
     .replace(/&/g, "\\26 ")
-    .replace(/[\r\n]+/g, " ");
+    .replace(/[\r\n\f]+/g, " ")
+    .replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16).toUpperCase()} `);
 }

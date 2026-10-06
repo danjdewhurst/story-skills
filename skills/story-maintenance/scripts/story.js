@@ -17072,7 +17072,7 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function cssString(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n]+/g, " ");
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n\f]+/g, " ").replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16).toUpperCase()} `);
 }
 
 // src/compare.js
@@ -19339,7 +19339,7 @@ function renderTimeline({ title, nodes }) {
   for (const node of nodes) {
     if (node.date !== section) {
       section = node.date;
-      lines.push(`  section ${node.date}`);
+      lines.push(`  section ${timelineText(node.date)}`);
     }
     const note = node.toldLateIn === null ? "" : ` (told in chapter ${node.toldLateIn})`;
     lines.push(`    ${timelineText(node.time ?? "day")} : ${timelineText(`${node.label}${note}`)}`);
@@ -19456,14 +19456,15 @@ function arcNodeId(id) {
 function plainText(text) {
   return String(text).replace(/\s+/g, " ").trim();
 }
+var LABEL_ESCAPES = { "#": "#35;", '"': "#quot;", "|": "#124;", "%": "#37;", "`": "#96;", ":": "#58;", "&": "&amp;", "<": "&lt;", ">": "&gt;" };
 function label(text) {
-  return String(text).replace(/&/g, "&amp;").replace(/"/g, "#quot;").replace(/\|/g, "#124;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\s+/g, " ").trim();
+  return String(text).replace(/\s+/g, " ").trim().replace(/[#"|%`:&<>]/g, (char) => LABEL_ESCAPES[char]);
 }
 function edgeLabel(text) {
   return `|"${label(text)}"|`;
 }
 function timelineText(text) {
-  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim();
+  return String(text).replace(/:/g, "∶").replace(/\s+/g, " ").trim().replace(/[#;%<]/g, (char) => `#${char.charCodeAt(0)};`);
 }
 
 // src/passes.js
