@@ -26,6 +26,8 @@ Run the installed or bundled CLI in place. Do not copy `scripts/story.js` into t
 Run commands from the story project root, or pass the story path explicitly.
 
 ```shell
+story check .
+story check . --strict
 story validate .
 story reindex .
 story wordcount . --write
@@ -96,6 +98,7 @@ The check commands' detailed rules live in `references/continuity-checks.md`, on
 
 Use:
 
+- `check` at the end of an editing session, after `wordcount --write` and `reindex`, and before reporting the project clean: it runs `validate`, `links`, and `continuity` over one scan, lists each finding once, and exits 1 if any of them has an error (`--strict` also fails on warnings). Run the three separately when you want one check's findings
 - `validate` after initialization and at the end of any multi-file edit
 - `reindex` after adding, removing, renaming, or moving any entity file. It rebuilds the character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, and glossary registries. `story add` reindexes itself; a hand-written file does not
 - `wordcount --write` after writing or revising chapters
@@ -107,7 +110,7 @@ Use:
 - `pacing` when the user asks about pacing, sagging middles, or chapter endings, and after drafting or restructuring chapters: per-chapter words, scene outcomes, sequels, and hooks, with warnings for runs and outliers. Rules: `references/continuity-checks.md` (pacing).
 - `clues` for mysteries and any story with a clue ledger: a clue-by-chapter matrix with fair-play warnings. Rules: `references/continuity-checks.md` (clues).
 - `voices` when dialogue voices may blur or during a line pass: per-character dialogue fingerprints, with warnings for look-alike voices and `voice-avoid`/`voice-words` misses. Rules: `references/continuity-checks.md` (voices).
-- `--json` when you need to read a result rather than show it to the user: `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity` then print one JSON object on stdout (`apiVersion`, `command`, `ok`, `data`, `diagnostics`, `writes`). `ok` is true exactly when the exit code is 0; each diagnostic has `severity`, `file`, `message`, `code` (the finding's rule, such as `stale-word-count`, the name a `story.md` `severity` entry takes), and `check` (the check that raised it). `report`, `next`, and `doctor` always have `ok: true`, so read their `data.checks` or error diagnostics instead
+- `--json` when you need to read a result rather than show it to the user: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity` then print one JSON object on stdout (`apiVersion`, `command`, `ok`, `data`, `diagnostics`, `writes`). `ok` is true exactly when the exit code is 0; each diagnostic has `severity`, `file`, `message`, `code` (the finding's rule, such as `stale-word-count`, the name a `story.md` `severity` entry takes), and `check` (the check that raised it). `report`, `next`, and `doctor` always have `ok: true`, so read their `data.checks` or error diagnostics instead
 - `passes` to track named revision passes in `story.md` `revision-passes`: `--init` writes the default ladder, `--start`/`--done <pass>` update one, and no flag prints the checklist. Rules: `references/continuity-checks.md` (passes).
 - `names` before naming a character, place, faction, artifact, system, or glossary term: `story names <name...>` reports exact clashes as errors and look-alikes as warnings. Rules: `references/continuity-checks.md` (names).
 - `diagram` when the user wants a picture of the story's structure: `story diagram <kind>` prints Mermaid source generated from frontmatter, or writes it with `--out <file>` (`--path <project>` sets the project). Kinds: `relationships` (character graph, family edges styled distinctly: the family tree), `locations` (map-graph from location `routes`, edges labelled with hours), `timeline` (dated scenes and chapters in story-time order), `clues` (clue plant to reveal flow per chapter), and `arcs` (arcs to the chapters that advance them). GitHub, many editors, and mermaid.live render it; regenerate rather than hand-edit

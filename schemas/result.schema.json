@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -17,6 +17,7 @@
   },
   "allOf": [
     { "if": { "properties": { "command": { "enum": ["validate", "links", "continuity"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-check" } } } },
+    { "if": { "properties": { "command": { "const": "check" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-check-all" } } } },
     { "if": { "properties": { "command": { "const": "series" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-series" } } } },
     { "if": { "properties": { "command": { "enum": ["next", "doctor"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-next" } } } },
     { "if": { "properties": { "command": { "const": "report" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-report" } } } },
@@ -92,6 +93,18 @@
         "errors": { "$ref": "#/$defs/count" },
         "warnings": { "$ref": "#/$defs/count" },
         "dismissed": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-check-all": {
+      "type": "object",
+      "$comment": "errors, warnings, and dismissed count the diagnostics: each finding once, and with strict every warning as an error. checks summarizes each check's own result, as story validate, links, and continuity report it.",
+      "required": ["errors", "warnings", "dismissed", "strict", "checks"],
+      "properties": {
+        "errors": { "$ref": "#/$defs/count" },
+        "warnings": { "$ref": "#/$defs/count" },
+        "dismissed": { "$ref": "#/$defs/count" },
+        "strict": { "type": "boolean" },
+        "checks": { "$ref": "#/$defs/checks" }
       }
     },
     "data-series": {

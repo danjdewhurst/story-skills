@@ -12,7 +12,7 @@ import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 const examples = fs.readdirSync(examplesRoot).sort().filter((name) => fs.existsSync(path.join(examplesRoot, name, "story.md")));
-const PATH_COMMANDS = ["validate", "links", "continuity", "series", "next", "doctor", "report", "timeline", "prose", "voices", "pacing", "clues", "progress"];
+const PATH_COMMANDS = ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "timeline", "prose", "voices", "pacing", "clues", "progress"];
 
 // `stdin`, when given, stands in for text piped to `story <command> -`.
 function invoke(cwd, argv, stdin) {
