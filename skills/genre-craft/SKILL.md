@@ -1,6 +1,6 @@
 ---
 name: genre-craft
-description: This skill should be used when the user asks about "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project.
+description: This skill should be used when the user asks about "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "fantasy", "quest", "chosen one", "historical fiction", "period voice", "anachronism", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project.
 ---
 
 # Genre Craft
@@ -12,7 +12,9 @@ checkable rules, ledgers, and audits. Packs cover mystery (fair play + clue
 ledger), romance (beats + HEA contract), thriller (ticking clock, power
 imbalance, set pieces), horror (dread/terror ordering, monster rules),
 MG/YA (category constraints), science fiction (load-bearing speculative
-elements), and serial/episodic structure. Use at story-init (pick the pack,
+elements), fantasy (quest structure, magic paid off by its rules and costs),
+historical fiction (period voice, anachronisms, real people), and
+serial/episodic structure. Use at story-init (pick the pack,
 set the constraints) and in revision (run the pack's audit).
 
 ## Prerequisites
@@ -41,6 +43,8 @@ exist or be in progress.
    - Horror → `references/horror.md`
    - Middle grade / young adult → `references/mg-ya.md`
    - Science fiction → `references/scifi-pipeline.md`
+   - Fantasy (epic, quest, secondary-world) → `references/fantasy.md`
+   - Historical fiction → `references/historical.md`
    - Serial / episodic / web serial → `references/serial-episodic.md`
    - Multi-genre stories: load each applicable pack; where packs conflict
      (e.g. horror's slow dread vs. thriller's cliffhangers), decide with
@@ -64,6 +68,14 @@ exist or be in progress.
      constraints (protagonist age, minimized adult involvement).
    - Sci-fi: write the speculative element's rules, costs, and limits in
      `worldbuilding/systems/` before the climax exploits them.
+   - Fantasy: write the magic's rules, costs, and limits in
+     `worldbuilding/systems/` (the `worldbuilding` skill designs them) and
+     log the quest goal and any prophecy in `continuity/promises/`.
+   - Historical: record `setting-era` in `story.md`, the chosen period
+     register in the style sheet, and a `research/` note (the `research`
+     skill) for every fact the plot leans on and every real person; run
+     the `editorial-review` real-people pass for anyone living or recently
+     dead.
 3. **Draft against the pack.** Use the pack's beat concepts and rules
    alongside the `chapter-writing` workflow and the `scene-craft`
    scene-grain tools. Cross-link thriller pacing to the Fichtean curve
@@ -118,6 +130,8 @@ story clues .     # mystery: fair-play matrix and warnings
 - **`references/horror.md`** - Dread vs. terror vs. gross-out ordering, the uncanny, monster rules stated early, recovery periods
 - **`references/mg-ya.md`** - Word-count norms, age-appropriate voice/stakes, minimized adult involvement, content boundaries
 - **`references/scifi-pipeline.md`** - Speculative element must be load-bearing, rules stated before exploited, worldbuilding→plot pipeline
+- **`references/fantasy.md`** - Quest and journey structure, magic rules stated before the climax relies on them, cost and limits, secondary-world exposition, chosen-one pitfalls
+- **`references/historical.md`** - Period voice vs. readability, anachronism checks (things, words, ideas), invented vs. real people, ethics of the real past, the author's note
 - **`references/serial-episodic.md`** - Season/volume goal, per-episode dramatic question, a reward in every installment, recap discipline
 
 ## Shared Conventions
