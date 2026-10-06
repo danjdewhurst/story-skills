@@ -246,6 +246,7 @@ manuscript:
 ```shell
 story reindex .
 story wordcount . --write
+story links .
 story validate .
 story build . --format metadata
 ```

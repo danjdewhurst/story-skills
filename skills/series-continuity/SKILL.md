@@ -133,8 +133,9 @@ The checker cannot judge knowledge without fact ids, or ages, dates, travel time
 After any change to series links or carried entities, run the checks in each affected book:
 
 ```shell
-story validate .
+story reindex .
 story links .
+story validate .
 story continuity .
 story series .
 ```
