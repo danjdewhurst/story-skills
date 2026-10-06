@@ -53,7 +53,7 @@ With a calendar, scene and chapter `date` values are written in it:
 - `3 Thaw 412 AF`, or `3rd of Thaw, 412 After the Founding`
 - `412-01-03 AF` (year, month number, day)
 - `3 Thaw 412` (no era: the last era)
-- `Midweek, 3 Thaw 412 AF` (a stated weekday must be the right one)
+- `Seconday, 3 Thaw 412 AF` (a stated weekday must be the right one)
 
 `story add scene --date "3 Thaw 412 AF"` takes the same forms. Use `time`
 for the time of day: it keeps the 24-hour `HH:MM` clock and the named

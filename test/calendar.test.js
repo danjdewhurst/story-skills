@@ -113,6 +113,54 @@ describe("custom calendar dates (#407)", () => {
     expect(problem("Thaw the third")).toMatch(/^write it as day, month, and year/);
   });
 
+  test("ordinal suffixes must fit the day", () => {
+    expect(days("1st Thaw 12")).toBe(days("1 Thaw 12"));
+    expect(days("2nd Thaw 12")).toBe(days("2 Thaw 12"));
+    expect(days("11th Thaw 12")).toBe(days("11 Thaw 12"));
+    expect(days("12th Thaw 12")).toBe(days("12 Thaw 12"));
+    expect(days("13th Thaw 12")).toBe(days("13 Thaw 12"));
+    expect(days("21st Thaw 12")).toBe(days("21 Thaw 12"));
+    expect(days("23RD of Thaw 12")).toBe(days("23 Thaw 12"));
+    expect(problem("1th Thaw 12")).toBe("write 1st, not 1th");
+    expect(problem("3nd Thaw 12")).toBe("write 3rd, not 3nd");
+    expect(problem("12nd Thaw 12")).toBe("write 12th, not 12nd");
+  });
+
+  test("a month may be called Of", () => {
+    const odd = parseCalendar([{ month: "Thaw", days: 10 }, { month: "Of", days: 10 }]).calendar;
+    expect(parseCalendarDate("3 of 1", odd).days).toBe(12);
+    expect(parseCalendarDate("3 of Of 1", odd).days).toBe(12);
+    expect(parseCalendarDate("3 of Thaw 1", odd).days).toBe(2);
+  });
+
+  test("days too large to count exactly are refused", () => {
+    expect(parseCalendar([{ month: "Thaw", days: 2 ** 53 }]).problems).toEqual([`entry 1 days must be a whole number 1 or more, got ${2 ** 53}`]);
+    expect(problem("3 Thaw 99999999999999999999 AE")).toBe("the year is too far from year 1 to count its days");
+    expect(problem(`3 Thaw ${"9".repeat(400)} AE`)).toBe("the year is too far from year 1 to count its days");
+  });
+
+  test("the documented examples read as documented", () => {
+    const ember = scanProject(path.join(repoRoot, "examples", "the-last-ember")).calendar;
+    const read = (text) => parseStoryDate(text, ember)?.days;
+    const expected = read("3 Thaw 302 AE");
+    for (const text of ["3rd of Thaw, 302 Age of Embers", "302-02-03 AE", "3 Thaw 302", "Rootday, 3 Thaw 302 AE"]) {
+      expect(read(text)).toBe(expected);
+    }
+    expect(read("1 Frostwane 1 AE") - read("6 Embertide 1 BW")).toBe(1);
+    // skills/worldbuilding/references/calendars.md
+    const vell = parseCalendar([
+      ...["Thaw", "Sowing", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth", "Eleventh", "Frost"].map((month) => ({ month, days: 30 })),
+      { month: "Hollow Days", days: 5 },
+      { weekdays: ["Firstday", "Seconday", "Midweek", "Fourthday", "Fifthday", "Restday"], "first-weekday": "Midweek" },
+      { era: "Before the Founding", abbrev: "BF", direction: "backward" },
+      { era: "After the Founding", abbrev: "AF" }
+    ]).calendar;
+    const vellDays = parseCalendarDate("3 Thaw 412 AF", vell).days;
+    for (const text of ["3rd of Thaw, 412 After the Founding", "412-01-03 AF", "3 Thaw 412", "Seconday, 3 Thaw 412 AF"]) {
+      expect(parseCalendarDate(text, vell).days).toBe(vellDays);
+    }
+  });
+
   test("a calendar without eras takes a bare year", () => {
     const plain = parseCalendar([{ month: "Thaw", days: 10 }, { month: "Bloom", days: 10 }]).calendar;
     expect(parseCalendarDate("1 Bloom 2", plain).days).toBe(30);

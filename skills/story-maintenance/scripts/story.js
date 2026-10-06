@@ -758,7 +758,14 @@ function isName(value) {
   return typeof value === "string" && CALENDAR_NAME.test(value);
 }
 function isCount(value) {
-  return Number.isInteger(value) && value >= 1;
+  return Number.isSafeInteger(value) && value >= 1;
+}
+function ordinalSuffix(day) {
+  const tens = day % 100;
+  if (tens >= 11 && tens <= 13) {
+    return "th";
+  }
+  return ["th", "st", "nd", "rd"][day % 10] ?? "th";
 }
 function fold(value) {
   return String(value).trim().replace(/\s+/g, " ").toLowerCase();
@@ -920,16 +927,21 @@ function parseCalendarDate(value, calendar) {
     day = Number(numeric[3]);
     rest = `${numeric[1]}${numeric[4] === undefined ? "" : ` ${numeric[4]}`}`;
   } else {
-    const named = /^(\d+)(?:st|nd|rd|th)? (?:of )?(.+)$/i.exec(text);
+    const named = /^(\d+)(st|nd|rd|th)? (.+)$/i.exec(text);
     if (!named) {
       return { problem: "write it as day, month, and year, such as 3 Thaw 301 AE or 301-02-03 AE" };
     }
-    const found = leadingName(named[2], calendar.months.map((entry) => entry.name));
+    day = Number(named[1]);
+    if (named[2] !== undefined && named[2].toLowerCase() !== ordinalSuffix(day)) {
+      return { problem: `write ${named[1]}${ordinalSuffix(day)}, not ${named[1]}${named[2]}` };
+    }
+    const names = calendar.months.map((entry) => entry.name);
+    const readings = [named[3], .../^of /i.test(named[3]) ? [named[3].slice(3)] : []].map((candidate) => leadingName(candidate, names)).filter(Boolean);
+    const found = readings.find((reading) => /^\d/.test(reading.rest)) ?? readings[0];
     if (!found) {
-      return { problem: `it names no calendar month (${calendar.months.map((entry) => entry.name).join(", ")})` };
+      return { problem: `it names no calendar month (${names.join(", ")})` };
     }
     month = calendar.months.find((entry) => entry.name === found.name);
-    day = Number(named[1]);
     rest = found.rest;
   }
   const yearMatch = /^(\d+)(?: (.+))?$/.exec(rest);
@@ -948,6 +960,9 @@ function parseCalendarDate(value, calendar) {
     return absolute;
   }
   const days = (absolute.year - 1) * calendar.yearDays + month.offset + day - 1;
+  if (!Number.isSafeInteger(days)) {
+    return { problem: "the year is too far from year 1 to count its days" };
+  }
   if (stated !== null) {
     const actual = calendar.weekdays[mod(days + calendar.firstWeekday, calendar.weekdays.length)];
     if (actual !== stated) {
