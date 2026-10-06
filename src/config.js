@@ -8,6 +8,7 @@ import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
 import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
+import { PDF_ENGINES, isPdfEngineName } from "./pdf.js";
 import { proseThresholds } from "./prose.js";
 import { similarityOptions } from "./similarity.js";
 
@@ -133,6 +134,10 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which names one target and cannot be a default`);
     } else if ((ONE_RUN_FLAGS[command.name] ?? []).includes(key)) {
       errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
+    } else if (key === "pdf-engine" && !isPdfEngineName(value)) {
+      // A path or command here would let a cloned project pick a program
+      // for `story build` to run, so a default may only name an engine.
+      errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));

@@ -894,7 +894,7 @@ Built 1 chapters as print PDF (weasyprint) to ~/stories/harbor-of-second-light/d
 Built 1 chapters as shunn PDF (weasyprint) to ~/stories/harbor-of-second-light/dist/harbor-of-second-light.shunn.pdf
 ```
 
-`--pdf-engine` picks the engine by name (`prince`, `weasyprint`, `pagedjs-cli`, `chrome`) or by the path to its executable, for one that is not on your `PATH`. To use one engine for every PDF build of a project, set it in `story.md`:
+`--pdf-engine` picks the engine by name (`prince`, `weasyprint`, `pagedjs-cli`, `chrome`), by a browser's command name (`chromium`, `msedge`), or by the path to its executable, for one that is not on your `PATH`. To use one engine for every PDF build of a project, set its name (never a path, so a project cannot pick a program to run) in `story.md`:
 
 ```yaml
 cli-defaults:

@@ -14233,8 +14233,251 @@ function formatNumber3(value) {
 }
 
 // src/config.js
+import fs5 from "node:fs";
+import path8 from "node:path";
+
+// src/pdf.js
 import fs4 from "node:fs";
+import os from "node:os";
 import path7 from "node:path";
+import { Buffer as Buffer2 } from "node:buffer";
+import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+var PDF_ENGINES = [
+  {
+    name: "prince",
+    label: "Prince",
+    commands: ["prince"],
+    install: "https://www.princexml.com/",
+    args: (input, output) => [input, "-o", output]
+  },
+  {
+    name: "weasyprint",
+    label: "WeasyPrint",
+    commands: ["weasyprint"],
+    install: "pip install weasyprint",
+    args: (input, output) => [input, output]
+  },
+  {
+    name: "pagedjs-cli",
+    label: "Paged.js CLI",
+    commands: ["pagedjs-cli"],
+    install: "npm install -g pagedjs-cli",
+    args: (input, output) => [input, "-o", output]
+  },
+  {
+    name: "chrome",
+    label: "Chrome or Chromium",
+    commands: ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome", "msedge"],
+    install: "https://www.google.com/chrome/",
+    args: (input, output, work) => [
+      "--headless",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-pdf-header-footer",
+      `--user-data-dir=${path7.join(work, "profile")}`,
+      `--print-to-pdf=${output}`,
+      pathToFileURL(input).href
+    ]
+  }
+];
+var ENGINE_NAMES = PDF_ENGINES.map((engine) => engine.name);
+var ENGINE_ALIASES = { pagedjs: "pagedjs-cli", "paged.js": "pagedjs-cli" };
+function isPdfEngineName(value) {
+  const name = String(value).trim().toLowerCase();
+  return ENGINE_NAMES.includes(name) || Object.prototype.hasOwnProperty.call(ENGINE_ALIASES, name);
+}
+function browserLocations(env, platform) {
+  if (platform === "darwin") {
+    return [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    ];
+  }
+  if (platform === "win32") {
+    const roots = [env.ProgramFiles, env["ProgramFiles(x86)"], env.LOCALAPPDATA].filter(Boolean);
+    return roots.flatMap((root) => [
+      path7.join(root, "Google", "Chrome", "Application", "chrome.exe"),
+      path7.join(root, "Microsoft", "Edge", "Application", "msedge.exe")
+    ]);
+  }
+  return [];
+}
+function envValue(env, name, platform) {
+  if (platform !== "win32") {
+    return env[name];
+  }
+  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
+  return key === undefined ? undefined : env[key];
+}
+function isExecutableFile(file, platform) {
+  try {
+    if (!fs4.statSync(file).isFile()) {
+      return false;
+    }
+    if (platform !== "win32") {
+      fs4.accessSync(file, fs4.constants.X_OK);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+function findCommand(name, env = process.env, platform = process.platform) {
+  const dirs = String(envValue(env, "PATH", platform) ?? "").split(platform === "win32" ? ";" : ":").filter((dir) => dir !== "");
+  const extensions = platform === "win32" ? String(envValue(env, "PATHEXT", platform) || ".COM;.EXE;.BAT;.CMD").split(";").filter((ext) => ext !== "") : [];
+  const names = platform === "win32" ? [...extensions.some((ext) => name.toUpperCase().endsWith(ext.toUpperCase())) ? [name] : [], ...extensions.map((ext) => `${name}${ext}`)] : [name];
+  for (const dir of dirs) {
+    for (const candidate of names) {
+      const file = path7.resolve(dir, candidate);
+      if (isExecutableFile(file, platform)) {
+        return file;
+      }
+    }
+  }
+  return null;
+}
+function locateEngine(engine, env, platform) {
+  for (const command of engine.commands) {
+    const file = findCommand(command, env, platform);
+    if (file !== null) {
+      return file;
+    }
+  }
+  if (engine.name === "chrome") {
+    return browserLocations(env, platform).find((file) => isExecutableFile(file, platform)) ?? null;
+  }
+  return null;
+}
+function engineForExecutable(file) {
+  const base = path7.basename(file).toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, "");
+  if (base.startsWith("prince")) {
+    return "prince";
+  }
+  if (base.startsWith("weasyprint")) {
+    return "weasyprint";
+  }
+  if (base.startsWith("pagedjs")) {
+    return "pagedjs-cli";
+  }
+  if (/chrom|msedge|microsoft edge|brave/.test(base)) {
+    return "chrome";
+  }
+  return null;
+}
+function installHints() {
+  return PDF_ENGINES.map((engine) => `${engine.label} (${engine.install})`).join(", ");
+}
+function resolvePdfEngine(choice, { env = process.env, platform = process.platform, cwd = process.cwd() } = {}) {
+  if (choice === undefined || choice === null) {
+    for (const engine of PDF_ENGINES) {
+      const file = locateEngine(engine, env, platform);
+      if (file !== null) {
+        return { name: engine.name, file };
+      }
+    }
+    throw refusedError(`No PDF engine found on PATH (looked for ${ENGINE_NAMES.join(", ")}). Install one: ${installHints()}. Or name an installed one with --pdf-engine <name|path>, or build without --pdf and render the HTML yourself`);
+  }
+  const value = String(choice).trim();
+  if (value === "") {
+    throw usageError(`--pdf-engine needs an engine name (${ENGINE_NAMES.join(", ")}) or the path to one`);
+  }
+  const named = ENGINE_ALIASES[value.toLowerCase()] ?? (ENGINE_NAMES.includes(value.toLowerCase()) ? value.toLowerCase() : null);
+  if (named !== null) {
+    const engine = PDF_ENGINES.find((entry) => entry.name === named);
+    const file = locateEngine(engine, env, platform);
+    if (file === null) {
+      throw refusedError(`PDF engine ${engine.name} was not found on PATH (looked for ${engine.commands.join(", ")}). Install ${engine.label} (${engine.install}), or give --pdf-engine the path to its executable`);
+    }
+    return { name: engine.name, file };
+  }
+  const kind = engineForExecutable(value);
+  if (kind === null) {
+    throw usageError(`Unknown PDF engine: ${value}. Name one of ${ENGINE_NAMES.join(", ")}, or the path to its executable, whose file name says which it is`);
+  }
+  const isPath = value.includes("/") || platform === "win32" && value.includes("\\");
+  const file = isPath ? path7.resolve(cwd, value) : findCommand(value, env, platform);
+  if (file === null || !isExecutableFile(file, platform)) {
+    throw refusedError(`PDF engine ${value} was not found${isPath ? " or is not an executable file" : " on PATH"}`);
+  }
+  return { name: kind, file };
+}
+var ENGINE_TIMEOUT_MS = 10 * 60 * 1000;
+function windowsScriptCommand(file, args, env) {
+  const parts = [file, ...args];
+  const unsafe = parts.find((part) => /["%!\r\n]/.test(part));
+  if (unsafe !== undefined) {
+    throw refusedError(`Cannot run ${file} safely through cmd.exe: ${unsafe} contains a quote, %, or !. Give --pdf-engine an .exe instead`);
+  }
+  return {
+    command: envValue(env, "COMSPEC", "win32") || "cmd.exe",
+    args: ["/d", "/s", "/c", `"${parts.map((part) => `"${part}"`).join(" ")}"`],
+    options: { windowsVerbatimArguments: true }
+  };
+}
+function renderPdf(html, engine, { env = process.env, platform = process.platform, timeout = ENGINE_TIMEOUT_MS } = {}) {
+  const spec = PDF_ENGINES.find((entry) => entry.name === engine.name);
+  const work = fs4.mkdtempSync(path7.join(os.tmpdir(), "story-pdf-"));
+  try {
+    const input = path7.join(work, "book.html");
+    const output = path7.join(work, "book.pdf");
+    fs4.writeFileSync(input, html, "utf8");
+    const args = spec.args(input, output, work);
+    const run = platform === "win32" && /\.(?:cmd|bat)$/i.test(engine.file) ? windowsScriptCommand(engine.file, args, env) : { command: engine.file, args, options: {} };
+    const logFile = path7.join(work, "engine.log");
+    const log = fs4.openSync(logFile, "w");
+    let result;
+    try {
+      result = spawnSync(run.command, run.args, {
+        ...run.options,
+        cwd: work,
+        env,
+        stdio: ["ignore", log, log],
+        timeout,
+        killSignal: "SIGKILL",
+        detached: platform !== "win32",
+        windowsHide: true
+      });
+    } finally {
+      fs4.closeSync(log);
+    }
+    killTree(result.pid, platform, Boolean(result.error));
+    const detail = lastLines(fs4.readFileSync(logFile, "utf8"));
+    const withDetail = (message) => `${message}${detail === "" ? "" : `:
+${detail}`}`;
+    if (result.error) {
+      const reason = result.error.code === "ETIMEDOUT" ? `did not finish within ${timeout / 1000} seconds` : `could not be run (${result.error.message})`;
+      throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
+    }
+    const pdf = fs4.existsSync(output) ? fs4.readFileSync(output) : null;
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer2.from("%PDF-"))) {
+      const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
+      throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
+    }
+    return pdf;
+  } finally {
+    try {
+      fs4.rmSync(work, { recursive: true, force: true, maxRetries: 3 });
+    } catch {}
+  }
+}
+function killTree(pid, platform, failed) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return;
+  }
+  if (platform !== "win32") {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {}
+  } else if (failed) {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+  }
+}
+function lastLines(text, count = 10) {
+  return text.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line !== "").slice(-count).join(`
+`);
+}
 
 // src/similarity.js
 var SIMILARITY_DEFAULTS = { minWords: 8 };
@@ -14453,7 +14696,7 @@ var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], e
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs4.readFileSync(path7.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(fs5.readFileSync(path8.join(root, "story.md"), "utf8")).data;
   } catch {
     return EMPTY_CONFIG;
   }
@@ -14526,6 +14769,8 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which names one target and cannot be a default`);
     } else if ((ONE_RUN_FLAGS[command.name] ?? []).includes(key)) {
       errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
+    } else if (key === "pdf-engine" && !isPdfEngineName(value)) {
+      errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
     } else if (option.value === undefined) {
       try {
         values[key] = normalizeBooleanValue(key, typeof value === "boolean" ? value : String(value));
@@ -14646,19 +14891,19 @@ import fs14 from "node:fs";
 import path15 from "node:path";
 
 // src/stdin.js
-import { Buffer as Buffer2 } from "node:buffer";
-import fs5 from "node:fs";
+import { Buffer as Buffer3 } from "node:buffer";
+import fs6 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
 var MAX_STDIN_BYTES = 5 * 1024 * 1024;
 var CHUNK_BYTES = 64 * 1024;
 var RETRY_MS = 10;
-function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs5.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
+function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer2.alloc(CHUNK_BYTES);
+  const buffer = Buffer3.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -14684,9 +14929,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs5.readSy
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer2.from(buffer.subarray(0, read)));
+    chunks.push(Buffer3.from(buffer.subarray(0, read)));
   }
-  return Buffer2.concat(chunks);
+  return Buffer3.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -15156,8 +15401,8 @@ function timelineText(text) {
 }
 
 // src/packaging.js
-import { Buffer as Buffer3 } from "node:buffer";
-import fs6 from "node:fs";
+import { Buffer as Buffer4 } from "node:buffer";
+import fs7 from "node:fs";
 import { deflateRawSync } from "node:zlib";
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
@@ -15200,7 +15445,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs6.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverEntries.push({ name: `OEBPS/${href}`, content: fs7.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
@@ -15765,14 +16010,14 @@ function writeZip(outFile, entries, writeOptions = {}) {
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer3.from(entry.name, "utf8");
-    const content = Buffer3.isBuffer(entry.content) ? entry.content : Buffer3.from(entry.content, "utf8");
+    const name = Buffer4.from(entry.name, "utf8");
+    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer3.alloc(30);
+    const localHeader = Buffer4.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -15785,7 +16030,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer3.alloc(46);
+    const centralHeader = Buffer4.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -15810,7 +16055,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer3.alloc(22);
+  const end = Buffer4.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -15819,7 +16064,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer3.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -15964,13 +16209,13 @@ function formatPasses(passes, command = "story passes") {
 }
 
 // src/snapshots.js
-import fs8 from "node:fs";
-import path9 from "node:path";
+import fs9 from "node:fs";
+import path10 from "node:path";
 
 // src/lock.js
-import fs7 from "node:fs";
-import os from "node:os";
-import path8 from "node:path";
+import fs8 from "node:fs";
+import os2 from "node:os";
+import path9 from "node:path";
 var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
@@ -15979,7 +16224,7 @@ var TAKEOVER_FILE = ".story-takeover.tmp";
 var TAKEOVER_STALE_MS = 2000;
 var held = new Map;
 function withProjectLock(root, run) {
-  const projectRoot = path8.resolve(root);
+  const projectRoot = path9.resolve(root);
   const key = realPath(projectRoot);
   if (held.has(key)) {
     held.set(key, held.get(key) + 1);
@@ -15989,8 +16234,8 @@ function withProjectLock(root, run) {
       held.set(key, held.get(key) - 1);
     }
   }
-  const lockPath = path8.join(projectRoot, LOCK_FILE);
-  const ours = fs7.existsSync(path8.join(projectRoot, "story.md")) && acquire(lockPath);
+  const lockPath = path9.join(projectRoot, LOCK_FILE);
+  const ours = fs8.existsSync(path9.join(projectRoot, "story.md")) && acquire(lockPath);
   if (!ours) {
     return run();
   }
@@ -16000,7 +16245,7 @@ function withProjectLock(root, run) {
   } finally {
     held.delete(key);
     if (readOwner(lockPath)?.text === ours) {
-      fs7.rmSync(lockPath, { force: true });
+      fs8.rmSync(lockPath, { force: true });
     }
   }
 }
@@ -16015,7 +16260,7 @@ function acquire(lockPath) {
       continue;
     }
     if (Date.now() >= deadline) {
-      const who = owner?.pid ? `another story command (process ${owner.pid}${owner.host && owner.host !== os.hostname() ? ` on ${owner.host}` : ""})` : "another story command";
+      const who = owner?.pid ? `another story command (process ${owner.pid}${owner.host && owner.host !== os2.hostname() ? ` on ${owner.host}` : ""})` : "another story command";
       throw refusedError(`${who} is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete ${LOCK_FILE} in the project folder and try again`);
     }
     sleep(Math.min(POLL_MS, Math.max(1, deadline - Date.now())));
@@ -16023,10 +16268,10 @@ function acquire(lockPath) {
   return created;
 }
 function removeStale(lockPath, staleText) {
-  const guard = path8.join(path8.dirname(lockPath), TAKEOVER_FILE);
+  const guard = path9.join(path9.dirname(lockPath), TAKEOVER_FILE);
   let created = tryCreate(guard);
   if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
-    fs7.rmSync(guard, { force: true });
+    fs8.rmSync(guard, { force: true });
     created = tryCreate(guard);
   }
   if (!created) {
@@ -16034,24 +16279,24 @@ function removeStale(lockPath, staleText) {
   }
   try {
     if (readOwner(lockPath)?.text === staleText) {
-      fs7.rmSync(lockPath, { force: true });
+      fs8.rmSync(lockPath, { force: true });
     }
   } finally {
-    fs7.rmSync(guard, { force: true });
+    fs8.rmSync(guard, { force: true });
   }
   return true;
 }
 function tryCreate(lockPath) {
   try {
-    const descriptor = fs7.openSync(lockPath, "wx", 420);
+    const descriptor = fs8.openSync(lockPath, "wx", 420);
     const text = `${process.pid}
-${os.hostname()}
+${os2.hostname()}
 ${new Date().toISOString()}
 `;
     try {
-      fs7.writeFileSync(descriptor, text, "utf8");
+      fs8.writeFileSync(descriptor, text, "utf8");
     } finally {
-      fs7.closeSync(descriptor);
+      fs8.closeSync(descriptor);
     }
     return text;
   } catch (error) {
@@ -16062,12 +16307,12 @@ function readOwner(lockPath) {
   let text;
   let modified;
   try {
-    const descriptor = fs7.openSync(lockPath, "r");
+    const descriptor = fs8.openSync(lockPath, "r");
     try {
-      modified = fs7.fstatSync(descriptor).mtimeMs;
-      text = fs7.readFileSync(descriptor, "utf8");
+      modified = fs8.fstatSync(descriptor).mtimeMs;
+      text = fs8.readFileSync(descriptor, "utf8");
     } finally {
-      fs7.closeSync(descriptor);
+      fs8.closeSync(descriptor);
     }
   } catch {
     return null;
@@ -16078,7 +16323,7 @@ function readOwner(lockPath) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return { text, pid: null, host: null, alive: true };
   }
-  const foreign = host && host !== os.hostname();
+  const foreign = host && host !== os2.hostname();
   return { text, pid, host, alive: foreign ? !foreignLockStale(Date.parse(writtenAt), modified) : processAlive(pid) };
 }
 function foreignLockStale(written, modified) {
@@ -16086,7 +16331,7 @@ function foreignLockStale(written, modified) {
 }
 function modifiedAt(file) {
   try {
-    return fs7.statSync(file).mtimeMs;
+    return fs8.statSync(file).mtimeMs;
   } catch {
     return Date.now();
   }
@@ -16108,7 +16353,7 @@ function sleep(ms) {
 }
 function realPath(target) {
   try {
-    return fs7.realpathSync(target);
+    return fs8.realpathSync(target);
   } catch {
     return target;
   }
@@ -16146,29 +16391,29 @@ function snapshotProjectUnlocked(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "take a snapshot");
   const projectRoot = project.root;
-  const target = path9.join(projectRoot, SNAPSHOTS_DIR, id);
+  const target = path10.join(projectRoot, SNAPSHOTS_DIR, id);
   const existing = lstatIfExists(target);
   if (existing && !options.force) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
   }
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
-  const backup = existing ? path9.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
+  const backup = existing ? path10.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
   if (backup !== null) {
-    fs8.rmSync(backup, { recursive: true, force: true });
-    fs8.cpSync(target, backup, { recursive: true });
+    fs9.rmSync(backup, { recursive: true, force: true });
+    fs9.cpSync(target, backup, { recursive: true });
   }
   try {
     const manifest = writeSnapshot(project, target, id, options, previous);
     return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
   } catch (error) {
-    fs8.rmSync(target, { recursive: true, force: true });
+    fs9.rmSync(target, { recursive: true, force: true });
     if (backup !== null) {
-      fs8.renameSync(backup, target);
+      fs9.renameSync(backup, target);
     }
     throw error;
   } finally {
     if (backup !== null) {
-      fs8.rmSync(backup, { recursive: true, force: true });
+      fs9.rmSync(backup, { recursive: true, force: true });
     }
   }
 }
@@ -16177,7 +16422,7 @@ function writeSnapshot(project, target, id, options, previous) {
   const files = markdownFiles(projectRoot);
   const written = new Set;
   for (const file of files) {
-    const copy = path9.join(target, path9.relative(projectRoot, file));
+    const copy = path10.join(target, path10.relative(projectRoot, file));
     writeFile(copy, readTextFile(file), { root: projectRoot });
     written.add(copy);
   }
@@ -16191,7 +16436,7 @@ function writeSnapshot(project, target, id, options, previous) {
     ...characters ? { characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {},
     files: files.length
   };
-  const manifestPath = path9.join(target, SNAPSHOT_MANIFEST);
+  const manifestPath = path10.join(target, SNAPSHOT_MANIFEST);
   writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}
 `, { root: projectRoot });
   written.add(manifestPath);
@@ -16204,12 +16449,12 @@ function writeSnapshot(project, target, id, options, previous) {
   return manifest;
 }
 function snapshotFiles(directory, root) {
-  assertSafeProjectDirectory(path9.dirname(directory), root);
+  assertSafeProjectDirectory(path10.dirname(directory), root);
   assertSafeProjectDirectory(directory, root);
   const files = [];
   const walk = (folder) => {
-    for (const entry of fs8.readdirSync(folder, { withFileTypes: true })) {
-      const full = path9.join(folder, entry.name);
+    for (const entry of fs9.readdirSync(folder, { withFileTypes: true })) {
+      const full = path10.join(folder, entry.name);
       if (entry.isDirectory()) {
         walk(full);
       } else {
@@ -16221,29 +16466,29 @@ function snapshotFiles(directory, root) {
   return files;
 }
 function removeEmptyFolders(folder) {
-  for (const entry of fs8.readdirSync(folder, { withFileTypes: true })) {
+  for (const entry of fs9.readdirSync(folder, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      const full = path9.join(folder, entry.name);
+      const full = path10.join(folder, entry.name);
       removeEmptyFolders(full);
-      if (fs8.readdirSync(full).length === 0) {
-        fs8.rmdirSync(full);
+      if (fs9.readdirSync(full).length === 0) {
+        fs9.rmdirSync(full);
       }
     }
   }
 }
 function listSnapshots(root) {
-  const projectRoot = path9.resolve(root);
+  const projectRoot = path10.resolve(root);
   requireStoryFile(projectRoot);
-  const folder = path9.join(projectRoot, SNAPSHOTS_DIR);
+  const folder = path10.join(projectRoot, SNAPSHOTS_DIR);
   const warnings = [];
   if (lstatIfExists(folder) === null) {
     return { ok: true, errors: [], warnings, snapshots: [] };
   }
   assertSafeProjectDirectory(folder, projectRoot);
-  const snapshots = fs8.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => {
+  const snapshots = fs9.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => {
     const blank = { name: entry.name, id: entry.name, created: null, chapters: null, words: null };
     try {
-      const manifest = JSON.parse(readTextFile(path9.join(folder, entry.name, SNAPSHOT_MANIFEST)));
+      const manifest = JSON.parse(readTextFile(path10.join(folder, entry.name, SNAPSHOT_MANIFEST)));
       return {
         ...blank,
         ...typeof manifest.name === "string" ? { name: manifest.name } : {},
@@ -16266,7 +16511,7 @@ function bySnapshotAge(a, b) {
   return order(a.created ?? "", b.created ?? "") || order(a.id, b.id);
 }
 function existingSnapshot(root, value) {
-  const projectRoot = path9.resolve(root);
+  const projectRoot = path10.resolve(root);
   const text = String(value).trim();
   const { snapshots } = listSnapshots(projectRoot);
   let derived = null;
@@ -16278,7 +16523,7 @@ function existingSnapshot(root, value) {
     const list = snapshots.length === 0 ? "this project has none yet (story snapshot <name> takes one)" : `story snapshot --list shows them: ${snapshots.map((snapshot) => snapshot.id).join(", ")}`;
     throw usageError(`No snapshot named ${text}: ${list}`);
   }
-  const directory = path9.join(projectRoot, SNAPSHOTS_DIR, found.id);
+  const directory = path10.join(projectRoot, SNAPSHOTS_DIR, found.id);
   assertSafeProjectDirectory(directory, projectRoot);
   return { directory, id: found.id };
 }
@@ -16311,8 +16556,8 @@ ${lines.join(`
 }
 
 // src/validate.js
-import fs9 from "node:fs";
-import path10 from "node:path";
+import fs10 from "node:fs";
+import path11 from "node:path";
 
 // src/fountain.js
 var SCENE_SETTINGS = new Map([
@@ -16462,7 +16707,7 @@ function validateProjectOf(project) {
   const warnings = [];
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
-    if (!fs9.existsSync(path10.join(projectRoot, requiredPath))) {
+    if (!fs10.existsSync(path11.join(projectRoot, requiredPath))) {
       errors.push(err("missing-required-path", `Missing required path: ${requiredPath} (story migrate adds missing registries)`));
     }
   }
@@ -16500,11 +16745,11 @@ function validateProjectOf(project) {
   validatePortablePaths(project, warnings);
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
-    if (WINDOWS_RESERVED_ID.test(path10.basename(file, ".md").toLowerCase())) {
+    if (WINDOWS_RESERVED_ID.test(path11.basename(file, ".md").toLowerCase())) {
       warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));
     }
   }
-  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path10.basename(item.file)})`, projectPath(projectRoot, item.file)]);
+  const linksFor = (items, prefix = "") => items.map((item) => [`](${prefix}${path11.basename(item.file)})`, projectPath(projectRoot, item.file)]);
   const indexChecks = [
     ["characters/_index.md", linksFor(project.characters)],
     ["worldbuilding/_index.md", linksFor(project.locations, "locations/").concat(linksFor(project.systems, "systems/")).concat(linksFor(project.factions, "factions/")).concat(linksFor(project.artifacts, "artifacts/"))],
@@ -16515,13 +16760,13 @@ function validateProjectOf(project) {
     ["continuity/promises/_index.md", linksFor(project.promises)],
     ["continuity/clues/_index.md", linksFor(project.clues)],
     ["glossary/_index.md", linksFor(project.glossaryTerms, "terms/")],
-    ...fs9.existsSync(path10.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path10.posix.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
-    ...fs9.existsSync(path10.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path10.posix.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
+    ...fs10.existsSync(path11.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path11.posix.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
+    ...fs10.existsSync(path11.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path11.posix.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
     let markdown;
     try {
-      markdown = safeRead(path10.join(projectRoot, indexPath), projectRoot);
+      markdown = safeRead(path11.join(projectRoot, indexPath), projectRoot);
     } catch {
       continue;
     }
@@ -16808,8 +17053,8 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
       }
     }
   };
-  const timelinePath = path10.join(project.root, "plot", "timeline.md");
-  if (fs9.existsSync(timelinePath)) {
+  const timelinePath = path11.join(project.root, "plot", "timeline.md");
+  if (fs10.existsSync(timelinePath)) {
     try {
       const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
@@ -16870,7 +17115,7 @@ function checkBodyLinkTarget(project, label, target, errors) {
     errors.push(err("link-backslash", `${label} links to ${cleaned} with a backslash; write ${portableSlashes(cleaned)} so the link works on every system`, label));
     return;
   }
-  const base = path10.basename(pathOnly);
+  const base = path11.basename(pathOnly);
   if (!base.endsWith(".md")) {
     return;
   }
@@ -16882,20 +17127,20 @@ function checkBodyLinkTarget(project, label, target, errors) {
     errors.push(err("link-not-kebab", `${label} links to ${cleaned} which must be kebab-case`, label));
     return;
   }
-  const resolved = path10.resolve(path10.dirname(path10.join(project.root, label)), pathOnly);
-  if (!isPathInside(path10.resolve(project.root), resolved)) {
+  const resolved = path11.resolve(path11.dirname(path11.join(project.root, label)), pathOnly);
+  if (!isPathInside(path11.resolve(project.root), resolved)) {
     const linkedBook = ["follows", "precedes"].flatMap((field) => seriesLinks(project.root, project.story.data, field)).find((bookRoot) => isPathInside(bookRoot, resolved));
-    if (linkedBook && fs9.existsSync(resolved) && fs9.statSync(resolved).isFile() && isPathInside(canonicalPath(linkedBook), canonicalPath(resolved))) {
+    if (linkedBook && fs10.existsSync(resolved) && fs10.statSync(resolved).isFile() && isPathInside(canonicalPath(linkedBook), canonicalPath(resolved))) {
       return;
     }
-    errors.push(linkedBook || !fs9.existsSync(resolved) ? err("broken-link", `${label} links to missing file ${cleaned}`, label) : err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
+    errors.push(linkedBook || !fs10.existsSync(resolved) ? err("broken-link", `${label} links to missing file ${cleaned}`, label) : err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
-  if (!fs9.existsSync(resolved) || !fs9.statSync(resolved).isFile()) {
+  if (!fs10.existsSync(resolved) || !fs10.statSync(resolved).isFile()) {
     errors.push(err("broken-link", `${label} links to missing file ${cleaned}`, label));
     return;
   }
-  if (!isPathInside(fs9.realpathSync(project.root), fs9.realpathSync(resolved))) {
+  if (!isPathInside(fs10.realpathSync(project.root), fs10.realpathSync(resolved))) {
     errors.push(err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
@@ -16936,13 +17181,13 @@ function sessionsWithoutCharacters(project) {
   return [warn("session-without-characters", `${PROGRESS_FILE} ${dates.length === 1 ? "session" : "sessions"} ${dates.join(", ")} ${dates.length === 1 ? "has" : "have"} no characters, so story progress leaves ${dates.length === 1 ? "it" : "them"} out of the pace: this book counts characters, so add characters by hand or remove ${dates.length === 1 ? "it" : "them"}`, PROGRESS_FILE)];
 }
 function sampleProblem(project, sample) {
-  const target = path10.resolve(project.root, sample);
+  const target = path11.resolve(project.root, sample);
   if (lstatIfExists(target) === null) {
     return warn("style-sample-missing", `${STYLE_SHEET_FILE} samples entry ${sample} names no file or folder in reach of the project`, STYLE_SHEET_FILE);
   }
   const real = canonicalPath(target);
   const self = canonicalPath(project.root);
-  const chapters = path10.join(self, "chapters");
+  const chapters = path11.join(self, "chapters");
   if (real === self || real === chapters || isPathInside(chapters, real)) {
     return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's own chapters, which are what the samples are compared with: list an earlier book or approved drafts kept elsewhere`, STYLE_SHEET_FILE);
   }
@@ -16979,15 +17224,15 @@ function hasMessage(findings, message) {
   return findings.some((finding) => finding.message === message);
 }
 function entityFileNames(root, relativeDir) {
-  const directory = path10.join(root, relativeDir);
-  if (!fs9.existsSync(directory)) {
+  const directory = path11.join(root, relativeDir);
+  if (!fs10.existsSync(directory)) {
     return [];
   }
-  return fs9.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path10.posix.join(relativeDir, name));
+  return fs10.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path11.posix.join(relativeDir, name));
 }
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
-  const topEntries = fs9.readdirSync(root, { withFileTypes: true });
+  const topEntries = fs10.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
     if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE && entry.name !== PROGRESS_FILE) {
@@ -17000,14 +17245,14 @@ function collectStrayFileWarnings(project, warnings) {
   }
   const nested = [];
   for (const relativeDir of ENTITY_SCAN_DIRS) {
-    const directory = path10.join(root, relativeDir);
-    if (!fs9.existsSync(directory)) {
+    const directory = path11.join(root, relativeDir);
+    if (!fs10.existsSync(directory)) {
       continue;
     }
     for (const file of markdownFiles(directory)) {
-      const relativePath = path10.relative(directory, file);
-      if (relativePath.includes(path10.sep) || path10.dirname(relativePath) !== ".") {
-        nested.push(portablePath(path10.join(relativeDir, relativePath)));
+      const relativePath = path11.relative(directory, file);
+      if (relativePath.includes(path11.sep) || path11.dirname(relativePath) !== ".") {
+        nested.push(portablePath(path11.join(relativeDir, relativePath)));
       }
     }
   }
@@ -17016,25 +17261,25 @@ function collectStrayFileWarnings(project, warnings) {
     warnings.push(warn("nested-file", `${nestedPath} is nested inside an entity directory and is ignored`, nestedPath));
   }
   for (const relativeDir of ENTITY_SCAN_DIRS) {
-    const directory = path10.join(root, relativeDir);
+    const directory = path11.join(root, relativeDir);
     if (!lstatIfExists(directory)?.isDirectory()) {
       continue;
     }
-    const linked = fs9.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path10.posix.join(relativeDir, entry.name)).sort();
+    const linked = fs10.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path11.posix.join(relativeDir, entry.name)).sort();
     for (const linkPath of linked) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
   }
   for (const leftover of temporaryFiles(root).map((file) => portablePath(file)).sort()) {
-    const name = TEMPORARY_FILE_PATTERN.exec(path10.posix.basename(leftover))?.[1];
-    const target = name ? ` to ${path10.posix.join(path10.posix.dirname(leftover), name)}` : "";
+    const name = TEMPORARY_FILE_PATTERN.exec(path11.posix.basename(leftover))?.[1];
+    const target = name ? ` to ${path11.posix.join(path11.posix.dirname(leftover), name)}` : "";
     warnings.push(warn("interrupted-write", `${leftover} was left by an interrupted write${target}; delete it once the files beside it look right`, leftover));
   }
 }
 function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
-  for (const entry of fs9.readdirSync(path10.join(root, relativeDir), { withFileTypes: true })) {
-    const relativePath = path10.join(relativeDir, entry.name);
+  for (const entry of fs10.readdirSync(path11.join(root, relativeDir), { withFileTypes: true })) {
+    const relativePath = path11.join(relativeDir, entry.name);
     if (entry.isDirectory() && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && !entry.name.startsWith(".")) {
       if (depth < MAX_SCAN_DEPTH) {
         found.push(...temporaryFiles(root, depth + 1, relativePath));
@@ -17250,10 +17495,10 @@ function unusedTargetWarnings(project, label, data, warnings) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label = relativePath;
-    if (!fs9.existsSync(path10.join(project.root, relativePath))) {
+    if (!fs10.existsSync(path11.join(project.root, relativePath))) {
       continue;
     }
-    const data = readRegistryValidationData(path10.join(project.root, relativePath), project.root, label, errors);
+    const data = readRegistryValidationData(path11.join(project.root, relativePath), project.root, label, errors);
     if (!data) {
       continue;
     }
@@ -17573,7 +17818,7 @@ function validateScenes(project, errors, warnings) {
     if (Number.isInteger(data.scene) && data.scene <= 0) {
       errors.push(err("field-below-minimum", `${label} scene must be greater than 0`, label));
     }
-    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path10.basename(scene.file));
+    const filenameMatch = SCENE_FILENAME_PATTERN.exec(path11.basename(scene.file));
     if (!filenameMatch) {
       errors.push(err("invalid-filename", `${label} filename must match {chapter}-scene-{NN}.md`, label));
     } else {
@@ -17697,8 +17942,8 @@ function validateClues(project, errors, warnings) {
   }
 }
 function validateExemptions(project, errors, warnings) {
-  const exemptionsPath = path10.join(project.root, EXEMPTIONS_FILE);
-  if (!fs9.existsSync(exemptionsPath)) {
+  const exemptionsPath = path11.join(project.root, EXEMPTIONS_FILE);
+  if (!fs10.existsSync(exemptionsPath)) {
     return;
   }
   const label = EXEMPTIONS_FILE;
@@ -17726,7 +17971,7 @@ function validateExemptions(project, errors, warnings) {
       continue;
     }
     const file = typeof entry.file === "string" ? exemptionFile(entry.file) : null;
-    if (file !== null && !lstatIfExists(path10.join(project.root, file))?.isFile()) {
+    if (file !== null && !lstatIfExists(path11.join(project.root, file))?.isFile()) {
       warnings.push(warn("stale-exemption", `${entryLabel} file ${entry.file} is not a file in the project, so the entry matches nothing`, label));
     }
     if (isChapterId(entry.chapter) && !chapters.has(entry.chapter)) {
@@ -17786,7 +18031,7 @@ function validateStyleSheet(project, errors, warnings) {
       continue;
     }
     const sample = entry.trim();
-    if (path10.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
+    if (path11.isAbsolute(sample) || /^[A-Za-z]:/.test(sample)) {
       errors.push(err("field-invalid-items", `${label} samples entry ${sample} must be a path relative to the project folder, such as ../book-one`, label));
     } else {
       const problem = sampleProblem(project, sample);
@@ -17865,9 +18110,9 @@ function validateProgressLog(project, errors) {
   });
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
-  const indexPath = path10.join(project.root, directory, "_index.md");
-  if (fs9.existsSync(indexPath)) {
-    const label = path10.posix.join(directory, "_index.md");
+  const indexPath = path11.join(project.root, directory, "_index.md");
+  if (fs10.existsSync(indexPath)) {
+    const label = path11.posix.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
       errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));
@@ -18225,223 +18470,6 @@ function inkSource(story) {
   return `${lines.join(`
 `).trimEnd()}
 `;
-}
-
-// src/pdf.js
-import fs10 from "node:fs";
-import os2 from "node:os";
-import path11 from "node:path";
-import { Buffer as Buffer4 } from "node:buffer";
-import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-var PDF_ENGINES = [
-  {
-    name: "prince",
-    label: "Prince",
-    commands: ["prince"],
-    install: "https://www.princexml.com/",
-    args: (input, output) => [input, "-o", output]
-  },
-  {
-    name: "weasyprint",
-    label: "WeasyPrint",
-    commands: ["weasyprint"],
-    install: "pip install weasyprint",
-    args: (input, output) => [input, output]
-  },
-  {
-    name: "pagedjs-cli",
-    label: "Paged.js CLI",
-    commands: ["pagedjs-cli"],
-    install: "npm install -g pagedjs-cli",
-    args: (input, output) => [input, "-o", output]
-  },
-  {
-    name: "chrome",
-    label: "Chrome or Chromium",
-    commands: ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "chrome", "msedge"],
-    install: "https://www.google.com/chrome/",
-    args: (input, output, work) => [
-      "--headless",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-pdf-header-footer",
-      `--user-data-dir=${path11.join(work, "profile")}`,
-      `--print-to-pdf=${output}`,
-      pathToFileURL(input).href
-    ]
-  }
-];
-var ENGINE_NAMES = PDF_ENGINES.map((engine) => engine.name);
-var ENGINE_ALIASES = { chromium: "chrome", pagedjs: "pagedjs-cli", "paged.js": "pagedjs-cli", edge: "chrome", msedge: "chrome" };
-function browserLocations(env, platform) {
-  if (platform === "darwin") {
-    return [
-      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-      "/Applications/Chromium.app/Contents/MacOS/Chromium",
-      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-    ];
-  }
-  if (platform === "win32") {
-    const roots = [env.ProgramFiles, env["ProgramFiles(x86)"], env.LOCALAPPDATA].filter(Boolean);
-    return roots.flatMap((root) => [
-      path11.join(root, "Google", "Chrome", "Application", "chrome.exe"),
-      path11.join(root, "Microsoft", "Edge", "Application", "msedge.exe")
-    ]);
-  }
-  return [];
-}
-function envValue(env, name, platform) {
-  if (platform !== "win32") {
-    return env[name];
-  }
-  const key = Object.keys(env).find((candidate) => candidate.toUpperCase() === name);
-  return key === undefined ? undefined : env[key];
-}
-function isExecutableFile(file, platform) {
-  try {
-    if (!fs10.statSync(file).isFile()) {
-      return false;
-    }
-    if (platform !== "win32") {
-      fs10.accessSync(file, fs10.constants.X_OK);
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-function findCommand(name, env = process.env, platform = process.platform) {
-  const dirs = String(envValue(env, "PATH", platform) ?? "").split(platform === "win32" ? ";" : ":").filter((dir) => dir !== "");
-  const extensions = platform === "win32" ? String(envValue(env, "PATHEXT", platform) || ".COM;.EXE;.BAT;.CMD").split(";").filter((ext) => ext !== "") : [];
-  const names = platform === "win32" ? [...extensions.some((ext) => name.toUpperCase().endsWith(ext.toUpperCase())) ? [name] : [], ...extensions.map((ext) => `${name}${ext}`)] : [name];
-  for (const dir of dirs) {
-    for (const candidate of names) {
-      const file = path11.resolve(dir, candidate);
-      if (isExecutableFile(file, platform)) {
-        return file;
-      }
-    }
-  }
-  return null;
-}
-function locateEngine(engine, env, platform) {
-  for (const command of engine.commands) {
-    const file = findCommand(command, env, platform);
-    if (file !== null) {
-      return file;
-    }
-  }
-  if (engine.name === "chrome") {
-    return browserLocations(env, platform).find((file) => isExecutableFile(file, platform)) ?? null;
-  }
-  return null;
-}
-function engineForExecutable(file) {
-  const base = path11.basename(file).toLowerCase().replace(/\.(?:exe|cmd|bat|com)$/, "");
-  if (base.startsWith("prince")) {
-    return "prince";
-  }
-  if (base.startsWith("weasyprint")) {
-    return "weasyprint";
-  }
-  if (base.startsWith("pagedjs")) {
-    return "pagedjs-cli";
-  }
-  if (/chrom|msedge|microsoft edge|brave/.test(base)) {
-    return "chrome";
-  }
-  return null;
-}
-function installHints() {
-  return PDF_ENGINES.map((engine) => `${engine.label} (${engine.install})`).join(", ");
-}
-function resolvePdfEngine(choice, { env = process.env, platform = process.platform, cwd = process.cwd() } = {}) {
-  if (choice === undefined || choice === null) {
-    for (const engine of PDF_ENGINES) {
-      const file = locateEngine(engine, env, platform);
-      if (file !== null) {
-        return { name: engine.name, file };
-      }
-    }
-    throw refusedError(`No PDF engine found on PATH (looked for ${ENGINE_NAMES.join(", ")}). Install one: ${installHints()}. Or name an installed one with --pdf-engine <name|path>, or build without --pdf and render the HTML yourself`);
-  }
-  const value = String(choice).trim();
-  if (value === "") {
-    throw usageError(`--pdf-engine needs an engine name (${ENGINE_NAMES.join(", ")}) or the path to one`);
-  }
-  const named = ENGINE_ALIASES[value.toLowerCase()] ?? (ENGINE_NAMES.includes(value.toLowerCase()) ? value.toLowerCase() : null);
-  if (named !== null) {
-    const engine = PDF_ENGINES.find((entry) => entry.name === named);
-    const file = locateEngine(engine, env, platform);
-    if (file === null) {
-      throw refusedError(`PDF engine ${engine.name} was not found on PATH (looked for ${engine.commands.join(", ")}). Install ${engine.label} (${engine.install}), or give --pdf-engine the path to its executable`);
-    }
-    return { name: engine.name, file };
-  }
-  const kind = engineForExecutable(value);
-  if (kind === null) {
-    throw usageError(`Unknown PDF engine: ${value}. Name one of ${ENGINE_NAMES.join(", ")}, or the path to its executable, whose file name says which it is`);
-  }
-  const isPath = value.includes("/") || platform === "win32" && value.includes("\\");
-  const file = isPath ? path11.resolve(cwd, value) : findCommand(value, env, platform);
-  if (file === null || !isExecutableFile(file, platform)) {
-    throw refusedError(`PDF engine ${value} was not found${isPath ? " or is not an executable file" : " on PATH"}`);
-  }
-  return { name: kind, file };
-}
-var ENGINE_TIMEOUT_MS = 10 * 60 * 1000;
-function windowsScriptCommand(file, args, env) {
-  const parts = [file, ...args];
-  const unsafe = parts.find((part) => /["%!\r\n]/.test(part));
-  if (unsafe !== undefined) {
-    throw refusedError(`Cannot run ${file} safely through cmd.exe: ${unsafe} contains a quote, %, or !. Give --pdf-engine an .exe instead`);
-  }
-  return {
-    command: envValue(env, "COMSPEC", "win32") || "cmd.exe",
-    args: ["/d", "/s", "/c", `"${parts.map((part) => `"${part}"`).join(" ")}"`],
-    options: { windowsVerbatimArguments: true }
-  };
-}
-function renderPdf(html, engine, { env = process.env, platform = process.platform, timeout = ENGINE_TIMEOUT_MS } = {}) {
-  const spec = PDF_ENGINES.find((entry) => entry.name === engine.name);
-  const work = fs10.mkdtempSync(path11.join(os2.tmpdir(), "story-pdf-"));
-  try {
-    const input = path11.join(work, "book.html");
-    const output = path11.join(work, "book.pdf");
-    fs10.writeFileSync(input, html, "utf8");
-    const args = spec.args(input, output, work);
-    const run = platform === "win32" && /\.(?:cmd|bat)$/i.test(engine.file) ? windowsScriptCommand(engine.file, args, env) : { command: engine.file, args, options: {} };
-    const result = spawnSync(run.command, run.args, {
-      ...run.options,
-      cwd: work,
-      env,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout,
-      maxBuffer: 64 * 1024 * 1024,
-      windowsHide: true
-    });
-    const detail = lastLines(`${result.stderr ?? ""}
-${result.stdout ?? ""}`);
-    if (result.error) {
-      const reason = result.error.code === "ETIMEDOUT" ? `did not finish within ${timeout / 1000} seconds` : `could not be run (${result.error.message})`;
-      throw refusedError(`PDF engine ${engine.name} (${engine.file}) ${reason}`);
-    }
-    const pdf = fs10.existsSync(output) ? fs10.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer4.from("%PDF-"))) {
-      const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
-      throw refusedError(`PDF engine ${engine.name} (${engine.file}) ${outcome}${detail === "" ? "" : `:
-${detail}`}`);
-    }
-    return pdf;
-  } finally {
-    fs10.rmSync(work, { recursive: true, force: true });
-  }
-}
-function lastLines(text, count = 10) {
-  return text.split(/\r?\n/).map((line) => line.trimEnd()).filter((line) => line !== "").slice(-count).join(`
-`);
 }
 
 // src/build.js
