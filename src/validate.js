@@ -1331,6 +1331,7 @@ function validateChapters(project, errors, warnings) {
     unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
+      validateUnitDate(data, label, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -1410,6 +1411,7 @@ function validateScenes(project, errors, warnings) {
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
+      validateUnitDate(data, label, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -1848,6 +1850,18 @@ function validateCover(project, errors) {
 function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
     errors.push(err("id-not-kebab", `${label} filename id must be kebab-case`, label));
+  }
+}
+
+// A chapter or scene date shaped like YYYY-MM-DD must be a real calendar
+// day; story continuity warns about other text.
+function validateUnitDate(data, label, errors) {
+  if (typeof data.date !== "string") {
+    return;
+  }
+  const dateError = storyDateError(data.date, { freeText: true });
+  if (dateError !== "") {
+    errors.push(err("invalid-date", `${label} ${dateError}`, label));
   }
 }
 

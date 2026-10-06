@@ -10102,8 +10102,12 @@ function shortestRoutesFrom(graph, from) {
 function formatHours(hours, round = Math.round) {
   return `${round(Math.round(hours * 1e6) / 1e5) / 10}h`;
 }
-function storyDateError(value) {
+var DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+function storyDateError(value, { freeText = false } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
+    return "";
+  }
+  if (freeText && !DATE_SHAPE.test(String(value).trim())) {
     return "";
   }
   if (!parseClockDate(String(value))) {
@@ -16394,6 +16398,7 @@ function validateChapters(project, errors, warnings) {
     unusedTargetWarnings(project, label, data, warnings);
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
+      validateUnitDate(data, label, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -16465,6 +16470,7 @@ function validateScenes(project, errors, warnings) {
     }
     if (data.date !== undefined) {
       requireScalar(data, "date", label, errors);
+      validateUnitDate(data, label, errors);
     }
     if (data.time !== undefined) {
       requireScalar(data, "time", label, errors);
@@ -16865,6 +16871,15 @@ function validateCover(project, errors) {
 function validateEntityId(id, label, errors) {
   if (id !== kebabCase(id)) {
     errors.push(err("id-not-kebab", `${label} filename id must be kebab-case`, label));
+  }
+}
+function validateUnitDate(data, label, errors) {
+  if (typeof data.date !== "string") {
+    return;
+  }
+  const dateError = storyDateError(data.date, { freeText: true });
+  if (dateError !== "") {
+    errors.push(err("invalid-date", `${label} ${dateError}`, label));
   }
 }
 function requireScalar(data, field, label, errors, file = label) {

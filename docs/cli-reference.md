@@ -2393,7 +2393,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-book-number` | error | `story.md` `book-number` is not a number 0 or more. |
 | `invalid-ifid` | error | `story.md` `ifid` is not a version 4 UUID. |
 | `invalid-cover` | error | `story.md` `cover` is not an image inside the project. |
-| `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day. |
+| `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day, or a chapter or scene `date` shaped `YYYY-MM-DD` is not a real day (`2024-13-45`). |
 | `invalid-cli-config` | error | `story.md` `cli-defaults` or `severity` is invalid. See [Defaults and severity](#defaults-and-severity-from-storymd). |
 | `invalid-filename` | error | A chapter or scene file name does not follow `chapter-NN.md` or `{chapter}-scene-NN.md`. |
 | `filename-number-mismatch` | error | A chapter or scene number does not match its file name. |

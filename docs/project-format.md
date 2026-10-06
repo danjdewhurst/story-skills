@@ -1350,7 +1350,7 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 | `time` | `HH:MM` on a 24-hour clock, or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
 | `travel-hours` | A number of hours, zero or more. Scenes only. |
 
-`story timeline` sorts named times as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story continuity` reads each as the span listed under [Route travel](#route-travel), for clock order and `travel-hours` as well as routes, so it reports only what is impossible on every reading. `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story continuity` reports malformed values as warnings. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
+`story timeline` sorts named times as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story continuity` reads each as the span listed under [Route travel](#route-travel), for clock order and `travel-hours` as well as routes, so it reports only what is impossible on every reading. `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story validate` errors (`invalid-date`) on a `YYYY-MM-DD` date that is not a real calendar day, such as `2024-13-45` or `2023-02-29`, and `story continuity` reports any malformed value as a warning. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
 
 ### Route travel
 
