@@ -112,7 +112,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 ## Example projects
 
-The repository includes eight sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
+The repository includes ten sample projects in [`examples/`](../examples/). The pages above use them for their sample output.
 
 | Example | Shows |
 |---------|-------|
@@ -120,6 +120,8 @@ The repository includes eight sample projects in [`examples/`](../examples/). Th
 | [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) | The prequel to *The Last Ember*, linked with `precedes` and shared `fact` ids |
 | [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, and a pronunciation |
 | [`the-gull-rock-light`](../examples/the-gull-rock-light/) | A short second-person branching story: chapter `choices` for `story build --format twee` and `--format ink` |
+| [`bo-and-the-missing-moon`](../examples/bo-and-the-missing-moon/) | A 32-page picture book (`form: picture-book`): one chapter per spread, a scene record and page-turn `hook` per spread, and a pagination plan with spread briefs |
+| [`the-left-luggage-office`](../examples/the-left-luggage-office/) | The first three episodes of a weekly serial (`form: serial`): `season-goal`, `episode-question`, per-episode `target-words` and `hook`, and a promise paid off in an episode not yet written |
 | [`the-unraveled-thread`](../examples/the-unraveled-thread/) | A village mystery that is broken on purpose to show the main kinds of continuity finding, plus clues (one a red herring) for `story clues` and scene outcomes and chapter hooks for `story pacing` |
 | [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, the French word lists, and French build labels |
 | [`kirimi-eki-no-wasuremono`](../examples/kirimi-eki-no-wasuremono/) | A short story in Japanese (`language: ja`): counted in characters, `target-characters`, corner-bracket dialogue, and `writing-mode: vertical` |
