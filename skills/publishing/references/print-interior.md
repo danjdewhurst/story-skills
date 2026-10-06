@@ -42,7 +42,12 @@ count; use it for pricing and the cover.
 
 ## Render To PDF
 
-The CLI bundles no PDF engine. Use one the author has installed:
+The CLI bundles no PDF engine, but `story build . --format print --pdf`
+finds one the author has installed and runs it, writing
+`dist/<story-id>.pdf`. It tries Prince, WeasyPrint, `pagedjs-cli`, then
+headless Chrome or Chromium, in that order; `--pdf-engine <name|path>` picks
+one. Chrome is a fallback: it skips the blank pages that start chapters on a
+recto, and older versions drop running heads. To run an engine by hand:
 
 - **Paged.js CLI:** `pagedjs-cli dist/<file>.html -o dist/<file>.pdf`
   (free; Chromium-based).

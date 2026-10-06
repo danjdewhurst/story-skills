@@ -191,6 +191,11 @@ story build . --format docx --shunn
 story build . --format shunn
 ```
 
+For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
+`dist/<story-id>.shunn.pdf` (US Letter, Courier, double-spaced, running
+head) with a paged-media engine the user has installed, and stops with
+install hints when there is none.
+
 Confirm `story.md` has `author` (or `authors`) and `contact` first; the
 title page uses them, joining co-authors with "and". Shunn builds leave out `matter/` pages, as submissions expect. With
 `form: short-story` or `form: flash` in `story.md` they use Shunn's
