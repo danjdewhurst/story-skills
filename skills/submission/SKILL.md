@@ -191,6 +191,7 @@ story build . --format docx --shunn
 story build . --format shunn
 ```
 
+These write `dist/<story-id>.shunn.docx` and `dist/<story-id>.shunn.md`.
 For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
 `dist/<story-id>.shunn.pdf` (US Letter, Courier, double-spaced, running
 head) with a paged-media engine the user has installed, and stops with

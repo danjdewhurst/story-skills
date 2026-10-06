@@ -57,7 +57,7 @@ See the `interactive-fiction` skill, or `adaptation` to convert a linear book.
 
 ## shunn
 
-`build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to the DOCX output, and `story build . --format shunn --pdf` renders a Shunn PDF with an installed engine.
+`build --format shunn` when the user wants Shunn manuscript-format markdown: title page, contact block, word count, chapter breaks, and double-spaced prose; `story build . --format docx --shunn` applies the same Shunn formatting to a Word file, `dist/<story-id>.shunn.docx`, so it never replaces the plain `docx` build, and `story build . --format shunn --pdf` renders a Shunn PDF with an installed engine.
 
 ## build-style
 

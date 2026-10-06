@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -585,7 +585,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `markdown` (default) or `md` | Markdown manuscript, as `story export` | `dist/<story-id>.md` | Yes |
 | `epub` | EPUB 3 ebook | `dist/<story-id>.epub` | Yes |
 | `docx` | Word document | `dist/<story-id>.docx` | Yes |
-| `docx` with `--shunn` | Word document in Shunn manuscript format | `dist/<story-id>.docx` | No |
+| `docx` with `--shunn` | Word document in Shunn manuscript format | `dist/<story-id>.shunn.docx` | No |
 | `shunn` | Plain-text Shunn manuscript | `dist/<story-id>.shunn.md` | No |
 | `html` | Single-file review copy with a label on every paragraph | `dist/<story-id>.html` | Yes |
 | `print` | Print interior as HTML with CSS paged media, to render to PDF | `dist/<story-id>.print.html` | Yes |
@@ -645,8 +645,6 @@ Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, h
 ```
 
 For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
-
-`--format docx` and `--format docx --shunn` write to the same default file, so the second build replaces the first. Pass `--out` to keep both.
 
 ### EPUB
 
@@ -725,7 +723,7 @@ For a `language` other than `en`, the document declares it, so Word spell-checks
 Shunn manuscript format is the plain layout that many agents, publishers, and short-fiction markets ask for. There are two Shunn builds:
 
 ```shell
-story build . --format docx --shunn   # Word document
+story build . --format docx --shunn   # Word document in a .shunn.docx file
 story build . --format shunn          # plain text in a .shunn.md file
 story build . --format shunn --pdf    # PDF, with an installed engine
 ```
