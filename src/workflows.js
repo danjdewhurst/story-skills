@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { projectPath } from "./files.js";
 import { VERSION } from "./version.js";
 
 // The GitHub Actions templates pin the CLI with an env line such as
@@ -19,7 +20,7 @@ export function workflowPinActions(projectRoot, cwd = projectRoot) {
   const current = parseVersion(VERSION);
   const actions = [];
   for (const pin of workflowPins(projectRoot)) {
-    const where = `${path.relative(cwd, pin.file) || pin.file}:${pin.line}`;
+    const where = `${projectPath(cwd, pin.file) || pin.file}:${pin.line}`;
     const parsed = parseVersion(pin.value);
     if (pin.name === "STORY_REF" && parsed === null) {
       // A branch or commit, which the current templates install through
