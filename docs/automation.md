@@ -622,7 +622,7 @@ Templates from 0.21.0 and earlier pinned a git tag with `STORY_REF: "v0.20.0"` a
 
 A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line, and one that names a branch or commit gets a `STORY_PACKAGE` line instead. A workflow with an uncommented `STORY_PACKAGE` line gets no `STORY_VERSION` note, since its install step does not use that pin. When there is a workflow note, the `Project is mechanically healthy` action is left out.
 
-It reads only the `STORY_VERSION:` and `STORY_REF:` lines, ignores commented-out ones, and says nothing when there is no workflows folder. `story next` and `story report` leave it out. Keeping your local CLI current and running `story doctor` now and then is enough to notice a stale pin.
+It reads only the `STORY_VERSION:` and `STORY_REF:` lines, ignores commented-out ones, and says nothing when there is no workflows folder. A workflow file that is a symlink, a FIFO, or larger than 5 MiB is skipped without being read. `story next` and `story report` leave it out. Keeping your local CLI current and running `story doctor` now and then is enough to notice a stale pin.
 
 To get a pull request instead, [Renovate](https://docs.renovatebot.com/) can bump `STORY_VERSION` with a regex manager that reads the line as an npm version. Add this to `renovate.json` in your story repository:
 

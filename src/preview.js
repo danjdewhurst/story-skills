@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readTextFile, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
@@ -196,14 +196,12 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
   }
   const context = { copyRoot, scratch, mirror, realOf };
   for (const file of linkSources(copyRoot)) {
-    // An oversized file is a blank sparse copy, and validate refuses it.
-    const stats = lstatIfExists(file);
-    if (!stats?.isFile() || stats.size > MAX_READ_BYTES) {
-      continue;
-    }
+    // A file validate refuses to read has no links it checks: a symlink, a
+    // folder, text that is not UTF-8, or an oversized file (a blank sparse
+    // copy here).
     let body;
     try {
-      body = fs.readFileSync(file, "utf8");
+      body = readTextFile(file);
     } catch {
       continue;
     }
@@ -356,11 +354,13 @@ function copyProject(source, target, roots, depth = 0) {
 // .gitignore it keeps), and no file over the read limit; of any other file
 // (a cover image) they check at most the size. So only readable markdown is copied whole. Every other file is a
 // sparse file of the same size, which takes no disk space, and an
-// unreadable file stays unreadable.
+// unreadable file stays unreadable. The copy is read as a command reads
+// it, so a file swapped for a FIFO or a symlink since the folder was
+// listed is refused rather than followed or waited on.
 function copyFile(from, to) {
   const { size } = fs.statSync(from);
   if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
-    fs.copyFileSync(from, to);
+    fs.writeFileSync(to, readFileBytes(from));
   } else {
     fs.writeFileSync(to, "");
     fs.truncateSync(to, size);

@@ -11,6 +11,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Fixed
 
 - A write that finds something already at its temporary file's name now says so in plain words (`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file (.chapter-01.md.story-<random>.tmp, in the same folder), so it was left as it is. Run the command again`) instead of ending in `EEXIST`. `story validate` now also reports a symlink, folder, or other entry that is not a regular file at a temporary file's name (`interrupted-write`), without following a symlink, and says to delete a symlink itself rather than what it points to; before, it reported only regular files there. ([#602](https://github.com/danjdewhurst/story-skills/issues/602))
+- A cloned project or a pull request can no longer hang `story` in CI with a file linked to `/dev/zero` or made a FIFO. `story.md` as read for `cli-defaults`, `.story.lock`, the workflows `story doctor` checks, and a codex folder's `index.html` now get the same refusal as every other project file (a refused lock counts as held), and every read checks the opened file too, so one swapped for a symlink, FIFO, or larger file while a command runs is refused. ([#548](https://github.com/danjdewhurst/story-skills/issues/548))
 
 ## [0.22.1] - 2026-10-06
 

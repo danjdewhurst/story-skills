@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -64,6 +65,22 @@ describe("story doctor workflow pins", () => {
     const lines = pinLines(invoke(root, ["doctor"]).out);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(".github/workflows/story-checks.yml:2 installs");
+  });
+
+  test.skipIf(process.platform === "win32")("skips a workflow that is a symlink or a FIFO rather than reading it (#548)", () => {
+    const { repo, root } = newRepo();
+    const outside = path.join(makeTempDir(), "pinned.yml");
+    fs.writeFileSync(outside, `env:\n  STORY_VERSION: "${older}"\n`);
+    writeWorkflow(repo, "story-checks.yml", `env:\n  STORY_VERSION: "${VERSION}"\n`);
+    fs.symlinkSync(outside, path.join(repo, ".github", "workflows", "linked.yml"));
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([]);
+    // /dev/zero, or a FIFO (where mkfifo exists), would hold doctor
+    // forever if it were read.
+    fs.symlinkSync("/dev/zero", path.join(repo, ".github", "workflows", "zero.yml"));
+    spawnSync("mkfifo", [path.join(repo, ".github", "workflows", "pipe.yml")]);
+    const result = invoke(root, ["doctor"]);
+    expect(result.code).toBe(0);
+    expect(pinLines(result.out)).toEqual([]);
   });
 
   test("flags a legacy STORY_REF, keeping a newer release than the CLI", () => {

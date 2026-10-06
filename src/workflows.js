@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { projectPath } from "./files.js";
+import { projectPath, readTextFile } from "./files.js";
 import { VERSION } from "./version.js";
 
 // The GitHub Actions templates pin the CLI with an env line such as
@@ -10,7 +10,7 @@ import { VERSION } from "./version.js";
 // workflows next to the project, and in the git repository root above it,
 // and notes a pin older than the running CLI or the legacy name. It only
 // matches the env lines, never parses YAML, and a missing or unreadable file
-// is skipped.
+// is skipped, as is a symlink, a FIFO, or a file over the read limit.
 const ENV_LINE = /^\s*(STORY_VERSION|STORY_REF|STORY_PACKAGE)\s*:\s*["']?([^"'\s#]*)/;
 const VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
 
@@ -46,7 +46,7 @@ function workflowPins(projectRoot) {
   for (const file of workflowFiles(projectRoot)) {
     let text;
     try {
-      text = fs.readFileSync(file, "utf8");
+      text = readTextFile(file);
     } catch {
       continue;
     }

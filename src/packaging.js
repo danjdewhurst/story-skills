@@ -3,9 +3,8 @@
 // takes a manuscript built by story.js and knows nothing about scanning a
 // project.
 import { Buffer } from "node:buffer";
-import fs from "node:fs";
 import { deflateRawSync } from "node:zlib";
-import { writeFile } from "./files.js";
+import { readFileBytes, writeFile } from "./files.js";
 import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } from "./html.js";
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
@@ -82,7 +81,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
     coverEntries.push(
-      { name: `OEBPS/${href}`, content: fs.readFileSync(manuscript.cover.filePath) },
+      { name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes) },
       { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` }
     );
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);

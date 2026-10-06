@@ -1,10 +1,10 @@
-import fs from "node:fs";
 import path from "node:path";
 // validate.js imports this module, and commands.js imports story.js, which
 // imports validate.js, so this import is circular. COMMANDS is only read
 // inside functions, after every module has finished loading.
 import { COMMANDS } from "./commands.js";
 import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
+import { readTextFile } from "./files.js";
 import { FINDING_CODES, PROJECTLESS_CODES, err, severityCodes } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
@@ -54,11 +54,13 @@ const EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [],
 
 // The config for a project, read from its story.md, with the usable entries
 // of continuity/exemptions.md. A missing or unreadable story.md gives an
-// empty config: the command reports that problem itself.
+// empty config: the command reports that problem itself. It is read as
+// validate reads it, so a story.md that is a FIFO or a symlink to /dev/zero
+// is refused here too rather than hanging every command.
 export function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs.readFileSync(path.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(readTextFile(path.join(root, "story.md"))).data;
   } catch {
     return EMPTY_CONFIG;
   }

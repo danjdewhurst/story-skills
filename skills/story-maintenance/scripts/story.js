@@ -4,14 +4,14 @@
 import path20 from "node:path";
 
 // src/commands.js
-import fs17 from "node:fs";
+import fs15 from "node:fs";
 import path19 from "node:path";
 
 // src/files.js
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer } from "node:buffer";
 
 // src/exit-codes.js
 var EXIT_CODES = Object.freeze({
@@ -60,17 +60,67 @@ function exitCodeFor(error) {
 // src/files.js
 var MAX_READ_BYTES = 5 * 1024 * 1024;
 function readTextFile(filePath) {
-  const stats = fs.lstatSync(filePath);
-  if (stats.isSymbolicLink()) {
-    throw projectError(`${filePath}: Refusing to read through symlink`);
+  return decodeUtf8(readFileBytes(filePath), filePath);
+}
+function readFileBytes(filePath, maxBytes = MAX_READ_BYTES) {
+  return readFileAndStats(filePath, maxBytes).bytes;
+}
+var SAFE_READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0);
+var READ_CHUNK_BYTES = 64 * 1024;
+function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
+  const named = fs.lstatSync(filePath);
+  if (named.isSymbolicLink()) {
+    throw symlinkReadRefusal(filePath);
   }
-  if (!stats.isFile()) {
-    throw projectError(`${filePath}: Refusing to read: not a regular file`);
+  if (!named.isFile()) {
+    throw notRegularFileRefusal(filePath);
   }
-  if (stats.size > MAX_READ_BYTES) {
-    throw projectError(`${filePath}: Refusing to read oversized file: ${stats.size} bytes exceeds the ${MAX_READ_BYTES} byte limit`);
+  if (named.size > maxBytes) {
+    throw projectError(`${filePath}: Refusing to read oversized file: ${named.size} bytes exceeds the ${maxBytes} byte limit`);
   }
-  return decodeUtf8(fs.readFileSync(filePath), filePath);
+  let descriptor;
+  try {
+    descriptor = fs.openSync(filePath, SAFE_READ_FLAGS);
+  } catch (error) {
+    throw error.code === "ELOOP" || error.code === "EMLINK" ? symlinkReadRefusal(filePath) : error;
+  }
+  try {
+    const stats = fs.fstatSync(descriptor);
+    if (!stats.isFile()) {
+      throw notRegularFileRefusal(filePath);
+    }
+    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+function readAtMost(descriptor, filePath, size, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  let buffer = Buffer.allocUnsafe(Math.min(size, maxBytes) + 1);
+  let filled = 0;
+  let read;
+  do {
+    if (filled === buffer.length) {
+      chunks.push(buffer);
+      buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+      filled = 0;
+    }
+    read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);
+    filled += read;
+    total += read;
+    if (total > maxBytes) {
+      throw projectError(`${filePath}: Refusing to read oversized file: it grew past the ${maxBytes} byte limit while story was reading it`);
+    }
+  } while (read > 0);
+  chunks.push(buffer.subarray(0, filled));
+  return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total);
+}
+function symlinkReadRefusal(filePath) {
+  return projectError(`${filePath}: Refusing to read through symlink`);
+}
+function notRegularFileRefusal(filePath) {
+  return projectError(`${filePath}: Refusing to read: not a regular file`);
 }
 var FILE_ERROR_REASONS = {
   EACCES: "permission denied",
@@ -102,7 +152,7 @@ function invalidUtf8Offset(buffer) {
     if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
       break;
     }
-    offset += Buffer2.byteLength(character, "utf8");
+    offset += Buffer.byteLength(character, "utf8");
   }
   return Math.max(0, Math.min(offset, buffer.length - 1));
 }
@@ -250,7 +300,7 @@ function planWrite(filePath, options) {
 }
 function currentText(target) {
   try {
-    return fs.readFileSync(target, "utf8");
+    return readTextFile(target);
   } catch {
     return null;
   }
@@ -261,7 +311,7 @@ function temporaryPath(target) {
   let name = "";
   let bytes = 0;
   for (const character of path.basename(target)) {
-    bytes += Buffer2.byteLength(character, "utf8");
+    bytes += Buffer.byteLength(character, "utf8");
     if (bytes > TEMPORARY_NAME_BYTES) {
       break;
     }
@@ -13806,7 +13856,7 @@ function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path5.extname(cover).slice(1).toLowerCase() };
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path5.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
 }
 var CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
 var SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
@@ -17207,14 +17257,13 @@ function formatNumber3(value) {
 }
 
 // src/config.js
-import fs6 from "node:fs";
 import path9 from "node:path";
 
 // src/pdf.js
 import fs4 from "node:fs";
 import os from "node:os";
 import path8 from "node:path";
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer2 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -17425,7 +17474,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs4.existsSync(output) ? fs4.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer3.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer2.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -17457,8 +17506,7 @@ function lastLines(text, count = 10) {
 }
 
 // src/packaging.js
-import { Buffer as Buffer4 } from "node:buffer";
-import fs5 from "node:fs";
+import { Buffer as Buffer3 } from "node:buffer";
 import { deflateRawSync } from "node:zlib";
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
@@ -17508,7 +17556,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   if (manuscript.cover) {
     const href = `images/cover.${manuscript.cover.extension}`;
     const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: fs5.readFileSync(manuscript.cover.filePath) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverEntries.push({ name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes) }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
     coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
     coverMeta.push(`<meta name="cover" content="cover-image"/>`);
     coverSpine.push(`<itemref idref="cover"/>`);
@@ -18165,14 +18213,14 @@ function writeZip(outFile, entries, writeOptions = {}) {
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer4.from(entry.name, "utf8");
-    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
+    const name = Buffer3.from(entry.name, "utf8");
+    const content = Buffer3.isBuffer(entry.content) ? entry.content : Buffer3.from(entry.content, "utf8");
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer4.alloc(30);
+    const localHeader = Buffer3.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -18185,7 +18233,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer4.alloc(46);
+    const centralHeader = Buffer3.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -18210,7 +18258,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer4.alloc(22);
+  const end = Buffer3.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -18219,7 +18267,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer3.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -18459,7 +18507,7 @@ var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], e
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(fs6.readFileSync(path9.join(root, "story.md"), "utf8")).data;
+    data = parseFrontmatter(readTextFile(path9.join(root, "story.md"))).data;
   } catch {
     return EMPTY_CONFIG;
   }
@@ -18651,12 +18699,12 @@ function applySeverity(result, overrides = NO_OVERRIDES) {
 }
 
 // src/import.js
-import { Buffer as Buffer6 } from "node:buffer";
-import fs14 from "node:fs";
+import { Buffer as Buffer5 } from "node:buffer";
+import fs12 from "node:fs";
 import path16 from "node:path";
 
 // src/lock.js
-import fs7 from "node:fs";
+import fs5 from "node:fs";
 import os2 from "node:os";
 import path10 from "node:path";
 var LOCK_FILE = ".story.lock";
@@ -18678,7 +18726,7 @@ function withProjectLock(root, run) {
     }
   }
   const lockPath = path10.join(projectRoot, LOCK_FILE);
-  const ours = fs7.existsSync(path10.join(projectRoot, "story.md")) && acquire(lockPath);
+  const ours = fs5.existsSync(path10.join(projectRoot, "story.md")) && acquire(lockPath);
   if (!ours) {
     return run();
   }
@@ -18688,7 +18736,7 @@ function withProjectLock(root, run) {
   } finally {
     held.delete(key);
     if (readOwner(lockPath)?.text === ours) {
-      fs7.rmSync(lockPath, { force: true });
+      fs5.rmSync(lockPath, { force: true });
     }
   }
 }
@@ -18714,7 +18762,7 @@ function removeStale(lockPath, staleText) {
   const guard = path10.join(path10.dirname(lockPath), TAKEOVER_FILE);
   let created = tryCreate(guard);
   if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
-    fs7.rmSync(guard, { force: true });
+    fs5.rmSync(guard, { force: true });
     created = tryCreate(guard);
   }
   if (!created) {
@@ -18722,41 +18770,38 @@ function removeStale(lockPath, staleText) {
   }
   try {
     if (readOwner(lockPath)?.text === staleText) {
-      fs7.rmSync(lockPath, { force: true });
+      fs5.rmSync(lockPath, { force: true });
     }
   } finally {
-    fs7.rmSync(guard, { force: true });
+    fs5.rmSync(guard, { force: true });
   }
   return true;
 }
 function tryCreate(lockPath) {
   try {
-    const descriptor = fs7.openSync(lockPath, "wx", 420);
+    const descriptor = fs5.openSync(lockPath, "wx", 420);
     const text = `${process.pid}
 ${os2.hostname()}
 ${new Date().toISOString()}
 `;
     try {
-      fs7.writeFileSync(descriptor, text, "utf8");
+      fs5.writeFileSync(descriptor, text, "utf8");
     } finally {
-      fs7.closeSync(descriptor);
+      fs5.closeSync(descriptor);
     }
     return text;
   } catch (error) {
     return error.code === "EEXIST" ? null : false;
   }
 }
+var MAX_LOCK_BYTES = 4096;
 function readOwner(lockPath) {
   let text;
   let modified;
   try {
-    const descriptor = fs7.openSync(lockPath, "r");
-    try {
-      modified = fs7.fstatSync(descriptor).mtimeMs;
-      text = fs7.readFileSync(descriptor, "utf8");
-    } finally {
-      fs7.closeSync(descriptor);
-    }
+    const { bytes, stats } = readFileAndStats(lockPath, MAX_LOCK_BYTES);
+    text = bytes.toString("utf8");
+    modified = stats.mtimeMs;
   } catch {
     return null;
   }
@@ -18774,7 +18819,7 @@ function foreignLockStale(written, modified) {
 }
 function modifiedAt(file) {
   try {
-    return fs7.statSync(file).mtimeMs;
+    return fs5.statSync(file).mtimeMs;
   } catch {
     return Date.now();
   }
@@ -18796,26 +18841,26 @@ function sleep(ms) {
 }
 function realPath(target) {
   try {
-    return fs7.realpathSync(target);
+    return fs5.realpathSync(target);
   } catch {
     return target;
   }
 }
 
 // src/stdin.js
-import { Buffer as Buffer5 } from "node:buffer";
-import fs8 from "node:fs";
+import { Buffer as Buffer4 } from "node:buffer";
+import fs6 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
 var MAX_STDIN_BYTES = 5 * 1024 * 1024;
 var CHUNK_BYTES = 64 * 1024;
 var RETRY_MS = 10;
-function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs8.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
+function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSync, maxBytes = MAX_STDIN_BYTES } = {}) {
   if (isatty(fd)) {
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer5.alloc(CHUNK_BYTES);
+  const buffer = Buffer4.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -18841,9 +18886,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs8.readSy
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer5.from(buffer.subarray(0, read)));
+    chunks.push(Buffer4.from(buffer.subarray(0, read)));
   }
-  return Buffer5.concat(chunks);
+  return Buffer4.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -18873,7 +18918,7 @@ function pause(ms) {
 
 // src/story.js
 import { execFileSync } from "node:child_process";
-import fs13 from "node:fs";
+import fs11 from "node:fs";
 import os3 from "node:os";
 import path15 from "node:path";
 
@@ -19513,15 +19558,15 @@ function formatPasses(passes, command = "story passes") {
 }
 
 // src/snapshots.js
-import fs11 from "node:fs";
+import fs9 from "node:fs";
 import path13 from "node:path";
 
 // src/mutate.js
-import fs10 from "node:fs";
+import fs8 from "node:fs";
 import path12 from "node:path";
 
 // src/validate.js
-import fs9 from "node:fs";
+import fs7 from "node:fs";
 import path11 from "node:path";
 
 // src/fountain.js
@@ -19672,7 +19717,7 @@ function validateProjectOf(project) {
   const warnings = [];
   const projectRoot = project.root;
   for (const requiredPath of REQUIRED_PATHS) {
-    if (!fs9.existsSync(path11.join(projectRoot, requiredPath))) {
+    if (!fs7.existsSync(path11.join(projectRoot, requiredPath))) {
       errors.push(err("missing-required-path", `Missing required path: ${requiredPath} (story migrate adds missing registries)`));
     }
   }
@@ -19725,8 +19770,8 @@ function validateProjectOf(project) {
     ["continuity/promises/_index.md", linksFor(project.promises)],
     ["continuity/clues/_index.md", linksFor(project.clues)],
     ["glossary/_index.md", linksFor(project.glossaryTerms, "terms/")],
-    ...fs9.existsSync(path11.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path11.posix.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
-    ...fs9.existsSync(path11.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path11.posix.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
+    ...fs7.existsSync(path11.join(projectRoot, MATTER_DIR, "_index.md")) ? [[path11.posix.join(MATTER_DIR, "_index.md"), linksFor(project.matter)]] : [],
+    ...fs7.existsSync(path11.join(projectRoot, RESEARCH_DIR, "_index.md")) ? [[path11.posix.join(RESEARCH_DIR, "_index.md"), linksFor(project.research)]] : []
   ];
   for (const [indexPath, links] of indexChecks) {
     let markdown;
@@ -20019,7 +20064,7 @@ function validateTimelineAndArcBodyRefs(project, chapters, errors, hasScheduledC
     }
   };
   const timelinePath = path11.join(project.root, "plot", "timeline.md");
-  if (fs9.existsSync(timelinePath)) {
+  if (fs7.existsSync(timelinePath)) {
     try {
       const raw = readTextFile(timelinePath);
       const body = parseFrontmatter(raw, timelinePath).body ?? raw;
@@ -20095,17 +20140,17 @@ function checkBodyLinkTarget(project, label, target, errors) {
   const resolved = path11.resolve(path11.dirname(path11.join(project.root, label)), pathOnly);
   if (!isPathInside(path11.resolve(project.root), resolved)) {
     const linkedBook = ["follows", "precedes"].flatMap((field) => seriesLinks(project.root, project.story.data, field)).find((bookRoot) => isPathInside(bookRoot, resolved));
-    if (linkedBook && fs9.existsSync(resolved) && fs9.statSync(resolved).isFile() && isPathInside(canonicalPath(linkedBook), canonicalPath(resolved))) {
+    if (linkedBook && fs7.existsSync(resolved) && fs7.statSync(resolved).isFile() && isPathInside(canonicalPath(linkedBook), canonicalPath(resolved))) {
       return;
     }
-    errors.push(linkedBook || !fs9.existsSync(resolved) ? err("broken-link", `${label} links to missing file ${cleaned}`, label) : err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
+    errors.push(linkedBook || !fs7.existsSync(resolved) ? err("broken-link", `${label} links to missing file ${cleaned}`, label) : err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
-  if (!fs9.existsSync(resolved) || !fs9.statSync(resolved).isFile()) {
+  if (!fs7.existsSync(resolved) || !fs7.statSync(resolved).isFile()) {
     errors.push(err("broken-link", `${label} links to missing file ${cleaned}`, label));
     return;
   }
-  if (!isPathInside(fs9.realpathSync(project.root), fs9.realpathSync(resolved))) {
+  if (!isPathInside(fs7.realpathSync(project.root), fs7.realpathSync(resolved))) {
     errors.push(err("link-outside-project", `${label} links to ${cleaned} which resolves outside the project`, label));
     return;
   }
@@ -20155,7 +20200,7 @@ function sampleProblem(project, sample) {
   const chapters = path11.join(self, "chapters");
   const folder = (file) => {
     try {
-      return fs9.statSync(file).isDirectory();
+      return fs7.statSync(file).isDirectory();
     } catch {
       return false;
     }
@@ -20197,14 +20242,14 @@ function hasMessage(findings, message) {
 }
 function entityFileNames(root, relativeDir) {
   const directory = path11.join(root, relativeDir);
-  if (!fs9.existsSync(directory)) {
+  if (!fs7.existsSync(directory)) {
     return [];
   }
-  return fs9.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path11.posix.join(relativeDir, name));
+  return fs7.readdirSync(directory).filter((name) => name.endsWith(".md") && !name.startsWith(".") && name !== "_index.md").sort().map((name) => path11.posix.join(relativeDir, name));
 }
 function collectStrayFileWarnings(project, warnings) {
   const root = project.root;
-  const topEntries = fs9.readdirSync(root, { withFileTypes: true });
+  const topEntries = fs7.readdirSync(root, { withFileTypes: true });
   const strayTop = [];
   for (const entry of topEntries) {
     if (entry.isFile() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "story.md" && entry.name !== STYLE_SHEET_FILE && entry.name !== PROGRESS_FILE) {
@@ -20218,7 +20263,7 @@ function collectStrayFileWarnings(project, warnings) {
   const nested = [];
   for (const relativeDir of ENTITY_SCAN_DIRS) {
     const directory = path11.join(root, relativeDir);
-    if (!fs9.existsSync(directory)) {
+    if (!fs7.existsSync(directory)) {
       continue;
     }
     for (const file of markdownFiles(directory)) {
@@ -20237,7 +20282,7 @@ function collectStrayFileWarnings(project, warnings) {
     if (!lstatIfExists(directory)?.isDirectory()) {
       continue;
     }
-    const linked = fs9.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path11.posix.join(relativeDir, entry.name)).sort();
+    const linked = fs7.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isSymbolicLink() && entry.name.endsWith(".md") && !entry.name.startsWith(".") && entry.name !== "_index.md").map((entry) => path11.posix.join(relativeDir, entry.name)).sort();
     for (const linkPath of linked) {
       warnings.push(warn("symlinked-file", `${linkPath} is a symlink and is ignored: replace it with the file itself`, linkPath));
     }
@@ -20255,7 +20300,7 @@ function collectStrayFileWarnings(project, warnings) {
 }
 function temporaryFiles(root, depth = 0, relativeDir = "") {
   const found = [];
-  for (const entry of fs9.readdirSync(path11.join(root, relativeDir), { withFileTypes: true })) {
+  for (const entry of fs7.readdirSync(path11.join(root, relativeDir), { withFileTypes: true })) {
     const relativePath = path11.join(relativeDir, entry.name);
     if (TEMPORARY_FILE_PATTERN.test(entry.name) || /^\.story-\d+\.tmp$/.test(entry.name)) {
       found.push([relativePath, entryKind(entry)]);
@@ -20466,7 +20511,7 @@ function unusedTargetWarnings(project, label, data, warnings) {
 function validateIndexFrontmatter(project, errors) {
   for (const [relativePath, expectedType] of INDEX_SCHEMAS) {
     const label = relativePath;
-    if (!fs9.existsSync(path11.join(project.root, relativePath))) {
+    if (!fs7.existsSync(path11.join(project.root, relativePath))) {
       continue;
     }
     const data = readRegistryValidationData(path11.join(project.root, relativePath), project.root, label, errors);
@@ -20919,7 +20964,7 @@ function validateClues(project, errors, warnings) {
 }
 function validateExemptions(project, errors, warnings) {
   const exemptionsPath = path11.join(project.root, EXEMPTIONS_FILE);
-  if (!fs9.existsSync(exemptionsPath)) {
+  if (!fs7.existsSync(exemptionsPath)) {
     return;
   }
   const label = EXEMPTIONS_FILE;
@@ -21108,7 +21153,7 @@ function validateProgressLog(project, errors) {
 }
 function validateOptionalRegistry(project, directory, expectedType, errors) {
   const indexPath = path11.join(project.root, directory, "_index.md");
-  if (fs9.existsSync(indexPath)) {
+  if (fs7.existsSync(indexPath)) {
     const label = path11.posix.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
@@ -21719,7 +21764,7 @@ function createStoryProject(options) {
   if (isInsideGitDirectory(root, cwd)) {
     throw refusedError(`Refusing to create a story project inside a .git folder: ${root}`);
   }
-  if (fs10.existsSync(root) && !options.force) {
+  if (fs8.existsSync(root) && !options.force) {
     throw refusedError(`${root} already exists. ${options.forceHint ?? "Use --force to add missing starter files; existing files are never overwritten."}`);
   }
   const enclosing = enclosingStoryProject(root);
@@ -21986,7 +22031,7 @@ function planSeriesBacklinks(root, series) {
       continue;
     }
     try {
-      fs10.accessSync(storyPath, fs10.constants.W_OK);
+      fs8.accessSync(storyPath, fs8.constants.W_OK);
     } catch {
       throw refusedError(`Cannot add the series backlink to ${storyPath}: the file is not writable; nothing was created`);
     }
@@ -22010,7 +22055,7 @@ function enclosingStoryProject(root) {
     const storyPath = path12.join(current, "story.md");
     let isProject = false;
     try {
-      isProject = fs10.statSync(storyPath).isFile() && /^﻿?---\r?\n/.test(readTextFile(storyPath).slice(0, 8));
+      isProject = fs8.statSync(storyPath).isFile() && /^﻿?---\r?\n/.test(readTextFile(storyPath).slice(0, 8));
     } catch {
       isProject = false;
     }
@@ -22032,7 +22077,7 @@ function reindexProjectUnlocked(root) {
   const at = (...parts) => path12.join(project.root, ...parts);
   const existingPlot = readRegistrySource(at("plot", "_index.md"), project.root);
   let plotStructure = "three-act";
-  if (fs10.existsSync(at("plot", "_index.md"))) {
+  if (fs8.existsSync(at("plot", "_index.md"))) {
     plotStructure = parseFrontmatter(existingPlot, "plot/_index.md").data.structure ?? "three-act";
   }
   writeRegistry(at("characters", "_index.md"), (existing) => characterIndex(project.storyId, project.characters, extractSection(existing, "Relationship Map"), extractSection(existing, "Family Trees")), changed, project.root);
@@ -22044,10 +22089,10 @@ function reindexProjectUnlocked(root) {
   writeRegistry(at("continuity", "promises", "_index.md"), () => promiseIndex(project.storyId, project.promises), changed, project.root);
   writeRegistry(at("continuity", "clues", "_index.md"), () => clueIndex(project.storyId, project.clues), changed, project.root);
   writeRegistry(at("glossary", "_index.md"), () => glossaryIndex(project.storyId, project.glossaryTerms), changed, project.root);
-  if (fs10.existsSync(at(MATTER_DIR))) {
+  if (fs8.existsSync(at(MATTER_DIR))) {
     writeRegistry(at(MATTER_DIR, "_index.md"), () => matterIndex(project.storyId, project.matter), changed, project.root);
   }
-  if (fs10.existsSync(at(RESEARCH_DIR))) {
+  if (fs8.existsSync(at(RESEARCH_DIR))) {
     writeRegistry(at(RESEARCH_DIR, "_index.md"), () => researchIndex(project.storyId, project.research), changed, project.root);
   }
   refreshStoryField(at("plot", "timeline.md"), project.storyId, changed, project.root);
@@ -22138,7 +22183,7 @@ function markdownHeadings(markdown) {
   return headings;
 }
 function refreshStoryField(filePath, storyId, changed, root) {
-  if (!fs10.existsSync(filePath)) {
+  if (!fs8.existsSync(filePath)) {
     return;
   }
   let raw;
@@ -22279,7 +22324,7 @@ function assertRepairable(root) {
   const project = scanProject(root);
   assertProjectParses(project, "fix");
   const plotPath = path12.join(project.root, "plot", "_index.md");
-  if (fs10.existsSync(plotPath)) {
+  if (fs8.existsSync(plotPath)) {
     const label = "plot/_index.md";
     const source = readRegistrySource(plotPath, project.root);
     try {
@@ -22388,7 +22433,7 @@ function kindsSharingFields(kind) {
 }
 function assertUnambiguousId(root, kind, id) {
   for (const [other, fields] of kindsSharingFields(kind)) {
-    if (fs10.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`))) {
+    if (fs8.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`))) {
       throw usageError(`${id} is already a ${other} id, and ${fields.join(" and ")} references could not tell the ${kind} from the ${other}. Choose another name, or pass --id`);
     }
   }
@@ -22465,7 +22510,7 @@ function createEntityUnlocked(root, options) {
   let entity = buildEntity(project, kind, name, options);
   assertPortableId(entity.id, kind);
   assertUnambiguousId(project.root, kind, entity.id);
-  const interrupted = (candidate) => fs10.existsSync(candidate.file) && readTextFile(candidate.file) === candidate.markdown && !registryLists(project.root, kind, candidate.file);
+  const interrupted = (candidate) => fs8.existsSync(candidate.file) && readTextFile(candidate.file) === candidate.markdown && !registryLists(project.root, kind, candidate.file);
   const numberOption = { chapter: "number", scene: "scene" }[kind];
   let resumed = false;
   if (numberOption && options[numberOption] === undefined) {
@@ -22478,7 +22523,7 @@ function createEntityUnlocked(root, options) {
       }
     }
   }
-  if (!resumed && fs10.existsSync(entity.file)) {
+  if (!resumed && fs8.existsSync(entity.file)) {
     if (!interrupted(entity)) {
       throw refusedError(`${relative(project, entity.file)} already exists`);
     }
@@ -22505,7 +22550,7 @@ function missingReferenceWarnings(root, kind, data) {
     }
     for (const item of asArray(value)) {
       const id = typeof item === "string" ? item.trim() : "";
-      if (!isKebabId(id) || kinds.some((other) => fs10.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`)))) {
+      if (!isKebabId(id) || kinds.some((other) => fs8.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`)))) {
         continue;
       }
       const backlink = BACKLINKED_FIELDS[kind]?.includes(key) ? ", so no backlink was written" : "";
@@ -22518,7 +22563,7 @@ function registryLists(root, kind, file) {
   const dir = entityConfig(kind).dir;
   const registry = [dir, path12.posix.dirname(dir)].map((entry) => path12.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
   const registryPath = registry && path12.join(root, registry);
-  if (!registryPath || !fs10.existsSync(registryPath)) {
+  if (!registryPath || !fs8.existsSync(registryPath)) {
     return false;
   }
   const link = projectPath(path12.dirname(registryPath), file);
@@ -22549,8 +22594,8 @@ function renameEntityUnlocked(root, options) {
   assertPortableId(newId, kind);
   const newFile = path12.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
-  if (!fs10.existsSync(oldFile)) {
-    if (newFile !== oldFile && fs10.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
+  if (!fs8.existsSync(oldFile)) {
+    if (newFile !== oldFile && fs8.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name && replaceEntityReferences(project.root, kind, oldId, newId, new Map).size === 0) {
       const reindexed = reindexProject(project.root);
       return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true };
     }
@@ -22582,8 +22627,8 @@ function renameEntityUnlocked(root, options) {
     followExemptionPatterns(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
-    const interrupted = fs10.existsSync(newFile) && plan.size === 0 && readTextFile(newFile) === renamedContents;
-    if (fs10.existsSync(newFile) && !interrupted) {
+    const interrupted = fs8.existsSync(newFile) && plan.size === 0 && readTextFile(newFile) === renamedContents;
+    if (fs8.existsSync(newFile) && !interrupted) {
       throw refusedError(`${kind} ${newId} already exists`);
     }
     if (!interrupted) {
@@ -22664,7 +22709,7 @@ function removeEntityUnlocked(root, options) {
   const file = path12.join(project.root, config.dir, `${id}.md`);
   requireKebabId(id, `${kind} id`);
   assertSafeProjectPath(file, project.root);
-  const alreadyGone = !fs10.existsSync(file);
+  const alreadyGone = !fs8.existsSync(file);
   if (alreadyGone && removeEntityReferences(project.root, kind, id, new Map).size === 0) {
     throw usageError(`${kind} ${id} does not exist`);
   }
@@ -22842,7 +22887,7 @@ function moveChapter(project, oldId, options) {
   const sceneContexts = scenes.map((scene) => ({ context: entityReferenceContext(project.root, "scene", scene.id), newId: `${newId}-scene-${String(scene.scene).padStart(2, "0")}` }));
   const plan = planReferenceRewrites(project.root, context, new Map([[chapter.file, renumbered]]), idRenamer(oldId, newId), (body, file) => renameIdTokens(project.root, file, sceneContexts.reduce((text, entry) => renameLinkTargets(project.root, file, text, entry.context, entry.newId), renameLinkTargets(project.root, file, body, context, newId)), oldId, newId));
   const statePath = path12.join(project.root, "continuity", "state.md");
-  if (fs10.existsSync(statePath)) {
+  if (fs8.existsSync(statePath)) {
     const stateText = plan.get(statePath) ?? readTextFile(statePath);
     const stateData = parseFrontmatter(stateText, statePath).data;
     if (stateData["current-chapter"] === chapter.number) {
@@ -23089,7 +23134,7 @@ function rewrittenFiles(root, kind, ids) {
 function assertRestructurable(project, { chapters, scenes, changed, created, chapterTargets }) {
   const root = project.root;
   const vacated = new Set(project.chapters.filter((chapter) => chapters.includes(chapter.id)).map((chapter) => chapter.file));
-  const occupied = chapterTargets.find((file) => fs10.existsSync(file) && !vacated.has(file));
+  const occupied = chapterTargets.find((file) => fs8.existsSync(file) && !vacated.has(file));
   if (occupied) {
     throw refusedError(`${relative(project, occupied)} already exists and is not a chapter this command renumbers: fix it first (story validate reports it)`);
   }
@@ -23204,7 +23249,7 @@ ${secondProse}`;
 }
 function setCurrentChapter(root, from, to, plan = null) {
   const statePath = path12.join(root, "continuity", "state.md");
-  if (!fs10.existsSync(statePath)) {
+  if (!fs8.existsSync(statePath)) {
     return;
   }
   const text = plan?.get(statePath) ?? readTextFile(statePath);
@@ -23244,7 +23289,7 @@ function mergeChaptersUnlocked(root, options) {
   const scenes = project.scenes.filter((scene) => scene.chapter === second.id).sort((left, right) => left.scene - right.scene);
   const firstScene = nextSceneNumber(project, first.id);
   const sceneFiles = scenes.map((scene, index) => path12.join(project.root, "scenes", `${first.id}-scene-${String(firstScene + index).padStart(2, "0")}.md`));
-  const taken = sceneFiles.find((file) => fs10.existsSync(file));
+  const taken = sceneFiles.find((file) => fs8.existsSync(file));
   if (taken) {
     throw refusedError(`${relative(project, taken)} already exists; nothing was changed`);
   }
@@ -23512,7 +23557,7 @@ function commitMoves(root, plan, moves, beforeDelete = () => {}, alsoChanged = [
   const contents = moves.map((move) => plan.get(move.oldFile) ?? readTextFile(move.oldFile));
   const interrupted = interruptedMove(plan, moves);
   moves.forEach((move) => {
-    if (fs10.existsSync(move.newFile) && !interrupted) {
+    if (fs8.existsSync(move.newFile) && !interrupted) {
       throw refusedError(`${projectPath(root, move.newFile)} already exists; nothing was changed`);
     }
   });
@@ -23534,10 +23579,10 @@ function interruptedMove(plan, moves) {
   if ([...plan.keys()].some((file) => !moving.has(file))) {
     return false;
   }
-  return moves.every((move) => !fs10.existsSync(move.newFile) || readTextFile(move.newFile) === (plan.get(move.oldFile) ?? readTextFile(move.oldFile)));
+  return moves.every((move) => !fs8.existsSync(move.newFile) || readTextFile(move.newFile) === (plan.get(move.oldFile) ?? readTextFile(move.oldFile)));
 }
 function ensureDirectory(directory, changed, root) {
-  if (!fs10.existsSync(directory)) {
+  if (!fs8.existsSync(directory)) {
     assertLexicallyInsideRoot(directory, root);
     assertExistingAncestorInsideRoot(directory, root);
     makeDirectories(directory);
@@ -23548,7 +23593,7 @@ function ensureDirectory(directory, changed, root) {
   assertSafeProjectDirectory(directory, root);
 }
 function ensureFile(filePath, contents, changed, root) {
-  if (!fs10.existsSync(filePath)) {
+  if (!fs8.existsSync(filePath)) {
     writeFile(filePath, contents, { root });
     changed.push(filePath);
     return;
@@ -23596,7 +23641,7 @@ function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
   const existsAs = (other) => {
     if (!otherExists.has(other)) {
-      otherExists.set(other, fs10.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`)));
+      otherExists.set(other, fs8.existsSync(path12.join(root, entityConfig(other).dir, `${id}.md`)));
     }
     return otherExists.get(other);
   };
@@ -23665,7 +23710,7 @@ function planReferenceRewrites(root, context, overrides, transform, transformBod
       assertSafeProjectPath(file, root);
       if (!sourceFile) {
         otherFiles += 1;
-        if (otherFiles > MAX_SCAN_FILES || fs10.lstatSync(file).size > MAX_SCAN_FILE_BYTES) {
+        if (otherFiles > MAX_SCAN_FILES || fs8.lstatSync(file).size > MAX_SCAN_FILE_BYTES) {
           continue;
         }
       }
@@ -23748,7 +23793,7 @@ function assertWritable(root, changed, created = []) {
   const problems = new Map;
   const check = (target, label) => {
     try {
-      fs10.accessSync(target, fs10.constants.W_OK);
+      fs8.accessSync(target, fs8.constants.W_OK);
     } catch (error) {
       if (!problems.has(label)) {
         problems.set(label, UNWRITABLE_REASONS[error.code] ?? error.code ?? error.message);
@@ -23758,12 +23803,12 @@ function assertWritable(root, changed, created = []) {
   const folder = (file) => {
     const directory = path12.dirname(file);
     const shown = projectPath(root, directory);
-    if (fs10.existsSync(directory)) {
+    if (fs8.existsSync(directory)) {
       check(directory, shown === "" ? "the project folder" : `${shown}/`);
     }
   };
   for (const file of changed) {
-    if (fs10.existsSync(file)) {
+    if (fs8.existsSync(file)) {
       check(file, projectPath(root, file));
     }
     folder(file);
@@ -23836,12 +23881,12 @@ function applyEntityBacklinks(root, kind, id, data) {
   }
   if (kind === "scene" && isKebabId(data.chapter)) {
     const chapterFile = `chapters/${data.chapter}.md`;
-    const exists = (dir, id) => fs10.existsSync(path12.join(root, dir, `${id}.md`));
+    const exists = (dir, id) => fs8.existsSync(path12.join(root, dir, `${id}.md`));
     if (isKebabId(data.location) && exists("worldbuilding/locations", data.location)) {
       addFrontmatterListValue(root, chapterFile, "locations", data.location);
     }
     const chapterPath = path12.join(root, chapterFile);
-    const mentions = fs10.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
+    const mentions = fs8.existsSync(chapterPath) ? asArray(readMarkdown(chapterPath, root).data.mentions) : [];
     for (const characterId of asArray(data.characters)) {
       if (isKebabId(characterId) && exists("characters", characterId) && !mentions.includes(characterId)) {
         addFrontmatterListValue(root, chapterFile, "characters", characterId);
@@ -23858,7 +23903,7 @@ function applyEntityBacklinks(root, kind, id, data) {
 }
 function addFrontmatterListValue(root, relativePath, field, value) {
   const filePath = path12.join(root, relativePath);
-  if (!fs10.existsSync(filePath) || !value) {
+  if (!fs8.existsSync(filePath) || !value) {
     return;
   }
   assertSafeProjectPath(filePath, root);
@@ -23920,21 +23965,21 @@ function snapshotProjectUnlocked(root, options) {
   const previous = existing ? snapshotFiles(target, projectRoot) : [];
   const backup = existing ? path13.join(projectRoot, SNAPSHOTS_DIR, `.${id}.story-${process.pid}.backup`) : null;
   if (backup !== null) {
-    fs11.rmSync(backup, { recursive: true, force: true });
-    fs11.cpSync(target, backup, { recursive: true });
+    fs9.rmSync(backup, { recursive: true, force: true });
+    fs9.cpSync(target, backup, { recursive: true });
   }
   try {
     const manifest = writeSnapshot(project, target, id, options, previous);
     return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
   } catch (error) {
-    fs11.rmSync(target, { recursive: true, force: true });
+    fs9.rmSync(target, { recursive: true, force: true });
     if (backup !== null) {
-      fs11.renameSync(backup, target);
+      fs9.renameSync(backup, target);
     }
     throw error;
   } finally {
     if (backup !== null) {
-      fs11.rmSync(backup, { recursive: true, force: true });
+      fs9.rmSync(backup, { recursive: true, force: true });
     }
   }
 }
@@ -23974,7 +24019,7 @@ function snapshotFiles(directory, root) {
   assertSafeProjectDirectory(directory, root);
   const files = [];
   const walk = (folder) => {
-    for (const entry of fs11.readdirSync(folder, { withFileTypes: true })) {
+    for (const entry of fs9.readdirSync(folder, { withFileTypes: true })) {
       const full = path13.join(folder, entry.name);
       if (entry.isDirectory()) {
         walk(full);
@@ -23987,12 +24032,12 @@ function snapshotFiles(directory, root) {
   return files;
 }
 function removeEmptyFolders(folder) {
-  for (const entry of fs11.readdirSync(folder, { withFileTypes: true })) {
+  for (const entry of fs9.readdirSync(folder, { withFileTypes: true })) {
     if (entry.isDirectory()) {
       const full = path13.join(folder, entry.name);
       removeEmptyFolders(full);
-      if (fs11.readdirSync(full).length === 0) {
-        fs11.rmdirSync(full);
+      if (fs9.readdirSync(full).length === 0) {
+        fs9.rmdirSync(full);
       }
     }
   }
@@ -24006,7 +24051,7 @@ function listSnapshots(root) {
     return { ok: true, errors: [], warnings, snapshots: [] };
   }
   assertSafeProjectDirectory(folder, projectRoot);
-  const snapshots = fs11.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => {
+  const snapshots = fs9.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isDirectory() && !entry.name.startsWith(".")).map((entry) => {
     const blank = { name: entry.name, id: entry.name, created: null, chapters: null, words: null };
     try {
       const manifest = JSON.parse(readTextFile(path13.join(folder, entry.name, SNAPSHOT_MANIFEST)));
@@ -24068,7 +24113,7 @@ function restoreSnapshotUnlocked(root, options) {
     const target = path13.join(projectRoot, ...relative.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
-    if (existing?.isFile() && fs11.readFileSync(target).equals(Buffer.from(text, "utf8"))) {
+    if (existing?.isFile() && currentText(target) === text) {
       continue;
     }
     writes.push({ path: relative, target, text, created: existing === null });
@@ -24125,7 +24170,7 @@ function restoreSources(root, name) {
       if (stats?.isSymbolicLink()) {
         throw refusedError(`Cannot restore snapshot ${id}: ${folder}/ is a symlink, and ${relative} would be written through it. Nothing was changed`);
       }
-      if (stats !== null && fs11.existsSync(path13.join(full, "story.md"))) {
+      if (stats !== null && fs9.existsSync(path13.join(full, "story.md"))) {
         throw refusedError(`Cannot restore snapshot ${id}: ${relative} would be written into ${folder}/, which is now a story project of its own. Nothing was changed`);
       }
     }
@@ -24135,7 +24180,7 @@ function restoreSources(root, name) {
 function nextSafetyId(projectRoot, id) {
   const prefix = `before-restore-${id}-`;
   const folder = path13.join(projectRoot, SNAPSHOTS_DIR);
-  const taken = lstatIfExists(folder) === null ? [] : fs11.readdirSync(folder);
+  const taken = lstatIfExists(folder) === null ? [] : fs9.readdirSync(folder);
   let next = 1;
   for (const name of taken) {
     const rest = name.startsWith(prefix) ? name.slice(prefix.length) : "";
@@ -24201,7 +24246,7 @@ ${lines.join(`
 }
 
 // src/build.js
-import fs12 from "node:fs";
+import fs10 from "node:fs";
 import path14 from "node:path";
 
 // src/codex.js
@@ -25257,7 +25302,7 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
   if (stats !== null && !stats.isDirectory()) {
     throw usageError(`--out ${rawOut} is not a folder: give a folder for --format codex`);
   }
-  if (stats !== null && fs12.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
+  if (stats !== null && fs10.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
     throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
   }
   return { directory, writeOptions: enforceRoot ? { root: project.root } : {} };
@@ -25267,20 +25312,20 @@ function isCodexFolder(directory) {
 }
 function isCodexPage(file) {
   try {
-    return fs12.readFileSync(file, "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return readTextFile(file).includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }
 }
 function removeStaleCodexPages(directory, written) {
-  const stalePages = (folder) => fs12.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => path14.join(folder, entry.name)).filter((file) => !written.has(file) && isCodexPage(file));
+  const stalePages = (folder) => fs10.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".html")).map((entry) => path14.join(folder, entry.name)).filter((file) => !written.has(file) && isCodexPage(file));
   for (const folder of [directory, ...CODEX_KINDS.map((kind) => path14.join(directory, kind.dir))]) {
     if (lstatIfExists(folder)?.isDirectory() !== true) {
       continue;
     }
     const stale = stalePages(folder);
     stale.forEach((file) => removeFile(file));
-    if (folder !== directory && fs12.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
+    if (folder !== directory && fs10.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
       removeDirectory(folder);
     }
   }
@@ -25713,7 +25758,7 @@ function assertNotProjectSource(project, outFile) {
   if (isInsideGitDirectory(outFile, project.root)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
-  const realRoot = fs12.realpathSync.native(project.root);
+  const realRoot = fs10.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
   const candidates = [[project.root, outFile], [realRoot, realTarget], [realRoot.toLowerCase(), realTarget.toLowerCase()]];
   for (const [root, target] of candidates) {
@@ -25732,8 +25777,8 @@ function assertNotProjectSource(project, outFile) {
   }
 }
 function realPathThroughAncestors(target) {
-  const { ancestor, missing } = nearestExistingAncestor(target, fs12.existsSync);
-  return path14.join(fs12.realpathSync.native(ancestor), ...missing);
+  const { ancestor, missing } = nearestExistingAncestor(target, fs10.existsSync);
+  return path14.join(fs10.realpathSync.native(ancestor), ...missing);
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
@@ -25863,7 +25908,7 @@ function draftingContext(root, targetId, options = {}) {
 function seriesReport(root) {
   const projectRoot = path15.resolve(root);
   requireStoryFile(projectRoot);
-  return buildSeries(fs13.realpathSync(projectRoot), scanProject);
+  return buildSeries(fs11.realpathSync(projectRoot), scanProject);
 }
 function compareProject(root, options = {}) {
   const given = (value) => typeof value === "string" && value !== "";
@@ -25925,7 +25970,7 @@ function mapProjectLabels(project, anchors, options) {
   return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
 }
 function labelsIn(root, label) {
-  if (!fs13.existsSync(path15.join(root, "story.md"))) {
+  if (!fs11.existsSync(path15.join(root, "story.md"))) {
     throw projectError(`No story project (story.md) in ${label}`);
   }
   const project = scanProject(root);
@@ -25939,7 +25984,7 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
     return { mode, type, hash, name: record.slice(tab + 1) };
   }).filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
   const contents = catBlobs(root, blobs.map((entry) => entry.hash));
-  const dir = fs13.mkdtempSync(path15.join(os3.tmpdir(), "story-compare-"));
+  const dir = fs11.mkdtempSync(path15.join(os3.tmpdir(), "story-compare-"));
   try {
     blobs.forEach((entry, index) => {
       const target = path15.join(dir, ...entry.name.split("/"));
@@ -25947,11 +25992,11 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
         return;
       }
       makeDirectories(path15.dirname(target));
-      fs13.writeFileSync(target, contents[index]);
+      fs11.writeFileSync(target, contents[index]);
     });
     return read(dir);
   } finally {
-    fs13.rmSync(dir, { recursive: true, force: true });
+    fs11.rmSync(dir, { recursive: true, force: true });
   }
 }
 function catBlobs(root, hashes) {
@@ -26073,7 +26118,7 @@ function similarityReport(root, options = {}) {
     label = `git ref ${against}`;
     try {
       references = withProjectAtGitRef(project.root, against, (oldRoot) => {
-        if (!fs13.existsSync(path15.join(oldRoot, "story.md"))) {
+        if (!fs11.existsSync(path15.join(oldRoot, "story.md"))) {
           throw projectError(`No story project (story.md) at git ref ${against}`);
         }
         const old = scanProject(oldRoot);
@@ -26123,7 +26168,7 @@ function labelledChapters(project, fileName) {
 }
 var REFERENCE_TEXT_FILE = /\.(?:md|markdown|txt)$/i;
 function referenceDocuments(target, display, self) {
-  if (!fs13.statSync(target).isDirectory()) {
+  if (!fs11.statSync(target).isDirectory()) {
     return [textDocument(target, display(target))];
   }
   const documents = [];
@@ -26139,13 +26184,13 @@ function referenceDocuments(target, display, self) {
   return documents;
 }
 function referenceEntries(dir, self, depth = 0, collected = []) {
-  if (fs13.existsSync(path15.join(dir, "story.md"))) {
+  if (fs11.existsSync(path15.join(dir, "story.md"))) {
     if (canonicalPath(dir) !== self) {
       collected.push({ project: true, path: dir });
     }
     return collected;
   }
-  const entries = fs13.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const entries = fs11.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   for (const entry of entries) {
     if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name) || entry.name === "_index.md") {
       continue;
@@ -26552,12 +26597,12 @@ function unitNumeral(words) {
 var MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 var MAX_IMPORT_FILES = 500;
 function rejectSymlinkedSource(filePath) {
-  if (fs14.lstatSync(filePath).isSymbolicLink()) {
+  if (fs12.lstatSync(filePath).isSymbolicLink()) {
     throw usageError("Refusing to import symlinked source: " + filePath);
   }
 }
 function assertImportFileSize(filePath) {
-  const size = fs14.statSync(filePath).size;
+  const size = fs12.statSync(filePath).size;
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError("Refusing to import oversized file " + filePath + ": " + size + " bytes exceeds the " + MAX_IMPORT_FILE_BYTES + " byte limit");
   }
@@ -26570,10 +26615,10 @@ function importManuscript(options) {
   const cwd = options.cwd ?? process.cwd();
   const fromStdin = rawSource === STDIN_ARG;
   const source = fromStdin ? null : path16.resolve(cwd, rawSource);
-  if (!fromStdin && !fs14.existsSync(source)) {
+  if (!fromStdin && !fs12.existsSync(source)) {
     throw usageError(`Import source not found: ${source}`);
   }
-  if (!fromStdin && fs14.statSync(source).isDirectory() && fs14.existsSync(path16.join(source, "story.md"))) {
+  if (!fromStdin && fs12.statSync(source).isDirectory() && fs12.existsSync(path16.join(source, "story.md"))) {
     throw usageError(`${rawSource} is already a story project (it has story.md); import reads manuscript files, so point it at the draft instead`);
   }
   if (options.language !== undefined && !isLanguageTag(options.language)) {
@@ -26604,7 +26649,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
-      const bytes = Buffer6.byteLength(text, "utf8");
+      const bytes = Buffer5.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }
@@ -26639,7 +26684,7 @@ function importManuscript(options) {
       }
     });
     const chaptersDir = path16.join(created.root, "chapters");
-    for (const name of fs14.readdirSync(chaptersDir)) {
+    for (const name of fs12.readdirSync(chaptersDir)) {
       if (!/^chapter-\d+\.md$/i.test(name)) {
         continue;
       }
@@ -26754,7 +26799,7 @@ function addCandidate(counts, name) {
   counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 function readSourceText(filePath) {
-  return decodeUtf82(fs14.readFileSync(filePath), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+  return decodeUtf82(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
 }
 function readImportSource(source, rules) {
   try {
@@ -26765,17 +26810,17 @@ function readImportSource(source, rules) {
 }
 function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
-  if (fs14.statSync(source).isFile()) {
+  if (fs12.statSync(source).isFile()) {
     assertImportFileSize(source);
     return [{ name: path16.basename(source), text: readSourceText(source) }];
   }
   const names = [];
-  for (const entry of fs14.readdirSync(source, { withFileTypes: true })) {
+  for (const entry of fs12.readdirSync(source, { withFileTypes: true })) {
     const fullPath = path16.join(source, entry.name);
-    if (fs14.lstatSync(fullPath).isSymbolicLink()) {
+    if (fs12.lstatSync(fullPath).isSymbolicLink()) {
       let targetIsDocument = false;
       try {
-        targetIsDocument = fs14.statSync(fullPath).isFile();
+        targetIsDocument = fs12.statSync(fullPath).isFile();
       } catch {
         targetIsDocument = false;
       }
@@ -27181,14 +27226,14 @@ function resultData(result) {
 }
 
 // src/preview.js
-import fs15 from "node:fs";
+import fs13 from "node:fs";
 import os4 from "node:os";
 import path17 from "node:path";
 function previewChanges(root, run) {
   const projectRoot = path17.resolve(root);
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
-    fs15.mkdirSync(path17.dirname(copyRoot), { recursive: true });
+    fs13.mkdirSync(path17.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
@@ -27203,15 +27248,15 @@ function previewNewProject(root, run) {
   return inScratch(target, run, (copyRoot, mirror) => {
     const stats = lstatIfExists(target);
     const ancestor = stats ? path17.dirname(target) : nearestExistingAncestor(target).ancestor;
-    const isFolder = fs15.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() === true;
-    fs15.mkdirSync(isFolder ? mirror(ancestor) : path17.dirname(mirror(ancestor)), { recursive: true });
+    const isFolder = fs13.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() === true;
+    fs13.mkdirSync(isFolder ? mirror(ancestor) : path17.dirname(mirror(ancestor)), { recursive: true });
     if (!isFolder) {
-      fs15.symlinkSync(path17.join(path17.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
+      fs13.symlinkSync(path17.join(path17.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
     }
     for (let folder = path17.dirname(target);; folder = path17.dirname(folder)) {
       const story = path17.join(folder, "story.md");
       if (lstatIfExists(story)?.isFile()) {
-        fs15.mkdirSync(mirror(folder), { recursive: true });
+        fs13.mkdirSync(mirror(folder), { recursive: true });
         copyFile(story, mirror(story));
       }
       if (path17.dirname(folder) === folder) {
@@ -27219,19 +27264,19 @@ function previewNewProject(root, run) {
       }
     }
     if (stats?.isSymbolicLink()) {
-      fs15.symlinkSync(path17.join(path17.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
+      fs13.symlinkSync(path17.join(path17.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
     } else if (stats?.isDirectory()) {
       copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot });
     } else if (stats) {
       copyFile(target, copyRoot);
     }
     if (isFolder) {
-      fs15.chmodSync(mirror(ancestor), copyMode(ancestor, true));
+      fs13.chmodSync(mirror(ancestor), copyMode(ancestor, true));
     }
   });
 }
 function inScratch(target, run, prepare) {
-  const scratch = fs15.realpathSync(fs15.mkdtempSync(path17.join(os4.tmpdir(), "story-dry-run-")));
+  const scratch = fs13.realpathSync(fs13.mkdtempSync(path17.join(os4.tmpdir(), "story-dry-run-")));
   const fsRoot = path17.parse(target).root;
   const atRoot = target === fsRoot;
   const mirror = (file) => {
@@ -27259,9 +27304,9 @@ function copyLinkedBooks(projectRoot, mirror) {
   const realParent = realPath2(parent);
   const home = (real) => isPathInside(realParent, real) ? path17.join(parent, path17.relative(realParent, real)) : real;
   const alias = (link, book) => {
-    if (link !== book && !fs15.existsSync(mirror(link))) {
-      fs15.mkdirSync(path17.dirname(mirror(link)), { recursive: true });
-      fs15.symlinkSync(mirror(book), mirror(link));
+    if (link !== book && !fs13.existsSync(mirror(link))) {
+      fs13.mkdirSync(path17.dirname(mirror(link)), { recursive: true });
+      fs13.symlinkSync(mirror(book), mirror(link));
     }
   };
   const projectReal = realPath2(projectRoot);
@@ -27281,10 +27326,10 @@ function copyLinkedBooks(projectRoot, mirror) {
       const real = realPath2(link);
       if (!copies.has(real)) {
         const target = mirror(home(real));
-        if (copies.size > MAX_SERIES_BOOKS || !fs15.existsSync(path17.join(real, "story.md")) || fs15.existsSync(target)) {
+        if (copies.size > MAX_SERIES_BOOKS || !fs13.existsSync(path17.join(real, "story.md")) || fs13.existsSync(target)) {
           continue;
         }
-        fs15.mkdirSync(path17.dirname(target), { recursive: true });
+        fs13.mkdirSync(path17.dirname(target), { recursive: true });
         copyProject(real, target, { realSource: real, copyRoot: target });
         copies.set(real, home(real));
       }
@@ -27303,13 +27348,9 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
   }
   const context = { copyRoot, scratch, mirror, realOf };
   for (const file of linkSources(copyRoot)) {
-    const stats = lstatIfExists(file);
-    if (!stats?.isFile() || stats.size > MAX_READ_BYTES) {
-      continue;
-    }
     let body;
     try {
-      body = fs15.readFileSync(file, "utf8");
+      body = readTextFile(file);
     } catch {
       continue;
     }
@@ -27328,7 +27369,7 @@ function linkSources(copyRoot) {
   for (const folder of [path17.join("plot", "arcs"), MATTER_DIR]) {
     let entries = [];
     try {
-      entries = fs15.readdirSync(path17.join(copyRoot, folder), { withFileTypes: true });
+      entries = fs13.readdirSync(path17.join(copyRoot, folder), { withFileTypes: true });
     } catch {
       continue;
     }
@@ -27350,13 +27391,13 @@ function stageLinkTarget(file, context, hops) {
       if (isPathInside(copyRoot, next) || !makeStandIn(next, context, index === parts.length - 1)) {
         return null;
       }
-      stats = fs15.lstatSync(next);
+      stats = fs13.lstatSync(next);
     }
     if (stats.isSymbolicLink()) {
       if (hops >= MAX_LINK_HOPS) {
         return null;
       }
-      current = stageLinkTarget(path17.resolve(path17.dirname(next), fs15.readlinkSync(next)), context, hops + 1);
+      current = stageLinkTarget(path17.resolve(path17.dirname(next), fs13.readlinkSync(next)), context, hops + 1);
       if (current === null) {
         return null;
       }
@@ -27374,71 +27415,71 @@ function makeStandIn(copy, { mirror, realOf }, last) {
   }
   withWritable(path17.dirname(copy), () => {
     if (stats.isSymbolicLink()) {
-      const text = fs15.readlinkSync(real);
-      fs15.symlinkSync(path17.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
+      const text = fs13.readlinkSync(real);
+      fs13.symlinkSync(path17.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
     } else if (stats.isDirectory()) {
-      fs15.mkdirSync(copy);
+      fs13.mkdirSync(copy);
       if (lstatIfExists(path17.join(real, "story.md"))) {
-        fs15.writeFileSync(path17.join(copy, "story.md"), "");
+        fs13.writeFileSync(path17.join(copy, "story.md"), "");
       }
     } else {
-      fs15.writeFileSync(copy, "");
+      fs13.writeFileSync(copy, "");
     }
   });
   return true;
 }
 function isFolder(target) {
   try {
-    return fs15.statSync(target).isDirectory();
+    return fs13.statSync(target).isDirectory();
   } catch {
     return false;
   }
 }
 function withWritable(folder, make) {
-  const mode = fs15.statSync(folder).mode & 4095;
+  const mode = fs13.statSync(folder).mode & 4095;
   if ((mode & 192) === 192) {
     make();
     return;
   }
-  fs15.chmodSync(folder, mode | 192);
+  fs13.chmodSync(folder, mode | 192);
   try {
     make();
   } finally {
-    fs15.chmodSync(folder, mode);
+    fs13.chmodSync(folder, mode);
   }
 }
 function copyProject(source, target, roots, depth = 0) {
-  fs15.mkdirSync(target);
-  for (const entry of fs15.readdirSync(source, { withFileTypes: true })) {
+  fs13.mkdirSync(target);
+  for (const entry of fs13.readdirSync(source, { withFileTypes: true })) {
     const from = path17.join(source, entry.name);
     const to = path17.join(target, entry.name);
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs15.existsSync(path17.join(from, "story.md"))) {
+      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs13.existsSync(path17.join(from, "story.md"))) {
         copyProject(from, to, roots, depth + 1);
       }
     } else if (entry.isSymbolicLink()) {
-      fs15.symlinkSync(linkTarget(fs15.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
+      fs13.symlinkSync(linkTarget(fs13.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
       copyFile(from, to);
     }
   }
-  fs15.chmodSync(target, copyMode(source, true));
+  fs13.chmodSync(target, copyMode(source, true));
 }
 function copyFile(from, to) {
-  const { size } = fs15.statSync(from);
-  if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs15.constants.R_OK)) {
-    fs15.copyFileSync(from, to);
+  const { size } = fs13.statSync(from);
+  if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs13.constants.R_OK)) {
+    fs13.writeFileSync(to, readFileBytes(from));
   } else {
-    fs15.writeFileSync(to, "");
-    fs15.truncateSync(to, size);
+    fs13.writeFileSync(to, "");
+    fs13.truncateSync(to, size);
   }
-  fs15.chmodSync(to, copyMode(from, false));
+  fs13.chmodSync(to, copyMode(from, false));
 }
 function copyMode(source, directory) {
-  let mode = fs15.statSync(source).mode & 4095;
-  const access = [[fs15.constants.R_OK, 292, 256], [fs15.constants.W_OK, 146, 128]];
+  let mode = fs13.statSync(source).mode & 4095;
+  const access = [[fs13.constants.R_OK, 292, 256], [fs13.constants.W_OK, 146, 128]];
   if (directory) {
-    access.push([fs15.constants.X_OK, 73, 64]);
+    access.push([fs13.constants.X_OK, 73, 64]);
   }
   for (const [check, all, owner] of access) {
     mode = allowed(source, check) ? mode | owner : mode & ~all;
@@ -27447,7 +27488,7 @@ function copyMode(source, directory) {
 }
 function allowed(file, check) {
   try {
-    fs15.accessSync(file, check);
+    fs13.accessSync(file, check);
     return true;
   } catch {
     return false;
@@ -27462,16 +27503,16 @@ function linkTarget(target, { realSource, copyRoot }) {
 }
 function removeScratch(scratch) {
   try {
-    fs15.rmSync(scratch, { recursive: true, force: true });
+    fs13.rmSync(scratch, { recursive: true, force: true });
   } catch {
     makeWritable(scratch);
-    fs15.rmSync(scratch, { recursive: true, force: true });
+    fs13.rmSync(scratch, { recursive: true, force: true });
   }
 }
 function makeWritable(directory) {
   try {
-    fs15.chmodSync(directory, 448);
-    for (const entry of fs15.readdirSync(directory, { withFileTypes: true })) {
+    fs13.chmodSync(directory, 448);
+    for (const entry of fs13.readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
         makeWritable(path17.join(directory, entry.name));
       }
@@ -27503,14 +27544,14 @@ function toProjectError(error, from, to) {
 }
 function realPath2(target) {
   try {
-    return fs15.realpathSync(target);
+    return fs13.realpathSync(target);
   } catch {
     return target;
   }
 }
 
 // src/workflows.js
-import fs16 from "node:fs";
+import fs14 from "node:fs";
 import path18 from "node:path";
 
 // src/version.js
@@ -27541,7 +27582,7 @@ function workflowPins(projectRoot) {
   for (const file of workflowFiles(projectRoot)) {
     let text;
     try {
-      text = fs16.readFileSync(file, "utf8");
+      text = readTextFile(file);
     } catch {
       continue;
     }
@@ -27566,7 +27607,7 @@ function workflowFiles(projectRoot) {
     const workflows = path18.join(dir, ".github", "workflows");
     let names;
     try {
-      names = fs16.readdirSync(workflows);
+      names = fs14.readdirSync(workflows);
     } catch {
       continue;
     }
@@ -27578,7 +27619,7 @@ function workflowFiles(projectRoot) {
 }
 function findGitRoot(start) {
   let dir = path18.resolve(start);
-  while (!fs16.existsSync(path18.join(dir, ".git"))) {
+  while (!fs14.existsSync(path18.join(dir, ".git"))) {
     const parent = path18.dirname(dir);
     if (parent === dir) {
       return null;
@@ -28295,8 +28336,8 @@ var COMMANDS = [
       const projectRoot = root();
       const existing = path19.join(projectRoot, SNAPSHOTS_DIR, snapshotId(name, id));
       const seed = (target) => {
-        if (target !== projectRoot && fs17.existsSync(existing)) {
-          fs17.cpSync(existing, path19.join(target, path19.relative(projectRoot, existing)), { recursive: true });
+        if (target !== projectRoot && fs15.existsSync(existing)) {
+          fs15.cpSync(existing, path19.join(target, path19.relative(projectRoot, existing)), { recursive: true });
         }
       };
       return runWrite(context, "snapshot", (target) => {
@@ -28572,7 +28613,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
 function nameWords2(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
-    if (word === "." || word === ".." || /[\\/]/.test(word) && fs17.existsSync(path19.join(path19.resolve(cwd, word), "story.md"))) {
+    if (word === "." || word === ".." || /[\\/]/.test(word) && fs15.existsSync(path19.join(path19.resolve(cwd, word), "story.md"))) {
       throw usageError(`"${word}" looks like a project path: story ${command} takes the project as --path ${word}`);
     }
   }
@@ -28595,7 +28636,7 @@ function passageRoot(parsed, cwd, required) {
   if (parsed.options.path !== undefined) {
     return path19.resolve(cwd, parsed.options.path);
   }
-  return required || fs17.existsSync(path19.join(cwd, "story.md")) ? path19.resolve(cwd) : null;
+  return required || fs15.existsSync(path19.join(cwd, "story.md")) ? path19.resolve(cwd) : null;
 }
 function runRestore(context, name) {
   const { parsed } = context;
@@ -28616,17 +28657,17 @@ function runRestore(context, name) {
     restoreSources(projectRoot, restore);
     const folder = path19.join(projectRoot, SNAPSHOTS_DIR);
     const { directory } = existingSnapshot(projectRoot, restore);
-    for (const entry of fs17.readdirSync(folder, { withFileTypes: true })) {
+    for (const entry of fs15.readdirSync(folder, { withFileTypes: true })) {
       const copy = path19.join(target, SNAPSHOTS_DIR, entry.name);
       if (entry.isDirectory()) {
-        fs17.mkdirSync(copy, { recursive: true });
+        fs15.mkdirSync(copy, { recursive: true });
         const manifest = path19.join(folder, entry.name, SNAPSHOT_MANIFEST);
         if (lstatIfExists(manifest)?.isFile()) {
-          fs17.copyFileSync(manifest, path19.join(copy, SNAPSHOT_MANIFEST));
+          fs15.writeFileSync(path19.join(copy, SNAPSHOT_MANIFEST), readFileBytes(manifest));
         }
       }
     }
-    fs17.cpSync(directory, path19.join(target, SNAPSHOTS_DIR, path19.basename(directory)), { recursive: true });
+    fs15.cpSync(directory, path19.join(target, SNAPSHOTS_DIR, path19.basename(directory)), { recursive: true });
   };
   return runWrite(context, "snapshot", (target) => {
     seed(target);

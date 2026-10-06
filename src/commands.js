@@ -9,7 +9,7 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
-import { lstatIfExists, planChanges, recordChanges } from "./files.js";
+import { lstatIfExists, planChanges, readFileBytes, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
@@ -1102,9 +1102,9 @@ function runRestore(context, name) {
       if (entry.isDirectory()) {
         fs.mkdirSync(copy, { recursive: true });
         const manifest = path.join(folder, entry.name, SNAPSHOT_MANIFEST);
-        // Only a real manifest file, as --list reads one.
+        // Only a real manifest file, read as --list reads one.
         if (lstatIfExists(manifest)?.isFile()) {
-          fs.copyFileSync(manifest, path.join(copy, SNAPSHOT_MANIFEST));
+          fs.writeFileSync(path.join(copy, SNAPSHOT_MANIFEST), readFileBytes(manifest));
         }
       }
     }

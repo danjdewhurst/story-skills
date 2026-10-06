@@ -248,6 +248,22 @@ describe("build --format codex", () => {
     expect(() => buildBook(root, { format: "codex", out: " " })).toThrow("--out needs a folder path");
   });
 
+  test.skipIf(process.platform === "win32")("never follows or reads a symlinked index.html to decide a folder is a codex (#548)", () => {
+    const { root } = project();
+    const codex = buildBook(root, { format: "codex" }).outFile;
+    // An earlier codex's index page, but outside the folder.
+    const outside = path.join(makeTempDir(), "index.html");
+    fs.copyFileSync(path.join(codex, "index.html"), outside);
+    fs.rmSync(codex, { recursive: true });
+    fs.mkdirSync(codex);
+    fs.symlinkSync(outside, path.join(codex, "index.html"));
+    expect(() => buildBook(root, { format: "codex" })).toThrow("Refusing to write the codex into dist/codex: it holds other files");
+    // Read, /dev/zero would hold the build forever.
+    fs.rmSync(path.join(codex, "index.html"));
+    fs.symlinkSync("/dev/zero", path.join(codex, "index.html"));
+    expect(() => buildBook(root, { format: "codex" })).toThrow("it holds other files");
+  });
+
   test("--spoilers applies only to the codex, and the CLI reports the pages", () => {
     const { root, cwd } = project();
     expect(() => buildBook(root, { format: "html", spoilers: true })).toThrow("--spoilers applies only to --format codex");

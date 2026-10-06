@@ -342,6 +342,34 @@ describe("lock edge cases", () => {
     expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project");
   });
 
+  test.skipIf(process.platform === "win32")("a symlinked lock counts as held rather than being followed (#548)", () => {
+    const root = newProject();
+    // Followed, this would read as a dead process's lock and be taken over.
+    const dead = spawnSync(process.execPath, ["-e", "process.exit(0)"]).pid;
+    const outside = path.join(makeTempDir(), "lock");
+    fs.writeFileSync(outside, `${dead}\n${os.hostname()}\n${new Date().toISOString()}\n`);
+    fs.symlinkSync(outside, path.join(root, LOCK_FILE));
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(() => createEntity(root, { kind: "character", name: "Bo" })).toThrow("another story command is modifying this project");
+    expect(fs.lstatSync(path.join(root, LOCK_FILE)).isSymbolicLink()).toBe(true);
+    expect(fs.existsSync(path.join(root, "characters", "bo.md"))).toBe(false);
+  });
+
+  test.skipIf(process.platform === "win32")("a lock linked to /dev/zero refuses the write rather than hanging it (#548)", () => {
+    const root = newProject();
+    fs.symlinkSync("/dev/zero", path.join(root, LOCK_FILE));
+    // In a child, so a read that never ends fails the test rather than
+    // stalling the suite.
+    const result = spawnSync(process.execPath, [path.join(import.meta.dir, "..", "bin", "story.js"), "add", "character", "Bo", "--path", root, "--json"], {
+      encoding: "utf8",
+      timeout: 20000,
+      env: { ...process.env, STORY_LOCK_WAIT_MS: "0" }
+    });
+    expect(result.signal).toBeNull();
+    expect(result.status).toBe(4);
+    expect(JSON.parse(result.stdout).diagnostics).toEqual([expect.objectContaining({ code: "write-refused", message: expect.stringContaining("another story command is modifying this project") })]);
+  });
+
   test("a lock from another machine with no timestamp is not taken over", () => {
     const root = newProject();
     fs.writeFileSync(path.join(root, LOCK_FILE), "1\nsome-other-host\n");

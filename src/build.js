@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, removeDirectory, removeFile, writeFile } from "./files.js";
+import { isInsideGitDirectory, isPlanning, lstatIfExists, nearestExistingAncestor, portablePath, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { PROGRESS_FILE } from "./progress.js";
 import {
@@ -271,9 +271,11 @@ function isCodexFolder(directory) {
   return isCodexPage(path.join(directory, "index.html"));
 }
 
+// A page that is a symlink, a FIFO, or over the read limit is not one the
+// codex wrote, so it is never followed or read whole.
 function isCodexPage(file) {
   try {
-    return fs.readFileSync(file, "utf8").includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
+    return readTextFile(file).includes(`<meta name="generator" content="${CODEX_GENERATOR}">`);
   } catch {
     return false;
   }
