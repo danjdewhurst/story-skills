@@ -311,54 +311,98 @@ export function maskMarkup(text) {
   return result + source.slice(position);
 }
 
-// A reference-style link definition (`[label]: url "Title"`), as a line.
-// A footnote (`[^1]: text`) is prose, and is not one.
-const LINK_DEFINITION_LINE = /^ {0,3}\[(?!\^)([^\]\n]{1,1000})\]:[^\n]*/gm;
+// Markdown link syntax, as story rename --prose leaves it alone. A link's
+// parts may run onto the next line of a paragraph, never across a blank
+// line, and a line inside a block quote may open with `>` markers.
+const QUOTE_MARKERS = String.raw`(?:[ \t]*>)*`;
+const NEXT_LINE = String.raw`\n(?![ \t>]*\r?$)`;
+const LINK_BREAK = String.raw`[ \t]*\r?${NEXT_LINE}${QUOTE_MARKERS}[ \t]*`;
+const titleText = (close) => String.raw`(?:[^${close}\n]|${NEXT_LINE}){0,1000}`;
+const LINK_TITLE = String.raw`(?:"${titleText('"')}"|'${titleText("'")}'|\(${titleText("()")}\))`;
+// A reference definition (`[label]: url "Title"`), in a block quote or a
+// list item too, with its destination or title on the next line or not,
+// and nothing after them on their line, so `[Ines]: are you there?` is
+// not one. A footnote (`[^1]: text`) is prose. Bounded, so it stays
+// linear.
+const LINK_DEFINITION = new RegExp(String.raw`^${QUOTE_MARKERS}[ \t]*\[(?!\^)([^[\]\n]{1,999})\]:(?:${LINK_BREAK}|[ \t]*)(?:<[^<>\n]*>|[^\s<]\S{0,2000})(?:(?:${LINK_BREAK}|[ \t]+)${LINK_TITLE})?[ \t]*$`, "gm");
 // After a link's `]`: an inline destination and title, with one level of
 // parentheses inside (`(https://en.wikipedia.org/wiki/Ines_(name))`), or a
-// full reference's label. Also an autolink. Bounded, so a long run of
-// unclosed `(` stays linear.
-const LINK_TARGET = /(?<=\])\((?:[^()\n]|\([^()\n]{0,1000}\)){0,1000}\)|(?<=\])\[[^[\]\n]{0,1000}\]|<[a-z][a-z0-9+.-]{0,31}:[^<>\s]*>/gi;
+// full reference's label. An autolink, and an HTML tag with its
+// attributes (`<img src="img/Ines.png" alt="Ines">`). Bounded, so a long
+// run of unclosed `(` or `<` stays linear.
+const LINK_TARGET = new RegExp([
+  String.raw`(?<=\])\((?:[^()\n]|${NEXT_LINE}|\([^()\n]{0,1000}\)){0,2000}\)`,
+  String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`,
+  String.raw`<[a-z][a-z0-9+.-]{1,31}:[^<>\s]*>`,
+  String.raw`<\/?[a-z][a-z0-9-]*(?:\s(?:[^<>\n]|${NEXT_LINE}){0,2000})?\/?>`
+].join("|"), "gim");
 // A shortcut (`[Ines]`) or collapsed (`[Ines][]`) reference: its text is
 // its label.
-const REFERENCE_TEXT = /\[([^[\]\n]{1,1000})\](?:\[\])?(?![([])/g;
+const REFERENCE_TEXT = /\[([^[\]\n]{1,999})\](?:\[\])?(?![([])/g;
+// A line that ends a paragraph, so a definition may follow it: a heading
+// or a thematic break. Blank lines are found apart.
+const BLOCK_LINE = /^[ \t>]*(?:#{1,6}(?:[ \t]|\r?$)|([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$)/;
 
-// The text with link and image destinations, their titles, reference
-// labels and definitions, autolinks, and bare URLs and email addresses
-// blanked with `blank`, keeping line breaks, so offsets still match: the
-// parts of a link a reader does not see as prose. A shortcut or collapsed
-// reference whose label a definition gives is blanked too, since its text
-// is the label. Link text and image alt text are kept.
+// Link syntax in `text` a reader does not see as prose, blanked with
+// `blank`, keeping line breaks, so offsets still match: link and image
+// destinations and titles, the label of a full reference, reference
+// definitions, autolinks, HTML tags, and bare URLs and email addresses.
+// Link text and image alt text are kept. A definition counts only where a
+// paragraph may start: at the start, after a blank line (or one of nothing
+// but `blank`, as an earlier mask leaves a comment), a heading, a
+// thematic break, or another definition. Returns { text, references }:
+// `references` lists, as [start, end], the text of each shortcut or
+// collapsed reference whose label is defined, since that text is the
+// label too, and renaming it would break the link.
 export function maskLinkTargets(text, blank = " ") {
   const source = String(text);
   const ranges = [];
   const labels = new Set();
   const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
-  for (const match of source.matchAll(LINK_DEFINITION_LINE)) {
-    labels.add(label(match[1]));
-    ranges.push([match.index, match.index + match[0].length]);
+  const blankLine = new RegExp(`^[ \\t>${escapeRegExp(blank)}]*\\r?$`);
+  let definitionEnd = -1;
+  for (const match of source.matchAll(LINK_DEFINITION)) {
+    const lineStart = source.lastIndexOf("\n", match.index - 2) + 1;
+    const previous = source.slice(lineStart, Math.max(lineStart, match.index - 1));
+    const opens = match.index === 0 || blankLine.test(previous) || BLOCK_LINE.test(previous)
+      || (definitionEnd !== -1 && source.slice(definitionEnd, match.index).trim() === "");
+    if (opens) {
+      labels.add(label(match[1]));
+      ranges.push([match.index, match.index + match[0].length]);
+      definitionEnd = match.index + match[0].length;
+    }
   }
   for (const pattern of [LINK_TARGET, URL_OR_EMAIL]) {
     for (const match of source.matchAll(pattern)) {
       ranges.push([match.index, match.index + match[0].length]);
     }
   }
-  for (const match of labels.size === 0 ? [] : source.matchAll(REFERENCE_TEXT)) {
-    if (labels.has(label(match[1]))) {
-      ranges.push([match.index + 1, match.index + 1 + match[1].length]);
-    }
-  }
   ranges.sort((left, right) => left[0] - right[0]);
+  const masked = [];
   let result = "";
   let position = 0;
   for (const [start, end] of ranges) {
     if (end > position) {
       const from = Math.max(start, position);
       result += source.slice(position, from) + source.slice(from, end).replace(/[^\r\n]/g, blank);
+      masked.push([from, end]);
       position = end;
     }
   }
-  return result + source.slice(position);
+  // References outside the masked parts, found in text order, as are the
+  // parts, so one pass over both finds them.
+  const references = [];
+  let next = 0;
+  for (const match of labels.size === 0 ? [] : source.matchAll(REFERENCE_TEXT)) {
+    const [start, end] = [match.index + 1, match.index + 1 + match[1].length];
+    while (next < masked.length && masked[next][1] <= start) {
+      next += 1;
+    }
+    if (labels.has(label(match[1])) && (next === masked.length || masked[next][0] >= end)) {
+      references.push([start, end]);
+    }
+  }
+  return { text: result + source.slice(position), references };
 }
 
 // One left-to-right pass over comments, closed backtick fences, and code

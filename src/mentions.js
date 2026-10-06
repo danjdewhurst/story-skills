@@ -34,8 +34,7 @@ const BLANKED = "\u0000";
 // entity, in NFC, with its pattern. A name that opens with titles or articles (the
 // pack's `titleWords`) is also looked for without them, so "The Hollow" is
 // found in "the whole Hollow" and "Captain Edran Vale" as "Edran Vale". A
-// given name of one character is an initial (see proseGivenName) and is
-// not looked for alone.
+// given name that is an initial (see isInitial) is not looked for alone.
 export function mentionNames(project) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
@@ -61,15 +60,18 @@ export function mentionNames(project) {
 }
 
 // A character's given name (see givenName) as prose uses it alone, or ""
-// when it has none or it is one character long: the J of "J. R. Dunn" is
-// an initial, and "the letter J" does not name the character.
+// when it has none or it is an initial.
 function proseGivenName(name, pack) {
   const given = givenName(name, pack);
-  return isInitial(given) ? "" : given;
+  return given === "" || isInitial(given) ? "" : given;
 }
 
+// Whether a given name is an initial: one letter of a script with capital
+// letters, as the J of "J. R. Dunn" is, so "the letter J" does not name
+// the character. One Hangul syllable or Chinese character is a name (김 of
+// 김 민준).
 function isInitial(word) {
-  return Array.from(word).length < 2;
+  return /^[\p{Lu}\p{Ll}\p{Lt}]$/u.test(word);
 }
 
 // `name` without the titles and articles it opens with (`titles`, the
@@ -203,10 +205,14 @@ export function locateMentions(chapterProse, mentions) {
 
 const EXCERPT_RADIUS = 60;
 
+// The line around a match, with each control character (a tab, or an
+// escape sequence that would drive the terminal) printed as a space or
+// U+FFFD.
 function excerpt(lineText, column, length) {
   const from = Math.max(0, column - EXCERPT_RADIUS);
   const to = Math.min(lineText.length, column + length + EXCERPT_RADIUS);
-  return `${from > 0 ? "…" : ""}${lineText.slice(from, to).trim()}${to < lineText.length ? "…" : ""}`;
+  const text = lineText.slice(from, to).trim().replace(/\t/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "\ufffd");
+  return `${from > 0 ? "…" : ""}${text}${to < lineText.length ? "…" : ""}`;
 }
 
 // The ids a chapter's frontmatter lists for an entity kind, or null for a
@@ -353,8 +359,9 @@ const NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
 // may use, each with the form of `newName` it becomes, the longest first.
 // The full name and the name without its titles ("Edran Vale" for "Captain
 // Edran Vale") become the new name in the same form, and a character's
-// given name alone becomes the new given name, or the whole new name when
-// that has no given name prose uses alone (see proseGivenName). An old
+// given name alone becomes the new given name, or the new name without its
+// titles when that has no given name prose uses alone (see
+// proseGivenName). An old
 // given name that is an initial is not a form, so renaming "J. R. Dunn"
 // leaves "the letter J" alone. An old name with no titles becomes the new
 // name without its titles too, since a title the prose puts before it
@@ -370,9 +377,10 @@ function renameForms(project, kind, id, newName, pack, titles) {
   const forms = [[oldName, oldBare === oldName ? targetBare : target], [oldBare, targetBare]];
   const given = kind === "character" ? proseGivenName(oldName, pack) : "";
   if (given !== "") {
-    forms.push([given, proseGivenName(target, pack) || target]);
+    forms.push([given, proseGivenName(target, pack) || targetBare]);
   }
-  return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+  // `part`: a form shorter than the whole name, such as a given name.
+  return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to, part: from !== oldName }));
 }
 
 // The first name a rename would write into the prose that is already a
@@ -397,21 +405,23 @@ function renameClash(forms, names, kind, id, pack) {
 
 // story rename --prose: the edits that rename entity `kind` `id` to
 // `newName` in drafted chapter prose, found as story mentions finds them
-// outside link destinations, reference definitions, and URLs (see
-// maskLinkTargets), so no link or address changes, with each form of the
-// name replaced as renameForms gives it. Aliases are left as written, since
-// a nickname usually outlives a change of name, and so is a span the name
-// shares with another entity, which `shared` lists, and a one-word match
-// that may not be the name at all (see uncertainRename), which `ambiguous`
-// lists. A possessive or hyphenated suffix stays, since it lies outside the
-// match. Returns { clash } when the new name would be another entity's in
-// the prose (see renameClash), and otherwise { files, edits, aliases,
-// shared, ambiguous }: `files` maps each chapter file to { original, next
-// }, `edits` lists each replacement as { file, line, endLine, column, from,
-// to }, where endLine is the last line of a name wrapped across lines,
-// `aliases` counts the alias mentions left, `shared` lists the shared
-// spans as { file, line, column, text }, and `ambiguous` the uncertain
-// ones as { file, line, column, text, excerpt }.
+// outside link destinations, reference definitions, HTML tags, and URLs
+// (see maskLinkTargets), so no link or address changes, with each form of
+// the name replaced as renameForms gives it. Aliases are left as written,
+// since a nickname usually outlives a change of name, and so is a span the
+// name shares with another entity, which `shared` lists. A match in the
+// text of a reference link whose label is defined (reason
+// "reference-label"), and a one-word match that may be an ordinary word
+// (reason "ordinary-word", see uncertainRename), are left as written too,
+// and `review` lists them. A possessive or hyphenated suffix stays, since
+// it lies outside the match. Returns { clash } when the new name would be
+// another entity's in the prose (see renameClash), and otherwise { files,
+// edits, aliases, shared, review }: `files` maps each chapter file to {
+// original, next }, `edits` lists each replacement as { file, line,
+// endLine, column, from, to }, where endLine is the last line of a name
+// wrapped across lines, `aliases` counts the alias mentions left, `shared`
+// lists the shared spans as { file, line, column, text }, and `review` the
+// matches to check as { file, line, column, text, excerpt, reason }.
 export function proseRenames(project, kind, id, newName) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
@@ -422,14 +432,14 @@ export function proseRenames(project, kind, id, newName) {
     return { clash };
   }
   const calendar = new Set((checkList(pack, "calendarWords") ?? []).map((word) => lowerCase(nfc(word), pack)));
-  const result = { files: new Map(), edits: [], aliases: 0, shared: [], ambiguous: [] };
+  const result = { files: new Map(), edits: [], aliases: 0, shared: [], review: [] };
   // A chapter that cannot be read is left out; the scan has reported it.
   const drafted = project.chapters.filter((entry) => entry.status !== "outline")
     .map((chapter) => [chapter, chapterText(project, chapter)])
     .filter(([, prose]) => prose !== null);
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
-    const text = maskLinkTargets(prose.text, BLANKED);
+    const { text, references } = maskLinkTargets(prose.text, BLANKED);
     const find = wordMatcher(text);
     const own = findMentions(text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
     const located = locateMentions(prose, own);
@@ -451,8 +461,10 @@ export function proseRenames(project, kind, id, newName) {
       if (replacement === mention.text) {
         return;
       }
-      if (uncertainRename(text, mention, pack, find, calendar)) {
-        result.ambiguous.push({ ...where, text: mention.text, excerpt: located[index].excerpt });
+      const reason = references.some(([start, end]) => mention.start < end && start < mention.end) ? "reference-label"
+        : uncertainRename(text, mention, form, pack, find, calendar) ? "ordinary-word" : null;
+      if (reason !== null) {
+        result.review.push({ ...where, text: mention.text, excerpt: located[index].excerpt, reason });
         return;
       }
       const start = prose.offset + mention.start;
@@ -468,13 +480,18 @@ export function proseRenames(project, kind, id, newName) {
   return result;
 }
 
-// Whether a one-word match may be an ordinary word rather than the name,
-// so rename --prose lists it instead of rewriting it: a word that opens a
-// sentence while the chapter also uses it in lower case (ambiguousMention,
-// "Rose from her chair"), or a day or month of the pack's calendarWords
-// ("May I come in?", "late in May" for a character called May Dunn).
-function uncertainRename(text, mention, pack, find, calendar) {
-  return ambiguousMention(text, mention, pack, find) || (!/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)));
+// Whether a one-word match of name form `form` may be an ordinary word
+// rather than the name, so rename --prose lists it instead of rewriting
+// it: a capitalised name opening a sentence while the chapter also uses it
+// in lower case (ambiguousMention, "Rose from her chair"), or part of a
+// longer name that is a day or month of the pack's calendarWords ("May I
+// come in?", "late in May" for a character called May Dunn). A name
+// written in lower case (a term called aether) is the word itself, and a
+// one-word name that is a month (a character called April) is the name.
+function uncertainRename(text, mention, form, pack, find, calendar) {
+  const [first] = Array.from(form.from);
+  return (first !== lowerCase(first, pack) && ambiguousMention(text, mention, pack, find))
+    || (form.part && !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)));
 }
 
 // `to` in the shape of `written`, the prose's match for name form `from`:

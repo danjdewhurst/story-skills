@@ -144,8 +144,8 @@ describe("prose analysis", () => {
     expect(analysis.words).toBe(11);
     expect(analysis.paragraphs).toBe(2);
     expect(analysis.adverbs).toEqual([{ word: "quietly", count: 1 }]);
-    const headings = analyze("# One\n###### Six\n#\n#hashtag and ####### seven\n\nText.");
-    expect(headings.words).toBe(4);
+    const headings = analyze("# One\n###### Six\n#\n####### seven is prose\n#hashtag too\n\nText.");
+    expect(headings.words).toBe(6);
     expect(headings.paragraphs).toBe(2);
   });
 

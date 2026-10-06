@@ -1277,7 +1277,7 @@ function renameEntityUnlocked(root, options) {
   const reindexed = reindexProject(project.root);
   const result = { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
   if (prose) {
-    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length, ambiguous: prose.ambiguous };
+    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length, review: prose.review };
     result.warnings = warnings.concat(prose.warnings);
   }
   return result;

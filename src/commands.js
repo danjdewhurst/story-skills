@@ -1199,23 +1199,28 @@ function reportImportNotes(io, result) {
   }
 }
 
+// Why rename --prose left a match for the writer to check.
+const REVIEW_REASONS = {
+  "ordinary-word": "may be an ordinary word",
+  "reference-label": "also the label of a reference link"
+};
+
 // rename --prose: each name replaced in chapter prose, as file:line:column,
-// then a count. A name wrapped across lines prints on one, with the last
-// line it changed.
+// then a count, then each match left for the writer to check, with why. A
+// name wrapped across lines prints on one, with the last line it changed.
 function formatProseRenames(result) {
   if (!result.prose) {
     return "";
   }
-  const { edits, aliases, ambiguous } = result.prose;
+  const { edits, aliases, review } = result.prose;
   const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
   const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}${edit.endLine > edit.line ? ` (wraps to line ${edit.endLine})` : ""}\n`);
   const files = new Set(edits.map((edit) => edit.file)).size;
   const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
-  // Matches that may be ordinary words, listed as story mentions lists them.
-  const one = ambiguous.length === 1;
-  const unsure = ambiguous.length === 0 ? "" : [
-    `Left ${plural(ambiguous.length, "match", "matches")} as written that may be ${one ? "an ordinary word" : "ordinary words"}; check ${one ? "it" : "each"} and rename it by hand if it is the name:`,
-    ...ambiguous.map((entry) => `${entry.file}:${entry.line}:${entry.column}: ${entry.text}: ${entry.excerpt}`)
+  // The matches left to check, listed as story mentions lists matches.
+  const unsure = review.length === 0 ? "" : [
+    `Left ${plural(review.length, "match", "matches")} as written; check ${review.length === 1 ? "it" : "each"} and rename it by hand if it is the name:`,
+    ...review.map((entry) => `${entry.file}:${entry.line}:${entry.column}: ${entry.text.replace(/\s+/gu, " ")} (${REVIEW_REASONS[entry.reason]}): ${entry.excerpt}`)
   ].map((line) => `${line}\n`).join("");
   return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}\n${unsure}`;
 }
