@@ -223,8 +223,8 @@ describe("build --format codex", () => {
     fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2020-05-01\n    words: 10\n  - date: 2020-05-02\n    words: 12\n    characters: 40\n---\n\n# Progress Log\n", "utf8");
     const site = readSite(buildBook(root, { format: "codex" }).outFile);
     expect(site["progress.html"]).toContain("<tbody>\n<tr><td>2020-05-02</td><td>40</td></tr>\n</tbody>");
-    expect(site["progress.html"]).toContain('<tr><th scope="row">Total characters</th>');
-    expect(site["progress.html"]).toContain("<th>Characters</th><th>Target</th>");
+    expect(site["progress.html"]).toContain('<tr><th scope="row">総文字数</th>');
+    expect(site["progress.html"]).toContain("<th>文字数</th><th>目標</th>");
     expect(site["progress.html"]).toMatch(/<td>100 \(\d+%\)<\/td>/);
   });
 

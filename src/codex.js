@@ -21,27 +21,29 @@ import { escapeHtml, htmlRoot } from "./html.js";
 import { inlineHtml, LINE_BREAK } from "./packaging.js";
 import { typesetting } from "./typesetting.js";
 import { publishingMeta } from "./publishing.js";
-import { joinNames } from "./languages/index.js";
+import { fillLabel, joinNames } from "./languages/index.js";
 import { plainLinks, scanComments } from "./markdown.js";
 import { asArray, readMarkdown } from "./scan.js";
 
 // The entity kinds with a page each, in the order the index lists them.
-// `dir` is the page folder, which matches the project folder's last part.
+// `dir` is the page folder, which matches the project folder's last part;
+// `title` is the label key of the kind's plural name.
 export const CODEX_KINDS = [
-  { kind: "character", dir: "characters", title: "Characters", list: (project) => project.characters },
-  { kind: "location", dir: "locations", title: "Locations", list: (project) => project.locations },
-  { kind: "faction", dir: "factions", title: "Factions", list: (project) => project.factions },
-  { kind: "artifact", dir: "artifacts", title: "Artifacts", list: (project) => project.artifacts },
-  { kind: "system", dir: "systems", title: "Systems", list: (project) => project.systems },
-  { kind: "arc", dir: "arcs", title: "Arcs", list: (project) => project.arcs }
+  { kind: "character", dir: "characters", title: "codex-characters", list: (project) => project.characters },
+  { kind: "location", dir: "locations", title: "codex-locations", list: (project) => project.locations },
+  { kind: "faction", dir: "factions", title: "codex-factions", list: (project) => project.factions },
+  { kind: "artifact", dir: "artifacts", title: "codex-artifacts", list: (project) => project.artifacts },
+  { kind: "system", dir: "systems", title: "codex-systems", list: (project) => project.systems },
+  { kind: "arc", dir: "arcs", title: "codex-arcs", list: (project) => project.arcs }
 ];
 
-// The pages that are not entities, as the header links them.
+// The pages that are not entities, as the header links them, with the
+// label key of each page's name.
 const SECTION_PAGES = [
-  { file: "index.html", title: "Story bible" },
-  { file: "timeline.html", title: "Timeline" },
-  { file: "threads.html", title: "Threads and clues" },
-  { file: "progress.html", title: "Progress" }
+  { file: "index.html", title: "codex-story-bible" },
+  { file: "timeline.html", title: "codex-timeline" },
+  { file: "threads.html", title: "codex-threads" },
+  { file: "progress.html", title: "codex-progress" }
 ];
 
 // Every page of the codex as { path, html }, sorted by path. `path` is
@@ -54,6 +56,9 @@ export function codexPages(project, { spoilers = false } = {}) {
     title: project.title,
     authors: joinNames(meta.authors, meta.labels),
     language: meta.language,
+    // The book's build labels (see buildLabels), so the codex speaks its
+    // language and story.md `labels` can reword it.
+    labels: meta.labels,
     type: typesetting(meta.language),
     chapters: [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en")),
     entities: new Map(CODEX_KINDS.map((entry) => [entry.kind, new Map(entry.list(project).map((entity) => [entity.id, entity]))])),
@@ -148,35 +153,36 @@ function references(project, site) {
   return backlinks;
 }
 
-// The fields of an entity that name other entities, as { label, kind, ids }.
+// The fields of an entity that name other entities, as { label, kind, ids },
+// with `label` a label key.
 // Spoiler fields (an artifact's owner and location) count only with spoilers.
 function linkedFields(site, kind, entity) {
   const ids = (value) => asArray(value).map(idText).filter((id) => id !== "");
   if (kind === "character") {
     return [
-      { label: "Relationships", kind: "character", ids: entity.relationships.map((entry) => idText(entry?.character)).filter((id) => id !== "") },
-      { label: "Locations", kind: "location", ids: ids(entity.locations) }
+      { label: "codex-relationships", kind: "character", ids: entity.relationships.map((entry) => idText(entry?.character)).filter((id) => id !== "") },
+      { label: "codex-locations", kind: "location", ids: ids(entity.locations) }
     ];
   }
   if (kind === "location") {
     return [
-      { label: "Notable characters", kind: "character", ids: ids(entity.notableCharacters) },
-      { label: "Routes", kind: "location", ids: entity.routes.map((route) => idText(route?.to)).filter((id) => id !== "") }
+      { label: "codex-notable-characters", kind: "character", ids: ids(entity.notableCharacters) },
+      { label: "codex-routes", kind: "location", ids: entity.routes.map((route) => idText(route?.to)).filter((id) => id !== "") }
     ];
   }
   if (kind === "faction") {
     return [
-      { label: "Members", kind: "character", ids: ids(entity.members) },
-      { label: "Locations", kind: "location", ids: ids(entity.locations) }
+      { label: "codex-members", kind: "character", ids: ids(entity.members) },
+      { label: "codex-locations", kind: "location", ids: ids(entity.locations) }
     ];
   }
   if (kind === "artifact") {
     return site.spoilers
-      ? [{ label: "Owner", kind: "character", ids: ids(entity.owner) }, { label: "Location", kind: "location", ids: ids(entity.location) }]
+      ? [{ label: "codex-owner", kind: "character", ids: ids(entity.owner) }, { label: "codex-location", kind: "location", ids: ids(entity.location) }]
       : [];
   }
   if (kind === "arc") {
-    return [{ label: "Characters", kind: "character", ids: ids(entity.characters) }];
+    return [{ label: "codex-characters", kind: "character", ids: ids(entity.characters) }];
   }
   return [];
 }
@@ -194,27 +200,25 @@ function indexPage(site) {
       const detail = summaryLine(site, entry.kind, entity);
       return `<li>${entityLink(site, entry.kind, entity.id, 0)}${detail === "" ? "" : ` <span class="muted">${escapeHtml(detail)}</span>`}</li>`;
     });
-    return `<section id="${entry.dir}"><h2>${entry.title} <span class="count">${entities.length}</span></h2>\n<ul class="entities">\n${items.join("\n")}\n</ul></section>`;
+    return `<section id="${entry.dir}"><h2>${label(site, entry.title)} <span class="count">${entities.length}</span></h2>\n<ul class="entities">\n${items.join("\n")}\n</ul></section>`;
   }).filter((section) => section !== "");
   const counts = [
-    ["Chapters", project.chapters.length],
-    ["Scenes", project.scenes.length],
+    ["codex-chapters", project.chapters.length],
+    ["codex-scenes", project.scenes.length],
     ...CODEX_KINDS.map((entry) => [entry.title, site.entities.get(entry.kind).size]),
-    ["Questions", project.questions.length],
-    ["Promises", project.promises.length],
-    ...(site.spoilers ? [["Clues", project.clues.length]] : [])
+    ["codex-questions", project.questions.length],
+    ["codex-promises", project.promises.length],
+    ...(site.spoilers ? [["codex-clues", project.clues.length]] : [])
   ];
   const synopsis = typeof project.story.data.synopsis === "string" ? project.story.data.synopsis.trim() : "";
   const body = [
     `<h1>${escapeHtml(site.title)}</h1>`,
     site.authors === "" ? "" : `<p class="byline">${escapeHtml(site.authors)}</p>`,
     synopsis === "" || !site.spoilers ? "" : `<p>${inlineHtml(synopsis)}</p>`,
-    `<p class="note">${site.spoilers
-      ? "Story bible with spoilers: entity notes, statuses, deaths, knowledge, clues, and how every thread resolves."
-      : "Spoiler-safe story bible: who and what the story holds and where they appear. Notes, statuses, deaths, knowledge, clues, and resolutions are left out; build with <code>--spoilers</code> for the full bible."}</p>`,
-    `<table class="facts"><tbody>\n${counts.map(([label, count]) => `<tr><th scope="row">${label}</th><td>${count}</td></tr>`).join("\n")}\n</tbody></table>`,
+    `<p class="note">${site.spoilers ? label(site, "codex-note-spoilers") : label(site, "codex-note-safe", { flag: "<code>--spoilers</code>" })}</p>`,
+    `<table class="facts"><tbody>\n${counts.map(([key, count]) => `<tr><th scope="row">${label(site, key)}</th><td>${count}</td></tr>`).join("\n")}\n</tbody></table>`,
     ...sections,
-    sections.length === 0 ? "<p>No characters, places, or other entities yet.</p>" : ""
+    sections.length === 0 ? `<p>${label(site, "codex-no-entities")}</p>` : ""
   ];
   return page(site, "index.html", site.title, body);
 }
@@ -225,27 +229,27 @@ function entityPage(site, entry, entity) {
   const name = displayName(entity);
   const facts = factRows(site, entry.kind, entity, depth);
   const body = [
-    `<p class="kind">${escapeHtml(KIND_NAMES[entry.kind])}</p>`,
+    `<p class="kind">${kindName(site, entry.kind)}</p>`,
     `<h1>${escapeHtml(name)}</h1>`,
-    facts.length === 0 ? "" : `<table class="facts"><tbody>\n${facts.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${value}</td></tr>`).join("\n")}\n</tbody></table>`
+    facts.length === 0 ? "" : `<table class="facts"><tbody>\n${facts.map(([field, value]) => `<tr><th scope="row">${field}</th><td>${value}</td></tr>`).join("\n")}\n</tbody></table>`
   ];
   if (entry.kind === "character" && entity.relationships.length > 0) {
     const items = entity.relationships
       .filter((relation) => relation && typeof relation === "object" && idText(relation.character) !== "")
       .map((relation) => `<li>${entityLink(site, "character", idText(relation.character), depth)}${relation.type === undefined ? "" : ` <span class="muted">${escapeHtml(String(relation.type))}</span>`}</li>`);
     if (items.length > 0) {
-      body.push(`<h2>Relationships</h2>\n<ul>\n${items.join("\n")}\n</ul>`);
+      body.push(`<h2>${label(site, "codex-relationships")}</h2>\n<ul>\n${items.join("\n")}\n</ul>`);
     }
   }
   const chapters = site.appearances.get(`${entry.kind} ${entity.id}`) ?? [];
   if (chapters.length > 0) {
-    const heading = entry.kind === "arc" ? "Advanced in" : "Appears in";
+    const heading = label(site, entry.kind === "arc" ? "codex-advanced-in" : "codex-appears-in");
     body.push(`<h2>${heading}</h2>\n<ol class="chapters">\n${chapters.map((id) => `<li>${chapterLabel(site, id)}</li>`).join("\n")}\n</ol>`);
   }
   const backlinks = site.references.get(`${entry.kind} ${entity.id}`) ?? [];
   if (backlinks.length > 0) {
     const sorted = [...backlinks].sort((left, right) => kindOrder(left.kind) - kindOrder(right.kind) || left.id.localeCompare(right.id, "en"));
-    body.push(`<h2>Linked from</h2>\n<ul>\n${sorted.map((ref) => `<li>${entityLink(site, ref.kind, ref.id, depth)} <span class="muted">${escapeHtml(KIND_NAMES[ref.kind])}</span></li>`).join("\n")}\n</ul>`);
+    body.push(`<h2>${label(site, "codex-linked-from")}</h2>\n<ul>\n${sorted.map((ref) => `<li>${entityLink(site, ref.kind, ref.id, depth)} <span class="muted">${kindName(site, ref.kind)}</span></li>`).join("\n")}\n</ul>`);
   }
   if (site.spoilers) {
     body.push(...spoilerSections(site, entry.kind, entity));
@@ -259,7 +263,7 @@ function spoilerSections(site, kind, entity) {
   const progressions = Array.isArray(entity.frontmatter?.progressions) ? entity.frontmatter.progressions : [];
   const changes = sortProgressions(progressions, chapterChronology(site.project)).map(progressionEntry).filter((change) => change !== null);
   if (changes.length > 0) {
-    sections.push(`<h2>Changes</h2>\n<ul>\n${changes.map((change) => `<li>From ${chapterLabel(site, change.from)}: ${escapeHtml(change.field)} becomes ${escapeHtml(plainValue(change.value))}</li>`).join("\n")}\n</ul>`);
+    sections.push(`<h2>${label(site, "codex-changes")}</h2>\n<ul>\n${changes.map((change) => `<li>${label(site, "codex-change", { chapter: chapterLabel(site, change.from), field: escapeHtml(change.field), value: escapeHtml(plainValue(change.value)) })}</li>`).join("\n")}\n</ul>`);
   }
   if (kind === "character") {
     const knowledge = asArray(site.project.continuity?.data["knowledge-state"])
@@ -267,14 +271,14 @@ function spoilerSections(site, kind, entity) {
     if (knowledge.length > 0) {
       const items = knowledge.map((entry) => {
         const learned = idText(entry["learned-in"]);
-        return `<li>${escapeHtml(String(entry.knows).trim())} <span class="muted">${learned === "" ? "known from the start" : `learned in ${chapterLabel(site, learned)}`}</span></li>`;
+        return `<li>${escapeHtml(String(entry.knows).trim())} <span class="muted">${learned === "" ? label(site, "codex-known-from-start") : label(site, "codex-learned-in", { chapter: chapterLabel(site, learned) })}</span></li>`;
       });
-      sections.push(`<h2>Knows</h2>\n<ul>\n${items.join("\n")}\n</ul>`);
+      sections.push(`<h2>${label(site, "codex-knows")}</h2>\n<ul>\n${items.join("\n")}\n</ul>`);
     }
   }
   const notes = notesHtml(site, entity);
   if (notes !== "") {
-    sections.push(`<h2>Notes</h2>\n<div class="notes">\n${notes}\n</div>`);
+    sections.push(`<h2>${label(site, "codex-notes")}</h2>\n<div class="notes">\n${notes}\n</div>`);
   }
   return sections;
 }
@@ -282,68 +286,69 @@ function spoilerSections(site, kind, entity) {
 function timelinePage(site) {
   const timeline = buildTimeline(site.project);
   const row = (entry) => {
-    const flags = [entry.toldLate ? "told out of order" : "", entry.flashbackTo === "" ? "" : `flashback to ${entry.flashbackTo}`].filter(Boolean).join("; ");
-    return `<tr><td>${escapeHtml(entry.date)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(String(entry.title))}</td><td>${chapterLabel(site, entry.orphanOf || (typeof entry.chapterNumber === "number" ? chapterIdOf(site, entry.chapterNumber) : entry.chapterNumber))}</td><td>${entry.pov === "" ? "" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.location === "" ? "" : entityLink(site, "location", idText(entry.location), 0)}</td><td>${escapeHtml(flags)}</td></tr>`;
+    const flags = [entry.toldLate ? label(site, "codex-told-late") : "", entry.flashbackTo === "" ? "" : label(site, "codex-flashback", { date: escapeHtml(entry.flashbackTo) })].filter(Boolean).join("; ");
+    return `<tr><td>${escapeHtml(entry.date)}</td><td>${escapeHtml(entry.time)}</td><td>${escapeHtml(String(entry.title))}</td><td>${chapterLabel(site, entry.orphanOf || (typeof entry.chapterNumber === "number" ? chapterIdOf(site, entry.chapterNumber) : entry.chapterNumber))}</td><td>${entry.pov === "" ? "" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.location === "" ? "" : entityLink(site, "location", idText(entry.location), 0)}</td><td>${flags}</td></tr>`;
   };
-  const head = "<thead><tr><th>Date</th><th>Time</th><th>Scene</th><th>Chapter</th><th>POV</th><th>Location</th><th>Notes</th></tr></thead>";
-  const body = [`<h1>Timeline</h1>`];
+  const head = `<thead><tr>${columns(site, ["codex-date", "codex-time", "codex-scene", "codex-chapter", "codex-pov", "codex-location", "codex-notes"])}</tr></thead>`;
+  const body = [`<h1>${label(site, "codex-timeline")}</h1>`];
   if (timeline.chronology.length === 0) {
-    body.push("<p>No dated scenes or chapters yet. Give scenes a <code>date</code> to place them in story time.</p>");
+    body.push(`<p>${label(site, "codex-no-dates", { field: "<code>date</code>" })}</p>`);
   } else {
-    body.push(`<p class="note">Story events in story-time order, as <code>story timeline</code> lists them.</p>`, `<div class="scroll"><table>${head}<tbody>\n${timeline.chronology.map(row).join("\n")}\n</tbody></table></div>`);
+    body.push(`<p class="note">${label(site, "codex-timeline-note", { command: "<code>story timeline</code>" })}</p>`, `<div class="scroll"><table>${head}<tbody>\n${timeline.chronology.map(row).join("\n")}\n</tbody></table></div>`);
   }
   if (timeline.undated.length > 0) {
-    body.push(`<h2>Undated</h2>\n<div class="scroll"><table>${head}<tbody>\n${timeline.undated.map(row).join("\n")}\n</tbody></table></div>`);
+    body.push(`<h2>${label(site, "codex-undated")}</h2>\n<div class="scroll"><table>${head}<tbody>\n${timeline.undated.map(row).join("\n")}\n</tbody></table></div>`);
   }
   if (timeline.pov.length > 0) {
-    body.push(`<h2>Point of view</h2>\n<table><thead><tr><th>POV</th><th>Chapters</th><th>Words</th><th>Share</th></tr></thead><tbody>\n${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? "unspecified" : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${entry.words}</td><td>${Math.round(entry.share)}%</td></tr>`).join("\n")}\n</tbody></table>`);
+    body.push(`<h2>${label(site, "codex-point-of-view")}</h2>\n<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", "codex-words", "codex-share"])}</tr></thead><tbody>\n${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${entry.words}</td><td>${Math.round(entry.share)}%</td></tr>`).join("\n")}\n</tbody></table>`);
   }
   if (timeline.presence.length > 0) {
-    const died = (entry) => (site.spoilers && entry.died !== null ? `dies in chapter ${entry.died}` : "");
-    body.push(`<h2>Presence</h2>\n<table><thead><tr><th>Character</th><th>Chapters</th><th>First</th><th>Last</th><th>Longest gap</th>${site.spoilers ? "<th>Death</th>" : ""}</tr></thead><tbody>\n${timeline.presence.map((entry) => `<tr><td>${entityLink(site, "character", entry.id, 0)}</td><td>${entry.chapters}</td><td>${entry.first ?? ""}</td><td>${entry.last ?? ""}</td><td>${entry.longestGap}</td>${site.spoilers ? `<td>${escapeHtml(died(entry))}</td>` : ""}</tr>`).join("\n")}\n</tbody></table>`);
+    const died = (entry) => (site.spoilers && entry.died !== null ? label(site, "codex-dies-in-chapter", { n: entry.died }) : "");
+    body.push(`<h2>${label(site, "codex-presence")}</h2>\n<table><thead><tr>${columns(site, ["codex-character", "codex-chapters", "codex-first", "codex-last", "codex-longest-gap", ...(site.spoilers ? ["codex-death"] : [])])}</tr></thead><tbody>\n${timeline.presence.map((entry) => `<tr><td>${entityLink(site, "character", entry.id, 0)}</td><td>${entry.chapters}</td><td>${entry.first ?? ""}</td><td>${entry.last ?? ""}</td><td>${entry.longestGap}</td>${site.spoilers ? `<td>${died(entry)}</td>` : ""}</tr>`).join("\n")}\n</tbody></table>`);
   }
-  return page(site, "timeline.html", "Timeline", body);
+  return page(site, "timeline.html", fillLabel(site.labels, "codex-timeline"), body);
 }
 
 function threadsPage(site) {
   const { project } = site;
-  const body = ["<h1>Threads and clues</h1>"];
+  const body = [`<h1>${label(site, "codex-threads")}</h1>`];
   const questions = [...project.questions].filter((question) => site.spoilers || question.status === "open");
   const promises = [...project.promises].filter((promise) => site.spoilers || promise.status === "planned" || promise.status === "planted");
   const characters = (ids) => asArray(ids).map(idText).filter((id) => id !== "").map((id) => entityLink(site, "character", id, 0)).join(", ");
   if (!site.spoilers) {
-    body.push(`<p class="note">Open questions and promises only, without their answers or payoffs. Clues and resolved threads need <code>--spoilers</code>.</p>`);
+    body.push(`<p class="note">${label(site, "codex-threads-note", { flag: "<code>--spoilers</code>" })}</p>`);
   }
-  body.push("<h2>Questions</h2>");
+  body.push(`<h2>${label(site, "codex-questions")}</h2>`);
   if (questions.length === 0) {
-    body.push("<p>None.</p>");
+    body.push(`<p>${label(site, "codex-none")}</p>`);
   } else {
-    body.push(`<table><thead><tr><th>Question</th><th>Raised in</th>${site.spoilers ? "<th>Status</th><th>Resolved in</th>" : ""}<th>Characters</th></tr></thead><tbody>\n${questions.map((question) => `<tr><td>${escapeHtml(String(question.title))}</td><td>${chapterLabel(site, question.introduced)}</td>${site.spoilers ? `<td>${escapeHtml(String(question.status))}</td><td>${chapterLabel(site, question.resolved)}</td>` : ""}<td>${characters(question.characters)}</td></tr>`).join("\n")}\n</tbody></table>`);
+    body.push(`<table><thead><tr>${columns(site, ["codex-question", "codex-raised-in", ...(site.spoilers ? ["codex-status", "codex-resolved-in"] : []), "codex-characters"])}</tr></thead><tbody>\n${questions.map((question) => `<tr><td>${escapeHtml(String(question.title))}</td><td>${chapterLabel(site, question.introduced)}</td>${site.spoilers ? `<td>${escapeHtml(String(question.status))}</td><td>${chapterLabel(site, question.resolved)}</td>` : ""}<td>${characters(question.characters)}</td></tr>`).join("\n")}\n</tbody></table>`);
   }
-  body.push("<h2>Promises</h2>");
+  body.push(`<h2>${label(site, "codex-promises")}</h2>`);
   if (promises.length === 0) {
-    body.push("<p>None.</p>");
+    body.push(`<p>${label(site, "codex-none")}</p>`);
   } else {
-    body.push(`<table><thead><tr><th>Promise</th><th>Planted in</th>${site.spoilers ? "<th>Status</th><th>Paid off in</th>" : ""}<th>Arcs</th><th>Characters</th></tr></thead><tbody>\n${promises.map((promise) => `<tr><td>${escapeHtml(String(promise.title))}</td><td>${chapterLabel(site, promise.planted)}</td>${site.spoilers ? `<td>${escapeHtml(String(promise.status))}</td><td>${chapterLabel(site, promise.payoff)}</td>` : ""}<td>${asArray(promise.arcs).map(idText).filter((id) => id !== "").map((id) => entityLink(site, "arc", id, 0)).join(", ")}</td><td>${characters(promise.characters)}</td></tr>`).join("\n")}\n</tbody></table>`);
+    body.push(`<table><thead><tr>${columns(site, ["codex-promise", "codex-planted-in", ...(site.spoilers ? ["codex-status", "codex-paid-off-in"] : []), "codex-arcs", "codex-characters"])}</tr></thead><tbody>\n${promises.map((promise) => `<tr><td>${escapeHtml(String(promise.title))}</td><td>${chapterLabel(site, promise.planted)}</td>${site.spoilers ? `<td>${escapeHtml(String(promise.status))}</td><td>${chapterLabel(site, promise.payoff)}</td>` : ""}<td>${asArray(promise.arcs).map(idText).filter((id) => id !== "").map((id) => entityLink(site, "arc", id, 0)).join(", ")}</td><td>${characters(promise.characters)}</td></tr>`).join("\n")}\n</tbody></table>`);
   }
   if (site.spoilers) {
     const matrix = buildClueMatrix(project);
-    body.push("<h2>Clues</h2>");
+    body.push(`<h2>${label(site, "codex-clues")}</h2>`);
     if (matrix.rows.length === 0) {
-      body.push("<p>None.</p>");
+      body.push(`<p>${label(site, "codex-none")}</p>`);
     } else {
       const clues = new Map(project.clues.map((clue) => [clue.id, clue]));
-      body.push(`<p class="note">P marks the chapter that plants a clue, R the one that reveals it, and x both, as <code>story clues</code> prints them. ${matrix.totals.planted} of ${matrix.totals.clues} planted, ${matrix.totals.revealed} revealed, ${matrix.totals.redHerrings} red ${matrix.totals.redHerrings === 1 ? "herring" : "herrings"}.</p>`);
-      const head = `<tr><th>Clue</th><th>Status</th>${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+      const totals = { planted: matrix.totals.planted, total: matrix.totals.clues, revealed: matrix.totals.revealed, herrings: matrix.totals.redHerrings };
+      body.push(`<p class="note">${label(site, "codex-clues-note", { command: "<code>story clues</code>" })} ${label(site, matrix.totals.redHerrings === 1 ? "codex-clue-totals-one" : "codex-clue-totals", totals)}</p>`);
+      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
       const rows = matrix.rows.map((row) => {
-        const tags = [row.redHerring ? "red herring" : "", row.significanceDelayed ? "significance delayed" : ""].filter(Boolean).join(", ");
+        const tags = [row.redHerring ? label(site, "codex-red-herring") : "", row.significanceDelayed ? label(site, "codex-significance-delayed") : ""].filter(Boolean).join(", ");
         const who = characters(clues.get(row.id)?.characters);
         return `<tr><td>${escapeHtml(String(row.title))}${tags === "" ? "" : ` <span class="muted">${tags}</span>`}${who === "" ? "" : `<br><span class="muted">${who}</span>`}</td><td>${escapeHtml(String(row.status))}</td>${row.cells.map((cell) => `<td class="cell">${cell === "." ? "" : cell}</td>`).join("")}</tr>`;
       });
       body.push(`<div class="scroll"><table class="grid"><thead>${head}</thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
     }
   }
-  return page(site, "threads.html", "Threads and clues", body);
+  return page(site, "threads.html", fillLabel(site.labels, "codex-threads"), body);
 }
 
 function progressPage(site) {
@@ -351,6 +356,7 @@ function progressPage(site) {
   const data = project.story.data;
   const unit = project.unit;
   const characterBook = unit.name === "characters";
+  const countColumn = characterBook ? "codex-character-count" : "codex-words";
   const target = data[unit.targetField];
   // Only the parts of the progress report that do not depend on today's
   // date are shown, so the page stays the same from one day to the next:
@@ -367,13 +373,13 @@ function progressPage(site) {
   });
   const length = characterBook ? progress.characterCount : progress.words;
   const facts = [
-    [`Total ${unit.name}`, String(length)],
-    ...(progress.target === null ? [] : [[`Target ${unit.name}`, String(progress.target)], ["Done", `${Math.min(100, Math.floor(progress.percent))}%`], ["Remaining", String(progress.remaining)]]),
-    ...(typeof data.deadline === "string" && data.deadline.trim() !== "" ? [["Deadline", data.deadline.trim()]] : [])
+    [`codex-total-${unit.name}`, String(length)],
+    ...(progress.target === null ? [] : [[`codex-target-${unit.name}`, String(progress.target)], ["codex-done", `${Math.min(100, Math.floor(progress.percent))}%`], ["codex-remaining", String(progress.remaining)]]),
+    ...(typeof data.deadline === "string" && data.deadline.trim() !== "" ? [["codex-deadline", data.deadline.trim()]] : [])
   ];
   const body = [
-    "<h1>Progress</h1>",
-    `<table class="facts"><tbody>\n${facts.map(([label, value]) => `<tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}\n</tbody></table>`,
+    `<h1>${label(site, "codex-progress")}</h1>`,
+    `<table class="facts"><tbody>\n${facts.map(([key, value]) => `<tr><th scope="row">${label(site, key)}</th><td>${escapeHtml(value)}</td></tr>`).join("\n")}\n</tbody></table>`,
     progress.target === null ? "" : `<p><meter min="0" max="100" value="${Math.min(100, Math.floor(progress.percent))}">${Math.min(100, Math.floor(progress.percent))}%</meter></p>`
   ];
   if (site.chapters.length > 0) {
@@ -383,29 +389,43 @@ function progressPage(site) {
       const goal = targets.get(chapter.id);
       return `<tr><td>${chapterLabel(site, chapter.id)}</td><td>${escapeHtml(String(chapter.status))}</td><td>${chapter.pov === "" ? "" : entityLink(site, "character", chapter.pov, 0)}</td><td>${count}</td><td>${goal === undefined ? "" : `${goal.target} (${Math.floor(goal.percent)}%)`}</td></tr>`;
     });
-    body.push(`<h2>Chapters</h2>\n<div class="scroll"><table><thead><tr><th>Chapter</th><th>Status</th><th>POV</th><th>${characterBook ? "Characters" : "Words"}</th><th>Target</th></tr></thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
+    body.push(`<h2>${label(site, "codex-chapters")}</h2>\n<div class="scroll"><table><thead><tr>${columns(site, ["codex-chapter", "codex-status", "codex-pov", countColumn, "codex-target"])}</tr></thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
   }
   if (site.grid.rows.length > 0 && site.grid.chapters.length > 0) {
-    const head = `<tr><th>Arc</th>${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
-    const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">unknown</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
+    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+    const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
-      rows.push(`<tr><td>Hook</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.hook)}</td>`).join("")}</tr>`);
-      rows.push(`<tr><td>Outcomes</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.outcomes.join(", "))}</td>`).join("")}</tr>`);
+      rows.push(`<tr><td>${label(site, "codex-hook")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.hook)}</td>`).join("")}</tr>`);
+      rows.push(`<tr><td>${label(site, "codex-outcomes")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.outcomes.join(", "))}</td>`).join("")}</tr>`);
     }
-    body.push(`<h2>Plot grid</h2>\n<p class="note">Arcs by chapter, as <code>story grid</code> prints them: x where a chapter or one of its scenes advances the arc.</p>\n<div class="scroll"><table class="grid"><thead>${head}</thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
+    body.push(`<h2>${label(site, "codex-plot-grid")}</h2>\n<p class="note">${label(site, "codex-grid-note", { command: "<code>story grid</code>" })}</p>\n<div class="scroll"><table class="grid"><thead>${head}</thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
   }
   // A book counted in characters lists only the sessions that logged them,
   // as `story progress` measures it.
   const sessions = cleanSessions(project.progressLog?.data.sessions).filter((session) => !characterBook || session.characters !== null);
   if (sessions.length > 0) {
-    body.push(`<h2>Session log</h2>\n<table><thead><tr><th>Date</th><th>${characterBook ? "Characters" : "Words"}</th></tr></thead><tbody>\n${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters : session.words}</td></tr>`).join("\n")}\n</tbody></table>`);
+    body.push(`<h2>${label(site, "codex-session-log")}</h2>\n<table><thead><tr>${columns(site, ["codex-date", countColumn])}</tr></thead><tbody>\n${sessions.map((session) => `<tr><td>${escapeHtml(session.date)}</td><td>${characterBook ? session.characters : session.words}</td></tr>`).join("\n")}\n</tbody></table>`);
   }
-  return page(site, "progress.html", "Progress", body);
+  return page(site, "progress.html", fillLabel(site.labels, "codex-progress"), body);
 }
 
 // ---------------------------------------------------------------- parts
 
-const KIND_NAMES = { character: "Character", location: "Location", faction: "Faction", artifact: "Artifact", system: "System", arc: "Arc" };
+// A codex label as HTML: the label's own text escaped, each value (already
+// HTML) placed as it is.
+function label(site, key, values = {}) {
+  return fillLabel(site.labels, key, values, escapeHtml);
+}
+
+// A table's header cells, one per label key.
+function columns(site, keys) {
+  return keys.map((key) => `<th>${label(site, key)}</th>`).join("");
+}
+
+// An entity kind's singular name, as HTML.
+function kindName(site, kind) {
+  return label(site, `codex-${kind}`);
+}
 
 function kindOrder(kind) {
   return CODEX_KINDS.findIndex((entry) => entry.kind === kind);
@@ -424,73 +444,73 @@ function summaryLine(site, kind, entity) {
   return parts.map((part) => String(part ?? "").trim()).filter((part) => part !== "").join(", ");
 }
 
-// The table of an entity's fields, as [label, html] pairs.
+// The table of an entity's fields, as [label, value] pairs of HTML.
 function factRows(site, kind, entity, depth) {
   const rows = [];
-  const text = (label, value) => {
+  const text = (key, value) => {
     const shown = plainValue(value);
     if (shown !== "") {
-      rows.push([label, escapeHtml(shown)]);
+      rows.push([label(site, key), escapeHtml(shown)]);
     }
   };
-  const links = (label, linkKind, ids) => {
+  const links = (key, linkKind, ids) => {
     const list = asArray(ids).map(idText).filter((id) => id !== "");
     if (list.length > 0) {
-      rows.push([label, list.map((id) => entityLink(site, linkKind, id, depth)).join(", ")]);
+      rows.push([label(site, key), list.map((id) => entityLink(site, linkKind, id, depth)).join(", ")]);
     }
   };
   const spoilers = site.spoilers;
   if (kind === "character") {
-    text("Role", entity.role);
-    text("Aliases", entity.aliases);
-    links("Locations", "location", entity.locations);
+    text("codex-role", entity.role);
+    text("codex-aliases", entity.aliases);
+    links("codex-locations", "location", entity.locations);
     if (spoilers) {
-      text("Status", entity.status);
-      text("Arc", entity.arc);
+      text("codex-status", entity.status);
+      text("codex-arc", entity.arc);
       if (entity.diedIn !== "") {
-        rows.push(["Dies in", chapterLabel(site, entity.diedIn)]);
+        rows.push([label(site, "codex-dies-in"), chapterLabel(site, entity.diedIn)]);
       }
       if (entity.revivedIn !== "") {
-        rows.push(["Revived in", chapterLabel(site, entity.revivedIn)]);
+        rows.push([label(site, "codex-revived-in"), chapterLabel(site, entity.revivedIn)]);
       }
     }
   } else if (kind === "location") {
-    text("Type", entity.type);
-    text("Region", entity.region);
-    text("Setting", entity.setting);
-    links("Notable characters", "character", entity.notableCharacters);
+    text("codex-type", entity.type);
+    text("codex-region", entity.region);
+    text("codex-setting", entity.setting);
+    links("codex-notable-characters", "character", entity.notableCharacters);
     const routes = entity.routes.filter((route) => route && typeof route === "object" && idText(route.to) !== "");
     if (routes.length > 0) {
-      rows.push(["Routes", routes.map((route) => {
-        const detail = [typeof route.hours === "number" ? `${route.hours} h` : "", typeof route.mode === "string" ? route.mode : ""].filter(Boolean).join(", ");
-        return `${entityLink(site, "location", idText(route.to), depth)}${detail === "" ? "" : ` <span class="muted">${escapeHtml(detail)}</span>`}`;
+      rows.push([label(site, "codex-routes"), routes.map((route) => {
+        const detail = [typeof route.hours === "number" ? label(site, "codex-hours", { hours: route.hours }) : "", typeof route.mode === "string" ? escapeHtml(route.mode) : ""].filter(Boolean).join(", ");
+        return `${entityLink(site, "location", idText(route.to), depth)}${detail === "" ? "" : ` <span class="muted">${detail}</span>`}`;
       }).join("<br>")]);
     }
   } else if (kind === "faction") {
-    text("Type", entity.type);
-    links("Members", "character", entity.members);
-    links("Locations", "location", entity.locations);
+    text("codex-type", entity.type);
+    links("codex-members", "character", entity.members);
+    links("codex-locations", "location", entity.locations);
     if (spoilers) {
-      text("Status", entity.status);
+      text("codex-status", entity.status);
     }
   } else if (kind === "artifact") {
-    text("Type", entity.type);
+    text("codex-type", entity.type);
     if (spoilers) {
-      text("Status", entity.status);
-      links("Owner", "character", entity.owner);
-      links("Location", "location", entity.location);
+      text("codex-status", entity.status);
+      links("codex-owner", "character", entity.owner);
+      links("codex-location", "location", entity.location);
     }
   } else if (kind === "system") {
-    text("Type", entity.type);
+    text("codex-type", entity.type);
   } else if (kind === "arc") {
-    text("Type", entity.type);
-    links("Characters", "character", entity.characters);
-    text("Themes", entity.themes);
+    text("codex-type", entity.type);
+    links("codex-characters", "character", entity.characters);
+    text("codex-themes", entity.themes);
     if (spoilers) {
-      text("Status", entity.status);
+      text("codex-status", entity.status);
     }
   }
-  text("Pronunciation", entity.pronunciation);
+  text("codex-pronunciation", entity.pronunciation);
   return rows;
 }
 
@@ -520,8 +540,9 @@ function entityLink(site, kind, id, depth) {
   return `<a href="${"../".repeat(depth)}${dir}/${encodeURIComponent(id)}.html">${escapeHtml(displayName(entity))}</a>`;
 }
 
-// A chapter by number and title, or the id as written when no chapter has
-// it (a planned chapter-NN).
+// A chapter by number and title, or by the book's chapter label when it has
+// no title, or the id as written when no chapter has it (a planned
+// chapter-NN).
 function chapterLabel(site, id) {
   const text = idText(id);
   if (text === "") {
@@ -532,7 +553,7 @@ function chapterLabel(site, id) {
     return escapeHtml(text);
   }
   const title = String(chapter.title ?? "").trim();
-  return escapeHtml(title === "" ? `Chapter ${chapter.number}` : `${chapter.number}. ${title}`);
+  return escapeHtml(title === "" ? fillLabel(site.labels, "chapter", { n: chapter.number }) : `${chapter.number}. ${title}`);
 }
 
 // The timeline names a chapter by number (or its id when it has none).
@@ -672,10 +693,10 @@ function page(site, path, title, body) {
   const depth = path.split("/").length - 1;
   const up = "../".repeat(depth);
   const nav = [
-    ...SECTION_PAGES.map((entry) => ({ href: `${up}${entry.file}`, title: entry.title, current: entry.file === path })),
-    ...CODEX_KINDS.filter((entry) => site.entities.get(entry.kind).size > 0).map((entry) => ({ href: `${up}index.html#${entry.dir}`, title: entry.title, current: false }))
+    ...SECTION_PAGES.map((entry) => ({ href: `${up}${entry.file}`, title: label(site, entry.title), current: entry.file === path })),
+    ...CODEX_KINDS.filter((entry) => site.entities.get(entry.kind).size > 0).map((entry) => ({ href: `${up}index.html#${entry.dir}`, title: label(site, entry.title), current: false }))
   ];
-  const fullTitle = path === "index.html" ? `${site.title}: story bible` : `${title} - ${site.title}`;
+  const fullTitle = path === "index.html" ? fillLabel(site.labels, "codex-index-title", { title: site.title }) : `${title} - ${site.title}`;
   return `<!DOCTYPE html>
 ${htmlRoot(site.language)}
 <head>
@@ -716,7 +737,7 @@ blockquote { margin: 0 0 1rem; margin-inline-start: 1rem; padding-inline-start: 
 </style>
 </head>
 <body>
-<header class="site"><span class="book">${escapeHtml(site.title)}</span><nav aria-label="Story bible">${nav.map((entry) => `<a href="${entry.href}"${entry.current ? ' aria-current="page"' : ""}>${escapeHtml(entry.title)}</a>`).join("")}</nav></header>
+<header class="site"><span class="book">${escapeHtml(site.title)}</span><nav aria-label="${label(site, "codex-story-bible")}">${nav.map((entry) => `<a href="${entry.href}"${entry.current ? ' aria-current="page"' : ""}>${entry.title}</a>`).join("")}</nav></header>
 <main>
 ${body.filter((part) => part !== "").join("\n")}
 </main>
