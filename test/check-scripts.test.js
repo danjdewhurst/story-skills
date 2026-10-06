@@ -506,6 +506,21 @@ describe("check-links", () => {
     expect(extractLinks(text).map((link) => link.target)).toEqual(["a.md", "pic.png", "with space.md", "has(paren).md", "ref.md", "logo.svg", "page.md#x"]);
   });
 
+  test("masks fences inside block quotes and treats an unclosed leading --- as a divider", () => {
+    expect(extractLinks("> ```md\n> [made-up](missing.md)\n> ```\n[real](real.md)\n")).toEqual([{ target: "real.md", line: 4 }]);
+    expect(extractLinks("---\n\n[after](after.md)\n")).toEqual([{ target: "after.md", line: 3 }]);
+  });
+
+  test("finds quoted, wrapped setext, and only real setext headings", () => {
+    const text = "> # Quoted note\n\nA long\nwrapped heading\n---------------\n\n- list item\n---\n\n***\nplain\n===\n";
+    expect([...anchorsFor(text)]).toEqual(["quoted-note", "a-long-wrapped-heading", "plain"]);
+  });
+
+  test("extracts unquoted html attributes and each srcset candidate", () => {
+    const text = "<a href=docs/guide.md>g</a> <img srcset=\"small.png 1x, large.png 2x\" src='small.png'>\n";
+    expect(extractLinks(text).map((link) => link.target)).toEqual(["docs/guide.md", "small.png", "large.png", "small.png"]);
+  });
+
   test("skips external links and template placeholders", () => {
     for (const target of ["https://example.com", "mailto:a@b.c", "//cdn.example.com/x", "characters/{name-kebab}.md", "${dir}/x.md", ""]) {
       expect(isSkipped(target)).toBe(true);
