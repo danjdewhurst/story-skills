@@ -548,6 +548,7 @@ var FINDING_CODES = {
   "near-miss-key": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
+  "substitute-story-id": "warning",
   "entry-not-mapping": "error",
   "schema-too-new": "error",
   "schema-version-mismatch": "error",
@@ -11756,8 +11757,10 @@ function dismissByExemptions(result, exemptions, { errors: withErrors }) {
 }
 
 // src/scan.js
+import crypto3 from "node:crypto";
 import fs3 from "node:fs";
 import path5 from "node:path";
+import { Buffer as Buffer2 } from "node:buffer";
 
 // src/forms.js
 var STORY_FORMS = new Map([
@@ -12431,7 +12434,31 @@ function existingStoryData(root) {
   }
 }
 function deriveStoryId(title, root) {
+  return asciiStoryId(title, root) || substituteStoryId(title, root).id;
+}
+function asciiStoryId(title, root) {
   return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path5.basename(root), { transliterate: false });
+}
+function substituteStoryId(title, root) {
+  const text = String(title ?? "").trim();
+  const folder = path5.basename(root);
+  const usable = (value) => kebabCase(value) !== "" && !WINDOWS_RESERVED_ID.test(kebabCase(value));
+  if (usable(text)) {
+    return { id: kebabCase(text), from: "transliterated from the title" };
+  }
+  if (usable(folder)) {
+    return { id: kebabCase(folder), from: "transliterated from the folder name" };
+  }
+  const hash = crypto3.createHash("sha256").update((text || folder).normalize("NFC")).digest("hex").slice(0, 8);
+  return { id: `story-${hash}`, from: `hashed from the ${text === "" ? "folder name" : "title"}` };
+}
+function substituteStoryIdWarnings(project) {
+  const title = project.story.data.title;
+  if (project.story.unreadable || asciiStoryId(title, project.root) !== "") {
+    return [];
+  }
+  const { id, from } = substituteStoryId(title, project.root);
+  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`, "story.md")];
 }
 function chapterLength(unit, data, markdown) {
   const prose = chapterProse(markdown.body);
@@ -14002,6 +14029,9 @@ function coverIsReady(project) {
 }
 function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
+  if (/[\u0000-\u001f\u007f]/u.test(cover)) {
+    throw projectError(`story.md cover ${JSON.stringify(cover)} must not contain control characters`);
+  }
   const mediaType = COVER_MEDIA_TYPES[path5.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
     throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
@@ -14019,7 +14049,30 @@ function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
+  const held = coverFormat(filePath);
+  if (held !== mediaType) {
+    throw projectError(held === null ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature` : `story.md cover ${cover} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
+  }
   return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path5.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
+}
+var IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
+var IMAGE_SIGNATURE_BYTES = 12;
+function coverFormat(filePath) {
+  const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
+  const ascii = (start, end) => head.subarray(start, end).toString("latin1");
+  if (head.subarray(0, 8).equals(Buffer2.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return "image/png";
+  }
+  if (head.subarray(0, 3).equals(Buffer2.from([255, 216, 255]))) {
+    return "image/jpeg";
+  }
+  if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
+    return "image/gif";
+  }
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") {
+    return "image/webp";
+  }
+  return null;
 }
 var CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;
 var SCENE_FILENAME_PATTERN = /^(.+)-scene-(\d+)\.md$/;
@@ -16829,6 +16882,9 @@ function styleFonts(style, type) {
 }
 function styleSheetFile(root, value) {
   const css = String(value).trim();
+  if (/[\u0000-\u001f\u007f]/u.test(css)) {
+    throw projectError(`story.md build-style css ${JSON.stringify(css)} must not contain control characters`);
+  }
   if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
     throw projectError(`story.md build-style css ${css} must be a .css file`);
   }
@@ -17521,7 +17577,7 @@ import path9 from "node:path";
 import fs4 from "node:fs";
 import os from "node:os";
 import path8 from "node:path";
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -17732,7 +17788,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs4.existsSync(output) ? fs4.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer2.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer3.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -17764,7 +17820,7 @@ function lastLines(text, count = 10) {
 }
 
 // src/packaging.js
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 import { deflateRawSync } from "node:zlib";
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
@@ -18471,14 +18527,14 @@ function writeZip(outFile, entries, writeOptions = {}) {
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer3.from(entry.name, "utf8");
-    const content = Buffer3.isBuffer(entry.content) ? entry.content : Buffer3.from(entry.content, "utf8");
+    const name = Buffer4.from(entry.name, "utf8");
+    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer3.alloc(30);
+    const localHeader = Buffer4.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -18491,7 +18547,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer3.alloc(46);
+    const centralHeader = Buffer4.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -18516,7 +18572,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer3.alloc(22);
+  const end = Buffer4.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -18525,7 +18581,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer3.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -18957,7 +19013,7 @@ function applySeverity(result, overrides = NO_OVERRIDES) {
 }
 
 // src/import.js
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer6 } from "node:buffer";
 import fs12 from "node:fs";
 import path16 from "node:path";
 
@@ -19106,7 +19162,7 @@ function realPath(target) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 import fs6 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -19118,7 +19174,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSy
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer4.alloc(CHUNK_BYTES);
+  const buffer = Buffer5.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -19144,9 +19200,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSy
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer4.from(buffer.subarray(0, read)));
+    chunks.push(Buffer5.from(buffer.subarray(0, read)));
   }
-  return Buffer4.concat(chunks);
+  return Buffer5.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -20012,6 +20068,7 @@ function validateProjectOf(project) {
   validatePronunciations(project, errors);
   validateTextFields(project, errors);
   validatePortablePaths(project, warnings);
+  warnings.push(...substituteStoryIdWarnings(project));
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path11.basename(file, ".md").toLowerCase())) {
@@ -22017,7 +22074,7 @@ function createStoryProject(options) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
   const existingStory = existingStoryData(root);
-  const storyId = deriveStoryId(existingStory ? existingStory.title : title, root);
+  const storyId = asciiStoryId(existingStory ? existingStory.title : title, root);
   assertPortableId(storyId, "story");
   assertPortableFolderName(path12.basename(root));
   if (!storyId) {
@@ -25488,8 +25545,9 @@ function buildBook(root, options = {}) {
   }
   const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const output = resolveOutputPath(project, options.out, `dist/${fileStem(project.storyId)}.${extension}`);
+  const withIdWarnings = (result) => ({ ...result, warnings: [...substituteStoryIdWarnings(project), ...result.warnings] });
   if (options.pdf) {
-    return buildPdf(project, format, { trim, paper }, output, options);
+    return withIdWarnings(buildPdf(project, format, { trim, paper }, output, options));
   }
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
@@ -25497,12 +25555,12 @@ function buildBook(root, options = {}) {
       generatedBy: "story build",
       enforceRoot: output.enforceRoot
     });
-    return { ...result, format };
+    return withIdWarnings({ ...result, format });
   }
   if (format === "fountain") {
     const screenplay = screenplayOutline(project, bookChapters(project));
     writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
-    return { outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings };
+    return withIdWarnings({ outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings });
   }
   const manuscript = manuscriptParts(project);
   if (format === "metadata") {
@@ -25542,7 +25600,7 @@ function buildBook(root, options = {}) {
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
   }
-  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings };
+  return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
 }
 function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
@@ -26003,6 +26061,9 @@ function manuscriptParts(project, action = "build") {
     if (!isKebabId(entry.id)) {
       throw projectError(`${relative(project, entry.file)}: matter file names must be kebab-case to build`);
     }
+    if (!entry.empty && entry.title.trim() === "") {
+      throw projectError(`${relative(project, entry.file)}: a matter page needs a title to build`);
+    }
   }
   const matter = (placement) => project.matter.filter((entry) => entry.placement === placement && !entry.empty).map((entry) => ({
     id: entry.id,
@@ -26045,12 +26106,15 @@ function isCopyrightMatter(entry) {
 }
 var HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 function assertNotProjectSource(project, outFile) {
+  const referenced = referencedFiles(project);
+  assertNotReferencedPath(project, outFile, outFile, referenced);
   assertNotSourcePath(project, outFile, project.root, outFile);
   if (isInsideGitDirectory(outFile, project.root)) {
     throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is inside a .git folder. Choose a path outside .git`);
   }
   const realRoot = fs10.realpathSync.native(project.root);
   const realTarget = realPathThroughAncestors(outFile);
+  assertNotReferencedPath(project, outFile, realTarget, referenced);
   assertNotSourcePath(project, outFile, realRoot, realTarget);
   assertNotSourcePath(project, outFile, realRoot.toLowerCase(), realTarget.toLowerCase());
 }
@@ -26073,6 +26137,32 @@ function assertNotSourcePath(project, outFile, root, target) {
 function realPathThroughAncestors(target) {
   const { ancestor, missing } = nearestExistingAncestor(target, fs10.existsSync);
   return path14.join(fs10.realpathSync.native(ancestor), ...missing);
+}
+function referencedFiles(project) {
+  const files = [];
+  const add = (value, label) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text === "" || /[\u0000-\u001f\u007f]/u.test(text)) {
+      return;
+    }
+    const file = path14.resolve(project.root, text);
+    for (const form of [file, realPathThroughAncestors(file)]) {
+      files.push({ names: lookedUpNames(form), label });
+    }
+  };
+  add(project.story.data.cover, "cover");
+  add(buildStyle(project.story.data).css, "build-style css");
+  return files;
+}
+function lookedUpNames(file) {
+  return file.split(path14.sep).map(fileSystemName);
+}
+function assertNotReferencedPath(project, outFile, target, referenced) {
+  const names = lookedUpNames(target);
+  const file = referenced.find((entry) => entry.names.length === names.length && names.every((name, index) => name === entry.names[index] || isShortNameOf(name, entry.names[index])));
+  if (file !== undefined) {
+    throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: story.md names it as the ${file.label}. Use a path such as dist/ instead`);
+  }
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
@@ -26943,7 +27033,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
-      const bytes = Buffer5.byteLength(text, "utf8");
+      const bytes = Buffer6.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }
@@ -27761,10 +27851,11 @@ function copyProject(source, target, roots, depth = 0) {
 }
 function copyRegularFile(from, to) {
   const { size } = fs13.statSync(from);
-  if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs13.constants.R_OK)) {
+  const readable = allowed(from, fs13.constants.R_OK);
+  if ((from.endsWith(".md") || path17.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && readable) {
     fs13.writeFileSync(to, readFileBytes(from));
   } else {
-    fs13.writeFileSync(to, "");
+    fs13.writeFileSync(to, readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs13.truncateSync(to, size);
   }
   fs13.chmodSync(to, copyMode(from, false));

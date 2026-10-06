@@ -85,6 +85,7 @@ import {
   ENTITY_SCAN_DIRS,
   asArray,
   coverImage,
+  substituteStoryIdWarnings,
   SCENE_FILENAME_PATTERN,
   chapterNumberFromFile,
   relative
@@ -184,6 +185,7 @@ export function validateProjectOf(project) {
   validatePronunciations(project, errors);
   validateTextFields(project, errors);
   validatePortablePaths(project, warnings);
+  warnings.push(...substituteStoryIdWarnings(project));
   collectStrayFileWarnings(project, warnings);
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {

@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { kebabCase } from "../src/markdown.js";
-import { buildBook, createEntity, createStoryProject, renameEntity, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { buildBook, createEntity, createStoryProject, reindexProject, renameEntity, scanProject, validateProject } from "../src/story.js";
+import { makeTempDir, memoryIo, messages, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -158,5 +158,72 @@ describe("ids recomputed on every run do not change", () => {
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Пролог\nnumber: 1\nnumbered: false\nstatus: draft", "## Chapter Text\n\nБуря пришла первой.\n");
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
     expect([...html.matchAll(/<p id="([^"]+)">/g)].map((match) => match[1])).toEqual(["unnumbered-01-p1"]);
+  });
+});
+
+describe("a project whose title and folder name have no ASCII letters or digits", () => {
+  // Made with an ASCII --dir, as init requires, then moved to a folder
+  // named after the title (a clone, say), with `title` set as given.
+  function movedProject(title, folder) {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Placeholder", dir: "book" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const storyPath = path.join(root, "story.md");
+    const text = fs.readFileSync(storyPath, "utf8");
+    fs.writeFileSync(storyPath, title === null ? text.replace(/^title: .*\n/m, "") : text.replace(/^title: .*$/m, `title: ${title}`), "utf8");
+    fs.renameSync(root, path.join(cwd, folder));
+    return path.join(cwd, folder);
+  }
+
+  const substitute = (id, from) => `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`;
+
+  test("init still refuses to make one", () => {
+    expect(() => createStoryProject({ cwd: makeTempDir(), title: "東京物語", dir: "東京" })).toThrow("Cannot derive a story id");
+  });
+
+  test("the story id is a hash of the title, the same on every run, and names the builds", () => {
+    const root = movedProject("東京物語", "東京");
+    const { storyId } = scanProject(root);
+    expect(storyId).toMatch(/^story-[0-9a-f]{8}$/);
+    expect(scanProject(root).storyId).toBe(storyId);
+    const epub = buildBook(root, { format: "epub" });
+    expect(path.relative(root, epub.outFile)).toBe(path.join("dist", `${storyId}.epub`));
+    expect(readArchiveText(epub.outFile)).toContain(`<dc:identifier id="book-id">${storyId}</dc:identifier>`);
+    expect(messages(epub.warnings)).toContain(substitute(storyId, "hashed from the title"));
+    expect(messages(buildBook(root, { format: "fountain" }).warnings)).toContain(substitute(storyId, "hashed from the title"));
+    reindexProject(root);
+    expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toContain(`story: ${storyId}\n`);
+    const validation = validateProject(root);
+    expect(messages(validation.errors)).toEqual([]);
+    expect(messages(validation.warnings)).toContain(substitute(storyId, "hashed from the title"));
+  });
+
+  test("each title hashes to its own id, in either Unicode form, and no title hashes the folder name", () => {
+    const tokyo = scanProject(movedProject("東京物語", "東京")).storyId;
+    expect(scanProject(movedProject("京都物語", "東京")).storyId).not.toBe(tokyo);
+    // が as one code point, and as か and a combining mark.
+    expect(scanProject(movedProject("がっこう".normalize("NFD"), "学校")).storyId).toBe(scanProject(movedProject("がっこう", "学校")).storyId);
+    const untitled = movedProject(null, "東京");
+    const { storyId } = scanProject(untitled);
+    expect(storyId).toMatch(/^story-[0-9a-f]{8}$/);
+    expect(storyId).not.toBe(tokyo);
+    expect(messages(validateProject(untitled).warnings)).toContain(substitute(storyId, "hashed from the folder name"));
+  });
+
+  test("a Cyrillic title or folder name is transliterated, unless that gives a name Windows reserves", () => {
+    const fromTitle = movedProject("Война и мир", "Война");
+    expect(scanProject(fromTitle).storyId).toBe("voyna-i-mir");
+    expect(messages(validateProject(fromTitle).warnings)).toContain(substitute("voyna-i-mir", "transliterated from the title"));
+    const fromFolder = movedProject("東京物語", "Токио");
+    expect(scanProject(fromFolder).storyId).toBe("tokio");
+    expect(messages(validateProject(fromFolder).warnings)).toContain(substitute("tokio", "transliterated from the folder name"));
+    expect(scanProject(movedProject("Нул", "Прн")).storyId).toMatch(/^story-[0-9a-f]{8}$/);
+  });
+
+  test("an ASCII title or folder name gives the id with no warning", () => {
+    const root = movedProject("東京物語", "tokyo");
+    expect(scanProject(root).storyId).toBe("tokyo");
+    expect(validateProject(root).warnings.map((warning) => warning.code)).not.toContain("substitute-story-id");
+    expect(buildBook(root, { format: "epub" }).warnings.map((warning) => warning.code)).not.toContain("substitute-story-id");
   });
 });

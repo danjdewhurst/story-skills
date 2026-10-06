@@ -1,6 +1,8 @@
 // Project scan and entity records: read a story project into memory, and the markdown those records are written from.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { Buffer } from "node:buffer";
 import { parseCalendar } from "./calendar.js";
 import { storyDateError, storyTimeError } from "./continuity.js";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
@@ -12,6 +14,7 @@ import {
   lstatIfExists,
   portablePath,
   projectPath,
+  readFilePrefix,
   readTextFile
 } from "./files.js";
 import { isTruthy, optionValues } from "./options.js";
@@ -211,9 +214,51 @@ export function existingStoryData(root) {
 // The story id is the kebab-case title, or the project folder name when the
 // title is missing or has no ASCII letters or digits. Neither is
 // transliterated: the id is recomputed on every run, so a Cyrillic or Greek
-// title or folder name must give the id it always has.
+// title or folder name must give the id it always has. When neither has
+// ASCII letters or digits, the id is a substitute (see substituteStoryId)
+// rather than "", which named every build dist/.epub.
 export function deriveStoryId(title, root) {
+  return asciiStoryId(title, root) || substituteStoryId(title, root).id;
+}
+
+// The id the title or folder name gives as written, or "" when neither has
+// ASCII letters or digits. story init and import refuse to make a project
+// without one.
+export function asciiStoryId(title, root) {
   return kebabCase(String(title ?? ""), { transliterate: false }) || kebabCase(path.basename(root), { transliterate: false });
+}
+
+// The id of a project whose title and folder name have no ASCII letters or
+// digits (a cloned project's folder renamed to its Japanese title, say): the
+// title transliterated (Война и мир gives voyna-i-mir), else the folder name
+// transliterated, else `story-` and eight hex digits of a hash of the title
+// (or of the folder name, without a title), so each book has its own id and
+// keeps it from run to run. A transliteration Windows reserves as a file
+// name (Нул gives nul) is passed over. `from` says which, for the warning.
+function substituteStoryId(title, root) {
+  const text = String(title ?? "").trim();
+  const folder = path.basename(root);
+  const usable = (value) => kebabCase(value) !== "" && !WINDOWS_RESERVED_ID.test(kebabCase(value));
+  if (usable(text)) {
+    return { id: kebabCase(text), from: "transliterated from the title" };
+  }
+  if (usable(folder)) {
+    return { id: kebabCase(folder), from: "transliterated from the folder name" };
+  }
+  // NFC, so a folder name macOS stores decomposed hashes the same everywhere.
+  const hash = crypto.createHash("sha256").update((text || folder).normalize("NFC")).digest("hex").slice(0, 8);
+  return { id: `story-${hash}`, from: `hashed from the ${text === "" ? "folder name" : "title"}` };
+}
+
+// The warning validate and build give while the story id is a substitute:
+// it names every build file, and the writer may want to choose it.
+export function substituteStoryIdWarnings(project) {
+  const title = project.story.data.title;
+  if (project.story.unreadable || asciiStoryId(title, project.root) !== "") {
+    return [];
+  }
+  const { id, from } = substituteStoryId(title, project.root);
+  return [warn("substitute-story-id", `story.md title and the project folder name have no ASCII letters or digits, so the story id is ${id}, ${from}; rename the folder with ASCII letters or digits to choose the id`, "story.md")];
 }
 
 // A chapter's word count and its length in the count unit: `count`, the
@@ -2065,6 +2110,11 @@ export function coverIsReady(project) {
 // swapped for a larger file or a symlink after this check is still refused.
 export function coverImage(project) {
   const cover = String(project.story.data.cover).trim();
+  // Checked before any file-system call, which would throw on a NUL with a
+  // message that names neither story.md nor the cover.
+  if (/[\u0000-\u001f\u007f]/u.test(cover)) {
+    throw projectError(`story.md cover ${JSON.stringify(cover)} must not contain control characters`);
+  }
   const mediaType = COVER_MEDIA_TYPES[path.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
     throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
@@ -2084,7 +2134,42 @@ export function coverImage(project) {
     throw projectError(`story.md cover ${cover} is not a file`);
   }
   assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
+  // The EPUB declares the media type from the extension, so the bytes must
+  // match it, or a file saved over the cover (an HTML build, say) would ship
+  // as the cover image.
+  const held = coverFormat(filePath);
+  if (held !== mediaType) {
+    throw projectError(held === null
+      ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature`
+      : `story.md cover ${cover} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
+  }
   return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
+}
+
+const IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
+
+// How many bytes of an image coverFormat reads. A --dry-run copy keeps
+// this many of every file that is not markdown (see preview.js).
+export const IMAGE_SIGNATURE_BYTES = 12;
+
+// The media type of a cover image read from its first bytes, the signature
+// each format starts with, or null when it has none of them.
+function coverFormat(filePath) {
+  const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
+  const ascii = (start, end) => head.subarray(start, end).toString("latin1");
+  if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return "image/png";
+  }
+  if (head.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+    return "image/jpeg";
+  }
+  if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
+    return "image/gif";
+  }
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") {
+    return "image/webp";
+  }
+  return null;
 }
 
 export const CHAPTER_FILENAME_PATTERN = /^chapter-(\d+)\.md$/;

@@ -114,6 +114,11 @@ export function styleFonts(style, type) {
 // on every system. Throws a project error naming the problem.
 export function styleSheetFile(root, value) {
   const css = String(value).trim();
+  // Before any file-system call, which would throw on a NUL with a message
+  // that names neither story.md nor the setting.
+  if (/[\u0000-\u001f\u007f]/u.test(css)) {
+    throw projectError(`story.md build-style css ${JSON.stringify(css)} must not contain control characters`);
+  }
   if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
     throw projectError(`story.md build-style css ${css} must be a .css file`);
   }

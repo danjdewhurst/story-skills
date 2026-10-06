@@ -94,6 +94,26 @@ describe("story add matter", () => {
     expect(() => buildBook(root, { format: "epub" })).toThrow("matter/a&b.md: matter file names must be kebab-case to build");
   });
 
+  test("builds and export refuse a written matter page with a blank title, which validate reports", () => {
+    const { root, cwd } = matterProject();
+    const refusal = "matter/dedication.md: a matter page needs a title to build";
+    writeMatter(root, "dedication", 'title: ""\nplacement: front\nheading: false', "For the lamplighters.\n");
+    expect(messages(validateProject(root).errors)).toContain("matter/dedication.md is missing frontmatter field title");
+    for (const format of ["epub", "markdown", "html", "docx"]) {
+      expect(() => buildBook(root, { format })).toThrow(refusal);
+    }
+    expect(() => exportManuscript(root)).toThrow(refusal);
+    const result = invoke(cwd, ["build", root, "--format", "epub"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain(refusal);
+    expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
+    writeMatter(root, "dedication", 'title: "  "\nplacement: front', "For the lamplighters.\n");
+    expect(() => buildBook(root, { format: "epub" })).toThrow(refusal);
+    // An unwritten page stays out of the book, so its title cannot reach it.
+    writeMatter(root, "dedication", 'title: ""\nplacement: front', "");
+    expect(buildBook(root, { format: "epub" }).format).toBe("epub");
+  });
+
   test("rename and remove work on matter files", () => {
     const { root } = matterProject();
     createEntity(root, { kind: "matter", name: "Afterword", placement: "back" });
@@ -165,6 +185,50 @@ describe("matter validation", () => {
     replaceCover("cover:\n  - a.png");
     expect(coverErrors()).toEqual(["story.md cover must be a path to an image file"]);
   });
+
+  test("checks that the cover holds the image its extension names", () => {
+    const { root } = matterProject();
+    const coverErrors = () => messages(validateProject(root).errors).filter((error) => error.includes("cover"));
+    setStoryFields(root, "cover: cover.png");
+    const storyPath = path.join(root, "story.md");
+    const replaceCover = (value) => fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^cover:.*$/m, value), "utf8");
+
+    // A review copy saved over the cover.
+    fs.writeFileSync(path.join(root, "cover.png"), "<!DOCTYPE html>\n<html lang=\"en\"></html>\n");
+    const notPng = "story.md cover cover.png does not hold a PNG image: its first bytes are not the PNG signature";
+    expect(coverErrors()).toEqual([notPng]);
+    expect(() => buildBook(root, { format: "epub" })).toThrow(notPng);
+    fs.writeFileSync(path.join(root, "cover.png"), "");
+    expect(coverErrors()).toEqual([notPng]);
+    fs.writeFileSync(path.join(root, "cover.png"), Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+    expect(coverErrors()).toEqual(["story.md cover cover.png holds a JPEG image, not a PNG one: rename it to end in .jpeg or .jpg"]);
+    replaceCover("cover: cover.webp");
+    fs.writeFileSync(path.join(root, "cover.webp"), "GIF89a");
+    expect(coverErrors()).toEqual(["story.md cover cover.webp holds a GIF image, not a WebP one: rename it to end in .gif"]);
+
+    const images = {
+      "cover.png": PNG_BYTES,
+      "cover.JPG": Buffer.from([0xff, 0xd8, 0xff, 0xdb]),
+      "cover.jpeg": Buffer.from([0xff, 0xd8, 0xff, 0xe1]),
+      "cover.gif": Buffer.from("GIF87a"),
+      "cover.webp": Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x24, 0, 0, 0]), Buffer.from("WEBPVP8 ")])
+    };
+    for (const [name, bytes] of Object.entries(images)) {
+      fs.writeFileSync(path.join(root, name), bytes);
+      replaceCover(`cover: ${name}`);
+      expect(coverErrors()).toEqual([]);
+    }
+  });
+
+  test("a cover path with a control character is refused, named, before any file is read", () => {
+    const { root, cwd } = matterProject();
+    setStoryFields(root, 'cover: "a\\u0000.png"');
+    const message = 'story.md cover "a\\u0000.png" must not contain control characters';
+    expect(messages(validateProject(root).errors)).toContain(message);
+    const result = invoke(cwd, ["build", root, "--format", "epub"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain(message);
+  });
 });
 
 describe("matter in export and build", () => {
@@ -234,6 +298,27 @@ describe("matter in export and build", () => {
     const text = readArchiveText(buildBook(root, { format: "epub" }).outFile);
     expect(text).not.toContain("cover");
     expect(text).not.toContain("dc:creator");
+  });
+
+  test("--out never replaces the cover story.md names", () => {
+    const { root, cwd } = matterProject();
+    fs.mkdirSync(path.join(root, "art"));
+    fs.writeFileSync(path.join(root, "art", "cover.png"), PNG_BYTES);
+    setStoryFields(root, "cover: art/cover.png");
+    const refusal = "Refusing to write generated output to art/cover.png: story.md names it as the cover. Use a path such as dist/ instead";
+    expect(() => buildBook(root, { format: "html", out: "art/cover.png" })).toThrow(refusal);
+    expect(() => exportManuscript(root, { out: "art/../art/cover.png" })).toThrow(refusal);
+    expect(() => buildBook(root, { format: "print", out: path.join(root, "Art", "Cover.PNG") })).toThrow("story.md names it as the cover");
+    const result = invoke(cwd, ["build", root, "--format", "html", "--out", "art/cover.png"]);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain(refusal);
+    expect(fs.readFileSync(path.join(root, "art", "cover.png")).equals(PNG_BYTES)).toBe(true);
+    try {
+      fs.symlinkSync(path.join(root, "art"), path.join(root, "images"));
+    } catch {
+      return; // Creating symlinks needs a privilege some Windows runners lack.
+    }
+    expect(() => buildBook(root, { format: "html", out: "images/cover.png" })).toThrow("story.md names it as the cover");
   });
 
   test("an epub build fails when the cover is missing", () => {

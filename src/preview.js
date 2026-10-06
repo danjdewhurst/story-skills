@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readTextFile, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
-import { MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
+import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, SKIPPED_SCAN_DIRECTORIES, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
@@ -352,17 +352,20 @@ function copyProject(source, target, roots, depth = 0) {
 
 // Write commands read the text of markdown files only (and import the
 // .gitignore it keeps), and no file over the read limit; of any other file
-// (a cover image) they check at most the size. So only readable markdown is copied whole. Every other file is a
-// sparse file of the same size, which takes no disk space, and an
-// unreadable file stays unreadable. The copy is read as a command reads
-// it, so a file swapped for a FIFO or a symlink since the folder was
-// listed is refused rather than followed or waited on.
+// (a cover image) they check at most the size and the first bytes, which
+// say what kind of image it is. So only readable markdown is copied whole.
+// Every other file is a sparse file of the same size that keeps only those
+// first bytes, which takes no disk space, and an unreadable file stays
+// unreadable. The copy is read as a command reads it, so a file swapped for
+// a FIFO or a symlink since the folder was listed is refused rather than
+// followed or waited on.
 function copyRegularFile(from, to) {
   const { size } = fs.statSync(from);
-  if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && allowed(from, fs.constants.R_OK)) {
+  const readable = allowed(from, fs.constants.R_OK);
+  if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && readable) {
     fs.writeFileSync(to, readFileBytes(from));
   } else {
-    fs.writeFileSync(to, "");
+    fs.writeFileSync(to, readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs.truncateSync(to, size);
   }
   fs.chmodSync(to, copyMode(from, false));

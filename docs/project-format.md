@@ -170,6 +170,8 @@ warning: characters/nul.md uses a file name Windows reserves, so the project can
 
 The story id is derived the same way from the `title` in `story.md` (`The Last Ember` becomes `the-last-ember`), or from the project directory name when the title has no ASCII letters or digits. The story id is recomputed from the title on every run, so it is never transliterated: a Cyrillic or Greek title keeps the folder-name id it has always had. Neither is the folder name, so a project in `Проект-Book/` keeps the id `book`. `story init` without `--dir` names the folder after the story id: the title's ASCII slug when it has one (`Война и мир 2` goes in `2/`, the id `2`), or else the transliterated title (`Война и мир` goes in `voyna-i-mir/`, which then gives the story id). Registries and state files record it in their `story` field.
 
+`story init` refuses a project whose title and folder name both lack ASCII letters or digits, but a project folder renamed later (a clone into `東京物語/`, say) can reach that state. Its story id is then a substitute: the title transliterated (`Война и мир` gives `voyna-i-mir`), else the folder name transliterated, else `story-` and eight hex digits hashed from the title (or from the folder name when there is no title), such as `story-d209412e`. A transliteration that Windows reserves as a file name, such as `nul`, is skipped. The substitute is the same on every run, and two titles give two ids. It names every build file, so `story validate` and `story build` warn about it (`substitute-story-id`); rename the folder with ASCII letters or digits to choose the id, then run `story reindex`.
+
 Chapters and scenes use fixed filename patterns instead of names:
 
 | Entity | Filename | Rule |
@@ -338,7 +340,7 @@ tense: past
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `title` | string | yes | Book title. The story id is derived from it, or from the project directory name when `title` is missing or has no ASCII letters or digits (`Война и мир`). Reports and builds show the directory name when `title` is missing. |
+| `title` | string | yes | Book title. The story id is derived from it, or from the project directory name when `title` is missing or has no ASCII letters or digits (`Война и мир`), or is a substitute when neither has any (see [Identifiers and filenames](#identifiers-and-filenames)). Reports and builds show the directory name when `title` is missing. |
 | `schema-version` | integer | yes | Must be `2`. `story migrate` sets it. |
 | `genre` | string | yes | Free text, for example `fantasy`. `story init` defaults it to `fiction`. |
 | `status` | enum | yes | `planning`, `drafting`, `in-progress`, `revising`, `complete`, or `abandoned`. `story init` sets `planning`. |
@@ -372,7 +374,7 @@ tense: past
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `build-style` | list of mappings | no | How the EPUB, HTML review copy, and print interior look: a `preset` (`classic`, `modern`, or `elegant`) and overrides for `body-font`, `heading-font`, `heading-style`, `scene-break`, `drop-caps`, `paragraphs`, and an extra `css` file inside the project. Unset, builds look as they always have. The Shunn and DOCX builds ignore it. See [Build styles](manuscripts.md#build-styles). |
-| `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`. `story build --format epub` embeds it. |
+| `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`, holding the image its extension names. `story build --format epub` embeds it, and `--out` never replaces it. |
 | `ifid` | UUID | no | The interactive fiction id `story build --format twee` and `--format ink` write, a version 4 UUID such as `3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07`. Without it the build derives one from the story id, the same on every build, and warns with the line to add: a title change changes the derived IFID, and two books with the same title share it. `story validate` and the build error on a value that is not a version 4 UUID. See [Branching chapters](#branching-chapters). |
 | `authors`, `editor`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, `chapter-label`, `chapter-numerals`, `contents-label`, `labels`, `writing-mode` | various | no | Publishing metadata read by `story build`. See [Publishing metadata](#publishing-metadata). |
 
@@ -1191,7 +1193,7 @@ heading: false
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `title` | string | yes | Labels the page in the EPUB table of contents and, unless `heading: false`, prints as its heading. |
+| `title` | string | yes | Labels the page in the EPUB table of contents and, unless `heading: false`, prints as its heading. Export and builds refuse a page with text and a blank title. |
 | `placement` | enum | yes | `front` or `back`. |
 | `order` | integer ≥ 0 | no | Sort position within the placement (missing counts as `0`); ties sort by id. `story add matter` numbers new pages after the last one in their placement unless you pass `--order`. |
 | `heading` | boolean | no | Defaults to `true`. Set `false` for pages that print no title, such as a dedication. |
