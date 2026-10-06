@@ -25,6 +25,8 @@ Why it works this way: [*Story Skills: a continuity compiler for AI-written fict
 
 ## Quick start
 
+**Writing in claude.ai, with no terminal?** [Writers: start here](docs/writers-start-here.md) shows how to download a skill as a zip and upload it to Claude, with nothing to install.
+
 Install the plugin in **Codex** or **Claude Code**:
 
 ```shell
