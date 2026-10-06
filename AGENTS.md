@@ -133,12 +133,24 @@ cd "$WT"
 
 The first argument is `.` because this project's checkout is the repo itself; the script also
 accepts a subdirectory name for projects that nest several clones under one checkout. The full
-signature is `<repo-dir> <issue-key> [branch] [base-ref]`. It prints only the worktree path, is
-idempotent across runs on the same task, refuses to steal a branch another worktree already
-holds, and never resets an existing branch. Read it before you trust it — it is short.
+signature is `<repo-dir> <issue-key> [branch] [base-ref]`; `[branch]` defaults to
+`work/<issue-key>` in lower case. It prints only the worktree path, is idempotent across runs on
+the same task, refuses to steal a branch another worktree already holds, and never resets an
+existing branch. Read it before you trust it — it is short.
+
+The worktree goes to `<instance>/workspaces/<agent-id>/worktrees/<repo>-<issue-key>`, where
+`<instance>` is `$PAPERCLIP_WORKSPACE_CWD` up to its last `projects` folder, in any letter case.
+If the checkout is under no `projects` folder, the script stops and asks for
+`ISSUE_WORKTREE_ROOT`: set it to a folder outside the checkout, and worktrees go to
+`$ISSUE_WORKTREE_ROOT/<agent-id>/<repo>-<issue-key>`. The script refuses any worktree path
+inside the checkout, symlinks included, because a nested worktree dirties the shared tree and
+the release preflight then refuses to run.
 
 Then edit, commit, and push entirely from `$WT`. If you are woken again on the same task,
-re-run the script; it returns the same path.
+re-run the script with the same arguments; it returns the same path. If the task's worktree
+already holds a different branch from the one you ask for (or from `work/<issue-key>` when you
+leave the branch out), the script fails instead of handing back a worktree on the wrong branch.
+A worktree stopped in a rebase still counts as holding the branch being rebased.
 
 ### Rule 3 — tear down when the task is finished
 

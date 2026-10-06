@@ -15,6 +15,15 @@
 #   WT=$(scripts/issue-worktree.sh cli FOR-123 feat/123-deploy-lock)
 #   cd "$WT"
 #
+# [branch] defaults to work/<issue-key>. A rerun for an issue whose worktree
+# holds a different branch fails rather than hand back the wrong branch.
+#
+# The worktree goes to <instance>/workspaces/<agent-id>/worktrees/<repo>-<issue-key>,
+# where <instance> is $PAPERCLIP_WORKSPACE_CWD up to its last `projects`
+# folder, in any letter case. Set ISSUE_WORKTREE_ROOT to use
+# $ISSUE_WORKTREE_ROOT/<agent-id>/<repo>-<issue-key> instead; a checkout under
+# no `projects` folder must. A worktree is never put inside the checkout.
+#
 set -euo pipefail
 
 REPO=${1:?repo directory name under the shared checkout, or '.' if the checkout is itself the repo}
@@ -24,6 +33,10 @@ BASE=${4:-}
 
 : "${PAPERCLIP_WORKSPACE_CWD:?run this inside a Paperclip heartbeat}"
 : "${PAPERCLIP_AGENT_ID:?run this inside a Paperclip heartbeat}"
+
+if [ -z "$BRANCH" ]; then
+  BRANCH="work/$(printf '%s' "$ISSUE" | tr '[:upper:]' '[:lower:]')"
+fi
 
 # Multi-repo projects keep clones beneath the shared checkout (`cli`, `browse`).
 # Single-repo projects have the shared checkout be the repo itself: pass '.'.
@@ -45,11 +58,76 @@ if [ ! -e "$SHARED/.git" ]; then
   exit 1
 fi
 
-INSTANCE_ROOT="${PAPERCLIP_WORKSPACE_CWD%/projects/*}"
-WT="$INSTANCE_ROOT/workspaces/$PAPERCLIP_AGENT_ID/worktrees/$SLUG-$ISSUE"
+# A worktree inside the checkout shows up in its `git status`, which then
+# fails the release preflight, so worktrees live outside it. Paperclip keeps
+# project checkouts under <instance>/projects/ and agent workspaces under
+# <instance>/workspaces/; any other layout must name the folder outright.
+if [ -n "${ISSUE_WORKTREE_ROOT:-}" ]; then
+  WT="$ISSUE_WORKTREE_ROOT/$PAPERCLIP_AGENT_ID/$SLUG-$ISSUE"
+else
+  INSTANCE_ROOT=${PAPERCLIP_WORKSPACE_CWD%/[Pp][Rr][Oo][Jj][Ee][Cc][Tt][Ss]/*}
+  if [ "$INSTANCE_ROOT" = "$PAPERCLIP_WORKSPACE_CWD" ]; then
+    echo "issue-worktree: $PAPERCLIP_WORKSPACE_CWD is not under a 'projects' folder, so there is no workspaces folder beside it" >&2
+    echo "issue-worktree: set ISSUE_WORKTREE_ROOT to a folder outside the checkout to hold your worktrees" >&2
+    exit 1
+  fi
+  WT="$INSTANCE_ROOT/workspaces/$PAPERCLIP_AGENT_ID/worktrees/$SLUG-$ISSUE"
+fi
+case "$WT" in
+  /*) ;;
+  *) WT="$PWD/$WT" ;;
+esac
 
-# Already provisioned on an earlier heartbeat for this issue: reuse it.
+# A path with symlinks resolved as far as it exists, so a linked folder
+# cannot hide that it leads into the checkout.
+physical() {
+  local dir=$1 rest=
+  while [ ! -d "$dir" ]; do
+    rest="/$(basename "$dir")$rest"
+    dir=$(dirname "$dir")
+  done
+  printf '%s%s\n' "$(CDPATH='' cd -- "$dir" && pwd -P)" "$rest"
+}
+
+CHECKOUT=$(physical "$PAPERCLIP_WORKSPACE_CWD")
+case "$(physical "$WT")/" in
+  "$CHECKOUT"/*)
+    echo "issue-worktree: $WT is inside the shared checkout $PAPERCLIP_WORKSPACE_CWD" >&2
+    echo "issue-worktree: set ISSUE_WORKTREE_ROOT to a folder outside the checkout to hold your worktrees" >&2
+    exit 1
+    ;;
+esac
+
+# The branch a worktree holds. HEAD is detached while a rebase is stopped,
+# so read the branch the rebase will move instead.
+held_branch() {
+  (
+    CDPATH='' cd -- "$1" || exit
+    git symbolic-ref --quiet --short HEAD 2>/dev/null && exit
+    for state in rebase-merge rebase-apply; do
+      head=$(git rev-parse --git-path "$state/head-name")
+      if [ -f "$head" ]; then
+        sed 's|^refs/heads/||' "$head"
+        exit
+      fi
+    done
+  )
+}
+
+# Already provisioned on an earlier heartbeat for this issue: reuse it, but
+# only on the branch asked for, or the agent would commit to the wrong one.
 if [ -e "$WT/.git" ]; then
+  HELD=$(held_branch "$WT" || true)
+  if [ "$HELD" != "$BRANCH" ]; then
+    if [ -n "$HELD" ]; then
+      echo "issue-worktree: $WT already holds branch '$HELD', not '$BRANCH'" >&2
+      echo "issue-worktree: pass '$HELD' to keep working there, or remove that worktree first" >&2
+    else
+      echo "issue-worktree: $WT has a detached HEAD, not branch '$BRANCH'" >&2
+      echo "issue-worktree: check out '$BRANCH' there, or remove that worktree first" >&2
+    fi
+    exit 1
+  fi
   echo "$WT"
   exit 0
 fi
@@ -59,10 +137,6 @@ git -C "$SHARED" fetch --quiet origin
 
 if [ -z "$BASE" ]; then
   BASE=$(git -C "$SHARED" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/main)
-fi
-
-if [ -z "$BRANCH" ]; then
-  BRANCH="work/$(printf '%s' "$ISSUE" | tr '[:upper:]' '[:lower:]')"
 fi
 
 # Git refuses to check out one branch in two worktrees. If another agent
