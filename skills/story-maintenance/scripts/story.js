@@ -755,7 +755,7 @@ function replaceFrontmatter(markdown, data, bodyOverride) {
     if (isDeepEqual(original[block.key], value)) {
       lines.push(...block.lines);
     } else {
-      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd));
+      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd, block.indent));
     }
   }
   for (const [key, value] of Object.entries(data)) {
@@ -775,7 +775,7 @@ function replaceFrontmatter(markdown, data, bodyOverride) {
   return `${opening}${body}${closing}${rest}`;
 }
 var FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
-function stringifyEntry(key, value, originalItems = [], lineEnd = "") {
+function stringifyEntry(key, value, originalItems = [], lineEnd = "", indent = "  ") {
   if (!Array.isArray(value)) {
     return [`${key}: ${formatScalar(value)}${lineEnd}`];
   }
@@ -807,8 +807,8 @@ function stringifyEntry(key, value, originalItems = [], lineEnd = "") {
       lines.push(...matches[index].lines);
       return;
     }
-    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate) && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length) : undefined;
-    const fresh = stringifyItem(key, item).map((line) => `${line}${lineEnd}`);
+    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate) && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length && candidate.childIndent === indent.length + 2) : undefined;
+    const fresh = stringifyItem(key, item, indent).map((line) => `${line}${lineEnd}`);
     if (!original) {
       lines.push(...fresh);
       return;
@@ -825,18 +825,18 @@ function sameKeys(left, right) {
   const rightKeys = Object.keys(right);
   return leftKeys.length === rightKeys.length && leftKeys.every((childKey, index) => childKey === rightKeys[index]);
 }
-function stringifyItem(key, item) {
+function stringifyItem(key, item, indent = "  ") {
   if (!isPlainObject(item)) {
-    return [`  - ${formatScalar(item)}`];
+    return [`${indent}- ${formatScalar(item)}`];
   }
   const entries = Object.entries(item);
   if (entries.length === 0) {
     throw new Error("Cannot stringify empty mapping in " + key);
   }
   const [firstKey, firstValue] = entries[0];
-  const lines = [`  - ${firstKey}: ${formatScalar(firstValue)}`];
+  const lines = [`${indent}- ${firstKey}: ${formatScalar(firstValue)}`];
   for (const [childKey, childValue] of entries.slice(1)) {
-    lines.push(`    ${childKey}: ${formatScalar(childValue)}`);
+    lines.push(`${indent}  ${childKey}: ${formatScalar(childValue)}`);
   }
   return lines;
 }
@@ -860,52 +860,368 @@ function isDeepEqual(left, right) {
 function parseYaml(source) {
   return parseYamlBlocks(source).data;
 }
-function parseYamlBlocks(source) {
+var KEY_PATTERN = /^([A-Za-z0-9_-]+):(.*)$/;
+var ITEM_KEY_PATTERN = /^([A-Za-z0-9_-]+):(\s.*)?$/;
+var LIST_ITEM_PATTERN = /^( *)-(\s.*)?$/;
+var BLOCK_HEADER_PATTERN = /^([|>])(?:([-+])([1-9])?|([1-9])([-+])?)?$/;
+function parseYamlBlocks(source, firstLine = 2) {
   const rawLines = source === "" ? [] : source.split(`
 `);
   const lines = rawLines.map((line) => line.replace(/\r$/, ""));
   const data = Object.create(null);
   const blocks = [];
+  const fail = (index, hint, problem = `Unsupported frontmatter line: ${lines[index].trim()}`) => {
+    throw projectError(`${problem} (line ${index + firstLine}). ${hint}`);
+  };
+  const nextContent = (index) => {
+    let next = index;
+    while (next < lines.length && isBlankOrComment(lines[next])) {
+      next += 1;
+    }
+    return next;
+  };
+  const inlineValue = (text, index) => {
+    const value = withoutComment(text);
+    if (value === "") {
+      return { empty: true };
+    }
+    const first = value[0];
+    if (first === "|" || first === ">") {
+      const header = BLOCK_HEADER_PATTERN.exec(value);
+      if (!header) {
+        fail(index, `Quote a value that starts with ${first}, such as epigraph: "${first} text", or put ${first} alone after the colon and the text on indented lines below`);
+      }
+      return { header };
+    }
+    if (first === "[" && !/^\[TODO\b/i.test(value)) {
+      return { value: parseFlowList(value, index) };
+    }
+    if (first === "{") {
+      fail(index, 'Flow mappings are not supported. Quote the value, such as type: "{family}", or write a list of key: value items, such as relationships: then   - character: sera-voss on the next line');
+    }
+    if (first === "&" || first === "*" || first === "!") {
+      fail(index, `Anchors, aliases, and tags are not supported. Quote the value, such as note: ${JSON.stringify(value)}`);
+    }
+    return { value: parseScalar(value) };
+  };
+  const parseFlowList = (value, index) => {
+    if (!value.endsWith("]")) {
+      fail(index, 'Close the list with ], such as characters: [sera-voss, kael-voss], or quote a value that starts with [, such as note: "[sic] text"');
+    }
+    const end = value.length - 1;
+    const items = [];
+    let at = 1;
+    for (;; ) {
+      while (at < end && /\s/.test(value[at])) {
+        at += 1;
+      }
+      if (at >= end) {
+        break;
+      }
+      let item;
+      if (value[at] === '"' || value[at] === "'") {
+        const close = quoteEnd(value, at);
+        if (close < 0 || close >= end) {
+          fail(index, 'Close each quoted entry, such as characters: ["Sera Voss", kael-voss]');
+        }
+        item = value.slice(at, close + 1);
+        at = close + 1;
+        while (at < end && /\s/.test(value[at])) {
+          at += 1;
+        }
+        if (at < end && value[at] !== ",") {
+          fail(index, 'Separate list entries with commas, such as characters: ["Sera Voss", kael-voss]');
+        }
+      } else {
+        let stop = at;
+        while (stop < end && value[stop] !== ",") {
+          stop += 1;
+        }
+        item = value.slice(at, stop).trim();
+        at = stop;
+        if (item === "") {
+          fail(index, "Remove the empty entry between two commas, such as characters: [sera-voss, kael-voss]");
+        }
+        if (/[[\]{}]/.test(item)) {
+          fail(index, 'Lists inside lists are not supported. Quote an entry that holds brackets or braces, such as tags: ["[draft]", final]');
+        }
+        if (/:(\s|$)/.test(item)) {
+          fail(index, 'Flow mappings are not supported. Quote an entry that holds a colon, such as tags: ["note: draft"]');
+        }
+      }
+      items.push(parseScalar(item));
+      if (value[at] === ",") {
+        at += 1;
+      }
+    }
+    return items;
+  };
+  const blockScalar = (header, index, parentIndent) => {
+    const [, style, chompBefore, digitAfter, digitBefore, chompAfter] = header;
+    const chomp = chompBefore ?? chompAfter ?? "";
+    const digit = digitAfter ?? digitBefore;
+    let blockIndent = digit ? parentIndent + Number(digit) : null;
+    const text = [];
+    let end = index + 1;
+    let scan = index + 1;
+    for (;scan < lines.length; scan += 1) {
+      const line = lines[scan];
+      if (line.trim() === "") {
+        text.push("");
+        continue;
+      }
+      const indent = /^ */.exec(line)[0].length;
+      if (indent <= parentIndent) {
+        break;
+      }
+      if (blockIndent === null) {
+        blockIndent = indent;
+      }
+      if (indent < blockIndent) {
+        fail(scan, "Indent every line of a block scalar at least as far as its first line");
+      }
+      text.push(line.slice(blockIndent));
+      end = scan + 1;
+    }
+    const body = text.slice(0, end - index - 1);
+    if (!body.some((line) => line !== "")) {
+      return { value: "", end };
+    }
+    const joined = style === "|" ? body.join(`
+`) : foldLines(body);
+    const trailing = chomp === "-" ? "" : chomp === "+" ? `
+`.repeat(1 + text.length - body.length) : `
+`;
+    return { value: joined + trailing, end };
+  };
+  const readValue = (target, key, text, index, indent) => {
+    const parsed = inlineValue(text, index);
+    if (parsed.header) {
+      const block = blockScalar(parsed.header, index, indent);
+      target[key] = block.value;
+      return block.end;
+    }
+    target[key] = parsed.empty ? "" : parsed.value;
+    return index + 1;
+  };
+  const nestedHint = (line) => {
+    const text = line.trim();
+    if (/^-(\s|$)/.test(text)) {
+      return "Lists inside lists are not supported. Give each entry its own item, such as   - sera-voss, or write a flow list, such as   - [sera-voss, kael-voss]";
+    }
+    if (/^[A-Za-z0-9_-]+:(\s|$)/.test(text)) {
+      return "Line up every key of a list item under its first key, such as   - character: sera-voss then     type: sibling. Deeper nesting is not supported";
+    }
+    return "Write a value that runs over several lines as a block scalar, such as   - | then the text on lines indented past the dash";
+  };
+  const parseList = (start, indent) => {
+    const items = [];
+    const starts = [];
+    const childIndents = [];
+    let index = start;
+    while (index < lines.length) {
+      if (isBlankOrComment(lines[index])) {
+        const next = nextContent(index);
+        const following = next < lines.length ? LIST_ITEM_PATTERN.exec(lines[next]) : null;
+        if (following && following[1].length === indent) {
+          index = next;
+          continue;
+        }
+        break;
+      }
+      const match = LIST_ITEM_PATTERN.exec(lines[index]);
+      if (!match || match[1].length !== indent) {
+        if (/^ */.exec(lines[index])[0].length > indent) {
+          fail(index, nestedHint(lines[index]));
+        }
+        break;
+      }
+      starts.push(index);
+      const rest = match[2] ?? "";
+      const itemText = rest.trimStart();
+      const childIndent = indent + 1 + rest.length - itemText.length;
+      childIndents.push(childIndent);
+      const objectMatch = ITEM_KEY_PATTERN.exec(itemText);
+      if (!objectMatch) {
+        if (/^-(\s|$)/.test(itemText)) {
+          fail(index, nestedHint(itemText));
+        }
+        const holder = Object.create(null);
+        index = readValue(holder, "item", rest, index, indent);
+        items.push(holder.item);
+        continue;
+      }
+      const item = Object.create(null);
+      index = readValue(item, objectMatch[1], objectMatch[2] ?? "", index, childIndent);
+      const childPattern = new RegExp(`^ {${childIndent}}([A-Za-z0-9_-]+):(.*)$`);
+      while (index < lines.length) {
+        const next = nextContent(index);
+        const child = next < lines.length ? childPattern.exec(lines[next]) : null;
+        if (!child) {
+          break;
+        }
+        index = next;
+        if (Object.prototype.hasOwnProperty.call(item, child[1])) {
+          fail(index, "Remove or rename one of the two keys in this list item", `Duplicate frontmatter key: ${child[1]}`);
+        }
+        index = readValue(item, child[1], child[2], index, childIndent);
+      }
+      items.push(item);
+    }
+    return { items, starts, childIndents, nextIndex: index };
+  };
   for (let index = 0;index < lines.length; ) {
     const line = lines[index];
-    if (!line.trim() || line.trimStart().startsWith("#")) {
+    if (isBlankOrComment(line)) {
       blocks.push({ line: rawLines[index] });
       index += 1;
       continue;
     }
-    const pair = /^([A-Za-z0-9_-]+):(?:\s*(.*))?$/.exec(line);
+    const pair = KEY_PATTERN.exec(line);
     if (!pair) {
-      throw projectError(`Unsupported frontmatter line: ${line}`);
+      fail(index, topLevelHint(line));
     }
-    const [, key, rest = ""] = pair;
+    const [, key, after] = pair;
     if (Object.prototype.hasOwnProperty.call(data, key)) {
-      throw projectError(`Duplicate frontmatter key: ${key}`);
+      fail(index, "Remove or rename one of the two entries", `Duplicate frontmatter key: ${key}`);
     }
-    if (rest !== "") {
-      data[key] = parseScalar(rest);
+    const parsed = inlineValue(after, index);
+    if (parsed.header) {
+      const block = blockScalar(parsed.header, index, 0);
+      data[key] = block.value;
+      blocks.push({ key, lines: rawLines.slice(index, block.end), items: [] });
+      index = block.end;
+      continue;
+    }
+    if (!parsed.empty) {
+      data[key] = parsed.value;
       blocks.push({ key, lines: [rawLines[index]], items: [] });
       index += 1;
       continue;
     }
-    const parsed = parseArray(lines, index + 1);
-    if (parsed.nextIndex === index + 1) {
+    const next = nextContent(index + 1);
+    const first = next < lines.length ? LIST_ITEM_PATTERN.exec(lines[next]) : null;
+    if (!first) {
       data[key] = "";
       blocks.push({ key, lines: [rawLines[index]], items: [] });
       index += 1;
       continue;
     }
-    data[key] = parsed.items;
+    const indent = first[1].length;
+    const list = parseList(next, indent);
+    data[key] = list.items;
     blocks.push({
       key,
-      lines: rawLines.slice(index, parsed.nextIndex),
-      items: parsed.items.map((item, itemIndex) => ({
+      lines: rawLines.slice(index, list.nextIndex),
+      indent: " ".repeat(indent),
+      items: list.items.map((item, itemIndex) => ({
         value: toPlainObject(item),
-        lines: rawLines.slice(parsed.starts[itemIndex], parsed.starts[itemIndex + 1] ?? parsed.nextIndex)
+        childIndent: list.childIndents[itemIndex],
+        lines: rawLines.slice(list.starts[itemIndex], list.starts[itemIndex + 1] ?? list.nextIndex)
       }))
     });
-    index = parsed.nextIndex;
+    index = list.nextIndex;
   }
   return { data: toPlainObject(data), blocks };
+}
+function isBlankOrComment(line) {
+  const text = line.trimStart();
+  return text === "" || text.startsWith("#");
+}
+function topLevelHint(line) {
+  const text = line.trim();
+  if (/^\s/.test(line)) {
+    if (/^-(\s|$)/.test(text)) {
+      return "Indent every item of a list the same amount, directly under its key, such as themes: then   - loyalty";
+    }
+    if (/^[A-Za-z0-9_-]+:(\s|$)/.test(text)) {
+      return "Nested fields are not supported. Write a list of key: value items, such as relationships: then   - character: sera-voss";
+    }
+    return "Write a value that runs over several lines as a block scalar, such as summary: | then the text on indented lines";
+  }
+  if (/^-(\s|$)/.test(text)) {
+    return "Put list items under a key, such as characters: then - sera-voss";
+  }
+  return "Write each field as key: value, with a key of letters, digits, - and _, such as title: The Bell";
+}
+function withoutComment(text) {
+  const value = text.trimStart();
+  let close = -1;
+  if (value[0] === '"' || value[0] === "'") {
+    close = quoteEnd(value, 0);
+  } else if (value[0] === "[") {
+    close = flowListEnd(value);
+  }
+  if (close >= 0 && /^(?:\s+#.*|\s*)$/.test(value.slice(close + 1))) {
+    return value.slice(0, close + 1);
+  }
+  const comment = /\s#/.exec(text);
+  return (comment ? text.slice(0, comment.index) : text).trim();
+}
+function quoteEnd(text, start) {
+  const quote = text[start];
+  for (let at = start + 1;at < text.length; at += 1) {
+    if (quote === '"' && text[at] === "\\") {
+      at += 1;
+    } else if (text[at] === quote) {
+      if (quote === "'" && text[at + 1] === "'") {
+        at += 1;
+      } else {
+        return at;
+      }
+    }
+  }
+  return -1;
+}
+function flowListEnd(text) {
+  let entryStart = true;
+  for (let at = 1;at < text.length; at += 1) {
+    const char = text[at];
+    if (char === "]") {
+      return at;
+    }
+    if (char === ",") {
+      entryStart = true;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      continue;
+    }
+    if (entryStart && (char === '"' || char === "'")) {
+      at = quoteEnd(text, at);
+      if (at < 0) {
+        return -1;
+      }
+    }
+    entryStart = false;
+  }
+  return -1;
+}
+function foldLines(lines) {
+  let out = "";
+  let previous = null;
+  let blanks = 0;
+  for (const line of lines) {
+    if (line === "") {
+      blanks += 1;
+      continue;
+    }
+    const indented = /^\s/.test(line);
+    if (previous === null) {
+      out += `
+`.repeat(blanks);
+    } else if (previous === "text" && !indented) {
+      out += blanks === 0 ? " " : `
+`.repeat(blanks);
+    } else {
+      out += `
+`.repeat(blanks + 1);
+    }
+    out += line;
+    previous = indented ? "indented" : "text";
+    blanks = 0;
+  }
+  return out;
 }
 function toPlainObject(value) {
   if (Array.isArray(value)) {
@@ -929,45 +1245,10 @@ function toPlainObject(value) {
   }
   return value;
 }
-function parseArray(lines, startIndex) {
-  const items = [];
-  const starts = [];
-  let index = startIndex;
-  while (index < lines.length) {
-    const itemMatch = /^  -(?:\s+(.*))?$/.exec(lines[index]);
-    if (!itemMatch) {
-      break;
-    }
-    starts.push(index);
-    const itemText = itemMatch[1] ?? "";
-    const objectMatch = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(itemText);
-    if (!objectMatch) {
-      items.push(parseScalar(itemText));
-      index += 1;
-      continue;
-    }
-    const item = Object.create(null);
-    item[objectMatch[1]] = parseScalar(objectMatch[2]);
-    index += 1;
-    while (index < lines.length) {
-      const childMatch = /^    ([A-Za-z0-9_-]+):\s*(.*)$/.exec(lines[index]);
-      if (!childMatch) {
-        break;
-      }
-      if (Object.prototype.hasOwnProperty.call(item, childMatch[1])) {
-        throw projectError(`Duplicate frontmatter key: ${childMatch[1]}`);
-      }
-      item[childMatch[1]] = parseScalar(childMatch[2]);
-      index += 1;
-    }
-    items.push(item);
-  }
-  return { items, starts, nextIndex: index };
-}
 function parseScalar(value) {
   const trimmed = value.trim();
-  if (trimmed === "[]") {
-    return [];
+  if (/^(?:~|null|Null|NULL)$/.test(trimmed)) {
+    return "";
   }
   if (trimmed === "true") {
     return true;
@@ -989,16 +1270,13 @@ function parseScalar(value) {
     }
   }
   if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    return trimmed.slice(1, -1);
+    return trimmed.slice(1, -1).replace(/''/g, "'");
   }
   return trimmed;
 }
 function formatScalar(value) {
   if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return "[]";
-    }
-    throw new Error("Cannot stringify a nested non-empty list");
+    return `[${value.map(formatFlowEntry).join(", ")}]`;
   }
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
@@ -1011,6 +1289,13 @@ function formatScalar(value) {
     return JSON.stringify(text);
   }
   return text;
+}
+function formatFlowEntry(value) {
+  if (Array.isArray(value) || isPlainObject(value)) {
+    throw new Error("Cannot stringify a list or mapping inside a nested list");
+  }
+  const text = formatScalar(value);
+  return text === "" || typeof value === "string" && /[,[\]{}]/.test(text) && !text.startsWith('"') ? JSON.stringify(String(value ?? "")) : text;
 }
 function needsQuotes(text) {
   return text === "" || /^\s|\s$/.test(text) || /[:#"'\u0000-\u001f\u007f]/.test(text) || /^[-?,[\]{}&*!|>%@`]/.test(text) || /^(true|false|null|yes|no|on|off|~)$/i.test(text) || /^[-+]?(\d[\d_]*(\.[\d_]*)?|\.\d[\d_]*)([eE][-+]?\d+)?$/.test(text) || /^[-+]?0[xob][0-9a-f_]+$/i.test(text) || /^[-+]?\.(inf|nan)$/i.test(text);
@@ -10578,7 +10863,7 @@ Add notes on the story's voice, texture, and emotional register.
 `;
 }
 function cell2(value) {
-  return String(value ?? "").replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|");
+  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/\|/g, "\\|");
 }
 function characterIndex(storyId, characters, relationshipMap, familyTrees) {
   const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);

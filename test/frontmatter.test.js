@@ -241,10 +241,250 @@ Body`);
     expect(replaceFrontmatter(markdown, withoutVersion)).not.toContain("version");
   });
 
-  test("stringifies nested empty lists as [] and rejects nested non-empty lists", () => {
+  test("stringifies nested lists as flow lists and rejects deeper nesting", () => {
     const yaml = stringifyFrontmatter({ items: [{ id: "a", tags: [] }, []] });
     expect(yaml).toContain("    tags: []\n  - []\n");
     expect(parseFrontmatter(`${yaml}Body`).data.items).toEqual([{ id: "a", tags: [] }, []]);
-    expect(() => stringifyFrontmatter({ items: [{ id: "a", tags: ["x"] }] })).toThrow("nested non-empty list");
+
+    const nested = { items: [{ id: "a", tags: ["x", "a, b", "#1", "", "[draft]", 3, true] }, ["y"]] };
+    const written = stringifyFrontmatter(nested);
+    expect(written).toContain('    tags: [x, "a, b", "#1", "", "[draft]", 3, true]\n  - [y]\n');
+    expect(parseFrontmatter(`${written}Body`).data).toEqual(nested);
+    expect(() => stringifyFrontmatter({ items: [{ id: "a", tags: [["x"]] }] })).toThrow("inside a nested list");
+  });
+
+  test("parses flow lists, with quotes, trailing commas, and comments", () => {
+    const parsed = parseFrontmatter(`---
+characters: [sera-voss, kael-voss]
+quoted: ["Sera, the heir", 'it''s', "# not a comment"] # a comment
+spaced: [ a ,b, ]
+empty: [ ]
+numbers: [1, 2.5, true, ~]
+todo: [TODO: author to supply]
+---
+Body`);
+
+    expect(parsed.data).toEqual({
+      characters: ["sera-voss", "kael-voss"],
+      quoted: ["Sera, the heir", "it's", "# not a comment"],
+      spaced: ["a", "b"],
+      empty: [],
+      numbers: [1, 2.5, true, ""],
+      todo: "[TODO: author to supply]"
+    });
+  });
+
+  test("parses list items at column 0 and blank or comment lines between items", () => {
+    const parsed = parseFrontmatter(`---
+themes:
+- loyalty
+- grief # strongest in act two
+relationships:
+-   character: kael-voss
+    type: sibling
+
+# the rival
+-   character: mara
+    type: rival
+locations:
+
+  - harbour
+
+  # later
+  - keep
+title: The Bell
+---
+Body`);
+
+    expect(parsed.data).toEqual({
+      themes: ["loyalty", "grief"],
+      relationships: [{ character: "kael-voss", type: "sibling" }, { character: "mara", type: "rival" }],
+      locations: ["harbour", "keep"],
+      title: "The Bell"
+    });
+  });
+
+  test("parses literal and folded block scalars with chomping indicators", () => {
+    const parsed = parseFrontmatter(`---
+literal: |
+  First line
+    indented # kept
+
+  Last line
+folded: >
+  One
+  sentence.
+
+  New paragraph.
+strip: |-
+  no newline
+keep: >+
+  kept
+
+next: plain
+items:
+  - note: |
+      inside an item
+    type: x
+  - >-
+    folded item
+blank: |
+
+poem: >
+  Lines
+
+    kept as written
+  then folded
+  together
+---
+Body`);
+
+    expect(parsed.data).toEqual({
+      literal: "First line\n  indented # kept\n\nLast line\n",
+      folded: "One sentence.\nNew paragraph.\n",
+      strip: "no newline",
+      keep: "kept\n\n",
+      next: "plain",
+      items: [{ note: "inside an item\n", type: "x" }, "folded item"],
+      blank: "",
+      poem: "Lines\n\n  kept as written\nthen folded together\n"
+    });
+  });
+
+  test("reads null and ~ as empty values", () => {
+    const parsed = parseFrontmatter("---\npov: ~\nlocation: null\nquoted: \"~\"\n---\nBody");
+
+    expect(parsed.data).toEqual({ pov: "", location: "", quoted: "~" });
+  });
+
+  test("strips inline comments after whitespace but keeps other # characters", () => {
+    const parsed = parseFrontmatter(`---
+title: The Bell # draft title
+number: 3 # renumber later
+hashtag: Issue#4
+key:#raw
+double: "Ash # Ember" # note
+single: 'Ash # Ember'
+tags:
+  - "#1" # first
+  - C#
+empty: # nothing yet
+---
+Body`);
+
+    expect(parsed.data).toEqual({
+      title: "The Bell",
+      number: 3,
+      hashtag: "Issue#4",
+      key: "#raw",
+      double: "Ash # Ember",
+      single: "Ash # Ember",
+      tags: ["#1", "C#"],
+      empty: ""
+    });
+  });
+
+  test("reads a list item URL as a string, not a mapping", () => {
+    expect(parseFrontmatter("---\nsources:\n  - https://example.com/tides\n---\nBody").data.sources).toEqual(["https://example.com/tides"]);
+  });
+
+  test("rejects unsupported YAML with the line number and a corrected example", () => {
+    const failure = (yaml) => {
+      try {
+        parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md");
+      } catch (error) {
+        return error.message;
+      }
+      return null;
+    };
+
+    expect(failure("title: A\nmeta:\n  author: me")).toBe("Unsupported frontmatter line: author: me (line 4). Nested fields are not supported. Write a list of key: value items, such as relationships: then   - character: sera-voss");
+    expect(failure("title: A\n- stray")).toContain("Unsupported frontmatter line: - stray (line 3). Put list items under a key, such as characters: then - sera-voss");
+    expect(failure("my title: A")).toContain("(line 2). Write each field as key: value");
+    expect(failure("summary: one\n  two")).toContain("(line 3). Write a value that runs over several lines as a block scalar");
+    expect(failure("tags:\n  - a\n    - b")).toContain("(line 4). Lists inside lists are not supported");
+    expect(failure("rel:\n  - character: a\n     type: b")).toContain("(line 4). Line up every key of a list item under its first key");
+    expect(failure("tags: [a, [b]]")).toContain("(line 2). Lists inside lists are not supported");
+    expect(failure("tags: [a, b")).toContain("(line 2). Close the list with ]");
+    expect(failure("note: [sic] text")).toContain("quote a value that starts with [");
+    expect(failure("tags: [a,, b]")).toContain("Remove the empty entry");
+    expect(failure("tags: [a: b]")).toContain("Flow mappings are not supported");
+    expect(failure("type: {family|guild}")).toContain("(line 2). Flow mappings are not supported. Quote the value");
+    expect(failure("epigraph: > quoted")).toContain('Quote a value that starts with >, such as epigraph: "> text"');
+    expect(failure("note: *bold*")).toContain('Anchors, aliases, and tags are not supported. Quote the value, such as note: "*bold*"');
+    expect(failure("summary: |\n    deep\n  shallow")).toContain("(line 4). Indent every line of a block scalar");
+    expect(failure("tags: [\"a, b]")).toContain("(line 2). Close each quoted entry");
+    expect(failure("tags: [\"a\"  x, b]")).toContain("(line 2). Separate list entries with commas");
+    expect(failure("tags:\n  - - a")).toContain("(line 3). Lists inside lists are not supported");
+    expect(failure("tags:\n  - one\n    two")).toContain("(line 4). Write a value that runs over several lines as a block scalar, such as   - |");
+    expect(failure("title: A\ntitle: B")).toBe("Duplicate frontmatter key: title (line 3). Remove or rename one of the two entries");
+  });
+
+  test("rewrites keep new syntax verbatim and write changed values deterministically", () => {
+    const markdown = [
+      "---",
+      "title: The Bell # draft",
+      "pov: ~",
+      "summary: >",
+      "  Folded",
+      "  text.",
+      "",
+      "characters: [sera-voss, kael-voss]",
+      "themes:",
+      "- loyalty",
+      "- grief",
+      "relationships:",
+      "- character: kael-voss",
+      "  type: sibling",
+      "status: draft",
+      "---",
+      "Body"
+    ].join("\n");
+    const { data } = parseFrontmatter(markdown);
+    expect(replaceFrontmatter(markdown, data)).toBe(markdown);
+
+    const next = replaceFrontmatter(markdown, {
+      ...data,
+      characters: [...data.characters, "mara"],
+      themes: [...data.themes, "home"],
+      relationships: [{ ...data.relationships[0], type: "rival" }],
+      status: "revised"
+    });
+    expect(next).toBe([
+      "---",
+      "title: The Bell # draft",
+      "pov: ~",
+      "summary: >",
+      "  Folded",
+      "  text.",
+      "",
+      "characters:",
+      "  - sera-voss",
+      "  - kael-voss",
+      "  - mara",
+      "themes:",
+      "- loyalty",
+      "- grief",
+      "- home",
+      "relationships:",
+      "- character: kael-voss",
+      "  type: rival",
+      "status: revised",
+      "---",
+      "Body"
+    ].join("\n"));
+    expect(replaceFrontmatter(next, parseFrontmatter(next).data)).toBe(next);
+
+    const summary = replaceFrontmatter(markdown, { ...data, summary: "Line one\nLine two" });
+    expect(summary).toContain('summary: "Line one\\nLine two"\n\ncharacters:');
+    expect(parseFrontmatter(summary).data.summary).toBe("Line one\nLine two");
+  });
+
+  test("does not mix original and new key lines in a list item indented its own way", () => {
+    const markdown = "---\nrel:\n-   character: a\n    type: b\n---\nBody";
+    const next = replaceFrontmatter(markdown, { rel: [{ character: "a", type: "c" }] });
+
+    expect(next).toBe("---\nrel:\n- character: a\n  type: c\n---\nBody");
+    expect(parseFrontmatter(next).data.rel).toEqual([{ character: "a", type: "c" }]);
   });
 });

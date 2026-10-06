@@ -39,8 +39,8 @@ Character files (character-management) and a plot structure
    consult `references/lie-truth.md` and add to their character files:
 
    `arc-type` is one of `change-positive`, `change-negative`, or `flat`.
-   Do not put that list in an inline comment. The frontmatter parser keeps
-   the comment as part of the value.
+   Do not put that list in an inline comment: a command that rewrites the
+   field drops the comment.
 
    ```yaml
    arc-type: change-positive
