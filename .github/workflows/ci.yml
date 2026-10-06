@@ -44,6 +44,14 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      # bun run test runs one seed; a few more catch validate and the schema
+      # drifting apart on values that seed never draws.
+      - name: Check validate and the schema agree on more seeds
+        run: |
+          for seed in 1 2 3 4 5; do
+            STORY_PROPERTY_SEED=$seed bun test test/validate-schema-property.test.js || exit 1
+          done
+
       - name: Run coverage and fallback checks
         run: bun run test:coverage
 
