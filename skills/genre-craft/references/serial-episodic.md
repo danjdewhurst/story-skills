@@ -7,7 +7,20 @@ covers, and the book/season layer the `series-continuity` skill handles
 
 [`examples/the-left-luggage-office`](../../../examples/the-left-luggage-office/)
 is the first three episodes of a serial with `season-goal`,
-`episode-question`, per-episode `target-words`, and a `hook` on each.
+`episode-question`, per-episode `target-words`, a `hook` on each, and a
+weekly release schedule (`release-every` and `release-start`).
+
+## The release schedule
+
+Record the cadence in `story.md` rather than in prose: `release-every`
+(days between episodes, `7` for weekly) and `release-start` (the real-world
+`YYYY-MM-DD` day episode 1 goes out). Each chapter is an episode in reading
+order. A chapter that moves off the cadence sets its own `release-date`.
+Release dates are always Gregorian, even when the book has a story
+`calendar`. Run `story progress .` or `story next .` to see the next
+episode due; both warn (`release-undrafted`) when an episode due within
+three days, or already past, has no prose or no chapter yet. Draft that
+episode first.
 
 ## The season/volume goal
 
@@ -85,6 +98,8 @@ until the story is absurd. Instead, **vary the stake type** per arc:
 ## Serial audit (per season)
 
 - [ ] One-sentence season goal, visible from installment one.
+- [ ] Release cadence recorded (`release-every`, `release-start`), and
+      `story next .` shows no overdue episode.
 - [ ] Every installment poses and answers its own dramatic question.
 - [ ] Every installment delivers at least one concrete reward.
 - [ ] Recaps are woven, not dumped; new readers can orient in one page.

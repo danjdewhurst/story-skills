@@ -912,7 +912,7 @@ const TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "time-skip", "strand"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -922,7 +922,7 @@ const TEXT_FIELDS = {
   matter: ["title", "rights-holder", "credit"]
 };
 
-const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline"];
+const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
 
 function validateTextFields(project, errors) {
   const check = (label, data, fields) => {
@@ -1006,6 +1006,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  validateReleaseCadence(data, errors);
   for (const problem of parseCalendar(data.calendar).problems) {
     errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
   }
@@ -1350,6 +1351,7 @@ function validateChapters(project, errors, warnings) {
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
     }
+    validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     validateNames(data, "author", label, errors);
     if ((Array.isArray(data.author) ? data.author : [data.author]).some(isPlaceholder)) {
@@ -1712,6 +1714,35 @@ export function validateDeadline(data, errors) {
     if (deadlineError !== "") {
       errors.push(err("invalid-date", `story.md deadline ${deadlineError}`, "story.md"));
     }
+  }
+}
+
+// The serial release cadence: an episode every `release-every` days from
+// `release-start`. Each needs the other, and the start is a real-world day,
+// YYYY-MM-DD even in a book with a story calendar.
+export function validateReleaseCadence(data, errors) {
+  const every = data["release-every"];
+  const start = data["release-start"];
+  if (every !== undefined) {
+    requireInteger(data, "release-every", "story.md", errors, 1);
+  }
+  validateReleaseDate(start, "story.md release-start", "story.md", errors);
+  if ((every === undefined) !== (start === undefined)) {
+    const [set, unset] = every === undefined ? ["release-start", "release-every"] : ["release-every", "release-start"];
+    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days from release-start`, "story.md"));
+  }
+}
+
+// A release date is a real-world day, so it is never read in the story.md
+// calendar. progress and next read only string dates, so anything else is
+// an error here rather than a silently unscheduled episode.
+function validateReleaseDate(value, name, label, errors) {
+  if (value === undefined) {
+    return;
+  }
+  const problem = typeof value === "string" && value.trim() !== "" ? storyDateError(value) : "must be a YYYY-MM-DD date";
+  if (problem !== "") {
+    errors.push(err("invalid-date", `${name} ${problem}`, label));
   }
 }
 

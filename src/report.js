@@ -3,7 +3,8 @@ import { checkContinuity } from "./continuity.js";
 import { characterCount, wordCount } from "./markdown.js";
 import { applySeverity } from "./config.js";
 import { DEFAULT_PASSES, nextPass, passChecks, readPasses } from "./passes.js";
-import { formatPercent } from "./progress.js";
+import { formatPercent, todayOption } from "./progress.js";
+import { formatNextRelease, projectRelease, releaseData } from "./release-schedule.js";
 import { plural } from "./plural.js";
 import {
   scanProject,
@@ -226,14 +227,25 @@ export function formatProjectReport(report, options = {}) {
   return `${lines.join("\n")}\n`;
 }
 
+// `date` is "today" for the release schedule, default the local date.
 export function projectActions(root, options = {}) {
+  const today = todayOption(options.date, "next");
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
+  const schedule = projectRelease(project, today);
+  // The schedule's own findings, with severity and exemptions applied, so a
+  // release-undrafted warning turned off in story.md is not an action.
+  const releaseFindings = applySeverity({ ok: true, errors: [], warnings: schedule?.warnings ?? [] }, options.overrides);
+  const releaseActions = [...releaseFindings.errors, ...releaseFindings.warnings]
+    .map((finding) => action("P1", "Draft the scheduled episode", `${finding.message}: ${finding.file === "story.md" ? "add it with story add chapter" : "draft it under ## Chapter Text"}, then run story wordcount ${shellWord(options.displayPath ?? ".")} --write.`));
+  const actions = buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions);
   return {
     root: project.root,
     title: project.title,
     storyId: project.storyId,
-    actions: buildProjectActions(project, validation, links, continuity, options.displayPath),
+    release: releaseData(schedule),
+    releaseFindings,
+    actions,
     validation,
     links,
     continuity
@@ -244,10 +256,13 @@ export function formatActionReport(report) {
   const lines = [
     `# Next Writing Actions: ${report.title}`,
     "",
-    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}, continuity ${formatCheck(report.continuity)}`,
-    "",
-    "Actions:"
+    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}, continuity ${formatCheck(report.continuity)}`
   ];
+  const release = formatNextRelease(report.release);
+  if (release !== null) {
+    lines.push(release);
+  }
+  lines.push("", "Actions:");
   appendActionLines(lines, report.actions);
   return `${lines.join("\n")}\n`;
 }
@@ -271,10 +286,11 @@ export function formatDoctorReport(report) {
 
 // `displayPath` is the project path as the user typed it, so suggested
 // commands run from where the user is; it defaults to ".".
-function buildProjectActions(project, validation, links, continuity, displayPath = ".") {
+// `releaseActions` are the next command's release schedule actions.
+function buildProjectActions(project, validation, links, continuity, displayPath = ".", releaseActions = []) {
   const where = shellWord(displayPath);
   const passesCommand = where === "." ? "story passes" : `story passes ${where}`;
-  const actions = [];
+  const actions = [...releaseActions];
   if (validation.errors.length > 0) {
     actions.push(action("P0", "Fix validation errors", `Run story validate ${where} and repair ${validation.errors.length} schema or registry errors.`));
   }

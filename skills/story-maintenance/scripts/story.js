@@ -615,6 +615,7 @@ var FINDING_CODES = {
   "name-look-alike": "warning",
   "name-shared-initial": "warning",
   "context-file-skipped": "warning",
+  "release-undrafted": "warning",
   "story-missing-at-ref": "warning",
   "similarity-shared-passage": "warning",
   "similarity-no-reference-text": "warning",
@@ -11151,7 +11152,7 @@ var OPTIONS = [
   { name: "role", value: "<name>", help: ["Character role for add character"] },
   { name: "status", value: "<name>", help: ["Entity status for add"] },
   { name: "mode", value: "<name>", help: ["Mode for add chapter (e.g. discovered)"] },
-  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD, or in the story.md", "calendar) for add chapter/scene; the session", "date for progress (default today)"] },
+  { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD, or in the story.md", "calendar) for add chapter/scene; the session", "date for progress, and today for progress and", "next release dates (default today)"] },
   { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
   { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
   { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
@@ -11560,6 +11561,103 @@ function tweeSource(story) {
 `;
 }
 
+// src/release-schedule.js
+var RELEASE_SOON_DAYS = 3;
+function projectRelease(project, today) {
+  return releaseSchedule({
+    data: project.story.data,
+    today,
+    chapters: project.chapters.map((chapter) => ({
+      id: chapter.id,
+      file: projectPath(project.root, chapter.file),
+      releaseDate: chapter.releaseDate,
+      drafted: chapter.wordCount > 0 || chapter.count > 0
+    }))
+  });
+}
+function releaseData(release) {
+  if (release === null) {
+    return null;
+  }
+  const { warnings, ...rest } = release;
+  return rest;
+}
+function releaseCadence(data) {
+  const every = data["release-every"];
+  const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
+  return Number.isInteger(every) && every >= 1 && start ? { every, start: start.text, startDays: start.days } : null;
+}
+function releaseSchedule({ data, chapters, today }) {
+  const cadence = releaseCadence(data);
+  const todayDays = parseClockDate(today).days;
+  const episodes = [];
+  chapters.forEach((chapter, index) => {
+    const own = chapter.releaseDate ? parseClockDate(chapter.releaseDate) : undefined;
+    const days = own ? own.days : cadence ? cadence.startDays + index * cadence.every : null;
+    if (days !== null) {
+      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
+    }
+  });
+  if (cadence === null && episodes.length === 0) {
+    return null;
+  }
+  const projected = (index) => {
+    const days = cadence.startDays + index * cadence.every;
+    return { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+  };
+  const candidates = episodes.filter((episode) => episode.days >= todayDays);
+  let unwritten = 0;
+  let firstUnwritten = null;
+  if (cadence !== null) {
+    candidates.push(projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every))));
+    unwritten = Math.floor((todayDays + RELEASE_SOON_DAYS - cadence.startDays) / cadence.every) - chapters.length + 1;
+    firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
+  }
+  candidates.sort((left, right) => left.days - right.days || left.episode - right.episode);
+  const next = candidates.length === 0 ? null : withDaysUntil(candidates[0], todayDays);
+  const warnings = [];
+  for (const episode of episodes) {
+    if (!episode.drafted && episode.days <= todayDays + RELEASE_SOON_DAYS) {
+      warnings.push(warn("release-undrafted", `${episode.file} (episode ${episode.episode}) ${releaseWhen(episode.date, episode.days - todayDays)} and has no prose yet`, episode.file));
+    }
+  }
+  if (firstUnwritten !== null) {
+    const more = unwritten === 1 ? "" : ` (and ${plural(unwritten - 1, "more scheduled episode")} after it)`;
+    warnings.push(warn("release-undrafted", `episode ${firstUnwritten.episode} ${releaseWhen(firstUnwritten.date, firstUnwritten.days - todayDays)} and has no chapter yet${more}`, "story.md"));
+  }
+  return {
+    every: cadence?.every ?? null,
+    start: cadence?.start ?? null,
+    next,
+    episodes: episodes.map(({ days, ...episode }) => episode),
+    warnings
+  };
+}
+function withDaysUntil({ days, ...episode }, todayDays) {
+  return { ...episode, daysUntil: days - todayDays };
+}
+function releaseWhen(date, daysUntil) {
+  if (daysUntil === 0) {
+    return `releases today (${date})`;
+  }
+  return daysUntil > 0 ? `releases ${date}, in ${plural(daysUntil, "day")},` : `was due ${date}, ${plural(-daysUntil, "day")} ago,`;
+}
+function formatNextRelease(release) {
+  if (!release) {
+    return null;
+  }
+  if (release.next === null) {
+    return "Next release: none scheduled after today";
+  }
+  const { episode, chapter, date, daysUntil, drafted } = release.next;
+  const when = daysUntil === 0 ? "today" : `in ${plural(daysUntil, "day")}`;
+  const state = chapter === null ? "no chapter yet" : drafted ? "drafted" : "not drafted";
+  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state})`;
+}
+function formatDate(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
+}
+
 // src/progress.js
 var PROGRESS_FILE = "progress.md";
 var PACE_SESSIONS = 7;
@@ -11666,7 +11764,7 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
       result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
       const daysNeeded = Math.ceil(result.remaining / result.pace);
       if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
-        result.projected = formatDate(todayDays + daysNeeded);
+        result.projected = formatDate2(todayDays + daysNeeded);
       }
     }
   }
@@ -11726,13 +11824,13 @@ function computeDaily({ measured, length, todayDays, dailyTarget, scheduled, wee
       }
       planned += isScheduled(day) ? 1 : 0;
     }
-    weeks.push({ start: formatDate(start), end: formatDate(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
+    weeks.push({ start: formatDate2(start), end: formatDate2(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
   }
   return {
     target: dailyTarget,
     writingDays: scheduled,
     today: {
-      date: formatDate(todayDays),
+      date: formatDate2(todayDays),
       scheduled: isScheduled(todayDays),
       written,
       remaining: dailyTarget === null || written === null ? null : Math.max(0, dailyTarget - written),
@@ -11764,6 +11862,10 @@ function formatProgress(progress) {
     } else {
       lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber2(perDay)} ${noun}s a day needed`);
     }
+  }
+  const release = formatNextRelease(progress.release);
+  if (release !== null) {
+    lines.push(release);
   }
   if (progress.lastSession) {
     const { date, since } = progress.lastSession;
@@ -11819,11 +11921,19 @@ function formatDaily(daily, hasSessions, noun) {
   }
   return lines;
 }
+function todayOption(date, command) {
+  const today = date === undefined ? localDate() : String(date).trim();
+  const dateError = storyDateError(today);
+  if (dateError !== "" || today === "") {
+    throw usageError(`${command} --date ${dateError || "must be a YYYY-MM-DD date"}`);
+  }
+  return today;
+}
 function localDate(now = new Date) {
   const pad = (value) => String(value).padStart(2, "0");
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
-function formatDate(days) {
+function formatDate2(days) {
   return new Date(days * 86400000).toISOString().slice(0, 10);
 }
 function plural2(count, noun, format = String) {
@@ -12161,6 +12271,7 @@ function scanProject(root) {
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
+      releaseDate: typeof data["release-date"] === "string" ? data["release-date"].trim() : "",
       mode: String(data.mode ?? ""),
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
@@ -16094,14 +16205,14 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
-  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "time-skip", "choices"],
+  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "release-date", "time-skip", "choices"],
   scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
@@ -20115,7 +20226,7 @@ var TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "time-skip", "strand"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -20124,7 +20235,7 @@ var TEXT_FIELDS = {
   research: ["title"],
   matter: ["title", "rights-holder", "credit"]
 };
-var STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline"];
+var STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
 function validateTextFields(project, errors) {
   const check = (label, data, fields) => {
     for (const field of fields) {
@@ -20203,6 +20314,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateCliConfig(data, errors);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  validateReleaseCadence(data, errors);
   for (const problem of parseCalendar(data.calendar).problems) {
     errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
   }
@@ -20513,6 +20625,7 @@ function validateChapters(project, errors, warnings) {
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
     }
+    validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     validateNames(data, "author", label, errors);
     if ((Array.isArray(data.author) ? data.author : [data.author]).some(isPlaceholder)) {
@@ -20840,6 +20953,27 @@ function validateDeadline(data, errors) {
     if (deadlineError !== "") {
       errors.push(err("invalid-date", `story.md deadline ${deadlineError}`, "story.md"));
     }
+  }
+}
+function validateReleaseCadence(data, errors) {
+  const every = data["release-every"];
+  const start = data["release-start"];
+  if (every !== undefined) {
+    requireInteger(data, "release-every", "story.md", errors, 1);
+  }
+  validateReleaseDate(start, "story.md release-start", "story.md", errors);
+  if (every === undefined !== (start === undefined)) {
+    const [set, unset] = every === undefined ? ["release-start", "release-every"] : ["release-every", "release-start"];
+    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days from release-start`, "story.md"));
+  }
+}
+function validateReleaseDate(value, name, label, errors) {
+  if (value === undefined) {
+    return;
+  }
+  const problem = typeof value === "string" && value.trim() !== "" ? storyDateError(value) : "must be a YYYY-MM-DD date";
+  if (problem !== "") {
+    errors.push(err("invalid-date", `${name} ${problem}`, label));
   }
 }
 function validateDailyTarget(data, errors) {
@@ -21272,13 +21406,20 @@ function formatProjectReport(report, options = {}) {
 `;
 }
 function projectActions(root, options = {}) {
+  const today = todayOption(options.date, "next");
   const project = scanProject(root);
   const { validation, links, continuity } = projectChecks(project, options.overrides);
+  const schedule = projectRelease(project, today);
+  const releaseFindings = applySeverity({ ok: true, errors: [], warnings: schedule?.warnings ?? [] }, options.overrides);
+  const releaseActions = [...releaseFindings.errors, ...releaseFindings.warnings].map((finding) => action("P1", "Draft the scheduled episode", `${finding.message}: ${finding.file === "story.md" ? "add it with story add chapter" : "draft it under ## Chapter Text"}, then run story wordcount ${shellWord(options.displayPath ?? ".")} --write.`));
+  const actions = buildProjectActions(project, validation, links, continuity, options.displayPath, releaseActions);
   return {
     root: project.root,
     title: project.title,
     storyId: project.storyId,
-    actions: buildProjectActions(project, validation, links, continuity, options.displayPath),
+    release: releaseData(schedule),
+    releaseFindings,
+    actions,
     validation,
     links,
     continuity
@@ -21288,10 +21429,13 @@ function formatActionReport(report) {
   const lines = [
     `# Next Writing Actions: ${report.title}`,
     "",
-    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}, continuity ${formatCheck(report.continuity)}`,
-    "",
-    "Actions:"
+    `Checks: validate ${formatCheck(report.validation)}, links ${formatCheck(report.links)}, continuity ${formatCheck(report.continuity)}`
   ];
+  const release = formatNextRelease(report.release);
+  if (release !== null) {
+    lines.push(release);
+  }
+  lines.push("", "Actions:");
   appendActionLines(lines, report.actions);
   return `${lines.join(`
 `)}
@@ -21315,10 +21459,10 @@ function formatDoctorReport(report) {
 `)}
 `;
 }
-function buildProjectActions(project, validation, links, continuity, displayPath = ".") {
+function buildProjectActions(project, validation, links, continuity, displayPath = ".", releaseActions = []) {
   const where = shellWord(displayPath);
   const passesCommand = where === "." ? "story passes" : `story passes ${where}`;
-  const actions = [];
+  const actions = [...releaseActions];
   if (validation.errors.length > 0) {
     actions.push(action("P0", "Fix validation errors", `Run story validate ${where} and repair ${validation.errors.length} schema or registry errors.`));
   }
@@ -25933,11 +26077,7 @@ function textDocument(file, name, prose = null) {
   return { file: name, path: file, paragraphs };
 }
 function projectProgress(root, options = {}) {
-  const today = options.date === undefined ? localDate() : String(options.date).trim();
-  const dateError = storyDateError(today);
-  if (dateError !== "" || today.trim() === "") {
-    throw usageError(`progress --date ${dateError || "must be a YYYY-MM-DD date"}`);
-  }
+  const today = todayOption(options.date, "progress");
   const weeks = historyWeeks(options);
   let project = scanProject(root);
   const words = project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
@@ -25970,12 +26110,14 @@ function projectProgress(root, options = {}) {
   }
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
+  validateReleaseCadence(data, errors);
+  const release = projectRelease(project, today);
   const target = data[unit.targetField];
   const dailyTarget = data[unit.dailyTargetField];
   return {
     ok: errors.length === 0,
     errors,
-    warnings: sessionsWithoutCharacters(project),
+    warnings: [...sessionsWithoutCharacters(project), ...release?.warnings ?? []],
     logged,
     ...computeProgress({
       unit: unit.name,
@@ -25989,7 +26131,8 @@ function projectProgress(root, options = {}) {
       weeks,
       chapters: project.chapters.map((chapter) => ({ id: chapter.id, words: chapter.wordCount, characters: chapter.count, target: chapter.targetCount })),
       sessions: cleanSessions(project.progressLog?.data.sessions)
-    })
+    }),
+    release: releaseData(release)
   };
 }
 function progressLogFile(sessions, unit) {
@@ -28074,13 +28217,13 @@ var COMMANDS = [
   {
     name: "next",
     usage: "next [path]",
-    summary: ["Recommend the next writing and maintenance actions"],
+    summary: ["Recommend the next writing and maintenance actions,", "and the next serial release (--date for today)"],
     project: "positional",
-    options: ["json"],
+    options: ["date", "json"],
     run({ parsed, io, root, overrides }) {
-      const report = projectActions(root(), { displayPath: displayPath2(parsed), overrides });
+      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath2(parsed), overrides, date: parsed.options.date });
       if (wantsJson(parsed)) {
-        return reportProjectJson(io, "next", report);
+        return reportProjectJson(io, "next", report, { diagnostics: diagnosticsFrom(releaseFindings, "next") });
       }
       io.stdout.write(formatActionReport(report));
       return 0;
@@ -28589,10 +28732,10 @@ function passesData(result, where) {
 function checkCounts(result) {
   return { errors: result.errors.length, warnings: result.warnings.length, dismissed: (result.dismissed ?? []).length };
 }
-function reportProjectJson(io, command, report, { ok = true, writes = [] } = {}) {
+function reportProjectJson(io, command, report, { ok = true, writes = [], diagnostics: own = [] } = {}) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
-  const diagnostics = Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name));
+  const diagnostics = [...Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name)), ...own];
   return writeJsonResult(io, {
     command,
     ok,

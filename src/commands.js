@@ -780,13 +780,13 @@ export const COMMANDS = [
   {
     name: "next",
     usage: "next [path]",
-    summary: ["Recommend the next writing and maintenance actions"],
+    summary: ["Recommend the next writing and maintenance actions,", "and the next serial release (--date for today)"],
     project: "positional",
-    options: ["json"],
+    options: ["date", "json"],
     run({ parsed, io, root, overrides }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
+      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath(parsed), overrides, date: parsed.options.date });
       if (wantsJson(parsed)) {
-        return reportProjectJson(io, "next", report);
+        return reportProjectJson(io, "next", report, { diagnostics: diagnosticsFrom(releaseFindings, "next") });
       }
       io.stdout.write(formatActionReport(report));
       return 0;
@@ -1404,10 +1404,11 @@ function checkCounts(result) {
 // uniqueCheckFindings), and the data summarizes each check. These commands
 // exit 0 whatever the checks find, so ok is true, except doctor --fix, which
 // passes its own ok and the files it wrote.
-function reportProjectJson(io, command, report, { ok = true, writes = [] } = {}) {
+// `diagnostics` are the command's own findings, after the checks'.
+function reportProjectJson(io, command, report, { ok = true, writes = [], diagnostics: own = [] } = {}) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
-  const diagnostics = Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name));
+  const diagnostics = [...Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name)), ...own];
   return writeJsonResult(io, {
     command,
     ok,

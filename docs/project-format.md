@@ -364,6 +364,8 @@ tense: past
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `daily-target-words` | integer ≥ 1 | no | Words a writing day aims for. `story progress` reports today's words against it, and a day counts toward the streak only when it reaches it. A book [counted in characters](#counting-in-characters) sets `daily-target-characters` instead. |
 | `writing-days` | list of weekdays | no | The days you plan to write: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, or the full names, in any letter case. A day not listed never breaks the `story progress` streak. Unset or `[]` means every day. |
+| `release-every` | integer ≥ 1 | no | Days between a serial's episodes, such as `7` for weekly or `14` for fortnightly. Needs `release-start`. See [Release schedule](#release-schedule). |
+| `release-start` | `YYYY-MM-DD` | no | The real-world day episode 1 releases. Needs `release-every`. Always a Gregorian date, even with a `calendar`. |
 | `calendar` | list of mappings | no | A secondary world's months, weekdays, and eras. Chapter and scene dates are then written in it, such as `3 Thaw 302 AE`. See [Custom calendars](#custom-calendars). |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
@@ -414,6 +416,32 @@ Japanese has no official lines. 中編 is usually about 100 to 300 sheets of 400
 Another language counted in characters (`count-unit: characters`) has no ranges, so its length is not checked against its form.
 
 The [premise-workshop skill](../skills/premise-workshop/SKILL.md) helps choose a form.
+
+### Release schedule
+
+A serial can record when each episode goes out. Each chapter is an episode, in reading order: the first chapter is episode 1. Set a cadence in `story.md`, and give a chapter its own `release-date` only when it moves off the cadence, such as a holiday week:
+
+```yaml
+# story.md
+form: serial
+release-every: 7          # days between episodes
+release-start: 2026-09-04 # episode 1
+```
+
+```yaml
+# chapters/chapter-06.md
+release-date: 2026-10-12  # episode 6, three days late this once; episode 7 stays on 2026-10-16
+```
+
+Episode *n* is due `release-start` plus (*n* − 1) × `release-every` days, unless its chapter sets `release-date`. A book with no cadence can schedule episodes with `release-date` alone. Release dates are real-world days, so they are always `YYYY-MM-DD` even when the book has a [custom calendar](#custom-calendars), and `story validate` errors on an impossible day such as `2026-02-30`, and on `release-every` or `release-start` set without the other.
+
+[`story progress`](cli-reference.md#progress) and [`story next`](cli-reference.md#next) then print the next release, the first one today or later:
+
+```text
+Next release: episode 3 (chapter-03) on 2026-09-18, in 4 days (drafted)
+```
+
+An episode counts as drafted once its chapter has prose. Both commands warn with `release-undrafted` when an episode is due within 3 days, or was due already, and its chapter has no prose. With a cadence, the episodes after the last chapter are scheduled too, so the next release can be one with no chapter yet, and a due episode with no chapter is warned about once, with a count of any more behind it. `--date YYYY-MM-DD` sets "today". `story validate` and `story check` never report it, since it depends on the day they run.
 
 ### Revision passes
 
@@ -805,6 +833,7 @@ word-count: 1489
 | `episode-question` | string | no | The installment's dramatic question, for serial fiction. |
 | `time-skip` | string | no | Free-form `from → to` note of a skipped interval. Not checked. |
 | `hook` | enum | no | How the chapter ending pulls the reader on: `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, or `resolution`. Set it with `story add chapter --hook <name>`. Read by [`story pacing`](#pacing). |
+| `release-date` | `YYYY-MM-DD` | no | For a serial: the real-world day this episode releases, overriding the `story.md` cadence for this chapter only. Always a Gregorian date, even with a `calendar`. See [Release schedule](#release-schedule). |
 | `choices` | list of mappings | no | For a branching story: the choices that end the chapter, each `text` (what the reader picks) and `to` (the chapter it leads to). See [Branching chapters](#branching-chapters). |
 
 `story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. A `pov` also listed in `mentions` narrates without appearing, as a ghost or posthumous narrator does, so it is not a posthumous appearance. It also warns when the `pov` character is in neither `characters` nor `mentions`, when chapter numbers skip, and when a drafted chapter's prose names a character it lists in none of `pov`, `characters`, or `mentions` (see [`story mentions`](continuity.md#story-mentions)). `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
