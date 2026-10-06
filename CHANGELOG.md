@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-06
+
 ### Changed
 
 - Skills now ask before they cut, remove, or tag prose. revision-continuity's revision plan names each scene, subplot, or passage it would cut, fold, or move, and the skill waits for the user's approval before editing; the removability audit and length pass propose cuts rather than make them, and the length pass writes chapter `target-words` budgets only once the plan is approved. A single edit the user has already spelled out counts as approved. interactive-fiction fixes `unreachable-chapter` with a choice that leads there, and removes a chapter only as one approved step after a snapshot and a `--dry-run` of each scene and the chapter, listing any `died-in`, `since`, `learned-in`, or progression `from` that would block it; a new Hard Rule repeats this. feedback-triage checks that `.gitignore` lists `dist/`, shows `git status` for the project folder, and, with approval, commits that folder before it tags a feedback round, so the tag holds the text the review copy was built from; a project without git, or a user who declines the commit, takes a `story snapshot` instead and maps old labels with `story compare --snapshot`. ([#543](https://github.com/danjdewhurst/story-skills/issues/543))
@@ -366,7 +368,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.22.1...HEAD
+[0.22.1]: https://github.com/danjdewhurst/story-skills/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/danjdewhurst/story-skills/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/danjdewhurst/story-skills/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/danjdewhurst/story-skills/compare/v0.19.0...v0.20.0

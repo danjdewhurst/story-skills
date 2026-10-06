@@ -27,7 +27,7 @@ permissions:
 
 env:
   STORY_DIR: "."
-  STORY_VERSION: "0.22.0"
+  STORY_VERSION: "0.22.1"
   # To run the CLI from GitHub instead of npm (an unreleased fix, a fork),
   # uncomment STORY_PACKAGE and point it at a tag, branch, or commit; it
   # replaces story-skills@$STORY_VERSION in the install step.
