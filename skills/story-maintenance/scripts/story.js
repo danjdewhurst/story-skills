@@ -11793,23 +11793,45 @@ var RENAME_COLLECTIONS = {
   term: ["glossaryTerms", "term"]
 };
 var NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
+function renameForms(project, kind, id, newName, pack, titles) {
+  const [collection, field] = RENAME_COLLECTIONS[kind];
+  const entity = project[collection].find((entry) => entry.id === id);
+  const oldName = nfc(String(entity?.[field] ?? "").trim());
+  const target = String(newName).trim();
+  const oldBare = withoutTitles(oldName, titles, pack);
+  const targetBare = withoutTitles(target, titles, pack);
+  const forms = [[oldName, oldBare === oldName ? targetBare : target], [oldBare, targetBare]];
+  const given = kind === "character" ? givenName(oldName, pack) : "";
+  if (given !== "") {
+    forms.push([given, givenName(target, pack) || target]);
+  }
+  return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+}
+function renameClash(forms, names, kind, id, pack) {
+  const others = new Map;
+  for (const entry of names) {
+    if (entry.kind !== kind || entry.id !== id) {
+      others.set(lowerCase(entry.name, pack), entry);
+    }
+  }
+  for (const { from, to } of forms) {
+    const other = nfc(to) === from ? undefined : others.get(lowerCase(nfc(to), pack));
+    if (other) {
+      return { name: to, kind: other.kind, id: other.id };
+    }
+  }
+  return null;
+}
 function proseRenames(project, kind, id, newName) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
-  const [collection, field] = RENAME_COLLECTIONS[kind];
-  const entity = project[collection].find((entry) => entry.id === id);
-  const result = { files: new Map, edits: [], aliases: 0, shared: [] };
-  const oldName = nfc(String(entity?.[field] ?? "").trim());
-  const target = String(newName).trim();
-  const forms = [[oldName, target], [withoutTitles(oldName, titles, pack), withoutTitles(target, titles, pack)]];
-  if (kind === "character") {
-    const given = givenName(oldName, pack);
-    if (given !== "") {
-      forms.push([given, givenName(target, pack) || target]);
-    }
-  }
-  const matchers = forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+  const forms = renameForms(project, kind, id, newName, pack, titles);
   const names = mentionNames(project);
+  const clash = renameClash(forms, names, kind, id, pack);
+  if (clash) {
+    return { clash };
+  }
+  const result = { files: new Map, edits: [], aliases: 0, shared: [] };
   const drafted = project.chapters.filter((entry) => entry.status !== "outline").map((chapter) => [chapter, chapterText(project, chapter)]).filter(([, prose]) => prose !== null);
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
@@ -11824,19 +11846,20 @@ function proseRenames(project, kind, id, newName) {
         return;
       }
       const written = nfc(mention.text);
-      const form = matchers.find(({ pattern }) => pattern.test(written));
+      const form = forms.find(({ pattern }) => pattern.test(written));
       if (!form) {
         result.aliases += 1;
         return;
       }
-      const replacement = renamedText(written, form.from, form.to, pack);
+      const replacement = renamedText(written, form.from, form.to, pack, titles);
       if (replacement === mention.text) {
         return;
       }
       const start = prose.offset + mention.start;
       next += `${prose.raw.slice(copied, start)}${replacement}`;
       copied = prose.offset + mention.end;
-      result.edits.push({ ...where, from: mention.text, to: replacement });
+      const endLine = where.line + (mention.text.match(/\n/gu)?.length ?? 0);
+      result.edits.push({ file, line: where.line, endLine, column: where.column, from: mention.text, to: replacement });
     });
     if (copied > 0) {
       result.files.set(chapter.file, { original: prose.raw, next: `${next}${prose.raw.slice(copied)}` });
@@ -11844,13 +11867,14 @@ function proseRenames(project, kind, id, newName) {
   }
   return result;
 }
-function renamedText(written, from, to, pack) {
+function renamedText(written, from, to, pack, titles) {
   const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);
   const words = to.split(/\s+/u);
   let text = words.map((word, index) => index === 0 ? word : `${gaps[index - 1] ?? " "}${word}`).join("");
   const [first] = Array.from(written);
   const [named] = Array.from(from);
-  if (first !== named) {
+  const opensWithTitle = (name) => Boolean(titles?.has(lowerCase(name.split(/\s+/u)[0], pack).replace(/[.’']/g, "")));
+  if (first !== named && opensWithTitle(from) === opensWithTitle(to)) {
     const [lead] = Array.from(text);
     const cased = first === upperCase(first, pack) ? upperCase(lead, pack) : lowerCase(lead, pack);
     text = `${cased}${text.slice(lead.length)}`;
@@ -21841,12 +21865,11 @@ function planProseRename(project, kind, id, name) {
   if (!MENTION_KINDS.includes(kind)) {
     throw usageError(`--prose does not apply to a ${kind}: it renames a character, location, faction, artifact, system, or term in chapter prose`);
   }
-  const others = existingNames(project).filter((entry) => !(entry.kind === kind && entry.id === id));
-  const [clash] = checkNames([name], others, project.pack ?? languagePack()).errors;
-  if (clash) {
-    throw refusedError(`${clash.message}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
-  }
   const found = proseRenames(project, kind, id, name);
+  if (found.clash) {
+    const { clash } = found;
+    throw refusedError(`"${clash.name}" is already a name of ${clash.kind} ${clash.id}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
+  }
   const warnings = found.shared.length === 0 ? [] : [warn("prose-name-shared", `--prose left ${found.shared.length} ${found.shared.length === 1 ? "name" : "names"} that ${kind} ${id} shares with another entity as written: ${found.shared.map((entry) => `${entry.file}:${entry.line}:${entry.column}`).join(", ")}. Check them`)];
   return { ...found, warnings };
 }
@@ -25813,7 +25836,7 @@ function formatProseRenames(result) {
   }
   const { edits, aliases } = result.prose;
   const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
-  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}
+  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}${edit.endLine > edit.line ? ` (wraps to line ${edit.endLine})` : ""}
 `);
   const files = new Set(edits.map((edit) => edit.file)).size;
   const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;

@@ -331,37 +331,72 @@ const RENAME_COLLECTIONS = {
 // The spaces, or the one line break, between two words of a name in prose.
 const NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
 
+// story rename --prose: the forms of entity `kind` `id`'s name that prose
+// may use, each with the form of `newName` it becomes, the longest first.
+// The full name and the name without its titles ("Edran Vale" for "Captain
+// Edran Vale") become the new name in the same form, and a character's
+// given name alone becomes the new given name. An old name with no titles
+// becomes the new name without its titles too, since a title the prose
+// puts before it ("Captain Edran Vale" for a character named "Edran Vale")
+// stays in the prose.
+function renameForms(project, kind, id, newName, pack, titles) {
+  const [collection, field] = RENAME_COLLECTIONS[kind];
+  const entity = project[collection].find((entry) => entry.id === id);
+  const oldName = nfc(String(entity?.[field] ?? "").trim());
+  const target = String(newName).trim();
+  const oldBare = withoutTitles(oldName, titles, pack);
+  const targetBare = withoutTitles(target, titles, pack);
+  const forms = [[oldName, oldBare === oldName ? targetBare : target], [oldBare, targetBare]];
+  const given = kind === "character" ? givenName(oldName, pack) : "";
+  if (given !== "") {
+    forms.push([given, givenName(target, pack) || target]);
+  }
+  return forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+}
+
+// The first name a rename would write into the prose that is already a
+// name, alias, or given name of another entity, as { name, kind, id }, or
+// null. A form the rename leaves as it is (a surname-only change keeps the
+// given name) is not checked, since the prose already shares it.
+function renameClash(forms, names, kind, id, pack) {
+  const others = new Map();
+  for (const entry of names) {
+    if (entry.kind !== kind || entry.id !== id) {
+      others.set(lowerCase(entry.name, pack), entry);
+    }
+  }
+  for (const { from, to } of forms) {
+    const other = nfc(to) === from ? undefined : others.get(lowerCase(nfc(to), pack));
+    if (other) {
+      return { name: to, kind: other.kind, id: other.id };
+    }
+  }
+  return null;
+}
+
 // story rename --prose: the edits that rename entity `kind` `id` to
-// `newName` in drafted chapter prose, found as story mentions finds them.
-// The full name, or the name without its titles ("Edran Vale" for "Captain
-// Edran Vale"), becomes the new one in the same form, and a character's
-// given name alone becomes the new given name. Aliases are left as
-// written, since a nickname usually outlives a change of name, and so is a
-// span the name shares with another entity, which `shared` lists. A
-// possessive or hyphenated suffix stays, since it lies outside the match.
-// Returns { files, edits, aliases, shared }: `files` maps each chapter file
-// to { original, next }, `edits` lists each replacement as { file, line,
-// column, from, to }, `aliases` counts the alias mentions left, and
-// `shared` lists the shared spans as { file, line, column, text }.
+// `newName` in drafted chapter prose, found as story mentions finds them,
+// with each form of the name replaced as renameForms gives it. Aliases are
+// left as written, since a nickname usually outlives a change of name, and
+// so is a span the name shares with another entity, which `shared` lists.
+// A possessive or hyphenated suffix stays, since it lies outside the match.
+// Returns { clash } when the new name would be another entity's in the
+// prose (see renameClash), and otherwise { files, edits, aliases, shared }:
+// `files` maps each chapter file to { original, next }, `edits` lists each
+// replacement as { file, line, endLine, column, from, to }, where endLine
+// is the last line of a name wrapped across lines, `aliases` counts the
+// alias mentions left, and `shared` lists the shared spans as { file,
+// line, column, text }.
 export function proseRenames(project, kind, id, newName) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
-  const [collection, field] = RENAME_COLLECTIONS[kind];
-  const entity = project[collection].find((entry) => entry.id === id);
-  const result = { files: new Map(), edits: [], aliases: 0, shared: [] };
-  const oldName = nfc(String(entity?.[field] ?? "").trim());
-  const target = String(newName).trim();
-  // Each form of the old name with the form of the new one it becomes, the
-  // longest first.
-  const forms = [[oldName, target], [withoutTitles(oldName, titles, pack), withoutTitles(target, titles, pack)]];
-  if (kind === "character") {
-    const given = givenName(oldName, pack);
-    if (given !== "") {
-      forms.push([given, givenName(target, pack) || target]);
-    }
-  }
-  const matchers = forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+  const forms = renameForms(project, kind, id, newName, pack, titles);
   const names = mentionNames(project);
+  const clash = renameClash(forms, names, kind, id, pack);
+  if (clash) {
+    return { clash };
+  }
+  const result = { files: new Map(), edits: [], aliases: 0, shared: [] };
   // A chapter that cannot be read is left out; the scan has reported it.
   const drafted = project.chapters.filter((entry) => entry.status !== "outline")
     .map((chapter) => [chapter, chapterText(project, chapter)])
@@ -379,19 +414,20 @@ export function proseRenames(project, kind, id, newName) {
         return;
       }
       const written = nfc(mention.text);
-      const form = matchers.find(({ pattern }) => pattern.test(written));
+      const form = forms.find(({ pattern }) => pattern.test(written));
       if (!form) {
         result.aliases += 1;
         return;
       }
-      const replacement = renamedText(written, form.from, form.to, pack);
+      const replacement = renamedText(written, form.from, form.to, pack, titles);
       if (replacement === mention.text) {
         return;
       }
       const start = prose.offset + mention.start;
       next += `${prose.raw.slice(copied, start)}${replacement}`;
       copied = prose.offset + mention.end;
-      result.edits.push({ ...where, from: mention.text, to: replacement });
+      const endLine = where.line + (mention.text.match(/\n/gu)?.length ?? 0);
+      result.edits.push({ file, line: where.line, endLine, column: where.column, from: mention.text, to: replacement });
     });
     if (copied > 0) {
       result.files.set(chapter.file, { original: prose.raw, next: `${next}${prose.raw.slice(copied)}` });
@@ -401,19 +437,22 @@ export function proseRenames(project, kind, id, newName) {
 }
 
 // `to` in the shape of `written`, the prose's match for name form `from`:
-// with its first letter cased as `written`'s when that differs from
+// with `written`'s gaps between words, so a name wrapped across lines
+// keeps its line break where the new name has words to keep it between,
+// and with its first letter cased as `written`'s when that differs from
 // `from`'s ("the Hollow", or "Rose" opening a sentence for a name written
-// "rose"), and with `written`'s gaps between words, so a name wrapped
-// across lines keeps its line break where the new name has words to keep
-// it between. Only the first letter can differ, since a name matches as
-// written otherwise.
-function renamedText(written, from, to, pack) {
+// "rose"). Only the first letter can differ, since a name matches as
+// written otherwise, and its case carries over only when `from` and `to`
+// both open with a title or article or neither does, so "the Hollow"
+// renamed to "Deep" is "Deep", not "deep".
+function renamedText(written, from, to, pack, titles) {
   const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);
   const words = to.split(/\s+/u);
   let text = words.map((word, index) => (index === 0 ? word : `${gaps[index - 1] ?? " "}${word}`)).join("");
   const [first] = Array.from(written);
   const [named] = Array.from(from);
-  if (first !== named) {
+  const opensWithTitle = (name) => Boolean(titles?.has(lowerCase(name.split(/\s+/u)[0], pack).replace(/[.’']/g, "")));
+  if (first !== named && opensWithTitle(from) === opensWithTitle(to)) {
     const [lead] = Array.from(text);
     const cased = first === upperCase(first, pack) ? upperCase(lead, pack) : lowerCase(lead, pack);
     text = `${cased}${text.slice(lead.length)}`;

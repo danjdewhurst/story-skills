@@ -2435,16 +2435,16 @@ Renamed chapter chapter-01 to chapter-01: ~/stories/the-salt-road/chapters/chapt
 
 `--prose` also replaces the old name in the prose of every drafted chapter (not `outline` ones), at each place [`story mentions`](#mentions) finds it for a character, location, faction, artifact, system, or glossary term, so outlines, HTML comments, and code fences are left alone and names match in NFC, as written, and as whole words. What each match becomes:
 
-- The full name becomes the new name, and the name without its leading titles or articles ("Edran Vale" of "Captain Edran Vale", "Hollow" of "The Hollow") becomes the new name without its titles.
+- The full name becomes the new name, and the name without its leading titles or articles ("Edran Vale" of "Captain Edran Vale", "Hollow" of "The Hollow") becomes the new name without its titles. When the old name has no titles, the new name's titles are left out too, so a title the prose adds stays single ("Captain Edran Vale" for a character named "Edran Vale" becomes "Captain Mara Holt", not "Captain Captain Mara Holt").
 - A character's given name alone ("Edran") becomes the new name's given name.
 - Aliases are left as written, since a nickname usually outlives a change of name, and the end of the line reports how many.
 - A possessive or hyphenated suffix stays (`Edran's` becomes `Mara's`, `Vale-born` keeps `-born`).
-- A first letter cased differently from the name is cased the same way in the replacement ("the Hollow" becomes "the Deep"). Other case is not matched, so a name in all capitals is left as written.
+- A first letter cased differently from the name is cased the same way in the replacement ("the Hollow" becomes "the Deep"), unless only one of the two names opens with a title or article: "the Hollow" renamed to "Deep" becomes "Deep". Other case is not matched, so a name in all capitals is left as written.
 - A name wrapped across lines keeps its line break between the new name's words.
 - The replacement is written as you typed the new name.
 - A place two entities' names share (two characters called Ann, say) is left as written, with a `prose-name-shared` warning that lists it.
 
-Each replacement is printed as `file:line:column: old → new`, with the old file's line and column, and with `--dry-run` before the list of files; `--json` gives them in `data.prose.edits` (`file`, `line`, `column`, `from`, `to`), with `data.prose.aliases` and `data.prose.shared` counting the matches left alone. `--prose` refuses (exit 4, nothing changed) a new name, or a character's new given name, that another entity already has as a name, given name, or alias, as [`story names`](#names) reports a clash, since the text would then give two entities one name; it is a usage error for chapters and scenes.
+Each replacement is printed as `file:line:column: old → new`, with the old file's line and column, ending `(wraps to line N)` for a name wrapped across lines, and with `--dry-run` before the list of files; `--json` gives them in `data.prose.edits` (`file`, `line`, `endLine`, `column`, `from`, `to`), with `data.prose.aliases` and `data.prose.shared` counting the matches left alone. `--prose` refuses (exit 4, nothing changed) when a form it would write (the new name, the new name without its titles, or a character's new given name) is already a name, alias, or given name of another entity, cut characters included, since the text would then give two entities one name: `"Ann" is already a name of character ann-lee, so --prose would give two entities one name in the text; choose another name, or rename without --prose`. A form the rename does not change, such as the given name in a surname-only rename, is not checked. It is a usage error for chapters and scenes.
 
 ```text
 $ story rename character ilse-marrow "Ilse Varrow" --prose --dry-run
