@@ -52,6 +52,8 @@ import { warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile } from "./exemptions.js";
 import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
 import { projectActions } from "./report.js";
+import { MENTION_KINDS, proseRenames } from "./mentions.js";
+import { checkNames, existingNames } from "./names.js";
 import {
   STORY_SCHEMA_VERSION,
   REQUIRED_PATHS,
@@ -1210,17 +1212,33 @@ function renameEntityUnlocked(root, options) {
     throw usageError(`${kind} ${oldId} does not exist`);
   }
   let warnings = [];
+  const prose = options.prose ? planProseRename(project, kind, oldId, name) : null;
+  const proseFiles = prose?.files ?? new Map();
 
   const markdown = readMarkdown(oldFile, project.root);
 
   const data = { ...markdown.data, [config.titleField]: name };
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
-    writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    assertWritable(project.root, [oldFile, ...proseFiles.keys()]);
+    commitWrites(() => {
+      for (const [file, { original, next }] of proseFiles) {
+        writeFile(file, next, { root: project.root, unchangedFrom: original });
+      }
+      writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    });
   } else {
     // Plan every rewrite before touching disk so a parse failure leaves the
-    // project unchanged.
-    const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
+    // project unchanged. Chapters renamed in prose are planned from their
+    // new text, and written only if they still hold the text it came from.
+    const overrides = new Map([[oldFile, retitled]]);
+    for (const [file, { next }] of proseFiles) {
+      overrides.set(file, next);
+    }
+    const plan = replaceEntityReferences(project.root, kind, oldId, newId, overrides);
+    for (const [file, { original }] of proseFiles) {
+      plan.originals.set(file, original);
+    }
     followExemptionPatterns(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
@@ -1253,7 +1271,29 @@ function renameEntityUnlocked(root, options) {
     warnings = warnings.concat(linkedBookIdWarnings(project, kind, oldId, newId));
   }
   const reindexed = reindexProject(project.root);
-  return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
+  const result = { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
+  if (prose) {
+    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length };
+    result.warnings = warnings.concat(prose.warnings);
+  }
+  return result;
+}
+
+// rename --prose: the chapter prose edits for the new name (see
+// proseRenames), after refusing a kind with no name in prose and a new name
+// that is already another entity's, which would merge the two in the text.
+function planProseRename(project, kind, id, name) {
+  if (!MENTION_KINDS.includes(kind)) {
+    throw usageError(`--prose does not apply to a ${kind}: it renames a character, location, faction, artifact, system, or term in chapter prose`);
+  }
+  const others = existingNames(project).filter((entry) => !(entry.kind === kind && entry.id === id));
+  const [clash] = checkNames([name], others, project.pack ?? languagePack()).errors;
+  if (clash) {
+    throw refusedError(`${clash.message}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
+  }
+  const found = proseRenames(project, kind, id, name);
+  const warnings = found.shared.length === 0 ? [] : [warn("prose-name-shared", `--prose left ${found.shared.length} ${found.shared.length === 1 ? "name" : "names"} that ${kind} ${id} shares with another entity as written: ${found.shared.map((entry) => `${entry.file}:${entry.line}:${entry.column}`).join(", ")}. Check them`)];
+  return { ...found, warnings };
 }
 
 const SERIES_CANON_COLLECTIONS = {

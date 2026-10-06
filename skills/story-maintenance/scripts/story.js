@@ -626,6 +626,7 @@ var FINDING_CODES = {
   "scene-no-setting": "warning",
   "unknown-reference": "warning",
   "adopted-references": "warning",
+  "prose-name-shared": "warning",
   "linked-book-id": "warning",
   "choices-dropped": "warning",
   "leftover-references": "warning",
@@ -9066,6 +9067,7 @@ var OPTIONS = [
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
   { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, snapshot, passes, progress --log,", "diagram or synopsis --out, export, build, init,", "or import would create, update, or delete, and", "change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
+  { name: "prose", help: ["For rename: also replace the entity's name and", "given name in drafted chapter prose (not its", "aliases)"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
   { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene"] },
   { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
@@ -11562,13 +11564,14 @@ function mentionNames(project) {
   for (const entry of existingNames(project, { cut: true })) {
     const name = nfc(entry.name);
     add(entry.kind, entry.id, name);
-    const words = name.split(/\s+/);
-    const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
-    if (titles && first > 0) {
-      add(entry.kind, entry.id, words.slice(first).join(" "));
-    }
+    add(entry.kind, entry.id, withoutTitles(name, titles, pack));
   }
   return names;
+}
+function withoutTitles(name, titles, pack) {
+  const words = name.split(/\s+/);
+  const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
+  return titles && first > 0 ? words.slice(first).join(" ") : name;
 }
 function namePattern(name, pack) {
   const words = name.split(/\s+/);
@@ -11780,6 +11783,79 @@ function formatMentions(report) {
   return `${lines.join(`
 `)}
 `;
+}
+var RENAME_COLLECTIONS = {
+  character: ["characters", "name"],
+  location: ["locations", "name"],
+  faction: ["factions", "name"],
+  artifact: ["artifacts", "name"],
+  system: ["systems", "name"],
+  term: ["glossaryTerms", "term"]
+};
+var NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
+function proseRenames(project, kind, id, newName) {
+  const pack = project.pack ?? languagePack();
+  const titles = checkSet(pack, "titleWords");
+  const [collection, field] = RENAME_COLLECTIONS[kind];
+  const entity = project[collection].find((entry) => entry.id === id);
+  const result = { files: new Map, edits: [], aliases: 0, shared: [] };
+  const oldName = nfc(String(entity?.[field] ?? "").trim());
+  const target = String(newName).trim();
+  const forms = [[oldName, target], [withoutTitles(oldName, titles, pack), withoutTitles(target, titles, pack)]];
+  if (kind === "character") {
+    const given = givenName(oldName, pack);
+    if (given !== "") {
+      forms.push([given, givenName(target, pack) || target]);
+    }
+  }
+  const matchers = forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+  const names = mentionNames(project);
+  const drafted = project.chapters.filter((entry) => entry.status !== "outline").map((chapter) => [chapter, chapterText(project, chapter)]).filter(([, prose]) => prose !== null);
+  for (const [chapter, prose] of drafted) {
+    const file = projectPath(project.root, chapter.file);
+    const own = findMentions(prose.text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
+    const located = locateMentions(prose, own);
+    let next = "";
+    let copied = 0;
+    own.forEach((mention, index) => {
+      const where = { file, line: located[index].line, column: located[index].column };
+      if (mention.entities.length > 1) {
+        result.shared.push({ ...where, text: mention.text });
+        return;
+      }
+      const written = nfc(mention.text);
+      const form = matchers.find(({ pattern }) => pattern.test(written));
+      if (!form) {
+        result.aliases += 1;
+        return;
+      }
+      const replacement = renamedText(written, form.from, form.to, pack);
+      if (replacement === mention.text) {
+        return;
+      }
+      const start = prose.offset + mention.start;
+      next += `${prose.raw.slice(copied, start)}${replacement}`;
+      copied = prose.offset + mention.end;
+      result.edits.push({ ...where, from: mention.text, to: replacement });
+    });
+    if (copied > 0) {
+      result.files.set(chapter.file, { original: prose.raw, next: `${next}${prose.raw.slice(copied)}` });
+    }
+  }
+  return result;
+}
+function renamedText(written, from, to, pack) {
+  const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);
+  const words = to.split(/\s+/u);
+  let text = words.map((word, index) => index === 0 ? word : `${gaps[index - 1] ?? " "}${word}`).join("");
+  const [first] = Array.from(written);
+  const [named] = Array.from(from);
+  if (first !== named) {
+    const [lead] = Array.from(text);
+    const cased = first === upperCase(first, pack) ? upperCase(lead, pack) : lowerCase(lead, pack);
+    text = `${cased}${text.slice(lead.length)}`;
+  }
+  return text;
 }
 
 // src/continuity.js
@@ -21708,13 +21784,28 @@ function renameEntityUnlocked(root, options) {
     throw usageError(`${kind} ${oldId} does not exist`);
   }
   let warnings = [];
+  const prose = options.prose ? planProseRename(project, kind, oldId, name) : null;
+  const proseFiles = prose?.files ?? new Map;
   const markdown = readMarkdown(oldFile, project.root);
   const data = { ...markdown.data, [config.titleField]: name };
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
-    writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    assertWritable(project.root, [oldFile, ...proseFiles.keys()]);
+    commitWrites(() => {
+      for (const [file, { original, next }] of proseFiles) {
+        writeFile(file, next, { root: project.root, unchangedFrom: original });
+      }
+      writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+    });
   } else {
-    const plan = replaceEntityReferences(project.root, kind, oldId, newId, new Map([[oldFile, retitled]]));
+    const overrides = new Map([[oldFile, retitled]]);
+    for (const [file, { next }] of proseFiles) {
+      overrides.set(file, next);
+    }
+    const plan = replaceEntityReferences(project.root, kind, oldId, newId, overrides);
+    for (const [file, { original }] of proseFiles) {
+      plan.originals.set(file, original);
+    }
     followExemptionPatterns(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
@@ -21739,7 +21830,25 @@ function renameEntityUnlocked(root, options) {
     warnings = warnings.concat(linkedBookIdWarnings(project, kind, oldId, newId));
   }
   const reindexed = reindexProject(project.root);
-  return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
+  const result = { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
+  if (prose) {
+    result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length };
+    result.warnings = warnings.concat(prose.warnings);
+  }
+  return result;
+}
+function planProseRename(project, kind, id, name) {
+  if (!MENTION_KINDS.includes(kind)) {
+    throw usageError(`--prose does not apply to a ${kind}: it renames a character, location, faction, artifact, system, or term in chapter prose`);
+  }
+  const others = existingNames(project).filter((entry) => !(entry.kind === kind && entry.id === id));
+  const [clash] = checkNames([name], others, project.pack ?? languagePack()).errors;
+  if (clash) {
+    throw refusedError(`${clash.message}, so --prose would give two entities one name in the text; choose another name, or rename without --prose`);
+  }
+  const found = proseRenames(project, kind, id, name);
+  const warnings = found.shared.length === 0 ? [] : [warn("prose-name-shared", `--prose left ${found.shared.length} ${found.shared.length === 1 ? "name" : "names"} that ${kind} ${id} shares with another entity as written: ${found.shared.map((entry) => `${entry.file}:${entry.line}:${entry.column}`).join(", ")}. Check them`)];
+  return { ...found, warnings };
 }
 var SERIES_CANON_COLLECTIONS = {
   character: "characters",
@@ -25444,7 +25553,7 @@ var COMMANDS = [
     summary: ["Rename an entity and update id references"],
     project: "flag",
     args: Infinity,
-    options: ["id", ...WRITE_OPTIONS],
+    options: ["id", "prose", ...WRITE_OPTIONS],
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -25452,10 +25561,11 @@ var COMMANDS = [
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: nameWords2(parsed, 3, cwd, "rename").join(" ")
+        name: nameWords2(parsed, 3, cwd, "rename").join(" "),
+        prose: isTruthy(parsed.options.prose)
       };
       return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options), (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
-`);
+${formatProseRenames(result)}`, formatProseRenames);
     }
   },
   {
@@ -25645,7 +25755,7 @@ function passageRoot(parsed, cwd, required) {
   }
   return required || fs17.existsSync(path19.join(cwd, "story.md")) ? path19.resolve(cwd) : null;
 }
-function runWrite({ parsed, io, root, overrides }, command, write, describe) {
+function runWrite({ parsed, io, root, overrides }, command, write, describe, detail = () => "") {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const { result, changes } = runOrPreview(dryRun, projectRoot, write);
@@ -25659,7 +25769,7 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
       writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
-  io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
+  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result));
   return writeFindings(io, findings);
 }
 function runOrPreview(dryRun, projectRoot, write) {
@@ -25696,6 +25806,19 @@ function reportImportNotes(io, result) {
     io.stderr.write(`note: the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed. Run story links to find them.
 `);
   }
+}
+function formatProseRenames(result) {
+  if (!result.prose) {
+    return "";
+  }
+  const { edits, aliases } = result.prose;
+  const plural = (count, word, words = `${word}s`) => `${count} ${count === 1 ? word : words}`;
+  const lines = edits.map((edit) => `${edit.file}:${edit.line}:${edit.column}: ${edit.from.replace(/\s+/gu, " ")} → ${edit.to.replace(/\s+/gu, " ")}
+`);
+  const files = new Set(edits.map((edit) => edit.file)).size;
+  const summary = edits.length === 0 ? "No names to rename in chapter prose" : `Renamed ${plural(edits.length, "name")} in ${plural(files, "chapter")}`;
+  return `${lines.join("")}${summary}${aliases > 0 ? `; left ${plural(aliases, "alias", "aliases")} as written` : ""}
+`;
 }
 function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();

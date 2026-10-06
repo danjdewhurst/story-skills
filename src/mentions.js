@@ -3,7 +3,7 @@ import { projectPath } from "./files.js";
 import { checkSet, languagePack } from "./languages/index.js";
 import { lowerCase, upperCase } from "./languages/locale.js";
 import { escapeRegExp, maskMarkup, proseStart } from "./markdown.js";
-import { existingNames } from "./names.js";
+import { existingNames, givenName } from "./names.js";
 import { readMarkdown } from "./scan.js";
 import { nfc } from "./unicode.js";
 import { wholeWords, wordMatcher } from "./words.js";
@@ -49,13 +49,17 @@ export function mentionNames(project) {
   for (const entry of existingNames(project, { cut: true })) {
     const name = nfc(entry.name);
     add(entry.kind, entry.id, name);
-    const words = name.split(/\s+/);
-    const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
-    if (titles && first > 0) {
-      add(entry.kind, entry.id, words.slice(first).join(" "));
-    }
+    add(entry.kind, entry.id, withoutTitles(name, titles, pack));
   }
   return names;
+}
+
+// `name` without the titles and articles it opens with (`titles`, the
+// pack's `titleWords`), or `name` itself when it has none or is all titles.
+function withoutTitles(name, titles, pack) {
+  const words = name.split(/\s+/);
+  const first = words.findIndex((word) => !titles?.has(lowerCase(word, pack).replace(/[.’']/g, "")));
+  return titles && first > 0 ? words.slice(first).join(" ") : name;
 }
 
 // A name as a pattern for wordMatcher. Its words are apart by spaces, or by
@@ -313,4 +317,106 @@ export function formatMentions(report) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+const RENAME_COLLECTIONS = {
+  character: ["characters", "name"],
+  location: ["locations", "name"],
+  faction: ["factions", "name"],
+  artifact: ["artifacts", "name"],
+  system: ["systems", "name"],
+  term: ["glossaryTerms", "term"]
+};
+
+// The spaces, or the one line break, between two words of a name in prose.
+const NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
+
+// story rename --prose: the edits that rename entity `kind` `id` to
+// `newName` in drafted chapter prose, found as story mentions finds them.
+// The full name, or the name without its titles ("Edran Vale" for "Captain
+// Edran Vale"), becomes the new one in the same form, and a character's
+// given name alone becomes the new given name. Aliases are left as
+// written, since a nickname usually outlives a change of name, and so is a
+// span the name shares with another entity, which `shared` lists. A
+// possessive or hyphenated suffix stays, since it lies outside the match.
+// Returns { files, edits, aliases, shared }: `files` maps each chapter file
+// to { original, next }, `edits` lists each replacement as { file, line,
+// column, from, to }, `aliases` counts the alias mentions left, and
+// `shared` lists the shared spans as { file, line, column, text }.
+export function proseRenames(project, kind, id, newName) {
+  const pack = project.pack ?? languagePack();
+  const titles = checkSet(pack, "titleWords");
+  const [collection, field] = RENAME_COLLECTIONS[kind];
+  const entity = project[collection].find((entry) => entry.id === id);
+  const result = { files: new Map(), edits: [], aliases: 0, shared: [] };
+  const oldName = nfc(String(entity?.[field] ?? "").trim());
+  const target = String(newName).trim();
+  // Each form of the old name with the form of the new one it becomes, the
+  // longest first.
+  const forms = [[oldName, target], [withoutTitles(oldName, titles, pack), withoutTitles(target, titles, pack)]];
+  if (kind === "character") {
+    const given = givenName(oldName, pack);
+    if (given !== "") {
+      forms.push([given, givenName(target, pack) || target]);
+    }
+  }
+  const matchers = forms.map(([from, to]) => ({ pattern: new RegExp(`^(?:${namePattern(from, pack).source})$`, "u"), from, to }));
+  const names = mentionNames(project);
+  // A chapter that cannot be read is left out; the scan has reported it.
+  const drafted = project.chapters.filter((entry) => entry.status !== "outline")
+    .map((chapter) => [chapter, chapterText(project, chapter)])
+    .filter(([, prose]) => prose !== null);
+  for (const [chapter, prose] of drafted) {
+    const file = projectPath(project.root, chapter.file);
+    const own = findMentions(prose.text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
+    const located = locateMentions(prose, own);
+    let next = "";
+    let copied = 0;
+    own.forEach((mention, index) => {
+      const where = { file, line: located[index].line, column: located[index].column };
+      if (mention.entities.length > 1) {
+        result.shared.push({ ...where, text: mention.text });
+        return;
+      }
+      const written = nfc(mention.text);
+      const form = matchers.find(({ pattern }) => pattern.test(written));
+      if (!form) {
+        result.aliases += 1;
+        return;
+      }
+      const replacement = renamedText(written, form.from, form.to, pack);
+      if (replacement === mention.text) {
+        return;
+      }
+      const start = prose.offset + mention.start;
+      next += `${prose.raw.slice(copied, start)}${replacement}`;
+      copied = prose.offset + mention.end;
+      result.edits.push({ ...where, from: mention.text, to: replacement });
+    });
+    if (copied > 0) {
+      result.files.set(chapter.file, { original: prose.raw, next: `${next}${prose.raw.slice(copied)}` });
+    }
+  }
+  return result;
+}
+
+// `to` in the shape of `written`, the prose's match for name form `from`:
+// with its first letter cased as `written`'s when that differs from
+// `from`'s ("the Hollow", or "Rose" opening a sentence for a name written
+// "rose"), and with `written`'s gaps between words, so a name wrapped
+// across lines keeps its line break where the new name has words to keep
+// it between. Only the first letter can differ, since a name matches as
+// written otherwise.
+function renamedText(written, from, to, pack) {
+  const gaps = written.split(NAME_GAP).filter((part, index) => index % 2 === 1);
+  const words = to.split(/\s+/u);
+  let text = words.map((word, index) => (index === 0 ? word : `${gaps[index - 1] ?? " "}${word}`)).join("");
+  const [first] = Array.from(written);
+  const [named] = Array.from(from);
+  if (first !== named) {
+    const [lead] = Array.from(text);
+    const cased = first === upperCase(first, pack) ? upperCase(lead, pack) : lowerCase(lead, pack);
+    text = `${cased}${text.slice(lead.length)}`;
+  }
+  return text;
 }

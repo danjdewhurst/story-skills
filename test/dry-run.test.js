@@ -37,6 +37,7 @@ function invokeJson(cwd, argv) {
 // first, so the command has something to do.
 const CASES = [
   { argv: ["rename", "character", "edran-vale", "Edran Vane"] },
+  { argv: ["rename", "character", "edran-vale", "Edran Vane", "--prose"] },
   { argv: ["remove", "character", "jonas-reed"] },
   { argv: ["move", "chapter", "chapter-01", "--number", "9"] },
   { argv: ["move", "scene", "chapter-01-scene-01", "--chapter", "chapter-02"] },
