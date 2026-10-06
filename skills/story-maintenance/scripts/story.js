@@ -17851,8 +17851,355 @@ function lastLines(text, count = 10) {
 }
 
 // src/packaging.js
+import { Buffer as Buffer5 } from "node:buffer";
+
+// src/deflate.js
 import { Buffer as Buffer4 } from "node:buffer";
-import { deflateRawSync } from "node:zlib";
+var WINDOW_SIZE = 32768;
+var WINDOW_MASK = WINDOW_SIZE - 1;
+var MIN_MATCH = 3;
+var MAX_MATCH = 258;
+var MAX_CHAIN = 256;
+var FAR_MATCH = 4096;
+var HASH_BITS = 15;
+var HASH_MASK = (1 << HASH_BITS) - 1;
+var BLOCK_SYMBOLS = 16384;
+var END_OF_BLOCK = 256;
+var MAX_CODE_BITS = 15;
+var MAX_CODE_LENGTH_BITS = 7;
+var LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+var LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+var DISTANCE_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+var DISTANCE_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+var CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+var CODE_LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7];
+function codeTable(bases, size) {
+  const table = new Uint8Array(size);
+  let code = 0;
+  for (let value = bases[0];value < size; value += 1) {
+    if (code + 1 < bases.length && bases[code + 1] <= value) {
+      code += 1;
+    }
+    table[value] = code;
+  }
+  return table;
+}
+var LENGTH_CODE = codeTable(LENGTH_BASE, MAX_MATCH + 1);
+var DISTANCE_CODE = codeTable(DISTANCE_BASE, WINDOW_SIZE + 1);
+var FIXED_LITERAL_LENGTHS = Array.from({ length: 288 }, (_, symbol) => symbol < 144 ? 8 : symbol < 256 ? 9 : symbol < 280 ? 7 : 8);
+var FIXED_DISTANCE_LENGTHS = new Array(30).fill(5);
+var FIXED_LITERAL_CODES = canonicalCodes(FIXED_LITERAL_LENGTHS);
+var FIXED_DISTANCE_CODES = canonicalCodes(FIXED_DISTANCE_LENGTHS);
+function deflateRaw(data) {
+  const length = data.length;
+  const writer = bitWriter(length);
+  const head = new Int32Array(HASH_MASK + 1).fill(-1);
+  const prev = new Int32Array(WINDOW_SIZE);
+  const block = {
+    values: new Uint16Array(BLOCK_SYMBOLS),
+    distances: new Uint16Array(BLOCK_SYMBOLS),
+    count: 0,
+    literals: new Array(286).fill(0),
+    distanceCodes: new Array(30).fill(0)
+  };
+  let foundDistance = 0;
+  const hashAt = (position) => (data[position] << 10 ^ data[position + 1] << 5 ^ data[position + 2]) & HASH_MASK;
+  const insert = (position) => {
+    if (position + MIN_MATCH <= length) {
+      const hash = hashAt(position);
+      prev[position & WINDOW_MASK] = head[hash];
+      head[hash] = position;
+    }
+  };
+  const longestMatch = (position) => {
+    if (position + MIN_MATCH > length) {
+      return 0;
+    }
+    const limit = Math.min(MAX_MATCH, length - position);
+    let best = 0;
+    let candidate = head[hashAt(position)];
+    for (let chain = MAX_CHAIN;candidate >= 0 && position - candidate <= WINDOW_SIZE && chain > 0; chain -= 1) {
+      if (data[candidate + best] === data[position + best]) {
+        let run = 0;
+        while (run < limit && data[candidate + run] === data[position + run]) {
+          run += 1;
+        }
+        if (run > best) {
+          best = run;
+          foundDistance = position - candidate;
+          if (best === limit) {
+            break;
+          }
+        }
+      }
+      candidate = prev[candidate & WINDOW_MASK];
+    }
+    return best < MIN_MATCH || best === MIN_MATCH && foundDistance > FAR_MATCH ? 0 : best;
+  };
+  const emit = (value, distance, symbol) => {
+    if (block.count === BLOCK_SYMBOLS) {
+      writeBlock(writer, block, false);
+    }
+    block.values[block.count] = value;
+    block.distances[block.count] = distance;
+    block.count += 1;
+    block.literals[symbol] += 1;
+    if (distance > 0) {
+      block.distanceCodes[DISTANCE_CODE[distance]] += 1;
+    }
+  };
+  const emitLiteral = (byte) => emit(byte, 0, byte);
+  const emitMatch = (matchLength, distance) => emit(matchLength, distance, 257 + LENGTH_CODE[matchLength]);
+  let position = 0;
+  let matchLength = longestMatch(0);
+  let matchDistance = foundDistance;
+  while (position < length) {
+    insert(position);
+    if (matchLength > 0 && matchLength < MAX_MATCH) {
+      const nextLength = longestMatch(position + 1);
+      if (nextLength > matchLength) {
+        emitLiteral(data[position]);
+        position += 1;
+        matchLength = nextLength;
+        matchDistance = foundDistance;
+        continue;
+      }
+    }
+    if (matchLength > 0) {
+      emitMatch(matchLength, matchDistance);
+      for (let step = 1;step < matchLength; step += 1) {
+        insert(position + step);
+      }
+      position += matchLength;
+    } else {
+      emitLiteral(data[position]);
+      position += 1;
+    }
+    matchLength = longestMatch(position);
+    matchDistance = foundDistance;
+  }
+  writeBlock(writer, block, true);
+  return writer.finish();
+}
+function bitWriter(size) {
+  let bytes = new Uint8Array(Math.max(64, size >> 1));
+  let used = 0;
+  let pending = 0;
+  let pendingBits = 0;
+  const push = (byte) => {
+    if (used === bytes.length) {
+      const grown = new Uint8Array(bytes.length * 2);
+      grown.set(bytes);
+      bytes = grown;
+    }
+    bytes[used] = byte;
+    used += 1;
+  };
+  return {
+    write(value, bits) {
+      pending |= value << pendingBits;
+      pendingBits += bits;
+      while (pendingBits >= 8) {
+        push(pending & 255);
+        pending >>>= 8;
+        pendingBits -= 8;
+      }
+    },
+    finish() {
+      if (pendingBits > 0) {
+        push(pending);
+      }
+      return Buffer4.from(bytes.buffer, 0, used);
+    }
+  };
+}
+function writeBlock(writer, block, final) {
+  block.literals[END_OF_BLOCK] = 1;
+  const literalLengths = huffmanLengths(block.literals, MAX_CODE_BITS);
+  const distanceLengths = huffmanLengths(block.distanceCodes, MAX_CODE_BITS);
+  const header = dynamicHeader(literalLengths, distanceLengths);
+  const dynamicBits = header.bits + codedBits(block.literals, literalLengths) + codedBits(block.distanceCodes, distanceLengths);
+  const fixedBits = codedBits(block.literals, FIXED_LITERAL_LENGTHS) + codedBits(block.distanceCodes, FIXED_DISTANCE_LENGTHS);
+  writer.write(final ? 1 : 0, 1);
+  if (fixedBits <= dynamicBits) {
+    writer.write(1, 2);
+    writeSymbols(writer, block, FIXED_LITERAL_CODES, FIXED_LITERAL_LENGTHS, FIXED_DISTANCE_CODES, FIXED_DISTANCE_LENGTHS);
+  } else {
+    writer.write(2, 2);
+    header.write(writer);
+    writeSymbols(writer, block, canonicalCodes(literalLengths), literalLengths, canonicalCodes(distanceLengths), distanceLengths);
+  }
+  block.count = 0;
+  block.literals.fill(0);
+  block.distanceCodes.fill(0);
+}
+function writeSymbols(writer, block, literalCodes, literalLengths, distanceCodes, distanceLengths) {
+  for (let index = 0;index < block.count; index += 1) {
+    const value = block.values[index];
+    const distance = block.distances[index];
+    if (distance === 0) {
+      writer.write(literalCodes[value], literalLengths[value]);
+      continue;
+    }
+    const lengthCode = LENGTH_CODE[value];
+    writer.write(literalCodes[257 + lengthCode], literalLengths[257 + lengthCode]);
+    writer.write(value - LENGTH_BASE[lengthCode], LENGTH_EXTRA[lengthCode]);
+    const distanceCode = DISTANCE_CODE[distance];
+    writer.write(distanceCodes[distanceCode], distanceLengths[distanceCode]);
+    writer.write(distance - DISTANCE_BASE[distanceCode], DISTANCE_EXTRA[distanceCode]);
+  }
+  writer.write(literalCodes[END_OF_BLOCK], literalLengths[END_OF_BLOCK]);
+}
+function codedBits(frequencies, lengths) {
+  let bits = 0;
+  for (let symbol = 0;symbol < frequencies.length; symbol += 1) {
+    bits += frequencies[symbol] * lengths[symbol];
+  }
+  return bits;
+}
+function dynamicHeader(literalLengths, distanceLengths) {
+  const literalCount = lastUsed(literalLengths) + 1;
+  const distanceCount = lastUsed(distanceLengths) + 1;
+  const items = runLengths([...literalLengths.slice(0, literalCount), ...distanceLengths.slice(0, distanceCount)]);
+  const frequencies = new Array(19).fill(0);
+  for (const [symbol] of items) {
+    frequencies[symbol] += 1;
+  }
+  const lengths = huffmanLengths(frequencies, MAX_CODE_LENGTH_BITS);
+  const codes = canonicalCodes(lengths);
+  let orderCount = CODE_LENGTH_ORDER.length;
+  while (orderCount > 4 && lengths[CODE_LENGTH_ORDER[orderCount - 1]] === 0) {
+    orderCount -= 1;
+  }
+  let bits = 5 + 5 + 4 + 3 * orderCount;
+  for (const [symbol] of items) {
+    bits += lengths[symbol] + CODE_LENGTH_EXTRA[symbol];
+  }
+  return {
+    bits,
+    write(writer) {
+      writer.write(literalCount - 257, 5);
+      writer.write(distanceCount - 1, 5);
+      writer.write(orderCount - 4, 4);
+      for (let index = 0;index < orderCount; index += 1) {
+        writer.write(lengths[CODE_LENGTH_ORDER[index]], 3);
+      }
+      for (const [symbol, extra] of items) {
+        writer.write(codes[symbol], lengths[symbol]);
+        writer.write(extra, CODE_LENGTH_EXTRA[symbol]);
+      }
+    }
+  };
+}
+function lastUsed(lengths) {
+  let index = lengths.length - 1;
+  while (lengths[index] === 0) {
+    index -= 1;
+  }
+  return index;
+}
+function runLengths(lengths) {
+  const items = [];
+  for (let index = 0;index < lengths.length; ) {
+    const value = lengths[index];
+    let run = 1;
+    while (index + run < lengths.length && lengths[index + run] === value) {
+      run += 1;
+    }
+    index += run;
+    if (value === 0) {
+      for (;run >= 11; run -= Math.min(run, 138)) {
+        items.push([18, Math.min(run, 138) - 11]);
+      }
+      if (run >= 3) {
+        items.push([17, run - 3]);
+        run = 0;
+      }
+    } else {
+      items.push([value, 0]);
+      run -= 1;
+      for (;run >= 3; run -= Math.min(run, 6)) {
+        items.push([16, Math.min(run, 6) - 3]);
+      }
+    }
+    for (;run > 0; run -= 1) {
+      items.push([value, 0]);
+    }
+  }
+  return items;
+}
+function huffmanLengths(frequencies, limit) {
+  let weights = Array.from(frequencies);
+  let used = weights.filter((weight) => weight > 0).length;
+  for (let symbol = 0;used < 2; symbol += 1) {
+    if (weights[symbol] === 0) {
+      weights[symbol] = 1;
+      used += 1;
+    }
+  }
+  let lengths = treeDepths(weights);
+  while (Math.max(...lengths) > limit) {
+    weights = weights.map((weight) => weight + 1 >> 1);
+    lengths = treeDepths(weights);
+  }
+  return lengths;
+}
+function treeDepths(weights) {
+  const leaves = [];
+  for (let symbol = 0;symbol < weights.length; symbol += 1) {
+    if (weights[symbol] > 0) {
+      leaves.push(symbol);
+    }
+  }
+  leaves.sort((a, b) => weights[a] - weights[b] || a - b);
+  const nodeWeights = leaves.map((symbol) => weights[symbol]);
+  const parents = [];
+  let leaf = 0;
+  let inner = leaves.length;
+  const lightest = () => leaf < leaves.length && (inner === nodeWeights.length || nodeWeights[leaf] <= nodeWeights[inner]) ? leaf++ : inner++;
+  while (nodeWeights.length < 2 * leaves.length - 1) {
+    const first = lightest();
+    const second = lightest();
+    parents[first] = nodeWeights.length;
+    parents[second] = nodeWeights.length;
+    nodeWeights.push(nodeWeights[first] + nodeWeights[second]);
+  }
+  const depths = new Array(nodeWeights.length).fill(0);
+  for (let node = nodeWeights.length - 2;node >= 0; node -= 1) {
+    depths[node] = depths[parents[node]] + 1;
+  }
+  const lengths = new Array(weights.length).fill(0);
+  leaves.forEach((symbol, index) => {
+    lengths[symbol] = depths[index];
+  });
+  return lengths;
+}
+function canonicalCodes(lengths) {
+  const counts = new Array(MAX_CODE_BITS + 1).fill(0);
+  for (const length of lengths) {
+    counts[length] += 1;
+  }
+  counts[0] = 0;
+  const next = [0];
+  for (let bits = 1;bits <= MAX_CODE_BITS; bits += 1) {
+    next[bits] = next[bits - 1] + counts[bits - 1] << 1;
+  }
+  return lengths.map((length) => {
+    if (length === 0) {
+      return 0;
+    }
+    let code = next[length];
+    next[length] += 1;
+    let reversed = 0;
+    for (let bit = 0;bit < length; bit += 1) {
+      reversed = reversed << 1 | code & 1;
+      code >>= 1;
+    }
+    return reversed;
+  });
+}
+
+// src/packaging.js
 function epubModifiedTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
   if (raw !== undefined && raw !== "") {
@@ -18552,20 +18899,19 @@ var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
 var ZIP_UTF8_NAME_FLAG = 2048;
 var ZIP_STORED = 0;
 var ZIP_DEFLATED = 8;
-var ZIP_DEFLATE_LEVEL = 9;
 function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer4.from(entry.name, "utf8");
-    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
+    const name = Buffer5.from(entry.name, "utf8");
+    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
     const crc = crc32(content);
-    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
+    const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer4.alloc(30);
+    const localHeader = Buffer5.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -18578,7 +18924,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer4.alloc(46);
+    const centralHeader = Buffer5.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -18603,7 +18949,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer4.alloc(22);
+  const end = Buffer5.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -18612,7 +18958,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -19044,7 +19390,7 @@ function applySeverity(result, overrides = NO_OVERRIDES) {
 }
 
 // src/import.js
-import { Buffer as Buffer6 } from "node:buffer";
+import { Buffer as Buffer7 } from "node:buffer";
 import fs12 from "node:fs";
 import path16 from "node:path";
 
@@ -19252,7 +19598,7 @@ function realPath(target) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer6 } from "node:buffer";
 import fs6 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -19264,7 +19610,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSy
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer5.alloc(CHUNK_BYTES);
+  const buffer = Buffer6.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -19290,9 +19636,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs6.readSy
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer5.from(buffer.subarray(0, read)));
+    chunks.push(Buffer6.from(buffer.subarray(0, read)));
   }
-  return Buffer5.concat(chunks);
+  return Buffer6.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -27204,7 +27550,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
-      const bytes = Buffer6.byteLength(text, "utf8");
+      const bytes = Buffer7.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }

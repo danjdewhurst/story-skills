@@ -3,7 +3,7 @@
 // takes a manuscript built by story.js and knows nothing about scanning a
 // project.
 import { Buffer } from "node:buffer";
-import { deflateRawSync } from "node:zlib";
+import { deflateRaw } from "./deflate.js";
 import { readFileBytes, writeFile } from "./files.js";
 import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } from "./html.js";
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
@@ -923,10 +923,6 @@ const ZIP_DOS_DATE = (0 << 9) | (1 << 5) | 1;
 const ZIP_UTF8_NAME_FLAG = 0x0800;
 const ZIP_STORED = 0;
 const ZIP_DEFLATED = 8;
-// The level is pinned rather than left at zlib's default so the deflate
-// stream, and therefore the whole archive, stays byte-identical between runs
-// and Node versions.
-const ZIP_DEFLATE_LEVEL = 9;
 
 export function writeZip(outFile, entries, writeOptions = {}) {
   const localParts = [];
@@ -939,8 +935,10 @@ export function writeZip(outFile, entries, writeOptions = {}) {
     const crc = crc32(content);
     // Entries marked stored must not be compressed (the EPUB mimetype).
     // Everything else deflates, except where deflating would not shrink it,
-    // as with already-compressed cover images.
-    const deflated = entry.stored ? null : deflateRawSync(content, { level: ZIP_DEFLATE_LEVEL });
+    // as with already-compressed cover images. The deflate is the CLI's own
+    // (src/deflate.js), not node:zlib, whose bytes differ between Bun and
+    // Node, so the archive is byte-identical on every runtime.
+    const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;

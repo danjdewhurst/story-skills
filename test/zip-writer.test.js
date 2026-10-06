@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { buildBook, createStoryProject } from "../src/story.js";
 import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
+const repoRoot = path.resolve(import.meta.dir, "..");
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 const UTF8_NAME_FLAG = 0x0800;
 const STORED = 0;
@@ -78,6 +80,30 @@ describe("zip writer", () => {
       const first = buildBook(root, { format, out: `dist/first.${format}` });
       const second = buildBook(root, { format, out: `dist/second.${format}` });
       expect(fs.readFileSync(first.outFile).equals(fs.readFileSync(second.outFile))).toBe(true);
+    }
+  });
+
+  test("bun, node, and the node fallback build the same bytes (#589)", () => {
+    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+    if (spawnSync("node", ["--version"]).status !== 0) {
+      console.warn("Skipping the cross-runtime build test: node is not on PATH.");
+      return;
+    }
+    const root = bookProject(true);
+    const runners = {
+      node: path.join(repoRoot, "bin", "story.js"),
+      fallback: path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js")
+    };
+    for (const [format, shunn] of [["epub", false], ["docx", false], ["docx", true]]) {
+      const name = `${shunn ? "shunn" : "book"}.${format}`;
+      const built = fs.readFileSync(buildBook(root, { format, shunn, out: `dist/bun-${name}` }).outFile);
+      for (const [runner, script] of Object.entries(runners)) {
+        const out = path.join(root, "dist", `${runner}-${name}`);
+        const result = spawnSync("node", [script, "build", root, "--format", format, ...(shunn ? ["--shunn"] : []), "--out", out], { encoding: "utf8" });
+        expect(result.stderr).not.toContain("Error");
+        expect(result.status).toBe(0);
+        expect({ runner, name, same: fs.readFileSync(out).equals(built) }).toEqual({ runner, name, same: true });
+      }
     }
   });
 });
