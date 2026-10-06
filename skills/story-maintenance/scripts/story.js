@@ -18548,15 +18548,17 @@ import path15 from "node:path";
 
 // src/timeline.js
 function buildTimeline(project) {
+  const unit = project.unit?.name === "characters" ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
   const entries = readingUnits(project).map((unit, reading) => timelineEntry(project, unit, reading));
   const dated = orderByStoryTime(entries.filter((entry) => entry.days !== undefined));
   markToldLate(dated);
   return {
+    unit,
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters),
+    pov: povBalance(chapters, unit),
     presence: characterPresence(project, chapters, chapterById)
   };
 }
@@ -18650,18 +18652,25 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
     reading
   };
 }
-function povBalance(chapters) {
+function povBalance(chapters, unit) {
+  const characterBook = unit === "characters";
+  const length = povLength(unit);
   const totals = new Map;
-  let words = 0;
   for (const chapter of chapters) {
     const key = chapter.pov || "unspecified";
-    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0 };
+    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0, ...characterBook ? { characterCount: 0 } : {} };
     entry.chapters += 1;
     entry.words += chapter.wordCount;
-    words += chapter.wordCount;
+    if (characterBook) {
+      entry.characterCount += chapter.count;
+    }
     totals.set(key, entry);
   }
-  return [...totals.values()].map((entry) => ({ ...entry, share: words === 0 ? 0 : entry.words * 100 / words })).sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
+  const total = [...totals.values()].reduce((sum, entry) => sum + length(entry), 0);
+  return [...totals.values()].map((entry) => ({ ...entry, share: total === 0 ? 0 : length(entry) * 100 / total })).sort((left, right) => length(right) - length(left) || right.chapters - left.chapters || right.words - left.words || left.pov.localeCompare(right.pov, "en"));
+}
+function povLength(unit) {
+  return unit === "characters" ? (entry) => entry.characterCount : (entry) => entry.words;
 }
 function characterPresence(project, chapters, chapterById) {
   const present = new Map(project.characters.map((character) => [character.id, new Set]));
@@ -18734,9 +18743,10 @@ function formatTimeline(timeline, totalChapters) {
   if (timeline.pov.length === 0) {
     lines.push("- None");
   }
-  const shares = roundedShares(timeline.pov.map((entry) => entry.words));
+  const length = povLength(timeline.unit);
+  const shares = roundedShares(timeline.pov.map(length));
   for (const [index, entry] of timeline.pov.entries()) {
-    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber4(entry.words)} words (${shares[index]}%)`);
+    lines.push(`- ${entry.pov}: ${plural3(entry.chapters, "chapter")}, ${formatNumber4(length(entry))} ${timeline.unit === "characters" ? "characters" : "words"} (${shares[index]}%)`);
   }
   lines.push("", "Character presence:");
   if (timeline.presence.length === 0) {
@@ -24237,19 +24247,10 @@ ${timeline.undated.map(row).join(`
 </tbody></table></div>`);
   }
   if (timeline.pov.length > 0) {
-    const characterBook = site.project.unit.name === "characters";
-    const characters = new Map;
-    for (const chapter of site.project.chapters) {
-      const key = chapter.pov || "unspecified";
-      characters.set(key, (characters.get(key) ?? 0) + chapter.count);
-    }
-    const length = (entry) => characterBook ? characters.get(entry.pov) ?? 0 : entry.words;
-    const total = timeline.pov.reduce((sum, entry) => sum + length(entry), 0);
-    const share = (entry) => characterBook ? total === 0 ? 0 : Math.round(length(entry) * 100 / total) : Math.round(entry.share);
-    const povs = characterBook ? [...timeline.pov].sort((left, right) => length(right) - length(left) || right.chapters - left.chapters) : timeline.pov;
+    const length = povLength(timeline.unit);
     body.push(`<h2>${label2(site, "codex-point-of-view")}</h2>
-<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", characterBook ? "codex-character-count" : "codex-words", "codex-share"])}</tr></thead><tbody>
-${povs.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label2(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${length(entry)}</td><td>${share(entry)}%</td></tr>`).join(`
+<table><thead><tr>${columns(site, ["codex-pov", "codex-chapters", timeline.unit === "characters" ? "codex-character-count" : "codex-words", "codex-share"])}</tr></thead><tbody>
+${timeline.pov.map((entry) => `<tr><td>${entry.pov === "unspecified" ? label2(site, "codex-unspecified") : entityLink(site, "character", entry.pov, 0)}</td><td>${entry.chapters}</td><td>${length(entry)}</td><td>${Math.round(entry.share)}%</td></tr>`).join(`
 `)}
 </tbody></table>`);
   }

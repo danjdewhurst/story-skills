@@ -649,7 +649,7 @@ story timeline .
 
 **Undated (reading order)** lists scenes and scene-less chapters with no valid date. The section is left out when everything is dated.
 
-**POV balance** totals chapter `pov` by chapter count and prose words, largest share first. Chapters with no `pov` are grouped as `unspecified`.
+**POV balance** totals chapter `pov` by chapter count and prose length, largest share first. Length is in words, or in characters in a book [counted in characters](project-format.md#counting-in-characters), as in `story progress`. Chapters with no `pov` are grouped as `unspecified`.
 
 **Character presence** counts the chapters in which each character appears in `characters` or as `pov` (on the chapter or on any of its scenes; `mentions` do not count). It shows the span from first to last appearance, the longest absence, and how many chapters at the end of the book they are missing from. For a character with `died-in` (and no `revived-in`), the trailing absence is expected, so the line reads `died in chapter <n>` instead. As in continuity, a death or revival in an `outline` chapter is planned, not written: a planned death leaves the ordinary trailing absence, and a planned revival still reads `died in chapter <n>`. Absences are counted in chapter positions, so gaps in chapter numbering do not inflate them.
 

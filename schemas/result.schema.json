@@ -352,8 +352,9 @@
     },
     "data-timeline": {
       "type": "object",
-      "required": ["totalChapters", "chronology", "undated", "pov", "presence"],
+      "required": ["unit", "totalChapters", "chronology", "undated", "pov", "presence"],
       "properties": {
+        "unit": { "enum": ["words", "characters"], "description": "The book's count unit: characters for Chinese and Japanese, or story.md count-unit; words otherwise. POV totals, shares, and order use it." },
         "totalChapters": { "$ref": "#/$defs/count" },
         "chronology": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
         "undated": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
@@ -366,7 +367,8 @@
               "pov": { "type": "string" },
               "chapters": { "$ref": "#/$defs/count" },
               "words": { "$ref": "#/$defs/count" },
-              "share": { "type": "number", "minimum": 0 }
+              "characterCount": { "$ref": "#/$defs/count", "description": "The POV's chapters in characters; present only when unit is characters." },
+              "share": { "type": "number", "minimum": 0, "description": "Percent of the book's length in the count unit." }
             }
           }
         },
