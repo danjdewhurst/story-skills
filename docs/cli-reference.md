@@ -1313,7 +1313,7 @@ story timeline [path]
 Shows three read-only views:
 
 - **Chronology**: scenes (and chapters with no scene records) that have a `date` in story order, sorted by `date` and then `time`. An entry told after events that happen later in story time is marked `[told in chapter N, after later events]`. Undated entries are listed separately in reading order.
-- **POV balance**: chapters and words per POV character.
+- **POV balance**: chapters and length per POV character, with each one's share of the book. Length, share, and order use the book's count unit, as `progress` does: words, or characters in a book [counted in characters](project-format.md#counting-in-characters) (`3 chapters, 1,972 characters (100%)`). `--json` gives the unit as `data.unit`, and each `data.pov` row has `chapters`, `words`, and `share`, plus `characterCount` when the unit is characters.
 - **Character presence**: how many chapters each character appears in (in `characters` or as `pov`, on the chapter or a scene), their longest absence, and whether they drop out before the end.
 
 `timeline` reports no findings of its own; clock errors belong to `continuity`.

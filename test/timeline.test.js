@@ -5,6 +5,9 @@ import { runCli } from "../src/cli.js";
 import { formatTimeline } from "../src/timeline.js";
 import { createEntity, createStoryProject, storyTimeline } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
+
+const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -79,6 +82,56 @@ describe("story timeline", () => {
       ["tom-reed", 1, 20]
     ]);
     expect(Math.round(pov[0].share)).toBe(60);
+  });
+
+  test("a book counted in words keeps its POV rows in words and says so", () => {
+    const { root, cwd } = timelineProject();
+    const timeline = storyTimeline(root);
+    expect(timeline.unit).toBe("words");
+    expect(timeline.pov.every((entry) => !("characterCount" in entry))).toBe(true);
+    const envelope = JSON.parse(invoke(cwd, ["timeline", root, "--json"]).out);
+    expect(validateAgainstSchema(envelope, schema)).toEqual([]);
+    expect(envelope.data.unit).toBe("words");
+  });
+
+  test("a book counted in characters measures POV balance in characters", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Character Timeline", force: false });
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncount-unit: characters\n"), "utf8");
+    // In words, short-words leads (4 to 1); in characters, long-word does
+    // (13 to 8), so the order, totals, and shares follow the unit.
+    writeChapter(root, 1, "pov: short-words", "a b c d e f g h");
+    writeChapter(root, 2, "pov: long-word", "abcdefghijklm");
+    const timeline = storyTimeline(root);
+
+    expect(timeline.unit).toBe("characters");
+    expect(timeline.pov.map((entry) => [entry.pov, entry.chapters, entry.words, entry.characterCount])).toEqual([
+      ["long-word", 1, 1, 13],
+      ["short-words", 1, 8, 8]
+    ]);
+    expect(Math.round(timeline.pov[0].share)).toBe(62);
+    const text = formatTimeline(timeline, timeline.totalChapters);
+    expect(text).toContain("POV balance:\n- long-word: 1 chapter, 13 characters (62%)\n- short-words: 1 chapter, 8 characters (38%)\n");
+
+    const result = invoke(cwd, ["timeline", root, "--json"]);
+    const envelope = JSON.parse(result.out);
+    expect(validateAgainstSchema(envelope, schema)).toEqual([]);
+    expect(envelope.data.unit).toBe("characters");
+    expect(envelope.data.pov[0]).toMatchObject({ pov: "long-word", words: 1, characterCount: 13 });
+  });
+
+  test("POV ties in the unit fall back to chapters, words, then id", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Tied Timeline", force: false });
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncount-unit: characters\n"), "utf8");
+    writeChapter(root, 1, "pov: zed", "abcd");
+    writeChapter(root, 2, "pov: amy", "abcd");
+    writeChapter(root, 3, "pov: bea", "a b");
+    writeChapter(root, 4, "pov: bea", "cd");
+    writeChapter(root, 5, "pov: cal", "ab cd");
+    expect(storyTimeline(root).pov.map((entry) => entry.pov)).toEqual(["bea", "cal", "amy", "zed"]);
   });
 
   test("reports presence, absences, and characters never on the page", () => {

@@ -6,7 +6,11 @@ import { projectPath } from "./files.js";
 // POV balance, and each character's presence across chapters. Nothing here
 // is a finding; `story continuity` owns the clock checks.
 
+// `unit` is the project's count unit, as in `story progress`: point-of-view
+// totals, shares, and order use it. Each POV row keeps its `words`, and a
+// book counted in characters adds `characterCount`.
 export function buildTimeline(project) {
+  const unit = project.unit?.name === "characters" ? "characters" : "words";
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
   const chapterById = new Map(chapters.map((chapter) => [chapter.id, chapter]));
   // A chapter with no scene records stands in for its own scenes, and scenes
@@ -17,9 +21,10 @@ export function buildTimeline(project) {
   markToldLate(dated);
 
   return {
+    unit,
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
-    pov: povBalance(chapters),
+    pov: povBalance(chapters, unit),
     presence: characterPresence(project, chapters, chapterById)
   };
 }
@@ -130,20 +135,31 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   };
 }
 
-function povBalance(chapters) {
+// Lengths, shares, and order in the count unit. Ties fall back to chapters,
+// then words, then the POV id.
+function povBalance(chapters, unit) {
+  const characterBook = unit === "characters";
+  const length = povLength(unit);
   const totals = new Map();
-  let words = 0;
   for (const chapter of chapters) {
     const key = chapter.pov || "unspecified";
-    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0 };
+    const entry = totals.get(key) ?? { pov: key, chapters: 0, words: 0, ...(characterBook ? { characterCount: 0 } : {}) };
     entry.chapters += 1;
     entry.words += chapter.wordCount;
-    words += chapter.wordCount;
+    if (characterBook) {
+      entry.characterCount += chapter.count;
+    }
     totals.set(key, entry);
   }
+  const total = [...totals.values()].reduce((sum, entry) => sum + length(entry), 0);
   return [...totals.values()]
-    .map((entry) => ({ ...entry, share: words === 0 ? 0 : (entry.words * 100) / words }))
-    .sort((left, right) => right.words - left.words || right.chapters - left.chapters || left.pov.localeCompare(right.pov, "en"));
+    .map((entry) => ({ ...entry, share: total === 0 ? 0 : (length(entry) * 100) / total }))
+    .sort((left, right) => length(right) - length(left) || right.chapters - left.chapters || right.words - left.words || left.pov.localeCompare(right.pov, "en"));
+}
+
+// A POV row's length in the count unit.
+export function povLength(unit) {
+  return unit === "characters" ? (entry) => entry.characterCount : (entry) => entry.words;
 }
 
 // Presence counts a character in a chapter when the chapter or one of its
@@ -233,10 +249,11 @@ export function formatTimeline(timeline, totalChapters) {
   if (timeline.pov.length === 0) {
     lines.push("- None");
   }
-  // Rounded so the shares add up to 100.
-  const shares = roundedShares(timeline.pov.map((entry) => entry.words));
+  // In the count unit, rounded so the shares add up to 100.
+  const length = povLength(timeline.unit);
+  const shares = roundedShares(timeline.pov.map(length));
   for (const [index, entry] of timeline.pov.entries()) {
-    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber(entry.words)} words (${shares[index]}%)`);
+    lines.push(`- ${entry.pov}: ${plural(entry.chapters, "chapter")}, ${formatNumber(length(entry))} ${timeline.unit === "characters" ? "characters" : "words"} (${shares[index]}%)`);
   }
 
   lines.push("", "Character presence:");
