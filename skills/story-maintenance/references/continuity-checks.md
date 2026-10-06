@@ -92,7 +92,9 @@ These read the chapters in number order, so sibling branches can produce finding
 - the clock and route checks (`clock-backward`, `travel-too-fast`, `route-too-fast`, `route-same-time`), which compare every dated scene in a `strand`, whichever branch it is on
 - `story timeline`, which marks a sibling ending dated before the one numbered ahead of it as told "after later events"
 - `story grid`, whose columns are every chapter side by side in number order, whichever path reaches each
-- `story pacing` runs, `story next`, the `progression-out-of-order` list order, and `story series` and `story diagram` lifelines
+- `story pacing` runs, `story next`, and the `progression-out-of-order` list order
+
+`story series` and `story diagram` lifelines, and the second-death checks that read them (`revival-status-mismatch`, `deceased-without-died-in`), read every chapter in one order, not path by path: the reading order of the choices, so a chapter comes after the chapters that lead to it, with dated chapters by date. A death on one branch still counts at the end of the book.
 
 ### Sibling-ending clock warnings
 

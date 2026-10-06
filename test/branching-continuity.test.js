@@ -4,7 +4,7 @@ import path from "node:path";
 import { chapterChronology } from "../src/chronology.js";
 import { buildContext } from "../src/context.js";
 import { characterLifeline } from "../src/deaths.js";
-import { checkProjectContinuity, createStoryProject, entityStateAtChapter, knowledgeAtChapter, scanProject } from "../src/story.js";
+import { checkProjectContinuity, createStoryProject, entityStateAtChapter, knowledgeAtChapter, scanProject, validateProject } from "../src/story.js";
 import { makeTempDir, writeMarkdown } from "./helpers.js";
 
 // Path-sensitive continuity for branching books (#358): a death, fact, or
@@ -490,12 +490,41 @@ progressions:
     expect(codes(result, "state-differs-by-path")).toEqual([]);
   });
 
-  test("the whole-book lifeline still reads chapter-number order", () => {
+  test("the whole-book lifeline reads the reading order", () => {
     const root = diamond();
     const scanned = scanProject(root);
     const jonas = scanned.characters.find((entry) => entry.id === "jonas-reed");
     const lifeline = characterLifeline(jonas, chapterChronology(scanned));
     expect(lifeline.deadAtEnd).toBe(true);
     expect(lifeline.events).toEqual([{ type: "death", chapter: "chapter-02", source: "died-in" }]);
+  });
+
+  test("a second death read after the revival, though numbered before it", () => {
+    // The path is 01, 04, 02: Jonas dies in 01, comes back in 04, and dies
+    // again in 02, so deceased is right at the end and died-in stays on 01.
+    const root = project("Second death");
+    character(root, "mara-finn");
+    writeMarkdown(path.join(root, "characters", "jonas-reed.md"), `
+name: jonas-reed
+role: supporting
+status: deceased
+died-in: chapter-01
+revived-in: chapter-04
+progressions:
+  - from: chapter-02
+    field: status
+    value: deceased
+`, "# jonas-reed\n");
+    chapter(root, 1, { links: [4] });
+    chapter(root, 4, { links: [2] });
+    chapter(root, 2, { links: [3] });
+    chapter(root, 3, { cast: ["jonas-reed"] });
+    const scanned = scanProject(root);
+    const jonas = scanned.characters.find((entry) => entry.id === "jonas-reed");
+    expect(characterLifeline(jonas, chapterChronology(scanned)).events.map((event) => `${event.type} ${event.chapter}`)).toEqual(["death chapter-01", "revival chapter-04", "death chapter-02"]);
+    const result = checkProjectContinuity(root);
+    expect(codes(result, "revival-status-mismatch")).toEqual([]);
+    expect(codes(result, "progression-deceased-in-cast")).toHaveLength(1);
+    expect(validateProject(root).warnings.filter((warning) => warning.code === "deceased-without-died-in")).toEqual([]);
   });
 });

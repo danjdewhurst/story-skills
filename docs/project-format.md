@@ -602,7 +602,7 @@ arc: redemption
 | `locations` | list of location ids | no | Places the character is tied to. Each location must list the character in `notable-characters`. |
 | `tags` | list of strings | no | Free labels. |
 | `died-in` | chapter id | no | Chapter in which the character dies on the page. Set it with `status: deceased` once that chapter is drafted. |
-| `revived-in` | chapter id | no | Chapter in which a character who died in `died-in` comes back. It ends the dead window, so casts from this chapter on are allowed again. Set `status: alive` once that chapter is drafted, unless a `status` progression after it makes the character `deceased` again (a second death). |
+| `revived-in` | chapter id | no | Chapter in which a character who died in `died-in` comes back. It ends the dead window, so casts from this chapter on are allowed again. Set `status: alive` once that chapter is drafted, unless a `status` progression after it makes the character `deceased` again in a drafted chapter (a second death). |
 | `arc` | string | no | Short theme label for the personal arc, such as `redemption`. Free text: `story links` does not check it as an arc id. Set it with `story add character --arc <theme>`. If the value happens to equal an arc id, `story rename arc` and `story remove arc` update or clear it. |
 | `arc-type` | enum | no | `change-positive`, `change-negative`, or `flat`. |
 | `lie` | string | no | The false belief that drives the character. |
@@ -616,7 +616,7 @@ arc: redemption
 Status notes:
 
 - `status: deceased` with `died-in` lets `story continuity` report the character in the cast of any later chapter or scene. `died-in` with any other status is an error, unless the `died-in` chapter is still an `outline` (a planned death, so later casts are allowed until that chapter is drafted) or a drafted `revived-in` chapter has brought the character back. Characters who died before chapter 1 use `status: deceased` without `died-in`; `story continuity` warns when one is in a chapter or scene cast, since they can appear only in `mentions`.
-- "Later" is story time when both chapters are dated: a chapter's `date`, or else its earliest dated scene. A 2034 prologue read first comes after a 2024 death. Otherwise chapters compare by number.
+- "Later" is story time when both chapters are dated: a chapter's `date`, or else its earliest dated scene. A 2034 prologue read first comes after a 2024 death. Otherwise chapters compare by number. When only some chapters are dated, an undated chapter takes the latest date among the chapters read before it, so the order never goes in a circle (see [Story continuity](continuity.md#story-continuity)).
 - `status: cut` keeps the file for a character removed during discovery drafting, out of canon but on record.
 
 The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI flags. `story validate` checks only their shape: `arc-type` must be `change-positive`, `change-negative`, or `flat`, and the other three must be text. See the [character-management](../skills/character-management/SKILL.md) and [theme-craft](../skills/theme-craft/SKILL.md) skills.
@@ -749,7 +749,7 @@ progressions:
 | `progressions[].field` | kebab-case string | yes | The field that changes. It may be a field the file already has (`status`, `role`, `controlled-by`) or a new one (`scar`, `title`). |
 | `progressions[].value` | string, number, or boolean | yes | The value from that chapter on. An empty string clears the field, such as a location no longer `controlled-by` anyone. |
 
-At a given chapter, an entity's state is its frontmatter with every progression from that chapter or earlier applied in story order, so a change listed `from: chapter-10` already holds while chapter 10 is drafted. Chapters compare in story time, as `died-in` does: by date when both chapters are dated, else by number. A planned chapter compares by the number in its id. When only some chapters are dated and those comparisons go in a circle, the progressions that apply take one fixed order, the same in Bun and Node (see [Story continuity](continuity.md#story-continuity)). `story knowledge <character-id> --at <chapter-id>` prints the changes that apply to a character after its knowledge. The resolver behind it, `entityStateAt(frontmatter, chapterId, chronology)` in `src/progressions.js`, is exported for other commands.
+At a given chapter, an entity's state is its frontmatter with every progression from that chapter or earlier applied in story order, so a change listed `from: chapter-10` already holds while chapter 10 is drafted. Chapters compare in story time, as `died-in` does: by date when both chapters are dated, else by number. A planned chapter compares by the number in its id. When only some chapters are dated, an undated chapter takes the latest date among the chapters read before it, and a planned chapter the place an undated chapter with its number would have, so which progressions apply and their order follow one story order (see [Story continuity](continuity.md#story-continuity)). `story knowledge <character-id> --at <chapter-id>` prints the changes that apply to a character after its knowledge. The resolver behind it, `entityStateAt(frontmatter, chapterId, chronology)` in `src/progressions.js`, is exported for other commands.
 
 Rules:
 

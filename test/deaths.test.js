@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { chapterChronology } from "../src/chronology.js";
 import { characterLifeline, revivedBy } from "../src/deaths.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
-import { createStoryProject, diagramProject, scanProject, seriesReport } from "../src/story.js";
+import { checkProjectContinuity, createStoryProject, diagramProject, scanProject, seriesReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 // A book with `count` drafted chapters. `chapters` maps a chapter number to
@@ -146,21 +146,19 @@ describe("characterLifeline", () => {
     expect(life.deadAtEnd).toBe(true);
   });
 
-  test("a book dated only in places has one lifeline", () => {
-    // Chapter 3 is dated a day after chapter 5, with chapter 4 undated
-    // between them, so `after` runs in a circle. Bun and Node sorted it
-    // differently: Ana ended the book dead in one and revived in the other
-    // (#545). The dates keep 5 before 3, and 4 comes before 5 by number.
+  test("a book dated only in places has one lifeline, which continuity agrees with", () => {
+    // Chapter 3 is dated a day after chapter 5, and chapter 4 is undated
+    // between them. Bun and Node sorted the chapters differently: Ana ended
+    // the book dead in one and revived in the other (#545). Chapter 4 keeps
+    // the date of chapter 3, read before it, so the revival in the
+    // flashback chapter 5 comes before the death, and ends nothing.
     const root = book(makeTempDir(), "Circle", {
       chapters: { 3: "date: 2024-01-02", 5: "date: 2024-01-01" },
-      characters: { ana: "status: alive\ndied-in: chapter-04\nrevived-in: chapter-05" }
+      characters: { ana: "status: deceased\ndied-in: chapter-04\nrevived-in: chapter-05" }
     });
-    expect(lifeline(root, "ana").life).toEqual({
-      deadAtStart: false,
-      deadAtEnd: false,
-      events: [{ type: "death", chapter: "chapter-04", source: "died-in" }, { type: "revival", chapter: "chapter-05", source: "revived-in" }]
-    });
-    expect(diagramProject(root, { kind: "relationships" }).text).toContain("  class ana revived\n");
+    expect(lifeline(root, "ana").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-04", source: "died-in" }] });
+    expect(diagramProject(root, { kind: "relationships" }).text).toContain("  class ana deceased\n");
+    expect(checkProjectContinuity(root).errors.map((finding) => finding.message)).toContain("characters/ana.md is revived in chapter-05, not after dying in chapter-04");
   });
 
   test("a died-in chapter dated before an undated one is where the death is", () => {
@@ -176,8 +174,27 @@ describe("characterLifeline", () => {
   });
 
   test("a revived-in before died-in brings nobody back", () => {
-    const root = book(makeTempDir(), "Backwards", { characters: { eli: "status: deceased\ndied-in: chapter-03\nrevived-in: chapter-02" } });
+    const root = book(makeTempDir(), "Backwards", {
+      characters: {
+        eli: "status: deceased\ndied-in: chapter-03\nrevived-in: chapter-02",
+        // A progression to deceased after that revival is no return to life,
+        // and one before died-in is no second death.
+        fay: `status: deceased\ndied-in: chapter-03\nrevived-in: chapter-02\n${progression(["chapter-04", "deceased"])}`,
+        gus: `status: alive\ndied-in: chapter-04\nrevived-in: chapter-01\n${progression(["chapter-03", "deceased"])}`
+      }
+    });
     expect(lifeline(root, "eli").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-03", source: "died-in" }] });
+    expect(lifeline(root, "fay").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-03", source: "died-in" }] });
+    expect(lifeline(root, "gus").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-04", source: "died-in" }] });
+  });
+
+  test("a status that is not one value does not stop the checks", () => {
+    const root = book(makeTempDir(), "Odd", {
+      characters: { odd: `status:\n  - toString: 1\ndied-in: chapter-02\n${progression(["chapter-04", "deceased"])}` }
+    });
+    expect(lifeline(root, "odd").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-02", source: "died-in" }] });
+    expect(validateProject(root).errors.map((finding) => finding.message)).toContain("characters/odd.md frontmatter field status must be a scalar");
+    expect(checkProjectContinuity(root).errors.map((finding) => finding.message)).toContain("characters/odd.md has died-in chapter-02 but status unset; set status: deceased");
   });
 
   test("an outline death still counts at the end of the book", () => {
@@ -225,6 +242,16 @@ describe("story series with deaths recorded as progressions", () => {
 
     // The same findings from book one, naming book two's files from there.
     expect(seriesReport(one).errors.map((finding) => finding.file)).toEqual(["../two/characters/mara.md", "../two/chapters/chapter-02.md", "../two/continuity/state.md"]);
+  });
+
+  test("a later book's status that is not one value reads as unset", () => {
+    const cwd = makeTempDir();
+    const one = book(cwd, "One", { characters: { mara: `status: alive\n${progression(["chapter-04", "deceased"])}` } });
+    const two = book(cwd, "Two", { characters: { mara: "status:\n  - toString: 1" } });
+    linkSeries([one, two]);
+    expect(seriesReport(two).errors.map((finding) => finding.message)).toEqual([
+      "characters/mara.md has status unset, but mara is deceased in earlier book One; set status: deceased"
+    ]);
   });
 
   test("a revival ends the death, in the earlier book or in the later one", () => {

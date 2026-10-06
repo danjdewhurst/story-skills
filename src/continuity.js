@@ -103,7 +103,7 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     const deathWritten = !context.chronology.outline.has(character.diedIn);
     const revivalWritten = character.revivedIn !== "" && !context.chronology.outline.has(character.revivedIn);
     if (deathWritten && !revivalWritten && character.status !== "deceased") {
-      errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${character.status || "unset"}; set status: deceased`, label));
+      errors.push(err("death-status-mismatch", `${label} has died-in ${character.diedIn} but status ${idText(character.status) || "unset"}; set status: deceased`, label));
     }
     if (revivalWritten && character.status === "deceased" && !diesAgain(character, context.chronology)) {
       errors.push(err("revival-status-mismatch", `${label} has revived-in ${character.revivedIn} but status deceased; set status: alive`, label));
@@ -135,10 +135,12 @@ function checkCharacterDeaths(project, context, errors, warnings) {
 // Whether a status progression after the revival makes the character
 // deceased again by the end of the book: a second death, which died-in
 // cannot record, so deceased is then the right status (see
-// characterLifeline).
+// characterLifeline). A death in an outline chapter is planned, so, as for
+// died-in, the status keeps describing the character as drafted so far.
 function diesAgain(character, chronology) {
   const lifeline = characterLifeline(character, chronology);
-  return lifeline.deadAtEnd && lifeline.events.at(-1)?.source === "progression";
+  const last = lifeline.events.at(-1);
+  return lifeline.deadAtEnd && last?.source === "progression" && !chronology.outline.has(last.chapter);
 }
 
 // Casts read against the character's status, frontmatter and progressions
