@@ -125,7 +125,7 @@ describe("#133 [TODO markers in chapter prose", () => {
     writeChapter(root, 2, "Clean prose.\n\n<!-- [TODO: only a note] -->");
     const report = validateProject(root);
     const todo = messages(report.warnings).filter((warning) => warning.includes("[TODO"));
-    expect(todo).toEqual([`${path.join("chapters", "chapter-01.md")} has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`]);
+    expect(todo).toEqual([`${"chapters/chapter-01.md"} has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`]);
 
     const { outFile } = buildBook(root, { format: "metadata" });
     const sheet = fs.readFileSync(outFile, "utf8");

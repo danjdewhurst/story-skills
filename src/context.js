@@ -295,7 +295,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
   const pov = idText(unit.pov) || idText(target.chapter.pov);
   const cast = [...new Set([pov, ...unit.characters.map(idText)].filter(Boolean))];
   const relative = (file) => projectPath(project.root, file);
-  const statePath = path.join("continuity", "state.md");
+  const statePath = "continuity/state.md";
 
   const sections = [];
 

@@ -85,7 +85,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "chapter", name: "One" });
     createEntity(root, { kind: "artifact", name: "Moon Blade" });
     createEntity(root, { kind: "scene", name: "Use", chapter: "chapter-01" });
-    edit(root, path.join("scenes", "chapter-01-scene-01.md"), "state-changes: []", "state-changes:\n  - target: moon-blade\n    change: swung again");
+    edit(root, "scenes/chapter-01-scene-01.md", "state-changes: []", "state-changes:\n  - target: moon-blade\n    change: swung again");
     renameEntity(root, { kind: "artifact", id: "moon-blade", name: "Sun Blade" });
     expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("  - target: sun-blade\n    change: swung again");
     removeEntity(root, { kind: "artifact", id: "sun-blade" });
@@ -96,7 +96,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     const root = newProject();
     createEntity(root, { kind: "character", name: "Kael" });
     createEntity(root, { kind: "character", name: "Sera" });
-    edit(root, path.join("characters", "sera.md"), "status: alive", "status: alive\n__proto__: keep-me");
+    edit(root, "characters/sera.md", "status: alive", "status: alive\n__proto__: keep-me");
     const sera = read(root, "characters", "sera.md");
     renameEntity(root, { kind: "character", id: "kael", name: "Kael Storm" });
     expect(read(root, "characters", "sera.md")).toBe(sera);
@@ -161,7 +161,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "C1" });
     createEntity(root, { kind: "chapter", name: "C2" });
-    edit(root, path.join("plot", "_index.md"), "| *No themes tracked yet* | | |", "| change | main | chapter-02 |");
+    edit(root, "plot/_index.md", "| *No themes tracked yet* | | |", "| change | main | chapter-02 |");
     moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
     expect(read(root, "plot", "_index.md")).toContain("| change | main | chapter-03 |");
   });
@@ -171,10 +171,10 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "chapter", name: "One" });
     createEntity(root, { kind: "chapter", name: "Two" });
     createEntity(root, { kind: "character", name: "Bob" });
-    edit(root, path.join("characters", "bob.md"), "status: alive", "status: deceased\ndied-in: chapter-02");
+    edit(root, "characters/bob.md", "status: alive", "status: deceased\ndied-in: chapter-02");
     expect(() => removeEntity(root, { kind: "chapter", id: "chapter-02" })).toThrow("chapter chapter-02 is still named by died-in, since, learned-in, or a progression's from in characters/bob.md");
     expect(read(root, "characters", "bob.md")).toContain("died-in: chapter-02");
-    edit(root, path.join("characters", "bob.md"), "died-in: chapter-02", "died-in: chapter-01");
+    edit(root, "characters/bob.md", "died-in: chapter-02", "died-in: chapter-01");
     removeEntity(root, { kind: "chapter", id: "chapter-02" });
     expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(false);
   });
@@ -184,7 +184,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     createEntity(root, { kind: "character", name: "Ann" });
     createEntity(root, { kind: "chapter", name: "One" });
     createEntity(root, { kind: "scene", name: "S", chapter: "chapter-01" });
-    edit(root, path.join("scenes", "chapter-01-scene-01.md"), "state-changes: []", "state-changes:\n  - character: ann\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451");
+    edit(root, "scenes/chapter-01-scene-01.md", "state-changes: []", "state-changes:\n  - character: ann\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451");
     renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
     expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("state-changes:\n  - character: anna\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451\n");
   });
@@ -194,7 +194,7 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(() => createEntity(root, { kind: "clue", name: "Ledger", planted: "chapter-1" })).toThrow("--planted chapter-1: did you mean chapter-01?");
     expect(() => createEntity(root, { kind: "research", name: "R", "used-in": "chapter-003" })).toThrow("did you mean chapter-03?");
     createEntity(root, { kind: "promise", name: "P", payoff: "chapter-03" });
-    edit(root, path.join("continuity", "promises", "p.md"), "payoff: chapter-03", "payoff: chapter-3");
+    edit(root, "continuity/promises/p.md", "payoff: chapter-03", "payoff: chapter-3");
     expect(messages(validateLinks(root).errors)).toContain("continuity/promises/p.md references missing chapter chapter-3");
   });
 

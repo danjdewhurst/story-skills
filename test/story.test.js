@@ -130,7 +130,7 @@ describe("story project operations", () => {
 
     const counts = computeWordCounts(created.root, { write: true });
     expect(counts).toEqual({
-      chapters: [{ number: 1, title: "The Ember Wakes", file: path.join("chapters", "chapter-01.md"), wordCount: 3 }],
+      chapters: [{ number: 1, title: "The Ember Wakes", file: "chapters/chapter-01.md", wordCount: 3 }],
       total: 3
     });
     expect(fs.readFileSync(path.join(created.root, "chapters", "chapter-01.md"), "utf8")).toContain("word-count: 3");
@@ -457,7 +457,7 @@ role: supporting
 
     const validation = validateProject(created.root);
     expect(validation.ok).toBe(false);
-    expect(messages(validation.errors)).toContain(`characters${path.sep}nameless.md is missing frontmatter field status`);
+    expect(messages(validation.errors)).toContain(`characters/nameless.md is missing frontmatter field status`);
     expect(() => exportManuscript(created.root)).toThrow("No chapters found to export");
   });
 
@@ -2029,7 +2029,7 @@ status: alive
     const root = createStoryProject({ title: "Big Index", cwd }).root;
     fs.writeFileSync(path.join(root, "characters", "_index.md"), "x".repeat(6 * 1024 * 1024), "utf8");
     const errors = messages(validateProject(root).errors).join("\n");
-    expect(errors).toContain(path.join("characters", "_index.md"));
+    expect(errors).toContain("characters/_index.md");
     expect(errors).toContain("exceeds the");
   });
 });

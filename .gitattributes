@@ -1,0 +1,3 @@
+# Check out text files with LF on every system. The bundled fallback is
+# compared byte for byte, and tests read workflow templates line by line.
+* text=auto eol=lf

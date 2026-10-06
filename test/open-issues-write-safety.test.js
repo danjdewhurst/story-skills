@@ -137,7 +137,7 @@ describe("write preflight (#198)", () => {
     const before = snapshot(root);
     const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
     expect(result.code).toBe(4);
-    expect(result.err).toBe(`Cannot write to ${path.join("plot", "arcs", "the-drowned-witness.md")} (permission denied); nothing was changed. Fix it and run the command again\n`);
+    expect(result.err).toBe(`Cannot write to ${"plot/arcs/the-drowned-witness.md"} (permission denied); nothing was changed. Fix it and run the command again\n`);
     expect(snapshot(root)).toEqual(before);
     fs.chmodSync(arc, 0o644);
     expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
@@ -206,12 +206,12 @@ describe("remove (#206, #103)", () => {
 
     const chapter = invoke(root, ["remove", "chapter", "chapter-02"]);
     expect(chapter.code).toBe(0);
-    expect(chapter.err).toContain(`warning: ${path.join("plot", "arcs", "main.md")}, ${path.join("plot", "timeline.md")} still mention chapter chapter-02 in links or ids in the text, which remove does not change: edit them, then run story links`);
+    expect(chapter.err).toContain(`warning: ${"plot/arcs/main.md"}, ${"plot/timeline.md"} still mention chapter chapter-02 in links or ids in the text, which remove does not change: edit them, then run story links`);
     expect(chapter.err).toContain(`warning: continuity/exemptions.md has an entry naming chapter-02 (exemptions[0]), which no longer matches anything: pattern "chapters/chapter-02.md has POV bo". Delete or update it`);
 
     const character = invoke(root, ["remove", "character", "bo"]);
     expect(character.code).toBe(0);
-    expect(character.err).toContain(`warning: ${path.join("characters", "_index.md")}, ${path.join("plot", "arcs", "main.md")} still mention character bo in links in the text`);
+    expect(character.err).toContain(`warning: ${"characters/_index.md"}, ${"plot/arcs/main.md"} still mention character bo in links in the text`);
   });
 
   test("a clean remove prints no warnings", () => {
@@ -283,9 +283,9 @@ describe("damaged registries point at reindex (#199)", () => {
   test("validate and rename name story reindex for an emptied registry", () => {
     const root = copyExample("harbor-of-second-light");
     fs.writeFileSync(path.join(root, "characters", "_index.md"), "");
-    expect(messages(validateProject(root).errors)).toContain(`${path.join("characters", "_index.md")}: is missing YAML frontmatter (it is a registry: run story reindex to rebuild it)`);
+    expect(messages(validateProject(root).errors)).toContain(`${"characters/_index.md"}: is missing YAML frontmatter (it is a registry: run story reindex to rebuild it)`);
     expect(() => renameEntity(root, { kind: "character", id: "ilya-venn", name: "Zed Q" }))
-      .toThrow(`${path.join("characters", "_index.md")} is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`);
+      .toThrow(`${"characters/_index.md"} is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`);
     expect(invoke(root, ["reindex"]).code).toBe(0);
     expect(validateProject(root).ok).toBe(true);
   });
@@ -303,9 +303,9 @@ describe("symlinked entity files (#63)", () => {
     const root = copyExample("the-last-ember");
     const chapter = path.join(root, "chapters", "chapter-01.md");
     fs.renameSync(chapter, path.join(root, "..", "c1.md"));
-    fs.symlinkSync(path.join("..", "..", "c1.md"), chapter);
+    fs.symlinkSync("../../c1.md", chapter);
     const result = invoke(root, ["validate"]);
-    expect(result.err).toContain(`warning: ${path.join("chapters", "chapter-01.md")} is a symlink and is ignored: replace it with the file itself`);
+    expect(result.err).toContain(`warning: ${"chapters/chapter-01.md"} is a symlink and is ignored: replace it with the file itself`);
   });
 });
 

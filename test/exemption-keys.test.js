@@ -50,8 +50,8 @@ function configure(root, yaml) {
   fs.writeFileSync(file, `${text.slice(0, end)}\n${yaml.trim()}${text.slice(end)}`, "utf8");
 }
 
-const CH1 = path.join("chapters", "chapter-01.md");
-const CH2 = path.join("chapters", "chapter-02.md");
+const CH1 = "chapters/chapter-01.md";
+const CH2 = "chapters/chapter-02.md";
 
 describe("exemption keys (#284)", () => {
   test("continuity findings carry their chapter", () => {
@@ -226,7 +226,7 @@ describe("exemption keys (#284)", () => {
     const result = validateProject(root);
     expect(result.errors).toEqual([]);
     const label = "continuity/exemptions.md exemptions";
-    expect(result.warnings.filter((warning) => warning.file === path.join("continuity", "exemptions.md")).map((warning) => [warning.code, warning.message])).toEqual([
+    expect(result.warnings.filter((warning) => warning.file === "continuity/exemptions.md").map((warning) => [warning.code, warning.message])).toEqual([
       ["stale-exemption", `${label}[0] file chapters/chapter-09.md is not a file in the project, so the entry matches nothing`],
       ["stale-exemption", `${label}[1] chapter chapter-09 is not a chapter in chapters/, so the entry matches nothing`],
       ["stale-exemption", `${label}[2] file chapters/ is not a file in the project, so the entry matches nothing`]

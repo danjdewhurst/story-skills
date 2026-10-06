@@ -253,7 +253,8 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
     expect(validateAgainstSchema(buildSchemaDocument(root), schema)).toEqual([]);
   });
 
-  // Each run takes a few milliseconds, so a deep search needs more time.
+  // Each run takes a few milliseconds (more on slower CI runners), so a deep
+  // search needs more time.
   test(`on ${RUNS} generated documents (seed ${SEED})`, () => {
     if (process.env.STORY_PROPERTY_SEED === "random") {
       console.log(`validate-schema property seed: ${SEED}`);
@@ -330,7 +331,7 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
       fs.writeFileSync(process.env.STORY_PROPERTY_REPORT, `${JSON.stringify(unique, null, 2)}\n`);
     }
     expect(unique).toEqual([]);
-  }, Math.max(5000, RUNS * 10));
+  }, Math.max(5000, RUNS * 50));
 
   test("every exception still describes a real difference", () => {
     // An exception names a kind and a field the test mutates, so a renamed

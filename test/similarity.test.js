@@ -190,7 +190,7 @@ describe("story similarity", () => {
     fs.writeFileSync(path.join(refs, "notes.pdf"), `${SHARED}.\n`);
     const report = similarityReport(root, { against: refs, cwd });
     expect(report.reference.files).toBe(2);
-    expect(report.passages.map((passage) => passage.reference.file)).toEqual([path.relative(cwd, path.join(refs, "nested", "b.markdown"))]);
+    expect(report.passages.map((passage) => passage.reference.file)).toEqual([path.relative(cwd, path.join(refs, "nested", "b.markdown")).split(path.sep).join("/")]);
   });
 
   test("--against another story project compares chapter with chapter, using that book's labels", () => {

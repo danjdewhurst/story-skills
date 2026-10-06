@@ -226,7 +226,7 @@ describe("#233 init names the linked story.md that fails to parse", () => {
     const cwd = copyExampleSeries();
     edit(path.join(cwd, "the-last-ember", "story.md"), "title:", "oops\ntitle:");
     expect(() => createStoryProject({ cwd, title: "Next", follows: ["the-last-ember"] }))
-      .toThrow(`--follows the-last-ember: ${path.join("the-last-ember", "story.md")}: Unsupported frontmatter line: oops`);
+      .toThrow(`--follows the-last-ember: ${"the-last-ember/story.md"}: Unsupported frontmatter line: oops`);
   });
 });
 

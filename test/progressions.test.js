@@ -321,9 +321,9 @@ progressions:
     expect(() => entityStateAtChapter(root, "character", "nobody", "chapter-01")).toThrow("Unknown character nobody");
     expect(() => entityStateAtChapter(root, "character", "mara-finn", "prologue")).toThrow("Unknown chapter prologue");
     fs.writeFileSync(path.join(root, "worldbuilding", "factions", "river-guild.md"), "no frontmatter\n");
-    expect(() => entityStateAtChapter(root, "faction", "river-guild", "chapter-01")).toThrow(`${path.join("worldbuilding", "factions", "river-guild.md")}: `);
+    expect(() => entityStateAtChapter(root, "faction", "river-guild", "chapter-01")).toThrow(`${"worldbuilding/factions/river-guild.md"}: `);
     fs.writeFileSync(path.join(root, "chapters", "chapter-04.md"), "no frontmatter\n");
-    expect(() => entityStateAtChapter(root, "character", "mara-finn", "chapter-01")).toThrow(`${path.join("chapters", "chapter-04.md")}: `);
+    expect(() => entityStateAtChapter(root, "character", "mara-finn", "chapter-01")).toThrow(`${"chapters/chapter-04.md"}: `);
   });
 
   test("story knowledge --at prints the character's state changes", () => {

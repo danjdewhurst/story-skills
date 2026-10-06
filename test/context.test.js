@@ -353,8 +353,8 @@ state-changes:
     const { root } = contextProject();
     const context = contextOf(root, "chapter-02-scene-02", { budget: "1" });
     const sources = new Map(context.omitted.map((entry) => [entry.id, entry.source]));
-    expect(sources.get("target:chapter-02-scene-02")).toBe(`${path.join("chapters", "chapter-02.md")}, ${path.join("scenes", "chapter-02-scene-02.md")}`);
-    expect(sources.get("state:mara-finn")).toBe(`${path.join("continuity", "state.md")}, ${path.join("scenes", "chapter-01-scene-01.md")}`);
+    expect(sources.get("target:chapter-02-scene-02")).toBe(`${"chapters/chapter-02.md"}, ${"scenes/chapter-02-scene-02.md"}`);
+    expect(sources.get("state:mara-finn")).toBe(`${"continuity/state.md"}, ${"scenes/chapter-01-scene-01.md"}`);
   });
 
   test("state.md is used only when it describes a point before the target", () => {
@@ -421,14 +421,14 @@ state-changes:
     fs.writeFileSync(path.join(root, "characters", "broken.md"), "not frontmatter\n", "utf8");
     const warned = invoke(cwd, ["context", "chapter-02", "--path", root]);
     expect(warned.code).toBe(0);
-    expect(warned.err).toContain(`warning: characters${path.sep}broken.md:`);
+    expect(warned.err).toContain(`warning: characters/broken.md:`);
     const json = invokeJson(cwd, ["context", "chapter-02", "--path", root]);
-    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: path.join("characters", "broken.md"), code: "context-file-skipped", check: "context" })]);
+    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: "characters/broken.md", code: "context-file-skipped", check: "context" })]);
 
     fs.writeFileSync(path.join(root, "chapters", "chapter-05.md"), "not frontmatter\n", "utf8");
     const failed = invoke(cwd, ["context", "chapter-02", "--path", root]);
     expect(failed.code).toBe(3);
-    expect(failed.err).toContain(`chapters${path.sep}chapter-05.md`);
+    expect(failed.err).toContain(`chapters/chapter-05.md`);
   });
 
   test("a target scene that fails to parse reports the parse error", () => {
@@ -436,7 +436,7 @@ state-changes:
     fs.writeFileSync(path.join(root, "scenes", "chapter-02-scene-01.md"), "not frontmatter\n", "utf8");
     const result = invoke(cwd, ["context", "chapter-02-scene-01", "--path", root]);
     expect(result.code).toBe(3);
-    expect(result.err).toContain(`scenes${path.sep}chapter-02-scene-01.md:`);
+    expect(result.err).toContain(`scenes/chapter-02-scene-01.md:`);
     expect(result.err).not.toContain("Unknown chapter or scene");
   });
 
