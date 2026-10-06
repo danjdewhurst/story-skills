@@ -330,6 +330,11 @@ items:
     folded item
 blank: |
 
+kept-blank: |+
+
+
+folded-blank: >+
+
 poem: >
   Lines
 
@@ -347,6 +352,8 @@ Body`);
       next: "plain",
       items: [{ note: "inside an item\n", type: "x" }, "folded item"],
       blank: "",
+      "kept-blank": "\n\n",
+      "folded-blank": "\n",
       poem: "Lines\n\n  kept as written\nthen folded together\n"
     });
   });
@@ -413,6 +420,10 @@ Body`);
     expect(failure("epigraph: > quoted")).toContain('Quote a value that starts with >, such as epigraph: "> text"');
     expect(failure("note: *bold*")).toContain('Anchors, aliases, and tags are not supported. Quote the value, such as note: "*bold*"');
     expect(failure("summary: |\n    deep\n  shallow")).toContain("(line 4). Indent every line of a block scalar");
+    expect(failure("tags: [ok, *shared]")).toContain('(line 2). Anchors, aliases, and tags are not supported. Quote the entry, such as tags: ["*shared"]');
+    expect(failure("tags: [&a foo]")).toContain("Anchors, aliases, and tags are not supported");
+    expect(failure("tags: [!tag x]")).toContain("Anchors, aliases, and tags are not supported");
+    expect(failure("tags: [alpha, beta # comment]")).toContain("(line 2). Close the list with ]");
     expect(failure("tags: [\"a, b]")).toContain("(line 2). Close each quoted entry");
     expect(failure("tags: [\"a\"  x, b]")).toContain("(line 2). Separate list entries with commas");
     expect(failure("tags:\n  - - a")).toContain("(line 3). Lists inside lists are not supported");
@@ -478,6 +489,64 @@ Body`);
     const summary = replaceFrontmatter(markdown, { ...data, summary: "Line one\nLine two" });
     expect(summary).toContain('summary: "Line one\\nLine two"\n\ncharacters:');
     expect(parseFrontmatter(summary).data.summary).toBe("Line one\nLine two");
+  });
+
+  test("keeps blank and comment lines inside a list when items change", () => {
+    const markdown = [
+      "---",
+      "characters:",
+      "  # the leads",
+      "  - sera-voss",
+      "",
+      "  # the brother",
+      "  - kael-voss",
+      "relationships:",
+      "  - character: kael-voss",
+      "    # why they fight",
+      "    type: sibling",
+      "    note: |",
+      "      Old",
+      "      grudge",
+      "",
+      "  # the rival",
+      "  - character: mara",
+      "    type: rival",
+      "---",
+      "Body"
+    ].join("\n");
+    const { data } = parseFrontmatter(markdown);
+    const renamed = (id) => (id === "kael-voss" ? "kael-storm" : id);
+    const next = replaceFrontmatter(markdown, {
+      characters: data.characters.map(renamed),
+      relationships: data.relationships.map((entry) => ({ ...entry, character: renamed(entry.character) }))
+    });
+
+    expect(next).toBe([
+      "---",
+      "characters:",
+      "  # the leads",
+      "  - sera-voss",
+      "",
+      "  # the brother",
+      "  - kael-storm",
+      "relationships:",
+      "  - character: kael-storm",
+      "    # why they fight",
+      "    type: sibling",
+      "    note: |",
+      "      Old",
+      "      grudge",
+      "",
+      "  # the rival",
+      "  - character: mara",
+      "    type: rival",
+      "---",
+      "Body"
+    ].join("\n"));
+    expect(replaceFrontmatter(next, parseFrontmatter(next).data)).toBe(next);
+
+    const dropped = replaceFrontmatter(markdown, { ...data, characters: ["kael-voss"] });
+    expect(dropped).toContain("characters:\n  # the leads\n\n  # the brother\n  - kael-voss\nrelationships:");
   });
 
   test("does not mix original and new key lines in a list item indented its own way", () => {

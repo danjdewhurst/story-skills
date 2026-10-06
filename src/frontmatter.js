@@ -85,13 +85,13 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
     if (isDeepEqual(original[block.key], value)) {
       lines.push(...block.lines);
     } else {
-      lines.push(...stringifyEntry(block.key, value, block.items, generatedEnd, block.indent));
+      lines.push(...stringifyEntry(block.key, value, block, generatedEnd));
     }
   }
 
   for (const [key, value] of Object.entries(data)) {
     if (!written.has(key)) {
-      lines.push(...stringifyEntry(key, value, [], generatedEnd));
+      lines.push(...stringifyEntry(key, value, undefined, generatedEnd));
     }
   }
 
@@ -112,9 +112,12 @@ export function replaceFrontmatter(markdown, data, bodyOverride) {
 const FRONTMATTER_PARTS_PATTERN = /^((?:\uFEFF)?---[ \t]*\r?\n)(?:([\s\S]*?)(\r?\n))?(---[ \t]*(?:\r?\n|$))/;
 
 // Newly written lines end with lineEnd ("\r" in a CRLF file) before the "\n"
-// join; reused source lines keep the ending they already have. New list items
-// take the original list's indent, so they line up with the items they join.
-function stringifyEntry(key, value, originalItems = [], lineEnd = "", indent = "  ") {
+// join; reused source lines keep the ending they already have. original is
+// the entry's parsed block: its list items, the indent they share, and the
+// blank and comment lines before its first item. New items take that indent,
+// so they line up with the items they join, and the blank and comment lines
+// inside the list stay where they were.
+function stringifyEntry(key, value, original = {}, lineEnd = "") {
   if (!Array.isArray(value)) {
     return [`${key}: ${formatScalar(value)}${lineEnd}`];
   }
@@ -122,7 +125,9 @@ function stringifyEntry(key, value, originalItems = [], lineEnd = "", indent = "
     return [`${key}: []${lineEnd}`];
   }
 
-  const lines = [`${key}:${lineEnd}`];
+  const originalItems = original.items ?? [];
+  const indent = original.indent ?? "  ";
+  const lines = [`${key}:${lineEnd}`, ...(original.leading ?? [])];
   // Original items keyed by value, each key a queue in file order, so every
   // item keeps its original formatting in one pass over long lists.
   const unused = new Map();
@@ -146,25 +151,34 @@ function stringifyEntry(key, value, originalItems = [], lineEnd = "", indent = "
   });
   value.forEach((item, index) => {
     if (matches[index]) {
-      lines.push(...matches[index].lines);
+      lines.push(...matches[index].before, ...matches[index].lines);
       return;
     }
     // A changed mapping item (a rename touched one of its keys) keeps the
     // original text of every key whose value did not change, so `code: 0451`
-    // is not rewritten as 451. Only an item written one key per line, with
-    // its keys where new lines put them, can mix old and new lines.
-    const original = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate)
-      && isPlainObject(candidate.value) && sameKeys(candidate.value, item) && candidate.lines.length === Object.keys(item).length
+    // is not rewritten as 451. Only an item whose keys sit where new lines
+    // put them can mix old and new lines.
+    const partial = isPlainObject(item) ? originalItems.find((candidate) => !reused.has(candidate)
+      && isPlainObject(candidate.value) && sameKeys(candidate.value, item)
       && candidate.childIndent === indent.length + 2) : undefined;
     const fresh = stringifyItem(key, item, indent).map((line) => `${line}${lineEnd}`);
-    if (!original) {
-      lines.push(...fresh);
+    if (partial) {
+      reused.add(partial);
+      lines.push(...partial.before);
+      Object.keys(item).forEach((childKey, childIndex) => {
+        const source = partial.keyLines[childIndex];
+        lines.push(...source.before);
+        lines.push(...(isDeepEqual(partial.value[childKey], item[childKey]) ? source.lines : [fresh[childIndex]]));
+      });
       return;
     }
-    reused.add(original);
-    Object.keys(item).forEach((childKey, childIndex) => {
-      lines.push(isDeepEqual(original.value[childKey], item[childKey]) ? original.lines[childIndex] : fresh[childIndex]);
-    });
+    // A replaced item keeps the comment lines above the item it replaces.
+    const positional = originalItems[index];
+    if (positional && !reused.has(positional)) {
+      reused.add(positional);
+      lines.push(...positional.before);
+    }
+    lines.push(...fresh);
   });
   return lines;
 }
@@ -323,6 +337,9 @@ function parseYamlBlocks(source, firstLine = 2) {
         if (/:(\s|$)/.test(item)) {
           fail(index, "Flow mappings are not supported. Quote an entry that holds a colon, such as tags: [\"note: draft\"]");
         }
+        if (/^[&*!]/.test(item)) {
+          fail(index, `Anchors, aliases, and tags are not supported. Quote the entry, such as tags: [${JSON.stringify(item)}]`);
+        }
       }
       items.push(parseScalar(item));
       if (value[at] === ",") {
@@ -364,8 +381,9 @@ function parseYamlBlocks(source, firstLine = 2) {
       end = scan + 1;
     }
     const body = text.slice(0, end - index - 1);
-    if (!body.some((line) => line !== "")) {
-      return { value: "", end };
+    if (body.length === 0) {
+      // Only blank lines: keep chomping keeps one line break for each.
+      return { value: chomp === "+" ? "\n".repeat(text.length) : "", end };
     }
     const joined = style === "|" ? body.join("\n") : foldLines(body);
     const trailing = chomp === "-" ? "" : chomp === "+" ? "\n".repeat(1 + text.length - body.length) : "\n";
@@ -396,11 +414,14 @@ function parseYamlBlocks(source, firstLine = 2) {
     return "Write a value that runs over several lines as a block scalar, such as   - | then the text on lines indented past the dash";
   };
 
+  // A block list whose first line (an item, or a blank or comment line
+  // before one) is start. Each item records the blank and comment lines
+  // before it, its own lines, and for a mapping, each key's lines.
   const parseList = (start, indent) => {
     const items = [];
-    const starts = [];
-    const childIndents = [];
+    const sources = [];
     let index = start;
+    let gap = start;
     while (index < lines.length) {
       if (isBlankOrComment(lines[index])) {
         // A blank or comment line belongs to the list when another item of
@@ -421,11 +442,11 @@ function parseYamlBlocks(source, firstLine = 2) {
         break;
       }
 
-      starts.push(index);
+      const itemStart = index;
+      const before = rawLines.slice(gap, itemStart);
       const rest = match[2] ?? "";
       const itemText = rest.trimStart();
       const childIndent = indent + 1 + rest.length - itemText.length;
-      childIndents.push(childIndent);
       const objectMatch = ITEM_KEY_PATTERN.exec(itemText);
       if (!objectMatch) {
         if (/^-(\s|$)/.test(itemText)) {
@@ -434,11 +455,14 @@ function parseYamlBlocks(source, firstLine = 2) {
         const holder = Object.create(null);
         index = readValue(holder, "item", rest, index, indent);
         items.push(holder.item);
+        sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent });
+        gap = index;
         continue;
       }
 
       const item = Object.create(null);
       index = readValue(item, objectMatch[1], objectMatch[2] ?? "", index, childIndent);
+      const keyLines = [{ before: [], lines: rawLines.slice(itemStart, index) }];
       const childPattern = new RegExp(`^ {${childIndent}}([A-Za-z0-9_-]+):(.*)$`);
       while (index < lines.length) {
         const next = nextContent(index);
@@ -446,15 +470,18 @@ function parseYamlBlocks(source, firstLine = 2) {
         if (!child) {
           break;
         }
-        index = next;
         if (Object.prototype.hasOwnProperty.call(item, child[1])) {
-          fail(index, "Remove or rename one of the two keys in this list item", `Duplicate frontmatter key: ${child[1]}`);
+          fail(next, "Remove or rename one of the two keys in this list item", `Duplicate frontmatter key: ${child[1]}`);
         }
-        index = readValue(item, child[1], child[2], index, childIndent);
+        const keyGap = index;
+        index = readValue(item, child[1], child[2], next, childIndent);
+        keyLines.push({ before: rawLines.slice(keyGap, next), lines: rawLines.slice(next, index) });
       }
       items.push(item);
+      sources.push({ before, lines: rawLines.slice(itemStart, index), childIndent, keyLines });
+      gap = index;
     }
-    return { items, starts, childIndents, nextIndex: index };
+    return { items, sources, nextIndex: index };
   };
 
   for (let index = 0; index < lines.length;) {
@@ -500,18 +527,18 @@ function parseYamlBlocks(source, firstLine = 2) {
       continue;
     }
 
-    const indent = first[1].length;
-    const list = parseList(next, indent);
+    const list = parseList(index + 1, first[1].length);
     data[key] = list.items;
+    // The lines between the key and its first item belong to the list, not
+    // to whichever item comes first.
+    const leading = list.sources[0].before;
+    list.sources[0].before = [];
     blocks.push({
       key,
       lines: rawLines.slice(index, list.nextIndex),
-      indent: " ".repeat(indent),
-      items: list.items.map((item, itemIndex) => ({
-        value: toPlainObject(item),
-        childIndent: list.childIndents[itemIndex],
-        lines: rawLines.slice(list.starts[itemIndex], list.starts[itemIndex + 1] ?? list.nextIndex)
-      }))
+      indent: first[1],
+      leading,
+      items: list.items.map((item, itemIndex) => ({ value: toPlainObject(item), ...list.sources[itemIndex] }))
     });
     index = list.nextIndex;
   }
@@ -584,6 +611,10 @@ function flowListEnd(text) {
     const char = text[at];
     if (char === "]") {
       return at;
+    }
+    // A comment hides the rest of the line, closing bracket included.
+    if (char === "#" && /\s/.test(text[at - 1])) {
+      return -1;
     }
     if (char === ",") {
       entryStart = true;
