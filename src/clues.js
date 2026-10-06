@@ -3,8 +3,8 @@
 // notice. `story continuity` owns the hard ordering errors; everything here is
 // a warning.
 
-import path from "node:path";
 import { warn } from "./findings.js";
+import { projectPath } from "./files.js";
 
 const LIVE_STATUSES = new Set(["planned", "planted", "paid-off"]);
 
@@ -22,7 +22,7 @@ export function buildClueMatrix(project) {
 
   for (const clue of clues) {
     const label = `clue ${clue.id}`;
-    const file = path.relative(project.root, clue.file);
+    const file = projectPath(project.root, clue.file);
     const plantAt = position.get(clue.planted);
     const payoffAt = position.get(clue.payoff);
     rows.push({

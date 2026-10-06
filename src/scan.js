@@ -9,6 +9,7 @@ import {
   FILE_ERROR_REASONS,
   isPathInside,
   lstatIfExists,
+  projectPath,
   readTextFile
 } from "./files.js";
 import { isTruthy } from "./options.js";
@@ -1893,12 +1894,12 @@ export function readMarkdown(filePath, root) {
 // file-system error (permission denied) is put in plain words after the path
 // rather than Node's "EACCES: ..., open '<path>'".
 export function relativePathError(error, filePath, root) {
-  const relativePath = path.relative(root, filePath);
+  const relativePath = projectPath(root, filePath);
   const reason = typeof error.code === "string" && error.path === filePath ? FILE_ERROR_REASONS[error.code] : undefined;
   if (reason) {
     return projectError(`${relativePath}: Cannot read: ${reason}`);
   }
-  return projectError(error.message.split(filePath).join(relativePath).split(path.resolve(root, relativePath)).join(relativePath));
+  return projectError(error.message.split(filePath).join(relativePath).split(path.resolve(root, filePath)).join(relativePath));
 }
 
 // Labels a scan error with the file's project-relative path, once: a message
@@ -2073,5 +2074,5 @@ function sceneChapterFromFile(file) {
 }
 
 export function relative(project, file) {
-  return path.relative(project.root, file);
+  return projectPath(project.root, file);
 }

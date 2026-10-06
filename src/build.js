@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
-import { lstatIfExists, nearestExistingAncestor, writeFile } from "./files.js";
+import { lstatIfExists, nearestExistingAncestor, projectPath, writeFile } from "./files.js";
 import {
   chapterHeading,
   chapterProse,
@@ -641,10 +641,10 @@ function assertNotProjectSource(project, outFile) {
     const lower = relativePath.toLowerCase();
     const [first] = lower.split(path.sep);
     if (SOURCE_ROOT_FILES.has(lower) || SOURCE_DIRECTORIES.includes(first)) {
-      throw refusedError(`Refusing to write generated output to ${path.relative(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
+      throw refusedError(`Refusing to write generated output to ${projectPath(project.root, outFile)}: it is project source. Use a path such as dist/ instead`);
     }
     if (HAND_EDITED_DIRECTORIES.includes(first) && relativePath.includes(path.sep) && lstatIfExists(outFile) !== null) {
-      throw refusedError(`Refusing to overwrite ${path.relative(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
+      throw refusedError(`Refusing to overwrite ${projectPath(project.root, outFile)}: files in ${HAND_EDITED_DIRECTORIES.map((dir) => `${dir}/`).join(", ")} may hold hand-written work. Delete it first to regenerate it, or use a path such as dist/ instead`);
     }
   }
 }

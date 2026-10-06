@@ -1,5 +1,4 @@
 // Project report and the next-action planner.
-import path from "node:path";
 import { checkContinuity } from "./continuity.js";
 import { characterCount, wordCount } from "./markdown.js";
 import { applySeverity } from "./config.js";
@@ -396,7 +395,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
   // new one.
   const undrafted = project.chapters.find((chapter) => chapter.wordCount === 0 && Number.isInteger(chapter.number) && chapter.number > 0);
   if (drafting && undrafted) {
-    actions.push(action("P2", `Draft chapter ${undrafted.number}`, `${path.relative(project.root, undrafted.file)} has no prose yet${undrafted.status === "" ? "" : ` (status ${undrafted.status})`}: draft it under ## Chapter Text to ${nextLabel}, then run story wordcount ${where} --write.`));
+    actions.push(action("P2", `Draft chapter ${undrafted.number}`, `${relative(project, undrafted.file)} has no prose yet${undrafted.status === "" ? "" : ` (status ${undrafted.status})`}: draft it under ## Chapter Text to ${nextLabel}, then run story wordcount ${where} --write.`));
   } else if (drafting) {
     actions.push(action("P2", `Draft chapter ${nextNumber}`, `Use story add chapter "Chapter ${nextNumber}" --number ${nextNumber}${where === "." ? "" : ` --path ${where}`}, then outline scenes to ${nextLabel}.`));
   }

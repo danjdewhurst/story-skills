@@ -169,7 +169,7 @@ function writeWholeFile(filePath, contents, options) {
     }
     if (options.unchangedFrom !== undefined && currentText(target) !== options.unchangedFrom) {
       fs.rmSync(temporary, { force: true });
-      throw Object.assign(new Error(`${options.root ? path.relative(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
+      throw Object.assign(new Error(`${options.root ? projectPath(path.resolve(options.root), target) : target} changed on disk while story was updating it, so it was left as it is. Run the command again`), { changedOnDisk: true });
     }
     fs.renameSync(temporary, target);
   } catch (error) {
@@ -341,6 +341,20 @@ function rejectSymlinkTarget(filePath, action) {
 
 export function lstatIfExists(filePath) {
   return fs.lstatSync(filePath, { throwIfNoEntry: false }) ?? null;
+}
+
+// A project path as story shows it in messages, --json output, and the
+// files it writes: forward slashes on every system, so output and
+// exemption entries are the same on Windows as elsewhere. `sep` is the
+// separator the path was built with (path.win32.sep in tests).
+export function portablePath(filePath, sep = path.sep) {
+  return typeof filePath !== "string" || sep === "/" ? filePath : filePath.split(sep).join("/");
+}
+
+// `file` relative to `root`, as a portable path. `paths` is node:path, or
+// path.win32 / path.posix in tests.
+export function projectPath(root, file, paths = path) {
+  return portablePath(paths.relative(root, file), paths.sep);
 }
 
 export function isPathInside(root, target) {

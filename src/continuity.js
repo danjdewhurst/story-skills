@@ -1,6 +1,7 @@
 import path from "node:path";
 import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
+import { projectPath } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
 import { progressionDeathAt, progressionDeathFrom, progressionStatusAt, statusProgressions } from "./deaths.js";
@@ -912,7 +913,7 @@ function requireMapping(entry, entryLabel, file, errors) {
 }
 
 function relative(project, file) {
-  return path.relative(project.root, file);
+  return projectPath(project.root, file);
 }
 
 // The chapter a chapter or scene record is in, for a finding's `chapter`: a
