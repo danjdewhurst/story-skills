@@ -123,10 +123,9 @@ every edition.
 After each batch of translated chapters:
 
 ```shell
+story reindex ../book-de
 story wordcount ../book-de --write
-story validate ../book-de
-story links ../book-de
-story continuity ../book-de
+story check ../book-de
 story compare ../book-de --against .
 ```
 

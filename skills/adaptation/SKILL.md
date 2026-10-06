@@ -159,12 +159,14 @@ with the `interactive-fiction` skill.
   that branches. Check and build it:
 
   ```shell
-  story validate .
-  story links .
+  story reindex .
+  story wordcount . --write
+  story check .
   story build . --format twee --out adaptations/interactive/{story-id}.twee
   ```
 
-  Fix every `links` warning about a chapter no choice path reaches.
+  Fix every `unreachable-chapter` warning about a chapter no choice path
+  reaches.
   `--out` never replaces an existing file under `adaptations/`, so delete
   the old `.twee` before a rebuild.
 - **Ink:** set up the interactive edition project the same way, check it
@@ -198,9 +200,9 @@ Follow `references/translation.md`.
    chapter sets:
 
    ```shell
-   story validate ../book-es
-   story links ../book-es
-   story continuity ../book-es
+   story reindex ../book-es
+   story wordcount ../book-es --write
+   story check ../book-es
    story compare ../book-es --against .
    ```
 
@@ -235,13 +237,13 @@ setting `form` or `language`:
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
-After changing chapters in a picture-book, translated, or interactive
-project, also run `story wordcount . --write`. After adding, retargeting,
-or removing `choices`, run `story links .` and rebuild the Twee or ink file.
+Run the same block after changing chapters in a picture-book, translated,
+or interactive project. After adding, retargeting, or removing `choices`,
+run it and rebuild the Twee or ink file.
 `story move` and `story remove` keep `choices` targets in step.
 
 ## Reference Files

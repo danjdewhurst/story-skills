@@ -93,8 +93,8 @@ After carrying entities, run in the new book:
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 story series .
 ```
 
@@ -135,9 +135,8 @@ After any change to series links or carried entities, run the checks in each aff
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story series .
 ```
 

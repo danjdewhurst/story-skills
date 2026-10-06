@@ -96,5 +96,4 @@ project use `mode: outlined` (or omit the field).
 - [ ] Diff run: every contradiction resolved (bible updated OR chapter revised)
 - [ ] `continuity/state.md`, `plot/timeline.md`, registries updated
 - [ ] Post-hoc notes appended; `mode: discovered` in frontmatter
-- [ ] `story wordcount . --write`, `story reindex .`, `story links .`,
-      `story validate .`, `story continuity .`
+- [ ] `story reindex .`, `story wordcount . --write`, and `story check .`

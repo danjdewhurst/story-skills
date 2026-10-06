@@ -20,7 +20,7 @@ A story project must already exist (created via the story-init skill). Verify by
 3. Recommend a structure based on genre (default to three-act if unclear). If the user wants to design the whole book top-down before drafting, or asks for the Snowflake Method, follow `references/snowflake.md` on top of the chosen structure
 4. Update `plot/_index.md` frontmatter `structure` field
 5. Populate the story structure section with the beat sheet
-6. When CLI access is available, run `story validate .`
+6. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Creating an Arc
 
@@ -39,7 +39,7 @@ A story project must already exist (created via the story-init skill). Verify by
 8. Update `plot/_index.md` arcs table
 9. Update theme tracking in `plot/_index.md`
 10. If characters are referenced, verify they exist in `characters/`
-11. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+11. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Managing Plot Points
 
@@ -50,7 +50,7 @@ Plot points live within arc files in the "Plot Points" table. When adding a plot
 3. Add the event to `plot/timeline.md` in chronological order
 4. If the plot point involves foreshadowing, add it to the arc's foreshadowing table
 5. If the plot point creates a reader promise or mystery, create or update a record in `continuity/promises/` or `continuity/questions/`
-6. When CLI access is available, run `story reindex .`, `story links .`, and `story validate .`
+6. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Timeline Management
 

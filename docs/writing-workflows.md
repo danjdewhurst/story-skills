@@ -51,13 +51,13 @@ flowchart LR
 | Stage | Skills | Main CLI checks |
 |-------|--------|-----------------|
 | Find the idea | `premise-workshop` | `story init --form`, `story names` |
-| Set up | `story-init` | `story init`, `story validate`, `story next` |
-| Plan | `plot-structure`, `character-management`, `worldbuilding`, `theme-craft`, `genre-craft` | `story reindex`, `story links`, `story validate`, `story names`, `story diagram`, `story clues` |
-| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft`; `interactive-fiction` for a branching book | `story wordcount --write`, `story continuity`, `story pacing`, `story progress --log` |
-| Keep it consistent | `voice-style`, `research` | `story prose`, `story voices`, `story validate` |
+| Set up | `story-init` | `story init`, `story check`, `story next` |
+| Plan | `plot-structure`, `character-management`, `worldbuilding`, `theme-craft`, `genre-craft` | `story reindex`, `story check`, `story names`, `story diagram`, `story clues` |
+| Draft | `chapter-writing` or `discovery-drafting`, with `scene-craft`; `interactive-fiction` for a branching book | `story wordcount --write`, `story check`, `story pacing`, `story progress --log` |
+| Keep it consistent | `voice-style`, `research` | `story prose`, `story voices`, `story check` |
 | Revise | `revision-continuity`, `theme-craft` (theme audit) | `story passes`, `story next`, `story continuity`, `story pacing`, `story clues`, `story doctor`, `story compare` |
 | Polish | `line-editing` | `story prose`, `story voices`, `story build --format narration`/`html`/`print` |
-| Get outside readers | `reader-panel`, `feedback-triage`, `editorial-review` | `story build --format html`, `story continuity`, `story validate` |
+| Get outside readers | `reader-panel`, `feedback-triage`, `editorial-review` | `story build --format html`, `story check` |
 | Send it out | `submission`, `publishing`, `adaptation` | `story synopsis`, `story build --format shunn`/`epub`/`print`/`metadata`/`narration` |
 
 Sequels and prequels add `series-continuity` on top of any of these; see [Series](series.md).
@@ -78,15 +78,21 @@ The commands on this page use `story` and assume you are in the project root, so
 
 ### The maintenance loop
 
-Almost every workflow ends with some subset of these five commands:
+Every workflow that changes story files ends with the same maintenance block, in this order:
 
-| Command | Run it when | What it does |
-|---------|-------------|--------------|
-| `story wordcount . --write` | Prose changed | Recounts prose under `## Chapter Text` and writes `word-count` into chapter frontmatter |
-| `story reindex .` | You hand-edited entity files | Rebuilds every `_index.md` registry table from the files |
-| `story links .` | References changed | Checks that every id points at a real file and that backlinks exist both ways |
-| `story validate .` | Always, last | Checks structure, frontmatter fields and values, and registries |
-| `story continuity .` | Chapters or scenes changed | Checks deaths, question, promise, and clue ordering, casts, and `continuity/state.md` |
+```shell
+story reindex .
+story wordcount . --write
+story check .
+```
+
+| Command | What it does |
+|---------|--------------|
+| `story reindex .` | Rebuilds every `_index.md` registry table from the files |
+| `story wordcount . --write` | Recounts prose under `## Chapter Text`, writes `word-count` into chapter frontmatter, and reindexes again |
+| `story check .` | Runs `validate` (structure, frontmatter fields and values, registries), `links` (every id points at a real file, backlinks exist both ways), and `continuity` (deaths, question, promise, and clue ordering, casts, `continuity/state.md`) over one scan. It exits 1 on errors; warnings print but do not fail it unless you pass `--strict` |
+
+Skills add their own checks after the block where they help, such as `story clues .` for a mystery or `story pacing .` after drafting. Run `story validate .`, `story links .`, or `story continuity .` alone when you want one check's findings.
 
 `story add` rebuilds the registries itself, so you only need `story reindex .` after editing files by hand. `story next .` runs `validate`, `links`, and `continuity` and turns their results into a prioritised to-do list, which makes it a good way to start a session.
 
@@ -222,7 +228,7 @@ story init "The Gannet Point Light" --form novel --genre mystery --sub-genre coa
 
 `--form novel` records the form and sets `target-words: 80000`. Without `--form`, `story init` writes neither field, so the skill passes `--form novel` when you don't choose. It then fills in the `story.md` bible: the synopsis, a Tone & Style section derived from the genre and themes, and a working `premise` and `counter-premise`. Treat both as guesses. The skill says to revise the premise later if the draft argues something different, rather than bending the draft to fit.
 
-The skill finishes with `story validate` and suggests `story next` as a next step. A fresh project is valid, and `story next` tells you where to go:
+The skill finishes with `story reindex .`, `story wordcount . --write`, and `story check .`, and suggests `story next` as a next step. A fresh project is valid, and `story next` tells you where to go:
 
 ```text
 # Next Writing Actions: The Gannet Point Light

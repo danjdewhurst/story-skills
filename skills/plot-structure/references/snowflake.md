@@ -64,7 +64,7 @@ When drafting finds a better story than the design, change the design at the sma
 
 ## Maintenance
 
-After every step from Step 2 on that creates or edits arcs, characters, chapters, scenes, promises, or questions, run `story reindex .`, `story links .`, and `story validate .`. After Step 10, also run `story wordcount . --write`. In early steps `story links .` reports characters named in an arc before their file exists; they clear once Step 3 creates them.
+After every step from Step 2 on that creates or edits arcs, characters, chapters, scenes, promises, or questions, run `story reindex .`, `story wordcount . --write`, and `story check .`. In early steps `story check .` reports characters named in an arc before their file exists; they clear once Step 3 creates them.
 
 ## When to Ask the User
 

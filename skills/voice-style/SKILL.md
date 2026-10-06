@@ -188,11 +188,11 @@ available, apply the checks in `references/prose-checks.md` by reading.
 After editing the style sheet or revising prose:
 
 ```shell
-story validate .
+story reindex .
+story wordcount . --write
+story check .
 story prose .
 story voices .
-story wordcount . --write
-story links .
 ```
 
 ## Reference Files

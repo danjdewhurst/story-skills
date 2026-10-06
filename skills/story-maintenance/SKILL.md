@@ -25,12 +25,25 @@ Run the installed or bundled CLI in place. Do not copy `scripts/story.js` into t
 
 Run commands from the story project root, or pass the story path explicitly.
 
+After any change to story files, run the maintenance block, in this order:
+
 ```shell
+story reindex .
+story wordcount . --write
+story check .
+```
+
+`reindex` rebuilds the registries, `wordcount --write` updates chapter counts (and reindexes again), and `check` then runs `validate`, `links`, and `continuity` over the settled files. `check` exits 1 only on errors; warnings print but do not fail it (`--strict` makes them fail). Every skill ends its edits with this block, followed by any skill-specific checks such as `story clues .` or `story pacing .`.
+
+The full command set:
+
+<!-- command-reference -->
+```shell
+story reindex .
+story wordcount . --write
 story check .
 story check . --strict
 story validate .
-story reindex .
-story wordcount . --write
 story links .
 story continuity .
 story prose .
@@ -109,7 +122,7 @@ The check commands' detailed rules live in `references/continuity-checks.md`, on
 
 Use:
 
-- `check` at the end of an editing session, after `wordcount --write` and `reindex`, and before reporting the project clean: it runs `validate`, `links`, and `continuity` over one scan, lists each finding once, and exits 1 if any of them has an error (`--strict` also fails on warnings). Run the three separately when you want one check's findings
+- `check` at the end of an editing session, after `reindex` and `wordcount --write`, and before reporting the project clean: it runs `validate`, `links`, and `continuity` over one scan, lists each finding once, and exits 1 if any of them has an error (`--strict` also fails on warnings). Run the three separately when you want one check's findings
 - `validate` after initialization and at the end of any multi-file edit
 - `reindex` after adding, removing, renaming, or moving any entity file. It rebuilds the character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, and glossary registries. `story add` reindexes itself; a hand-written file does not
 - `wordcount --write` after writing or revising chapters

@@ -133,29 +133,29 @@ The main handoffs:
 
 | Skill | Main files it writes | CLI commands it runs |
 |-------|----------------------|----------------------|
-| [premise-workshop](#premise-workshop) | Optional `premise-notes.md`, then `story.md` premise fields and notes after init | `init --form`, `names`, `validate`, `report` |
-| [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init --form`, `validate` (then suggests `next`) |
-| [character-management](#character-management) | `characters/*.md`, `characters/_index.md` | `names`, `add character`, `diagram relationships`, `reindex`, `links`, `validate` |
-| [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md` | `names`, `add faction`, `add artifact`, `diagram locations`, `reindex`, `links`, `validate` |
-| [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `grid`, `diagram timeline`/`arcs`/`clues`, `reindex`, `links`, `validate` |
-| [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `links`, `validate` |
-| [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `links`, `validate`, `continuity` |
-| [research](#research) | `research/*.md` | `add research`, `reindex`, `links`, `validate` |
-| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `next`, `pacing`, `progress --log` |
-| [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `progress --log` |
-| [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `links`, `validate`, `continuity`, `pacing` |
-| [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `validate`, `wordcount --write`, `links`, `rename character` |
-| [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `wordcount --write`, `links`, `validate` (story verse only) |
-| [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `remove chapter`, `build --format twee`/`ink`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity` |
-| [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `wordcount --write`, `reindex`, `links`, `validate`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
-| [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `wordcount --write`, `links`, `validate` |
-| [reader-panel](#reader-panel) | `feedback/round-N/{persona}.md`, marked `source: simulated` | `build --format html --stamp`, `context`, `prose` (line editor), `reindex`, `links`, `validate` |
-| [feedback-triage](#feedback-triage) | `feedback/round-N/*.md` | `build --format html`, `reindex`, `links`, `validate`, `continuity` |
-| [editorial-review](#editorial-review) | Research `risk` and `reviewed-by`, matter permission fields, `story.md` `ai-disclosure` and `authors` | `add research`, `build --format docx`/`html`/`shunn`/`metadata`, `compare`, `similarity`, `reindex`, `links`, `validate`, `wordcount --write` |
-| [series-continuity](#series-continuity) | A new linked project, carried entity files, `fact` ids | `init --follows`/`--precedes`, `series`, `reindex`, `links`, `validate`, `continuity` |
-| [submission](#submission) | `submission/*.md`, Shunn builds in `dist/` | `validate`, `links`, `continuity`, `prose`, `wordcount --write`, `report`, `synopsis`, `build` |
-| [publishing](#publishing) | `story.md` publishing metadata, copyright matter page, `publishing/*.md` | `validate`, `links`, `continuity`, `prose`, `wordcount --write`, `passes`, `add matter`, `build --format metadata`/`epub`/`print`, `reindex` |
-| [adaptation](#adaptation) | `pronunciation` fields, `adaptations/**`, a translated sibling project | `build --format narration`/`fountain`, `timeline`, `names`, `init --form picture-book`, `compare --against`, `reindex`, `links`, `validate`, `continuity` |
+| [premise-workshop](#premise-workshop) | Optional `premise-notes.md`, then `story.md` premise fields and notes after init | `init --form`, `names`, `reindex`, `wordcount --write`, `check`, `report` |
+| [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init --form`, `reindex`, `wordcount --write`, `check` (then suggests `next`) |
+| [character-management](#character-management) | `characters/*.md`, `characters/_index.md` | `names`, `add character`, `diagram relationships`, `reindex`, `wordcount --write`, `check` |
+| [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md` | `names`, `add faction`, `add artifact`, `diagram locations`, `reindex`, `wordcount --write`, `check` |
+| [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `grid`, `diagram timeline`/`arcs`/`clues`, `reindex`, `wordcount --write`, `check` |
+| [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `wordcount --write`, `check` |
+| [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `wordcount --write`, `check` |
+| [research](#research) | `research/*.md` | `add research`, `reindex`, `wordcount --write`, `check` |
+| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `reindex`, `wordcount --write`, `check`, `next`, `pacing`, `progress --log` |
+| [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `reindex`, `wordcount --write`, `check`, `progress --log` |
+| [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `wordcount --write`, `check`, `pacing` |
+| [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `reindex`, `wordcount --write`, `check`, `rename character` |
+| [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `reindex`, `wordcount --write`, `check` (story verse only) |
+| [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `remove chapter`, `build --format twee`/`ink`, `reindex`, `wordcount --write`, `check` |
+| [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `reindex`, `wordcount --write`, `check`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
+| [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `reindex`, `wordcount --write`, `check` |
+| [reader-panel](#reader-panel) | `feedback/round-N/{persona}.md`, marked `source: simulated` | `build --format html --stamp`, `context`, `prose` (line editor), `reindex`, `wordcount --write`, `check` |
+| [feedback-triage](#feedback-triage) | `feedback/round-N/*.md` | `build --format html`, `reindex`, `wordcount --write`, `check` |
+| [editorial-review](#editorial-review) | Research `risk` and `reviewed-by`, matter permission fields, `story.md` `ai-disclosure` and `authors` | `add research`, `build --format docx`/`html`/`shunn`/`metadata`, `compare`, `similarity`, `reindex`, `wordcount --write`, `check` |
+| [series-continuity](#series-continuity) | A new linked project, carried entity files, `fact` ids | `init --follows`/`--precedes`, `series`, `reindex`, `wordcount --write`, `check` |
+| [submission](#submission) | `submission/*.md`, Shunn builds in `dist/` | `reindex`, `wordcount --write`, `check`, `prose`, `report`, `synopsis`, `build` |
+| [publishing](#publishing) | `story.md` publishing metadata, copyright matter page, `publishing/*.md` | `reindex`, `wordcount --write`, `check`, `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
+| [adaptation](#adaptation) | `pronunciation` fields, `adaptations/**`, a translated sibling project | `build --format narration`/`fountain`, `timeline`, `names`, `init --form picture-book`, `compare --against`, `reindex`, `wordcount --write`, `check` |
 | [story-maintenance](#story-maintenance) | Registries, word counts, exports, `dist/` | Every CLI command |
 
 ## Setting up
@@ -190,7 +190,7 @@ The main handoffs:
 
 **Writes.** Optionally `premise-notes.md` in the current directory, outside the future project folder, while no project exists. After init it offers to move that file into the project as `notes/premise-notes.md`, and deletes it only when you ask. In the new project it writes `story.md` `premise`, `counter-premise`, and `## Notes`.
 
-**CLI.** `story init --form`, `story names "<candidate>" ... --path .`, then `story validate .` and `story report .`. `story validate` warns when `target-words` is outside the chosen form's usual range.
+**CLI.** `story init --form`, `story names "<candidate>" ... --path .`, then `story reindex .`, `story wordcount . --write`, and `story check .`, and `story report .`. `story check` warns when `target-words` is outside the chosen form's usual range.
 
 **References.**
 
@@ -261,7 +261,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Writes.** `characters/*.md`, `characters/_index.md`, and the matching backlink in any related character file.
 
-**CLI.** `story names`, `story add character`, `story diagram relationships`, then `story reindex .`, `story links .`, `story validate .`.
+**CLI.** `story names`, `story add character`, `story diagram relationships`, then `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 **References.**
 
@@ -290,7 +290,7 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and the
 
 **Writes.** `worldbuilding/**/*.md`, `worldbuilding/_index.md`, and backlinks in character files.
 
-**CLI.** `story names`, `story add faction`, `story add artifact`, `story diagram locations`, then `story reindex .`, `story links .`, `story validate .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location "{Name}"` (with `--region`, `--population`, `--controlled-by`) and `story add system "{Name}"` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
+**CLI.** `story names`, `story add faction`, `story add artifact`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location "{Name}"` (with `--region`, `--population`, `--controlled-by`) and `story add system "{Name}"` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
 
 **References.**
 
@@ -326,7 +326,7 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and the
 
 **Writes.** `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/promises/*.md`, `continuity/questions/*.md`, and scene `outcome` and chapter `hook` fields.
 
-**CLI.** `story add arc`, `story add chapter`, `story add scene`, `story timeline .`, `story diagram timeline`, `story diagram arcs`, `story clues .`, then `story reindex .`, `story links .`, `story validate .`, `story pacing .`. Generated diagrams go in `dist/` via `--out`, never in entity folders.
+**CLI.** `story add arc`, `story add chapter`, `story add scene`, `story timeline .`, `story diagram timeline`, `story diagram arcs`, `story clues .`, then `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .`. Generated diagrams go in `dist/` via `--out`, never in entity folders.
 
 **References.**
 
@@ -361,7 +361,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Writes.** `story.md` premise fields, character arc fields, the motif ledger (`continuity/motifs.md` or a table in an arc file), and `continuity/theme-audit.md`. The CLI does not scan, validate, or reindex the motif ledger or the theme audit.
 
-**CLI.** `story reindex .`, `story links .`, `story validate .`.
+**CLI.** `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 **References.**
 
@@ -398,7 +398,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Writes.** `continuity/clues/*.md`, `continuity/promises/*.md`, `story.md` genre fields and notes, and audit findings in the revision plan or `continuity/`.
 
-**CLI.** `story add clue`, then `story reindex .`, `story links .`, `story validate .`, `story continuity .`, and `story clues .` for a mystery. `story continuity` reports a clue paid off before it is planted as an error. `story clues` warns about a payoff with no plant, a late plant (in the payoff chapter or the one before), a clue with no `characters`, three or more live clues with none `significance-delayed`, and a red herring with no `payoff`. See [Continuity and analysis](continuity.md#promises-questions-and-clues).
+**CLI.** `story add clue`, then `story reindex .`, `story wordcount . --write`, `story check .`, and `story clues .` for a mystery. `story continuity` reports a clue paid off before it is planted as an error. `story clues` warns about a payoff with no plant, a late plant (in the payoff chapter or the one before), a clue with no `characters`, three or more live clues with none `significance-delayed`, and a red herring with no `payoff`. See [Continuity and analysis](continuity.md#promises-questions-and-clues).
 
 **References.**
 
@@ -434,7 +434,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Writes.** `research/*.md` and `research/_index.md` (created by the first `story add research`).
 
-**CLI.** `story add research`, then `story reindex .`, `story links .`, `story validate .`. `story rename`, `story move`, and `story remove` keep `used-in` current when chapters change.
+**CLI.** `story add research`, then `story reindex .`, `story wordcount . --write`, and `story check .`. `story rename`, `story move`, and `story remove` keep `used-in` current when chapters change.
 
 **References.**
 
@@ -468,7 +468,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** `chapters/chapter-NN.md`, `scenes/*.md`, `plot/timeline.md`, arc files, `continuity/` records (including `continuity/state.md` after the draft, not as drafting context), and `progress.md` when you keep a log. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand.
 
-**CLI.** `story add chapter` and `story add scene` for scaffolds, then `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story next .`, `story pacing .`, and `story progress . --log`. `story continuity` is the continuity result: `story next` can name continuity errors and still exit 0. `story pacing` shows the new chapter's words, scene outcomes, and hook beside the rest of the book. It skips `--log` if you don't keep a progress log.
+**CLI.** `story add chapter` and `story add scene` for scaffolds, then `story reindex .`, `story wordcount . --write`, `story check .`, `story next .`, `story pacing .`, and `story progress . --log`. `story check` is the continuity result: `story next` can name continuity errors and still exit 0. `story pacing` shows the new chapter's words, scene outcomes, and hook beside the rest of the book. It skips `--log` if you don't keep a progress log.
 
 **References.**
 
@@ -502,7 +502,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** `story.md` (kernel and `draft-mode`), chapters and their post-hoc notes, `scenes/`, and whichever bible files the reconcile step updates.
 
-**CLI.** After each reconcile loop: `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`. `story add chapter --mode discovered` scaffolds a chapter already marked as discovered.
+**CLI.** After each reconcile loop: `story reindex .`, `story wordcount . --write`, and `story check .`. `story add chapter --mode discovered` scaffolds a chapter already marked as discovered.
 
 **References.**
 
@@ -543,7 +543,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** `scenes/*.md` frontmatter and `## Planning`, `## Scene Card`, or `## Sequel` sections; chapter outlines and the chapter `hook`; and `continuity/state.md` plus entity files when a scene decision changes canon.
 
-**CLI.** `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .`. `story add scene` accepts `--sequel`, `--dilemma`, and `--outcome`, and `story add chapter` accepts `--hook`, writing them into frontmatter; the `## Sequel` section is added by hand.
+**CLI.** `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .`. `story add scene` accepts `--sequel`, `--dilemma`, and `--outcome`, and `story add chapter` accepts `--hook`, writing them into frontmatter; the `## Sequel` section is added by hand.
 
 **References.**
 
@@ -581,7 +581,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** `style-sheet.md`, character `voice-words` and `voice-avoid` (with your approval), and chapter prose.
 
-**CLI.** `story validate .`, `story prose .`, `story voices .`, `story wordcount . --write`, `story links .`, and `story names` plus `story rename character` for a name change.
+**CLI.** `story reindex .`, `story wordcount . --write`, and `story check .`, then `story prose .` and `story voices .`, and `story names` plus `story rename character` for a name change.
 
 **References.**
 
@@ -613,7 +613,7 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Writes.** A standalone poem file where you ask for it, or verse in chapter prose and `matter/` files.
 
-**CLI.** None for a standalone poem. For story verse, `story add matter "Epigraph" --heading false` for an epigraph page, then `story wordcount --write`, `story links`, and `story validate`.
+**CLI.** None for a standalone poem. For story verse, `story add matter "Epigraph" --heading false` for an epigraph page, then `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 **References.**
 
@@ -642,7 +642,7 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Writes.** Chapter files and their `choices`, scene records, `continuity/state.md` (one `knowledge-state` entry per branch for a fact learned on two branches), `continuity/exemptions.md` for findings that only reflect branch order, `notes/branch-map.md`, and built copies under `adaptations/interactive/`.
 
-**CLI.** `story add chapter`, `story context`, `story move chapter` (which rewrites every `to`), `story remove chapter`, and `story build --format twee`/`ink`, then `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, and `story continuity .`.
+**CLI.** `story add chapter`, `story context`, `story move chapter` (which rewrites every `to`), `story remove chapter`, and `story build --format twee`/`ink`, then `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 **References.**
 
@@ -697,7 +697,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 
 **Writes.** Chapter prose and `status`, `plot/timeline.md`, `scenes/*.md`, `continuity/state.md`, question and promise files, arc plot points and foreshadowing rows, character or location files whose state changed, and `story.md` `revision-passes`. Copyedits can also update `style-sheet.md` and `glossary/`.
 
-**CLI.** It starts by running or reading `story report .`, and `story passes .` when the book is in a named-pass revision. After edits it runs `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, and `story doctor .`, plus `story series .` when `story.md` has `follows` or `precedes` links. Structural and reveal passes add `story pacing .` and `story clues .`, dialogue changes add `story voices .`, and a named pass ends with `story passes . --done <pass>`. It then compares the result with the snapshot:
+**CLI.** It starts by running or reading `story report .`, and `story passes .` when the book is in a named-pass revision. After edits it runs `story reindex .`, `story wordcount . --write`, `story check .`, and `story doctor .`, plus `story series .` when `story.md` has `follows` or `precedes` links. Structural and reveal passes add `story pacing .` and `story clues .`, dialogue changes add `story voices .`, and a named pass ends with `story passes . --done <pass>`. It then compares the result with the snapshot:
 
 ```shell
 story compare . --ref draft-1
@@ -736,7 +736,7 @@ It also draws on the references of [scene-craft](#scene-craft), [theme-craft](#t
 
 **Writes.** Chapter prose below `## Chapter Text`, `style-sheet.md` decisions, character `voice-words` and `voice-avoid` with your approval, chapter `status`, and `story.md` `revision-passes`.
 
-**CLI.** `story passes`, `story prose .`, `story voices .`, `story build . --format narration`, `--format html`, and `--format print`, then `story wordcount . --write`, `story prose .`, `story voices .`, `story links .`, and `story validate .` after editing.
+**CLI.** `story passes`, `story prose .`, `story voices .`, `story build . --format narration`, `--format html`, and `--format print`, then `story reindex .`, `story wordcount . --write`, and `story check .`, `story prose .`, and `story voices .` after editing.
 
 **Companion skill.** [`better-writing`](#companion-skill-better-writing) is an optional complement for anti-generic checks; line-editing doesn't depend on it.
 
@@ -804,7 +804,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 **Writes.** `feedback/round-N/*.md`, `continuity/questions/*.md`, and, with your approval, the GitHub workflow and issue form under `.github/`.
 
-**CLI.** `story build . --format html` for the review copy, then `story reindex .`, `story links .`, `story validate .`, `story continuity .`. The CLI doesn't read `feedback/`, so these commands check the `continuity/questions/` changes and the rest of the project, not the feedback files themselves.
+**CLI.** `story build . --format html` for the review copy, then `story reindex .`, `story wordcount . --write`, and `story check .`. The CLI doesn't read `feedback/`, so these commands check the `continuity/questions/` changes and the rest of the project, not the feedback files themselves.
 
 **References.**
 
@@ -838,7 +838,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 **Writes.** Research notes (`risk`, `reviewed-by`), matter frontmatter (`permission`, `rights-holder`, `credit`), `story.md` `ai-disclosure` and `authors`, feedback rounds, and, with your approval, `.github/` files and `CODEOWNERS`.
 
-**CLI.** `story add research`, `story build . --format docx`, `html`, `shunn`, or `metadata`, `story compare . --ref <tag>`, `story similarity . --against <text>`, then `story reindex .`, `story links .`, `story validate .`, and `story wordcount . --write` after changes.
+**CLI.** `story add research`, `story build . --format docx`, `html`, `shunn`, or `metadata`, `story compare . --ref <tag>`, `story similarity . --against <text>`, then `story reindex .`, `story wordcount . --write`, and `story check .` after changes.
 
 **References.**
 
@@ -873,7 +873,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 **Writes.** `submission/query.md`, `submission/comps.md`, `submission/synopsis-1-page.md`, `submission/synopsis-3-page.md`, `submission/blurb.md`, and `submission/tracker.md`, each with a `type` and `updated` in its frontmatter. The CLI doesn't validate `submission/`, and builds never include it.
 
-**CLI.** The readiness check runs `story validate .`, `story links .`, `story continuity .`, `story prose .`, `story wordcount . --write`, and `story report .`. The package uses `story synopsis . --pages 1` and `--pages 3` with `--out`, `story build` for the manuscript, and `story build . --format metadata` for the fact sheet.
+**CLI.** The readiness check runs `story reindex .`, `story wordcount . --write`, `story check .`, `story prose .`, and `story report .`. The package uses `story synopsis . --pages 1` and `--pages 3` with `--out`, `story build` for the manuscript, and `story build . --format metadata` for the fact sheet.
 
 **References.**
 
@@ -914,7 +914,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Writes.** `story.md` publishing fields, `matter/copyright.md`, matter permission fields, and `publishing/launch-plan.md`, `publishing/retailer-copy.md`, `publishing/rights.md`, and `publishing/one-sheet-{right}.md`, each with a `type` and `updated` in its frontmatter. The CLI doesn't validate `publishing/`, and builds never include it.
 
-**CLI.** The readiness commands above, `story add matter`, `story build . --format metadata`, `--format epub`, and `--format print --trim <size>`, then `story reindex .`, `story wordcount . --write`, `story validate .`, and `story build . --format metadata` after changes.
+**CLI.** The readiness commands above, `story add matter`, `story build . --format metadata`, `--format epub`, and `--format print --trim <size>`, then `story reindex .`, `story wordcount . --write`, `story check .`, and `story build . --format metadata` after changes.
 
 **References.**
 
@@ -948,7 +948,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Writes.** `pronunciation` fields and glossary `## Translations` sections in the source project, planning and script files under `adaptations/audiobook/`, `screenplay/`, `picture-book/`, `comics/`, and `interactive/`, and a translated sibling project. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`, `translation-notes`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it.
 
-**CLI.** `story build . --format narration`, `story build . --format fountain`, `story timeline .`, `story names`, `story init --form picture-book`, and `story compare --against`, then `story reindex .`, `story links .`, `story validate .` after adding pronunciations or translations or setting `form` or `language`, plus `story wordcount . --write` after changing chapters in a picture-book or translated project.
+**CLI.** `story build . --format narration`, `story build . --format fountain`, `story timeline .`, `story names`, `story init --form picture-book`, and `story compare --against`, then `story reindex .`, `story wordcount . --write`, and `story check .` after adding pronunciations or translations, setting `form` or `language`, or changing chapters in a picture-book or translated project.
 
 **References.**
 
@@ -989,7 +989,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Writes.** A new project, both books' `story.md`, carried entity files, and `continuity/state.md` fact ids.
 
-**CLI.** After carrying entities into the new book it runs `story reindex .`, `story links .`, `story validate .`, and `story series .`. After any later change to series links or carried entities, it runs `story validate .`, `story links .`, `story continuity .`, and `story series .` in each affected book.
+**CLI.** After carrying entities into the new book it runs `story reindex .`, `story wordcount . --write`, `story check .`, and `story series .`. After any later change to series links or carried entities, it runs `story reindex .`, `story wordcount . --write`, `story check .`, and `story series .` in each affected book.
 
 `story series` orders the linked books by chronology and reports deaths that are undone in a later book, dead characters appearing on the page, facts learned twice across books, name drift, and destroyed artifacts that return. `story links` also checks the series links and their backlinks.
 

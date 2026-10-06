@@ -180,11 +180,9 @@ After adding, removing, renumbering, or rewriting chapters or their
 `choices`, run:
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 ```
 
 Repair every error. Treat `unreachable-chapter` and `state-differs-by-path`

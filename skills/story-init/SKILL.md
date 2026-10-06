@@ -43,7 +43,7 @@ The values are the user's own words, so quote each one for the shell: wrap it in
 
 Record the language straight after init. `story init` has no flag for it, so add `language: {tag}` to the `story.md` frontmatter by hand, with the exact tag the user gave, regional variants such as `en-GB` or `en-AU` included. Write it for English books too: it costs nothing, and a missing field only means `en`. The language is not just metadata: drafting, editing, and critique skills write and judge prose in it, `story validate` checks the tag, and builds declare it. For a book not in English, set `dialect: unspecified` in `style-sheet.md` (the British and American spelling pairs are English) and, before the first chapter, settle the dialogue punctuation with the `voice-style` skill.
 
-A Chinese (`zh`) or Japanese (`ja`) book is counted in characters, not words: `story wordcount`, `story progress`, the registries, and the form check all measure characters, against `target-characters`. Because the language is added after init, `--form` will have written a `target-words`; replace it with `target-characters` for the form (Chinese: novel 200,000, novella 60,000, short story 10,000, flash 1,500; Japanese: novel 150,000, novella 80,000, short story 20,000, flash 4,000), or a number the user names. No source sets a novelette, picture-book, or chapter-book length in characters, so those forms get no default and no range check: ask the user for a target. `story validate` warns `unused-target` until you do. Only set `count-unit: words` or `count-unit: characters` when the user asks to count the other way. Then run `story wordcount . --write` and `story validate .`.
+A Chinese (`zh`) or Japanese (`ja`) book is counted in characters, not words: `story wordcount`, `story progress`, the registries, and the form check all measure characters, against `target-characters`. Because the language is added after init, `--form` will have written a `target-words`; replace it with `target-characters` for the form (Chinese: novel 200,000, novella 60,000, short story 10,000, flash 1,500; Japanese: novel 150,000, novella 80,000, short story 20,000, flash 4,000), or a number the user names. No source sets a novelette, picture-book, or chapter-book length in characters, so those forms get no default and no range check: ask the user for a target. `story validate` warns `unused-target` until you do. Only set `count-unit: words` or `count-unit: characters` when the user asks to count the other way. Then run `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 The other publishing metadata (`isbn`, `publisher`, `publication-date`, `description`, `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`) is optional and can wait until the book is ready to publish; the `publishing` skill fills it in. Do not ask for it at init.
 
@@ -276,8 +276,7 @@ If manual initialization gets tedious, stop and ask the user to install or run t
 ```shell
 story reindex .
 story wordcount . --write
-story links .
-story validate .
+story check .
 ```
 
 If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.

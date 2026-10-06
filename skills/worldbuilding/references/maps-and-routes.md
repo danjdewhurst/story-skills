@@ -90,5 +90,5 @@ need a `time`; a flashback does not reset it), not a journey inside the
 scene. A scene with no `pov` counts its chapter's `pov` as present. `story timeline .` and `story diagram timeline` show dated scenes in
 story-time order, which helps when adjusting dates.
 
-After editing routes, run `story reindex .`, `story links .`,
-`story continuity .`, and `story validate .`.
+After editing routes, run `story reindex .`, `story wordcount . --write`,
+and `story check .` (which includes the continuity route checks).

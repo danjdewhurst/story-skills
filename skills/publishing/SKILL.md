@@ -71,11 +71,10 @@ law applies elsewhere; say what to check.
 ### 1. Readiness
 
 ```shell
-story validate .
-story links .
-story continuity .
-story prose .
+story reindex .
 story wordcount . --write
+story check .
+story prose .
 story build . --format metadata
 ```
 
@@ -115,7 +114,9 @@ choose the codes from the checklist and record them in
 Rebuild the sheet and repeat until the checklist is clean:
 
 ```shell
-story validate .
+story reindex .
+story wordcount . --write
+story check .
 story build . --format metadata
 ```
 
@@ -274,8 +275,7 @@ manuscript:
 ```shell
 story reindex .
 story wordcount . --write
-story links .
-story validate .
+story check .
 story build . --format metadata
 ```
 

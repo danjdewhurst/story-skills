@@ -94,8 +94,8 @@ audit:
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 The motif ledger (`continuity/motifs.md` or the motif table in an arc file)

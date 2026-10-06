@@ -111,9 +111,8 @@ After adding or revising scene records:
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story pacing .
 ```
 

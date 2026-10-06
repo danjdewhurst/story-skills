@@ -132,7 +132,7 @@ which makes a good rare event.
   minimum time since the latest moment the story has reached in reading
   order (a flashback does not reset it), not a journey within the scene.
 
-After adding or changing the calendar, run `story validate .` (it checks the
-`calendar` list and every date against it), then `story continuity .`. After
-adding or changing the calendar system file, run `story reindex .`,
-`story links .`, and `story validate .`.
+After adding or changing the calendar or the calendar system file, run
+`story reindex .`, `story wordcount . --write`, and `story check .`:
+`check` validates the `calendar` list and every date against it, then runs
+the continuity checks.

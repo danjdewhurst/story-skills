@@ -76,4 +76,4 @@ Change the initial or the length unless the resemblance is deliberate
 `story prose .` also warns about similar character first names.
 
 When renaming an existing entity, use `story rename`, then run
-`story reindex .`, `story links .`, and `story validate .`.
+`story reindex .`, `story wordcount . --write`, and `story check .`.

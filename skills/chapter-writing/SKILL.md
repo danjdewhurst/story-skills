@@ -124,17 +124,15 @@ After the chapter is written:
 8. **Run CLI maintenance when available:**
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story next .
 story pacing .
 story progress . --log
 ```
 
-`story continuity .` is the continuity check, in the same place discovery-drafting runs it, after `story validate`. It prints each finding and exits non-zero when there are errors. Repair those errors before treating the chapter as done. `story next .` can name the same errors as a P0 line and still exit 0, without printing the findings, so its exit code is not a continuity result.
+`story check .` runs `validate`, `links`, and `continuity` (the continuity check) over one scan, as every skill's maintenance block does. It prints each finding and exits non-zero when there are errors; warnings print but do not fail it. Repair those errors before treating the chapter as done. `story next .` can name the same errors as a P0 line and still exit 0, without printing the findings, so its exit code is not a continuity result.
 
 `story pacing .` shows the new chapter's words, scene outcomes, and hook alongside the rest of the book, and warns about runs of `yes` outcomes, missing sequels, length outliers, or a missing `hook`.
 

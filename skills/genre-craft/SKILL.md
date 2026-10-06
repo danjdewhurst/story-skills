@@ -116,9 +116,8 @@ episode questions):
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story clues .     # mystery: fair-play matrix and warnings
 ```
 
