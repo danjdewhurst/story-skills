@@ -14,12 +14,18 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 // Markdown and HTML link targets that are paths inside the package, without
-// their #fragment. Fenced code is skipped so shell examples are not links.
+// their #fragment: inline links (with or without a title or <angle> target),
+// reference definitions, and src/href attributes in either quote style.
+// Fenced code is skipped so shell examples are not links.
 export function relativeLinks(markdown) {
   const prose = markdown.replace(/^```[\s\S]*?^```/gm, "");
-  const pattern = /\]\(([^)\s]+)\)|\b(?:src|href)="([^"]+)"/g;
+  const patterns = [
+    /\]\(\s*(?:<([^>\n]+)>|([^)\s]+))/g,
+    /^ {0,3}\[[^\]\n]+\]:[ \t]*(?:<([^>\n]+)>|(\S+))/gm,
+    /\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
+  ];
   const links = new Set();
-  for (const match of prose.matchAll(pattern)) {
+  for (const match of patterns.flatMap((pattern) => [...prose.matchAll(pattern)])) {
     const target = (match[1] ?? match[2]).split("#")[0];
     if (target && !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("/")) {
       links.add(decodeURIComponent(target));
