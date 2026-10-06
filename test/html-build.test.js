@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { estimatePages, printHtml } from "../src/html.js";
+import { findCommand } from "../src/pdf.js";
 import { buildBook, createEntity, createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -93,11 +95,12 @@ describe("html and print builds", () => {
   test("the print contents set a right-to-left book's page numbers at the left margin without a float (#591)", () => {
     const book = (language) => ({ title: "T", authors: [], language, words: 100, parts: [{ key: "ch01", kind: "chapter", title: "C", heading: true, words: 100, paragraphs: [] }] });
     // WeasyPrint drops a float that follows text on a right-to-left line.
-    const arabic = printHtml(book("ar"));
-    expect(arabic).toContain('<html lang="ar" dir="rtl">');
-    expect(arabic).toContain(".toc li { position: relative; padding-left: 2.5em; }\n.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }\n");
-    expect(arabic).not.toMatch(/\.toc a::after \{[^}]*float/);
-    expect(printHtml(book("he"))).toContain("page); position: absolute; left: 0; bottom: 0; }");
+    for (const language of ["ar", "he"]) {
+      const html = printHtml(book(language));
+      expect(html).toContain(`<html lang="${language}" dir="rtl">`);
+      expect(html).toContain("\n.toc li { position: relative; padding-left: 2.5em; }\n.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }\n");
+      expect(html).not.toMatch(/\.toc [^{]*\{[^}]*float/);
+    }
     // Left to right, the number still floats to the right margin.
     const english = printHtml(book("en"));
     expect(english).toContain('.toc a::after { content: " " target-counter(attr(href), page); float: right; }\n');
@@ -113,5 +116,60 @@ describe("html and print builds", () => {
     const bad = invoke(cwd, ["build", root, "--format", "pdf"]);
     expect(bad.code).toBe(2);
     expect(bad.err).toContain("Supported formats: markdown, epub, docx, shunn, html, print");
+  });
+});
+
+// With WeasyPrint and pdftotext (from poppler) on PATH, render the print
+// interior and read the contents page back. CI installs neither, so there
+// the CSS checks above stand alone.
+const weasyprint = findCommand("weasyprint");
+const pdftotext = findCommand("pdftotext");
+
+describe.skipIf(!weasyprint || !pdftotext)("print contents rendered with WeasyPrint", () => {
+  // Each page's words, with their edges in points.
+  function pdfWords(file) {
+    const xml = spawnSync(pdftotext, ["-bbox", file, "-"], { encoding: "utf8" }).stdout;
+    return xml.split("<page ").slice(1).map((page) => [...page.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="[\d.]+">([^<]*)<\/word>/g)]
+      .map(([, left, top, right, text]) => ({ text, left: Number(left), top: Number(top), right: Number(right) })));
+  }
+
+  // Latin titles and labels, which pdftotext reads back as written. A line
+  // in a right-to-left book still runs right to left.
+  const titles = ["Alpha", "Bravo", "Charlie"];
+
+  // Each contents entry's words, and the number on its line: the page the
+  // chapter's heading is on, the first page after the contents with its title.
+  function renderedContents(language) {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Lamp", force: false });
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\nlanguage: ${language}\nlabels:\n  - chapter: Chapter {n}\n  - contents: Contents\n`), "utf8");
+    titles.forEach((title, index) => writeMarkdown(path.join(root, "chapters", `chapter-0${index + 1}.md`), `title: ${title}\nnumber: ${index + 1}\nstatus: draft`, "## Chapter Text\n\nThe lamps came on.\n"));
+    const out = path.join(cwd, "lamp.pdf");
+    expect(invoke(cwd, ["build", root, "--format", "print", "--pdf", "--pdf-engine", weasyprint, "--out", out]).code).toBe(0);
+    const pages = pdfWords(out);
+    const contents = pages.findIndex((words) => words.some((word) => word.text === "Contents"));
+    expect(contents).toBeGreaterThanOrEqual(0);
+    return titles.map((title) => {
+      const start = pages.findIndex((words, index) => index > contents && words.some((word) => word.text === title));
+      expect(start).toBeGreaterThan(contents);
+      const top = pages[contents].find((word) => word.text === title).top;
+      const line = pages[contents].filter((word) => Math.abs(word.top - top) < 2);
+      const number = line.find((word) => word.text === String(start + 1));
+      expect(number).toBeDefined();
+      return { number, entry: line.filter((word) => word !== number) };
+    });
+  }
+
+  test("a right-to-left book's contents show each chapter's page left of its title (#591)", () => {
+    for (const { number, entry } of renderedContents("ar")) {
+      expect(number.right).toBeLessThan(Math.min(...entry.map((word) => word.left)));
+    }
+  });
+
+  test("a left-to-right book's contents show each chapter's page right of its title", () => {
+    for (const { number, entry } of renderedContents("en")) {
+      expect(number.left).toBeGreaterThan(Math.max(...entry.map((word) => word.right)));
+    }
   });
 });
