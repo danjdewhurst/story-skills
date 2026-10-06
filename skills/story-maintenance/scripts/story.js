@@ -26492,36 +26492,37 @@ function importManuscript(options) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
-  const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
-  const rules = importRules(pack);
-  const warnings = [];
-  const documents = fromStdin ? [{ name: "stdin", text: options.readStdin(), untitled: true }] : readImportSource(source, rules);
-  const chapters = splitChapters(documents, warnings, rules);
-  if (chapters.length === 0) {
-    throw usageError("No chapter content found in import source");
-  }
-  const existing = target === null ? null : existingStoryData(target);
-  const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
-  let totalWords = 0;
-  let totalCharacters = 0;
-  const chapterFiles = chapters.map((chapter, index) => {
-    const number = index + 1;
-    const prose = scanComments(chapter.prose).text;
-    const words = wordCount(prose);
-    const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
-    totalWords += words;
-    totalCharacters += counts["character-count"] ?? 0;
-    const title = chapter.title || `Chapter ${number}`;
-    const name = `chapter-${String(number).padStart(2, "0")}.md`;
-    const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
-    const bytes = Buffer6.byteLength(text, "utf8");
-    if (bytes > MAX_READ_BYTES) {
-      throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+  const piped = fromStdin ? options.readStdin() : null;
+  const run = () => {
+    const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
+    const rules = importRules(pack);
+    const warnings = [];
+    const documents = fromStdin ? [{ name: "stdin", text: piped, untitled: true }] : readImportSource(source, rules);
+    const chapters = splitChapters(documents, warnings, rules);
+    if (chapters.length === 0) {
+      throw usageError("No chapter content found in import source");
     }
-    return { name, text };
-  });
-  const write = () => {
-    const project = createStoryProject({
+    const existing = target === null ? null : existingStoryData(target);
+    const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
+    let totalWords = 0;
+    let totalCharacters = 0;
+    const chapterFiles = chapters.map((chapter, index) => {
+      const number = index + 1;
+      const prose = scanComments(chapter.prose).text;
+      const words = wordCount(prose);
+      const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
+      totalWords += words;
+      totalCharacters += counts["character-count"] ?? 0;
+      const title = chapter.title || `Chapter ${number}`;
+      const name = `chapter-${String(number).padStart(2, "0")}.md`;
+      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
+      const bytes = Buffer6.byteLength(text, "utf8");
+      if (bytes > MAX_READ_BYTES) {
+        throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+      }
+      return { name, text };
+    });
+    const created = createStoryProject({
       title: options.title,
       cwd,
       dir: options.dir,
@@ -26540,16 +26541,16 @@ function importManuscript(options) {
         if (!hasStory) {
           return;
         }
-        let scanned;
+        let project;
         try {
-          scanned = scanProject(root);
+          project = scanProject(root);
         } catch {
           return;
         }
-        assertProjectParses(scanned, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
+        assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
       }
     });
-    const chaptersDir = path16.join(project.root, "chapters");
+    const chaptersDir = path16.join(created.root, "chapters");
     for (const name of fs14.readdirSync(chaptersDir)) {
       if (!/^chapter-\d+\.md$/i.test(name)) {
         continue;
@@ -26557,27 +26558,26 @@ function importManuscript(options) {
       removeFile(path16.join(chaptersDir, name));
     }
     for (const chapter of chapterFiles) {
-      writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: project.root });
+      writeFile(path16.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
     }
-    reindexProject(project.root);
-    return project;
-  };
-  const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
-  const created = locked ? withProjectLock(target, write) : write();
-  return {
-    root: created.root,
-    storyId: created.storyId,
-    keptStory: created.keptStory,
-    ignoredOptions: created.ignoredOptions,
-    chapters: chapters.length,
-    words: totalWords,
-    ...characters ? { characters: totalCharacters } : {},
-    warnings,
-    gitignore: created.gitignore,
-    candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join(`
+    reindexProject(created.root);
+    return {
+      root: created.root,
+      storyId: created.storyId,
+      keptStory: created.keptStory,
+      ignoredOptions: created.ignoredOptions,
+      chapters: chapters.length,
+      words: totalWords,
+      ...characters ? { characters: totalCharacters } : {},
+      warnings,
+      gitignore: created.gitignore,
+      candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join(`
 
 `), pack)
+    };
   };
+  const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
+  return locked ? withProjectLock(target, run) : run();
 }
 var NAME_WORD = "(?:(?:Ma?c|[OD]['’])(?=\\p{Lu}))?\\p{Lu}\\p{Ll}+(?:['’]\\p{Ll}+)?(?:-\\p{Lu}\\p{Ll}+)*";
 var NAME_RUN_PATTERN = new RegExp(`(?<![\\p{L}\\p{N}'’-])${NAME_WORD}(?:\\s+${NAME_WORD})+(?![\\p{L}\\p{N}])`, "gu");

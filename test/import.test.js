@@ -6,7 +6,7 @@ import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages, treeSnapshot } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -458,49 +458,78 @@ describe("import --force into an existing project", () => {
     }
   }
 
+  function holdLock(root) {
+    // A live command (this process) holds the lock.
+    const lock = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
+    fs.writeFileSync(path.join(root, LOCK_FILE), lock);
+    return lock;
+  }
+
   test("the refusal says --force replaces the chapters, unlike init's", () => {
     const { cwd, root } = importedTwice();
     const refused = invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "twice"]);
     expect(refused.code).toBe(4);
-    expect(refused.err).toContain(`${root} already exists. Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place`);
+    expect(refused.err).toContain(`${root} already exists. Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.`);
     expect(refused.err).not.toContain("never overwritten");
     const init = invoke(cwd, ["init", "Twice", "--dir", "twice"]);
     expect(init.code).toBe(4);
-    expect(init.err).toContain("Use --force to add missing starter files; existing files are never overwritten.");
+    expect(init.err).toContain(`${root} already exists. Use --force to add missing starter files; existing files are never overwritten.`);
   });
 
-  test("a held lock refuses it before anything changes", () => {
+  test("a held lock refuses it before it reads the project or changes anything", () => {
     const { cwd, root } = importedTwice();
     fs.rmSync(path.join(root, ".gitignore"));
-    // A live command (this process) holds the lock.
-    fs.writeFileSync(path.join(root, LOCK_FILE), `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`);
+    holdLock(root);
     const before = treeSnapshot(root);
     const result = withNoLockWait(() => invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "twice", "--force"]));
     expect(result.code).toBe(4);
     expect(result.err).toContain("is modifying this project; nothing was changed");
     expect(treeSnapshot(root)).toEqual(before);
+    // The lock comes before the manuscript is split with the project's
+    // settings, so even a manuscript with no chapters waits for it.
+    fs.writeFileSync(path.join(cwd, "empty.md"), "\n", "utf8");
+    const early = withNoLockWait(() => invoke(cwd, ["import", "empty.md", "--title", "Twice", "--dir", "twice", "--force"]));
+    expect(early.code).toBe(4);
+    expect(early.err).toContain("is modifying this project; nothing was changed");
+    expect(treeSnapshot(root)).toEqual(before);
   });
 
-  test("a dry run lists what the real run does, without waiting for the lock", () => {
+  test.skipIf(process.platform === "win32")("a symlinked target is refused without taking the lock through the link", () => {
     const { cwd, root } = importedTwice();
-    const lock = `${process.pid}\n${os.hostname()}\n${new Date().toISOString()}\n`;
-    fs.writeFileSync(path.join(root, LOCK_FILE), lock);
+    const lock = holdLock(root);
+    fs.symlinkSync(root, path.join(cwd, "linked"), "dir");
     const before = treeSnapshot(root);
-    const preview = withNoLockWait(() => invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "twice", "--force", "--dry-run"]));
-    expect(preview.code).toBe(0);
-    expect(preview.out).toBe([
-      "update  chapters/_index.md",
-      "update  chapters/chapter-01.md",
-      "delete  chapters/chapter-02.md",
-      "Dry run: story import would make 3 changes; nothing was written",
-      ""
-    ].join("\n"));
+    const result = withNoLockWait(() => invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "linked", "--force"]));
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("Refusing to use symlinked project directory");
+    expect(result.err).not.toContain("is modifying this project");
     expect(treeSnapshot(root)).toEqual(before);
+    expect(fs.readFileSync(path.join(root, LOCK_FILE), "utf8")).toBe(lock);
+  });
+
+  test("a dry run lists exactly what the real run does, without waiting for the lock", () => {
+    const { cwd, root } = importedTwice();
+    holdLock(root);
+    const locked = treeSnapshot(root);
+    const argv = ["import", "redraft.md", "--title", "Twice", "--dir", "twice", "--force"];
+    const preview = withNoLockWait(() => invoke(cwd, [...argv, "--dry-run"]));
+    expect(preview.code).toBe(0);
+    expect(treeSnapshot(root)).toEqual(locked);
+    const lines = preview.out.trimEnd().split("\n");
+    expect(lines.at(-1)).toBe("Dry run: story import would make 3 changes; nothing was written");
+    const listed = lines.slice(0, -1).map((line) => ({ action: line.slice(0, 7).trim(), path: line.slice(8) }));
 
     fs.rmSync(path.join(root, LOCK_FILE));
-    const real = invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "twice", "--force"]);
+    const before = treeSnapshot(root);
+    const real = invoke(cwd, argv);
     expect(real.code).toBe(0);
-    expect(fs.readdirSync(path.join(root, "chapters")).sort()).toEqual(["_index.md", "chapter-01.md"]);
+    expect(listed).toEqual(treeDiff(before, treeSnapshot(root)));
+    expect(listed).toEqual([
+      { action: "update", path: "chapters/_index.md" },
+      { action: "update", path: "chapters/chapter-01.md" },
+      { action: "delete", path: "chapters/chapter-02.md" }
+    ]);
+    expect(preview.err).toBe(real.err);
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("Only this.");
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
   });

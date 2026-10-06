@@ -156,54 +156,60 @@ export function importManuscript(options) {
     throw usageError(`--language ${options.language} must be a BCP 47 tag such as en, en-GB, or fr`);
   }
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
-  const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
-  const rules = importRules(pack);
-  const warnings = [];
-  const documents = fromStdin
-    ? [{ name: "stdin", text: options.readStdin(), untitled: true }]
-    : readImportSource(source, rules);
-  const chapters = splitChapters(documents, warnings, rules);
-  if (chapters.length === 0) {
-    throw usageError("No chapter content found in import source");
-  }
-
-  // Build every chapter file before touching the disk: frontmatter and
-  // headings make a chapter a little larger than its prose, and a file over
-  // the size story reads would leave a project no command can open.
-  // A book counted in characters (Chinese, Japanese, or story.md
-  // `count-unit`) records character-count too, as story wordcount --write
-  // does. An existing story.md is kept, so its count-unit and language
-  // decide, whatever --language says.
-  const existing = target === null ? null : existingStoryData(target);
-  const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
-  let totalWords = 0;
-  let totalCharacters = 0;
-  const chapterFiles = chapters.map((chapter, index) => {
-    const number = index + 1;
-    // Count as the scanner does, without HTML comments.
-    const prose = scanComments(chapter.prose).text;
-    const words = wordCount(prose);
-    const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
-    totalWords += words;
-    totalCharacters += counts["character-count"] ?? 0;
-    // An untitled numbered heading ("# Chapter 1") takes its new number.
-    const title = chapter.title || `Chapter ${number}`;
-    const name = `chapter-${String(number).padStart(2, "0")}.md`;
-    const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
-    const bytes = Buffer.byteLength(text, "utf8");
-    if (bytes > MAX_READ_BYTES) {
-      throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
-    }
-    return { name, text };
-  });
+  // Piped text is read before the project lock is taken, so a slow pipe does
+  // not hold it.
+  const piped = fromStdin ? options.readStdin() : null;
 
   // --force into an existing project deletes and rewrites its chapters, so
-  // it holds the project lock from the first starter file to the reindex,
-  // as the other write commands do: a command already running refuses this
-  // one before anything changes. A symlinked folder is refused unlocked by
-  // createStoryProject, so no lock file is written through it.
-  const write = () => {
-    const project = createStoryProject({
+  // it holds the project lock from reading the project's language, count
+  // unit, and style sheet to the reindex, as the other write commands do: a
+  // command already running refuses this one before it reads or changes
+  // anything, and the chapters are never built from settings that changed
+  // meanwhile. A symlinked folder is refused unlocked by createStoryProject,
+  // so no lock file is written through it.
+  const run = () => {
+    const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
+    const rules = importRules(pack);
+    const warnings = [];
+    const documents = fromStdin
+      ? [{ name: "stdin", text: piped, untitled: true }]
+      : readImportSource(source, rules);
+    const chapters = splitChapters(documents, warnings, rules);
+    if (chapters.length === 0) {
+      throw usageError("No chapter content found in import source");
+    }
+
+    // Build every chapter file before touching the disk: frontmatter and
+    // headings make a chapter a little larger than its prose, and a file over
+    // the size story reads would leave a project no command can open.
+    // A book counted in characters (Chinese, Japanese, or story.md
+    // `count-unit`) records character-count too, as story wordcount --write
+    // does. An existing story.md is kept, so its count-unit and language
+    // decide, whatever --language says.
+    const existing = target === null ? null : existingStoryData(target);
+    const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
+    let totalWords = 0;
+    let totalCharacters = 0;
+    const chapterFiles = chapters.map((chapter, index) => {
+      const number = index + 1;
+      // Count as the scanner does, without HTML comments.
+      const prose = scanComments(chapter.prose).text;
+      const words = wordCount(prose);
+      const counts = characters ? { "word-count": words, "character-count": characterCount(prose) } : { "word-count": words };
+      totalWords += words;
+      totalCharacters += counts["character-count"] ?? 0;
+      // An untitled numbered heading ("# Chapter 1") takes its new number.
+      const title = chapter.title || `Chapter ${number}`;
+      const name = `chapter-${String(number).padStart(2, "0")}.md`;
+      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
+      const bytes = Buffer.byteLength(text, "utf8");
+      if (bytes > MAX_READ_BYTES) {
+        throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
+      }
+      return { name, text };
+    });
+
+    const created = createStoryProject({
       title: options.title,
       cwd,
       dir: options.dir,
@@ -225,19 +231,19 @@ export function importManuscript(options) {
         if (!hasStory) {
           return;
         }
-        let scanned;
+        let project;
         try {
-          scanned = scanProject(root);
+          project = scanProject(root);
         } catch {
           // An unsafe layout (a symlinked folder, say) is refused by the
           // starter-file checks that follow, with their own message.
           return;
         }
-        assertProjectParses(scanned, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
+        assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
       }
     });
 
-    const chaptersDir = path.join(project.root, "chapters");
+    const chaptersDir = path.join(created.root, "chapters");
     for (const name of fs.readdirSync(chaptersDir)) {
       if (!/^chapter-\d+\.md$/i.test(name)) {
         continue;
@@ -246,27 +252,26 @@ export function importManuscript(options) {
     }
 
     for (const chapter of chapterFiles) {
-      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: project.root });
+      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root });
     }
 
-    reindexProject(project.root);
-    return project;
+    reindexProject(created.root);
+
+    return {
+      root: created.root,
+      storyId: created.storyId,
+      keptStory: created.keptStory,
+      ignoredOptions: created.ignoredOptions,
+      chapters: chapters.length,
+      words: totalWords,
+      ...(characters ? { characters: totalCharacters } : {}),
+      warnings,
+      gitignore: created.gitignore,
+      candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"), pack)
+    };
   };
   const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
-  const created = locked ? withProjectLock(target, write) : write();
-
-  return {
-    root: created.root,
-    storyId: created.storyId,
-    keptStory: created.keptStory,
-    ignoredOptions: created.ignoredOptions,
-    chapters: chapters.length,
-    words: totalWords,
-    ...(characters ? { characters: totalCharacters } : {}),
-    warnings,
-    gitignore: created.gitignore,
-    candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"), pack)
-  };
+  return locked ? withProjectLock(target, run) : run();
 }
 
 // A capitalised name word in any script: "Élodie", "O’Brien", "McAllister",
