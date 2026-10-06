@@ -12,8 +12,10 @@
  * instruction. Each fixture runs under the skill named by its checks.json
  * (`skill`); pass --skill to override every fixture at once (useful for
  * cross-skill experiments). Drafts land in DIR (default evals/outputs/) as
- * <fixture-name>.md, then run-evals.js checks them. Run provenance lands
- * next to each draft: <fixture-name>.prompt.md (the exact prompt sent),
+ * <fixture-name>.md, then run-evals.js checks them. A chapter draft keeps
+ * only the text under `## Chapter Text` unless the fixture's checks.json sets
+ * `"keep": "file"`, which scores the whole file, frontmatter included. Run
+ * provenance lands next to each draft: <fixture-name>.prompt.md (the exact prompt sent),
  * <fixture-name>.system.sha256 (hash of the system prompt), and
  * <fixture-name>.judge-raw.txt (the judge's raw reply). Model, temperature,
  * and seed are logged per run; `claude -p` exposes no temperature/seed
@@ -48,10 +50,25 @@ const DEFAULT_JUDGE_MODEL = "claude-opus-5";
 const CLAUDE_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
 
-const BASELINE_HEADER = `You are a careful fiction writer. Apply the user's request to the text.
+// A fixture's `keep` (checks.json) says what of the reply is scored:
+// "chapter-text" (the default) keeps only the prose under `## Chapter Text`,
+// "file" keeps the whole chapter file, frontmatter included, for fixtures
+// that check fields such as `choices`.
+const PROSE_RULE = "Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.";
+const FILE_RULE = "Output rules for this run: return only the complete file the brief asks for, frontmatter included. No preamble, no change note, no diagnostic audit, no closing remark.";
 
-Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.
+function outputRule(keep) {
+  return keep === "file" ? FILE_RULE : PROSE_RULE;
+}
+
+function baselineHeader(keep) {
+  return `You are a careful fiction writer. Apply the user's request to the text.
+
+${outputRule(keep)}
 `;
+}
+
+const BASELINE_HEADER = baselineHeader();
 
 const JUDGE_PROMPT = `You are checking a story draft for invented canon.
 
@@ -71,15 +88,15 @@ Do not list: rewording, reordering, or cuts; showing rather than telling; ordina
 
 Reply with a JSON array of short strings, one per invented canon claim, and nothing else. Reply with [] if there are none.`;
 
-function buildSystemPrompt(skillName, withSkill) {
-  if (!withSkill) return BASELINE_HEADER;
+function buildSystemPrompt(skillName, withSkill, keep) {
+  if (!withSkill) return baselineHeader(keep);
   const skillDir = path.join(ROOT, "skills", skillName);
   if (!fs.existsSync(path.join(skillDir, "SKILL.md"))) {
     throw new Error(`unknown skill "${skillName}": no ${path.join("skills", skillName, "SKILL.md")}`);
   }
   const header = `You are running a story-skills ${skillName} workflow. The skill instructions and reference material follow. Apply them to the user's request.
 
-Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.
+${outputRule(keep)}
 `;
   const parts = [header, fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8")];
   const refsDir = path.join(skillDir, "references");
@@ -140,7 +157,7 @@ function claudeCall(spawn, model, prompt, systemText, sysFile) {
   throw lastErr || new Error("claude call failed");
 }
 
-function stripPreamble(text) {
+export function stripPreamble(text, keep = "chapter-text") {
   let t = text.trim();
   t = t.replace(/^```(?:json|markdown|md|text)?\s*\n/, "");
   t = t.replace(/\n```\s*$/, "").trim();
@@ -148,8 +165,9 @@ function stripPreamble(text) {
   const preambleRe = /^(?:here(?:'s| is)|sure|certainly|of course|okay|ok)\b[^.!?]{0,60}:\s*$/i;
   while (lines.length > 0 && preambleRe.test(lines[0].trim())) lines.shift();
   if (lines.length > 0 && /^draft\s*:\s*$/i.test(lines[0].trim())) lines.shift();
-  // Drop a beat-by-beat outline if the model emitted one above the prose.
-  const textIdx = lines.findIndex((l) => /^##\s+chapter text/i.test(l.trim()));
+  // Drop a beat-by-beat outline if the model emitted one above the prose,
+  // unless the fixture scores the whole file.
+  const textIdx = keep === "file" ? -1 : lines.findIndex((l) => /^##\s+chapter text/i.test(l.trim()));
   const body = textIdx >= 0 ? lines.slice(textIdx + 1) : lines;
   return body.join("\n").trim() + "\n";
 }
@@ -242,7 +260,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
     // Each fixture runs under the skill it declares; an explicit --skill
     // overrides every fixture (useful for cross-skill experiments).
     const skillName = opts.withSkill ? (opts.skillOverridden ? opts.skill : checks.skill || opts.skill) : opts.skill;
-    const systemPrompt = buildSystemPrompt(skillName, opts.withSkill);
+    const systemPrompt = buildSystemPrompt(skillName, opts.withSkill, checks.keep);
     // Clear stale outputs first so a failed run never presents a previous
     // run's draft, claims, or judge reply as current results.
     for (const ext of [".md", ".claims.json", ".judge-raw.txt"]) {
@@ -261,7 +279,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
     fs.writeFileSync(path.join(opts.out, `${name}.system.sha256`), `${sha256(systemPrompt)}\n`, "utf8");
     let draft;
     try {
-      draft = stripPreamble(claudeText(spawn, opts.model, prompt, systemPrompt));
+      draft = stripPreamble(claudeText(spawn, opts.model, prompt, systemPrompt), checks.keep);
     } catch (err) {
       console.log(`  FAIL draft call: ${err.message}`);
       allOk = false;

@@ -54,6 +54,8 @@ describe("check-evals", () => {
   test("passes a well-formed fixture and prints its warnings", () => {
     const root = evalsRoot();
     addFixture(root, "ok", { ...good, banned: ["Thursday"] });
+    addFixture(root, "whole-file", { ...good, keep: "file" });
+    addFixture(root, "prose", { ...good, keep: "chapter-text" });
     const result = run(root);
     expect(result.status).toBe(0);
     expect(result.out).toContain('WARN ok: banned phrase "Thursday" appears in input.md');
@@ -73,6 +75,7 @@ describe("check-evals", () => {
       paragraphs: 1.5,
       ends_with_question: "yes",
       language: "not a tag",
+      keep: "whole",
       voice_drift: { hedge_rate: "high", tone: 1 },
       banned_regex: ["(unclosed", 7]
     });
@@ -96,6 +99,7 @@ describe("check-evals", () => {
       "FAIL fields/checks.json: paragraphs must be a positive integer",
       "FAIL fields/checks.json: ends_with_question must be a boolean",
       "FAIL fields/checks.json: language must be a BCP 47 tag",
+      'FAIL fields/checks.json: keep must be one of "chapter-text", "file"',
       'FAIL fields/checks.json: voice_drift has unknown key "tone"',
       "FAIL fields/checks.json: voice_drift[hedge_rate] must be numeric",
       "FAIL fields/checks.json: voice_drift must include a known numeric marker",

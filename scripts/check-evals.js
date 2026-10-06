@@ -36,6 +36,10 @@ function voiceDriftActive(drift) {
 
 const OVERLAP_KINDS = ["in_input", "with_required"];
 
+// What `run-skill.js` scores of a chapter reply: the prose under
+// `## Chapter Text` (the default) or the whole file, frontmatter included.
+const KEEP_VALUES = ["chapter-text", "file"];
+
 const trimmed = (s) => String(s).trim();
 const lowered = (s) => String(s).toLowerCase();
 
@@ -259,6 +263,12 @@ export function checkEvals(root = ROOT, log = console.log) {
       check(
         typeof checks.language === "string" && /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(checks.language),
         `${name}/checks.json: language must be a BCP 47 tag such as fr, ja, or ar`
+      );
+    }
+    if ("keep" in checks) {
+      check(
+        KEEP_VALUES.includes(checks.keep),
+        `${name}/checks.json: keep must be one of ${KEEP_VALUES.map((v) => JSON.stringify(v)).join(", ")}`
       );
     }
     if ("voice_drift" in checks) {
