@@ -966,10 +966,12 @@ function checkPropCustody(project, context, errors) {
 }
 
 // Each artifact's object-state entries in story-time `since` order (no
-// `since` first), as windows in which it is gone: from a destroyed/lost entry
-// to the next entry with another status, or for good once it is destroyed.
-// Consecutive gone entries form one window that starts at the earliest, so
-// each late reference is reported once.
+// `since` first, then the chronology's total `compare` order, which sorts
+// the same in Bun and Node when only some chapters are dated), as windows
+// in which it is gone: from a destroyed/lost entry to the next entry with
+// another status, or for good once it is destroyed. Consecutive gone entries
+// form one window that starts at the earliest, so each late reference is
+// reported once.
 function goneWindows(project, context) {
   const histories = new Map();
   for (const entry of project.continuity ? stateEntries(project.continuity.data["object-state"]) : []) {
@@ -990,7 +992,7 @@ function goneWindows(project, context) {
 
   const windows = [];
   for (const [artifact, history] of histories) {
-    history.sort((left, right) => compareSince(left.since, right.since, context));
+    history.sort((left, right) => (right.since === "") - (left.since === "") || (left.since === "" ? 0 : context.chronology.compare(left.since, right.since)));
     let open = null;
     for (const entry of history) {
       if (entry.gone && open === null) {

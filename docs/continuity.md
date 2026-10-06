@@ -114,6 +114,8 @@ warning: continuity/state.md object-state[0] status active conflicts with worldb
 
 Reader-order ledgers use chapter numbers: `planted` and `payoff` on a promise or clue, and `introduced` and `resolved` on a question. Deaths and revivals (`died-in`, `revived-in`), progressions (`from`), knowledge (`learned-in`), and object history (`since`) use story time when both chapters are dated on different days (a chapter's `date`, or else its earliest dated scene), and chapter number otherwise. All of these fields are chapter ids (`chapter-02`).
 
+When only some chapters are dated, those comparisons can go in a circle: with chapter 3 dated a day after chapter 5 and chapter 4 undated, chapter 4 comes after 3 and chapter 5 after 4 by number, but 3 comes after 5 by date. Where a command needs one order for the whole book (sorting progressions and object history, and the end-of-book deaths that `story series` and `story diagram` read), it keeps the dated chapters in date order and the undated ones in number order, and takes the next chapter from whichever list comes first by number. That example reads 1, 2, 4, 5, 3. When the dates and numbers agree, the order is the same as the comparisons, and Bun and Node always give the same result.
+
 ### How findings are reported
 
 `continuity`, `timeline`, `pacing`, `clues`, `prose`, `voices`, `names`, `progress`, `compare`, and `similarity` all report the same way. On stderr they print one summary line first, like the first line above, and then each finding on its own line:

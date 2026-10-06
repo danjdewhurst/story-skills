@@ -146,6 +146,40 @@ describe("characterLifeline", () => {
     expect(life.deadAtEnd).toBe(true);
   });
 
+  test("a book dated only in places has one lifeline", () => {
+    // Chapter 3 is dated a day after chapter 5, with chapter 4 undated
+    // between them, so `after` runs in a circle. Bun and Node sorted it
+    // differently: Ana ended the book dead in one and revived in the other
+    // (#545). The dates keep 5 before 3, and 4 comes before 5 by number.
+    const root = book(makeTempDir(), "Circle", {
+      chapters: { 3: "date: 2024-01-02", 5: "date: 2024-01-01" },
+      characters: { ana: "status: alive\ndied-in: chapter-04\nrevived-in: chapter-05" }
+    });
+    expect(lifeline(root, "ana").life).toEqual({
+      deadAtStart: false,
+      deadAtEnd: false,
+      events: [{ type: "death", chapter: "chapter-04", source: "died-in" }, { type: "revival", chapter: "chapter-05", source: "revived-in" }]
+    });
+    expect(diagramProject(root, { kind: "relationships" }).text).toContain("  class ana revived\n");
+  });
+
+  test("a died-in chapter dated before an undated one is where the death is", () => {
+    // Chapter 1 is dated after chapter 3, the death chapter, and chapter 2
+    // has no date. The death used to land in chapter 1, from a progression
+    // the character does not have.
+    const root = book(makeTempDir(), "Flashback", {
+      count: 3,
+      chapters: { 1: "date: 2024-01-06", 3: "date: 2024-01-01" },
+      characters: { cy: "status: deceased\ndied-in: chapter-03" }
+    });
+    expect(lifeline(root, "cy").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-03", source: "died-in" }] });
+  });
+
+  test("a revived-in before died-in brings nobody back", () => {
+    const root = book(makeTempDir(), "Backwards", { characters: { eli: "status: deceased\ndied-in: chapter-03\nrevived-in: chapter-02" } });
+    expect(lifeline(root, "eli").life).toEqual({ deadAtStart: false, deadAtEnd: true, events: [{ type: "death", chapter: "chapter-03", source: "died-in" }] });
+  });
+
   test("an outline death still counts at the end of the book", () => {
     const root = book(makeTempDir(), "Planned", {
       characters: { eli: "status: alive\ndied-in: chapter-05" }
