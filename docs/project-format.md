@@ -192,7 +192,7 @@ A Cyrillic or Greek letter outside these tables, such as Kazakh `қ` or pre-refo
 
 ## Frontmatter syntax
 
-Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. Skill notes kept beside them, such as `continuity/motifs.md` and `continuity/theme-audit.md`, may be plain markdown, as may an `_index.md` in a folder the CLI does not manage, such as `notes/_index.md`. A UTF-8 byte order mark and Windows line endings are accepted.
+Every entity file, registry, and state file starts with a frontmatter block between two `---` lines. A file without one fails with `is missing YAML frontmatter`. Skill notes kept beside them, such as `continuity/motifs.md` and `continuity/theme-audit.md`, may be plain markdown, as may an `_index.md` in a folder the CLI does not manage, such as `notes/_index.md`. A UTF-8 byte order mark and Windows line endings are accepted. A carriage return with no line feed after it fails with `Unsupported line break`, as YAML reads it as a line break inside the line.
 
 The CLI uses its own YAML parser, which supports a deliberate subset of YAML:
 
@@ -201,7 +201,7 @@ The CLI uses its own YAML parser, which supports a deliberate subset of YAML:
 | Plain scalar | `status: draft` | the string `draft` |
 | Integer | `number: 3`, `number: 007` | the number `3`, `7` |
 | Decimal | `travel-hours: 1.5` | the number `1.5` |
-| Boolean | `sequel: true` | `true` or `false` |
+| Boolean | `sequel: true`, `sequel: True` | `true` for `true`, `True`, or `TRUE`; `false` for `false`, `False`, or `FALSE` |
 | Double-quoted string | `title: "Dawn: Part One"` | JSON-unescaped string |
 | Single-quoted string | `title: 'Night'`, `title: 'It''s Late'` | the text between the quotes, with `''` read as `'` |
 | Empty value | `payoff:`, `payoff: ""`, `payoff: ~`, or `payoff: null` | an empty string |
@@ -222,7 +222,8 @@ Keep to these rules, because anything else is an error:
 - `#` starts a comment at the beginning of a line, or after a space or tab. `Issue#4` and `C#` keep their `#`, as does a `#` inside quotes: `title: "Ash # Ember"`.
 - A block scalar's text is every following line indented past its key. `|` keeps the line breaks and `>` folds them into spaces; both end with one line break unless you write `|-` or `>-` (none) or `|+` or `>+` (keep trailing blank lines).
 - A value that starts with `[` is a flow list, except a `[TODO` placeholder, which stays text. Quote other text that starts with `[`, `{`, `*`, `&`, `!`, `|`, or `>`, such as `note: "[sic] as written"`. Flow mappings (`{a: b}`), lists inside a flow list, anchors, aliases, and tags are not supported.
-- Dates such as `2026-09-24` stay strings.
+- Dates such as `2026-09-24` stay strings. So do YAML's other number forms (`1e21`, `0x1F`, `+5`, `.5`, `.inf`), which other YAML tools read as numbers, and the YAML 1.1 booleans `yes`, `no`, `on`, and `off`. Quote them so every tool reads them as text.
+- U+2028 and U+2029 inside a value are ordinary characters, as in YAML 1.2. Other tools may read them as line breaks, so the CLI writes them as escapes.
 - The frontmatter ends at the first line holding only `---` (trailing spaces allowed). `----` or `--- # end` does not close it, and a file whose block never closes fails with `has unclosed YAML frontmatter`.
 
 An error names the file and the line, and shows how to write the value instead, for example `chapters/chapter-02.md: Unsupported frontmatter line: author: me (line 4). Nested fields are not supported. Write a list of key: value items, such as relationships: then   - character: sera-voss`.
@@ -238,9 +239,9 @@ Several commands edit frontmatter in place: `story wordcount --write`, `story ad
 - Comment lines, blank lines, unchanged entries (with their original quoting and number formatting), and unchanged list items keep their exact text, including their own line ending in a file that mixes LF and CRLF.
 - The body is untouched, except that `story rename` and `story move` update links to a renamed file, and `story move` updates a moved chapter's `# Chapter N:` heading and bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`. When a rename changes one key of a list item, the item's other keys keep their text.
 - A file whose content does not change is not written at all.
-- A changed entry is written in the standard form: a changed flow list becomes a block list, a changed block scalar becomes a double-quoted string with `\n` for each line break, and an inline comment on a changed line is dropped. Comment and blank lines between list items, or between a list item's keys, stay in place when an item changes, and go with an item that is removed. New items in a block list take the indent of the items already there. A list inside a list item is written as a flow list.
+- A changed entry is written in the standard form, but keeps the inline comment on its line: `word-count: 5 # stale` becomes `word-count: 7 # stale`. A flow list stays a flow list, and its entries that remain keep their text: renaming `kael-voss` turns `characters: [sera-voss, kael-voss]  # cast` into `characters: [sera-voss, kael-storm]  # cast`. A flow list that gains a mapping, or an empty `[]` that gains items, becomes a block list. A changed block scalar becomes a double-quoted string with `\n` for each line break. A changed list item, or a changed key of a list item, keeps the inline comment of the line it replaces. Comment and blank lines between list items, or between a list item's keys, stay in place when an item changes, and go with an item that is removed. New items in a block list take the indent of the items already there. A list inside a list item is written as a flow list.
 
-When the CLI writes a new value, it double-quotes strings that this parser or another YAML parser would otherwise misread: empty strings; strings that look like numbers (including `0x1F`, `1e3`, and `.inf`), booleans (`true`, `yes`, `off`, in any case), `null`, or `~`; strings that start with a YAML indicator such as `[`, `{`, `*`, `&`, `!`, `|`, `>`, `%`, `@`, a backtick, or `-`; strings with leading or trailing spaces; and strings containing `:`, `#`, a quote, or a control character. So `story add chapter "[Redacted]"` writes `title: "[Redacted]"`. Dates stay bare.
+When the CLI writes a new value, it double-quotes strings that this parser or another YAML parser would otherwise misread: empty strings; strings that look like numbers (including `0x1F`, `1e3`, and `.inf`), booleans (`true`, `yes`, `off`, in any case), `null`, or `~`; strings that start with a YAML indicator such as `[`, `{`, `*`, `&`, `!`, `|`, `>`, `%`, `@`, a backtick, or `-`; strings with leading or trailing spaces; and strings containing `:`, `#`, a quote, a control character, U+0085, U+2028, U+2029, or a byte order mark. So `story add chapter "[Redacted]"` writes `title: "[Redacted]"`. Inside the quotes, a line break, control character, DEL, U+0085, U+2028, U+2029, or byte order mark is written as an escape such as `\n` or `\u2028`, so the value stays on one line for every YAML parser. Dates stay bare. A number is written in plain decimal, such as `1000000000000000000000` rather than `1e+21`, which this parser would read back as text.
 
 ## Markdown bodies and word counts
 

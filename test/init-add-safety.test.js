@@ -38,6 +38,15 @@ describe("init", () => {
     expect(messages(validateProject(path.join(cwd, "tk")).errors)).toEqual([]);
   });
 
+  test("a title with a line or paragraph separator is written escaped and validates", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Night\u2028Train", "--dir", "night"]).code).toBe(0);
+    const story = path.join(cwd, "night", "story.md");
+    expect(fs.readFileSync(story, "utf8")).toContain('title: "Night\\u2028Train"\n');
+    expect(frontmatter(story).title).toBe("Night\u2028Train");
+    expect(messages(validateProject(path.join(cwd, "night")).errors)).toEqual([]);
+  });
+
   test("--force adds missing starter files and never overwrites existing ones", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Kept Work" });
@@ -222,6 +231,33 @@ describe("add", () => {
     // Planted in a chapter not written yet is still a plan.
     expect(invoke(cwd, ["add", "promise", "Later", "--planted", "chapter-05", "--path", root]).code).toBe(0);
     expect(frontmatter(path.join(root, "continuity", "promises", "later.md")).status).toBe("planned");
+  });
+
+  test("refuses a name with a line or paragraph separator and writes nothing", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Separators" });
+    for (const name of ["Sera\u2028Voss", "Sera\u2029Voss"]) {
+      const result = invoke(cwd, ["add", "character", name, "--path", root]);
+      expect(result.code).toBe(2);
+      expect(result.err).toContain("A character name must be a single line");
+    }
+    createEntity(root, { kind: "character", name: "Sera Voss" });
+    const renamed = invoke(cwd, ["rename", "character", "sera-voss", "Sera\u2028Storm", "--path", root]);
+    expect(renamed.code).toBe(2);
+    expect(renamed.err).toContain("A character name must be a single line");
+    expect(fs.readdirSync(path.join(root, "characters")).sort()).toEqual(["_index.md", "sera-voss.md"]);
+    expect(validateProject(root).ok).toBe(true);
+  });
+
+  test("a scene marked sequel: True validates as a boolean", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Booleans" });
+    expect(invoke(cwd, ["add", "chapter", "One", "--path", root]).code).toBe(0);
+    expect(invoke(cwd, ["add", "scene", "Arrival", "--path", root]).code).toBe(0);
+    const scene = path.join(root, "scenes", "chapter-01-scene-01.md");
+    setFrontmatterLine(scene, /^sequel: false$/m, "sequel: True");
+    expect(frontmatter(scene).sequel).toBe(true);
+    expect(messages(validateProject(root).errors)).toEqual([]);
   });
 });
 

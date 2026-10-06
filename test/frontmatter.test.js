@@ -469,10 +469,7 @@ Body`);
       "  Folded",
       "  text.",
       "",
-      "characters:",
-      "  - sera-voss",
-      "  - kael-voss",
-      "  - mara",
+      "characters: [sera-voss, kael-voss, mara]",
       "themes:",
       "- loyalty",
       "- grief",
@@ -555,5 +552,298 @@ Body`);
 
     expect(next).toBe("---\nrel:\n- character: a\n  type: c\n---\nBody");
     expect(parseFrontmatter(next).data.rel).toEqual([{ character: "a", type: "c" }]);
+  });
+  test("writes line separators, DEL, C1 controls, and a byte order mark as escapes that read back", () => {
+    const data = {
+      name: "Sera\u2028Voss",
+      note: "one\u2029two",
+      next: "a\u0085b",
+      del: "x\u007fy",
+      c1: "\u0080\u009f",
+      bom: "\ufeffmark",
+      cr: "a\rb",
+      tags: ["Sera\u2028Voss", "plain"],
+      items: [{ id: "a", tags: ["b\u2029c", "d"] }]
+    };
+    const yaml = stringifyFrontmatter(data);
+    expect(yaml).toContain('name: "Sera\\u2028Voss"\n');
+    expect(yaml).toContain('note: "one\\u2029two"\n');
+    expect(yaml).toContain('next: "a\\u0085b"\n');
+    expect(yaml).toContain('del: "x\\u007fy"\n');
+    expect(yaml).toContain('c1: "\\u0080\\u009f"\n');
+    expect(yaml).toContain('bom: "\\ufeffmark"\n');
+    expect(yaml).toContain('cr: "a\\rb"\n');
+    expect(yaml).toContain('  - "Sera\\u2028Voss"\n');
+    expect(yaml).toContain('    tags: ["b\\u2029c", d]\n');
+    expect(yaml).not.toMatch(/[\r\u007f-\u009f\u2028\u2029\ufeff]/);
+    expect(parseFrontmatter(`${yaml}Body`).data).toEqual(data);
+
+    const replaced = replaceFrontmatter("---\nname: Sera\n---\nBody", { name: "Sera\u2028Voss" });
+    expect(replaced).toBe('---\nname: "Sera\\u2028Voss"\n---\nBody');
+    expect(parseFrontmatter(replaced).data.name).toBe("Sera\u2028Voss");
+  });
+
+  test("reads U+2028 and U+2029 in a hand-written value as text and rejects a lone carriage return", () => {
+    const parsed = parseFrontmatter("---\nname: Sera\u2028Voss # lead\ntags:\n  - one\u2029two\nrel:\n  - character: a\u2028b\n    type: c\u2029d\n---\nBody");
+    expect(parsed.data).toEqual({ name: "Sera\u2028Voss", tags: ["one\u2029two"], rel: [{ character: "a\u2028b", type: "c\u2029d" }] });
+
+    for (const yaml of ["name: Sera\rVoss", "# a\rcomment", "tags:\n  - a\rb", "summary: |\n  a\rb"]) {
+      expect(() => parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md")).toThrow("Unsupported line break: a carriage return with no line feed after it (line ");
+    }
+    expect(() => parseFrontmatter("---\r\ntitle: A\r\nname: B\rC\r\n---\r\nBody")).toThrow('a carriage return with no line feed after it (line 3). Remove it, or write it as \\r inside a double-quoted value, such as note: "a\\rb"');
+  });
+
+  test("reads the YAML 1.2 core spellings of true and false as booleans", () => {
+    const parsed = parseFrontmatter("---\na: True\nb: TRUE\nc: False\nd: FALSE\ne: tRUE\nf: yes\ng: Off\nlist: [True, FALSE]\nitems:\n  - True\n  - id: x\n    flag: False\n---\nBody");
+
+    expect(parsed.data).toEqual({ a: true, b: true, c: false, d: false, e: "tRUE", f: "yes", g: "Off", list: [true, false], items: [true, { id: "x", flag: false }] });
+    expect(stringifyFrontmatter({ a: "True", b: "FALSE", c: "tRUE" })).toBe('---\na: "True"\nb: "FALSE"\nc: "tRUE"\n---\n\n');
+  });
+
+  test("writes numbers in plain decimal so they read back as numbers, and keeps 1e21 as written", () => {
+    const numbers = { big: 1e21, bigger: -1.2345e25, small: 1.5e-7, tiny: -5e-324, max: Number.MAX_VALUE, list: [1e21], items: [{ n: 2e-7, tags: [3e22] }] };
+    const yaml = stringifyFrontmatter(numbers);
+    expect(yaml).toContain("big: 1000000000000000000000\n");
+    expect(yaml).toContain("bigger: -12345000000000000000000000\n");
+    expect(yaml).toContain("small: 0.00000015\n");
+    expect(yaml).toContain("  - n: 0.0000002\n    tags: [30000000000000000000000]\n");
+    expect(yaml).not.toContain("e+");
+    expect(parseFrontmatter(`${yaml}Body`).data).toEqual(numbers);
+
+    const markdown = "---\nfloat: 1e21\nhuge: 1000000000000000000000\ntags: [1e21, 1.10, 'Sera', old]\nlist:\n  - 1e21\n  - old\nword-count: 5\n---\nBody";
+    const { data } = parseFrontmatter(markdown);
+    expect(data).toEqual({ float: "1e21", huge: 1e21, tags: ["1e21", 1.1, "Sera", "old"], list: ["1e21", "old"], "word-count": 5 });
+    const renamed = (item) => (item === "old" ? "new" : item);
+    expect(replaceFrontmatter(markdown, { ...data, tags: data.tags.map(renamed), list: data.list.map(renamed), "word-count": 6 }))
+      .toBe("---\nfloat: 1e21\nhuge: 1000000000000000000000\ntags: [1e21, 1.10, 'Sera', new]\nlist:\n  - 1e21\n  - new\nword-count: 6\n---\nBody");
+    expect(replaceFrontmatter(markdown, { ...data, huge: data.huge + 1e6 })).toContain("huge: 1000000000000001000000\n");
+  });
+
+  test("keeps trailing comments and flow lists when values change", () => {
+    const markdown = [
+      "---",
+      "characters: [sera-voss, kael-voss]  # cast",
+      "word-count: 5 # stale",
+      "pov: \"kael-voss\"\t# narrator",
+      "themes: # core",
+      "  - loyalty",
+      "allies:",
+      "  - kael-voss # brother",
+      "  - mara",
+      "relationships:",
+      "  - character: kael-voss # sibling",
+      "    type: sibling # since birth",
+      "summary: > # short",
+      "  Old text.",
+      "places: []",
+      "---",
+      "Body"
+    ].join("\n");
+    const { data } = parseFrontmatter(markdown);
+    const renamed = (id) => (id === "kael-voss" ? "kael-storm" : id);
+    const next = replaceFrontmatter(markdown, {
+      ...data,
+      characters: data.characters.map(renamed),
+      "word-count": 7,
+      pov: renamed(data.pov),
+      themes: [...data.themes, "grief"],
+      allies: data.allies.map(renamed),
+      relationships: data.relationships.map((entry) => ({ character: renamed(entry.character), type: "rival" })),
+      summary: "New text.",
+      places: ["harbour"]
+    });
+
+    expect(next).toBe([
+      "---",
+      "characters: [sera-voss, kael-storm]  # cast",
+      "word-count: 7 # stale",
+      "pov: kael-storm\t# narrator",
+      "themes: # core",
+      "  - loyalty",
+      "  - grief",
+      "allies:",
+      "  - kael-storm # brother",
+      "  - mara",
+      "relationships:",
+      "  - character: kael-storm # sibling",
+      "    type: rival # since birth",
+      "summary: New text. # short",
+      "places:",
+      "  - harbour",
+      "---",
+      "Body"
+    ].join("\n"));
+    expect(replaceFrontmatter(next, parseFrontmatter(next).data)).toBe(next);
+
+    const flow = "---\ntags: ['Sera', 1.10, \"a, b\"] # mixed\n---\nBody";
+    expect(replaceFrontmatter(flow, { tags: ["Sera", 1.1, "a, b", "new"] })).toBe("---\ntags: ['Sera', 1.10, \"a, b\", new] # mixed\n---\nBody");
+    expect(replaceFrontmatter(flow, { tags: [] })).toBe("---\ntags: [] # mixed\n---\nBody");
+    expect(replaceFrontmatter(flow, { tags: ["Sera", { id: "x" }] })).toBe("---\ntags: # mixed\n  - Sera\n  - id: x\n---\nBody");
+    expect(replaceFrontmatter("---\r\nn: 1 # one\r\n---\r\nBody", { n: 2 })).toBe("---\r\nn: 2 # one\r\n---\r\nBody");
+  });
+});
+
+// mulberry32: a small seeded generator, so a failure can be replayed.
+function generator(seed) {
+  let state = seed | 0;
+  const random = () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  return { random, pick: (list) => list[Math.floor(random() * list.length)] };
+}
+
+// The package has no YAML dependency to compare with, so this checks the
+// writer against the parser instead: every generated value the CLI writes
+// must read back as itself, and a rewrite must keep the comments, flow lists,
+// and unchanged text of the document it edits. A fixed seed runs in
+// `bun run test`; STORY_PROPERTY_RUNS and STORY_PROPERTY_SEED (or `random`,
+// which prints the seed) search further.
+describe("frontmatter round trip property", () => {
+  const RUNS = Number(process.env.STORY_PROPERTY_RUNS ?? 1500);
+  const SEED = process.env.STORY_PROPERTY_SEED === "random"
+    ? Math.floor(Math.random() * 2 ** 31)
+    : Number(process.env.STORY_PROPERTY_SEED ?? 20261006);
+
+  // Pieces of text that have tripped the writer or the parser: YAML
+  // indicators, quotes, comment and flow markers, line breaks and line
+  // separators, control characters, other scripts, and words YAML reads as
+  // booleans, nulls, numbers, or dates.
+  const PIECES = ["a", "Sera", "voss", " ", "  ", "\t", ":", ": ", "#", " #", "\"", "'", "''", "\\", ",", "[", "]", "{", "}", "-", "- ", "|", ">", "&", "*", "!", "%", "@", "`", "~", "?", "\n", "\r", "\r\n", "\u2028", "\u2029", "\u0085", "\u007f", "\u0080", "\u009f", "\u00a0", "\ufeff", "\u0000", "\u001b", "é", "東京", "🔥", "true", "True", "FALSE", "null", "Null", "yes", "off", "0", "007", "1.10", "1e21", "-3.5", ".inf", "0x1F", "2026-09-24", "[TODO", "---"];
+  const NUMBERS = [0, 1, -7, 3.5, 0.1, 12345678901234567890, Number.MAX_SAFE_INTEGER, 1e21, -1.2345e25, 1.5e-7, 5e-324, Number.MAX_VALUE];
+  const KEYS = ["title", "name", "tags", "word-count", "a_b", "x1", "7", "TRUE", "pov", "characters", "summary", "z"];
+
+  const text = (rng) => Array.from({ length: Math.floor(rng.random() * 5) }, () => rng.pick(PIECES)).join("");
+  const number = (rng) => {
+    const roll = rng.random();
+    // `|| 0` turns -0, which reads back as 0, into 0.
+    const value = roll < 0.4 ? rng.pick(NUMBERS) : (rng.random() - 0.5) * 10 ** (Math.floor(rng.random() * 60) - 30);
+    return (roll > 0.7 ? Math.round(value) : value) || 0;
+  };
+  const scalar = (rng) => {
+    const roll = rng.random();
+    return roll < 0.6 ? text(rng) : roll < 0.85 ? number(rng) : rng.random() < 0.5;
+  };
+  const scalars = (rng, max) => Array.from({ length: Math.floor(rng.random() * (max + 1)) }, () => scalar(rng));
+  const mapping = (rng) => {
+    const keys = [...new Set(Array.from({ length: 1 + Math.floor(rng.random() * 3) }, () => rng.pick(KEYS)))];
+    return Object.fromEntries(keys.map((key) => [key, rng.random() < 0.8 ? scalar(rng) : scalars(rng, 3)]));
+  };
+  const value = (rng) => {
+    const roll = rng.random();
+    if (roll < 0.55) {
+      return scalar(rng);
+    }
+    if (roll < 0.8) {
+      return scalars(rng, 4);
+    }
+    return Array.from({ length: 1 + Math.floor(rng.random() * 3) }, () => {
+      const kind = rng.random();
+      return kind < 0.4 ? scalar(rng) : kind < 0.8 ? mapping(rng) : scalars(rng, 3);
+    });
+  };
+  const document = (rng) => Object.fromEntries([...new Set(Array.from({ length: 1 + Math.floor(rng.random() * 6) }, () => rng.pick(KEYS)))].map((key) => [key, value(rng)]));
+
+  // A changed copy: entries kept, replaced, removed, or with one list item
+  // renamed, added, or dropped, and sometimes a new entry.
+  const edit = (rng, data) => {
+    const next = {};
+    for (const [key, current] of Object.entries(data)) {
+      const roll = rng.random();
+      if (roll < 0.45) {
+        next[key] = current;
+      } else if (roll < 0.6) {
+        next[key] = value(rng);
+      } else if (roll < 0.7) {
+        continue;
+      } else if (Array.isArray(current) && current.length > 0) {
+        const items = [...current];
+        const at = Math.floor(rng.random() * items.length);
+        const change = rng.random();
+        if (change < 0.5) {
+          items[at] = scalar(rng);
+        } else if (change < 0.75) {
+          items.push(scalar(rng));
+        } else {
+          items.splice(at, 1);
+        }
+        next[key] = items;
+      } else {
+        next[key] = scalar(rng);
+      }
+    }
+    if (rng.random() < 0.3) {
+      next[rng.pick(KEYS)] = value(rng);
+    }
+    return next;
+  };
+
+  const isScalarList = (entry) => Array.isArray(entry) && entry.length > 0 && entry.every((item) => item === null || typeof item !== "object");
+  // A flow list as the writer formats the entries of a nested list.
+  const flowList = (items) => stringifyFrontmatter({ x: [items] }).split("\n")[2].slice("  - ".length);
+
+  test(`stringified values read back as themselves (seed ${SEED}, ${RUNS} runs)`, () => {
+    if (process.env.STORY_PROPERTY_SEED === "random") {
+      console.log(`frontmatter property seed: ${SEED}`);
+    }
+    const rng = generator(SEED);
+    for (let run = 0; run < RUNS; run += 1) {
+      const data = document(rng);
+      const yaml = stringifyFrontmatter(data);
+      try {
+        expect(yaml).not.toMatch(/[\r\u007f-\u009f\u2028\u2029\ufeff]/);
+        expect(parseFrontmatter(`${yaml}Body`).data).toEqual(data);
+      } catch (error) {
+        throw new Error(`run ${run} (seed ${SEED}) wrote ${JSON.stringify(yaml)}: ${error.message}`);
+      }
+    }
+  });
+
+  test(`rewrites read back as the new values and keep comments, flow lists, and unchanged text (seed ${SEED}, ${RUNS} runs)`, () => {
+    const rng = generator(SEED + 1);
+    for (let run = 0; run < RUNS; run += 1) {
+      const original = document(rng);
+      const blocks = {};
+      const commented = new Set();
+      const flowKeys = new Set();
+      for (const [key, entry] of Object.entries(original)) {
+        let lines = stringifyFrontmatter({ [key]: entry }).split("\n").slice(1, -3);
+        if (isScalarList(entry) && rng.random() < 0.5) {
+          lines = [`${key}: ${flowList(entry)}`];
+          flowKeys.add(key);
+        }
+        if (rng.random() < 0.5) {
+          lines[0] += `  # c-${key}`;
+          commented.add(key);
+        }
+        blocks[key] = lines.join("\n");
+      }
+      const markdown = `---\n${Object.values(blocks).join("\n")}\n---\nBody`;
+      const data = edit(rng, original);
+      try {
+        expect(parseFrontmatter(markdown).data).toEqual(original);
+        const next = replaceFrontmatter(markdown, data);
+        expect(parseFrontmatter(next).data).toEqual(data);
+        expect(replaceFrontmatter(next, data)).toBe(next);
+        for (const key of Object.keys(data)) {
+          if (!Object.hasOwn(original, key)) {
+            continue;
+          }
+          if (Bun.deepEquals(original[key], data[key], true)) {
+            expect(next).toContain(`\n${blocks[key]}\n`);
+          }
+          if (commented.has(key)) {
+            expect(next).toContain(`  # c-${key}\n`);
+          }
+          if (flowKeys.has(key) && isScalarList(data[key])) {
+            expect(next).toContain(`\n${key}: [`);
+          }
+        }
+      } catch (error) {
+        throw new Error(`run ${run} (seed ${SEED}) rewrote ${JSON.stringify(markdown)} with ${JSON.stringify(data)}: ${error.message}`);
+      }
+    }
   });
 });
