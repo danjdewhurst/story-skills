@@ -8,6 +8,10 @@ publisher chooses the illustrator; an author-only manuscript goes out as
 text with sparse art notes. Self-published authors commission art and
 need the full spread briefs.
 
+[`examples/bo-and-the-missing-moon`](../../../examples/bo-and-the-missing-moon/)
+is a 14-spread picture book set up this way, with its pagination plan in
+`adaptations/picture-book/pagination.md`.
+
 ## Pagination
 
 Books are printed in signatures, so 32 pages (sometimes 24 or 40) is

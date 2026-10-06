@@ -5,6 +5,10 @@ structure at **two layers**: the within-installment layer this reference
 covers, and the book/season layer the `series-continuity` skill handles
 (one project per book, canon carried across). Do not confuse them.
 
+[`examples/the-left-luggage-office`](../../../examples/the-left-luggage-office/)
+is the first three episodes of a serial with `season-goal`,
+`episode-question`, per-episode `target-words`, and a `hook` on each.
+
 ## The season/volume goal
 
 Every season (or volume, or series-arc) needs one **overarching goal**: the
