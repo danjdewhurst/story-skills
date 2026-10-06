@@ -1996,8 +1996,18 @@ Prints [Mermaid](https://mermaid.js.org/) diagram source generated from frontmat
 |---|---|---|
 | `--out <file>` | Write the source to this path, relative to the project root, instead of stdout. Project source paths are refused (see [Where commands write](#where-commands-write)) | Print to stdout |
 | `--dry-run` | With `--out`, list the file it would write and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
-| `--json` | Print a JSON result: `data.kind`, `data.text` (the Mermaid source, also when `--out` writes it), `data.outFile` (the absolute path written, or `null`), `data.dryRun`, and `data.changes`, with the file in `writes` (see [JSON output](#json-output)) | Off |
+| `--json` | Print a JSON result: `data.kind`, `data.text` (the Mermaid source, also when `--out` writes it), `data.nodes` and `data.edges` (the model the source is drawn from, described below), `data.outFile` (the absolute path written, or `null`), `data.dryRun`, and `data.changes`, with the file in `writes` (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
+
+Each kind is drawn from a small model of nodes and edges, and `--json` returns it, so a script can read the graph without parsing Mermaid. Ids are project ids (not the Mermaid ids), labels are the readable text before Mermaid escaping, and both lists are in drawing order:
+
+| Kind | `nodes` | `edges` |
+|---|---|---|
+| `relationships` | Characters, `kind: "character"`, with `state` (`alive`, `deceased`, or `revived`) | One per pair, `label` the relationship type; `kind` is `family-directed` (from the elder), `family`, or `relationship` |
+| `locations` | Locations, `kind: "location"`, with `region` (or `null`) | Each usable route, `kind: "route"`, with `hours`, `mode` (or `null`), and `reverse` (true when the destination declares a route back) |
+| `timeline` | Dated entries in story order, `kind: "event"`, with `date`, `time` (or `null`), and `toldLateIn` (the chapter an entry told out of order is read in, or `null`) | None. `data.groups` lists each date section (`label`, `kind: "date"`, and the event ids in `nodes`), and `data.title` is the timeline title |
+| `clues` | Chapters by number, `kind: "chapter"`, with `number`; plus `{ "id": "unrevealed", "kind": "unrevealed" }` when a clue has no payoff chapter | `kind: "sequence"` between consecutive chapters (`label: null`), then each clue from plant to payoff, `kind` `clue` or `red-herring`, with `clue` (its id) and `revealed` |
+| `arcs` | Arcs (`kind: "arc"`), then chapters as in `clues` | From each arc to each chapter that advances it, `kind: "advances"`, `label: null`. An arc and a chapter may share an id; `kind` tells the nodes apart |
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
 

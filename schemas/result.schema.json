@@ -559,10 +559,63 @@
     },
     "data-diagram": {
       "type": "object",
-      "required": ["kind", "text", "outFile", "dryRun", "changes"],
+      "required": ["kind", "text", "nodes", "edges", "outFile", "dryRun", "changes"],
+      "$comment": "text is rendered from nodes, edges, and (for the timeline) title and groups alone. Node and edge ids are project ids; in arcs an arc and a chapter may share an id, and kind tells them apart.",
       "properties": {
         "kind": { "enum": ["relationships", "locations", "timeline", "clues", "arcs"] },
         "text": { "type": "string", "description": "The Mermaid source." },
+        "title": { "type": "string", "description": "timeline only: the title drawn above the timeline, the story title." },
+        "nodes": {
+          "type": "array",
+          "description": "The diagram's nodes in drawing order: characters (relationships), locations, dated events in story order (timeline), chapters by number plus an unrevealed placeholder when a clue has no payoff chapter (clues), or arcs then chapters (arcs).",
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "kind"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "description": "The entity id; unrevealed for the clues placeholder." },
+              "label": { "type": "string", "description": "The readable name or title, whitespace closed up, before Mermaid escaping." },
+              "kind": { "enum": ["character", "location", "event", "chapter", "arc", "unrevealed"] },
+              "state": { "enum": ["alive", "deceased", "revived"], "description": "character: how they stand at the end of the book, as story continuity reads deaths." },
+              "region": { "type": ["string", "null"], "description": "location: its region, or null." },
+              "number": { "type": "integer", "description": "chapter: its chapter number." },
+              "date": { "type": "string", "description": "event: the story date." },
+              "time": { "type": ["string", "null"], "description": "event: the time of day, or null for an untimed event." },
+              "toldLateIn": { "type": ["integer", "string", "null"], "description": "event: the chapter number (or id, for a chapter with no number) an event told after later events is read in, else null." }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "description": "The diagram's edges in drawing order; from and to are node ids. The timeline has none.",
+          "items": {
+            "type": "object",
+            "required": ["from", "to", "label", "kind"],
+            "properties": {
+              "from": { "type": "string", "minLength": 1 },
+              "to": { "type": "string", "minLength": 1 },
+              "label": { "type": ["string", "null"], "description": "The edge text before Mermaid escaping (a clue's title without the red-herring note), or null for an unlabelled edge." },
+              "kind": { "enum": ["family-directed", "family", "relationship", "route", "sequence", "clue", "red-herring", "advances"], "description": "family-directed runs from the elder (parent, grandparent, aunt, uncle); family and relationship are drawn once per pair; route is a declared route; sequence links consecutive chapters; clue and red-herring run from plant to payoff; advances runs from an arc to a chapter." },
+              "hours": { "type": "number", "description": "route: the travel hours." },
+              "mode": { "type": ["string", "null"], "description": "route: the travel mode, or null." },
+              "reverse": { "type": "boolean", "description": "route: true when the destination declares a route back." },
+              "clue": { "type": "string", "description": "clue, red-herring: the clue id." },
+              "revealed": { "type": "boolean", "description": "clue, red-herring: false when the clue has no payoff chapter yet, so the edge runs to the unrevealed node." }
+            }
+          }
+        },
+        "groups": {
+          "type": "array",
+          "description": "timeline only: each run of events on one day, drawn as a section.",
+          "items": {
+            "type": "object",
+            "required": ["label", "kind", "nodes"],
+            "properties": {
+              "label": { "type": "string", "description": "The story date." },
+              "kind": { "const": "date" },
+              "nodes": { "type": "array", "items": { "type": "string" }, "description": "The ids of the events in the section, in order." }
+            }
+          }
+        },
         "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote (or, with --dry-run, would write), else null." },
         "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
         "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }

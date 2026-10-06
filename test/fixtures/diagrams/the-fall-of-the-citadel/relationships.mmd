@@ -1,0 +1,9 @@
+flowchart LR
+  kael_voss["Kael Voss"]
+  king_aldric["King Aldric Voss"]
+  lord_maren["Lord Maren"]
+  sera_voss["Sera Voss"]
+  kael_voss ===|"sibling"| sera_voss
+  king_aldric ==>|"parent"| sera_voss
+  king_aldric ==>|"parent"| kael_voss
+  king_aldric -.-|"employer"| lord_maren

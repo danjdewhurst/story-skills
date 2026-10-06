@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { DIAGRAM_KINDS } from "../src/diagram.js";
 import { createEntity, createStoryProject, diagramProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -149,4 +150,88 @@ describe("story diagram", () => {
     expect(bad.code).toBe(2);
     expect(bad.err).toContain("Unknown diagram kind: weather. Supported kinds: relationships, locations, timeline, clues, arcs");
   });
+
+  test("--json returns the nodes and edges the Mermaid text is drawn from", () => {
+    const { root, cwd } = diagramFixture();
+    const json = (kind) => {
+      const run = invoke(cwd, ["diagram", kind, "--path", root, "--json"]);
+      expect(run.code).toBe(0);
+      const { data } = JSON.parse(run.out);
+      expect(data.text).toBe(diagramProject(root, { kind }).text);
+      return data;
+    };
+
+    const relationships = json("relationships");
+    expect(relationships.nodes).toEqual([
+      { id: "ada", label: "Ada \"The Elder\"", kind: "character", state: "deceased" },
+      { id: "ben", label: "Ben", kind: "character", state: "alive" },
+      { id: "cy", label: "Cy | Twin", kind: "character", state: "alive" }
+    ]);
+    expect(relationships.edges).toEqual([
+      { from: "ada", to: "ben", label: "parent", kind: "family-directed" },
+      { from: "ada", to: "cy", label: "rival", kind: "relationship" },
+      { from: "ben", to: "cy", label: "sibling", kind: "family" }
+    ]);
+    expect(relationships.groups).toBeUndefined();
+
+    const locations = json("locations");
+    expect(locations.nodes.find((node) => node.id === "port")).toEqual({ id: "port", label: "Port", kind: "location", region: "Coast" });
+    expect(locations.nodes.find((node) => node.id === "fort").region).toBeNull();
+    expect(locations.edges).toEqual([
+      { from: "fort", to: "inn", label: "2h", kind: "route", hours: 2, mode: null, reverse: true },
+      { from: "inn", to: "fort", label: "3h", kind: "route", hours: 3, mode: null, reverse: true },
+      { from: "port", to: "fort", label: "5h cart", kind: "route", hours: 5, mode: "cart", reverse: false }
+    ]);
+
+    const timeline = json("timeline");
+    expect(timeline.title).toBe("Graph: Book");
+    expect(timeline.nodes).toEqual([
+      { id: "chapter-02", label: "Part 2", kind: "event", date: "2024-01-01", time: "09:30", toldLateIn: 2 },
+      { id: "chapter-01-scene-01", label: "Dock: arrival", kind: "event", date: "2024-01-02", time: null, toldLateIn: null }
+    ]);
+    expect(timeline.edges).toEqual([]);
+    expect(timeline.groups).toEqual([
+      { label: "2024-01-01", kind: "date", nodes: ["chapter-02"] },
+      { label: "2024-01-02", kind: "date", nodes: ["chapter-01-scene-01"] }
+    ]);
+
+    const clues = json("clues");
+    expect(clues.nodes.map((node) => `${node.kind}:${node.id}`)).toEqual(["chapter:chapter-01", "chapter:chapter-02", "chapter:chapter-03", "unrevealed:unrevealed"]);
+    expect(clues.nodes[0]).toEqual({ id: "chapter-01", label: "Part 1", kind: "chapter", number: 1 });
+    expect(clues.edges.filter((edge) => edge.kind !== "sequence")).toEqual([
+      { from: "chapter-01", to: "chapter-03", label: "Ash", kind: "clue", clue: "ash", revealed: true },
+      { from: "chapter-02", to: "unrevealed", label: "Glove", kind: "red-herring", clue: "glove", revealed: false }
+    ]);
+    expect(clues.edges.filter((edge) => edge.kind === "sequence").map((edge) => `${edge.from}>${edge.to}`)).toEqual(["chapter-01>chapter-02", "chapter-02>chapter-03"]);
+
+    const arcs = json("arcs");
+    expect(arcs.nodes[0]).toEqual({ id: "main-line", label: "Main Line", kind: "arc" });
+    expect(arcs.edges).toEqual([
+      { from: "main-line", to: "chapter-01", label: null, kind: "advances" },
+      { from: "main-line", to: "chapter-02", label: null, kind: "advances" }
+    ]);
+  });
+
+  // The Mermaid text is rendered from the node and edge model; these golden
+  // files pin it byte for byte for every kind on every example. A deliberate
+  // change to the output updates the matching file in test/fixtures/diagrams.
+  const examplesDir = path.join(import.meta.dir, "..", "examples");
+  const goldenDir = path.join(import.meta.dir, "fixtures", "diagrams");
+  const examples = fs.readdirSync(examplesDir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+
+  test("golden files cover every example and kind", () => {
+    expect(fs.readdirSync(goldenDir).sort()).toEqual(examples);
+    for (const example of examples) {
+      expect(fs.readdirSync(path.join(goldenDir, example)).sort()).toEqual(DIAGRAM_KINDS.map((kind) => `${kind}.mmd`).sort());
+    }
+  });
+
+  for (const example of examples) {
+    test(`${example} diagrams match their golden files`, () => {
+      for (const kind of DIAGRAM_KINDS) {
+        const golden = fs.readFileSync(path.join(goldenDir, example, `${kind}.mmd`), "utf8");
+        expect(`${kind}:\n${diagramProject(path.join(examplesDir, example), { kind }).text}`).toBe(`${kind}:\n${golden}`);
+      }
+    });
+  }
 });
