@@ -11075,6 +11075,7 @@ function relative(project, file) {
 
 // src/mentions.js
 var MENTION_KINDS = ["character", "location", "faction", "artifact", "system", "term"];
+var BLANKED = "\x00";
 function mentionNames(project) {
   const pack = project.pack ?? languagePack();
   const titles = checkSet(pack, "titleWords");
@@ -11114,7 +11115,7 @@ function namePattern(name, pack) {
     const variants = words.length > 1 ? [first, upper, lower] : first === lower ? [first, upper] : [first];
     const unique = [...new Set(variants)].map(escapeRegExp);
     return `${unique.length === 1 ? unique[0] : `(?:${unique.join("|")})`}${rest}`;
-  }).join("\\s+");
+  }).join("(?:[^\\S\\n]+|[^\\S\\n]*\\n[^\\S\\n]*)");
   return new RegExp(wholeWords(body, name), "gu");
 }
 function chapterText(project, chapter) {
@@ -11124,9 +11125,14 @@ function chapterText(project, chapter) {
   } catch {
     return null;
   }
-  const masked = maskMarkup(markdown.body);
-  const start = proseStart(markdown.body, masked);
-  return { raw: markdown.rawMarkdown, text: masked.slice(start), offset: markdown.rawMarkdown.length - markdown.body.length + start };
+  const { body } = markdown;
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  let text = "";
+  for (let index = start;index < body.length; index += 1) {
+    text += masked[index] === body[index] ? body[index] : BLANKED;
+  }
+  return { raw: markdown.rawMarkdown, text, offset: markdown.rawMarkdown.length - body.length + start };
 }
 function findMentions(text, names) {
   const find = wordMatcher(text);
@@ -11268,7 +11274,7 @@ function entityMentions(project, kind, id) {
   const own = entries.filter((entry) => entry.kind === kind && entry.id === id);
   const chapters = [];
   const matches = [];
-  for (const chapter of project.chapters) {
+  for (const chapter of project.chapters.filter((entry) => entry.status !== "outline")) {
     const prose = chapterText(project, chapter);
     if (prose === null) {
       continue;
@@ -11286,7 +11292,7 @@ function entityMentions(project, kind, id) {
   return { names: own.map((entry) => entry.name), chapters, matches };
 }
 function formatMentions(report) {
-  const lines = report.matches.map((match) => `${match.file}:${match.line}:${match.column}: ${match.text}: ${match.excerpt}`);
+  const lines = report.matches.map((match) => `${match.file}:${match.line}:${match.column}: ${match.text.replace(/\s+/gu, " ")}: ${match.excerpt}`);
   const heading = `${report.kind} ${report.id} (${report.names.join(", ")})`;
   if (report.matches.length === 0) {
     lines.push(`No mentions of ${heading} in chapter prose`);
