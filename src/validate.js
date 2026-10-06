@@ -726,9 +726,17 @@ export function sampleProblem(project, sample) {
   const chapters = path.join(self, "chapters");
   // A chapter file the author approved, named on its own, is a sample, and
   // prose leaves it out of the comparison. The project or a folder of its
-  // chapters is not: every chapter would be compared with itself.
-  const file = fs.statSync(real, { throwIfNoEntry: false })?.isFile() ?? false;
-  if (real === self || real === chapters || (isPathInside(chapters, real) && !file)) {
+  // chapters is not: every chapter would be compared with itself. A path
+  // that cannot be stat'd (a symlink loop, say) is left to prose's read,
+  // which reports it as style-sample-unreadable.
+  const folder = (file) => {
+    try {
+      return fs.statSync(file).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  if (real === self || real === chapters || (isPathInside(chapters, real) && folder(real))) {
     return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's chapters as a whole, which are what the samples are compared with: list the approved chapter files one by one, or an earlier book`, STYLE_SHEET_FILE);
   }
   return null;

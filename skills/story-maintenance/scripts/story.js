@@ -19755,8 +19755,14 @@ function sampleProblem(project, sample) {
   const real = canonicalPath(target);
   const self = canonicalPath(project.root);
   const chapters = path11.join(self, "chapters");
-  const file = fs9.statSync(real, { throwIfNoEntry: false })?.isFile() ?? false;
-  if (real === self || real === chapters || isPathInside(chapters, real) && !file) {
+  const folder = (file) => {
+    try {
+      return fs9.statSync(file).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  if (real === self || real === chapters || isPathInside(chapters, real) && folder(real)) {
     return warn("style-sample-own-chapters", `${STYLE_SHEET_FILE} samples entry ${sample} names this project's chapters as a whole, which are what the samples are compared with: list the approved chapter files one by one, or an earlier book`, STYLE_SHEET_FILE);
   }
   return null;
