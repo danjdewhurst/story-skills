@@ -443,7 +443,7 @@ Next release: episode 3 (chapter-03) on 2026-09-18, in 4 days (drafted)
 
 An episode counts as drafted once its chapter has prose. Both commands warn with `release-undrafted` when an episode is due within 3 days, or was due already, and its chapter has no prose. With a cadence, the episodes after the last chapter are scheduled too, so the next release can be one with no chapter yet, and a due episode with no chapter is warned about once, with a count of any more behind it. `--date YYYY-MM-DD` sets "today"; it cannot be a [`cli-defaults`](#cli-defaults-and-severity) entry. `story validate`, `story check`, and `story doctor` never report the warning, since it depends on the day they run.
 
-Once `story.md` has `status: complete`, the chapters are every episode there is, so the cadence stops at the last chapter: no episode past it is scheduled or warned about. Chapters whose release dates are still ahead keep them, and the line marks the final release, as in `(drafted, the last episode)`. After it has gone out, the line says so:
+Once `story.md` has `status: complete`, the chapters are every episode there is, so the cadence stops at the last chapter: no episode past it is scheduled or warned about. Chapters whose release dates are still ahead keep them. When every chapter has a release date, the line marks the final release, as in `(drafted, the last episode)`, and after it has gone out says so:
 
 ```text
 Next release: none, the story is complete; episode 12 (chapter-12) on 2026-11-20 was the last
