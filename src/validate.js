@@ -618,6 +618,9 @@ function validateMatterBodyLinks(project, errors) {
   }
 }
 
+// A --dry-run stages the targets of these links that lie outside the project
+// (copyLinkTargets in preview.js), for the timeline, arcs, and matter pages:
+// check links in another file and that list needs it too.
 function checkBodyLinkTarget(project, label, target, errors) {
   const cleaned = String(target).trim();
   if (!cleaned || /^(https?:|mailto:|#)/i.test(cleaned)) {

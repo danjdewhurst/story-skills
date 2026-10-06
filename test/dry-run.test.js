@@ -319,6 +319,10 @@ describe("--dry-run", () => {
     fs.writeFileSync(path.join(sibling, "spin-off", "notes.md"), "# Notes\n");
     fs.symlinkSync(path.join(parent, "notes.md"), path.join(parent, "notes-link.md"));
     fs.symlinkSync(path.join(parent, "nowhere.md"), path.join(parent, "dangling.md"));
+    // In-project symlinks that lead outside it, to a file and a folder.
+    fs.symlinkSync(path.join("..", "..", "notes.md"), path.join(root, "plot", "outside.md"));
+    fs.symlinkSync(path.join("..", "drafts"), path.join(root, "drafts"), "dir");
+    fs.symlinkSync("loop.md", path.join(parent, "loop.md"));
     const links = [
       "../../notes.md",
       "../../gone.md",
@@ -332,10 +336,24 @@ describe("--dry-run", () => {
       "../../the-fall-of-the-citadel/spin-off/notes.md",
       "../characters/sera-voss.md",
       "../characters/nobody.md",
-      "../../dangling.md"
+      "../../dangling.md",
+      "outside.md",
+      "../drafts/old/chapter-one.md",
+      "../../loop.md",
+      `${"../".repeat(64)}notes.md`
     ];
     fs.appendFileSync(path.join(root, "plot", "timeline.md"), `\n${links.map((link, index) => `[link ${index}](${link})`).join("\n")}\n`);
     fs.appendFileSync(path.join(root, "matter", "epigraph.md"), "\n[notes](../../notes.md)\n");
+    const arc = `plot/arcs/${fs.readdirSync(path.join(root, "plot", "arcs")).find((name) => name !== "_index.md")}`;
+    fs.appendFileSync(path.join(root, arc), "\n[notes](../../../notes.md)\n");
+    // A read-only linked book: the stand-in for its dist/ is made anyway.
+    // An unreadable matter page is reported, and its links are not.
+    const unreadable = path.join(root, "matter", "credits.md");
+    writeMarkdown(unreadable, "title: Credits\nplacement: back", "[notes](../../notes.md)\n");
+    if (!CHMOD_IGNORED) {
+      fs.chmodSync(sibling, 0o555);
+      fs.chmodSync(unreadable, 0o000);
+    }
 
     const parity = (argv) => {
       const preview = invokeJson(root, [...argv, "--dry-run", "--json"]);
@@ -345,7 +363,7 @@ describe("--dry-run", () => {
       return real.envelope.diagnostics;
     };
     const findings = parity(["doctor", "--fix"])
-      .filter((entry) => /link/.test(entry.code))
+      .filter((entry) => /link/.test(entry.code) && entry.file !== "matter/credits.md")
       .map((entry) => `${entry.code} ${entry.message}`);
     const outside = (file, link) => `link-outside-project ${file} links to ${link} which resolves outside the project`;
     const missing = (link) => `broken-link plot/timeline.md links to missing file ${link}`;
@@ -359,11 +377,17 @@ describe("--dry-run", () => {
       missing(links[7]),
       missing(links[11]),
       missing(links[12]),
+      outside("plot/timeline.md", links[13]),
+      outside("plot/timeline.md", links[14]),
+      outside(arc, "../../../notes.md"),
+      missing(links[15]),
+      missing(links[16]),
       outside("matter/epigraph.md", "../../notes.md")
     ].sort());
     parity(["rename", "character", "sera-voss", "Sera Vane"]);
+    fs.chmodSync(sibling, 0o755);
     // The preview made nothing beside the project.
-    expect(fs.readdirSync(parent).sort()).toEqual(["dangling.md", "drafts", "folder.md", "notes-link.md", "notes.md", "the-fall-of-the-citadel", "the-last-ember"]);
+    expect(fs.readdirSync(parent).sort()).toEqual(["dangling.md", "drafts", "folder.md", "loop.md", "notes-link.md", "notes.md", "the-fall-of-the-citadel", "the-last-ember"]);
   });
 
   test("a dry run copies no more linked books than the series book limit", () => {
