@@ -39,6 +39,7 @@ const out = flag ? flag.slice("--print-to-pdf=".length) : args.includes("-o") ? 
 const input = flag ? new URL(args[args.length - 1]) : args[0];
 fs.appendFileSync(process.env.FAKE_PDF_LOG, JSON.stringify({ name: ${JSON.stringify(name)}, args, html: fs.readFileSync(input, "utf8") }) + "\\n");
 if (process.env.FAKE_PDF_MODE === "fail") { process.stderr.write("fake engine: font not found\\n"); process.exit(3); }
+if (process.env.FAKE_PDF_MODE === "crash") { process.stderr.write("[1:2:FATAL:zygote_host_impl_linux.cc(127)] No usable sandbox!\\n" + Array.from({ length: 12 }, (_, n) => "#" + n + " 0x7f4e18a2a1ca").join("\\n") + "\\n"); process.exit(5); }
 if (process.env.FAKE_PDF_MODE !== "nopdf") { fs.writeFileSync(out, "%PDF-1.7\\n% fake\\n"); }
 `, { mode: 0o755 });
   return file;
@@ -172,6 +173,11 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(failed.code).toBe(4);
     expect(failed.err).toContain("PDF engine weasyprint");
     expect(failed.err).toContain("exited with code 3:\nfake engine: font not found");
+
+    const crashed = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "crash" }, ["build", root, "--format", "print", "--pdf"], root);
+    expect(crashed.code).toBe(4);
+    expect(crashed.err).toContain("exited with code 5:\n[1:2:FATAL:zygote_host_impl_linux.cc(127)] No usable sandbox!\n...\n#2 0x7f4e18a2a1ca\n");
+    expect(crashed.err).toContain("#11 0x7f4e18a2a1ca");
 
     const empty = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "nopdf" }, ["build", root, "--format", "print", "--pdf"], root);
     expect(empty.code).toBe(4);
@@ -389,11 +395,17 @@ describe("Shunn manuscript HTML", () => {
   });
 });
 
-// A real engine, when this machine has one: the PDF it writes is a PDF.
+// A real paged-media engine, when this machine has one: the PDF it writes
+// is a PDF. Browsers are left out: whether headless Chrome runs at all
+// depends on the machine's sandbox and first-run state (CI runners crash or
+// hang), which the stub engine tests cover instead.
 let realEngine = null;
 try {
   realEngine = resolvePdfEngine();
 } catch {
+  realEngine = null;
+}
+if (realEngine?.name === "chrome") {
   realEngine = null;
 }
 
