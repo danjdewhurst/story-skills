@@ -52,7 +52,8 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   ].join("");
   // A styled book marks its scene breaks and its chapter and matter bodies
   // for the stylesheet; an unstyled one keeps the plain markup.
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *" };
+  // Only indented paragraphs set a first-line indent of their own.
+  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
@@ -215,10 +216,10 @@ function epubAccessibilityMeta(hasCover, labels) {
   ].join("");
 }
 
-// `markup` is { styled, sceneBreak } from writeEpub.
+// `markup` is { styled, sceneBreak, ownIndent } from writeEpub.
 function xhtmlParagraphs(body, markup) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body).map((paragraph) => ({
+  return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
@@ -247,10 +248,10 @@ function matterXhtml(entry, placement, root, head, markup) {
 // anchors are keyed by the printed chapter number (ch03), an unnumbered
 // chapter's title (prologue), or matter id (front-dedication), so they stay
 // stable while other chapters change.
-export function htmlBook(manuscript) {
+export function htmlBook(manuscript, ownIndent = false) {
   // A book counted in characters also counts each part's characters.
   const characters = (body) => (manuscript.unit === "characters" ? { characters: characterCount(body) } : {});
-  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
+  const paragraphs = (body) => markdownParagraphs(body, ownIndent).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
     }
@@ -312,7 +313,8 @@ export function writeDocx(outFile, manuscript, writeOptions = {}) {
     if (byline !== "") {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
     }
-    for (const paragraph of markdownParagraphs(body)) {
+    // Normal indents every first line (see docxStyles).
+    for (const paragraph of markdownParagraphs(body, true)) {
       bodyParts.push(paragraph.sceneBreak
         ? paragraphXml(script, "* * *", "SceneBreak")
         : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
@@ -498,7 +500,8 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, pap
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
+    // A Shunn manuscript indents every first line half an inch.
+    const body = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       const byline = shunnChapterByline(chapter, meta);
@@ -534,7 +537,9 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
+    // The Shunn format's own half-inch indent, as in the DOCX and PDF, so a
+    // typed one goes here too.
+    const body = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -584,7 +589,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body);
+    const paragraphs = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>\n`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
@@ -851,8 +856,11 @@ export const LINE_BREAK = "\uE001";
 // break, and `quote` marks a blockquote paragraph (an epigraph, a letter).
 // Whitespace-only lines are blank, as in CommonMark. Fence lines go and the
 // code stays; links print as their text and images are left out, as word
-// counts treat them.
-function markdownParagraphs(markdown) {
+// counts treat them. A build that indents first lines itself passes
+// `ownIndent`, and a paragraph's typed indent (the ideographic space a
+// Japanese paragraph opens with) goes, so the two never add up; the other
+// builds keep it as the paragraph's only indent.
+function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -871,13 +879,13 @@ function markdownParagraphs(markdown) {
     }).join("");
     // Only layout whitespace collapses, so a typed no-break or ideographic
     // space reaches the book (see collapseSourceSpace). A hard-broken line
-    // of nothing but whitespace at either end of the paragraph goes.
+    // of nothing but whitespace that opens the paragraph goes. The last
+    // line is never blank (a blank line flushes), so none can end it, and
+    // text is never empty here.
     const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
-    const blank = (part) => part.trim() === "";
-    const text = parts.slice(parts.findIndex((part) => !blank(part)), parts.findLastIndex((part) => !blank(part)) + 1).join(LINE_BREAK);
-    // The last line is never blank (a blank line flushes), so text is never
-    // empty here. A break spaced with typed spaces (`*\u00a0*\u00a0*`) is
-    // still a break.
+    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
+    const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
+    // A break spaced with typed spaces (`*\u00a0*\u00a0*`) is still a break.
     lines = [];
     paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
   };

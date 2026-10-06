@@ -75,6 +75,15 @@ function noteHref(noteUrl, label, stamp, text) {
   return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
 }
 
+// Whether a build's stylesheet indents the first line of a paragraph
+// itself: the print interior unless build-style asks for block paragraphs,
+// the review copy only when it asks for indented ones (see printHtml and
+// reviewStyleRules). htmlBook then drops a typed indent rather than add it
+// to the build's own.
+export function indentsFirstLines(format, style = CLASSIC_STYLE) {
+  return format === "print" ? style.paragraphs !== "block" : style.paragraphs === "indented";
+}
+
 // Each part is { key, kind, title, heading, words, paragraphs } where each
 // paragraph is { html, text, quote } with pre-rendered inline HTML and its
 // plain text, or null for a scene break. Consecutive quoted paragraphs share

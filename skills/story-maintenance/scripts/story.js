@@ -9511,6 +9511,9 @@ var SOURCE_SPACE_RUN = /[ \t\n\v\f\r\u2028\u2029]+/g;
 function collapseSourceSpace(text) {
   return String(text).replace(SOURCE_SPACE_RUN, " ");
 }
+function plainSpaces(text) {
+  return String(text).replace(/[^\S \t\n\v\f\r\u2028\u2029]/g, " ");
+}
 function trimSourceSpace(text) {
   const value = String(text);
   let start = 0;
@@ -16637,6 +16640,9 @@ function noteHref(noteUrl, label, stamp, text) {
   const fragment = hash === -1 ? "" : noteUrl.slice(hash);
   return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
 }
+function indentsFirstLines(format, style = CLASSIC_STYLE) {
+  return format === "print" ? style.paragraphs !== "block" : style.paragraphs === "indented";
+}
 function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = {}) {
   const labels = book.labels;
   const label = (key, values) => fillLabel(labels, key, values);
@@ -17474,7 +17480,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
     extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
   ].join("");
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *" };
+  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
@@ -17601,7 +17607,7 @@ function epubAccessibilityMeta(hasCover, labels) {
 }
 function xhtmlParagraphs(body, markup) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body).map((paragraph) => ({
+  return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
@@ -17621,9 +17627,9 @@ function matterXhtml(entry, placement, root, head, markup) {
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
   return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
 }
-function htmlBook(manuscript) {
+function htmlBook(manuscript, ownIndent = false) {
   const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
-  const paragraphs = (body) => markdownParagraphs(body).map((paragraph) => {
+  const paragraphs = (body) => markdownParagraphs(body, ownIndent).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
     }
@@ -17682,7 +17688,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
     if (byline !== "") {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
     }
-    for (const paragraph of markdownParagraphs(body)) {
+    for (const paragraph of markdownParagraphs(body, true)) {
       bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
     }
   };
@@ -17795,7 +17801,7 @@ function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName 
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
+    const body = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       const byline = shunnChapterByline(chapter, meta);
@@ -17827,7 +17833,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body);
+    const body = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -17867,7 +17873,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body);
+    const paragraphs = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
@@ -18101,7 +18107,7 @@ function runMarkup(run, escape, lineBreak) {
   return markup;
 }
 var LINE_BREAK = "";
-function markdownParagraphs(markdown) {
+function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -18119,8 +18125,8 @@ function markdownParagraphs(markdown) {
       return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
     }).join("");
     const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
-    const blank = (part) => part.trim() === "";
-    const text = parts.slice(parts.findIndex((part) => !blank(part)), parts.findLastIndex((part) => !blank(part)) + 1).join(LINE_BREAK);
+    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
+    const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
     lines = [];
     paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
   };
@@ -24982,7 +24988,7 @@ function pronunciationGuide(project) {
 function narrationBody(body) {
   return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
 `))).replace(/\\\n/g, `
-`).split(/\n[ \t]*\n[ \t\n\v\f\r\u2028\u2029]*/).map(trimSourceSpace).filter((paragraph) => paragraph.trim() !== "").map((paragraph) => isSceneBreak(paragraph) ? "[pause]" : paragraph).join(`
+`).replace(/^[^\S\n]+$/gm, "").split(/\n{2,}/).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreak(plainSpaces(paragraph)) ? "[pause]" : paragraph).join(`
 
 `);
 }
@@ -25170,8 +25176,8 @@ function buildBook(root, options = {}) {
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
   } else if (format === "html" || format === "print") {
-    const book = htmlBook(manuscript);
     const style = projectBuildStyle(project);
+    const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
   } else if (format === "shunn") {
@@ -25189,7 +25195,8 @@ function buildBook(root, options = {}) {
 function buildPdf(project, format, { trim, paper }, output, options) {
   const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
   const manuscript = manuscriptParts(project);
-  const html = format === "print" ? printHtml(htmlBook(manuscript), trim, projectBuildStyle(project)) : shunnHtml(manuscript, shunnMeta(project), paper);
+  const style = projectBuildStyle(project);
+  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
