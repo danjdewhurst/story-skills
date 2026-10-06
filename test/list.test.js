@@ -106,6 +106,20 @@ describe("story list", () => {
     expect(code).toBe(1);
     expect(out).toBe("");
     expect(err).toContain("chapters/chapter-03.md");
+    // A key only the broken file sets is not reported as a typo, and --json
+    // lists nothing rather than a partial set.
+    expect(invoke(root, ["list", "chapters", "--where", "only-in-broken"]).code).toBe(1);
+    const json = JSON.parse(invoke(root, ["list", "chapters", "--json"]).out);
+    expect(json.ok).toBe(false);
+    expect(json.data.items).toEqual([]);
+    expect(validateAgainstSchema(json, schema)).toEqual([]);
+  });
+
+  test("a multi-line title or value stays on one line", () => {
+    const root = sampleProject();
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: |\n  Two\n  Lines\nnumber: 3\nhook: |\n  a\n  b", "## Chapter Text\n\nWords.\n");
+    const { out } = invoke(root, ["list", "chapters", "--where", "number=3", "--where", "hook"]);
+    expect(out).toBe("chapter-03  Two Lines  chapters/chapter-03.md  number=3  hook=a b\n");
   });
 
   test("--json gives the filters and each match's fields, and matches the result schema", () => {
