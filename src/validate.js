@@ -1763,7 +1763,7 @@ export function validateProgressLog(project, errors) {
 function validateOptionalRegistry(project, directory, expectedType, errors) {
   const indexPath = path.join(project.root, directory, "_index.md");
   if (fs.existsSync(indexPath)) {
-    const label = path.join(directory, "_index.md");
+    const label = path.posix.join(directory, "_index.md");
     const data = readRegistryValidationData(indexPath, project.root, label, errors);
     if (data && data.type !== expectedType) {
       errors.push(err("wrong-type", `${label} type must be ${expectedType}`, label));

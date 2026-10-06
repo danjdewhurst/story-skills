@@ -6,10 +6,9 @@ import { runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
 import { EXIT_CODES, exitCodeFor, projectError, refusedError, usageError, withDefaultExitCode, withExitCode } from "../src/exit-codes.js";
 import { LOCK_FILE } from "../src/lock.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const { ok, findings, usage, project, refused } = EXIT_CODES;
-const isRoot = process.getuid?.() === 0;
 
 function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
@@ -239,7 +238,7 @@ describe("exit codes", () => {
     });
   }
 
-  test.skipIf(isRoot)("a write the file system refuses exits 4", () => {
+  test.skipIf(CHMOD_IGNORED)("a write the file system refuses exits 4", () => {
     const root = newProject();
     const story = path.join(root, "story.md");
     fs.chmodSync(story, 0o444);
@@ -252,7 +251,7 @@ describe("exit codes", () => {
     }
   });
 
-  test.skipIf(isRoot)("a folder migrate cannot create exits 4", () => {
+  test.skipIf(CHMOD_IGNORED)("a folder migrate cannot create exits 4", () => {
     const root = newProject();
     const parent = path.join(root, "worldbuilding");
     fs.rmSync(path.join(parent, "factions"), { recursive: true, force: true });
@@ -286,7 +285,7 @@ describe("exit codes", () => {
     expect(fs.readFileSync(target, "utf8")).toBe("old\n");
   });
 
-  test.skipIf(isRoot)("an import source that cannot be read exits 2", () => {
+  test.skipIf(CHMOD_IGNORED)("an import source that cannot be read exits 2", () => {
     const cwd = makeTempDir();
     const draft = path.join(cwd, "draft.md");
     fs.writeFileSync(draft, "# Chapter 1\n\nText.\n", "utf8");
@@ -386,7 +385,7 @@ describe("exit codes with --json", () => {
     });
   }
 
-  test.skipIf(isRoot)("progress --log --json exits 4 when the log cannot be written", () => {
+  test.skipIf(CHMOD_IGNORED)("progress --log --json exits 4 when the log cannot be written", () => {
     const root = newProject();
     const log = path.join(root, "progress.md");
     if (!fs.existsSync(log)) {

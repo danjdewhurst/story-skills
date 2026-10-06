@@ -179,7 +179,7 @@ export function buildSeries(startRoot, scan) {
     warnings.push(warn("series-id-missing", `Linked books ${unnamed.map((book) => book.title).join(", ")} set no series id; add series: ${seriesIds[0]}`));
   }
   for (const book of books.filter((candidate) => candidate.invalidBookNumber)) {
-    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path.join(book.label, "story.md")));
+    errors.push(err("invalid-book-number", `${book.label}: story.md book-number ${JSON.stringify(book.project.story.data["book-number"])} is not a number 0 or more; the book is listed as unnumbered`, path.posix.join(book.label, "story.md")));
   }
   const seriesTitles = [...new Set(books.map((book) => book.seriesTitle).filter((title) => title !== undefined))].sort();
   if (seriesTitles.length > 1) {
@@ -303,7 +303,7 @@ function discoverBooks(startRoot, scan, errors) {
     }
     // A linked book's file errors keep their codes, and name the book.
     for (const scanError of project.fileErrors ?? []) {
-      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path.join(label, scanError.file) });
+      errors.push({ ...scanError, message: `${label}: ${scanError.message}`, file: path.posix.join(label, scanError.file) });
     }
     // An unparseable story.md has no series id, number, or links to trust,
     // so the book is reported once and left out rather than read as empty.

@@ -261,7 +261,7 @@ The valley keeps its secret.`;
 
     const result = invoke(cwd, ["synopsis", root, "--pages", "3", "--out", "dist/the-long-valley.synopsis.md"]);
     expect(result.code).toBe(0);
-    expect(result.out).toContain("dist/the-long-valley.synopsis.md");
+    expect(result.out).toContain(path.join("dist", "the-long-valley.synopsis.md"));
     expect(fs.existsSync(path.join(root, "dist", "the-long-valley.synopsis.md"))).toBe(true);
   });
 

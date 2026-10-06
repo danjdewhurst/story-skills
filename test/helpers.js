@@ -6,6 +6,12 @@ import { inflateRawSync } from "node:zlib";
 
 const tempDirs = [];
 
+// Whether chmod cannot take access away: root reads and writes anything,
+// and Windows has no POSIX modes (chmod only sets a file's read-only flag,
+// and is ignored on folders). Tests that make a file or folder unreadable or
+// unwritable skip when it is true.
+export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
+
 // Removes every temp dir made so far. test/setup.js runs it after the whole
 // test run, so repeated runs do not fill the disk.
 export function removeTempDirs() {

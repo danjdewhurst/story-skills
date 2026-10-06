@@ -246,21 +246,21 @@ describe("check-coverage", () => {
       "TN:\nSF:/repo/src/a.js\nBRDA:10,0,0,1\nBRDA:10,0,1,-\nBRDA:12,1,0,3\n" +
       "LF:5\nLH:5\nFNF:1\nFNH:1\nBRF:3\nBRH:2\nend_of_record\n"
     );
-    const record = records.get("/repo/src/a.js");
+    const record = records.get(path.resolve("/repo/src/a.js"));
     expect(record.hasBranchData).toBe(true);
     expect(record.branches).toEqual({ found: 3, hit: 2 });
   });
 
   test("counts BRDA lines when BRF/BRH summaries are absent", () => {
     const records = parseLcov("TN:\nSF:/repo/src/a.js\nBRDA:1,0,0,2\nBRDA:2,0,0,-\nLF:2\nLH:2\nFNF:0\nFNH:0\nend_of_record\n");
-    const record = records.get("/repo/src/a.js");
+    const record = records.get(path.resolve("/repo/src/a.js"));
     expect(record.hasBranchData).toBe(true);
     expect(record.branches).toEqual({ found: 2, hit: 1 });
   });
 
   test("marks files without branch records as having no branch data", () => {
     const records = parseLcov("TN:\nSF:/repo/src/a.js\nLF:2\nLH:2\nFNF:0\nFNH:0\nend_of_record\n");
-    const record = records.get("/repo/src/a.js");
+    const record = records.get(path.resolve("/repo/src/a.js"));
     expect(record.hasBranchData).toBe(false);
   });
 
@@ -359,7 +359,8 @@ describe("bun pin", () => {
     expect(readPinnedBunVersion()).not.toBe(null);
   });
 
-  test("check:fallback refuses to compare bytes under an unpinned bun", () => {
+  // The fake bun is a shell script, which Windows cannot run from PATH.
+  test.skipIf(process.platform === "win32")("check:fallback refuses to compare bytes under an unpinned bun", () => {
     // A fake `bun` earlier on PATH stands in for a contributor on another release.
     const fakeBin = makeTempDir("story-fake-bun-");
     fs.writeFileSync(path.join(fakeBin, "bun"), '#!/bin/sh\nif [ "$1" = "--version" ]; then echo 9.9.9; exit 0; fi\nexit 1\n', "utf8");
