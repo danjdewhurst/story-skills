@@ -222,9 +222,9 @@ function writeWholeFile(filePath, contents, options) {
       throw error;
     }
     const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
-    if (!created && error.code === "EEXIST") {
-      const shown = (file) => options.root ? projectPath(path.resolve(options.root), file) : file;
-      throw Object.assign(new Error(`Cannot ${action} ${shown(target)}: something is already at the name of its temporary file, ${shown(temporary)}, so it was left as it is. Run the command again`), { code: error.code, path: target, syscall: "write" });
+    if (!created && (error.code === "EEXIST" || lstatIfExists(temporary) !== null)) {
+      const reason = `something is already at the name of its temporary file (${path.basename(temporary)}, in the same folder), so it was left as it is. Run the command again`;
+      throw Object.assign(new Error(`Cannot ${action} ${target}: ${reason}`), { code: "EEXIST", path: target, syscall: "write", reason });
     }
     throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }
@@ -20245,7 +20245,7 @@ function collectStrayFileWarnings(project, warnings) {
   const leftovers = temporaryFiles(root).map(([file, kind]) => [portablePath(file), kind]).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
   for (const [leftover, kind] of leftovers) {
     if (kind) {
-      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}, which story never makes; delete it`, leftover));
+      warnings.push(warn("interrupted-write", `${leftover} has the name of a story temporary file but is ${kind}`, leftover));
       continue;
     }
     const name = TEMPORARY_FILE_PATTERN.exec(path11.posix.basename(leftover))?.[1];
@@ -20272,9 +20272,9 @@ function entryKind(entry) {
     return null;
   }
   if (entry.isSymbolicLink()) {
-    return "a symlink";
+    return "a symlink, which story never makes; delete the link itself, not what it points to";
   }
-  return entry.isDirectory() ? "a folder" : "not a regular file";
+  return entry.isDirectory() ? "a folder, which story never makes; it may hold files, so check them before you delete it" : "not a regular file, which story never makes; delete it";
 }
 function checkIdReference(errors, label, value, kind, exists, file = label) {
   const text = String(value ?? "");
@@ -29053,7 +29053,7 @@ function handleOutputError(error, proc) {
 var FILE_ERROR_ACTIONS = { open: "open", scandir: "list", stat: "check", statx: "check", lstat: "check", rename: "replace", mkdir: "create the folder", unlink: "delete", rmdir: "delete", copyfile: "copy", access: "write to", write: "write to", rm: "delete" };
 function describeError(error, cwd) {
   const hint = typeof error.hint === "string" ? `. ${error.hint}` : "";
-  const reason = FILE_ERROR_REASONS[error.code];
+  const reason = typeof error.reason === "string" ? error.reason : FILE_ERROR_REASONS[error.code];
   if (!reason || typeof error.path !== "string") {
     return `${error.message}${hint}`;
   }

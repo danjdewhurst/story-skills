@@ -240,12 +240,13 @@ function writeWholeFile(filePath, contents, options) {
     }
     // Name the file the user asked for, not the temporary one.
     const action = existing?.nlink > 1 ? "replace hard-linked" : "write to";
-    if (!created && error.code === "EEXIST") {
-      // Something was already at the random name. FILE_ERROR_REASONS has
-      // no EEXIST, so this message is shown as it is; a rerun picks a new
-      // name.
-      const shown = (file) => (options.root ? projectPath(path.resolve(options.root), file) : file);
-      throw Object.assign(new Error(`Cannot ${action} ${shown(target)}: something is already at the name of its temporary file, ${shown(temporary)}, so it was left as it is. Run the command again`), { code: error.code, path: target, syscall: "write" });
+    // Something was already at the random name: EEXIST, or on Windows
+    // another code for a folder there. FILE_ERROR_REASONS has no EEXIST,
+    // since makeDirectories' messages keep the code, so the reason travels
+    // with the error; a rerun picks a new name.
+    if (!created && (error.code === "EEXIST" || lstatIfExists(temporary) !== null)) {
+      const reason = `something is already at the name of its temporary file (${path.basename(temporary)}, in the same folder), so it was left as it is. Run the command again`;
+      throw Object.assign(new Error(`Cannot ${action} ${target}: ${reason}`), { code: "EEXIST", path: target, syscall: "write", reason });
     }
     throw Object.assign(new Error(`Cannot ${action} ${target}: ${error.code ?? error.message}`), { code: error.code, path: target, syscall: "write" });
   }

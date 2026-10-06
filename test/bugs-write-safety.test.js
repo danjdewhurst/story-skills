@@ -38,6 +38,36 @@ function listDir(root, dir) {
   return fs.readdirSync(path.join(root, dir)).sort();
 }
 
+// The reason a write gives when its temporary file's name is taken.
+function takenName(name) {
+  return `something is already at the name of its temporary file (${name}, in the same folder), so it was left as it is. Run the command again`;
+}
+
+// Runs `run` with fs[method] throwing `code` for paths matching `pattern`.
+function failing(method, pattern, code, run) {
+  const original = fs[method];
+  fs[method] = (target, ...rest) => {
+    if (pattern.test(String(target))) {
+      throw Object.assign(new Error(`${code}: stubbed, ${method} '${target}'`), { code, syscall: method, path: target });
+    }
+    return original(target, ...rest);
+  };
+  try {
+    return run();
+  } finally {
+    fs[method] = original;
+  }
+}
+
+function thrown(run) {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected a throw");
+}
+
 // Makes fs.rmSync throw for the first path matching `pattern`, standing in
 // for a process killed (or a delete refused) at that point.
 function failingRemove(pattern, run) {
@@ -209,11 +239,14 @@ describe("atomic writes (#190, #197)", () => {
     const planted = path.join(dir, `.chapter.md.story-${bytes.toString("hex")}.tmp`);
     fs.symlinkSync(outside, planted);
     const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
+    let error;
     try {
-      expect(() => writeFile(target, "new")).toThrow(`Cannot write to ${target}: something is already at the name of its temporary file, ${planted}, so it was left as it is. Run the command again`);
+      error = thrown(() => writeFile(target, "new"));
     } finally {
       spy.mockRestore();
     }
+    expect(error.message).toBe(`Cannot write to ${target}: ${takenName(path.basename(planted))}`);
+    expect(error).toMatchObject({ code: "EEXIST", path: target, syscall: "write", reason: takenName(path.basename(planted)) });
     expect(fs.readFileSync(outside, "utf8")).toBe("untouched");
     expect(fs.readFileSync(target, "utf8")).toBe("old");
     expect(fs.lstatSync(planted).isSymbolicLink()).toBe(true);
@@ -244,36 +277,88 @@ describe("atomic writes (#190, #197)", () => {
       spy.mockRestore();
     }
     expect(refused.code).toBe(4);
-    expect(refused.err).toBe(`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file, chapters/.chapter-01.md.story-${bytes.toString("hex")}.tmp, so it was left as it is. Run the command again\n`);
+    expect(refused.err).toBe(`Cannot write to ${"chapters/chapter-01.md"}: ${takenName(`.chapter-01.md.story-${bytes.toString("hex")}.tmp`)}\n`);
     expect(fs.readFileSync(outside, "utf8")).toBe("untouched\n");
     expect(read(root, "chapters/chapter-01.md")).not.toContain("word-count: 3");
   });
 
-  test("a file at the name a write picks is named in a plain refusal, and a rerun writes (#602)", () => {
+  // Windows has no FIFOs.
+  const plantings = [
+    ["a file", (planted) => fs.writeFileSync(planted, "someone else's")],
+    ["a folder", (planted) => fs.mkdirSync(planted)],
+    ...(process.platform === "win32" ? [] : [["a FIFO", (planted) => expect(spawnSync("mkfifo", [planted]).status).toBe(0)]])
+  ];
+
+  test.each(plantings)("%s at the name a write picks gets a plain refusal, and a rerun writes (#602)", (_kind, plant) => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    const chapter = path.join(root, "chapters", "chapter-01.md");
-    fs.appendFileSync(chapter, "\nThe ember woke.\n");
-    const before = read(root, "chapters/chapter-01.md");
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "\nThe ember woke.\n");
+    const chapter = read(root, "chapters/chapter-01.md");
+    const registry = read(root, "chapters/_index.md");
     const bytes = Buffer.from("00112233aabbccdd", "hex");
     const planted = path.join(root, "chapters", `.chapter-01.md.story-${bytes.toString("hex")}.tmp`);
-    fs.writeFileSync(planted, "someone else's");
+    plant(planted);
+    const before = fs.lstatSync(planted);
+    // From the folder above the book, so the path names the book too.
+    const parent = path.dirname(root);
+    const book = path.basename(root);
     const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
     let refused;
     try {
-      refused = invoke(root, ["wordcount", "--write"]);
+      refused = invoke(parent, ["wordcount", book, "--write"]);
     } finally {
       spy.mockRestore();
     }
     expect(refused.code).toBe(4);
-    expect(refused.err).toBe(`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file, chapters/.chapter-01.md.story-${bytes.toString("hex")}.tmp, so it was left as it is. Run the command again\n`);
-    expect(read(root, "chapters/chapter-01.md")).toBe(before);
-    // Not this write's file, so it is neither written nor removed.
-    expect(fs.readFileSync(planted, "utf8")).toBe("someone else's");
+    expect(refused.err).toBe(`Cannot write to ${book}/chapters/chapter-01.md: ${takenName(path.basename(planted))}\n`);
+    expect(read(root, "chapters/chapter-01.md")).toBe(chapter);
+    expect(read(root, "chapters/_index.md")).toBe(registry);
+    // Not this write's, so it is neither written nor removed.
+    const after = fs.lstatSync(planted);
+    expect([after.ino, after.mode, after.size]).toEqual([before.ino, before.mode, before.size]);
 
     // A rerun picks another name.
-    expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
+    expect(invoke(parent, ["wordcount", book, "--write"]).code).toBe(0);
     expect(read(root, "chapters/chapter-01.md")).toContain("word-count: 3");
+  });
+
+  test("a folder at the name is refused alike when the open fails with another code, as on Windows (#602)", () => {
+    const dir = makeTempDir();
+    const target = path.join(dir, "chapter.md");
+    fs.writeFileSync(target, "old");
+    const bytes = Buffer.from("8899aabbccddeeff", "hex");
+    const planted = path.join(dir, `.chapter.md.story-${bytes.toString("hex")}.tmp`);
+    fs.mkdirSync(planted);
+    const spy = spyOn(crypto, "randomBytes").mockImplementation(() => bytes);
+    let error;
+    try {
+      error = failing("openSync", /\.story-[0-9a-f]+\.tmp$/, "EPERM", () => thrown(() => writeFile(target, "new")));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(error.message).toBe(`Cannot write to ${target}: ${takenName(path.basename(planted))}`);
+    expect(error).toMatchObject({ code: "EEXIST", path: target, syscall: "write" });
+    expect(fs.readFileSync(target, "utf8")).toBe("old");
+    expect(fs.lstatSync(planted).isDirectory()).toBe(true);
+  });
+
+  test("only a taken temporary name gets that reason (#602)", () => {
+    const dir = makeTempDir();
+    const target = path.join(dir, "chapter.md");
+    fs.writeFileSync(target, "old");
+    // The open fails with nothing at the name.
+    const open = failing("openSync", /\.story-[0-9a-f]+\.tmp$/, "EACCES", () => thrown(() => writeFile(target, "new")));
+    expect(open.message).toBe(`Cannot write to ${target}: EACCES`);
+    expect(open).toMatchObject({ code: "EACCES", path: target, syscall: "write" });
+    expect(open.reason).toBeUndefined();
+    // EEXIST after this write made its temporary file is not about the name,
+    // and the file it made is removed.
+    const rename = failing("renameSync", /\.story-[0-9a-f]+\.tmp$/, "EEXIST", () => thrown(() => writeFile(target, "new")));
+    expect(rename.message).toBe(`Cannot write to ${target}: EEXIST`);
+    expect(rename).toMatchObject({ code: "EEXIST", path: target, syscall: "write" });
+    expect(rename.reason).toBeUndefined();
+    expect(fs.readFileSync(target, "utf8")).toBe("old");
+    expect(fs.readdirSync(dir)).toEqual(["chapter.md"]);
   });
 
   test("a read-only file stays refused", () => {
@@ -307,8 +392,8 @@ describe("atomic writes (#190, #197)", () => {
     fs.mkdirSync(path.join(root, ".story-687110.tmp"));
     const found = validateProject(root).warnings.filter((warning) => warning.code === "interrupted-write");
     expect(found.map((warning) => warning.message)).toEqual([
-      ".story-687110.tmp has the name of a story temporary file but is a folder, which story never makes; delete it",
-      "chapters/.chapter-01.md.story-4242.tmp has the name of a story temporary file but is a folder, which story never makes; delete it"
+      ".story-687110.tmp has the name of a story temporary file but is a folder, which story never makes; it may hold files, so check them before you delete it",
+      "chapters/.chapter-01.md.story-4242.tmp has the name of a story temporary file but is a folder, which story never makes; it may hold files, so check them before you delete it"
     ]);
   });
 
@@ -327,10 +412,10 @@ describe("atomic writes (#190, #197)", () => {
 
     const found = validateProject(root).warnings.filter((warning) => warning.code === "interrupted-write");
     expect(found.map((warning) => [warning.file, warning.message])).toEqual([
-      [".story.md.story-4242.tmp", ".story.md.story-4242.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"],
-      ["chapters/.chapter-01.md.story-0123456789abcdef.tmp", "chapters/.chapter-01.md.story-0123456789abcdef.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"],
+      [".story.md.story-4242.tmp", ".story.md.story-4242.tmp has the name of a story temporary file but is a symlink, which story never makes; delete the link itself, not what it points to"],
+      ["chapters/.chapter-01.md.story-0123456789abcdef.tmp", "chapters/.chapter-01.md.story-0123456789abcdef.tmp has the name of a story temporary file but is a symlink, which story never makes; delete the link itself, not what it points to"],
       ["chapters/.chapter-01.md.story-fedcba9876543210.tmp", "chapters/.chapter-01.md.story-fedcba9876543210.tmp has the name of a story temporary file but is not a regular file, which story never makes; delete it"],
-      ["chapters/.story-687110.tmp", "chapters/.story-687110.tmp has the name of a story temporary file but is a symlink, which story never makes; delete it"]
+      ["chapters/.story-687110.tmp", "chapters/.story-687110.tmp has the name of a story temporary file but is a symlink, which story never makes; delete the link itself, not what it points to"]
     ]);
     expect(fs.readFileSync(outsideFile, "utf8")).toBe("untouched\n");
     expect(fs.readdirSync(outsideDir)).toEqual(["outside.txt"]);
