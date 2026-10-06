@@ -755,7 +755,7 @@ Checks that references between entities point at entities that exist and that tw
 - the `from` chapter of each progression on a character, location, or faction, which may be a scheduled `chapter-NN` with no chapter file yet
 - arc characters, faction members and locations, and artifact owners and locations
 - chapter and scene POV, `characters`, `mentions` (a character or an artifact), locations, and `arcs-advanced`, and each scene's chapter
-- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status: planned`, an `open` question's `introduced`, any chapter of an `abandoned` promise, clue, or question, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
+- the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status` is `planned` or `abandoned`, an `open` or `abandoned` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files, and markdown links in the bodies of `matter/` pages
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
 
@@ -2305,7 +2305,7 @@ The name is every positional after the kind. A trailing `.` (or another project 
 
 For characters and locations, `add` also writes the backlink on the other side: adding a character with `--location gull-harbour` appends the character to that location's `notable-characters`, and adding a location with `--character` appends the location to each character's `locations`.
 
-An option that names a character, location, faction, artifact, or arc with no file is kept, since it may be a forward reference, but `add` warns, as `story links` will report it: `warning: location gul-harbour (locations) does not exist, so no backlink was written; story links reports it until you add it`. Chapter options are not checked this way: a promise planted in a chapter not written yet is normal, and `add scene --chapter` already refuses an unknown chapter.
+An option that names a character, location, faction, artifact, or arc with no file is kept, since it may be a forward reference, but `add` warns, as `story links` will report it: `warning: location gul-harbour (locations) does not exist, so no backlink was written; story links reports it until you add it`. Chapter options are not checked this way: a promise planted in a chapter not written yet is normal, and `add scene --chapter` already refuses an unknown chapter. `add chapter` warns when an abandoned promise, clue, or question still names the new chapter's id, since the cut thread now points at it (`warning: chapter-09 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/the-duel.md. Clear them if the cut threads do not belong there`).
 
 Options by kind:
 
@@ -2366,7 +2366,7 @@ $ story add chapter "Two" --number 0
 chapter number must be a positive integer, got 0
 ```
 
-A chapter id in `--chapter`, `--planted`, `--payoff`, `--introduced`, or `--used-in` may name a chapter not written yet, but not `chapter-00`, and only in the spelling `story add chapter` writes (`chapter-01`, not `chapter-1` or `chapter-001`):
+A chapter id in `--planted`, `--payoff`, `--introduced`, or `--used-in` may name a chapter not written yet, but not `chapter-00`, and only in the spelling `story add chapter` writes (`chapter-01`, not `chapter-1` or `chapter-001`). Any other id must name an existing chapter:
 
 ```text
 $ story add promise "The Ledger" --payoff chapter-00
@@ -2374,9 +2374,12 @@ $ story add promise "The Ledger" --payoff chapter-00
 
 $ story add promise "The Ledger" --payoff chapter-1
 --payoff chapter-1: did you mean chapter-01?
+
+$ story add promise "The Ledger" --payoff epilogue
+--payoff epilogue names no chapter: a chapter not written yet must be named chapter-NN, as story add chapter names it
 ```
 
-A status that says the chapter is on the page needs it written, as `story links` does: `--resolved` on a question, `--planted` with `--status planted`, `paid-off`, or `dropped`, `--payoff` with `--status paid-off`, and `--introduced` on a question whose status is not `open` must name an existing chapter (`--resolved chapter-05 is not written yet: a question's resolved chapter must exist. Add --resolved once the answer is drafted`). With `--status abandoned` none of them has to, since the thread was cut. Without `--status`, a promise or clue planted in an unwritten chapter is `planned`.
+A status that says the chapter is on the page needs it written, as `story links` does: `--resolved` on a question, `--planted` with `--status planted`, `paid-off`, or `dropped`, `--payoff` with `--status paid-off`, and `--introduced` on a question whose status is not `open` or `abandoned` must name an existing chapter (`--resolved chapter-05 is not written yet: a question's resolved chapter must exist. Add --resolved once the answer is drafted`). A dropped setup stays in the book, so the refusal suggests `--status abandoned` for one that was cut. Without `--status`, a promise or clue planted in an unwritten chapter is `planned`.
 
 `add scene` needs an existing chapter. With no chapters it fails with `No chapters yet: add one with story add chapter before adding a scene`, and a `--chapter` id with no chapter file fails with `chapter chapter-99 does not exist: add it with story add chapter, or pass --chapter with an existing chapter id`.
 
@@ -2618,7 +2621,7 @@ The new chapter is titled `<title> (continued)` unless `--title` names it. It ge
 
 Scene records have no position in the chapter text, so they follow it in order: the records of the scenes before the split stay, and the rest move to the new chapter with [`move scene`](#move), numbered from 1. When the split falls inside a scene, that scene's record stays with the first chapter. `split` warns (`split-scenes`) when the number of scene records differs from the number of scenes the breaks mark out, since it then assigned them by order, and when it split inside a scene.
 
-References to the split chapter keep pointing at it, which now holds only the first part. A clue planted, a question introduced, a death, or a progression in the split chapter may now happen in the new one, and `split` cannot tell, so it lists the files that still name the chapter (`split-references`) for you to check. Registries are left out, since `split` reindexes.
+References to the split chapter keep pointing at it, which now holds only the first part. A clue planted, a question introduced, a death, or a progression in the split chapter may now happen in the new one, and `split` cannot tell, so it lists the files that still name the chapter (`split-references`) for you to check. Registries are left out, since `split` reindexes. When the new chapter takes a number no chapter had, `split` also warns (`adopted-references`) if an abandoned promise, clue, or question still names that id, as `add chapter` does.
 
 On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
 
@@ -3297,7 +3300,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | Code | Level | Reported when |
 |---|---|---|
 | `unknown-reference` | warning | `add` records an id that does not exist yet. |
-| `adopted-references` | warning | `rename` or `move` gives an entity an id the project already referenced. |
+| `adopted-references` | warning | `rename` or `move` gives an entity an id the project already referenced, or `add chapter` or `split` gives a new chapter an id that an abandoned promise, clue, or question still names. |
 | `prose-name-shared` | warning | `rename --prose` left a name in chapter prose as written because another entity shares it. |
 | `linked-book-id` | warning | `rename` changes an id a linked book also defines. |
 | `choices-dropped` | warning | `remove` dropped chapter choices that led to the removed chapter. |

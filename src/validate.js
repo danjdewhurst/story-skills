@@ -501,8 +501,7 @@ export function validateLinksOf(project) {
   for (const question of project.questions) {
     const label = relative(project, question.file);
     // A question can be planned for a chapter not written yet; its answer
-    // must be on the page before `resolved` names a chapter, unless the
-    // question was abandoned.
+    // must be on the page before `resolved` names a chapter.
     checkIdReference(errors, label, question.introduced, "chapter", threadChapter("question", question, "introduced"));
     checkIdReference(errors, label, question.resolved, "chapter", threadChapter("question", question, "resolved"));
     for (const characterId of question.characters) {

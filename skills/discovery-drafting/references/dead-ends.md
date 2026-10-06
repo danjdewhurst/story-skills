@@ -39,9 +39,11 @@ payoff exists in the ledger, the thread is alive — leave it.
      `continuity/questions/` as `status: abandoned` with a reason — never
      just delete them. An abandoned record explains to future agents why the
      setup has no payoff; a deleted record looks like a forgotten setup.
-     Leave their `planted`, `payoff`, `introduced`, or `resolved` chapters
-     as they are, even ones never written: `story links` accepts them on an
-     abandoned record.
+     Leave their `planted`, `payoff`, and `introduced` chapters as they
+     are, even ones never written: `story links` accepts them on an
+     abandoned record. If a chapter with that number is added later,
+     `story add chapter` and `story split` warn (`adopted-references`);
+     clear the field then if the cut thread does not belong in it.
    - Update affected scene records' `state-changes` if the cut removes a
      change other chapters assumed.
    - If a character is cut, set their file's `status: cut` and leave the

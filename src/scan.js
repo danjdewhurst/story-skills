@@ -123,17 +123,18 @@ export const CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped
 
 // Whether a promise, clue, or question chapter field (`planted`, `payoff`,
 // `introduced`, `resolved`) may name a scheduled chapter-NN with no file yet:
-// only a status that says the chapter is on the page needs it written. An
-// abandoned thread was cut, so none of its chapters need to be; continuity
-// skips it too. links and add share this rule.
+// only a status that says the chapter is on the page needs it written. A
+// thread can be abandoned before its setup reaches the page, so an abandoned
+// one schedules like a planned promise or clue or an open question; continuity
+// skips it. An open question never records `resolved`, so one abandoned
+// before its answer has none, and `resolved` must always be written. links
+// and add share this rule.
 export function mayScheduleChapter(kind, field, status) {
-  if (status === "abandoned") {
-    return true;
+  const setupPending = status === "abandoned" || status === (kind === "question" ? "open" : "planned");
+  if (field === "payoff") {
+    return status !== "paid-off";
   }
-  if (kind === "question") {
-    return field === "introduced" && status === "open";
-  }
-  return field === "planted" ? status === "planned" : status !== "paid-off";
+  return field !== "resolved" && setupPending;
 }
 
 export const TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);

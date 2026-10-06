@@ -202,6 +202,17 @@ describe("story split", () => {
     expect(fs.existsSync(path.join(root, "scenes", "chapter-03-scene-02.md"))).toBe(true);
   });
 
+  test("warns when the new last chapter takes an id an abandoned thread still names", () => {
+    const root = book();
+    setProse(root, "chapter-04", "They landed.\n\nNight fell.\n");
+    createEntity(root, { kind: "promise", name: "The Duel", planted: "chapter-05", status: "abandoned" });
+    createEntity(root, { kind: "clue", name: "The Ring", planted: "chapter-05" });
+    const result = splitChapter(root, { id: "chapter-04", at: "Night fell." });
+    expect(result.newId).toBe("chapter-05");
+    expect(codes(result)).toEqual(["adopted-references"]);
+    expect(result.warnings[0].message).toBe("chapter-05 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/the-duel.md. Clear them if the cut threads do not belong there");
+  });
+
   test("leaves the chapters after a numbering gap alone", () => {
     const root = book();
     createEntity(root, { kind: "chapter", name: "Ten", number: 10 });
