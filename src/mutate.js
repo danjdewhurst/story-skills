@@ -91,6 +91,7 @@ import {
   newerSchemaVersion,
   newerSchemaMessage,
   canonicalChapterId,
+  mayScheduleChapter,
   mapOutsideLinks,
   storyBible,
   characterIndex,
@@ -1037,29 +1038,35 @@ function assertChapterReferences(project, options) {
   }
 }
 
+const STATUS_CHAPTER_FIELDS = {
+  promise: ["planted", "payoff"],
+  clue: ["planted", "payoff"],
+  question: ["resolved", "introduced"]
+};
+
 // A status that says a chapter is on the page needs that chapter written:
-// links applies the same rule, so add refuses what links would reject.
+// links applies the same rule (mayScheduleChapter), so add refuses what links
+// would reject.
 function assertStatusChapters(project, kind, options) {
+  const fields = STATUS_CHAPTER_FIELDS[kind];
+  if (fields === undefined) {
+    return;
+  }
   const written = (value) => project.chapters.some((chapter) => chapter.id === String(value ?? "").trim());
   const given = (value) => String(value ?? "").trim() !== "";
-  const status = String(options.status ?? "");
-  const refuse = (option, value, reason) => {
-    throw usageError(`--${option} ${String(value).trim()} is not written yet: ${reason}`);
+  // Without --status, add writes the default the file builders pick.
+  const defaultStatus = kind === "question" ? (given(options.resolved) ? "answered" : "open") : (given(options.planted) ? "planted" : "planned");
+  const status = String(options.status ?? defaultStatus);
+  const article = /^[aeiou]/.test(status) ? "an" : "a";
+  const reasons = {
+    planted: `${article} ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`,
+    payoff: `a paid-off ${kind} needs its payoff chapter. Use --status planted until the payoff is drafted`,
+    resolved: "a question's resolved chapter must exist. Add --resolved once the answer is drafted",
+    introduced: `${article} ${status} question needs its introduced chapter`
   };
-  if (kind === "promise" || kind === "clue") {
-    if ((status === "planted" || status === "paid-off") && given(options.planted) && !written(options.planted)) {
-      refuse("planted", options.planted, `a ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`);
-    }
-    if (status === "paid-off" && given(options.payoff) && !written(options.payoff)) {
-      refuse("payoff", options.payoff, `a paid-off ${kind} needs its payoff chapter. Use --status planted until the payoff is drafted`);
-    }
-  }
-  if (kind === "question") {
-    if (given(options.resolved) && !written(options.resolved)) {
-      refuse("resolved", options.resolved, "a question's resolved chapter must exist. Add --resolved once the answer is drafted");
-    }
-    if (status !== "" && status !== "open" && given(options.introduced) && !written(options.introduced)) {
-      refuse("introduced", options.introduced, `a ${status} question needs its introduced chapter`);
+  for (const field of fields) {
+    if (given(options[field]) && !written(options[field]) && !mayScheduleChapter(kind, field, status)) {
+      throw usageError(`--${field} ${String(options[field]).trim()} is not written yet: ${reasons[field]}`);
     }
   }
 }

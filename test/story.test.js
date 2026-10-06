@@ -723,6 +723,48 @@ payoff: chapter-01
     expect(messages(continuity.errors).filter((error) => error.includes("dead-promise"))).toEqual([]);
   });
 
+  test("links accepts unwritten chapters on abandoned threads, which continuity skips", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Abandoned Plans", force: false }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    // Each thread was scheduled for chapter 9, then cut before it was written.
+    writeMarkdown(path.join(root, "continuity", "promises", "duel.md"), "title: Duel\nstatus: abandoned\nplanted: chapter-09\npayoff: chapter-12", "# Duel\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "ring.md"), "title: Ring\nstatus: abandoned\nplanted: chapter-09\npayoff: chapter-12", "# Ring\n");
+    writeMarkdown(path.join(root, "continuity", "questions", "who.md"), "title: Who\nstatus: abandoned\nintroduced: chapter-09\nresolved: chapter-12", "# Who\n");
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    expect(messages(checkContinuity(scanProject(root)).errors)).toEqual([]);
+
+    // A typo is still reported, and a dropped thread stays in the book, so
+    // its setup must be on the page.
+    writeMarkdown(path.join(root, "continuity", "promises", "typo.md"), "title: Typo\nstatus: abandoned\nplanted: chapter-1\npayoff: chapter-00", "# Typo\n");
+    writeMarkdown(path.join(root, "continuity", "promises", "kept.md"), "title: Kept\nstatus: dropped\nplanted: chapter-09", "# Kept\n");
+    writeMarkdown(path.join(root, "continuity", "questions", "why.md"), "title: Why\nstatus: dropped\nintroduced: chapter-09", "# Why\n");
+    expect(messages(validateLinks(root).errors)).toEqual([
+      "continuity/questions/why.md references missing chapter chapter-09",
+      "continuity/promises/kept.md references missing chapter chapter-09",
+      "continuity/promises/typo.md references missing chapter chapter-1",
+      "continuity/promises/typo.md references missing chapter chapter-00"
+    ]);
+  });
+
+  test("add accepts unwritten chapters on an abandoned thread and refuses what links rejects", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Abandoned Adds", force: false }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-09", payoff: "chapter-12", status: "abandoned" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-09", payoff: "chapter-12", status: "abandoned" });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-09", resolved: "chapter-12", status: "abandoned" });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+
+    expect(() => createEntity(root, { kind: "promise", name: "Kept", planted: "chapter-09", status: "dropped" }))
+      .toThrow("--planted chapter-09 is not written yet: a dropped promise needs its planted chapter");
+    // --resolved alone makes the question answered.
+    expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-09", resolved: "chapter-01" }))
+      .toThrow("--introduced chapter-09 is not written yet: an answered question needs its introduced chapter");
+    expect(fs.readdirSync(path.join(root, "continuity", "promises")).sort()).toEqual(["_index.md", "duel.md"]);
+    expect(fs.readdirSync(path.join(root, "continuity", "questions")).sort()).toEqual(["_index.md", "who.md"]);
+  });
+
   test("rejects malformed scene metadata types", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Scene Types", force: false });

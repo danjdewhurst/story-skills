@@ -12381,6 +12381,15 @@ var ARTIFACT_STATUSES = new Set(["active", "lost", "destroyed", "hidden", "trans
 var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "abandoned"]);
 var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
+function mayScheduleChapter(kind, field, status) {
+  if (status === "abandoned") {
+    return true;
+  }
+  if (kind === "question") {
+    return field === "introduced" && status === "open";
+  }
+  return field === "planted" ? status === "planned" : status !== "paid-off";
+}
 var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
 var STYLE_SHEET_FILE = "style-sheet.md";
@@ -20084,6 +20093,7 @@ function validateLinksOf(project) {
     const number = match ? Number.parseInt(match[1], 10) : 0;
     return number > 0 && !existingNumbers.has(number) && id === canonicalChapterId(number);
   };
+  const threadChapter = (kind, entry, field) => mayScheduleChapter(kind, field, entry.status) ? hasScheduledChapter : hasChapter;
   const hasArc = (id) => arcs.has(id);
   const artifactIds = new Set(project.artifacts.map((item) => item.id));
   const hasMention = (id) => characters.has(id) || artifactIds.has(id);
@@ -20264,16 +20274,16 @@ function validateLinksOf(project) {
   }
   for (const question of project.questions) {
     const label = relative(project, question.file);
-    checkIdReference(errors, label, question.introduced, "chapter", question.status === "open" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, question.resolved, "chapter", hasChapter);
+    checkIdReference(errors, label, question.introduced, "chapter", threadChapter("question", question, "introduced"));
+    checkIdReference(errors, label, question.resolved, "chapter", threadChapter("question", question, "resolved"));
     for (const characterId of question.characters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
     }
   }
   for (const promise of project.promises) {
     const label = relative(project, promise.file);
-    checkIdReference(errors, label, promise.planted, "chapter", promise.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, promise.payoff, "chapter", promise.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    checkIdReference(errors, label, promise.planted, "chapter", threadChapter("promise", promise, "planted"));
+    checkIdReference(errors, label, promise.payoff, "chapter", threadChapter("promise", promise, "payoff"));
     for (const arcId of promise.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
@@ -20283,8 +20293,8 @@ function validateLinksOf(project) {
   }
   for (const clue of project.clues) {
     const label = relative(project, clue.file);
-    checkIdReference(errors, label, clue.planted, "chapter", clue.status === "planned" ? hasScheduledChapter : hasChapter);
-    checkIdReference(errors, label, clue.payoff, "chapter", clue.status === "paid-off" ? hasChapter : hasScheduledChapter);
+    checkIdReference(errors, label, clue.planted, "chapter", threadChapter("clue", clue, "planted"));
+    checkIdReference(errors, label, clue.payoff, "chapter", threadChapter("clue", clue, "payoff"));
     for (const arcId of clue.arcs) {
       checkIdReference(errors, label, arcId, "arc", hasArc);
     }
@@ -22718,27 +22728,30 @@ function assertChapterReferences(project, options) {
     }
   }
 }
+var STATUS_CHAPTER_FIELDS = {
+  promise: ["planted", "payoff"],
+  clue: ["planted", "payoff"],
+  question: ["resolved", "introduced"]
+};
 function assertStatusChapters(project, kind, options) {
+  const fields = STATUS_CHAPTER_FIELDS[kind];
+  if (fields === undefined) {
+    return;
+  }
   const written = (value) => project.chapters.some((chapter) => chapter.id === String(value ?? "").trim());
   const given = (value) => String(value ?? "").trim() !== "";
-  const status = String(options.status ?? "");
-  const refuse = (option, value, reason) => {
-    throw usageError(`--${option} ${String(value).trim()} is not written yet: ${reason}`);
+  const defaultStatus = kind === "question" ? given(options.resolved) ? "answered" : "open" : given(options.planted) ? "planted" : "planned";
+  const status = String(options.status ?? defaultStatus);
+  const article = /^[aeiou]/.test(status) ? "an" : "a";
+  const reasons = {
+    planted: `${article} ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`,
+    payoff: `a paid-off ${kind} needs its payoff chapter. Use --status planted until the payoff is drafted`,
+    resolved: "a question's resolved chapter must exist. Add --resolved once the answer is drafted",
+    introduced: `${article} ${status} question needs its introduced chapter`
   };
-  if (kind === "promise" || kind === "clue") {
-    if ((status === "planted" || status === "paid-off") && given(options.planted) && !written(options.planted)) {
-      refuse("planted", options.planted, `a ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`);
-    }
-    if (status === "paid-off" && given(options.payoff) && !written(options.payoff)) {
-      refuse("payoff", options.payoff, `a paid-off ${kind} needs its payoff chapter. Use --status planted until the payoff is drafted`);
-    }
-  }
-  if (kind === "question") {
-    if (given(options.resolved) && !written(options.resolved)) {
-      refuse("resolved", options.resolved, "a question's resolved chapter must exist. Add --resolved once the answer is drafted");
-    }
-    if (status !== "" && status !== "open" && given(options.introduced) && !written(options.introduced)) {
-      refuse("introduced", options.introduced, `a ${status} question needs its introduced chapter`);
+  for (const field of fields) {
+    if (given(options[field]) && !written(options[field]) && !mayScheduleChapter(kind, field, status)) {
+      throw usageError(`--${field} ${String(options[field]).trim()} is not written yet: ${reasons[field]}`);
     }
   }
 }
