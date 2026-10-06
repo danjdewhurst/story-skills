@@ -18,7 +18,6 @@ import {
   writeFile
 } from "./files.js";
 import { withProjectLock } from "./lock.js";
-import { sourceRoot } from "./preview.js";
 import {
   chapterProse,
   characterCount,
@@ -1265,8 +1264,7 @@ const SERIES_CANON_COLLECTIONS = {
 function linkedBookIdWarnings(project, kind, oldId, newId) {
   const collection = SERIES_CANON_COLLECTIONS[kind];
   const data = project.story.data ?? {};
-  // A --dry-run runs on a copy; the linked books sit beside the project.
-  const root = sourceRoot(project.root);
+  const root = project.root;
   if (!collection || (seriesLinks(root, data, "follows").length === 0 && seriesLinks(root, data, "precedes").length === 0)) {
     return [];
   }

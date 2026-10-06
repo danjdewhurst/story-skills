@@ -259,6 +259,68 @@ describe("--dry-run", () => {
     }
   });
 
+  test("a dry run in a series book sees its linked books, as the real run does, and writes none of them", () => {
+    const parent = makeTempDir();
+    for (const name of ["the-last-ember", "the-fall-of-the-citadel", "the-unraveled-thread"]) {
+      fs.cpSync(path.join(examplesRoot, name), path.join(parent, name), { recursive: true });
+    }
+    const root = path.join(parent, "the-last-ember");
+    const sibling = path.join(parent, "the-fall-of-the-citadel");
+    const siblingBefore = snapshot(sibling);
+
+    const fixPreview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
+    const fixReal = invokeJson(root, ["doctor", "--fix", "--json"]);
+    expect(fixPreview.code).toBe(fixReal.code);
+    expect(fixPreview.envelope.data.links).toEqual(fixReal.envelope.data.links);
+    expect(fixPreview.envelope.data.validation).toEqual(fixReal.envelope.data.validation);
+    expect(fixPreview.envelope.diagnostics).toEqual(fixReal.envelope.diagnostics);
+
+    // kael-voss is also defined in the linked book, so both runs warn.
+    const argv = ["rename", "character", "kael-voss", "Kael Vane", "--json"];
+    const renamePreview = invokeJson(root, [...argv, "--dry-run"]);
+    const renameReal = invokeJson(root, argv);
+    expect(renamePreview.code).toBe(renameReal.code);
+    expect(renameReal.envelope.diagnostics.map((entry) => entry.code)).toContain("linked-book-id");
+    expect(renamePreview.envelope.diagnostics).toEqual(renameReal.envelope.diagnostics);
+    expect(renamePreview.envelope.data).toEqual({ ...renameReal.envelope.data, dryRun: true });
+    expect(snapshot(sibling)).toEqual(siblingBefore);
+
+    // Only linked books are copied beside the project; the copies are
+    // scratch files, so a write to one leaves the real book alone.
+    const { result } = previewChanges(root, (copy) => {
+      fs.writeFileSync(path.join(path.dirname(copy), "the-fall-of-the-citadel", "story.md"), "changed");
+      return fs.readdirSync(path.dirname(copy)).sort();
+    });
+    expect(result).toEqual(["the-fall-of-the-citadel", "the-last-ember"]);
+    expect(snapshot(sibling)).toEqual(siblingBefore);
+  });
+
+  test("a dry run copies only sibling books, keeps a symlinked sibling a symlink, and skips missing or unparsable ones", () => {
+    const parent = makeTempDir();
+    for (const name of ["the-last-ember", "the-fall-of-the-citadel"]) {
+      fs.cpSync(path.join(examplesRoot, name), path.join(parent, name), { recursive: true });
+    }
+    const root = path.join(parent, "the-last-ember");
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("  - ../the-fall-of-the-citadel\n",
+      "  - ../alias\n  - ../broken\n  - ../missing\n  - ../dangling\n  - ../../elsewhere\n"));
+    fs.symlinkSync("the-fall-of-the-citadel", path.join(parent, "alias"));
+    fs.symlinkSync("nowhere", path.join(parent, "dangling"));
+    fs.mkdirSync(path.join(parent, "broken"));
+    fs.writeFileSync(path.join(parent, "broken", "story.md"), "---\ntitle: [\n---\n");
+
+    const { result } = previewChanges(root, (copy) => {
+      const scratch = path.dirname(copy);
+      return { books: fs.readdirSync(scratch).sort(), alias: fs.readlinkSync(path.join(scratch, "alias")) };
+    });
+    expect(result).toEqual({ books: ["alias", "broken", "the-fall-of-the-citadel", "the-last-ember"], alias: "the-fall-of-the-citadel" });
+
+    const preview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
+    const real = invokeJson(root, ["doctor", "--fix", "--json"]);
+    expect(preview.code).toBe(real.code);
+    expect(preview.envelope.data.links).toEqual(real.envelope.data.links);
+  });
+
   test("wordcount --dry-run needs --write, and story.md cannot default it", () => {
     const root = copyExample("the-unraveled-thread");
     const usage = invoke(root, ["wordcount", "--dry-run"]);
