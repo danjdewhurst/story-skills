@@ -1736,7 +1736,7 @@ export function validateReleaseCadence(data, errors) {
 // A release date is a real-world day, so it is never read in the story.md
 // calendar. progress and next read only string dates, so anything else is
 // an error here rather than a silently unscheduled episode.
-function validateReleaseDate(value, name, label, errors) {
+export function validateReleaseDate(value, name, label, errors) {
   if (value === undefined) {
     return;
   }

@@ -784,7 +784,7 @@ export const COMMANDS = [
     project: "positional",
     options: ["date", "json"],
     run({ parsed, io, root, overrides }) {
-      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath(parsed), overrides, date: parsed.options.date });
+      const { releaseFindings, ...report } = projectActions(root(), { displayPath: displayPath(parsed), overrides, release: true, date: parsed.options.date });
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "next", report, { diagnostics: diagnosticsFrom(releaseFindings, "next") });
       }

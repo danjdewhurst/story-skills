@@ -20,6 +20,7 @@
     { "if": { "properties": { "command": { "const": "check" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-check-all" } } } },
     { "if": { "properties": { "command": { "const": "series" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-series" } } } },
     { "if": { "properties": { "command": { "enum": ["next", "doctor"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-next" } } } },
+    { "if": { "properties": { "command": { "const": "next" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "required": ["release"] } } } },
     { "if": { "properties": { "command": { "const": "report" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-report" } } } },
     { "if": { "properties": { "command": { "const": "knowledge" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-knowledge" } } } },
     { "if": { "properties": { "command": { "const": "context" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-context" } } } },
@@ -157,7 +158,45 @@
         "storyId": { "type": "string" },
         "actions": { "type": "array", "items": { "$ref": "#/$defs/action" } },
         "checks": { "$ref": "#/$defs/checks" },
+        "release": { "$ref": "#/$defs/release", "description": "Only on next: the serial release schedule." },
         "fix": { "$ref": "#/$defs/doctor-fix" }
+      }
+    },
+    "release": {
+      "type": ["object", "null"],
+      "description": "The serial release schedule on --date, or null when story.md sets no release-every cadence and no chapter has a release-date. Each chapter is an episode, in reading order.",
+      "required": ["every", "start", "next", "episodes"],
+      "properties": {
+        "every": { "type": ["integer", "null"], "minimum": 1, "description": "story.md release-every, or null without a cadence." },
+        "start": { "type": ["string", "null"], "description": "story.md release-start, or null without a cadence." },
+        "next": {
+          "type": ["object", "null"],
+          "description": "The first release today or later, or null when none is scheduled. chapter and file are null for an episode the cadence schedules past the last chapter.",
+          "required": ["episode", "chapter", "file", "date", "drafted", "daysUntil"],
+          "properties": {
+            "episode": { "type": "integer", "minimum": 1 },
+            "chapter": { "type": ["string", "null"] },
+            "file": { "type": ["string", "null"] },
+            "date": { "type": "string" },
+            "drafted": { "type": "boolean" },
+            "daysUntil": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "episodes": {
+          "type": "array",
+          "description": "Each chapter with a release date, from its release-date or the cadence.",
+          "items": {
+            "type": "object",
+            "required": ["episode", "chapter", "file", "date", "drafted"],
+            "properties": {
+              "episode": { "type": "integer", "minimum": 1 },
+              "chapter": { "type": "string" },
+              "file": { "type": "string" },
+              "date": { "type": "string" },
+              "drafted": { "type": "boolean" }
+            }
+          }
+        }
       }
     },
     "doctor-fix": {
@@ -1091,8 +1130,9 @@
     "data-progress": {
       "type": "object",
       "$comment": "target, percent, remaining, deadline.perDay, lastSession.since, and pace are in unit; words is the word count in every book.",
-      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily", "dryRun", "changes"],
+      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily", "release", "dryRun", "changes"],
       "properties": {
+        "release": { "$ref": "#/$defs/release" },
         "logged": {
           "type": ["object", "null"],
           "required": ["file", "date", "words", "characterCount"],

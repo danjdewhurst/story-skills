@@ -354,8 +354,9 @@ export function scanProject(root) {
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
-      // A real-world YYYY-MM-DD day; validate reports anything else.
-      releaseDate: typeof data["release-date"] === "string" ? data["release-date"].trim() : "",
+      // Raw: a real-world YYYY-MM-DD day, or undefined; validate reports
+      // anything else, and the release schedule leaves that episode out.
+      releaseDate: data["release-date"],
       mode: String(data.mode ?? ""),
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),

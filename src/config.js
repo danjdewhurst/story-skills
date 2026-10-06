@@ -33,7 +33,7 @@ export { severityCodes };
 const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
 
 // Flags that name one target or one moment rather than a habit.
-const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
+const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
 
 // Flags that change what one run does rather than set a habit: a default
 // --force would replace every snapshot whose name is taken, and a default
