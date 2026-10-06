@@ -1,0 +1,7 @@
+name: story-skills CodeQL config
+
+# The fallback CLI is bundled from src/ by `bun run build:fallback`, and src/
+# is scanned already. Scanning the bundle too reports every src/ alert twice,
+# at line numbers that move on each rebuild.
+paths-ignore:
+  - skills/story-maintenance/scripts/story.js

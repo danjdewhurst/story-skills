@@ -268,5 +268,5 @@ export function metadataSheet(input) {
 }
 
 function tableCell(value) {
-  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return String(value).replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }

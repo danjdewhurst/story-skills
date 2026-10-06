@@ -64,6 +64,15 @@ describe("narration build", () => {
     expect(messages(validateProject(root).errors)).toContain("glossary/terms/odd.md frontmatter field pronunciation must be text");
   });
 
+  test("#438 a backslash before a pipe in a table cell is escaped too", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Slash", force: false });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nHi.\n");
+    writeMarkdown(path.join(root, "glossary", "terms", "either.md"), "term: Either \\| Or\ncategory: term\npronunciation: EE-ther \\ OR", "# E\n");
+    const text = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+    expect(text).toContain("| Either \\\\\\| Or | EE-ther \\\\ OR | term |");
+  });
+
   test("formatRuntime rounds to minutes", () => {
     expect(formatRuntime(0)).toBe("0h 00m");
     expect(formatRuntime(155 * 61)).toBe("1h 01m");

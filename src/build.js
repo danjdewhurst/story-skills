@@ -412,7 +412,7 @@ function longestFittingPrefix(token, room) {
 
 // Cuts the synopsis at the word budget line by line, so headings and
 // paragraph breaks survive and only the last paragraph is cut short.
-function truncateWords(text, budget) {
+export function truncateWords(text, budget) {
   const kept = [];
   let used = 0;
   for (const line of text.trimEnd().split("\n")) {
@@ -442,8 +442,13 @@ function truncateWords(text, budget) {
     }
     break;
   }
-  // Never end on a blank line or a heading with nothing under it.
-  return `${kept.join("\n").replace(/(?:\n(?:#[^\n]*)?[ \t]*)+$/, "")}…\n`;
+  // Never end on a blank line or a heading with nothing under it. A loop
+  // rather than a trailing-lines regex, which backtracks exponentially on
+  // runs of lines like "#\t".
+  while (kept.length > 1 && /^(?:#|[ \t]*$)/.test(kept[kept.length - 1])) {
+    kept.pop();
+  }
+  return `${kept.join("\n")}…\n`;
 }
 
 function shunnMeta(project) {
