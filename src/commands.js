@@ -24,6 +24,7 @@ import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { formatSimilarity } from "./similarity.js";
+import { formatSnapshot, formatSnapshotList, listSnapshots, snapshotDirectory, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
 import {
@@ -335,13 +336,20 @@ export const COMMANDS = [
     summary: [
       "Compare chapters with an earlier draft: word changes,",
       "added and removed chapters, and unchanged paragraphs;",
-      "requires --ref or --against; --anchor maps old",
-      "review-copy labels to the current paragraphs"
+      "requires --ref, --against, or --snapshot; --anchor",
+      "maps old review-copy labels to the current",
+      "paragraphs"
     ],
     project: "positional",
-    options: ["ref", "against", "anchor", "json"],
+    options: ["ref", "against", "snapshot", "anchor", "json"],
     run({ parsed, io, cwd, root, overrides }) {
-      const comparison = applySeverity(compareProject(root(), { ref: parsed.options.ref, against: parsed.options.against, anchors: parsed.options.anchor, cwd }), overrides);
+      const comparison = applySeverity(compareProject(root(), {
+        ref: parsed.options.ref,
+        against: parsed.options.against,
+        snapshot: parsed.options.snapshot,
+        anchors: parsed.options.anchor,
+        cwd
+      }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "compare", compareData(comparison));
       }
@@ -665,6 +673,57 @@ export const COMMANDS = [
       }
       io.stdout.write(formatPasses(result.passes, where === "." ? "story passes" : `story passes ${where}`));
       return 0;
+    }
+  },
+  {
+    name: "snapshot",
+    usage: "snapshot <name>",
+    summary: [
+      "Save a named copy of the project's markdown in",
+      ".snapshots/ to compare with later (compare",
+      "--snapshot); --list shows the saved snapshots"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["list", "force", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed, io, root } = context;
+      const name = parsed.positionals[1];
+      if (isTruthy(parsed.options.list)) {
+        for (const flag of ["force", "dry-run"]) {
+          if (isTruthy(parsed.options[flag])) {
+            throw usageError(`--${flag} does not apply to story snapshot --list`);
+          }
+        }
+        if (name !== undefined) {
+          throw usageError("story snapshot --list takes no name: it lists every snapshot");
+        }
+        const report = listSnapshots(root());
+        if (wantsJson(parsed)) {
+          return reportJson(io, "snapshot", report);
+        }
+        io.stdout.write(formatSnapshotList(report));
+        return 0;
+      }
+      if (name === undefined) {
+        throw usageError("Usage: story snapshot <name>, or story snapshot --list");
+      }
+      const force = isTruthy(parsed.options.force);
+      const projectRoot = root();
+      // The --dry-run copy leaves out dot-folders, .snapshots/ among them, so
+      // the snapshot being replaced is copied in first: the preview then
+      // lists what --force would update and delete, and refuses as the real
+      // run does when the name is taken.
+      const existing = snapshotDirectory(projectRoot, name);
+      const seed = (target) => {
+        if (target !== projectRoot && fs.existsSync(existing)) {
+          fs.cpSync(existing, path.join(target, path.relative(projectRoot, existing)), { recursive: true });
+        }
+      };
+      return runWrite(context, "snapshot", (target) => {
+        seed(target);
+        return snapshotProject(target, { name, force });
+      }, formatSnapshot);
     }
   },
   {

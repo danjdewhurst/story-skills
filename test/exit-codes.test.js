@@ -82,6 +82,7 @@ const OK_ARGS = {
   voices: () => ["voices"],
   series: () => ["series"],
   passes: () => ["passes", "--init"],
+  snapshot: () => ["snapshot", "draft"],
   report: () => ["report"],
   next: () => ["next"],
   doctor: () => ["doctor"],
@@ -134,6 +135,10 @@ const REFUSED = {
     invoke(root, ["add", "chapter", "Two"]);
     return ["move", "chapter", "chapter-01", "--number", "2"];
   },
+  snapshot: (root) => {
+    invoke(root, ["snapshot", "draft"]);
+    return ["snapshot", "draft"];
+  },
   export: () => ["export", "--out", "chapters/chapter-01.md"],
   build: () => ["build", "--out", "story.md"],
   synopsis: () => ["synopsis", "--out", "story.md"],
@@ -147,7 +152,8 @@ const LOCKED = {
   wordcount: ["wordcount", "--write"],
   migrate: ["migrate"],
   doctor: ["doctor", "--fix"],
-  remove: ["remove", "character", "mara-quill"]
+  remove: ["remove", "character", "mara-quill"],
+  snapshot: ["snapshot", "draft"]
 };
 
 const savedLockWait = process.env.STORY_LOCK_WAIT_MS;

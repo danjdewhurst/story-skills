@@ -1054,7 +1054,7 @@ For genre books, add the audit checklist at the end of the relevant [`genre-craf
 Before any pass that touches more than one chapter, the skill takes a snapshot named after the draft it preserves (`draft-1`, `pre-beta-edit`):
 
 - **In a git repository**, it asks before committing, then commits and tags: `git add -A && git commit -m "Draft 1 before developmental pass" && git tag draft-1`. It never pushes, rewrites history, or deletes tags without your approval.
-- **Without git**, it offers `git init`. If you decline, it copies the project folder next to the original (`../the-gannet-point-light-draft-1`), never inside it, where `story` commands would scan the copy.
+- **Without git**, it offers `git init`. If you decline, it runs `story snapshot draft-1`, which copies the project's markdown to `.snapshots/draft-1/`. Every `story` command skips that folder, and `story snapshot --list` shows the snapshots you have. See [`story snapshot`](cli-reference.md#snapshot).
 
 ### 4. Plan, edit, and update
 
@@ -1079,13 +1079,13 @@ After the pass, the skill reports how deep it went:
 
 ```shell
 story compare . --ref draft-1
-story compare . --against ../the-gannet-point-light-draft-1
+story compare . --snapshot draft-1
 ```
 
-Against a folder copy, after a copyedit that changed *grey* to *gray* in chapter 1 and a new chapter 3, the report reads:
+Against the snapshot, after a copyedit that changed *grey* to *gray* in chapter 1 and a new chapter 3, the report reads:
 
 ```text
-Compared with /path/to/the-gannet-point-light-draft-1
+Compared with snapshot draft-1
 Chapters: 2 then, 3 now (1 added, 0 removed)
 Words: 132 then, 132 now (±0)
 
@@ -1095,7 +1095,7 @@ Words: 132 then, 132 now (±0)
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
-Chapter 1's prose is a single paragraph, so one changed word leaves 0% of its paragraphs unchanged. Chapters are matched by id, so a renumbered chapter shows as one removed and one added. `story compare` reads git but never commits or tags.
+Chapter 1's prose is a single paragraph, so one changed word leaves 0% of its paragraphs unchanged. Chapters are matched by id, so a renumbered chapter shows as one removed and one added. `story compare` reads git or the snapshot but never commits, tags, or changes a snapshot.
 
 ### 6. Close the pass
 

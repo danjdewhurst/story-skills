@@ -29,6 +29,7 @@ import { addedPassNotes, readPasses, updatePasses, validatePasses } from "./pass
 import { buildPacing } from "./pacing.js";
 import { compareChapters, mapLabels, proseParagraphs } from "./compare.js";
 import { compareSimilarity, similarityOptions } from "./similarity.js";
+import { existingSnapshot, snapshotId } from "./snapshots.js";
 import { PROGRESS_FILE, cleanSessions, computeProgress, localDate, withSession, writingDays } from "./progress.js";
 import {
   BASELINE_CHECKS,
@@ -238,21 +239,29 @@ export function seriesReport(root) {
 }
 
 // Compares the current chapters with an earlier draft: a git ref (read with
-// git show; nothing is written to the repository) or another copy of the
-// project on disk. With `anchors`, maps those review-copy labels from the
-// earlier draft to the current text instead.
+// git show; nothing is written to the repository), another copy of the
+// project on disk, or a named snapshot in .snapshots/ (see snapshots.js).
+// --ref is always a git ref and --snapshot always a snapshot, so a branch and
+// a snapshot with the same name are never confused. With `anchors`, maps
+// those review-copy labels from the earlier draft to the current text
+// instead.
 export function compareProject(root, options = {}) {
-  const hasRef = typeof options.ref === "string" && options.ref !== "";
-  const hasAgainst = typeof options.against === "string" && options.against !== "";
-  if (hasRef === hasAgainst) {
-    throw usageError("compare needs exactly one of --ref <git-ref> or --against <project-path>");
+  const given = (value) => typeof value === "string" && value !== "";
+  const hasRef = given(options.ref);
+  const sources = [hasRef, given(options.against), given(options.snapshot)].filter(Boolean).length;
+  if (sources !== 1) {
+    throw usageError("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>");
   }
   const project = scanProject(root);
   // A chapter that fails to parse would be reported as removed.
   assertProjectParses(project, "compare");
+  // The earlier draft on disk, for --against and --snapshot.
+  const other = hasRef ? null : given(options.snapshot)
+    ? { root: existingSnapshot(project.root, options.snapshot), label: `snapshot ${snapshotId(options.snapshot)}` }
+    : { root: path.resolve(options.cwd ?? process.cwd(), options.against) };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
-    return mapProjectLabels(project, anchors, { hasRef, ...options });
+    return mapProjectLabels(project, anchors, { ...options, other });
   }
   const current = project.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, project.root)));
   const warnings = [];
@@ -262,13 +271,12 @@ export function compareProject(root, options = {}) {
     previous = chaptersAtGitRef(project.root, options.ref, warnings);
     label = `git ref ${options.ref}`;
   } else {
-    const otherRoot = path.resolve(options.cwd ?? process.cwd(), options.against);
-    const other = scanProject(otherRoot);
-    if (other.fileErrors.length > 0) {
-      throw projectError(`Cannot read ${otherRoot}: ${other.fileErrors[0].message}`);
+    const scanned = scanProject(other.root);
+    if (scanned.fileErrors.length > 0) {
+      throw projectError(`Cannot read ${other.label ?? other.root}: ${scanned.fileErrors[0].message}`);
     }
-    previous = other.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, other.root)));
-    label = otherRoot;
+    previous = scanned.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, scanned.root)));
+    label = other.label ?? other.root;
   }
   return {
     ok: project.fileErrors.length === 0,
@@ -294,12 +302,12 @@ function mapProjectLabels(project, anchors, options) {
   const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels")));
   let previous;
   let label;
-  if (options.hasRef) {
+  if (options.other === null) {
     label = `git ref ${options.ref}`;
     previous = withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label));
   } else {
-    label = path.resolve(options.cwd ?? process.cwd(), options.against);
-    previous = labelsIn(label, label);
+    label = options.other.label ?? options.other.root;
+    previous = labelsIn(options.other.root, label);
   }
   return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
 }

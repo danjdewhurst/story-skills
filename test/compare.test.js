@@ -93,7 +93,7 @@ describe("story compare", () => {
 
   test("rejects missing or doubled sources, bad refs, non-repositories, and unreadable copies", () => {
     const { root } = gitProject();
-    expect(() => compareProject(root, {})).toThrow("compare needs exactly one of --ref <git-ref> or --against <project-path>");
+    expect(() => compareProject(root, {})).toThrow("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>");
     expect(() => compareProject(root, { ref: "HEAD", against: "x" })).toThrow("exactly one");
     expect(() => compareProject(root, { ref: "--output=x" })).toThrow("Unsupported git ref: --output=x");
     expect(() => compareProject(root, { ref: "no-such-tag" })).toThrow("Unknown git ref: no-such-tag");

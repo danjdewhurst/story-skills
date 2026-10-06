@@ -38,7 +38,7 @@ const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"] };
 // `story compare --against` must not pick up a default --ref.
 const LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url"]],
-  compare: [["ref", "against"]]
+  compare: [["ref", "against", "snapshot"]]
 };
 
 const EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], errors: [] });
