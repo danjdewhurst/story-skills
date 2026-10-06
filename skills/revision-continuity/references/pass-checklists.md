@@ -20,6 +20,7 @@ The named passes that `story passes .` tracks in `story.md`
 | `line` | [Line edit](#line-edit) |
 | `copyedit` | [Copyedit](#copyedit) |
 | `proof` | [Proof/polish](#proofpolish) |
+| `length` (custom) | [Length pass](#length-pass) |
 
 ## Adding a pass
 
@@ -140,6 +141,64 @@ the decision so nobody re-litigates it.
   `continuity/promises/`.
 - **Update:** scene `state-changes`, promise/question status,
   `plot/timeline.md`.
+
+## Length pass
+
+Cut an overlong draft (140,000 words down to 100,000) or expand a thin one
+to a target length. Set a budget per chapter and arc before touching prose:
+trimming every chapter by the same share flattens the book, while a budget
+takes words from the parts that are slack and keeps them where the story
+turns. Run it after `structure` and before `line`, so no sentence is
+polished and then cut. Track it as a custom pass with
+`story passes . --start length`.
+
+- **Run:**
+  1. `story progress .` for the total against `story.md` `target-words`
+     (`target-characters` in a book counted in characters). With no
+     target, agree one with the user and set it first. `story validate .`
+     warns when the target sits outside the `form`'s usual range; confirm
+     the target with the user rather than changing the form to silence it.
+  2. `story pacing .` for each chapter's length, scene and sequel counts,
+     and outcomes, plus the median chapter and its `pacing-long-chapter`
+     and `pacing-short-chapter` outliers.
+  3. Set the budget. Start each chapter at its count times target over
+     total (100,000 / 140,000 keeps about 71% of each), then move words
+     between chapters: protect the opening, act turns, midpoint, climax,
+     and chapters that pay off a promise or clue; take more from long
+     outliers, runs of sequels, and chapters whose scenes advance no arc.
+     Expanding, give words to short outliers, scene runs with no sequel,
+     and arcs with missing plot points. Keep the budgets summing to the
+     book target and write each one, as a whole number, to the chapter's
+     `target-words` (`target-characters`): `story progress .` then lists every chapter
+     against its budget (`chapter-01: 101 of 70 words (144%)`), and
+     `story context <chapter>` shows it when the chapter is redrafted.
+  4. Budget each arc: add up the counts of the chapters whose
+     `arcs-advanced` lists it and compare its share of the book with its
+     weight in `plot/_index.md`. A subplot that takes a quarter of the book
+     for one late payoff is the first cut; a main arc squeezed into a few
+     chapters is where an expansion goes.
+  5. After each batch of edits, `story wordcount . --write` and
+     `story progress .` again, until the total is within the tolerance
+     agreed with the user (say 2%).
+- **Read:** `story.md` (`target-words`, `form`), `chapters/_index.md`,
+  `plot/_index.md` and the arc files, `scenes/` state-changes,
+  `continuity/promises/`, `continuity/questions/`, `continuity/clues/`.
+- **Check:** cut biggest first: whole subplots and scenes (the
+  [removability audit](#removability-audit-darling-killing)), then merge
+  scenes or chapters that do the same job, then compress (summarise
+  transit, repeated sequels, backstory, and description), and trim
+  sentences last with the `line-editing` skill. Before cutting a scene,
+  check it does not plant or pay off a clue or promise, teach a character
+  something they later act on, or carry a state change; move what it
+  carries to a scene that stays. Expand by adding scenes or sequels that
+  change something, not by padding existing ones.
+- **Update:** chapters, scenes (merge and remove with `story move` and
+  `story remove`, see Structural Edits in `SKILL.md`), chapter
+  `target-words`, promise, question, and clue chapters, arc plot points,
+  `plot/timeline.md`, and `continuity/state.md`. When the pass is done,
+  ask whether to keep the chapter budgets as targets or remove them.
+- **See also:** the `plot-structure` skill for arc weight, `scene-craft`
+  for new scenes, and `line-editing` for sentence-level trims.
 
 ## Voice differentiation
 

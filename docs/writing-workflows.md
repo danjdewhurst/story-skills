@@ -1038,6 +1038,7 @@ Within a ladder pass, or for a one-off job, the skill asks which pass you want u
 | Pacing waveform | "Run a pacing check as a revision pass" | `structure`, `pacing` | Tension per chapter and dead zones, from `story pacing .` (outcomes, sequels, hooks, length outliers) and `story timeline .` for POV balance |
 | Reveal economy | "Run a clue check. Are my reveals earned?" | `continuity` | Every reveal planted beforehand and spaced out, from `story clues .`; `story diagram clues` draws the flow |
 | Removability audit | "Which scenes could I cut?" | `structure` | Scenes whose removal changes nothing downstream: wire them in, fold them, or cut them |
+| Length pass | "Cut this from 140k to 100k words" | a custom `length` | A word budget per chapter and arc from `story progress .` and `story pacing .`, recorded as chapter `target-words`, then cuts or expansions until `story progress .` meets the target |
 | Voice differentiation | "Everyone sounds the same" | `character`, `line` | `story voices .` fingerprints; handed to `line-editing` for the rewrite |
 | Line edit | "Line edit chapter 3" | `line` | Handled by [`line-editing`](#line-editing) |
 | Copyedit | "Copyedit against the style sheet" | `copyedit` | Handled by `line-editing` |
