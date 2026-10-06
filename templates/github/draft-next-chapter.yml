@@ -175,7 +175,7 @@ jobs:
       - name: Draft the next chapter
         id: draft
         if: steps.guard.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@9171db3e57d6a3140a37ddc2ba92788584e0ead6 # v1.0.234
+        uses: anthropics/claude-code-action@86d88e619d8e6caf07b5c3944dd14f441c533718 # v1.0.243
         env:
           # Overrides .git/config for the agent's git add and git commit, so a
           # config the agent wrote cannot run a command.
@@ -275,7 +275,7 @@ jobs:
 
       - name: Keep the bundle for the publish job
         if: steps.guard.outputs.skip != 'true' && steps.bundle.outputs.drafted == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: draft-bundle
           path: ${{ runner.temp }}/draft/draft.bundle

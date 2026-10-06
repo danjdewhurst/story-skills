@@ -608,18 +608,40 @@ describe("github workflows", () => {
     }
   });
 
-  test("templates pin the same action versions as ci", () => {
-    // Dependabot only updates .github/workflows, so the templates users copy
-    // must follow ci.yml by hand; this fails until they do.
-    const pins = (text) => new Map(usesRefs(text).map(({ ref }) => ref.split("@")));
-    const ci = pins(readRepo(".github/workflows/ci.yml"));
+  test("templates pin the same action versions as the repo workflows", () => {
+    // Users copy the templates, so a stale pin there spreads to every story
+    // repository. Dependabot bumps both directories in one pull request; this
+    // catches a hand edit that moves one side only.
+    const repoPins = new Map();
+    for (const relativePath of repoWorkflowFiles) {
+      for (const { ref } of usesRefs(readRepo(relativePath))) {
+        const [action, sha] = ref.split("@");
+        repoPins.set(action, [...new Set([...(repoPins.get(action) || []), sha])]);
+      }
+    }
+    const mismatches = [];
     for (const relativePath of workflowFiles.slice(1)) {
-      for (const [action, sha] of pins(readRepo(relativePath))) {
-        if (ci.has(action)) {
-          expect(`${relativePath} ${action}@${sha}`).toBe(`${relativePath} ${action}@${ci.get(action)}`);
+      for (const { ref } of usesRefs(readRepo(relativePath))) {
+        const [action, sha] = ref.split("@");
+        if (repoPins.has(action) && !repoPins.get(action).includes(sha)) {
+          mismatches.push(`${relativePath} ${action}@${sha}, repo workflows pin ${repoPins.get(action).join(", ")}`);
         }
       }
     }
+    expect(mismatches).toEqual([]);
+  });
+
+  test("one action SHA carries one version comment everywhere", () => {
+    // A bare `# v7` beside the SHA another file labels `# v7.0.1` hides which
+    // release is pinned and stops the files reading as identical pins.
+    const comments = new Map();
+    for (const relativePath of pinnedFiles) {
+      for (const { ref, comment } of usesRefs(readRepo(relativePath))) {
+        comments.set(ref, [...new Set([...(comments.get(ref) || []), comment])]);
+      }
+    }
+    const drift = [...comments].filter(([, labels]) => labels.length > 1).map(([ref, labels]) => `${ref}: ${labels.join(" vs ")}`);
+    expect(drift).toEqual([]);
   });
 
   test("every template job has a timeout", () => {
@@ -874,6 +896,11 @@ describe("github workflows", () => {
     const dependabot = readRepo(".github/dependabot.yml");
     expect(dependabot).toContain("github-actions");
     expect(topLevelKeys(dependabot)).toContain("updates");
+    // The templates users copy must get bump pull requests too, grouped with
+    // the matching .github/workflows bump so the pins stay equal.
+    expect(dependabot).toMatch(/^\s+- "\/"$/m);
+    expect(dependabot).toMatch(/^\s+- "\/templates\/github"$/m);
+    expect(dependabot).toMatch(/^\s+group-by: dependency-name$/m);
   });
 });
 
