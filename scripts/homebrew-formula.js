@@ -80,17 +80,17 @@ end
 `;
 }
 
-function main() {
-  const [version, checksumsFile] = process.argv.slice(2);
+export function main(argv, write = (text) => process.stdout.write(text)) {
+  const [version, checksumsFile] = argv;
   if (!version || !checksumsFile) {
     throw new Error("usage: node scripts/homebrew-formula.js <version> <checksums-file>");
   }
-  process.stdout.write(formula(version, parseChecksums(fs.readFileSync(checksumsFile, "utf8"))));
+  write(formula(version, parseChecksums(fs.readFileSync(checksumsFile, "utf8"))));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    main();
+    main(process.argv.slice(2));
   } catch (error) {
     console.error(`homebrew-formula: ${error.message}`);
     process.exit(1);

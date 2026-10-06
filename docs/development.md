@@ -334,7 +334,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 
 Most CLI tests call `runCli` directly with `memoryIo` rather than spawning a process, so they are fast and count toward coverage. Build a project in a temp directory, run commands against it, and assert on the exit code, stdout, stderr, and resulting files. Never point a test that writes files at `examples/`.
 
-Beyond the CLI, the tests also check repository invariants: `test/check-scripts.test.js` verifies that every GitHub Actions `uses:` reference in `.github/workflows/ci.yml` and the three workflow templates is pinned to a 40-character commit SHA with a version comment, that each action is pinned at one SHA across the repository's workflows and the templates, that one SHA carries the same version comment in every file, that every template job sets `timeout-minutes`, that CI still runs the release-gate checks and the Node 18 floor, that Dependabot watches GitHub Actions, and that `review-copy.yml` builds the HTML review copy and deploys it with GitHub Pages while the `manuscript-note.yml` issue form asks for a paragraph anchor. `test/release.test.js` covers the release script's version handling.
+Beyond the CLI, the tests also check repository invariants: `test/check-scripts.test.js` verifies that every GitHub Actions `uses:` reference in `.github/workflows/ci.yml` and the three workflow templates is pinned to a 40-character commit SHA with a version comment, that each action is pinned at one SHA across the repository's workflows and the templates, that one SHA carries the same version comment in every file, that every template job sets `timeout-minutes`, that CI still runs the release-gate checks and the Node 18 floor, that Dependabot watches GitHub Actions, and that `review-copy.yml` builds the HTML review copy and deploys it with GitHub Pages while the `manuscript-note.yml` issue form asks for a paragraph anchor. `test/release.test.js` covers the release script's version handling, and `test/release-run.test.js` drives a whole release (`runRelease`) against a temporary root with git, gh, npm, and bun stubbed: argument parsing, each preflight refusal (wrong branch, dirty tree, empty `Unreleased`, an existing tag or release, a version already on npm), the `--dry-run` plan, and the file bumps, commit, tag, push, and GitHub release of a full run. `test/check-evals.test.js`, `test/check-examples.test.js`, `test/eval-runners.test.js`, and `test/script-entrypoints.test.js` run the other scripts' entry points the same way.
 
 ### Coverage gate
 
@@ -342,16 +342,23 @@ Beyond the CLI, the tests also check repository invariants: `test/check-scripts.
 bun run test:coverage
 ```
 
-This runs the suite with lcov output into `coverage/`, then `node scripts/check-coverage.js coverage/lcov.info src`, then `check:fallback`. The coverage threshold is 100%: every `.js` file in `src/` and its subfolders (`src/languages/`) must have a coverage record, and every line and every function in it must be hit. If the lcov report includes branch records (`BRDA`, or `BRF`/`BRH`), branches must be at 100% too. Bun's lcov reporter does not currently emit branch records, so the branch gate is skipped with a note:
+This runs the suite with lcov output into `coverage/`, then `node scripts/check-coverage.js coverage/lcov.info src scripts:85 evals:85`, then `check:fallback`. Each argument after the report names a folder to gate, and every `.js` file in it and its subfolders must have a coverage record:
+
+- A bare folder (`src`) is gated at 100%: every line and every function in each file must be hit. If the lcov report includes branch records (`BRDA`, or `BRF`/`BRH`), branches must be at 100% too.
+- `folder:N` (`scripts:85`, `evals:85`) requires each file to have at least N% of its lines hit. The check scripts, the release script, and the eval runners are gated this way rather than at 100% because each has a CLI entry block that only runs as a process, and some have small branches for platform or runtime errors. Their logic is still tested in-process: each exports its entry point with the commands it runs (git, gh, npm, bun, tar, or `claude`) passed in, so tests stub them. No test cuts a release, pushes, publishes, or calls a model.
+
+Bun's lcov reporter does not currently emit branch records, so the branch gate is skipped with a note:
 
 ```text
 Note: coverage/lcov.info contains no branch records, so the branch gate was skipped. Use a coverage reporter that emits BRDA/BRF/BRH records to enforce branch coverage.
 Coverage is 100% for src line and function coverage.
+Line coverage is at least 85% for every file in scripts.
+Line coverage is at least 85% for every file in evals.
 $ node scripts/check-fallback.js
 Bundled story-maintenance fallback is up to date.
 ```
 
-A failure prints `Coverage is below 100%:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage`, `branch coverage`, or `has no coverage record`), and exits with status 1. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
+A failure prints `Coverage is below the gate:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage`, `branch coverage`, or `has no coverage record`) for a 100% folder, or `/path/to/story-skills/scripts/release.js line coverage 80.0% (240/300) is below 85%` for a floor, and exits with status 1. A new script in `scripts/` or `evals/` needs a test that imports it, or it fails with `has no coverage record`. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
 
 ## Examples check
 

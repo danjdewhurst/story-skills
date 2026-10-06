@@ -507,7 +507,8 @@ export function runOne(fixtureDir, draftPath) {
   return failures.length === 0;
 }
 
-function main(argv) {
+// `argv` is process.argv.slice(1): the script path, then the arguments.
+export function main(argv) {
   if (argv.length !== 3) {
     console.log(
       "Usage:\n  node evals/run-evals.js <fixture-dir> <draft-file>\n  node evals/run-evals.js --all <outputs-dir>"

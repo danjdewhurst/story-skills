@@ -2,55 +2,64 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { repoRoot, requirePinnedBun } from "./bun-pin.js";
 import { buildBundle, FALLBACK_PATH } from "./build-fallback.js";
 import { missingBunMessage } from "./bun-missing.js";
 
-// A different Bun rebuilds the bundle with renamed generated identifiers, so
-// the byte comparison below only means anything on the pinned version.
-requirePinnedBun();
-
 // Returns an exit code rather than calling process.exit, so the temp dir is
-// always removed before the process ends.
-function main() {
+// always removed before the process ends. `build(outFile)` stands in for
+// buildBundle, so tests can compare without running Bun.
+export function checkFallback({
+  build = buildBundle,
+  committedPath = FALLBACK_PATH,
+  log = console.log,
+  error = console.error,
+  writeError = (text) => process.stderr.write(text)
+} = {}) {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-fallback-"));
   const generatedPath = path.join(tempDir, "story.js");
 
   try {
-    const build = buildBundle(generatedPath);
+    const result = build(generatedPath);
 
     // A spawn that never started has null status and no output at all, so it
-    // has to be handled before anything reads build.stderr.
-    if (build.error) {
-      const missing = missingBunMessage(build.error);
+    // has to be handled before anything reads result.stderr.
+    if (result.error) {
+      const missing = missingBunMessage(result.error);
       if (!missing) {
-        throw build.error;
+        throw result.error;
       }
-      console.error(missing);
+      error(missing);
       return 1;
     }
 
-    if (build.status !== 0) {
-      process.stderr.write(build.stderr || build.stdout || "");
-      return build.status ?? 1;
+    if (result.status !== 0) {
+      writeError(result.stderr || result.stdout || "");
+      return result.status ?? 1;
     }
 
-    const committed = fs.readFileSync(FALLBACK_PATH);
+    const committed = fs.readFileSync(committedPath);
     const generated = fs.readFileSync(generatedPath);
 
     if (!committed.equals(generated)) {
-      console.error(`Bundled story-maintenance fallback is out of date: ${path.relative(repoRoot, FALLBACK_PATH)} does not match a fresh build of bin/story.js.`);
-      console.error("Run: bun run build:fallback");
+      error(`Bundled story-maintenance fallback is out of date: ${path.relative(repoRoot, committedPath)} does not match a fresh build of bin/story.js.`);
+      error("Run: bun run build:fallback");
       return 1;
     }
 
-    console.log("Bundled story-maintenance fallback is up to date.");
+    log("Bundled story-maintenance fallback is up to date.");
     return 0;
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
-// Setting exitCode rather than calling process.exit lets the event loop drain
-// stderr first; process.exit truncates a piped build failure at the pipe buffer.
-process.exitCode = main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // A different Bun rebuilds the bundle with renamed generated identifiers, so
+  // the byte comparison only means anything on the pinned version.
+  requirePinnedBun();
+  // Setting exitCode rather than calling process.exit lets the event loop drain
+  // stderr first; process.exit truncates a piped build failure at the pipe buffer.
+  process.exitCode = checkFallback();
+}

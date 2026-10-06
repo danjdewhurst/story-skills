@@ -109,8 +109,8 @@ export function parseArgs(argv, platform = process.platform, arch = process.arch
   return options;
 }
 
-function run(command, args, cwd) {
-  const result = spawnSync(command, args, { cwd, encoding: "utf8" });
+function run(command, args, cwd, spawn = spawnSync) {
+  const result = spawn(command, args, { cwd, encoding: "utf8" });
   if (result.error || result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed: ${result.error?.message ?? (result.stderr || result.stdout)}`);
   }
@@ -131,21 +131,23 @@ export function smokeTest(executable, version, spawn = spawnSync) {
 }
 
 // Compiles and archives one target, and returns its archive's name and hash.
-export function buildTarget(target, version, out, { smoke = false } = {}) {
+// `spawn` stands in for child_process.spawnSync, so tests can build without
+// compiling anything.
+export function buildTarget(target, version, out, { smoke = false, spawn = spawnSync, log = console.log } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `story-binary-${target.name}-`));
   try {
     const executable = executableName(target);
-    run("bun", ["build", "./bin/story.js", "--compile", `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot);
+    run("bun", ["build", "./bin/story.js", "--compile", `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot, spawn);
     if (smoke && target === hostTarget()) {
-      smokeTest(path.join(work, executable), version);
-      console.log(`Smoke-tested ${target.name}: --version ${version}, validate passed`);
+      smokeTest(path.join(work, executable), version, spawn);
+      log(`Smoke-tested ${target.name}: --version ${version}, validate passed`);
     }
     const archive = path.join(out, archiveName(version, target));
     fs.rmSync(archive, { force: true });
     if (target.os === "windows") {
       writeZip(archive, [{ name: executable, content: fs.readFileSync(path.join(work, executable)) }]);
     } else {
-      run("tar", ["-czf", archive, executable], work);
+      run("tar", ["-czf", archive, executable], work, spawn);
     }
     return { file: path.basename(archive), sha256: sha256File(archive) };
   } finally {
@@ -154,23 +156,23 @@ export function buildTarget(target, version, out, { smoke = false } = {}) {
   }
 }
 
-function main() {
-  const options = parseArgs(process.argv.slice(2));
+export function main(argv, { spawn = spawnSync, log = console.log } = {}) {
+  const options = parseArgs(argv);
   const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
   fs.mkdirSync(options.out, { recursive: true });
   const entries = options.targets.map((target) => {
-    const entry = buildTarget(target, version, options.out, { smoke: options.smoke });
-    console.log(`Built ${entry.file}`);
+    const entry = buildTarget(target, version, options.out, { smoke: options.smoke, spawn, log });
+    log(`Built ${entry.file}`);
     return entry;
   });
   const checksums = path.join(options.out, checksumsName(version));
   fs.writeFileSync(checksums, checksumsText(entries));
-  console.log(`Wrote ${checksums}`);
+  log(`Wrote ${checksums}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    main();
+    main(process.argv.slice(2));
   } catch (error) {
     console.error(`build-binaries: ${error.message}`);
     process.exit(1);

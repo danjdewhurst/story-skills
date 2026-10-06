@@ -106,12 +106,13 @@ export function interactiveBuildFindings(root, format) {
   }
 }
 
-function main() {
+// Checks every project under `examplesDir` and returns the exit status.
+export function checkExamples(examplesDir = examplesRoot, { log = console.log, error = console.error } = {}) {
   const failures = characterCountFailures();
   const summaries = [];
 
-  for (const name of fs.readdirSync(examplesRoot).sort()) {
-    const root = path.join(examplesRoot, name);
+  for (const name of fs.readdirSync(examplesDir).sort()) {
+    const root = path.join(examplesDir, name);
     if (!fs.statSync(root).isDirectory() || !fs.existsSync(path.join(root, "story.md"))) {
       continue;
     }
@@ -148,13 +149,14 @@ function main() {
   }
 
   if (failures.length > 0) {
-    console.error(`Example validation failed:\n${failures.join("\n")}`);
-    process.exit(1);
+    error(`Example validation failed:\n${failures.join("\n")}`);
+    return 1;
   }
 
-  console.log(`Examples are valid:\n${summaries.join("\n")}`);
+  log(`Examples are valid:\n${summaries.join("\n")}`);
+  return 0;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+  process.exitCode = checkExamples();
 }

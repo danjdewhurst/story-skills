@@ -184,57 +184,63 @@ export function checkMarketplaces({ packageName, packageVersion, claudeMarketpla
   return failures;
 }
 
-function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), "utf8"));
+function readJson(root, relativePath) {
+  return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
 }
 
-function main() {
+// Every metadata check against the checkout at `root`; returns the failures
+// and the package.json it read.
+export function metadataFailures(root = repoRoot) {
   const failures = [];
 
-  const packageJson = readJson("package.json");
-  const codexPlugin = readJson(".codex-plugin/plugin.json");
-  const claudePlugin = readJson(".claude-plugin/plugin.json");
+  const packageJson = readJson(root, "package.json");
+  const codexPlugin = readJson(root, ".codex-plugin/plugin.json");
+  const claudePlugin = readJson(root, ".claude-plugin/plugin.json");
 
   expectEqual(failures, "package.json name", packageJson.name, codexPlugin.name);
   expectEqual(failures, "package.json name", packageJson.name, claudePlugin.name);
   expectEqual(failures, "package/plugin version", packageJson.version, codexPlugin.version);
   expectEqual(failures, "package/plugin version", packageJson.version, claudePlugin.version);
 
-  checkVersionModule(failures, packageJson.version, fs.readFileSync(path.join(repoRoot, "src", "version.js"), "utf8"));
+  checkVersionModule(failures, packageJson.version, fs.readFileSync(path.join(root, "src", "version.js"), "utf8"));
 
   if (codexPlugin.skills !== "./skills/") {
     failures.push(".codex-plugin/plugin.json skills must point to ./skills/");
   }
 
-  checkSkillFrontmatter(failures, path.join(repoRoot, "skills"), (filePath) => fs.readFileSync(filePath, "utf8"));
+  checkSkillFrontmatter(failures, path.join(root, "skills"), (filePath) => fs.readFileSync(filePath, "utf8"));
 
-  checkTemplateStoryVersion(failures, packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
+  checkTemplateStoryVersion(failures, packageJson.version, path.join(root, "templates", "github"), (filePath) =>
     fs.readFileSync(filePath, "utf8")
   );
 
   checkWorkflowBunPin(
     failures,
     packageJson.packageManager,
-    fs.readFileSync(path.join(repoRoot, ".github", "workflows", "ci.yml"), "utf8")
+    fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8")
   );
 
-  checkDocBunPin(failures, packageJson.packageManager, fs.readFileSync(path.join(repoRoot, "docs", "development.md"), "utf8"));
+  checkDocBunPin(failures, packageJson.packageManager, fs.readFileSync(path.join(root, "docs", "development.md"), "utf8"));
 
-  checkDocVersions(failures, packageJson.version, docVersionFiles(repoRoot), (relativePath) =>
-    fs.readFileSync(path.join(repoRoot, relativePath), "utf8")
+  checkDocVersions(failures, packageJson.version, docVersionFiles(root), (relativePath) =>
+    fs.readFileSync(path.join(root, relativePath), "utf8")
   );
 
-  checkChangelogVersion(failures, packageJson.version, fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"));
+  checkChangelogVersion(failures, packageJson.version, fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8"));
 
   const marketplaceFailures = checkMarketplaces({
     packageName: packageJson.name,
     packageVersion: packageJson.version,
-    claudeMarketplace: readJson(".claude-plugin/marketplace.json"),
-    agentsMarketplace: readJson(".agents/plugins/marketplace.json"),
-    exists: (relativePath) => fs.existsSync(path.join(repoRoot, relativePath))
+    claudeMarketplace: readJson(root, ".claude-plugin/marketplace.json"),
+    agentsMarketplace: readJson(root, ".agents/plugins/marketplace.json"),
+    exists: (relativePath) => fs.existsSync(path.join(root, relativePath))
   });
   failures.push(...marketplaceFailures);
+  return { failures, packageJson };
+}
 
+function main() {
+  const { failures, packageJson } = metadataFailures();
   if (failures.length > 0) {
     console.error(`Metadata check failed:\n${failures.join("\n")}`);
     process.exit(1);

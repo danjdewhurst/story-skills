@@ -54,10 +54,10 @@ Draft 2:
 
 Reply with exactly one character: 1 or 2.`;
 
-function ask(model, prompt) {
+function ask(spawn, model, prompt) {
   const args = ["-p", prompt, "--model", model, "--tools", "", "--output-format", "text"];
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = spawnSync("claude", args, {
+    const res = spawn("claude", args, {
       encoding: "utf8",
       timeout: CLAUDE_TIMEOUT_MS,
       maxBuffer: 4 * 1024 * 1024,
@@ -86,7 +86,9 @@ export function programArgs(argv = process.argv) {
   return argv.slice(2);
 }
 
-export function main(argv) {
+// `spawn` stands in for child_process.spawnSync, so tests can answer for the
+// judge without a `claude` binary.
+export function main(argv, { spawn = spawnSync } = {}) {
   let model = "claude-opus-5";
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -132,8 +134,8 @@ export function main(argv) {
     const b = fs.readFileSync(bPath, "utf8");
     const fill = (first, second) =>
       fillTemplate(PROMPT, { brief: checks.brief, context: inputText, first, second });
-    const v1 = ask(model, fill(a, b)); // A first
-    const v2 = ask(model, fill(b, a)); // B first
+    const v1 = ask(spawn, model, fill(a, b)); // A first
+    const v2 = ask(spawn, model, fill(b, a)); // B first
     // v1 === "1" means A won when shown first; v2 === "2" means A won when shown second.
     const aWins = v1 === "1" && v2 === "2";
     const bWins = v1 === "2" && v2 === "1";
