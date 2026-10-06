@@ -142,7 +142,10 @@ Use `revision-continuity` for the passes, plus these checks:
   loop and confirm a choice leaves it.
 - **Path continuity:** run `story continuity .` and read the branching
   findings in `references/path-continuity.md`. Then do the hand checks
-  there for what the checker reads by chapter number.
+  there for what the checker reads by chapter number. Branching books in
+  [`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#branching-books)
+  says which `continuity`, `knowledge`, `context`, `timeline`, and `grid`
+  results follow the paths and which go by chapter number.
 - **Renumbering:** `story move chapter` rewrites every `to` that named the
   old id. It never edits prose, so reread the passages for chapter numbers
   in the text.

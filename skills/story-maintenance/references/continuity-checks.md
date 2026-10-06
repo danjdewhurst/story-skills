@@ -70,6 +70,44 @@ It checks clock/time plausibility when scenes or chapters carry `date: YYYY-MM-D
 
 Intentional exceptions go in `continuity/exemptions.md` (frontmatter `type: exemption-log`, entries with a `reason` and the finding's `code` plus its `file` or `chapter`, as `--json` diagnostics give them; `pattern` matches message text and still works); exempted findings are reported as dismissed, not errors.
 
+## Branching books
+
+Once any chapter has `choices`, `story continuity` (and `story check`, which reports the same findings), `story knowledge`, and `story context` read "later" along the paths of choices from the first chapter. Read this before acting on their findings in a branching book. Writing rejoins, recording a fact learned on two branches, and fixing `state-differs-by-path` are covered by the `interactive-fiction` skill's `references/path-continuity.md`.
+
+### What follows the paths
+
+- **Deaths and revivals.** A death on one branch is not a posthumous appearance on a sibling branch. At a rejoin, a death on any incoming branch counts, so listing the character in that chapter's `characters` or `pov` is a `posthumous-appearance` error. `revived-in` ends the death only when every path from the death passes through the revival chapter. Learning after death and status progressions use the same rule.
+- **Dates.** Two chapters on one path dated on different days compare by date, so a flashback reached later stays earlier. Dates in a `story.md` custom `calendar` compare the same way. Chapters on sibling branches never compare.
+- **Knowledge.** `story knowledge <id> --at <chapter>` and `story context` list a fact once it is learned on some path to the chapter. At a rejoin, a fact learned on only one incoming branch is listed as known, so check that every incoming branch teaches it before the rejoin prose uses it. One `knowledge-state` entry per branch for the same `fact` is not a `state-duplicate-fact` error.
+- **Context.** `story context` takes previous scenes, open promises, clues, and questions, and progressions only from chapters on a path to the target. At a rejoin that is every incoming branch.
+- **Prop custody.** A destroyed or lost artifact is gone only on paths after its `since` chapter.
+- **`continuity/state.md`.** It is checked against the chapters on a path to `current-chapter`. When those branches last set an artifact's `owner` or `location` differently, it warns `state-differs-by-path`.
+- **Loops and unreachable chapters.** Two chapters that each lead to the other, and any chapter no path reaches (`story links` warns `unreachable-chapter`), compare by date and then by number, as in a linear book.
+
+### What still goes by chapter number
+
+These read the chapters in number order, so sibling branches can produce findings no reader meets:
+
+- the promise, clue, and question ledgers: payoff before plant, and the chapter counts behind the Chekhov and `question-unanswered` warnings. A setup planted on one branch and paid off on a sibling passes, though no reader sees both, so check each one against the paths by hand.
+- the clock and route checks (`clock-backward`, `travel-too-fast`, `route-too-fast`, `route-same-time`), which compare every dated scene in a `strand`, whichever branch it is on
+- `story timeline`, which marks a sibling ending dated before the one numbered ahead of it as told "after later events"
+- `story grid`, whose columns are every chapter side by side in number order, whichever path reaches each
+- `story pacing` runs, `story next`, the `progression-out-of-order` list order, and `story series` and `story diagram` lifelines
+- the `continuity/state.md` lines in `story context`, included whenever `current-chapter` is numbered below the target, even on another branch. Set `current-chapter` to the passage last drafted on the target's own path.
+
+### Sibling-ending clock warnings
+
+Two endings reached from the same chapter are alternatives, but the clock reads the higher-numbered one after the other. If its scene is dated earlier, `clock-backward` reports it. When that finding only reflects branch order, keep the dates and exempt the finding by `code` and `file`, with a `reason` naming the branch:
+
+```yaml
+exemptions:
+  - code: clock-backward
+    file: scenes/chapter-06-scene-01.md
+    reason: "Chapter 6 is the other ending: readers reach it from chapter 4, not after chapter 5."
+```
+
+`examples/the-gull-rock-light` does this, and `story continuity` reports it as `dismissed: scenes/chapter-06-scene-01.md timestamp runs backward (exemption: ...)`. Exempt only the branch-order finding. A `clock-backward` warning between two chapters on one path is a real clock problem: fix the dates or times.
+
 ## clues
 
 Run `story clues .` for mysteries and any story with a clue ledger. It prints a clue-by-chapter matrix (`P` planted, `R` payoff, `x` both, `.` none; `~` after a clue name marks a red herring) and warns about:
