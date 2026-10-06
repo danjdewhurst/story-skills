@@ -692,7 +692,7 @@ export function resolveOutputPath(project, out, defaultRelativePath, enforceRoot
 }
 
 // The file extension of each build format; its keys are the formats
-// --format accepts (plus the md alias for markdown).
+// --format accepts, besides BUILD_FORMAT_ALIASES.
 export const BUILD_EXTENSIONS = {
   markdown: "md",
   epub: "epub",
@@ -707,10 +707,13 @@ export const BUILD_EXTENSIONS = {
   ink: "ink"
 };
 
+// Other names --format accepts for a format.
+export const BUILD_FORMAT_ALIASES = { md: "markdown" };
+
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
-  if (format === "markdown" || format === "md") {
-    return "markdown";
+  if (Object.prototype.hasOwnProperty.call(BUILD_FORMAT_ALIASES, format)) {
+    return BUILD_FORMAT_ALIASES[format];
   }
 
   if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {

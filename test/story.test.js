@@ -1281,6 +1281,9 @@ word-count: 0
     expect(docxText).toContain("word/styles.xml");
     expect(docxText).toContain('<w:t xml:space="preserve">* * *</w:t>');
     expect(() => buildBook(created.root, { format: "pdf" })).toThrow("Unsupported build format: pdf");
+    const alias = buildBook(created.root, { format: " MD " });
+    expect(alias.format).toBe("markdown");
+    expect(alias.outFile).toBe(path.join(created.root, "dist", "plain-build.md"));
   });
 
   test("falls back to filename scene numbers without throwing", () => {

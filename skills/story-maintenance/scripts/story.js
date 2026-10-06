@@ -17761,10 +17761,11 @@ var BUILD_EXTENSIONS = {
   twee: "twee",
   ink: "ink"
 };
+var BUILD_FORMAT_ALIASES = { md: "markdown" };
 function normalizeBuildFormat(value) {
   const format = String(value).trim().toLowerCase();
-  if (format === "markdown" || format === "md") {
-    return "markdown";
+  if (Object.prototype.hasOwnProperty.call(BUILD_FORMAT_ALIASES, format)) {
+    return BUILD_FORMAT_ALIASES[format];
   }
   if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {
     return format;
