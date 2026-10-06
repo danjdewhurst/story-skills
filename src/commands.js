@@ -79,27 +79,27 @@ import { EXIT_CODES, usageError } from "./exit-codes.js";
 // How --json names a piped passage in a diagnostic, as the text output does.
 const STDIN_LABEL = "stdin";
 
-// The options each kind of `story add` reads. Every kind also takes --id (a
-// chapter or scene refuses it, as its id comes from its number), --dry-run,
-// and --json; an option only other kinds read is an error.
+// The options each kind of `story add` reads; every kind also takes
+// --dry-run and --json, and an option only other kinds read is an error. A
+// chapter or scene takes no --id, as its id comes from its number.
 const ADD_KIND_OPTIONS = {
-  character: ["role", "status", "location", "locations", "arc"],
-  location: ["type", "status", "region", "population", "controlled-by", "character", "characters"],
-  system: ["type", "prevalence"],
-  faction: ["type", "status", "member", "members", "character", "characters", "location", "locations"],
-  artifact: ["type", "status", "owner", "location"],
-  arc: ["type", "status", "character", "characters", "theme", "themes", "acts", "act"],
+  character: ["id", "role", "status", "location", "locations", "arc"],
+  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters"],
+  system: ["id", "type", "prevalence"],
+  faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
+  artifact: ["id", "type", "status", "owner", "location"],
+  arc: ["id", "type", "status", "character", "characters", "theme", "themes", "acts", "act"],
   chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
   scene: [
     "chapter", "scene", "pov", "location", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "date", "time",
     "travel-hours", "sequel", "outcome", "dilemma"
   ],
-  question: ["status", "introduced", "resolved", "character", "characters"],
-  promise: ["status", "planted", "payoff", "arc", "arcs", "character", "characters"],
-  clue: ["status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
-  term: ["category", "alias", "aliases"],
-  matter: ["placement", "order", "heading"],
-  research: ["status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
+  question: ["id", "status", "introduced", "resolved", "character", "characters"],
+  promise: ["id", "status", "planted", "payoff", "arc", "arcs", "character", "characters"],
+  clue: ["id", "status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
+  term: ["id", "category", "alias", "aliases"],
+  matter: ["id", "placement", "order", "heading"],
+  research: ["id", "status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
 };
 
 // The flags of every command that writes the project in place: --dry-run
@@ -847,7 +847,7 @@ export const COMMANDS = [
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
     args: Infinity,
-    options: ["id", ...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
+    options: [...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
     kinds: ADD_KIND_OPTIONS,
     run(context) {
       const { parsed, cwd } = context;

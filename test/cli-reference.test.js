@@ -78,13 +78,18 @@ describe("docs/cli-reference.md", () => {
 
   test("the add options-by-kind table lists the options each kind accepts", () => {
     const add = COMMANDS.find((command) => command.name === "add");
-    const table = section("### add").split("Options by kind:")[1];
+    const text = section("### add");
+    const table = text.split("Options by kind:")[1];
     for (const [kind, names] of Object.entries(add.kinds)) {
       const row = table.split("\n").find((line) => line.startsWith(`| \`${kind}\` |`));
-      // Cell 2 lists the options; the defaults cell may name some too.
+      // Cell 2 lists the options; the defaults cell may name some too. --id
+      // is described once, above the table.
       const flags = codeWords(row.split(" | ")[1]).filter((word) => word.startsWith("--")).map((word) => word.slice(2).split("=")[0]);
-      expect(sorted(flags)).toEqual(sorted(documentedOptions(names)));
+      expect(sorted(flags)).toEqual(sorted(documentedOptions(names).filter((name) => name !== "id")));
     }
+    const withoutId = Object.keys(add.kinds).filter((kind) => !add.kinds[kind].includes("id"));
+    expect(withoutId).toEqual(["chapter", "scene"]);
+    expect(text).toContain("Every kind but `chapter` and `scene` also takes `--id`.");
   });
 
   test("every build format is in the command summary, the --format help, and the formats table", () => {

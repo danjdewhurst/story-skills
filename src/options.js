@@ -135,10 +135,22 @@ const VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefi
 // `--out a.md --out b.md` writes b.md.
 const REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
 const COMMA_OPTIONS = new Set(OPTIONS.filter((option) => option.commas).map((option) => option.name));
+const PATH_OPTIONS = new Set(OPTIONS.filter((option) => option.value === "<path>").map((option) => option.name));
 
 // Whether --name reads the next argument as its value.
 export function takesValue(name) {
   return VALUE_OPTIONS.has(name);
+}
+
+// Whether --name is a boolean flag, which takes a value only as --name=value.
+export function isBooleanOption(name) {
+  return BOOLEAN_OPTIONS.has(name);
+}
+
+// Whether --name takes a file-system path (shown as <path> in help), which
+// cannot be empty.
+export function isPathOption(name) {
+  return PATH_OPTIONS.has(name);
 }
 
 const OPTION_COLUMN = 28;
@@ -298,13 +310,14 @@ export function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.nam
         addOption(options, key, inlineValue);
         continue;
       }
-      // A flag takes a value only as --flag=value, so the next word stays an
-      // argument: `add chapter --dry-run No Way Back` previews "No Way Back".
-      // A bare true or false there is the old `--flag false` form, refused
-      // rather than read as a title word or a project path.
+      // A flag takes a value only as --flag=value. A boolean word right after
+      // it (`--heading false`, `--dry-run No Way Back`) is refused rather than
+      // read as a title word or a path: either reading could turn a requested
+      // dry run into a write, or a flag turned off into one turned on.
       const nextToken = argv[index + 1];
-      if (nextToken === "true" || nextToken === "false") {
-        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${nextToken} to set the flag, or put ${nextToken} after -- to keep it as an argument`);
+      if (isBooleanLiteralToken(nextToken)) {
+        const value = normalizeBooleanValue(key, nextToken);
+        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${value} to turn the flag ${value ? "on" : "off"}, or put --${key} after ${nextToken}, or ${nextToken} after --, to keep ${nextToken} as an argument`);
       }
       addOption(options, key, true);
       continue;

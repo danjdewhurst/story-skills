@@ -11460,8 +11460,15 @@ var BOOLEAN_OPTIONS = new Set(OPTIONS.filter((option) => option.value === undefi
 var VALUE_OPTIONS = new Set(OPTIONS.filter((option) => option.value !== undefined).map((option) => option.name));
 var REPEATABLE_OPTIONS = new Set(OPTIONS.filter((option) => option.repeatable).map((option) => option.name));
 var COMMA_OPTIONS = new Set(OPTIONS.filter((option) => option.commas).map((option) => option.name));
+var PATH_OPTIONS = new Set(OPTIONS.filter((option) => option.value === "<path>").map((option) => option.name));
 function takesValue(name) {
   return VALUE_OPTIONS.has(name);
+}
+function isBooleanOption(name) {
+  return BOOLEAN_OPTIONS.has(name);
+}
+function isPathOption(name) {
+  return PATH_OPTIONS.has(name);
 }
 var OPTION_COLUMN = 28;
 function documentedOptions(names) {
@@ -11584,8 +11591,9 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
         continue;
       }
       const nextToken = argv[index + 1];
-      if (nextToken === "true" || nextToken === "false") {
-        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${nextToken} to set the flag, or put ${nextToken} after -- to keep it as an argument`);
+      if (isBooleanLiteralToken(nextToken)) {
+        const value = normalizeBooleanValue(key, nextToken);
+        throw usageError(`--${key} ${nextToken} is ambiguous: write --${key}=${value} to turn the flag ${value ? "on" : "off"}, or put --${key} after ${nextToken}, or ${nextToken} after --, to keep ${nextToken} as an argument`);
       }
       addOption(options, key, true);
       continue;
@@ -27902,12 +27910,12 @@ function action2(title, detail) {
 // src/commands.js
 var STDIN_LABEL = "stdin";
 var ADD_KIND_OPTIONS = {
-  character: ["role", "status", "location", "locations", "arc"],
-  location: ["type", "status", "region", "population", "controlled-by", "character", "characters"],
-  system: ["type", "prevalence"],
-  faction: ["type", "status", "member", "members", "character", "characters", "location", "locations"],
-  artifact: ["type", "status", "owner", "location"],
-  arc: ["type", "status", "character", "characters", "theme", "themes", "acts", "act"],
+  character: ["id", "role", "status", "location", "locations", "arc"],
+  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters"],
+  system: ["id", "type", "prevalence"],
+  faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
+  artifact: ["id", "type", "status", "owner", "location"],
+  arc: ["id", "type", "status", "character", "characters", "theme", "themes", "acts", "act"],
   chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
   scene: [
     "chapter",
@@ -27928,12 +27936,12 @@ var ADD_KIND_OPTIONS = {
     "outcome",
     "dilemma"
   ],
-  question: ["status", "introduced", "resolved", "character", "characters"],
-  promise: ["status", "planted", "payoff", "arc", "arcs", "character", "characters"],
-  clue: ["status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
-  term: ["category", "alias", "aliases"],
-  matter: ["placement", "order", "heading"],
-  research: ["status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
+  question: ["id", "status", "introduced", "resolved", "character", "characters"],
+  promise: ["id", "status", "planted", "payoff", "arc", "arcs", "character", "characters"],
+  clue: ["id", "status", "planted", "payoff", "significance-delayed", "red-herring", "character", "characters", "arc", "arcs"],
+  term: ["id", "category", "alias", "aliases"],
+  matter: ["id", "placement", "order", "heading"],
+  research: ["id", "status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
 };
 var WRITE_OPTIONS = ["dry-run", "json"];
 var COMMANDS = [
@@ -28649,7 +28657,7 @@ var COMMANDS = [
     summary: ["Create an entity file and reindex registries"],
     project: "flag",
     args: Infinity,
-    options: ["id", ...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
+    options: [...new Set(Object.values(ADD_KIND_OPTIONS).flat()), ...WRITE_OPTIONS],
     kinds: ADD_KIND_OPTIONS,
     run(context) {
       const { parsed, cwd } = context;
@@ -29323,7 +29331,8 @@ function commandWord(argv) {
     if (!arg.startsWith("-")) {
       return arg;
     }
-    if (arg.startsWith("--") && !arg.includes("=") && takesValue(arg.slice(2))) {
+    const name = arg.startsWith("--") && !arg.includes("=") ? arg.slice(2) : null;
+    if (name !== null && (takesValue(name) || isBooleanOption(name) && isBooleanLiteralToken(argv[index + 1]))) {
       index += 1;
     }
   }
@@ -29394,8 +29403,10 @@ function kindUsageError(command, parsed) {
   return stray === undefined ? null : `--${stray} does not apply to story ${command.name} ${kind}: story help ${command.name} lists the options each kind reads`;
 }
 function emptyPathError(command, parsed) {
-  if (parsed.options.path !== undefined && String(lastOptionValue(parsed.options.path)).trim() === "") {
-    return "--path cannot be empty: give the project folder, or leave --path out to use the current directory";
+  for (const [key, value] of Object.entries(parsed.options)) {
+    if (isPathOption(key) && [].concat(value).some((item) => String(item).trim() === "")) {
+      return key === "path" ? "--path cannot be empty: give the project folder, or leave --path out to use the current directory" : `--${key} cannot be empty: give a path, or leave --${key} out`;
+    }
   }
   if (command.project === "positional" && parsed.positionals[1]?.trim() === "") {
     return "The project path cannot be empty: give the project folder, or leave it out to use the current directory";
