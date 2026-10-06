@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { FRONTMATTER_KEYS, nearMissKey } from "../src/frontmatter-keys.js";
+import { FRONTMATTER_KEYS, nearMissKeys } from "../src/frontmatter-keys.js";
 import { validateProject } from "../src/story.js";
 import { makeTempDir, messages } from "./helpers.js";
 
@@ -34,23 +34,23 @@ describe("misspelled frontmatter keys (#373)", () => {
     expect(FRONTMATTER_KEYS).toEqual(fromSchema);
   });
 
-  test("nearMissKey matches case, separators, hyphens, and small typos", () => {
+  test("nearMissKeys matches case, separators, hyphens, and small typos", () => {
     const chapter = FRONTMATTER_KEYS.chapter;
-    expect(nearMissKey("arcs_advanced", chapter)).toBe("arcs-advanced");
-    expect(nearMissKey("Arcs-Advanced", chapter)).toBe("arcs-advanced");
-    expect(nearMissKey("arcsadvanced", chapter)).toBe("arcs-advanced");
-    expect(nearMissKey("arcs-advaced", chapter)).toBe("arcs-advanced");
-    expect(nearMissKey("stauts", chapter)).toBe("status");
-    expect(nearMissKey("statsu", chapter)).toBe("status");
-    expect(nearMissKey("tilte", chapter)).toBe("title");
-    expect(nearMissKey("hoook", chapter)).toBe("hook");
-    expect(nearMissKey("charaters", chapter)).toBe("characters");
-    expect(nearMissKey("wordcount", chapter)).toBe("word-count");
-    expect(nearMissKey("since_chapter", FRONTMATTER_KEYS.objectState)).toBe("since");
-    expect(nearMissKey("died-in-chapter", FRONTMATTER_KEYS.character)).toBe("died-in");
+    expect(nearMissKeys("arcs_advanced", chapter)).toEqual(["arcs-advanced"]);
+    expect(nearMissKeys("Arcs-Advanced", chapter)).toEqual(["arcs-advanced"]);
+    expect(nearMissKeys("arcsadvanced", chapter)).toEqual(["arcs-advanced"]);
+    expect(nearMissKeys("arcs-advaced", chapter)).toEqual(["arcs-advanced"]);
+    expect(nearMissKeys("stauts", chapter)).toEqual(["status"]);
+    expect(nearMissKeys("statsu", chapter)).toEqual(["status"]);
+    expect(nearMissKeys("tilte", chapter)).toEqual(["title"]);
+    expect(nearMissKeys("hoook", chapter)).toEqual(["hook"]);
+    expect(nearMissKeys("charaters", chapter)).toEqual(["characters"]);
+    expect(nearMissKeys("wordcount", chapter)).toEqual(["word-count"]);
+    expect(nearMissKeys("since_chapter", FRONTMATTER_KEYS.objectState)).toEqual(["since"]);
+    expect(nearMissKeys("died-in-chapter", FRONTMATTER_KEYS.character)).toEqual(["died-in"]);
   });
 
-  test("nearMissKey leaves known, short, distant, and other-kind keys alone", () => {
+  test("nearMissKeys leaves known, short, distant, and other-kind keys alone", () => {
     const chapter = FRONTMATTER_KEYS.chapter;
     for (const key of [
       "status", "arcs-advanced",
@@ -61,10 +61,24 @@ describe("misspelled frontmatter keys (#373)", () => {
       // keys another kind defines
       "location", "arcs", "scene", "setting", "tags", "type", "themes"
     ]) {
-      expect({ key, intended: nearMissKey(key, chapter) }).toEqual({ key, intended: undefined });
+      expect({ key, intended: nearMissKeys(key, chapter) }).toEqual({ key, intended: [] });
     }
-    expect(nearMissKey("Location", chapter)).toBeUndefined();
-    expect(nearMissKey("locaton", FRONTMATTER_KEYS.scene)).toBe("location");
+    expect(nearMissKeys("Location", chapter)).toEqual([]);
+    expect(nearMissKeys("locaton", FRONTMATTER_KEYS.scene)).toEqual(["location"]);
+    // Two edits count only when the first letter matches: notes is not routes.
+    expect(nearMissKeys("notes", FRONTMATTER_KEYS.location)).toEqual([]);
+    expect(nearMissKeys("ruotse", FRONTMATTER_KEYS.location)).toEqual(["routes"]);
+    // A key only continuity state entries define is still a near miss on a file.
+    expect(nearMissKeys("character", chapter)).toEqual(["characters"]);
+    // A key far longer than every known one is never compared in full.
+    expect(nearMissKeys("x".repeat(100000), chapter)).toEqual([]);
+  });
+
+  test("equally close keys are all suggested, leaving out those already set", () => {
+    expect(nearMissKeys("numberd", FRONTMATTER_KEYS.chapter)).toEqual(["number", "numbered"]);
+    const root = exampleCopy();
+    edit(root, "chapters/chapter-01.md", /^status:/m, "numberd: false\nstatus:");
+    expect(nearMisses(root)).toEqual(["chapters/chapter-01.md has numberd; did you mean numbered?"]);
   });
 
   test("story validate warns about a misspelled key in any kind of file", () => {

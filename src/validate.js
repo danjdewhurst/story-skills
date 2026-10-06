@@ -5,7 +5,7 @@ import { idText, storyDateError } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
 import { validateProgressions } from "./progressions.js";
 import { parseFrontmatter } from "./frontmatter.js";
-import { FRONTMATTER_KEYS, nearMissKey } from "./frontmatter-keys.js";
+import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { isPathInside, lstatIfExists, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
@@ -1885,12 +1885,13 @@ function validateStringArray(data, field, label, errors) {
 // Warns about a key that is a near miss for a known one, such as
 // `learned_in`, `Learned-In`, `since_chapter`, or `stauts`, which would
 // otherwise be ignored. Keys far from every known one stay allowed as
-// custom fields, and so does a near miss whose intended key is also set.
+// custom fields, and so does a near miss whose intended key is also set;
+// of several equally close keys, those not set are named.
 function warnNearMissKeys(data, keys, label, warnings, file = label) {
   for (const key of Object.keys(data)) {
-    const intended = nearMissKey(key, keys);
-    if (intended !== undefined && !Object.hasOwn(data, intended)) {
-      warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended}?`, file));
+    const intended = nearMissKeys(key, keys).filter((candidate) => !Object.hasOwn(data, candidate));
+    if (intended.length > 0) {
+      warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended.join(" or ")}?`, file));
     }
   }
 }

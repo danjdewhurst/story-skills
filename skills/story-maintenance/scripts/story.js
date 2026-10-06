@@ -15158,27 +15158,35 @@ var FRONTMATTER_KEYS = {
   objectState: ["artifact", "owner", "location", "status", "since"],
   knowledgeState: ["character", "knows", "fact", "learned-in"]
 };
-var EVERY_KEY = new Set(Object.values(FRONTMATTER_KEYS).flat());
+var STATE_KINDS = new Set(["characterState", "objectState", "knowledgeState"]);
+var EVERY_KEY = new Set(Object.entries(FRONTMATTER_KEYS).filter(([kind]) => !STATE_KINDS.has(kind)).flatMap(([, keys]) => keys));
 var PREFIX_KEYS = new Set(["since", "learned-in", "died-in"]);
-function nearMissKey(key, known) {
+function nearMissKeys(key, known) {
   if (known.includes(key) || EVERY_KEY.has(key)) {
-    return;
+    return [];
   }
   const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
   const squashed = normalized.replace(/-/g, "");
-  const exact = known.find((candidate) => normalized === candidate || squashed === candidate.replace(/-/g, "") || PREFIX_KEYS.has(candidate) && normalized.startsWith(`${candidate}-`));
-  if (exact !== undefined || EVERY_KEY.has(normalized) || normalized.length < 4) {
+  const exact = known.filter((candidate) => normalized === candidate || squashed === candidate.replace(/-/g, "") || PREFIX_KEYS.has(candidate) && normalized.startsWith(`${candidate}-`));
+  if (exact.length > 0 || EVERY_KEY.has(normalized) || normalized.length < 4) {
     return exact;
   }
-  let best;
+  let best = [];
   let bestDistance = Infinity;
   for (const candidate of known) {
-    const limit = candidate.length >= 6 ? 2 : candidate.length >= 4 ? 1 : 0;
-    const distance = limit === 0 ? Infinity : typoDistance(normalized, candidate);
-    if (distance <= limit && distance < bestDistance) {
-      best = candidate;
+    const limit = candidate.length < 4 ? 0 : candidate.length < 6 || candidate[0] !== normalized[0] ? 1 : 2;
+    if (limit === 0 || Math.abs(candidate.length - normalized.length) > limit) {
+      continue;
+    }
+    const distance = typoDistance(normalized, candidate);
+    if (distance > limit || distance > bestDistance) {
+      continue;
+    }
+    if (distance < bestDistance) {
+      best = [];
       bestDistance = distance;
     }
+    best.push(candidate);
   }
   return best;
 }
@@ -16866,9 +16874,9 @@ function validateStringArray(data, field, label, errors) {
 }
 function warnNearMissKeys(data, keys, label, warnings, file = label) {
   for (const key of Object.keys(data)) {
-    const intended = nearMissKey(key, keys);
-    if (intended !== undefined && !Object.hasOwn(data, intended)) {
-      warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended}?`, file));
+    const intended = nearMissKeys(key, keys).filter((candidate) => !Object.hasOwn(data, candidate));
+    if (intended.length > 0) {
+      warnings.push(warn("near-miss-key", `${label} has ${key}; did you mean ${intended.join(" or ")}?`, file));
     }
   }
 }
