@@ -2,8 +2,10 @@
 
 One section per revision pass. Each section says what the pass is for, which
 checks to run, what to read, what to look for, and which files to update. Pick
-the pass in step 1 of the Revision Workflow in `SKILL.md`, then follow its
-section here before moving on to the snapshot, reading, and planning steps.
+the pass in step 1 of the Revision Workflow in `SKILL.md` and take the
+snapshot in step 2 before running anything here: some checks write files,
+such as `story wordcount . --write`. Then follow the pass's section through
+the reading, planning, editing, and maintenance steps.
 
 The named passes that `story passes .` tracks in `story.md`
 `revision-passes` map onto these checklists:
