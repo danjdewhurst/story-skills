@@ -12382,13 +12382,11 @@ var QUESTION_STATUSES = new Set(["open", "answered", "resolved", "dropped", "aba
 var PROMISE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 var CLUE_STATUSES = new Set(["planned", "planted", "paid-off", "dropped", "abandoned"]);
 function mayScheduleChapter(kind, field, status) {
-  if (status === "abandoned") {
-    return true;
+  const setupPending = status === "abandoned" || status === (kind === "question" ? "open" : "planned");
+  if (field === "payoff") {
+    return status !== "paid-off";
   }
-  if (kind === "question") {
-    return field === "introduced" && status === "open";
-  }
-  return field === "planted" ? status === "planned" : status !== "paid-off";
+  return field !== "resolved" && setupPending;
 }
 var TERM_CATEGORIES = new Set(["person", "place", "faction", "artifact", "concept", "term", "other"]);
 var STYLE_DIALECTS = new Set(["british", "american", "unspecified"]);
@@ -22707,12 +22705,19 @@ function assertUnambiguousId(root, kind, id) {
   }
 }
 var CHAPTER_REFERENCE_OPTIONS = ["chapter", "planted", "payoff", "introduced", "resolved", "used-in"];
+var SCHEDULED_CHAPTER_OPTIONS = new Set(["planted", "payoff", "introduced", "used-in"]);
 function assertChapterReferences(project, options) {
   const byNumber = new Map(project.chapters.map((chapter) => [chapter.number, chapter.id]));
   for (const option of CHAPTER_REFERENCE_OPTIONS) {
     for (const value of optionValues(options, option)) {
+      if (project.chapters.some((chapter) => chapter.id === value)) {
+        continue;
+      }
       const match = /^chapter-(\d+)$/.exec(value);
-      if (!match || project.chapters.some((chapter) => chapter.id === value)) {
+      if (!match) {
+        if (SCHEDULED_CHAPTER_OPTIONS.has(option)) {
+          throw usageError(`--${option} ${value} names no chapter: a chapter not written yet must be named chapter-NN, as story add chapter names it`);
+        }
         continue;
       }
       const number = Number.parseInt(match[1], 10);
@@ -22740,11 +22745,10 @@ function assertStatusChapters(project, kind, options) {
   }
   const written = (value) => project.chapters.some((chapter) => chapter.id === String(value ?? "").trim());
   const given = (value) => String(value ?? "").trim() !== "";
-  const defaultStatus = kind === "question" ? given(options.resolved) ? "answered" : "open" : given(options.planted) ? "planted" : "planned";
-  const status = String(options.status ?? defaultStatus);
+  const status = String(options.status ?? (kind !== "question" ? "planned" : given(options.resolved) ? "answered" : "open"));
   const article = /^[aeiou]/.test(status) ? "an" : "a";
   const reasons = {
-    planted: `${article} ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`,
+    planted: status === "dropped" ? `a dropped ${kind} stays in the book, so its setup must be on the page. Use --status abandoned for a setup that was cut` : `${article} ${status} ${kind} needs its planted chapter. Leave --status unset to record it as planned`,
     payoff: `a paid-off ${kind} needs its payoff chapter. Use --status planted until the payoff is drafted`,
     resolved: "a question's resolved chapter must exist. Add --resolved once the answer is drafted",
     introduced: `${article} ${status} question needs its introduced chapter`
@@ -22806,7 +22810,11 @@ function createEntityUnlocked(root, options) {
   const data = readMarkdown(entity.file, project.root).data;
   applyEntityBacklinks(project.root, kind, entity.id, data);
   const reindexed = reindexProject(project.root);
-  return { kind, id: entity.id, file: entity.file, changed: [entity.file].concat(reindexed.changed), resumed, warnings: missingReferenceWarnings(project.root, kind, data) };
+  const warnings = missingReferenceWarnings(project.root, kind, data);
+  if (kind === "chapter") {
+    warnings.push(...abandonedThreadWarnings(project, entity.id));
+  }
+  return { kind, id: entity.id, file: entity.file, changed: [entity.file].concat(reindexed.changed), resumed, warnings };
 }
 var BACKLINKED_FIELDS = { character: ["locations"], location: ["notable-characters"], scene: ["location", "characters"] };
 function missingReferenceWarnings(root, kind, data) {
@@ -23455,6 +23463,9 @@ function splitChapterUnlocked(root, options) {
   } else if (!point.atBreak && scenes[keep - 1] !== undefined) {
     warnings.push(warn("split-scenes", `--at "${marker}" falls inside the text of ${scenes[keep - 1].id}, whose record stays in ${chapter.id}; if the scene now belongs to ${newId}, or needs a record in each, use story move scene and story add scene`, label));
   }
+  if (run.length === 0) {
+    warnings.push(...abandonedThreadWarnings(project, newId));
+  }
   const referencing = chapterReferenceFiles(project.root, chapter.id, [chapter.file, ...scenes.map((scene) => scene.file)]);
   if (referencing.length > 0) {
     warnings.push(warn("split-references", `${referencing.join(", ")} still ${referencing.length === 1 ? "names" : "name"} ${chapter.id}, which now holds only the text before the split: check whether ${referencing.length === 1 ? "it" : "any of them"} should name ${newId} instead`, referencing.length === 1 ? referencing[0] : null));
@@ -23810,6 +23821,13 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   }
   const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
+}
+function abandonedThreadWarnings(project, chapterId) {
+  const files = [...project.promises, ...project.clues, ...project.questions].filter((entry) => entry.status === "abandoned" && [entry.planted, entry.payoff, entry.introduced].includes(chapterId)).map((entry) => projectPath(project.root, entry.file)).sort();
+  if (files.length === 0) {
+    return [];
+  }
+  return [warn("adopted-references", `${chapterId} was already named by abandoned threads, and those references now point at the new chapter: ${files.join(", ")}. Clear them if the cut threads do not belong there`)];
 }
 function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;

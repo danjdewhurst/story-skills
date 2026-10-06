@@ -1055,7 +1055,7 @@ Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-pla
 
 For promises and clues, `story continuity` errors when `payoff` comes before `planted`, when a `paid-off` entry has no `payoff` chapter, and when a `planted` entry has no `planted` chapter. It warns when a `planted` entry's `payoff` chapter is already at or behind the latest chapter past `outline`, or its `payoff` is unset and it was planted at least three chapters before that chapter, and when a promise records a `planted` chapter but is still `planned`. When `story.md` has `status: complete`, any `open` question or `planned` or `planted` promise or clue is an error.
 
-`status: abandoned` marks a thread cut during discovery drafting: `story continuity` skips abandoned questions, promises, and clues entirely, and `story links` lets their chapter fields keep a scheduled `chapter-NN` that was never written (see [References and backlinks](#references-and-backlinks)). [What the status values mean](#what-the-status-values-mean) sets out how `abandoned` differs from `dropped`.
+`status: abandoned` marks a thread cut during discovery drafting: `story continuity` skips abandoned questions, promises, and clues entirely, and `story links` lets an abandoned promise or clue keep a `planted` or `payoff` chapter, and an abandoned question an `introduced` chapter, that was never written (see [References and backlinks](#references-and-backlinks)). [What the status values mean](#what-the-status-values-mean) sets out how `abandoned` differs from `dropped`.
 
 ### Exemptions
 
@@ -1347,7 +1347,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Scene | `chapter` | Chapter |
 | Scene | `location` | Location |
 | Chapter, scene | `arcs-advanced` | Arc |
-| Question | `introduced`, `resolved` | Chapter; `introduced` may be a scheduled `chapter-NN` while `status: open`, and both may while `status: abandoned` (see below) |
+| Question | `introduced`, `resolved` | Chapter; `introduced` may be a scheduled `chapter-NN` while `status` is `open` or `abandoned` (see below) |
 | Promise, clue | `planted`, `payoff` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | Question, promise, clue | `characters` | Character |
 | Promise, clue | `arcs` | Arc |
@@ -1356,7 +1356,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Arc bodies | any `chapter-NN` token | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see below) |
 | `plot/timeline.md`, arc bodies, matter bodies | relative links to `.md` files, except `_index.md` and `*` wildcard targets (links to non-entity files such as `story.md` are reported missing) | Existing entity file, named by its kebab-case id, inside the project |
 
-A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced` and a research note's `used-in`, since research often comes before the chapter that needs it. So may any `chapter-NN` in an arc body, where Plot Points and Foreshadowing rows plan chapters not yet written. The number must be 1 or more and the id must use the spelling `story add chapter` writes: `chapter-1` and `chapter-003` are reported as missing, since they would never match `chapter-01` or `chapter-03` once that chapter is added, and `chapter-00` is never a chapter. Once the status is `planted`, `paid-off`, or `dropped`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `resolved` chapter must exist, as must its `introduced` chapter once it is no longer `open`. An `abandoned` promise, clue, or question is the exception: the thread was cut and `story continuity` skips it, so any of its chapter fields may still name the scheduled `chapter-NN` it was planned for, and cutting a planned thread needs only the status change. The spelling rules above still apply.
+A promise or clue can schedule its setup and payoff ahead of the drafted book: `payoff`, and `planted` while `status: planned`, may name a `chapter-NN` that has no file yet. So may an `open` question's `introduced` and a research note's `used-in`, since research often comes before the chapter that needs it. So may any `chapter-NN` in an arc body, where Plot Points and Foreshadowing rows plan chapters not yet written. The number must be 1 or more and the id must use the spelling `story add chapter` writes: `chapter-1` and `chapter-003` are reported as missing, since they would never match `chapter-01` or `chapter-03` once that chapter is added, and `chapter-00` is never a chapter. Once the status is `planted`, `paid-off`, or `dropped`, the `planted` chapter must exist, and once it is `paid-off`, so must the `payoff` chapter. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist. An `abandoned` thread may have been cut before its setup reached the page, so it schedules like a `planned` promise or clue or an `open` question: its `planted` or `introduced` chapter, and a promise's or clue's `payoff`, may still name the `chapter-NN` it was planned for, and cutting a planned thread needs only the status change. A question's `resolved` chapter still must exist, since an `open` question never records one. A chapter added later with that number takes over the reference: `story add chapter` and `story split` warn (`adopted-references`), so you can clear the field if the cut thread does not belong there.
 
 `story continuity`, not `story links`, checks the ids in `continuity/state.md`: `character`, `location`, `artifact`, `owner`, `learned-in`, and `since` must name existing entities, and `fact` must be kebab-case.
 
@@ -1596,7 +1596,7 @@ Scene status is not read by any check beyond validation; chapter status drives t
 | `open` | Raised and not yet answered. | `story add question` default without `--resolved`. Error if `resolved` is set, and when `story.md` is `complete`. Warns `question-unanswered` once twelve drafted chapters follow `introduced` with no `resolved` chapter. Counted by `story next`. |
 | `answered`, `resolved` | Answered on the page. | `story add question --resolved` defaults to `answered`. Error if no `resolved` chapter is recorded. The CLI treats the two the same. |
 | `dropped` | Deliberately left unanswered, but still part of the book. | Still checked: `resolved` must not come before `introduced`. |
-| `abandoned` | Cut from the book, kept on record. | Skipped entirely by `story continuity`. `introduced` and `resolved` may name a scheduled `chapter-NN` with no file yet. |
+| `abandoned` | Cut from the book, kept on record. | Skipped entirely by `story continuity`. `introduced` may name a scheduled `chapter-NN` with no file yet; `resolved` must exist. |
 
 **Promise and clue status:**
 
@@ -1608,7 +1608,7 @@ Scene status is not read by any check beyond validation; chapter status drives t
 | `dropped` | The setup stays in the book but will not be paid off. | No gap warning and no completion error, but still checked: `payoff` must not come before `planted`, and the `planted` chapter must exist. |
 | `abandoned` | The thread was cut, usually during discovery drafting, and kept on record. | Skipped entirely by `story continuity`. `planted` and `payoff` may name a scheduled `chapter-NN` with no file yet. |
 
-So `dropped` and `abandoned` differ only in how much checking remains: a dropped entry is still in the book, so its chapter order is checked and its `planted` or `introduced` chapter must exist, while an abandoned one is ignored by `story continuity` altogether and may name chapters that were never written. The [discovery-drafting skill](../skills/discovery-drafting/references/dead-ends.md) uses `abandoned` for cut threads.
+So `dropped` and `abandoned` differ only in how much checking remains: a dropped entry is still in the book, so its chapter order is checked and its `planted` or `introduced` chapter must exist, while an abandoned one is ignored by `story continuity` altogether and may keep the chapters it was planned for, even ones never written. The [discovery-drafting skill](../skills/discovery-drafting/references/dead-ends.md) uses `abandoned` for cut threads.
 
 ## Scanning limits and safety
 

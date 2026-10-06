@@ -23,6 +23,7 @@ import {
   validateProject,
   validateProjectOf
 } from "../src/story.js";
+import { CLUE_STATUSES, PROMISE_STATUSES, QUESTION_STATUSES } from "../src/scan.js";
 import { makeTempDir, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function addStoryEntities(root) {
@@ -730,39 +731,92 @@ payoff: chapter-01
     // Each thread was scheduled for chapter 9, then cut before it was written.
     writeMarkdown(path.join(root, "continuity", "promises", "duel.md"), "title: Duel\nstatus: abandoned\nplanted: chapter-09\npayoff: chapter-12", "# Duel\n");
     writeMarkdown(path.join(root, "continuity", "clues", "ring.md"), "title: Ring\nstatus: abandoned\nplanted: chapter-09\npayoff: chapter-12", "# Ring\n");
-    writeMarkdown(path.join(root, "continuity", "questions", "who.md"), "title: Who\nstatus: abandoned\nintroduced: chapter-09\nresolved: chapter-12", "# Who\n");
+    writeMarkdown(path.join(root, "continuity", "questions", "who.md"), "title: Who\nstatus: abandoned\nintroduced: chapter-09", "# Who\n");
     expect(messages(validateLinks(root).errors)).toEqual([]);
     expect(messages(checkContinuity(scanProject(root)).errors)).toEqual([]);
 
-    // A typo is still reported, and a dropped thread stays in the book, so
-    // its setup must be on the page.
-    writeMarkdown(path.join(root, "continuity", "promises", "typo.md"), "title: Typo\nstatus: abandoned\nplanted: chapter-1\npayoff: chapter-00", "# Typo\n");
-    writeMarkdown(path.join(root, "continuity", "promises", "kept.md"), "title: Kept\nstatus: dropped\nplanted: chapter-09", "# Kept\n");
-    writeMarkdown(path.join(root, "continuity", "questions", "why.md"), "title: Why\nstatus: dropped\nintroduced: chapter-09", "# Why\n");
-    expect(messages(validateLinks(root).errors)).toEqual([
-      "continuity/questions/why.md references missing chapter chapter-09",
-      "continuity/promises/kept.md references missing chapter chapter-09",
-      "continuity/promises/typo.md references missing chapter chapter-1",
-      "continuity/promises/typo.md references missing chapter chapter-00"
-    ]);
+    // An open question never records an answer, so one abandoned before its
+    // answer has none: a resolved chapter must be written.
+    writeMarkdown(path.join(root, "continuity", "questions", "why.md"), "title: Why\nstatus: abandoned\nintroduced: chapter-01\nresolved: chapter-12", "# Why\n");
+    expect(messages(validateLinks(root).errors)).toEqual(["continuity/questions/why.md references missing chapter chapter-12"]);
   });
 
-  test("add accepts unwritten chapters on an abandoned thread and refuses what links rejects", () => {
+  test("add refuses a thread's chapter exactly when links rejects it, at every status", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Thread Rules", force: false }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    // The statuses at which each field may name chapter-09, which has no file:
+    // a setup not on the page yet (planned, open, or cut before it was), and
+    // any payoff not yet paid off. A resolved chapter must always be written.
+    const scheduled = {
+      promise: { planted: ["planned", "abandoned"], payoff: ["planned", "planted", "dropped", "abandoned"] },
+      clue: { planted: ["planned", "abandoned"], payoff: ["planned", "planted", "dropped", "abandoned"] },
+      question: { introduced: ["open", "abandoned"], resolved: [] }
+    };
+    const statuses = { promise: PROMISE_STATUSES, clue: CLUE_STATUSES, question: QUESTION_STATUSES };
+    const cases = [];
+    for (const [kind, fields] of Object.entries(scheduled)) {
+      for (const status of statuses[kind]) {
+        for (const [field, allowed] of Object.entries(fields)) {
+          // chapter-1 (beside chapter-01), chapter-9, and chapter-00 are
+          // typos, and epilogue names no chapter.
+          for (const value of ["chapter-09", "chapter-1", "chapter-9", "chapter-00", "epilogue"]) {
+            const id = `${kind}-${status}-${field}-${value}`;
+            let added = true;
+            try {
+              createEntity(root, { kind, name: `Add ${id}`, status, [field]: value });
+            } catch {
+              added = false;
+            }
+            writeMarkdown(path.join(root, "continuity", `${kind}s`, `hand-${id}.md`), `title: Hand\nstatus: ${status}\n${field}: ${value}`, "# Hand\n");
+            cases.push({ id, dir: `continuity/${kind}s`, added, expected: value === "chapter-09" && allowed.includes(status) });
+          }
+        }
+      }
+    }
+    const errors = messages(validateLinks(root).errors);
+    const linked = (file) => !errors.some((error) => error.startsWith(`${file} `));
+    expect(cases.filter((entry) => entry.added !== entry.expected).map((entry) => entry.id)).toEqual([]);
+    expect(cases.filter((entry) => linked(`${entry.dir}/hand-${entry.id}.md`) !== entry.expected).map((entry) => entry.id)).toEqual([]);
+    expect(cases.filter((entry) => entry.added && !linked(`${entry.dir}/add-${entry.id}.md`)).map((entry) => entry.id)).toEqual([]);
+    expect(cases.filter((entry) => entry.expected)).toHaveLength(14);
+  });
+
+  test("add says why it refuses a thread's unwritten chapter", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ cwd, title: "Abandoned Adds", force: false }).root;
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-09", payoff: "chapter-12", status: "abandoned" });
-    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-09", payoff: "chapter-12", status: "abandoned" });
-    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-09", resolved: "chapter-12", status: "abandoned" });
-    expect(messages(validateLinks(root).errors)).toEqual([]);
-
-    expect(() => createEntity(root, { kind: "promise", name: "Kept", planted: "chapter-09", status: "dropped" }))
-      .toThrow("--planted chapter-09 is not written yet: a dropped promise needs its planted chapter");
+    for (const kind of ["promise", "clue"]) {
+      expect(() => createEntity(root, { kind, name: "Kept", planted: "chapter-09", status: "dropped" }))
+        .toThrow(`--planted chapter-09 is not written yet: a dropped ${kind} stays in the book, so its setup must be on the page. Use --status abandoned for a setup that was cut`);
+    }
     // --resolved alone makes the question answered.
     expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-09", resolved: "chapter-01" }))
       .toThrow("--introduced chapter-09 is not written yet: an answered question needs its introduced chapter");
-    expect(fs.readdirSync(path.join(root, "continuity", "promises")).sort()).toEqual(["_index.md", "duel.md"]);
-    expect(fs.readdirSync(path.join(root, "continuity", "questions")).sort()).toEqual(["_index.md", "who.md"]);
+    expect(() => createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-12", status: "abandoned" }))
+      .toThrow("--resolved chapter-12 is not written yet: a question's resolved chapter must exist");
+    expect(() => createEntity(root, { kind: "promise", name: "Duel", payoff: "epilogue", status: "abandoned" }))
+      .toThrow("--payoff epilogue names no chapter: a chapter not written yet must be named chapter-NN, as story add chapter names it");
+    expect(() => createEntity(root, { kind: "research", name: "Lamp Oil", "used-in": ["chapter-01", "epilogue"] }))
+      .toThrow("--used-in epilogue names no chapter");
+    for (const dir of ["promises", "clues", "questions"]) {
+      expect(fs.readdirSync(path.join(root, "continuity", dir))).toEqual(["_index.md"]);
+    }
+  });
+
+  test("a new chapter that an abandoned thread still names warns", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Adopted Plans", force: false }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-02", status: "abandoned" });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02", status: "abandoned" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-02" });
+    const added = createEntity(root, { kind: "chapter", name: "Two" });
+    // The planned clue is meant to land in chapter 2, so it is not listed.
+    expect(added.warnings.map((warning) => warning.message)).toEqual([
+      "chapter-02 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/duel.md, continuity/questions/who.md. Clear them if the cut threads do not belong there"
+    ]);
+    expect(added.warnings[0].code).toBe("adopted-references");
   });
 
   test("rejects malformed scene metadata types", () => {
