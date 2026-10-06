@@ -47,9 +47,10 @@ here unless it brings a procedure of its own.
 Find contradictions, stale references, timeline problems, missing
 backlinks, or word-count drift.
 
-- **Run:** `story reindex .` and `story wordcount . --write`, which
-  correct registry and word-count drift, then `story check .` for the
-  deterministic continuity findings, missing backlinks, and validation.
+- **Run:** `story reindex .`, `story wordcount . --write`, and
+  `story check .`: the first two correct registry and word-count drift,
+  and `check` reports the deterministic continuity findings, missing
+  backlinks, and validation errors.
 - **Check:** what the CLI cannot judge, using the Continuity Audit
   Checklist in `SKILL.md`.
 - **Update:** the chapter, and every dependent record listed in step 6 of

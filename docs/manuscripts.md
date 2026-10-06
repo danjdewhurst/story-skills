@@ -284,7 +284,7 @@ A typical next pass:
 1. Replace the synopsis placeholder in `story.md` and fill in its frontmatter.
 2. Create characters and locations from the candidates with `story add`, then fill each chapter's `pov`, `characters`, and `locations`.
 3. Add arcs, scenes, and continuity entries as you reverse-outline the draft.
-4. Run `story links .` and `story validate .` after each batch of changes.
+4. Run `story reindex .`, `story wordcount . --write`, and `story check .` after each batch of changes.
 
 ## What goes into a manuscript
 

@@ -442,17 +442,15 @@ story add scene "Low Water" --chapter chapter-01 --scene 1 --pov nell-carrow --l
 After each chapter, `chapter-writing` runs:
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story next .
 story pacing .
 story progress . --log
 ```
 
-`story continuity .` prints each finding and exits non-zero on errors. `story next .` can name those same errors as a P0 line and still exit 0, without the findings, so the continuity command is the check.
+`story check .` runs `validate`, `links`, and `continuity`, prints each finding, and exits non-zero on errors. `story next .` can name those same errors as a P0 line and still exit 0, without the findings, so `story check` is the check.
 
 `story pacing .` shows the new chapter beside the rest of the book. Later in the draft, with three short chapters of *The Gannet Point Light* written:
 
@@ -603,11 +601,9 @@ At the midpoint and at draft completion, the skill hands the batch to `revision-
 After each reconcile loop:
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 ```
 
 Log each session with `story progress . --log`. `story validate` warns about chapters that have no scene records yet, which in a discovery project usually means the reverse outline has not been done:
@@ -716,9 +712,8 @@ The skill will not rewrite prose just to satisfy a checklist. If a scene breaks 
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story pacing .
 ```
 
@@ -776,8 +771,8 @@ The CLI has no theme-specific checks: the premise and arc fields are for you and
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 ### Result
@@ -884,11 +879,11 @@ How the skill handles findings:
 After editing the style sheet or revising prose:
 
 ```shell
-story validate .
+story reindex .
+story wordcount . --write
+story check .
 story prose .
 story voices .
-story wordcount . --write
-story links .
 ```
 
 ### Result
@@ -959,11 +954,11 @@ Sensitivity and authenticity reads, and portrayals of real people, go through [E
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
-`story validate` catches the case that matters most: a settled chapter resting on unsettled or unreviewed research. Marking chapter 1 `final` while the drowning note is still open and unreviewed gives:
+`story check` (through `validate`) catches the case that matters most: a settled chapter resting on unsettled or unreviewed research. Marking chapter 1 `final` while the drowning note is still open and unreviewed gives:
 
 ```text
 Project is valid: 0 errors, 2 warnings, 0 dismissed
@@ -1114,11 +1109,9 @@ story passes . --done structure
 ### Checks
 
 ```shell
-story wordcount . --write
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story doctor .
 ```
 
@@ -1219,11 +1212,11 @@ The skill summarises what changed, what was kept on purpose, and any style-sheet
 After editing chapters, character voice fields, or the style sheet:
 
 ```shell
+story reindex .
 story wordcount . --write
+story check .
 story prose .
 story voices .
-story links .
-story validate .
 ```
 
 ### Result
@@ -1320,11 +1313,10 @@ Rounds with a professional editor, and sensitivity or authenticity reads, are se
 ### Checks
 
 ```shell
-story build . --format html
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
+story build . --format html
 ```
 
 The CLI ignores `feedback/`, so reader files never cause validation errors. The checks are there for the continuity questions the synthesis touches.
@@ -1435,9 +1427,8 @@ After adding or editing research notes, matter pages, `story.md` metadata, or ch
 
 ```shell
 story reindex .
-story links .
-story validate .
 story wordcount . --write
+story check .
 ```
 
 ### Result
@@ -1463,11 +1454,10 @@ Is the manuscript ready to query?
 The skill runs:
 
 ```shell
-story validate .
-story links .
-story continuity .
-story prose .
+story reindex .
 story wordcount . --write
+story check .
+story prose .
 story report .
 ```
 
@@ -1548,9 +1538,9 @@ To assemble a collection, the skill lists your candidate stories with their leng
 After the readiness check, or after any change made for submission:
 
 ```shell
+story reindex .
 story wordcount . --write
-story validate .
-story continuity .
+story check .
 story prose .
 ```
 
@@ -1588,11 +1578,10 @@ Help me self-publish this book. Is it ready?
 The skill runs the checks and builds the metadata sheet:
 
 ```shell
-story validate .
-story links .
-story continuity .
-story prose .
+story reindex .
 story wordcount . --write
+story check .
+story prose .
 story build . --format metadata
 ```
 
@@ -1704,7 +1693,7 @@ After editing `story.md` metadata, adding matter pages, or changing the manuscri
 ```shell
 story reindex .
 story wordcount . --write
-story validate .
+story check .
 story build . --format metadata
 ```
 
@@ -1794,9 +1783,9 @@ Prepare the book for a Spanish translation.
 Following the [translation reference](../skills/adaptation/references/translation.md), the skill turns the glossary into a term base (a `## Translations` section on each term, plus `pronunciation` where it helps) and checks translated names with `story names`. It copies the project to a new folder without `dist/`, sets `language`, removes `series`, `book-number`, `follows`, and `precedes` from the copied `story.md` (copied values break `story links` and `story series`), keeps every id as the English kebab-case id, and writes a target-language style sheet. After translation it checks the new project and compares the chapter sets:
 
 ```shell
-story validate ../the-gannet-point-light-es
-story links ../the-gannet-point-light-es
-story continuity ../the-gannet-point-light-es
+story reindex ../the-gannet-point-light-es
+story wordcount ../the-gannet-point-light-es --write
+story check ../the-gannet-point-light-es
 story compare ../the-gannet-point-light-es --against .
 ```
 
@@ -1806,11 +1795,11 @@ After adding `pronunciation` or glossary translations, or setting `form` or `lan
 
 ```shell
 story reindex .
-story links .
-story validate .
+story wordcount . --write
+story check .
 ```
 
-After changing chapters in a picture-book or translated project, also run `story wordcount . --write`.
+Run the same block after changing chapters in a picture-book or translated project.
 
 ### Result
 

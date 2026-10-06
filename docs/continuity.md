@@ -546,7 +546,7 @@ Continuity is consistent: 0 errors, 0 warnings, 1 dismissed
 dismissed: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet (exemption: The letter pays off in book two; the gap is deliberate.)
 ```
 
-After any continuity fix, run the rest of the maintenance loop (`story reindex .`, `story wordcount . --write`, `story links .`, `story validate .`) so registries and backlinks match.
+After any continuity fix, run the maintenance block (`story reindex .`, `story wordcount . --write`, and `story check .`) so registries and backlinks match and the fix is confirmed.
 
 ## Exemptions
 
@@ -1587,11 +1587,11 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Start of a session | `story next .` |
 | Before naming a character, place, or term | `story names "<candidate>" --path .` |
 | Before renaming or removing a character, place, or term | `story mentions <kind> <id> --path .` |
-| After drafting or revising a chapter | `story wordcount . --write`, `story reindex .`, `story links .`, `story validate .`, `story continuity .`, `story pacing .` |
+| After drafting or revising a chapter | `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .` |
 | Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
 | Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
-| Inserting, reordering, splitting, or merging chapters and scenes | `story split <chapter-id> --at <marker>`, `story merge <chapter-id> <next-chapter-id>`, `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story wordcount . --write`, `story validate .`, `story links .`, `story continuity .` |
+| Inserting, reordering, splitting, or merging chapters and scenes | `story split <chapter-id> --at <marker>`, `story merge <chapter-id> <next-chapter-id>`, `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story reindex .`, `story wordcount . --write`, and `story check .` |
 | Planting or revealing a mystery clue | `story clues .`, `story diagram clues` |
 | Adding places and journeys | `story diagram locations`, then `story continuity .` for route travel |
 | After dialogue changes | `story voices .` |

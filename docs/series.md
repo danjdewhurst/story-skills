@@ -403,13 +403,12 @@ After changing series links or carried entities, run these in each affected book
 
 ```shell
 story reindex .
-story links .
-story validate .
-story continuity .
+story wordcount . --write
+story check .
 story series .
 ```
 
-`reindex` rebuilds the registries after you copy entity files in, `links` checks series links and carried references, `validate` checks the series fields, `continuity` checks fact ids within the book, and `series` checks canon across books. To run them in CI, see [Automation and CI](automation.md).
+`reindex` rebuilds the registries after you copy entity files in, `wordcount --write` keeps the chapter counts current, `check` runs `links` (series links and carried references), `validate` (the series fields), and `continuity` (fact ids within the book), and `series` checks canon across books. To run them in CI, see [Automation and CI](automation.md).
 
 ## Short-story collections and anthologies
 
@@ -463,8 +462,9 @@ salt-and-lantern/
 5. Run the maintenance checks, then build:
 
    ```shell
+   story reindex .
    story wordcount . --write
-   story validate .
+   story check .
    story build . --format epub
    story build . --format shunn
    ```
