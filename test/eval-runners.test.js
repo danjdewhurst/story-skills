@@ -3,13 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { main as compareMain } from "../evals/compare-outputs.js";
-import { main as runSkillMain } from "../evals/run-skill.js";
+import { main as runSkillMain, stripPreamble } from "../evals/run-skill.js";
+import { checkDraft, loadFixture } from "../evals/run-evals.js";
 
 // Both runners call `claude -p` through an injected spawn, so these tests
 // answer for the model and never start a real process.
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const goodDraft = fs.readFileSync(path.join(repoRoot, "evals", "examples", "canon-keeping.md"), "utf8");
+const goodChapterFile = fs.readFileSync(path.join(repoRoot, "evals", "examples", "branch-choices.md"), "utf8");
 
 let logs;
 let originalLog;
@@ -132,6 +134,61 @@ describe("run-skill with a stubbed model", () => {
     expect(runSkillMain(["--out", out, "canon-keeping"], { spawn: missing.spawn })).toBe(1);
     expect(missing.calls).toHaveLength(1);
     expect(output()).toContain("FAIL draft call: Claude Code CLI (`claude`) not found on PATH.");
+  });
+});
+
+describe("a fixture's keep option", () => {
+  const chapterFile = "---\ntitle: One\nchoices:\n  - text: Go on\n    to: chapter-02\n---\n\n# Chapter 1: One\n\n## Chapter Text\n\nYou go on.\n";
+
+  test("keeps only the chapter text by default and the whole file with keep: file", () => {
+    expect(stripPreamble(chapterFile)).toBe("You go on.\n");
+    expect(stripPreamble(chapterFile, "chapter-text")).toBe("You go on.\n");
+    expect(stripPreamble(`Here is the chapter:\n${chapterFile}`, "file")).toBe(chapterFile);
+  });
+
+  test("run-skill asks for the whole file and scores its frontmatter", () => {
+    const out = makeTempDir("story-run-skill-");
+    const stub = modelStub({ draft: goodChapterFile });
+    expect(runSkillMain(["--out", out, "branch-choices"], { spawn: stub.spawn })).toBe(0);
+    expect(stub.calls[0].system).toContain("story-skills interactive-fiction workflow");
+    expect(stub.calls[0].system).toContain("return only the complete file the brief asks for, frontmatter included");
+    expect(stub.calls[0].system).not.toContain("return only the final draft prose");
+    // The judge keeps the prose rule: it is not drafting a file.
+    expect(stub.calls[1].system).toContain("return only the final draft prose");
+    expect(fs.readFileSync(path.join(out, "branch-choices.md"), "utf8")).toBe(goodChapterFile);
+    expect(output()).toContain("PASS branch-choices");
+
+    logs.length = 0;
+    const baseline = modelStub({ draft: goodChapterFile });
+    expect(runSkillMain(["--no-skill", "--no-judge", "--out", out, "branch-choices"], { spawn: baseline.spawn })).toBe(0);
+    expect(baseline.calls[0].system).toContain("frontmatter included");
+  });
+
+  test("branch-choices fails a lazy chapter file and a prose-only reply", () => {
+    const { checks, inputText } = loadFixture(path.join(repoRoot, "evals", "fixtures", "branch-choices"));
+    const failed = (draft) => checkDraft(checks, inputText, draft).filter(([ok]) => !ok).map(([, desc]) => desc);
+    expect(failed(goodChapterFile)).toEqual([]);
+
+    const lazy = goodChapterFile
+      .replace("text: Ring the storm bell", 'text: "[[Ring the storm bell->chapter-05]]"')
+      .replace("to: chapter-06", "to: chapter-04");
+    const lazyFailures = failed(lazy);
+    expect(lazyFailures).toContain('canon kept: "to: chapter-06"');
+    expect(lazyFailures).toContain("trap avoided: /\\[\\[/");
+    expect(lazyFailures.some((d) => d.startsWith("trap avoided: /(?:^|\\n)[ \\t-]*text:"))).toBe(true);
+    expect(lazyFailures.some((d) => d.startsWith("trap avoided: /(?:^|\\n)[ \\t-]*to:"))).toBe(true);
+
+    expect(failed(goodChapterFile.replace(/to: chapter-05/, "to: chapter-09"))).toEqual([
+      expect.stringContaining('canon kept: "to: chapter-05"'),
+      expect.stringMatching(/^trap avoided: .*to:/),
+    ]);
+
+    const proseOnly = stripPreamble(goodChapterFile);
+    expect(failed(proseOnly)).toEqual(expect.arrayContaining([
+      'canon kept: "choices"',
+      'canon kept: "to: chapter-05"',
+      'canon kept: "title: The Storm"',
+    ]));
   });
 });
 

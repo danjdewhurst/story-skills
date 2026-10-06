@@ -1031,7 +1031,7 @@ npx skills add forjd/better-writing
 
 ## Testing skill changes
 
-The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (thirty-six fixtures across all 24 skills, including drafting and line editing in French, Japanese, and Arabic, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a brief seeded with canon that must survive and traps a lazy output would spring: a draft or an edit for the prose skills, and a file such as a query letter, a synthesis, or a style sheet for the others. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
+The [`evals/`](../evals/) directory holds regression fixtures for the fiction-writing skills (thirty-seven fixtures across all 24 skills, including drafting and line editing in French, Japanese, and Arabic, listed by skill in its [skill coverage table](../evals/README.md#skill-coverage)). Each fixture is a brief seeded with canon that must survive and traps a lazy output would spring: a draft or an edit for the prose skills, and a file such as a query letter, a synthesis, or a style sheet for the others. Agents using the skills never load it. See the [Development guide](development.md#evals) and [`evals/README.md`](../evals/README.md) before changing a skill's instructions.
 
 ## See also
 
