@@ -78,6 +78,7 @@ Which commands can report findings (exit `1`):
 | `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `diagram` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
 | `names` | A candidate name clashes with an existing one. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
+| `doctor --fix` | A check still reports an error after its safe repairs. |
 | `build`, `export`, `context`, `add`, `rename`, `move`, `remove` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
 | All other commands | Never: they succeed, or stop with `2`, `3`, or `4`. |
 

@@ -37,6 +37,7 @@ import {
   formatActionReport,
   formatDoctorReport,
   formatProjectReport,
+  fixProject,
   knowledgeAtChapter,
   migrateProject,
   moveEntity,
@@ -593,11 +594,19 @@ export const COMMANDS = [
   {
     name: "doctor",
     usage: "doctor [path]",
-    summary: ["Show health checks plus actionable repair steps"],
+    summary: ["Show health checks plus actionable repair steps;", "--fix applies the safe repairs first"],
     project: "positional",
-    options: ["json"],
-    run({ parsed, io, root, overrides }) {
-      const report = projectActions(root(), { displayPath: displayPath(parsed), overrides });
+    options: ["fix", ...WRITE_OPTIONS],
+    run(context) {
+      const { parsed, io, root, overrides } = context;
+      const options = { displayPath: displayPath(parsed), overrides };
+      if (isTruthy(parsed.options.fix)) {
+        return runDoctorFix(context, options);
+      }
+      if (isTruthy(parsed.options["dry-run"])) {
+        throw usageError("--dry-run previews doctor --fix: add --fix");
+      }
+      const report = projectActions(root(), options);
       if (wantsJson(parsed)) {
         return reportProjectJson(io, "doctor", report);
       }
@@ -800,11 +809,59 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe) {
       ok: findings.ok,
       data: { ...writeResultData(projectRoot, result), dryRun, changes },
       diagnostics: diagnosticsFrom(findings, command),
-      writes: dryRun ? [] : changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.join(projectRoot, change.path))
+      writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
   io.stdout.write(dryRun ? formatPreview(command, changes) : describe(result));
   return writeFindings(io, findings);
+}
+
+// story doctor --fix: applies the safe repairs under the project lock (or,
+// with --dry-run, on a copy, as runWrite does), then prints what it changed
+// and the diagnosis that remains. Unlike doctor, it exits 1 while any check
+// still reports an error, since those need the writer.
+function runDoctorFix({ parsed, io, root }, options) {
+  const projectRoot = root();
+  const dryRun = isTruthy(parsed.options["dry-run"]);
+  const fix = (target) => fixProject(target, options);
+  const { result: report, changes } = dryRun ? previewChanges(projectRoot, fix) : recordChanges(projectRoot, () => fix(projectRoot));
+  const ok = report.validation.ok && report.links.ok && report.continuity.ok;
+  const { repairs, stopped, ...diagnosis } = report;
+  if (wantsJson(parsed)) {
+    return reportProjectJson(io, "doctor", { ...diagnosis, fix: { dryRun, repairs, stopped, changes } }, {
+      ok,
+      writes: dryRun ? [] : writtenFiles(projectRoot, changes)
+    });
+  }
+  io.stdout.write(`${formatRepairs(repairs, stopped, changes, dryRun)}\n${formatDoctorReport(diagnosis)}`);
+  return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
+}
+
+// The repairs doctor --fix applied, each with the changes it made.
+function formatRepairs(repairs, stopped, changes, dryRun) {
+  const lines = [dryRun ? "Repairs (dry run; nothing was written):" : "Repairs:"];
+  if (repairs.length === 0 && stopped === null) {
+    lines.push("- No safe repairs needed");
+  }
+  for (const repair of repairs) {
+    const count = repair.changes.length === 0 ? "no changes" : `${repair.changes.length} ${repair.changes.length === 1 ? "change" : "changes"}`;
+    lines.push(`- story ${repair.command} (${repair.codes.join(", ")}): ${count}`);
+    for (const change of repair.changes) {
+      lines.push(`  ${change.action.padEnd(7)} ${change.path}`);
+    }
+  }
+  if (stopped !== null) {
+    lines.push(`- Stopped: ${stopped}`);
+  }
+  if (dryRun) {
+    lines.push(`Dry run: story doctor --fix would make ${changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}; the checks below are what would remain`);
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+// The absolute paths of the files a run created or updated, for --json writes.
+function writtenFiles(projectRoot, changes) {
+  return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.join(projectRoot, change.path));
 }
 
 // The changes a --dry-run would make, one per line, then a summary.
@@ -902,16 +959,18 @@ function checkCounts(result) {
 // report, next, and doctor run validate, links, and continuity: their
 // findings become diagnostics coded by check, each listed once (see
 // uniqueCheckFindings), and the data summarizes each check. These commands
-// exit 0 whatever the checks find, so ok is true.
-function reportProjectJson(io, command, report) {
+// exit 0 whatever the checks find, so ok is true, except doctor --fix, which
+// passes its own ok and the files it wrote.
+function reportProjectJson(io, command, report, { ok = true, writes = [] } = {}) {
   const { validation, links, continuity, ...rest } = report;
   const checks = { validate: validation, links, continuity };
   const diagnostics = Object.entries(uniqueCheckFindings(checks)).flatMap(([name, check]) => diagnosticsFrom(check, name));
   return writeJsonResult(io, {
     command,
-    ok: true,
+    ok,
     data: { ...rest, checks: checkSummaries(checks) },
-    diagnostics
+    diagnostics,
+    writes
   });
 }
 

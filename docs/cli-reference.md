@@ -62,7 +62,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`series [path]`](#series) | Order linked books and check shared canon | No |
 | | [`report [path]`](#report) | Summarise inventory, progress, and checks | No |
 | | [`next [path]`](#next) | Recommend the next actions | No |
-| | [`doctor [path]`](#doctor) | Show health checks and repair steps | No |
+| | [`doctor [path]`](#doctor) | Show health checks and repair steps; `--fix` applies the safe ones | With `--fix` |
 | Craft and revision | [`pacing [path]`](#pacing) | Show scenes, sequels, outcomes, hooks, and length per chapter | No |
 | | [`clues [path]`](#clues) | Show the clue plant and reveal grid and flag fair-play problems | No |
 | | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
@@ -274,11 +274,11 @@ The examples on this page show stdout and stderr together, as a terminal does.
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
-`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `check` (or `validate`, `links`, and `continuity` one at a time) when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `doctor --fix` is the exception: after its repairs it exits 1 while any check still reports an error. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `check` (or `validate`, `links`, and `continuity` one at a time) when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, and `similarity`; and on the commands that change the project in place: `add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount`, and `doctor --fix`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -293,7 +293,7 @@ Every result has the same envelope:
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
-`report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `report --json` always includes `actions`.
+`report`, `next`, and `doctor` put a `checks` summary in `data` (`ok` and error, warning, and dismissed counts for `validate`, `links`, and `continuity`) and list each check's findings in `diagnostics`. They still exit `0`, so their `ok` is `true` even when a check fails: read `data.checks` to gate on them. `doctor --fix` adds `data.fix` (`dryRun`, `repairs` with each repair's `command`, the finding `codes` that called for it, and its `changes`, `stopped`, and every change in `changes`), lists the files it wrote in `writes`, and reports the diagnosis made after its repairs; its `ok` is `false` while a check still reports an error. `report --json` always includes `actions`.
 
 A command that cannot run (an unknown option, a missing argument, a missing project, an unknown id) also prints an envelope when `--json` is on, with `ok: false`, `data: null`, and the error as its one diagnostic, coded `usage-error`, `unusable-project`, `write-refused`, or `command-failed` to match the exit code. `prose - --json` and `voices - --json` report a piped passage as one chapter with `file` `stdin`, and a stdin error, such as empty input, is the error envelope. `--json false` and `--json=off` keep the text output. `--help` and `--version` print their usual text even with `--json`.
 
@@ -332,7 +332,7 @@ The write commands (`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and
 
 ### Previewing changes with --dry-run
 
-`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, and `wordcount --write` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+`add`, `rename`, `move`, `remove`, `reindex`, `migrate`, `wordcount --write`, and `doctor --fix` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
 ```text
 $ story rename character edran-vale "Edran Vane" --dry-run
@@ -366,7 +366,7 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. Generated and rewritten files are written whole or not at all: the new contents go to a hidden temporary file beside the target (`.chapter-01.md.story-<pid>.tmp`), which is flushed to disk and then renamed over it. A full disk, a failed write, or a killed process leaves the old file intact rather than truncated, and the error names the target, not the temporary file (`Cannot write to chapters/chapter-01.md: no space left on the device`). An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`), and the folder must be writable too. A target that is a hard link, such as an `--out` path linked to a chapter, is replaced rather than written through, so the linked file is left unchanged. If a process is killed before the rename, `story validate` warns about the leftover temporary file (`<path> was left by an interrupted write to <target>; delete it once the files beside it look right`). The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
-Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`, `migrate`, and `wordcount --write`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
+Commands that change project files (`add`, `rename`, `remove`, `move`, `reindex`, `migrate`, `wordcount --write`, and `doctor --fix`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. A lock from another machine, such as a container, a cloud agent, or a shared folder, cannot be checked that way: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A project folder the user cannot write to is not locked; the command then fails only if it needs to write. Rewrites also check that each file still holds what the command read, so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`).
 
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
@@ -1502,10 +1502,10 @@ Actions:
 ### doctor
 
 ```text
-story doctor [path]
+story doctor [path] [--fix] [--dry-run] [--json]
 ```
 
-The same checks and actions as `next`, laid out as a health report with the project root and one line per check. Use it when you want to know what is stale or broken. Always exits 0 on a readable project.
+The same checks and actions as `next`, laid out as a health report with the project root and one line per check. Use it when you want to know what is stale or broken. Always exits 0 on a readable project, unless you pass `--fix`.
 
 ```shell
 story doctor
@@ -1527,6 +1527,30 @@ Actions:
 - [P2] Review promises and payoffs: 1 setup/payoff promises need planting or payoff decisions.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
+```
+
+`--fix` first applies the repairs that are mechanical and safe to repeat, each only when the checks raised a finding it fixes, then runs the checks again and prints the report for what remains:
+
+| Repair | Runs on | What it changes |
+|---|---|---|
+| `story migrate` | `schema-version-mismatch`, `missing-required-path` | Adds missing folders and starter registries, sets `schema-version`, and reindexes. Never overwrites a file. |
+| `story wordcount --write` | `stale-word-count` | Rewrites `word-count` (and `character-count`) in chapter frontmatter, then reindexes. |
+| `story reindex` | `stale-registry`, `story-id-mismatch` | Rebuilds the registry tables. Skipped when `migrate` or `wordcount --write` already reindexed. |
+
+It never edits prose and never makes a choice for you: renames, missing references, continuity contradictions, and every other action stay in the report for you to work through. A warning a `story.md` [`severity`](#defaults-and-severity-from-storymd) entry turns off does not call for its repair. `--fix` holds the [project lock](#where-commands-write) for the whole run. If a file fails to parse, the first repair stops with its `Cannot ...` message (`- Stopped: ...`), nothing is written, and no later repair is tried. `--dry-run` runs the same repairs on a copy of the project and prints the checks as they would be afterwards; without `--fix` it is a usage error.
+
+Unlike plain `doctor`, `doctor --fix` exits 1 while any check still reports an error after the repairs, so it can gate a script; warnings alone exit 0.
+
+```text
+$ story doctor --fix
+Repairs:
+- story migrate (missing-required-path): 1 change
+  create  glossary/_index.md
+- story wordcount --write (stale-word-count): 1 change
+  update  chapters/chapter-01.md
+
+# Story Doctor: The Unraveled Thread
+...
 ```
 
 ## Craft and revision commands

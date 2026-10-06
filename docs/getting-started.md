@@ -615,7 +615,7 @@ Continuity is consistent: 0 errors, 0 warnings, 0 dismissed
 <details>
 <summary>For scripts and CI</summary>
 
-`story validate`, `story links`, and `story continuity` exit with status 1 when they find errors, so you can use them as gates in scripts and CI. They print their summary line and findings to stderr, not stdout. `story doctor`, `story next`, and `story report` are reports, not gates, and exit 0 even when checks fail. See [Automation and CI](automation.md#exit-codes).
+`story validate`, `story links`, and `story continuity` exit with status 1 when they find errors, so you can use them as gates in scripts and CI. They print their summary line and findings to stderr, not stdout. `story doctor`, `story next`, and `story report` are reports, not gates, and exit 0 even when checks fail. `story doctor --fix` applies the mechanical repairs (stale word counts and registries, missing registries) and then exits 1 if errors remain. See [Automation and CI](automation.md#exit-codes).
 
 </details>
 

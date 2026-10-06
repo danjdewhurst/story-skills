@@ -13,6 +13,7 @@ import {
   lstatIfExists,
   makeDirectories,
   readTextFile,
+  recordChanges,
   removeFile,
   writeFile
 } from "./files.js";
@@ -44,7 +45,8 @@ import {
 } from "./series.js";
 import { warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile } from "./exemptions.js";
-import { projectError, refusedError, usageError } from "./exit-codes.js";
+import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
+import { projectActions } from "./report.js";
 import {
   STORY_SCHEMA_VERSION,
   REQUIRED_PATHS,
@@ -794,6 +796,55 @@ function migrateProjectUnlocked(root) {
 
   const reindexed = reindexProject(projectRoot);
   return { root: projectRoot, changed: changed.concat(reindexed.changed) };
+}
+
+// The repairs `story doctor --fix` applies, in order. Each runs only when
+// the diagnosis raised one of its codes (a warning story.md severity turned
+// off is not raised), rewrites only registries and frontmatter the CLI
+// maintains, never prose, and changes nothing when run again. migrate only
+// adds missing folders and starter files and sets schema-version, so it is
+// safe; it and wordcount --write both reindex when they finish, so reindex
+// runs on its own only when neither did.
+const DOCTOR_REPAIRS = [
+  { command: "migrate", codes: ["schema-version-mismatch", "missing-required-path"], run: (root) => migrateProject(root) },
+  { command: "wordcount --write", codes: ["stale-word-count"], run: (root) => computeWordCounts(root, { write: true }) },
+  { command: "reindex", codes: ["stale-registry", "story-id-mismatch"], run: (root) => reindexProject(root) }
+];
+
+// story doctor --fix: diagnoses the project, applies the safe repairs the
+// findings call for, and diagnoses it again, all under the project lock, so
+// the report is what remains for the writer to do. Returns that second
+// diagnosis (see projectActions) with `repairs`, one { command, codes,
+// changes } per repair applied, and `stopped`, the message of a repair
+// that could not run (a file that does not parse), after which none of the
+// later ones is tried; null when every due repair ran.
+export function fixProject(root, options = {}) {
+  return withProjectLock(root, () => {
+    const before = projectActions(root, options);
+    const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+    const repairs = [];
+    let stopped = null;
+    for (const repair of DOCTOR_REPAIRS) {
+      const codes = repair.codes.filter((code) => raised.has(code));
+      if (codes.length === 0 || (repair.command === "reindex" && repairs.length > 0)) {
+        continue;
+      }
+      try {
+        const { changes } = recordChanges(root, () => repair.run(root));
+        repairs.push({ command: repair.command, codes, changes });
+      } catch (error) {
+        // A project error is raised before the repair writes anything; a
+        // refused write (a lock, a file changed on disk) stops the command.
+        if (error?.exitCode !== EXIT_CODES.project) {
+          throw error;
+        }
+        stopped = error.message;
+        break;
+      }
+    }
+    const after = repairs.length > 0 ? projectActions(root, options) : before;
+    return { ...after, repairs, stopped };
+  });
 }
 
 const ENTITY_ENUM_OPTIONS = {
