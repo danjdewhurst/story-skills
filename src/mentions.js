@@ -161,17 +161,28 @@ export function findMentions(text, names) {
 // also uses it as an ordinary lower-case word ("Rose from her chair" in a
 // chapter with "a rose"), so the capital may be the sentence's, not the
 // name's. Used by the continuity check and rename --prose; story mentions
-// lists every match.
-export function ambiguousMention(text, mention, pack, find = wordMatcher(text)) {
+// lists every match. `uses` is wordUse(text), shared by every mention in
+// the text.
+export function ambiguousMention(text, mention, pack, uses = wordUse(text)) {
   if (/\s/u.test(mention.text)) {
     return false;
   }
   const written = nfc(mention.text);
   const lower = lowerCase(written, pack);
-  if (lower === written || !opensSentence(text, mention.start)) {
-    return false;
-  }
-  return find(new RegExp(wholeWords(escapeRegExp(lower), lower), "gu"), { first: true }).length > 0;
+  return lower !== written && opensSentence(text, mention.start) && uses(lower);
+}
+
+// Whether `text` uses a word (in NFC) as a whole word, as written: the
+// text is searched once for each word, however often it is asked.
+function wordUse(text) {
+  const find = wordMatcher(text);
+  const known = new Map();
+  return (word) => {
+    if (!known.has(word)) {
+      known.set(word, find(new RegExp(wholeWords(escapeRegExp(word), word), "gu"), { first: true }).length > 0);
+    }
+    return known.get(word);
+  };
 }
 
 function opensSentence(text, start) {
@@ -257,7 +268,7 @@ export function auditMentions(project, { unnamed = false } = {}) {
       continue;
     }
     const label = projectPath(project.root, chapter.file);
-    const find = wordMatcher(prose.text);
+    const uses = wordUse(prose.text);
     const mentions = findMentions(prose.text, names);
     const named = new Set();
     const unlisted = new Map();
@@ -274,7 +285,7 @@ export function auditMentions(project, { unnamed = false } = {}) {
       if (kind !== "character" || cut.has(id) || listed.has(id) || unlisted.has(id)) {
         continue;
       }
-      if (!ambiguousMention(prose.text, mention, pack, find)) {
+      if (!ambiguousMention(prose.text, mention, pack, uses)) {
         unlisted.set(id, mention.text);
       }
     }
@@ -440,7 +451,7 @@ export function proseRenames(project, kind, id, newName) {
   for (const [chapter, prose] of drafted) {
     const file = projectPath(project.root, chapter.file);
     const { text, references } = maskLinkTargets(prose.text, BLANKED);
-    const find = wordMatcher(text);
+    const uses = wordUse(text);
     const own = findMentions(text, names).filter((mention) => mention.entities.some((entry) => entry.kind === kind && entry.id === id));
     const located = locateMentions(prose, own);
     let next = "";
@@ -462,7 +473,7 @@ export function proseRenames(project, kind, id, newName) {
         return;
       }
       const reason = references.some(([start, end]) => mention.start < end && start < mention.end) ? "reference-label"
-        : uncertainRename(text, mention, form, pack, find, calendar) ? "ordinary-word" : null;
+        : uncertainRename(text, mention, form, pack, uses, calendar) ? "ordinary-word" : null;
       if (reason !== null) {
         result.review.push({ ...where, text: mention.text, excerpt: located[index].excerpt, reason });
         return;
@@ -488,10 +499,10 @@ export function proseRenames(project, kind, id, newName) {
 // come in?", "late in May" for a character called May Dunn). A name
 // written in lower case (a term called aether) is the word itself, and a
 // one-word name that is a month (a character called April) is the name.
-function uncertainRename(text, mention, form, pack, find, calendar) {
+function uncertainRename(text, mention, form, pack, uses, calendar) {
   const [first] = Array.from(form.from);
-  return (first !== lowerCase(first, pack) && ambiguousMention(text, mention, pack, find))
-    || (form.part && !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)));
+  return (form.part && !/\s/u.test(mention.text) && calendar.has(lowerCase(nfc(mention.text), pack)))
+    || (first !== lowerCase(first, pack) && ambiguousMention(text, mention, pack, uses));
 }
 
 // `to` in the shape of `written`, the prose's match for name form `from`:

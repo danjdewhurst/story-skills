@@ -84,6 +84,18 @@ describe("markdown utilities", () => {
     expect(maskLinkTargets("[a](b)")).toEqual({ text: "[a]   ", references: [] });
   });
 
+  test("masks nested, escaped, and wrapped destinations, URLs with brackets, and titles on the next line", () => {
+    const blank = (part) => part.replace(/[^\n]/g, "_");
+    const mask = (text) => maskLinkTargets(text, "_").text;
+    expect(mask("![map](images/a(b(c-Ines))) and [x](img/Ines\\(draft.png) end")).toBe(`![map]${blank("(images/a(b(c-Ines)))")} and [x]${blank("(img/Ines\\(draft.png)")} end`);
+    expect(mask("![x](\n img/Ines.png) end")).toBe(`![x]${blank("(\n img/Ines.png)")} end`);
+    expect(mask("See https://example.com/(Ines) and http://[::1]/Ines now.")).toBe(`See ${blank("https://example.com/(Ines)")} and ${blank("http://[::1]/Ines")} now.`);
+    // A blank line ends the paragraph, and the destination with it.
+    expect(mask("[a](Ines\n\nInes) and \\\\(x)")).toBe("[a](Ines\n\nInes) and \\\\(x)");
+    expect(mask("[ref]: /url\n  \"Ines\"\n[Ines]:\n\n[Ines]")).toBe(`${blank("[ref]: /url\n  \"Ines\"")}\n[Ines]:\n\n[Ines]`);
+    expect(maskLinkTargets("[Ines]:\n\n[Ines]").references).toEqual([]);
+  });
+
   test("counts curly apostrophes, accents, and hyphenated words as single words", () => {
     expect(wordCount("don\u2019t stop")).toBe(2);
     expect(wordCount("na\u00efve caf\u00e9 \u00c9lodie")).toBe(3);
