@@ -79,7 +79,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The output and `--dry-run` list each choice they add or point elsewhere.
 - Codex, byline, credit, and review-copy labels changed in several languages after a review of every language pack. (#539)
   - Arabic and Hebrew codex labels about a character are nouns, so they no longer read as male, and Arabic asks the reader in the passive.
-  - Russian, Ukrainian, and Hindi credits name the work, so they fit any number of editors, writers, or narrators, and a Hindi byline is the name alone.
+  - Russian, Ukrainian, and Hindi credits name the work, so they fit any number of editors, writers, or narrators.
+  - A Hindi byline is the name alone, as in Japanese and Russian, so `story import --bylines` reads none in Hindi.
   - The Russian POV column reads `Фокальный персонаж`, and Arabic names the codex `مرجع القصة`.
   - A codex death column shows the chapter alone in Arabic, Hebrew, Persian, Hindi, Japanese, and Korean, and the note under an empty list agrees with every list in Spanish, Portuguese, French, and Italian.
 - A boolean flag now takes a value only as `--flag=value` (`--heading=false`, `--baseline=false`, `--json=false`), and a boolean word right after a bare flag (`true`, `no`, `0`, and the rest, in any case) is refused with exit 2. So `story add chapter --dry-run No Way Back`, which used to write a chapter titled "Way Back", now writes nothing; put the flag after the title, or the title after `--`. ([#549](https://github.com/danjdewhurst/story-skills/issues/549))
