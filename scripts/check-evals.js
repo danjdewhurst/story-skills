@@ -390,6 +390,7 @@ export function checkEvals(root = ROOT, log = console.log) {
         checks.min_words_ratio !== undefined ||
         checks.max_words !== undefined ||
         checks.paragraphs !== undefined ||
+        checks.lines !== undefined ||
         checks.ends_with_question === true ||
         checks.requires_first_person === true ||
         checks.requires_past_tense === true ||
