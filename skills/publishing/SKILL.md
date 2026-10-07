@@ -102,6 +102,17 @@ Report every pending permission, and every risky note without
 `reviewed-by`, whatever the chapter status. If `story passes .` shows unfinished revision passes, say so
 before production starts.
 
+`story export` and every build that prints matter pages (markdown, EPUB,
+DOCX, HTML, print, narration) leave out a page whose `permission` is
+`pending` and warn `permission-pending-left-out` for it, so a file built
+for upload, a printer, or readers never carries the uncleared quote.
+Report each such warning: the book builds without that page until the
+author confirms the permission. Add `--include-pending` only when the
+author asks to see the page in a proof they read alone, such as a print
+PDF for layout, and tell them not to share or upload that file. Never add
+it to a build for a retailer, a printer, advance readers, or the review
+copy workflow, and never set it in `cli-defaults` (validate refuses it).
+
 ### 2. Metadata
 
 Fill the `story.md` fields with `references/metadata-checklist.md`:

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { createStoryProject } from "../src/story.js";
 import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
@@ -1405,6 +1406,34 @@ describe("github workflows", () => {
     const note = readRepo("templates/github/ISSUE_TEMPLATE/manuscript-note.yml");
     expect(note).toContain("id: anchor");
     expect(note).toContain("ch03-p12");
+  });
+
+  test("the review copy leaves out matter whose permission is pending (#558)", () => {
+    const template = readRepo("templates/github/review-copy.yml");
+    const match = /- name: Build the review copy\n(?:(?! {6}- name:).*\n)*? {8}run: \|\n((?: {10}.*\n)+)/.exec(template);
+    expect(match).not.toBeNull();
+    const script = match[1].replace(/^ {10}/gm, "");
+    // Only the header comment may name the flag, to warn against it.
+    expect(script).not.toContain("--include-pending");
+    expect(template).toContain("Never add --include-pending to the build step");
+
+    // The step, run as the runner would, with `story` from this checkout.
+    const workspace = makeTempDir("review-copy-");
+    const { root } = createStoryProject({ cwd: workspace, title: "Quoted", dir: workspace, force: true });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Opening\nnumber: 1\nstatus: draft\nword-count: 2", "\n## Chapter Text\n\nChapter prose.\n");
+    writeMarkdown(path.join(root, "matter", "epigraph.md"), "title: Epigraph\nplacement: front\nheading: false\npermission: pending", "\nA line of a song.\n");
+    const bin = makeTempDir("fake-story-");
+    fs.writeFileSync(path.join(bin, "story"), `#!/bin/sh\nexec "${process.execPath}" "${path.join(repoRoot, "bin", "story.js")}" "$@"\n`, { mode: 0o755 });
+    const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
+      cwd: workspace,
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, STORY_DIR: ".", GITHUB_SHA: "0123456789abcdef", GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "owner/book", GITHUB_WORKSPACE: workspace }
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]");
+    const site = fs.readFileSync(path.join(workspace, "review-site", "index.html"), "utf8");
+    expect(site).toContain("Chapter prose.");
+    expect(site).not.toContain("A line of a song.");
   });
 
   test("story templates pin STORY_VERSION to the package version", () => {

@@ -93,7 +93,10 @@ or a real organisation is shown doing something discreditable.
    date. Never set `granted` or `public-domain` without the user's
    confirmation and, for `granted`, the rights-holder's name.
 4. `story validate .` warns when a matter page is `pending` and the story
-   is `complete`, and when `granted` has no `rights-holder`.
+   is `complete`, and when `granted` has no `rights-holder`. Whatever the
+   status, `story export` and the builds leave a `pending` page out (the
+   review copy too) and warn `permission-pending-left-out`, unless
+   `--include-pending` is given.
 
 ### 4. Overlap with other text
 

@@ -60,7 +60,7 @@ const MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 export function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   const action = options.generatedBy === undefined ? "export" : "build";
-  const manuscript = manuscriptParts(project, action);
+  const manuscript = manuscriptParts(project, action, { includePending: Boolean(options.includePending) });
   assertMatterTitles(project);
   const output = resolveOutputPath(project, options.out, EXPORT_FILE, options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
@@ -134,6 +134,13 @@ export function buildBook(root, options = {}) {
   if (options.spoilers && format !== "codex") {
     throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
+  // A build that prints no matter page has none to leave out, so it says
+  // nothing about pending permissions.
+  const printsMatter = MATTER_FORMATS.has(format) && !options.shunn;
+  if (options.includePending && !printsMatter) {
+    throw usageError("--include-pending applies only to builds that print matter pages: --format markdown, epub, docx (without --shunn), html, print, and narration");
+  }
+  const includePending = Boolean(options.includePending) || !printsMatter;
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
@@ -146,14 +153,15 @@ export function buildBook(root, options = {}) {
   const withIdWarnings = (result) => ({ ...result, warnings: [...substituteStoryIdWarnings(project), ...result.warnings] });
 
   if (options.pdf) {
-    return withIdWarnings(buildPdf(project, format, { trim, paper }, output, options));
+    return withIdWarnings(buildPdf(project, format, { trim, paper, includePending }, output, options));
   }
 
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
       out: output.outFile,
       generatedBy: "story build",
-      enforceRoot: output.enforceRoot
+      enforceRoot: output.enforceRoot,
+      includePending
     });
     return withIdWarnings({ ...result, format });
   }
@@ -166,7 +174,7 @@ export function buildBook(root, options = {}) {
     return withIdWarnings({ outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings });
   }
 
-  const manuscript = manuscriptParts(project);
+  const manuscript = manuscriptParts(project, "build", { includePending });
   assertMatterTitles(project);
   if (format === "metadata") {
     const book = htmlBook(manuscript);
@@ -221,12 +229,12 @@ export function buildBook(root, options = {}) {
 // installed engine. The engine is found before the manuscript is assembled,
 // so a machine without one fails fast, and the PDF is written like any other
 // build, only once the engine has made it.
-function buildPdf(project, format, { trim, paper }, output, options) {
+function buildPdf(project, format, { trim, paper, includePending }, output, options) {
   // Finding or running an engine --pdf-engine named is about that flag; the
   // one --pdf finds by itself, about --pdf.
   const engineFlag = options.pdfEngine === undefined ? "pdf" : "pdf-engine";
   const engine = withFlags(engineFlag, () => resolvePdfEngine(options.pdfEngine, { cwd: options.cwd }));
-  const manuscript = manuscriptParts(project);
+  const manuscript = manuscriptParts(project, "build", { includePending });
   assertMatterTitles(project);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
   const style = projectBuildStyle(project);
@@ -766,7 +774,12 @@ export function bookChapters(project, action = "build") {
   return { meta, chapters, warnings };
 }
 
-export function manuscriptParts(project, action = "build") {
+// The matter pages are left out while their `permission` is `pending` (an
+// epigraph whose rights holder has not answered yet), with a warning for
+// each, so no copy shared, sold, or published from a build carries quoted
+// material that is not cleared. `includePending` keeps them, for a proof the
+// author reads alone.
+export function manuscriptParts(project, action = "build", { includePending = false } = {}) {
   const { meta, chapters, warnings } = bookChapters(project, action);
 
   // Matter ids become EPUB manifest ids and file names, so they must be safe.
@@ -776,8 +789,14 @@ export function manuscriptParts(project, action = "build") {
     }
   }
   // Unwritten matter (a scaffold with only its heading) stays out of the book.
-  const matter = (placement) => project.matter
-    .filter((entry) => entry.placement === placement && !entry.empty)
+  const written = project.matter.filter((entry) => (entry.placement === "front" || entry.placement === "back") && !entry.empty);
+  const pending = includePending ? [] : written.filter((entry) => entry.permission === "pending");
+  for (const entry of pending) {
+    const label = relative(project, entry.file);
+    warnings.push(warn("permission-pending-left-out", `${label} permission is still pending, so it is left out; pass --include-pending to include it`, label));
+  }
+  const matter = (placement) => written
+    .filter((entry) => entry.placement === placement && !pending.includes(entry))
     .map((entry) => ({
       id: entry.id,
       file: entry.file,
@@ -1006,6 +1025,11 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
     writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
+
+// The formats that print matter pages. The Shunn manuscripts (and docx
+// --shunn), the metadata sheet, the screenplay skeleton, the Twine and ink
+// stories, and the codex print none.
+const MATTER_FORMATS = new Set(["markdown", "epub", "docx", "html", "print", "narration"]);
 
 // The file extension of each build format; its keys are the formats
 // --format accepts, besides BUILD_FORMAT_ALIASES.

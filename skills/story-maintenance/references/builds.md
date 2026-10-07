@@ -6,6 +6,8 @@ What each `story build` format writes, and the flags and `story.md` fields it re
 
 `build` when the user asks to build the book artifact; supports markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, Fountain, Twee, and ink outputs in `dist/`, and a codex site in `dist/codex/`, with front and back matter. For EPUB, set `cover: path/to/cover.jpg` (inside the project, and holding the kind of image its extension names) and `author` in `story.md` to embed a cover image and creator; never pass the cover or the `build-style` `css` file as `--out`, which is refused. For an anthology, set `editor` in `story.md` and `author` on each chapter: builds credit the editor on the title pages and print each story's writer under its heading, outside the word count (docs/manuscripts.md#story-authors-in-collections-and-anthologies).
 
+A matter page with `permission: pending` is left out of `export` and of every build that prints matter (markdown, EPUB, DOCX, HTML, print, narration), with a `permission-pending-left-out` warning for each. Report the warning rather than work around it. Add `--include-pending` only for a proof the author reads alone, never for a file anyone else sees; `cli-defaults` cannot set it, and other builds refuse it.
+
 ## html
 
 `build --format html` when the user wants a review or reading copy for people who never open a terminal: a single HTML file with a table of contents and a paragraph label on every paragraph, shown faintly in the margin as a link labelled `ch03-p12` (chapter 3, paragraph 12), that reviewers cite in notes.

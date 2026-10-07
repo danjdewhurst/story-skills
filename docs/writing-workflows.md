@@ -1383,7 +1383,7 @@ credit: ""
 ---
 ```
 
-`permission` is `not-needed`, `pending`, `granted`, or `public-domain`, and `credit` is the exact line the rights-holder requires. Song lyrics almost always need permission, fair use is a narrow and uncertain defence, and public-domain status depends on country and date. The skill never sets `granted` or `public-domain` without your confirmation, or `granted` without a rights-holder. Once the book is `complete`, `story validate` catches anything left open:
+`permission` is `not-needed`, `pending`, `granted`, or `public-domain`, and `credit` is the exact line the rights-holder requires. Song lyrics almost always need permission, fair use is a narrow and uncertain defence, and public-domain status depends on country and date. The skill never sets `granted` or `public-domain` without your confirmation, or `granted` without a rights-holder. Until the page is cleared, `story export` and the builds leave it out, the review copy too, with a `permission-pending-left-out` warning. Once the book is `complete`, `story validate` catches anything left open:
 
 ```text
 warning: matter/epigraph.md permission is still pending and the story is complete [permission-pending]

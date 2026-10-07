@@ -40,9 +40,11 @@ const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove
 const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
 
 // Flags that change what one run does rather than set a habit: a default
-// --force would replace every snapshot whose name is taken, and a default
-// --list or --restore would stop snapshot taking one.
-const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"] };
+// --force would replace every snapshot whose name is taken, a default
+// --list or --restore would stop snapshot taking one, and a default
+// --include-pending would put uncleared matter in every build, the
+// published review copy too.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"] };
 
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format

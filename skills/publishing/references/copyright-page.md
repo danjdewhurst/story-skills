@@ -93,7 +93,10 @@ Edited by {name}
 - Every quoted epigraph, song lyric, poem, or long passage needs a
   `permission` value on its matter page: `not-needed`, `pending`,
   `granted`, or `public-domain`. `story validate` warns about `pending` in
-  a complete story and about `granted` without `rights-holder`.
+  a complete story and about `granted` without `rights-holder`. Export
+  and the builds leave a `pending` page out, with a
+  `permission-pending-left-out` warning, unless `--include-pending` is
+  given.
 - Put the credit line the rights holder requires in `credit`, and repeat it
   on the copyright page or in back matter as the permission specifies.
 - Short lyric quotations often need permission even when very short.

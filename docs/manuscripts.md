@@ -368,6 +368,14 @@ heading: true
 
 The three permission fields are for your records; no build prints them. `story validate` checks their values and warns when a page's `permission` is still `pending` while `story.md` has `status: complete`, or is `granted` with no `rights-holder`. Put the credit line in the page text yourself. The [`editorial-review`](../skills/editorial-review/SKILL.md) skill walks through clearing permissions.
 
+A page whose `permission` is `pending` is left out of `story export` and of every build that prints matter pages (see the table in [Build a book](#build-a-book)), whatever the story status, with a warning for each:
+
+```text
+warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
+```
+
+So no file you send, upload, or publish carries quoted material that is not cleared yet, and the [review copy workflow](automation.md#review-copy-workflow) never puts the page on GitHub Pages. Once the rights holder agrees, set `permission: granted` and `rights-holder`, and the next build includes the page. To see the page in a proof that only you read, such as a print PDF to check the layout, add `--include-pending` to that one command. Do not share that file. `cli-defaults` in `story.md` cannot set `include-pending`, so it never reaches a build that you did not run by hand.
+
 A matter page whose id is `copyright`, or whose title contains the word "Copyright" in any letter case, counts as the book's copyright page. The EPUB marks it as a copyright page wherever it sits. When it is front matter, the print interior places it before the contents and the narration script skips it; a back-matter copyright page stays at the end of the print interior and is narrated.
 
 Matter file names must be kebab-case, because they become EPUB file names. A build stops on a name such as `matter/About_Me.md` with `matter/About_Me.md: matter file names must be kebab-case to build`. A page with text also needs a title, even with `heading: false`, since the title names the page in the EPUB contents. Export and every build stop on a blank one with `matter/dedication.md: a matter page needs a title to build`, and `story validate` reports it as a missing field.
@@ -598,6 +606,7 @@ The prose is copied as written, markdown included, with LF line endings even whe
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
 | `--out <file>` | Output file. Defaults to `dist/manuscript.md`. See [Output paths](#output-paths-and-what-is-disposable). |
+| `--include-pending` | Keep the matter pages whose `permission` is `pending`. See [Front and back matter](#front-and-back-matter). |
 
 With `--out manuscript.md`, the manuscript lands in the project root, and `story validate` then warns about it:
 
@@ -668,6 +677,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | `--pdf` | With `--format print` or `--format shunn`, render to PDF with an installed engine. An error with every other format. See [PDF output](#pdf-output). |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
 | `--spoilers` | With `--format codex`, include notes, statuses, deaths, knowledge, clues, and resolutions. An error with every other format. |
+| `--include-pending` | With a build that includes matter, keep the pages whose `permission` is `pending`, which are otherwise left out. An error with every other build. See [Front and back matter](#front-and-back-matter). |
 | `--out <file>` | Output file instead of the default in `dist/`; for `codex`, a folder. |
 
 Any other format is an error:
@@ -903,7 +913,7 @@ See [`compare`](cli-reference.md#mapping-review-copy-labels) for how paragraphs 
 
 `--note-url <url>` adds a faint **Note** link beside every label, to that address with the label, the `--stamp` build, and the paragraph's first six words as prefilled query parameters (`title`, `anchor`, `build`, `quote`). Pointed at a GitHub new-issue link for the `manuscript-note.yml` form, one click opens a note with those fields filled in. Builds without `--note-url` are unchanged.
 
-For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push, links every label to the `manuscript-note.yml` issue form with `--note-url`, and publishes it to GitHub Pages. See [Automation and CI](automation.md#review-copy-workflow).
+For a project in a GitHub repository, the `review-copy.yml` workflow template rebuilds this file on every push, links every label to the `manuscript-note.yml` issue form with `--note-url`, and publishes it to GitHub Pages. Like every build, it leaves out a matter page whose `permission` is still `pending`. See [Automation and CI](automation.md#review-copy-workflow).
 
 ### Print interior
 
@@ -1466,6 +1476,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported paper: <paper>. ...` | An unknown `--paper` with the Shunn PDF or DOCX | Use `letter` or `a4`. |
 | `--paper applies only to --format shunn --pdf and --format docx --shunn ...` | `--paper` with another build | Leave it out, or use `--trim` to size a print interior. |
+| `--include-pending applies only to builds that print matter pages: ...` | `--include-pending` with a build that has no matter pages, such as Shunn, metadata, or codex | Leave it out. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `<path>: Refusing to write through symlink` | The `--out` file is a symlink | Delete the symlink or choose another file. |

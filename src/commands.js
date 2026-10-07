@@ -981,11 +981,11 @@ export const COMMANDS = [
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out", "dry-run"],
+    options: ["out", "include-pending", "dry-run"],
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
-      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out }));
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
       io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}\n`);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
     }
@@ -1005,7 +1005,7 @@ export const COMMANDS = [
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -1025,7 +1025,8 @@ export const COMMANDS = [
         // A story.md default engine waits for a build that asks for a PDF.
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
-        spoilers: isTruthy(parsed.options.spoilers)
+        spoilers: isTruthy(parsed.options.spoilers),
+        includePending: isTruthy(parsed.options["include-pending"])
       }));
       if (dryRun) {
         io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)\n` : ""}${formatPreview("build", changes)}`);

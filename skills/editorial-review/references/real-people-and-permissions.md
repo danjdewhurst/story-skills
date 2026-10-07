@@ -106,6 +106,9 @@ neither fits.
 
 `story validate .` warns when a matter page is `pending` and the story
 status is `complete`, and when `granted` has no `rights-holder`.
+`story export` and the builds leave a `pending` page out, with a
+`permission-pending-left-out` warning, unless `--include-pending` is
+given, so the review copy and shared files never carry it.
 
 ## Permission request checklist
 

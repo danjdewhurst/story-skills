@@ -2747,14 +2747,15 @@ These commands produce files for reading or submission. The source of truth stay
 ### export
 
 ```text
-story export [path] [--out <file>] [--dry-run]
+story export [path] [--out <file>] [--include-pending] [--dry-run]
 ```
 
-Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out. The file uses LF line endings, even from a CRLF checkout.
+Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out, and so are matter pages with `permission: pending` (see [Pending permissions](#pending-permissions)). The file uses LF line endings, even from a CRLF checkout.
 
 | Option | Effect | Default |
 |---|---|---|
 | `--out <file>` | Output path, relative to the project root | `dist/manuscript.md` |
+| `--include-pending` | Keep matter pages whose `permission` is `pending`. `cli-defaults` cannot set it | Off |
 | `--dry-run` | List the file and folders it would write, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 
 ```text
@@ -2778,7 +2779,7 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--out <file>] [--dry-run]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -2794,6 +2795,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
 | `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter hooks and outcomes, and how questions and promises resolve. An error with any other format | Off |
+| `--include-pending` | With a build that prints matter pages (`markdown`, `epub`, `docx` without `--shunn`, `html`, `print`, and `narration`), keep the pages whose `permission` is `pending`. An error with any other build. `cli-defaults` cannot set it. See [Pending permissions](#pending-permissions) | Off |
 | `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
 | `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 
@@ -2826,6 +2828,18 @@ severity:
 With `form: short-story` or `form: flash` in `story.md`, both Shunn builds use the short-story layout: no chapter headings or page breaks, and a centred `#` between chapters and at every scene break.
 
 When `story.md` sets `copyright` and no matter page already covers it, `export` and the `markdown`, `epub`, `docx`, `html`, and `print` builds add a generated copyright page to the front matter. `narration` leaves it out, and Shunn output (`--format shunn` and `docx --shunn`) has no front or back matter at all.
+
+#### Pending permissions
+
+A matter page with `permission: pending`, such as an epigraph whose rights holder has not answered yet, is left out of `export` and of every build that prints matter pages, and each one left out prints a warning. The book builds without it, so no copy you send, upload, or publish carries quoted material that is not cleared. The [review copy workflow](automation.md#review-copy-workflow) therefore never puts such a page on GitHub Pages:
+
+```text
+$ story build --format html
+Built 1 chapters as html to ~/stories/the-last-ember/dist/the-last-ember.html
+warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
+```
+
+Set `permission: granted` (with `rights-holder`), `not-needed`, or `public-domain` once the page is cleared, and the next build includes it. To see the page in a proof you read alone, such as a print PDF to check the layout, add `--include-pending` to that one run; do not share that file. `cli-defaults` in `story.md` cannot set `include-pending`, so no build includes a pending page unless its command line asks. To stop a build instead of leaving the page out, promote the warning with `severity` (`- warning: permission-pending-left-out` with `level: error`): the build still writes its file, then exits 1. `story validate` reports a pending permission itself only once `story.md` has `status: complete` ([`permission-pending`](#codes-validate)).
 
 ```text
 $ story build
@@ -3315,6 +3329,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `scene-unknown-location` | warning | A Fountain scene names a location with no record. |
 | `chapter-no-scenes` | warning | A Fountain build has chapters with no scene records. |
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
+| `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`; `--include-pending` keeps it. |
 
 ### Codes: add, rename, move, split, merge, and remove
 
