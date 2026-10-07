@@ -10,7 +10,7 @@ import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
 import { breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
-import { publishingMeta } from "./publishing.js";
+import { creditLines, publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
 function epubModifiedTimestamp() {
@@ -305,8 +305,13 @@ export function htmlBook(manuscript, ownIndent = false) {
 }
 
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
-  const script = docxScript(manuscript.meta);
-  const bodyParts = [paragraphXml(script, manuscript.title, "Title")];
+  const meta = manuscript.meta ?? publishingMeta({});
+  const script = docxScript(meta);
+  // The title block: the title, then the book's credits as the HTML and
+  // print title pages set them, the authors and then "Edited by" the
+  // editors, in the book's language. A story's own author stays in its
+  // byline.
+  const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...creditLines(meta).map((line) => paragraphXml(script, line, "Credit"))];
   const pushSection = (heading, body, byline = "") => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
@@ -396,12 +401,15 @@ function docxPackageEntries(script, body, page = "") {
 
 // Body text is 12pt Times New Roman (or a font for the book's script) at
 // 1.5 spacing with a half-inch first-line indent, so paragraph breaks show
-// without blank lines; titles, headings, and scene breaks cancel the indent.
+// without blank lines; titles, credits, headings, and scene breaks cancel
+// the indent. The credit lines under the title sit together at 14pt, as
+// the print title page sets them, with space after the last.
 function docxStyles(script) {
   return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`
     + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
     + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>`
     + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>`
+    + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/>${script.sizeCs ? `<w:szCs w:val="28"/>` : ""}</w:rPr></w:style>`
     + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>`
     + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>`
     + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>`
