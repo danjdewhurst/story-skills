@@ -58,6 +58,7 @@ import {
 } from "./series.js";
 import { warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile } from "./exemptions.js";
+import { queryFiltersNaming, retargetFilter, shownFilter, shownQuery } from "./list.js";
 import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
 import { projectActions } from "./report.js";
 import { MENTION_KINDS, proseRenames } from "./mentions.js";
@@ -1488,6 +1489,7 @@ export function renameEntity(root, options) {
       plan.originals.set(file, original);
     }
     followExemptionPatterns(project.root, plan, kind, oldId, newId);
+    followQueryFilters(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
     // The new id is taken, unless an earlier run was killed after writing
@@ -1697,7 +1699,9 @@ export function removeEntity(root, options) {
     removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
-  const warnings = leftoverReferenceWarnings(project.root, kind, id);
+  // remove never rewrites story.md's frontmatter, so its queries are as
+  // scanned.
+  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries);
   if (choosers.length > 0) {
     // With the last choice gone the book is linear again: every chapter
     // continues to the next, endings included.
@@ -1710,10 +1714,10 @@ export function removeEntity(root, options) {
 
 // What remove leaves for the author: body links and bare chapter or scene ids
 // (the ones `story links` checks, plus links in a registry's own sections),
-// which it never edits, exemption patterns naming the id, which no longer
-// match anything, and references another kind's entity with the id may
-// mean (see ambiguousReferenceWarnings).
-function leftoverReferenceWarnings(root, kind, id) {
+// which it never edits; story.md `queries` filters naming the id; exemption
+// patterns naming it, which no longer match anything; and references another
+// kind's entity with the id may mean (see ambiguousReferenceWarnings).
+function leftoverReferenceWarnings(root, kind, id, queries) {
   const warnings = [];
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-leftover-probe`;
@@ -1739,6 +1743,11 @@ function leftoverReferenceWarnings(root, kind, id) {
       return { index, keys: EXEMPTION_TEXT_KEYS.filter((key) => followed[key] !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`) };
     })
     .filter(({ keys }) => keys.length > 0);
+  const named = queryFiltersNaming(queries, context.isReferenceKey, id);
+  if (named.length > 0) {
+    const listed = named.map((entry) => `${shownQuery(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
+    warnings.push(warn("stale-query", `story.md ${named.length === 1 ? "query" : "queries"} ${listed} still ${named.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${named.length === 1 ? "that filter" : "those filters"}`, "story.md"));
+  }
   if (stale.length > 0) {
     const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
@@ -1819,6 +1828,30 @@ function followExemptionPatterns(root, plan, kind, oldId, newId) {
     }
     plan.set(filePath, replaceFrontmatter(text, { ...data, exemptions }));
   }
+}
+
+// Saved story.md queries filter on ids (`pov=mara-quill`), so when rename,
+// move, or merge changes an id, the filters comparing a key that can name
+// the entity with the old id follow it, as its frontmatter references do;
+// the rest of each filter stays as written. No key names a scene, so a scene
+// move has none to follow.
+function followQueryFilters(root, plan, kind, oldId, newId) {
+  const filePath = path.join(root, "story.md");
+  const text = plan.get(filePath) ?? readTextFile(filePath);
+  // The plan already parsed it: a broken story.md stops the command.
+  const data = parseFrontmatter(text, filePath).data;
+  const found = queryFiltersNaming(data.queries, entityReferenceContext(root, kind, oldId).isReferenceKey, oldId);
+  if (found.length === 0) {
+    return;
+  }
+  const queries = [...data.queries];
+  for (const { index, item, positions } of found) {
+    queries[index] = { ...item, where: item.where.map((filter, position) => (positions.includes(position) ? retargetFilter(filter, newId) : filter)) };
+  }
+  if (!plan.has(filePath)) {
+    plan.originals?.set(filePath, text);
+  }
+  plan.set(filePath, replaceFrontmatter(text, { ...data, queries }));
 }
 
 // Moves a chapter to another number, or a scene to another chapter or
@@ -1909,6 +1942,7 @@ function moveChapter(project, oldId, options, action = "move") {
     }
   }
   followExemptionPatterns(project.root, plan, "chapter", oldId, newId);
+  followQueryFilters(project.root, plan, "chapter", oldId, newId);
   reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   // The number is taken, unless an earlier run of this move was interrupted
@@ -2507,6 +2541,7 @@ export function mergeChapters(root, options) {
     plan.originals.set(first.file, kept.rawMarkdown);
     setCurrentChapter(project.root, second.number, first.number, plan);
     followExemptionPatterns(project.root, plan, "chapter", second.id, first.id);
+    followQueryFilters(project.root, plan, "chapter", second.id, first.id);
     reorderProgressions(current, plan, chapterChronology(current));
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);

@@ -57,7 +57,7 @@ const EXCEPTIONS = [
   { kind: "story", field: "calendar", side: "validate", match: /^invalid-calendar: story\.md calendar (?:entry \d+ (?:must name exactly one of month, era, or weekdays|first-weekday must be one of the weekdays|repeats weekdays|weekdays needs at least one name)|needs at least one month entry|era .+ (?:counts backward, but only the first era may|needs years)|.+ appears more than once)/, reason: "a calendar entry must be exactly one kind, with months, unique names, and eras in a readable order, which needs counting and comparing across entries" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
   { kind: "story", field: "severity", side: "validate", match: /^invalid-cli-config/, reason: "an unknown key in a severity entry is rejected, and the schema checker has no additionalProperties" },
-  { kind: "story", field: "queries", side: "validate", match: /^invalid-query: story\.md query \S+ (?:has .+: a query takes only name, kind, and where|where must be a list of one or more filters)/, reason: "an unknown key in a query is rejected, and so is an empty where; the schema checker has neither additionalProperties nor minItems" },
+  { kind: "story", field: "queries", side: "validate", match: /^invalid-query: story\.md query [a-z0-9-]+ (?:has [\w-]+(?:, [\w-]+)*: a query takes only name, kind, and where|where needs at least one filter, such as where: \[status=draft\])$/, reason: "an unknown key in a query is rejected, and so is an empty where; the schema checker has neither additionalProperties nor minItems" },
   { kind: "story", field: "build-style", side: "validate", match: /^invalid-build-style: story\.md build-style (?:key \S+ is not a style setting|sets \S+ more than once|css .* (?:does not exist|must be inside the project|is not|Refusing))/, reason: "an unknown or repeated build-style key is rejected, which the schema checker cannot express, and the css file must exist inside the project" },
   { kind: "character", field: "progressions", side: "validate", reason: "a progression's value is checked by the rules of the field it changes (a status enum), which depend on the entity kind" },
   { kind: "location", field: "progressions", side: "validate", reason: "as for character progressions" },
@@ -348,6 +348,27 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
     }
     expect(unique).toEqual([]);
   }, Math.max(5000, RUNS * 50));
+
+  // A generated document seldom adds a key to a query or empties its where,
+  // so these cases run the queries exception every time, and check that it
+  // covers nothing the schema also rejects.
+  test("the queries exception covers an unknown key and an empty where, and nothing else", () => {
+    const root = baseProject();
+    const pristine = fs.readFileSync(path.join(root, "story.md"), "utf8");
+    const outcome = (lines) => {
+      fs.writeFileSync(path.join(root, "story.md"), withField(pristine, "queries", lines));
+      const reasons = validateProject(root).errors.filter((error) => error.file === "story.md").map((error) => `${error.code}: ${error.message}`);
+      const schemaRejects = validateAgainstSchema(buildSchemaDocument(root), schema).some((error) => error.startsWith("$.story"));
+      return { rejected: reasons.length > 0, schemaRejects, explained: reasons.length > 0 && explained("story", "queries", "validate", reasons) };
+    };
+    const query = ["queries:", "  - name: drafts", "    kind: chapters"];
+    expect(outcome([...query, "    where: [status=draft]"])).toEqual({ rejected: false, schemaRejects: false, explained: false });
+    expect(outcome([...query, "    where: [status=draft]", "    notes: mine"])).toEqual({ rejected: true, schemaRejects: false, explained: true });
+    expect(outcome([...query, "    where: []"])).toEqual({ rejected: true, schemaRejects: false, explained: true });
+    for (const where of ["    where: status=draft", "    where: [3]", "    where: [\"status=\"]", "    where: [a b]"]) {
+      expect(outcome([...query, where])).toEqual({ rejected: true, schemaRejects: true, explained: false });
+    }
+  });
 
   test("every exception still describes a real difference", () => {
     // An exception names a kind and a field the test mutates, so a renamed

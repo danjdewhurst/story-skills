@@ -1095,7 +1095,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateBuildStyle(data, errors, project.root);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
-  errors.push(...queryFindings(project));
+  const queries = queryFindings(project);
+  errors.push(...queries.errors);
+  warnings.push(...queries.warnings);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);

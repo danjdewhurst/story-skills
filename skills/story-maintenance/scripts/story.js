@@ -624,6 +624,7 @@ var FINDING_CODES = {
   "duplicate-pass": "error",
   "duplicate-query": "error",
   "invalid-query": "error",
+  "query-unknown-key": "warning",
   "exemption-pattern-too-short": "error",
   "exemption-unknown-code": "error",
   "exemption-code-not-dismissible": "error",
@@ -812,6 +813,7 @@ var FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  "stale-query": "warning",
   "ambiguous-references": "warning",
   "split-references": "warning",
   "split-scenes": "warning",
@@ -17641,6 +17643,8 @@ var KIND_NAMES = LIST_KINDS.map((entry) => entry.kind);
 var QUERY_KINDS = new Set(LIST_KINDS.flatMap((entry) => [entry.kind, entry.singular]));
 var QUERY_KEYS = ["name", "kind", "where"];
 var KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+var LINE_BREAK2 = /[\n\r\u2028\u2029]/;
+var UNSAFE_IN_MESSAGE = /[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
 function listKind(name) {
   if (typeof name !== "string" || name.trim() === "") {
     throw usageError(`Usage: story list <kind> [--where <filter>]... or story list --query <name> [--where <filter>]... [--path <project>]; kinds: ${KIND_NAMES.join(", ")}`);
@@ -17664,34 +17668,41 @@ function parseWhere(text) {
 }
 function readWhere(text) {
   const filter = String(text).trim();
-  const comparison = /^([^=!]+?)\s*(!=|=)\s*(.*)$/.exec(filter);
-  if (comparison) {
-    const [, key, operator, value] = comparison;
+  const at = filter.search(/[=!]/);
+  if (at > 0 && (filter[at] === "=" || filter[at + 1] === "=")) {
+    const operator = filter[at] === "=" ? "=" : "!=";
+    const key = filter.slice(0, at).trimEnd();
+    const value = filter.slice(at + operator.length).trimStart();
     if (value === "") {
       return { problem: "value", text: filter, key, operator };
     }
-    return { key, op: operator === "=" ? "eq" : "ne", value };
+    if (!LINE_BREAK2.test(value)) {
+      return { key, op: operator === "=" ? "eq" : "ne", value };
+    }
   }
-  const presence = /^(!?)([^=!\s]+)$/.exec(filter);
-  if (presence) {
-    return { key: presence[2], op: presence[1] === "!" ? "absent" : "present", value: null };
+  const absent = filter.startsWith("!");
+  const key = absent ? filter.slice(1) : filter;
+  if (key !== "" && !/[=!\s]/.test(key)) {
+    return { key, op: absent ? "absent" : "present", value: null };
   }
   return { problem: "shape", text: filter };
 }
 function buildList(project, kindName, whereValues = [], queryName = undefined) {
   const query = queryName === undefined ? null : savedQuery(project, queryName);
-  const entry = query === null ? listKind(kindName) : queryKind(query, kindName);
-  const given = [whereValues].flat().filter((value) => value !== undefined && value !== true);
-  const filters = [...query?.where ?? [], ...given].map(parseWhere);
+  const entry = query === null ? listKind(kindName) : queryKind(query.item, kindName);
+  const saved = (query?.item.where ?? []).map(parseWhere);
+  const given = [whereValues].flat().filter((value) => value !== undefined && value !== true).map(parseWhere);
+  const filters = [...saved, ...given];
   const entities = project[entry.collection];
-  const queryField = query?.name ?? null;
+  const queryField = query === null ? null : String(queryName).trim();
+  const warnings = query?.warnings ?? [];
   if ((project.fileErrors ?? []).length > 0) {
-    return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items: [] };
+    return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items: [], warnings };
   }
   const known = knownKeys(project, entry);
-  for (const filter of filters) {
-    if (!known.includes(filter.key)) {
-      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${keyHint(filter.key, known)}`, "where");
+  for (const filter of given) {
+    if (!known.has(filter.key)) {
+      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${keyHint(filter.key, [...known])}`, "where");
     }
   }
   const keys = [...new Set(filters.map((filter) => filter.key))];
@@ -17701,22 +17712,29 @@ function buildList(project, kindName, whereValues = [], queryName = undefined) {
     title: String(entity[entry.title]),
     fields: Object.fromEntries(keys.map((key) => [key, entity.frontmatter?.[key] ?? null]))
   }));
-  return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items };
+  return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items, warnings };
 }
 function knownKeys(project, entry) {
-  const known = [...FRONTMATTER_KEYS[entry.schema]];
+  const known = new Set(FRONTMATTER_KEYS[entry.schema]);
   for (const entity of project[entry.collection]) {
     for (const key of Object.keys(entity.frontmatter ?? {})) {
-      if (!known.includes(key)) {
-        known.push(key);
-      }
+      known.add(key);
     }
   }
   return known;
 }
-function keyHint(key, known) {
-  const near = nearMissKeys(key, known);
+function keyHint(key, candidates) {
+  const near = nearMissKeys(key, candidates);
   return near.length > 0 ? `; did you mean ${near.map((candidate) => `"${candidate}"`).join(" or ")}?` : "";
+}
+function quoted(value) {
+  return JSON.stringify(value).replace(UNSAFE_IN_MESSAGE, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+function shownName(name) {
+  return typeof name === "string" && KEBAB_NAME.test(name) ? name : quoted(name);
+}
+function nameText(name) {
+  return typeof name === "number" || typeof name === "boolean" ? String(name) : name;
 }
 function savedQuery(project, name) {
   const wanted = String(name).trim();
@@ -17724,23 +17742,27 @@ function savedQuery(project, name) {
     throw usageError("--query needs the name of a story.md query");
   }
   if (project.story.unreadable) {
-    throw projectError(`story.md cannot be parsed; fix it before running story list --query ${wanted}`);
+    throw projectError(`story.md cannot be parsed; fix it before running story list --query ${quoted(wanted)}`);
   }
   const raw = project.story.data.queries;
   if (raw !== undefined && !Array.isArray(raw)) {
-    throw projectError(`story.md frontmatter field queries must be a list; fix it before running story list --query ${wanted}`);
+    throw projectError(`story.md frontmatter field queries must be a list; fix it before running story list --query ${quoted(wanted)}`);
   }
   const entries = (raw ?? []).map((item, index) => ({ item, index })).filter(({ item }) => isMapping2(item));
-  const named = entries.filter(({ item }) => item.name === wanted);
+  const named = entries.filter(({ item }) => nameText(item.name) === wanted);
   if (named.length === 0) {
-    const names = [...new Set(entries.map(({ item }) => item.name).filter((candidate) => typeof candidate === "string" && candidate !== ""))];
-    throw usageError(names.length === 0 ? `Unknown query "${wanted}": story.md has no queries` : `Unknown query "${wanted}" (story.md queries: ${names.join(", ")})${suggestion(wanted, names)}`);
+    const names = [...new Set(entries.map(({ item }) => nameText(item.name)).filter((candidate) => typeof candidate === "string" && candidate !== ""))];
+    throw usageError(names.length === 0 ? `Unknown query ${quoted(wanted)}: story.md has no queries` : `Unknown query ${quoted(wanted)} (story.md queries: ${names.map(shownName).join(", ")})${suggestion(wanted, names)}`);
   }
-  const problems = named.length > 1 ? [`story.md lists query ${wanted} more than once`] : queryProblems(project, named[0].item, named[0].index).map((finding) => finding.message);
-  if (problems.length > 0) {
-    throw projectError(`Fix story.md query ${wanted} before running it: ${problems.join("; ")}`);
+  if (named.length > 1) {
+    throw projectError(`Fix story.md query ${shownName(wanted)} before running it: story.md lists query ${shownName(wanted)} more than once`);
   }
-  return named[0].item;
+  const { item, index } = named[0];
+  const problems = queryProblems(project, item, index, (entry) => knownKeys(project, entry));
+  if (problems.errors.length > 0) {
+    throw projectError(`Fix story.md query ${shownName(wanted)} before running it: ${problems.errors.map((finding) => finding.message).join("; ")}`);
+  }
+  return { item, warnings: problems.warnings };
 }
 function queryKind(query, kindName) {
   const entry = listKind(query.kind);
@@ -17750,75 +17772,126 @@ function queryKind(query, kindName) {
   return entry;
 }
 function queryFindings(project) {
+  const errors = [];
+  const warnings = [];
   const raw = project.story.data.queries;
   if (raw === undefined) {
-    return [];
+    return { errors, warnings };
   }
   if (!Array.isArray(raw)) {
-    return [err("field-not-list", "story.md frontmatter field queries must be a list", "story.md")];
+    errors.push(err("field-not-list", "story.md frontmatter field queries must be a list", "story.md"));
+    return { errors, warnings };
   }
-  const findings = [];
+  const keysByKind = new Map;
+  const knownFor = (entry) => {
+    if (!keysByKind.has(entry)) {
+      keysByKind.set(entry, knownKeys(project, entry));
+    }
+    return keysByKind.get(entry);
+  };
   const seen = new Set;
   raw.forEach((item, index) => {
     if (!isMapping2(item)) {
-      findings.push(err("field-invalid-items", "story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", "story.md"));
+      errors.push(err("field-invalid-items", "story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", "story.md"));
       return;
     }
-    findings.push(...queryProblems(project, item, index));
+    const problems = queryProblems(project, item, index, knownFor);
+    errors.push(...problems.errors);
+    warnings.push(...problems.warnings);
     if (typeof item.name === "string" && seen.has(item.name)) {
-      findings.push(err("duplicate-query", `story.md lists query ${item.name} more than once`, "story.md"));
+      errors.push(err("duplicate-query", `story.md lists query ${shownName(item.name)} more than once`, "story.md"));
     }
     seen.add(item.name);
   });
-  return findings;
+  return { errors, warnings };
 }
-function queryProblems(project, item, index) {
-  const findings = [];
+function queryProblems(project, item, index, knownFor) {
+  const errors = [];
+  const warnings = [];
   const label = typeof item.name === "string" && KEBAB_NAME.test(item.name) ? `story.md query ${item.name}` : `story.md queries[${index}]`;
   const extra = Object.keys(item).filter((key) => !QUERY_KEYS.includes(key));
   if (extra.length > 0) {
-    findings.push(err("invalid-query", `${label} has ${extra.join(", ")}: a query takes only name, kind, and where`, "story.md"));
+    errors.push(err("invalid-query", `${label} has ${extra.join(", ")}: a query takes only name, kind, and where`, "story.md"));
   }
   if (item.name === undefined) {
-    findings.push(err("missing-field", `${label} is missing name`, "story.md"));
+    errors.push(err("missing-field", `${label} is missing name`, "story.md"));
+  } else if (typeof item.name === "number" || typeof item.name === "boolean") {
+    errors.push(err("field-not-text", `${label} name ${String(item.name)} is not text: quote it, such as name: "${String(item.name)}"`, "story.md"));
   } else if (typeof item.name !== "string" || !KEBAB_NAME.test(item.name)) {
-    findings.push(err("id-not-kebab", `${label} name ${JSON.stringify(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
+    errors.push(err("id-not-kebab", `${label} name ${quoted(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
   }
   let entry = null;
   if (item.kind === undefined) {
-    findings.push(err("missing-field", `${label} is missing kind`, "story.md"));
+    errors.push(err("missing-field", `${label} is missing kind`, "story.md"));
   } else if (QUERY_KINDS.has(item.kind)) {
     entry = listKind(item.kind);
   } else {
     const near = typeof item.kind === "string" ? suggestion(item.kind, KIND_NAMES) : "";
-    findings.push(err("invalid-query", `${label} kind ${JSON.stringify(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
+    errors.push(err("invalid-query", `${label} kind ${quoted(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
   }
   if (item.where === undefined) {
-    findings.push(err("missing-field", `${label} is missing where`, "story.md"));
-    return findings;
+    errors.push(err("missing-field", `${label} is missing where`, "story.md"));
+    return { errors, warnings };
   }
-  if (!Array.isArray(item.where) || item.where.length === 0 || !item.where.every((filter) => typeof filter === "string")) {
-    findings.push(err("invalid-query", `${label} where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
-    return findings;
+  if (Array.isArray(item.where) && item.where.length === 0) {
+    errors.push(err("invalid-query", `${label} where needs at least one filter, such as where: [status=draft]`, "story.md"));
+    return { errors, warnings };
+  }
+  if (!Array.isArray(item.where) || !item.where.every((filter) => typeof filter === "string")) {
+    errors.push(err("invalid-query", `${label} where must be a list of filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
+    return { errors, warnings };
   }
   const filters = [];
   for (const text of item.where) {
     const filter = readWhere(text);
     if (filter.problem === "value") {
-      findings.push(err("invalid-query", `${label} where filter ${JSON.stringify(filter.text)} needs a value after ${filter.operator}; write ${filter.key} for a key that is set, or "!${filter.key}" for one that is not`, "story.md"));
+      errors.push(err("invalid-query", `${label} where filter ${quoted(filter.text)} needs a value after ${filter.operator}; write ${quoted(filter.key)} for a key that is set, or ${quoted(`!${filter.key}`)} for one that is not`, "story.md"));
     } else if (filter.problem === "shape") {
-      findings.push(err("invalid-query", `${label} cannot read where filter ${JSON.stringify(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
+      errors.push(err("invalid-query", `${label} cannot read where filter ${quoted(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
     } else {
       filters.push(filter);
     }
   }
   if (entry !== null && (project.fileErrors ?? []).length === 0) {
-    const known = knownKeys(project, entry);
-    for (const filter of filters.filter((candidate) => !known.includes(candidate.key))) {
-      findings.push(err("invalid-query", `${label} filters on ${filter.key}, which no ${entry.singular} file sets and the schema does not define${keyHint(filter.key, known)}`, "story.md"));
+    const known = knownFor(entry);
+    for (const filter of filters.filter((candidate) => !known.has(candidate.key))) {
+      warnings.push(warn("query-unknown-key", `${label} filters on ${quoted(filter.key)}, which no ${entry.singular} file sets and the schema does not define, so it matches as unset${keyHint(filter.key, FRONTMATTER_KEYS[entry.schema])}`, "story.md"));
     }
   }
-  return findings;
+  return { errors, warnings };
+}
+function queryFiltersNaming(queries, isReferenceKey, id) {
+  if (!Array.isArray(queries)) {
+    return [];
+  }
+  const found = [];
+  queries.forEach((item, index) => {
+    if (!isMapping2(item) || !Array.isArray(item.where)) {
+      return;
+    }
+    const positions = [];
+    item.where.forEach((text, position) => {
+      const filter = typeof text === "string" ? readWhere(text) : {};
+      if (filter.value === id && isReferenceKey(filter.key)) {
+        positions.push(position);
+      }
+    });
+    if (positions.length > 0) {
+      found.push({ index, item, positions });
+    }
+  });
+  return found;
+}
+function retargetFilter(text, newId) {
+  const end = text.trimEnd().length;
+  return `${text.slice(0, end - readWhere(text).value.length)}${newId}${text.slice(end)}`;
+}
+function shownFilter(text) {
+  const filter = readWhere(text);
+  return `${filter.key}${filter.op === "eq" ? "=" : "!="}${filter.value}`;
+}
+function shownQuery({ item, index }) {
+  return typeof item.name === "string" && KEBAB_NAME.test(item.name) ? item.name : `queries[${index}]`;
 }
 function isMapping2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -19405,7 +19478,7 @@ function htmlBook(manuscript, ownIndent = false) {
     const runs = inlineRuns(paragraph.text);
     return {
       html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK2).join(" ").replace(/\s+/g, " ").trim(),
+      text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
       quote: paragraph.quote
     };
   });
@@ -19621,7 +19694,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
         continue;
       }
       const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK2).join(`\\
+      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK3).join(`\\
 ${prefix}`)}`, "");
     }
   }
@@ -19709,7 +19782,7 @@ ${body.join(`
 `;
 }
 function docxTextXml(text) {
-  return String(text).split(LINE_BREAK2).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
+  return String(text).split(LINE_BREAK3).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
 function paragraphXml(script, text, style = "", runs = [{ text }]) {
   const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
@@ -19725,7 +19798,7 @@ function inlineRuns(text) {
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
-  const isSpace = (char) => char === undefined || char === LINE_BREAK2 || /\s/u.test(char);
+  const isSpace = (char) => char === undefined || char === LINE_BREAK3 || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
   for (let index = 0;index < text.length; ) {
     const char = text[index];
@@ -19852,7 +19925,7 @@ function inlineHtml(text) {
   return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
 }
 function runMarkup(run, escape, lineBreak) {
-  let markup = escape(run.text).split(LINE_BREAK2).join(lineBreak);
+  let markup = escape(run.text).split(LINE_BREAK3).join(lineBreak);
   if (run.em) {
     markup = `<em>${markup}</em>`;
   }
@@ -19861,7 +19934,7 @@ function runMarkup(run, escape, lineBreak) {
   }
   return markup;
 }
-var LINE_BREAK2 = "";
+var LINE_BREAK3 = "";
 function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
@@ -19876,15 +19949,15 @@ function markdownParagraphs(markdown, ownIndent = false) {
         return text;
       }
       if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
-        return `${text}${LINE_BREAK2}`;
+        return `${text}${LINE_BREAK3}`;
       }
       return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
     }).join("");
-    const parts = collapseSourceSpace(joined).split(LINE_BREAK2).map(trimSourceSpace);
-    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK2);
+    const parts = collapseSourceSpace(joined).split(LINE_BREAK3).map(trimSourceSpace);
+    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK3);
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK2) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
   const source = splitFences(markdown.replace(/\r\n?/g, `
 `)).flatMap((part) => plainLinks(part.fenced ? withoutFenceMarkers(part.text) : part.text).split(`
@@ -22246,7 +22319,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateBuildStyle(data, errors, project.root);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
-  errors.push(...queryFindings(project));
+  const queries = queryFindings(project);
+  errors.push(...queries.errors);
+  warnings.push(...queries.warnings);
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
@@ -24655,6 +24730,7 @@ function renameEntity(root, options) {
       plan.originals.set(file, original);
     }
     followExemptionPatterns(project.root, plan, kind, oldId, newId);
+    followQueryFilters(project.root, plan, kind, oldId, newId);
     const renamedContents = plan.get(oldFile);
     plan.delete(oldFile);
     const interrupted = fs8.existsSync(newFile) && plan.size === 0 && readTextFile(newFile) === renamedContents;
@@ -24806,13 +24882,13 @@ function removeEntity(root, options) {
     removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
-  const warnings = leftoverReferenceWarnings(project.root, kind, id);
+  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries);
   if (choosers.length > 0) {
     warnings.push(warn("choices-dropped", branchGraph(scanProject(project.root)).branching || !wasBranching ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now` : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`, choosers.length === 1 ? choosers[0] : null));
   }
   return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
-function leftoverReferenceWarnings(root, kind, id) {
+function leftoverReferenceWarnings(root, kind, id, queries) {
   const warnings = [];
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-leftover-probe`;
@@ -24833,6 +24909,11 @@ function leftoverReferenceWarnings(root, kind, id) {
     const followed = followExemptionEntry(entry, kind, id, probe);
     return { index, keys: EXEMPTION_TEXT_KEYS.filter((key) => followed[key] !== entry[key]).map((key) => `${key} ${JSON.stringify(entry[key])}`) };
   }).filter(({ keys }) => keys.length > 0);
+  const named = queryFiltersNaming(queries, context.isReferenceKey, id);
+  if (named.length > 0) {
+    const listed = named.map((entry) => `${shownQuery(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
+    warnings.push(warn("stale-query", `story.md ${named.length === 1 ? "query" : "queries"} ${listed} still ${named.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${named.length === 1 ? "that filter" : "those filters"}`, "story.md"));
+  }
   if (stale.length > 0) {
     const values = stale.flatMap(({ keys }) => keys);
     warnings.push(warn("stale-exemption", `continuity/exemptions.md has ${stale.length === 1 ? "an entry" : `${stale.length} entries`} naming ${id} (${stale.map(({ index }) => `exemptions[${index}]`).join(", ")}), which ${stale.length === 1 ? "no longer matches" : "no longer match"} anything: ${values.join(", ")}. Delete or update ${stale.length === 1 ? "it" : "them"}`, EXEMPTIONS_FILE));
@@ -24891,6 +24972,23 @@ function followExemptionPatterns(root, plan, kind, oldId, newId) {
     }
     plan.set(filePath, replaceFrontmatter(text, { ...data, exemptions }));
   }
+}
+function followQueryFilters(root, plan, kind, oldId, newId) {
+  const filePath = path12.join(root, "story.md");
+  const text = plan.get(filePath) ?? readTextFile(filePath);
+  const data = parseFrontmatter(text, filePath).data;
+  const found = queryFiltersNaming(data.queries, entityReferenceContext(root, kind, oldId).isReferenceKey, oldId);
+  if (found.length === 0) {
+    return;
+  }
+  const queries = [...data.queries];
+  for (const { index, item, positions } of found) {
+    queries[index] = { ...item, where: item.where.map((filter, position) => positions.includes(position) ? retargetFilter(filter, newId) : filter) };
+  }
+  if (!plan.has(filePath)) {
+    plan.originals?.set(filePath, text);
+  }
+  plan.set(filePath, replaceFrontmatter(text, { ...data, queries }));
 }
 function moveEntity(root, options) {
   const project = scanProject(root);
@@ -24969,6 +25067,7 @@ function moveChapter(project, oldId, options, action = "move") {
     }
   }
   followExemptionPatterns(project.root, plan, "chapter", oldId, newId);
+  followQueryFilters(project.root, plan, "chapter", oldId, newId);
   reorderProgressions(project, plan, renumberedChronology(chapterChronology(project), oldId, newId, number));
   const moves = [{ oldFile: chapter.file, newFile }, ...sceneMoves];
   if (taken && !interruptedMove(plan, moves)) {
@@ -25418,6 +25517,7 @@ function mergeChapters(root, options) {
     plan.originals.set(first.file, kept.rawMarkdown);
     setCurrentChapter(project.root, second.number, first.number, plan);
     followExemptionPatterns(project.root, plan, "chapter", second.id, first.id);
+    followQueryFilters(project.root, plan, "chapter", second.id, first.id);
     reorderProgressions(current, plan, chapterChronology(current));
     warnings.push(...mergeProgressions(project.root, plan, first.id));
     assertWritable(project.root, [...plan.keys(), second.file]);
@@ -27110,9 +27210,9 @@ function notesHtml(site, entity) {
           return line.trim();
         }
         if (/\\$/.test(line)) {
-          return `${line.slice(0, -1).trim()}${LINE_BREAK2}`;
+          return `${line.slice(0, -1).trim()}${LINE_BREAK3}`;
         }
-        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK2}` : `${line.trim()} `;
+        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK3}` : `${line.trim()} `;
       }).join("");
       out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];
@@ -28764,7 +28864,8 @@ function gridReport(root, options = {}) {
 }
 function listReport(root, kind, where = [], query = undefined) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where, query) };
+  const { warnings, ...list } = buildList(project, kind, where, query);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings, ...list };
 }
 function diagramProject(root, options = {}) {
   const project = scanProject(root);
@@ -30816,8 +30917,8 @@ var COMMANDS = [
     project: "flag",
     args: 1,
     options: ["where", "query", "json"],
-    run({ parsed, io, root }) {
-      const report = listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "list", report);
       }
@@ -30825,6 +30926,7 @@ var COMMANDS = [
         io.stdout.write(formatList(report));
         io.stderr.write(`${report.items.length} of ${report.total} ${report.kind} matched
 `);
+        printFindings(io, report);
         return 0;
       }
       return reportResult(io, report, "Listed", "List failed");

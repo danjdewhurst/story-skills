@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { LIST_KINDS } from "../src/list.js";
-import { createStoryProject, validateProject } from "../src/story.js";
+import { LIST_KINDS, parseWhere, queryFindings } from "../src/list.js";
+import { createStoryProject, scanProject, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
@@ -222,7 +222,9 @@ describe("story list --query (#532)", () => {
     const other = invoke(root, ["list", "scenes", "--query", "ilse-drafts"]);
     expect(other.code).toBe(2);
     expect(other.err).toBe("Query ilse-drafts lists chapters, not scenes: drop the kind, or give chapters\n");
-    expect(invoke(root, ["list", "chapterz", "--query", "ilse-drafts"]).err).toContain('Unknown kind "chapterz"');
+    const unknown = invoke(root, ["list", "chapterz", "--query", "ilse-drafts"]);
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toContain('Unknown kind "chapterz"');
   });
 
   test("--json names the query and lists its filters first, matching the result schema", () => {
@@ -254,21 +256,69 @@ describe("story list --query (#532)", () => {
     result = invoke(root, ["list", "--query="]);
     expect(result.code).toBe(2);
     expect(result.err).toBe("--query needs the name of a story.md query\n");
-    const json = JSON.parse(invoke(root, ["list", "--query", "nope", "--json"]).out);
+    result = invoke(root, ["list", "--query", "nope", "--json"]);
+    expect(result.code).toBe(2);
+    const json = JSON.parse(result.out);
+    expect(validateAgainstSchema(json, schema)).toEqual([]);
     expect(json.ok).toBe(false);
-    expect(json.diagnostics[0].code).toBe("usage-error");
+    expect(json.diagnostics.map((entry) => entry.code)).toEqual(["usage-error"]);
   });
 
-  test("a query story validate rejects does not run (exit 3)", () => {
+  test("a query with errors does not run (exit 3), also with --json", () => {
     const root = sampleProject();
-    configure(root, "queries:\n  - name: typo\n    kind: chapters\n    where: [stauts=draft]\n  - name: twice\n    kind: chapters\n    where: [hook]\n  - name: twice\n    kind: scenes\n    where: [pov]");
-    let result = invoke(root, ["list", "--query", "typo"]);
+    configure(root, [
+      "queries:",
+      "  - name: unreadable",
+      "    kind: chapters",
+      "    where: [a b]",
+      "  - name: twice",
+      "    kind: chapters",
+      "    where: [hook]",
+      "  - name: twice",
+      "    kind: scenes",
+      "    where: [pov]",
+      "  - name: 2025",
+      "    kind: chapters",
+      "    where: [hook]"
+    ].join("\n"));
+    let result = invoke(root, ["list", "--query", "unreadable"]);
     expect(result.code).toBe(3);
     expect(result.out).toBe("");
-    expect(result.err).toBe('Fix story.md query typo before running it: story.md query typo filters on stauts, which no chapter file sets and the schema does not define; did you mean "status"?\n');
+    expect(result.err).toBe('Fix story.md query unreadable before running it: story.md query unreadable cannot read where filter "a b": expected key=value, key!=value, key, or "!key"\n');
     result = invoke(root, ["list", "--query", "twice"]);
     expect(result.code).toBe(3);
     expect(result.err).toBe("Fix story.md query twice before running it: story.md lists query twice more than once\n");
+    // An unquoted number is found by its text, and told to take quotes.
+    result = invoke(root, ["list", "--query", "2025"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toBe('Fix story.md query 2025 before running it: story.md queries[3] name 2025 is not text: quote it, such as name: "2025"\n');
+    result = invoke(root, ["list", "--query", "unreadable", "--json"]);
+    expect(result.code).toBe(3);
+    const json = JSON.parse(result.out);
+    expect(validateAgainstSchema(json, schema)).toEqual([]);
+    expect(json.ok).toBe(false);
+    expect(json.diagnostics.map((entry) => entry.code)).toEqual(["unusable-project"]);
+  });
+
+  test("a filter on a key no file of the kind sets is a warning, and the query still runs", () => {
+    const root = sampleProject();
+    configure(root, "queries:\n  - name: typo\n    kind: chapters\n    where: [stauts=draft]");
+    const warning = 'story.md query typo filters on "stauts", which no chapter file sets and the schema does not define, so it matches as unset; did you mean "status"?';
+    let result = invoke(root, ["list", "--query", "typo"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toBe("");
+    expect(result.err).toBe(`0 of 4 chapters matched\nwarning: ${warning} [query-unknown-key]\n`);
+    result = invoke(root, ["list", "--query", "typo", "--json"]);
+    expect(result.code).toBe(0);
+    const json = JSON.parse(result.out);
+    expect(validateAgainstSchema(json, schema)).toEqual([]);
+    expect(json.diagnostics).toMatchObject([{ severity: "warning", code: "query-unknown-key", message: warning, file: "story.md" }]);
+    // A severity entry promotes it, as for any warning.
+    configure(root, "severity:\n  - warning: query-unknown-key\n    level: error");
+    result = invoke(root, ["list", "--query", "typo"]);
+    expect(result.code).toBe(1);
+    expect(result.out).toBe("");
+    expect(result.err).toContain(`error: ${warning} [query-unknown-key]`);
   });
 
   test("a story.md that does not parse, or queries that is not a list, stops --query", () => {
@@ -276,11 +326,11 @@ describe("story list --query (#532)", () => {
     configure(root, "queries: ilse-drafts");
     let result = invoke(root, ["list", "--query", "ilse-drafts"]);
     expect(result.code).toBe(3);
-    expect(result.err).toBe("story.md frontmatter field queries must be a list; fix it before running story list --query ilse-drafts\n");
+    expect(result.err).toBe('story.md frontmatter field queries must be a list; fix it before running story list --query "ilse-drafts"\n');
     fs.writeFileSync(path.join(root, "story.md"), "---\ntitle: [unclosed\n---\n", "utf8");
     result = invoke(root, ["list", "--query", "ilse-drafts"]);
     expect(result.code).toBe(3);
-    expect(result.err).toBe("story.md cannot be parsed; fix it before running story list --query ilse-drafts\n");
+    expect(result.err).toBe('story.md cannot be parsed; fix it before running story list --query "ilse-drafts"\n');
   });
 
   test("another file that fails to parse lists nothing, as without --query", () => {
@@ -293,56 +343,174 @@ describe("story list --query (#532)", () => {
     expect(validateAgainstSchema(envelope, schema)).toEqual([]);
     expect(envelope.data).toMatchObject({ kind: "chapters", query: "ilse-drafts", items: [] });
   });
+
+  test("story.md text in a message is quoted, so it cannot drive a terminal or a CI log", () => {
+    const root = sampleProject();
+    const esc = String.fromCharCode(27);
+    // OSC 52 sets the clipboard; U+009B, the one-byte CSI, starts an escape
+    // sequence on some terminals and is one JSON.stringify leaves raw.
+    const name = `x${esc}]52;c;cHduZWQ=${String.fromCharCode(7)}${String.fromCharCode(0x9b)}2J`;
+    const quote = (text) => JSON.stringify(text).replace(/[\x7f-\x9f]/g, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+    const filter = `k${esc}[2J\n::error::injected=1`;
+    configure(root, `queries:\n  - name: ${JSON.stringify(name)}\n    kind: chapters\n    where: [${JSON.stringify(filter)}]\n  - name: odd-key\n    kind: chapters\n    where: [${JSON.stringify(filter)}]`);
+    const unsafe = (text) => /[\x00-\x09\x0b-\x1f\x7f-\x9f]/.test(text) || text.split("\n").some((line) => line.startsWith("::"));
+    const report = validateProject(root);
+    expect(messages([...report.errors, ...report.warnings]).filter((message) => /queries|query/.test(message))).toEqual([
+      `story.md queries[0] name ${quote(name)} must be kebab-case, such as mara-drafts`,
+      `story.md queries[0] filters on ${JSON.stringify(filter.slice(0, -2))}, which no chapter file sets and the schema does not define, so it matches as unset`,
+      `story.md query odd-key filters on ${JSON.stringify(filter.slice(0, -2))}, which no chapter file sets and the schema does not define, so it matches as unset`
+    ]);
+    for (const argv of [["validate"], ["list", "--query", "nope"], ["list", "--query", name], ["list", "--query", "odd-key"]]) {
+      const { err } = invoke(root, argv);
+      expect(unsafe(err)).toBe(false);
+    }
+  });
+});
+
+describe("story list reads a filter in linear time", () => {
+  const pattern = new RegExp(storySchema.properties.story.properties.queries.items.properties.where.items.pattern, "u");
+  const accepts = (text) => {
+    try {
+      parseWhere(text);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // The forms that made the earlier regular expressions backtrack in
+  // quadratic time: a long run of spaces inside a key or a value, and a value
+  // that breaks a line at its end. Each took minutes at this length.
+  test("on long runs of spaces, by --where and by the schema's where pattern", () => {
+    const n = 200000;
+    for (const text of ["a" + " ".repeat(n) + "x", "a=b" + " ".repeat(n) + "\nc", "a=" + "b ".repeat(n) + "\nc", "a" + " =".repeat(n) + "\n"]) {
+      const start = performance.now();
+      accepts(text);
+      pattern.test(text);
+      expect(performance.now() - start).toBeLessThan(1000);
+    }
+  });
+
+  test("checks every query's keys once per kind", () => {
+    const root = sampleProject();
+    const keys = Array.from({ length: 5000 }, (_, index) => `custom-${index}: x`).join("\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), `title: Wide\nnumber: 3\n${keys}`, "## Chapter Text\n\nWords.\n");
+    configure(root, ["queries:", ...Array.from({ length: 500 }, (_, index) => `  - name: q-${index}\n    kind: chapters\n    where: [custom-${index}=x, missing-${index}]`)].join("\n"));
+    const project = scanProject(root);
+    const start = performance.now();
+    const found = queryFindings(project);
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(found.errors).toEqual([]);
+    expect(found.warnings).toHaveLength(500);
+  });
 });
 
 describe("story validate checks story.md queries (#532)", () => {
-  const errorsWith = (yaml) => {
+  const queryWarnings = (report) => messages(report.warnings.filter((warning) => warning.code === "query-unknown-key"));
+  // The errors validate reports, and whether schemas/story.schema.json
+  // rejects the same story.md.
+  const check = (yaml) => {
     const root = sampleProject();
     configure(root, yaml);
-    return validateProject(root).errors.map((error) => `${error.code}: ${error.message}`);
+    return { errors: validateProject(root).errors.map((error) => `${error.code}: ${error.message}`), schemaRejects: checkProjectSchema(root).length > 0 };
   };
 
   test("valid queries pass validate and the schema", () => {
     const root = sampleProject();
-    configure(root, `${QUERIES}\n  - name: custom-flag\n    kind: chapters\n    where: ["my-flag = true", "hook!=question"]`);
-    expect(messages(validateProject(root).errors)).toEqual([]);
+    configure(root, `${QUERIES}\n  - name: custom-flag\n    kind: chapters\n    where: ["my-flag = true", "hook!=question"]\n  - name: "2025"\n    kind: scenes\n    where: [pov]`);
+    const report = validateProject(root);
+    expect(messages(report.errors)).toEqual([]);
+    expect(queryWarnings(report)).toEqual([]);
     expect(checkProjectSchema(root)).toEqual([]);
   });
 
+  const kinds = "(chapters, scenes, characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, terms, research, matter, or the singular)";
+  // The last column says whether the schema rejects it too: it cannot see
+  // another key in an entry, an empty where, or a repeated name.
   const cases = [
-    ["queries: drafts", "field-not-list: story.md frontmatter field queries must be a list"],
-    ["queries:\n  - drafts", "field-invalid-items: story.md frontmatter field queries must contain mappings, such as - name: mara-drafts"],
-    ["queries:\n  - kind: chapters\n    where: [hook]", "missing-field: story.md queries[0] is missing name"],
-    ["queries:\n  - name: Ilse Drafts\n    kind: chapters\n    where: [hook]", "id-not-kebab: story.md queries[0] name \"Ilse Drafts\" must be kebab-case, such as mara-drafts"],
-    ["queries:\n  - name: drafts\n    where: [hook]", "missing-field: story.md query drafts is missing kind"],
-    ["queries:\n  - name: drafts\n    kind: chapterz\n    where: [hook]", "invalid-query: story.md query drafts kind \"chapterz\" is not a kind story list takes (chapters, scenes, characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, terms, research, matter, or the singular); did you mean chapters?"],
-    ["queries:\n  - name: drafts\n    kind: Chapters\n    where: [hook]", "invalid-query: story.md query drafts kind \"Chapters\" is not a kind story list takes (chapters, scenes, characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, terms, research, matter, or the singular); did you mean chapters?"],
-    ["queries:\n  - name: drafts\n    kind: 3\n    where: [hook]", "invalid-query: story.md query drafts kind 3 is not a kind story list takes (chapters, scenes, characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, terms, research, matter, or the singular)"],
-    ["queries:\n  - name: drafts\n    kind: chapters", "missing-field: story.md query drafts is missing where"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: status=draft", "invalid-query: story.md query drafts where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: []", "invalid-query: story.md query drafts where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [3]", "invalid-query: story.md query drafts where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [\"status=\"]", "invalid-query: story.md query drafts where filter \"status=\" needs a value after =; write status for a key that is set, or \"!status\" for one that is not"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [a b]", "invalid-query: story.md query drafts cannot read where filter \"a b\": expected key=value, key!=value, key, or \"!key\""],
-    ["queries:\n  - name: drafts\n    kind: characters\n    where: [pov=ilse]", "invalid-query: story.md query drafts filters on pov, which no character file sets and the schema does not define"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [hook]\n    filter: [pov=ilse]", "invalid-query: story.md query drafts has filter: a query takes only name, kind, and where"],
-    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [hook]\n  - name: drafts\n    kind: scenes\n    where: [pov]", "duplicate-query: story.md lists query drafts more than once"]
+    ["queries: drafts", "field-not-list: story.md frontmatter field queries must be a list", true],
+    ["queries:\n  - drafts", "field-invalid-items: story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", true],
+    ["queries:\n  - kind: chapters\n    where: [hook]", "missing-field: story.md queries[0] is missing name", true],
+    ["queries:\n  - name: Ilse Drafts\n    kind: chapters\n    where: [hook]", "id-not-kebab: story.md queries[0] name \"Ilse Drafts\" must be kebab-case, such as mara-drafts", true],
+    ["queries:\n  - name: 2025\n    kind: chapters\n    where: [hook]", "field-not-text: story.md queries[0] name 2025 is not text: quote it, such as name: \"2025\"", true],
+    ["queries:\n  - name: drafts\n    where: [hook]", "missing-field: story.md query drafts is missing kind", true],
+    ["queries:\n  - name: drafts\n    kind: chapterz\n    where: [hook]", `invalid-query: story.md query drafts kind "chapterz" is not a kind story list takes ${kinds}; did you mean chapters?`, true],
+    ["queries:\n  - name: drafts\n    kind: Chapters\n    where: [hook]", `invalid-query: story.md query drafts kind "Chapters" is not a kind story list takes ${kinds}; did you mean chapters?`, true],
+    ["queries:\n  - name: drafts\n    kind: 3\n    where: [hook]", `invalid-query: story.md query drafts kind 3 is not a kind story list takes ${kinds}`, true],
+    ["queries:\n  - name: drafts\n    kind: chapters", "missing-field: story.md query drafts is missing where", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: status=draft", "invalid-query: story.md query drafts where must be a list of filters, such as where: [status=draft, pov=mara-quill]", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [3]", "invalid-query: story.md query drafts where must be a list of filters, such as where: [status=draft, pov=mara-quill]", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [\"status=\"]", "invalid-query: story.md query drafts where filter \"status=\" needs a value after =; write \"status\" for a key that is set, or \"!status\" for one that is not", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [a b]", "invalid-query: story.md query drafts cannot read where filter \"a b\": expected key=value, key!=value, key, or \"!key\"", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [\"!=x\"]", "invalid-query: story.md query drafts cannot read where filter \"!=x\": expected key=value, key!=value, key, or \"!key\"", true],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: []", "invalid-query: story.md query drafts where needs at least one filter, such as where: [status=draft]", false],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [hook]\n    filter: [pov=ilse]", "invalid-query: story.md query drafts has filter: a query takes only name, kind, and where", false],
+    ["queries:\n  - name: drafts\n    kind: chapters\n    where: [hook]\n  - name: drafts\n    kind: scenes\n    where: [pov]", "duplicate-query: story.md lists query drafts more than once", false]
   ];
-  for (const [yaml, finding] of cases) {
+  for (const [yaml, finding, schemaRejects] of cases) {
     test(finding, () => {
-      expect(errorsWith(yaml)).toEqual([finding]);
+      expect(check(yaml)).toEqual({ errors: [finding], schemaRejects });
     });
   }
+
+  test("a key no file of the kind sets is a warning, so editing another file cannot fail story check", () => {
+    const root = sampleProject();
+    configure(root, "queries:\n  - name: flagged\n    kind: chapters\n    where: [my-flag=true]");
+    expect(queryWarnings(validateProject(root))).toEqual([]);
+    // chapter-10 is the only chapter that sets my-flag.
+    writeChapter(root, 10, "status: draft\npov: ilse");
+    const report = validateProject(root);
+    expect(report.errors).toEqual([]);
+    expect(queryWarnings(report)).toEqual([
+      'story.md query flagged filters on "my-flag", which no chapter file sets and the schema does not define, so it matches as unset'
+    ]);
+    expect(invoke(root, ["check"]).code).toBe(0);
+  });
 
   test("a key check waits for every file to parse, as story list does", () => {
     const root = sampleProject();
     configure(root, "queries:\n  - name: broken\n    kind: chapters\n    where: [only-in-broken]");
     fs.writeFileSync(path.join(root, "chapters", "chapter-03.md"), "---\ntitle: [unclosed\n---\n", "utf8");
-    expect(validateProject(root).errors.map((error) => error.code)).toEqual(["unreadable-file"]);
+    const report = validateProject(root);
+    expect(report.errors.map((error) => error.code)).toEqual(["unreadable-file"]);
+    expect(queryWarnings(report)).toEqual([]);
   });
 
   test("the schema's kinds are the ones story list takes", () => {
     const kinds = storySchema.properties.story.properties.queries.items.properties.kind.enum;
     expect(kinds).toEqual([...new Set(LIST_KINDS.flatMap((entry) => [entry.kind, entry.singular]))]);
+  });
+
+  test("the schema's where pattern accepts exactly the filters --where reads", () => {
+    const pattern = new RegExp(storySchema.properties.story.properties.queries.items.properties.where.items.pattern, "u");
+    const accepts = (text) => {
+      try {
+        parseWhere(text);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const accepted = ["status=draft", " pov = ilse ", "hook!=question", "!hook", "hook", "my key=a b", "a=b=c", "a==b", "a=!b", "a=\nb", "a=b \n"];
+    const rejected = ["", "  ", "status=", "status = ", "=draft", "!=x", "a b", "!", "!!a", "a!b", "a!", "a=b\nc", "a!b=c", "!a b"];
+    expect(accepted.filter((text) => !accepts(text) || !pattern.test(text))).toEqual([]);
+    expect(rejected.filter((text) => accepts(text) || pattern.test(text))).toEqual([]);
+    // Every short string over the characters that matter, from a fixed seed.
+    let state = 532;
+    const random = () => {
+      state = (state + 0x6d2b79f5) | 0;
+      let t = Math.imul(state ^ (state >>> 15), 1 | state);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const alphabet = ["a", "b", "=", "!", " ", "\t", "\n", "\r", "-", "é"];
+    const disagreements = [];
+    for (let run = 0; run < 20000; run += 1) {
+      const text = Array.from({ length: Math.floor(random() * 8) }, () => alphabet[Math.floor(random() * alphabet.length)]).join("");
+      if (accepts(text) !== pattern.test(text)) {
+        disagreements.push(text);
+      }
+    }
+    expect(disagreements).toEqual([]);
   });
 });

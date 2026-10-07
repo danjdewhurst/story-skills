@@ -655,17 +655,18 @@ export const COMMANDS = [
     project: "flag",
     args: 1,
     options: ["where", "query", "json"],
-    run({ parsed, io, root }) {
-      const report = listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query);
+    run({ parsed, io, root, overrides }) {
+      const report = applySeverity(listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "list", report);
       }
       // As with grid, a partly unreadable project would silently drop the
       // files that fail to parse, so nothing is listed until the scan is
-      // clean.
+      // clean. A saved query's warnings follow the count.
       if (report.ok) {
         io.stdout.write(formatList(report));
         io.stderr.write(`${report.items.length} of ${report.total} ${report.kind} matched\n`);
+        printFindings(io, report);
         return 0;
       }
       return reportResult(io, report, "Listed", "List failed");
