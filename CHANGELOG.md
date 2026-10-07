@@ -151,6 +151,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A description of 2,001 emoji now reports 2001 characters, not 4002, against the 4000 limit.
   - A retailer may count differently, so check its own rule.
 - Prose checks no longer fail under Node with `Maximum call stack size exceeded` on a chapter of about 200,000 sentences. ([#708](https://github.com/danjdewhurst/story-skills/issues/708))
+- The draft-next-chapter workflow accepts a drafted story file whose name has non-ASCII letters, such as `characters/José.md`.
+  - Before, the publish job refused the whole draft, because git quotes such a name in its log and the check then found no `.md` ending.
 
 ## [0.23.0] - 2026-10-07
 
