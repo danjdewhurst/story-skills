@@ -131,12 +131,15 @@ story voices .
 
 `story voices` fingerprints each character's attributed dialogue and
 warns about a `voice-avoid` word said, a `voice-words` entry never said,
-and two characters who may sound alike. Pronoun tags (`she said`) are
-never attributed, so in close third person the POV character is often
-under-counted; when that matters, name the tags in a sample chapter and
-rerun. The attribution rules and thresholds are in the voices section of
-[`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#voices),
-and `story voices --help` gives the options.
+and two characters who may sound alike. A line counts only when the
+narration names its speaker by a speech verb, or names one character in
+the paragraph. Pronoun tags (`she said`) are never attributed, so in
+close third person the POV character is often under-counted; when that
+matters, name the tags in a sample chapter and rerun.
+`story voices --help` describes the command and, when `story-maintenance`
+is installed, the voices section of
+[`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#voices)
+gives the full attribution rules and thresholds.
 
 When two voices blur, differentiate them on more than one axis (sentence
 length, contractions, vocabulary, what they ask about) and see

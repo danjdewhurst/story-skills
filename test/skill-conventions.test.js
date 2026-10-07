@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { COMMANDS } from "../src/commands.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { takesValue } from "../src/options.js";
 import { TERM_CATEGORIES } from "../src/scan.js";
@@ -700,16 +701,34 @@ describe("CLI detail in one place", () => {
     }
   });
 
+  // A phrase from each rule list a skill used to copy: voice-style's and
+  // line-editing's voices attribution, premise-workshop's look-alike
+  // thresholds, and series-continuity's story series checks.
+  test("no SKILL.md copies the voices, names, or story series rules", () => {
+    for (const phrase of ["A name before the verb wins over a name after it", "failing that, names exactly one character", "same first four letters", "Two books that share a `book-number`"]) {
+      expect(filesSaying(phrase).filter((file) => file.endsWith("/SKILL.md")), phrase).toEqual([]);
+    }
+  });
+
   test("story-maintenance keeps its command catalogue and import notes in references", () => {
     expect(filesSaying("<!-- command-reference -->")).toEqual(["story-maintenance/references/commands.md"]);
     expect(filesSaying("Directory sources import in natural file-name order")).toEqual(["story-maintenance/references/editing-commands.md"]);
   });
 
+  test("the command catalogue has an example of every command", () => {
+    const catalogue = fs.readFileSync(path.join(skillsDir, "story-maintenance", "references", "commands.md"), "utf8");
+    const examples = new Set([...catalogue.matchAll(/^story ([a-z-]+)/gm)].map(([, name]) => name));
+    expect(COMMANDS.length).toBeGreaterThan(30);
+    expect(COMMANDS.map(({ name }) => name).filter((name) => !examples.has(name))).toEqual([]);
+  });
+
   test("story-init drafts the working premise after story init, which writes neither field", () => {
     expect(filesSaying("Populate each `_index.md` with an empty registry")).toEqual(["story-init/references/manual-setup.md"]);
     const text = fs.readFileSync(path.join(skillsDir, "story-init", "SKILL.md"), "utf8");
+    const init = text.indexOf("story init '{Title}'");
+    expect(init).toBeGreaterThan(-1);
     const premise = text.indexOf("Draft a working premise");
-    expect(premise).toBeGreaterThan(text.indexOf("story init '{Title}'"));
+    expect(premise).toBeGreaterThan(init);
     expect(text.slice(premise).replace(/\s+/g, " ")).toContain("`story init` writes neither `premise` nor `counter-premise`");
     const cwd = makeTempDir("story-init-premise-");
     expect(runCli(["init", "Premise Probe", "--form", "novel", "--synopsis", "A probe."], memoryIo(cwd))).toBe(0);
@@ -721,9 +740,13 @@ describe("CLI detail in one place", () => {
   test("submission owns the retailer description, and publishing drafts none of its own", () => {
     const read = (name) => fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8").replace(/\s+/g, " ");
     expect(read("submission")).toContain("This skill owns the retailer description: `submission/blurb.md` is its only draft");
-    const publishing = read("publishing");
-    expect(publishing).toContain("The retailer description has one draft, in `submission/blurb.md`, and the `submission` skill owns it");
-    expect(publishing).not.toMatch(/long description|short description/);
+    expect(read("publishing")).toContain("The retailer description has one draft, in `submission/blurb.md`, and the `submission` skill owns it");
+    const publishingDir = path.join(skillsDir, "publishing");
+    const publishingFiles = ["SKILL.md", ...fs.readdirSync(path.join(publishingDir, "references")).map((name) => path.join("references", name))];
+    expect(publishingFiles.length).toBeGreaterThan(1);
+    for (const file of publishingFiles) {
+      expect(fs.readFileSync(path.join(publishingDir, file), "utf8").replace(/\s+/g, " "), file).not.toMatch(/long description|short description/i);
+    }
   });
 });
 
