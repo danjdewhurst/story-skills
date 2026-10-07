@@ -32,7 +32,13 @@ export default {
     by: "",
     byline: "{names}",
     "edited-by": "Redakcja: {names}",
+    // A count's noun takes the form for 1 (-one), for 2 to 4 and 22 to 24
+    // (-few), or the base key's form for the rest.
+    "approximate-words-one": "Około {words} słowo",
+    "approximate-words-few": "Około {words} słowa",
     "approximate-words": "Około {words} słów",
+    "approximate-characters-one": "Około {characters} znak",
+    "approximate-characters-few": "Około {characters} znaki",
     "approximate-characters": "Około {characters} znaków",
     "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",
     "narration-opening-anonymous": "{title}. Czyta: {narrator}.",

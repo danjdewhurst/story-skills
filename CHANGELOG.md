@@ -93,6 +93,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story validate` reports a `language` of `constructor` or `__proto__` as an `invalid-language` error instead of crashing. ([#739](https://github.com/danjdewhurst/story-skills/issues/739))
 - A language tag with an Arabic script name in an extension or private-use part, such as `en-u-nu-arab`, builds left to right. ([#740](https://github.com/danjdewhurst/story-skills/issues/740))
   - Only the script subtag right after the language sets the direction, as `az-Arab` does.
+- The title page's length line takes the plural form its count needs in Russian, Ukrainian, and Polish. ([#741](https://github.com/danjdewhurst/story-skills/issues/741))
+  - Russian now writes `Около 523 слова` and `Около 5 слов`, and the characters line takes its plural the same way (`Около 523 знака`).
+  - Ukrainian and Polish follow the same rule.
 
 ## [0.23.0] - 2026-10-07
 
