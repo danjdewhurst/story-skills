@@ -118,10 +118,11 @@ const WRITE_OPTIONS = ["dry-run", "json"];
 // that changes the project in place: true, or a function of the parsed
 // options for one that writes only with a flag (wordcount --write). runCli
 // holds the project lock around such a run, except with --dry-run (see
-// lock.js). `recovers` marks a write command that first puts back a change
-// another stopped part way (split, merge, move, rename, remove, and doctor
-// --fix; see undo.js); runCli refuses every other write command while such
-// a change's undo log is in the project. init and import lock the folder
+// lock.js). `recovers` marks a write command that deals itself with the
+// undo log a command stopped part way left (split, merge, move, rename, and
+// remove, which put back their own and refuse any other, and doctor --fix;
+// see undo.js); runCli refuses every other write command while such a log
+// is in the project. init and import lock the folder
 // they fill themselves, and the builds write only generated files, so they
 // take no lock. `run` receives { parsed, io, cwd, root, overrides,
 // defaulted }, where root() resolves the project path and overrides holds

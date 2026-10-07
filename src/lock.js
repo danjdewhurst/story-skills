@@ -84,6 +84,15 @@ export function withProjectLock(root, run, options = {}) {
   }
 }
 
+// Whether another story command that is still running holds the project's
+// lock (one this process holds does not count), so a file it keeps while it
+// runs, such as its undo log, is in use rather than left by a command that
+// stopped.
+export function lockedByAnother(root) {
+  const projectRoot = path.resolve(root);
+  return !held.has(realPath(projectRoot)) && readOwner(path.join(projectRoot, LOCK_FILE))?.alive === true;
+}
+
 // Returns the text of the lock once this call creates it, or the error
 // when the folder cannot take one. Throws when another live command keeps
 // it past the wait.

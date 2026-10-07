@@ -300,9 +300,10 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
 
   // Runs a rename that is killed once it has deleted the old file, at the
   // first write to `target` (a registry the reindex rewrites) or, for the
-  // marker, at its delete. Its undo log would have a rerun put the rename
-  // back and make it again (test/undo.test.js), so the log is deleted, as
-  // when a story from before the log was killed: the marker resumes it.
+  // marker, at its delete. Its undo log has a rerun put the rename back and
+  // make it again (#604), so the project keeps a copy with the log, which
+  // is returned, and loses the log itself, as a story from before the log
+  // left it: then the marker resumes the rename.
   function killedAfterDelete(oldFile, target, run) {
     const { renameSync, rmSync } = fs;
     const kill = (file) => {
@@ -324,9 +325,11 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
       fs.renameSync = renameSync;
       fs.rmSync = rmSync;
     }
-    const log = path.join(oldFile, "..", "..", UNDO_LOG);
-    expect(fs.existsSync(log)).toBe(true);
-    fs.rmSync(log);
+    const root = path.resolve(oldFile, "..", "..");
+    const logged = path.join(makeTempDir(), "logged");
+    fs.cpSync(root, logged, { recursive: true });
+    fs.rmSync(path.join(root, UNDO_LOG));
+    return logged;
   }
 
   test("rename refuses an id that never existed, though an entity has the new name", () => {
@@ -353,16 +356,19 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
       const root = project("Stopped Rename");
       createEntity(root, { kind: "character", name: "Mara Quill" });
       createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara-quill", pov: "mara-quill" });
-      const rename = () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" });
-      killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, ...target), rename);
+      const rename = (at = root) => renameEntity(at, { kind: "character", id: "mara-quill", name: "Mara Tide" });
+      const logged = killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, ...target), rename);
       expect(fs.existsSync(path.join(root, MARKER))).toBe(true);
 
-      expect(rename()).toMatchObject({ id: "mara-tide", resumed: true, warnings: [] });
-      expect(read(root, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
-      expect(read(root, "chapters", "_index.md")).toContain("| 1 | One | mara-tide |");
-      expect(fs.existsSync(path.join(root, MARKER))).toBe(false);
-      // Finished, so a rerun is refused.
-      expect(rename).toThrow("character mara-quill does not exist");
+      for (const [at, finished] of [[root, { resumed: true }], [logged, { undone: { command: "story rename character mara-quill 'Mara Tide'" } }]]) {
+        expect(rename(at)).toMatchObject({ id: "mara-tide", ...finished, warnings: [] });
+        expect(read(at, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
+        expect(read(at, "chapters", "_index.md")).toContain("| 1 | One | mara-tide |");
+        expect(fs.existsSync(path.join(at, MARKER))).toBe(false);
+        expect(fs.existsSync(path.join(at, UNDO_LOG))).toBe(false);
+        // Finished, so a rerun is refused.
+        expect(() => rename(at)).toThrow("character mara-quill does not exist");
+      }
     }
   });
 
@@ -370,17 +376,22 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
     const root = project("Id Only");
     createEntity(root, { kind: "character", name: "Mara Quill" });
     // The name does not change, so the reindex has nothing to rewrite.
-    const idOnly = () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Quill", newId: "mara" });
-    killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, MARKER), idOnly);
+    const idOnly = (at = root) => renameEntity(at, { kind: "character", id: "mara-quill", name: "Mara Quill", newId: "mara" });
+    const idOnlyLogged = killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, MARKER), idOnly);
     expect(idOnly()).toMatchObject({ id: "mara", resumed: true });
     expect(idOnly).toThrow("character mara-quill does not exist");
+    expect(idOnly(idOnlyLogged)).toMatchObject({ id: "mara", undone: { command: "story rename character mara-quill 'Mara Quill' --id mara" } });
+    expect(() => idOnly(idOnlyLogged)).toThrow("character mara-quill does not exist");
 
     writeMarkdown(path.join(root, "characters", "ilse.md"), "name: Ilse\nrole: supporting\nstatus: alive", "# Ilse\n");
-    const unlisted = () => renameEntity(root, { kind: "character", id: "ilse", name: "Ilse Varrow" });
-    killedAfterDelete(path.join(root, "characters", "ilse.md"), path.join(root, "characters", "_index.md"), unlisted);
+    const unlisted = (at = root) => renameEntity(at, { kind: "character", id: "ilse", name: "Ilse Varrow" });
+    const unlistedLogged = killedAfterDelete(path.join(root, "characters", "ilse.md"), path.join(root, "characters", "_index.md"), unlisted);
     expect(read(root, "characters", "_index.md")).not.toContain("ilse");
     expect(unlisted()).toMatchObject({ id: "ilse-varrow", resumed: true });
-    expect(read(root, "characters", "_index.md")).toContain("| Ilse Varrow | supporting | alive | [ilse-varrow](ilse-varrow.md) |");
+    expect(unlisted(unlistedLogged)).toMatchObject({ id: "ilse-varrow", undone: { command: "story rename character ilse 'Ilse Varrow'" } });
+    for (const at of [root, unlistedLogged]) {
+      expect(read(at, "characters", "_index.md")).toContain("| Ilse Varrow | supporting | alive | [ilse-varrow](ilse-varrow.md) |");
+    }
   });
 
   test("rename and remove say which mentions they left on an id a character and an artifact share", () => {
@@ -403,11 +414,14 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
       chapter: null
     }]);
 
-    // A resumed rename gives the warning the killed run never printed.
+    // A resumed rename gives the warning the killed run never printed, as
+    // does one its undo log puts back and makes again.
     handMade();
-    const rename = () => renameEntity(root, { kind: "character", id: "blackened-crown", name: "Dark Knight" });
-    killedAfterDelete(path.join(root, "characters", "blackened-crown.md"), path.join(root, MARKER), rename);
-    expect(rename()).toMatchObject({ resumed: true, warnings: [{ code: "ambiguous-references", message: left("rename", "change any that meant the character to dark-knight") }] });
+    const rename = (at = root) => renameEntity(at, { kind: "character", id: "blackened-crown", name: "Dark Knight" });
+    const logged = killedAfterDelete(path.join(root, "characters", "blackened-crown.md"), path.join(root, MARKER), rename);
+    const warning = { code: "ambiguous-references", message: left("rename", "change any that meant the character to dark-knight") };
+    expect(rename()).toMatchObject({ resumed: true, warnings: [warning] });
+    expect(rename(logged)).toMatchObject({ undone: { command: "story rename character blackened-crown 'Dark Knight'" }, warnings: [warning] });
 
     handMade();
     const removed = removeEntity(root, { kind: "character", id: "blackened-crown" });

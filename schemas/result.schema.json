@@ -460,10 +460,10 @@
       "properties": {
         "undone": {
           "type": "object",
-          "description": "Only when rename, remove, move, split, or merge first put back a change another one left part way: the command that stopped, and the files it had changed, which were put back.",
+          "description": "Only when rename, remove, move, split, or merge first put back the change it left part way when it last ran with the same arguments: the command that stopped, and the files it had changed, which were put back.",
           "required": ["command", "files"],
           "properties": {
-            "command": { "type": "string", "minLength": 1, "description": "The command that stopped, as its undo log names it: story split chapter-03." },
+            "command": { "type": "string", "minLength": 1, "description": "The command that stopped, as typed and as its undo log names it: story split chapter-03 --at 2." },
             "files": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The files put back, relative to the project root, with / separators." }
           }
         },

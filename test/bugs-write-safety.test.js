@@ -513,7 +513,7 @@ describe("interrupted rename (#181, #192)", () => {
     expect(listDir(root, "characters")).toEqual(["_index.md", "ilya-venn.md", "zed-quill.md"]);
     const rerun = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
     // It puts back what the killed run changed, then renames (#604).
-    expect(rerun.err).toMatch(/^note: story rename character ilya-venn stopped part way, so this first put back the \d+ files it had changed\n$/);
+    expect(rerun.err).toMatch(/^note: story rename character ilya-venn 'Zed Quill' stopped part way, so this first put back the \d+ files it had changed\n$/);
     expect(rerun.code).toBe(0);
     expect(listDir(root, "characters")).toEqual(["_index.md", "zed-quill.md"]);
     expect(messages(validateLinks(root).errors)).toEqual([]);
