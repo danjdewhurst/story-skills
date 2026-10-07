@@ -44,6 +44,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - An entry with `code: unreadable-file` is rejected by `story validate` as `exemption-code-not-dismissible`. An entry with only a `file` and `pattern` no longer dismisses that error either.
   - `docs/continuity.md` states the exception.
 
+- `story validate` reports a numeric or true/false `pronunciation` once, not twice. ([#698](https://github.com/danjdewhurst/story-skills/issues/698))
+  - The error is the one that says to quote the value, such as `pronunciation: "42"`. A list `pronunciation` still gets its own error.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
