@@ -237,6 +237,25 @@ describe("exemption keys (#284)", () => {
     expect(result.warnings.map((finding) => finding.file)).toEqual([CH1, CH2]);
   });
 
+  test("an exemption cannot dismiss an unreadable file, by code or by pattern", () => {
+    const { root } = povProject();
+    const chapter = path.join(root, CH2);
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("title: Chapter 2", "title: [unclosed"), "utf8");
+    const unreadable = (result) => result.errors.filter((error) => error.code === "unreadable-file").map((error) => error.file);
+    expect(unreadable(checkContinuity(scanProject(root)))).toEqual([CH2]);
+
+    writeLog(root, "  - code: unreadable-file\n    file: chapters/chapter-02.md\n    reason: broken on purpose");
+    expect(validateProject(root).errors.map((error) => error.code)).toContain("exemption-code-not-dismissible");
+    let result = checkContinuity(scanProject(root));
+    expect(unreadable(result)).toEqual([CH2]);
+    expect(result.dismissed).toEqual([]);
+
+    writeLog(root, "  - file: chapters/chapter-02.md\n    pattern: unclosed\n    reason: broken on purpose");
+    result = checkContinuity(scanProject(root));
+    expect(unreadable(result)).toEqual([CH2]);
+    expect(result.dismissed).toEqual([]);
+  });
+
   test("validate warns about a file or chapter that names nothing", () => {
     const { root } = povProject();
     writeLog(root, "  - code: pov-not-in-cast\n    file: chapters/chapter-09.md\n    reason: gone\n  - code: pov-not-in-cast\n    chapter: chapter-09\n    reason: gone\n  - code: pov-not-in-cast\n    file: chapters/\n    reason: a folder");

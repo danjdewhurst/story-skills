@@ -136,9 +136,10 @@ describe("finding codes", () => {
     expect(story.$defs.exemption.properties.code.enum).toEqual(exemptionCodes());
   });
 
-  test("CONTINUITY_ERROR_CODES lists the errors story continuity raises, and its scan's unreadable-file", () => {
+  test("CONTINUITY_ERROR_CODES lists the errors story continuity raises, and not its scan's unreadable-file", () => {
     const raised = raisedInSource().filter((call) => call.file === "continuity.js" && call.level === "error").flatMap((call) => call.codes);
-    expect([...CONTINUITY_ERROR_CODES].sort()).toEqual([...new Set(["unreadable-file", ...raised])].sort());
+    expect([...CONTINUITY_ERROR_CODES].sort()).toEqual([...new Set(raised)].sort());
+    expect(CONTINUITY_ERROR_CODES).not.toContain("unreadable-file");
   });
 
   test("CHAPTER_CODES lists the codes whose every finding carries a chapter, as docs/continuity.md does", () => {

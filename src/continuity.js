@@ -1,7 +1,7 @@
 import path from "node:path";
 import { DEFAULT_HOURS_PER_DAY, MAX_HOURS_PER_DAY, calendarShaped, dayHours, dayLengthKnown, parseCalendarDate } from "./calendar.js";
 import { dismissByExemptions } from "./exemptions.js";
-import { err, warn } from "./findings.js";
+import { CONTINUITY_ERROR_CODES, err, warn } from "./findings.js";
 import { projectPath } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { chapterChronology, deathWindow } from "./chronology.js";
@@ -68,7 +68,10 @@ export function checkContinuity(project) {
 // of errors/warnings and reported as dismissed. `ok` reflects only the
 // errors that remain.
 function withExemptions(project, result) {
-  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], { errors: true });
+  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], {
+    errors: true,
+    dismissable: (finding) => CONTINUITY_ERROR_CODES.includes(finding.code)
+  });
 }
 
 function checkCharacterDeaths(project, context, errors, warnings) {

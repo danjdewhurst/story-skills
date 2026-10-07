@@ -969,7 +969,6 @@ function severityCodes() {
   return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
 }
 var CONTINUITY_ERROR_CODES = [
-  "unreadable-file",
   "entry-not-mapping",
   "revived-without-death",
   "died-in-missing-chapter",
@@ -13232,20 +13231,20 @@ function readExemptionLog(root) {
 function exemptionMatches(exemption, finding) {
   return (exemption.pattern === undefined || portable(finding.message).includes(portable(exemption.pattern))) && (exemption.code === undefined || finding.code === exemption.code) && (exemption.file === undefined || typeof finding.file === "string" && portable(finding.file) === exemption.file) && (exemption.chapter === undefined || finding.chapter === exemption.chapter);
 }
-function dismissByExemptions(result, exemptions, { errors: withErrors }) {
+function dismissByExemptions(result, exemptions, { errors: withErrors, dismissable = () => true }) {
   if (exemptions.length === 0) {
     return result;
   }
   const dismissed = [...result.dismissed ?? []];
-  const keep = (findings) => findings.filter((finding) => {
-    const match = exemptions.find((exemption) => exemptionMatches(exemption, finding));
+  const keep = (findings, canDismiss) => findings.filter((finding) => {
+    const match = canDismiss(finding) ? exemptions.find((exemption) => exemptionMatches(exemption, finding)) : undefined;
     if (match) {
       dismissed.push({ finding, reason: match.reason, index: match.index });
     }
     return !match;
   });
-  const errors = withErrors ? keep(result.errors) : result.errors;
-  const warnings = keep(result.warnings);
+  const errors = withErrors ? keep(result.errors, dismissable) : result.errors;
+  const warnings = keep(result.warnings, () => true);
   if (dismissed.length === (result.dismissed ?? []).length) {
     return result;
   }
@@ -16141,7 +16140,10 @@ function checkContinuity(project) {
   return withExemptions(project, { ok: errors.length === 0, errors, warnings });
 }
 function withExemptions(project, result) {
-  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], { errors: true });
+  return dismissByExemptions({ ...result, dismissed: [] }, project.exemptions ?? [], {
+    errors: true,
+    dismissable: (finding) => CONTINUITY_ERROR_CODES.includes(finding.code)
+  });
 }
 function checkCharacterDeaths(project, context, errors, warnings) {
   for (const character of project.characters) {
