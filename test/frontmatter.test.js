@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCli } from "../src/cli.js";
-import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "../src/frontmatter.js";
+import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "../src/frontmatter.js";
 import { createEntity, createStoryProject } from "../src/story.js";
 import { expectLinearTime, makeTempDir, memoryIo } from "./helpers.js";
 
@@ -149,6 +149,13 @@ Body`);
 
     expect(parsed.data).toEqual({ title: "BOM" });
     expect(parsed.body).toBe("Body");
+  });
+
+  // #729: the lenient reader must strip a BOM the strict parser accepts.
+  test("withoutLeadingFrontmatter strips a UTF-8 BOM before the block (#729)", () => {
+    expect(withoutLeadingFrontmatter("\uFEFF---\nname: Sera Voss\n---\nBody")).toBe("Body");
+    // A block that opens with a blank line is a scene break, BOM or not.
+    expect(withoutLeadingFrontmatter("\uFEFF---\n\nA scene break\n---\nBody")).toBe("\uFEFF---\n\nA scene break\n---\nBody");
   });
 
   // #727: trailing spaces on a list item's first key line do not shift the
