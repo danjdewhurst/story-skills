@@ -47,6 +47,14 @@ describe("check-examples", () => {
     expect(result.err).toContain("the-unraveled-thread continuity is missing expected error");
   });
 
+  test("fails an example whose mentions or pacing warning is not dismissed", () => {
+    const dir = examplesCopy(["kirimi-eki-no-wasuremono"]);
+    fs.rmSync(path.join(dir, "kirimi-eki-no-wasuremono", "continuity", "exemptions.md"));
+    const result = run(dir);
+    expect(result.status).toBe(1);
+    expect(result.err).toBe("Example validation failed:\nkirimi-eki-no-wasuremono mentions warning: chapters/chapter-02.md lists character morita-fumi in mentions but never names it; add the name the chapter uses as an alias, or drop the mention");
+  });
+
   test("fails a mentions or pacing warning that the example does not exempt", () => {
     const dir = examplesCopy(["kirimi-eki-no-wasuremono"]);
     const root = path.join(dir, "kirimi-eki-no-wasuremono");
@@ -67,6 +75,16 @@ describe("check-examples", () => {
     expect(collectAdvisory([], "the-unraveled-thread", root, expected)).toEqual([
       "the-unraveled-thread pacing is missing expected warning: a warning that is gone",
       `the-unraveled-thread pacing has unexpected warning: ${EXPECTED_WARNINGS["the-unraveled-thread"].pacing.warnings[0]}`
+    ]);
+    // A story.md severity entry applies as in the CLI: a kept warning it
+    // promotes to an error fails the check.
+    const copy = path.join(examplesCopy(["the-unraveled-thread"]), "the-unraveled-thread");
+    const story = path.join(copy, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2\n", "schema-version: 2\nseverity:\n  - warning: pacing-no-sequel\n    level: error\n"));
+    const kept = EXPECTED_WARNINGS["the-unraveled-thread"].pacing.warnings[0];
+    expect(collectAdvisory([], "the-unraveled-thread", copy)).toEqual([
+      `the-unraveled-thread pacing error: ${kept}`,
+      `the-unraveled-thread pacing is missing expected warning: ${kept}`
     ]);
     // Every example that keeps a warning says why.
     for (const entry of Object.values(EXPECTED_WARNINGS).flatMap(Object.values)) {
