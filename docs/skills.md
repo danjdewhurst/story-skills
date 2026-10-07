@@ -490,7 +490,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Triggers.** "Pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "dead end", "drafting sprint", "writing cadence".
 
-**Not for.** Mysteries and other clue-dependent genres where setup has to come before payoff (use chapter-writing with [genre-craft](#genre-craft)), or revising existing chapters, including a reverse outline of the draft or cutting a subplot ([revision-continuity](#revision-continuity)). The reverse outline inside the reconcile loop, and cutting dead ends in a batch review, stay here. You can switch mode per project or per chapter.
+**Not for.** Mysteries and other clue-dependent genres where setup has to come before payoff (use chapter-writing with [genre-craft](#genre-craft)), or revising existing chapters, including a reverse outline of an existing linear draft or cutting a subplot ([revision-continuity](#revision-continuity)). The reverse outline inside the reconcile loop, and cutting dead ends in a batch review, stay here. You can switch mode per project or per chapter.
 
 **Workflow.**
 
