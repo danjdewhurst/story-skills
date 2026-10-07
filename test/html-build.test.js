@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { estimatePages, printHtml } from "../src/html.js";
-import { htmlBook } from "../src/packaging.js";
+import { htmlBook, inlineHtml } from "../src/packaging.js";
 import { findCommand } from "../src/pdf.js";
 import { buildBook, createEntity, createStoryProject } from "../src/story.js";
 import { backtickRuns, expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -122,6 +122,10 @@ describe("html and print builds", () => {
   test("long runs of spaces in a code span, a hard-broken line, or a heading build in linear time", () => {
     const paragraphs = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs;
     expect(paragraphs("Use ` a ` here  \nnext line\n\n# Title   ##").map((paragraph) => paragraph.html)).toEqual(["Use a here<br>next line", "Title"]);
+    // One space comes off each end of a code span that is not all spaces,
+    // whatever it holds: a pattern with `.` kept the spaces round two line
+    // separators.
+    expect(inlineHtml("` a\u2028\u2029b ` and `  `")).toBe("a\u2028\u2029b and   ");
     expectLinearTime(paragraphs, (n) => `\` ${"a ".repeat(n / 2)}x\``, { length: 64000 });
     expectLinearTime(paragraphs, (n) => `a${" ".repeat(n)}b\nc`);
     expectLinearTime(paragraphs, (n) => `# a${" ".repeat(n)}b`);
