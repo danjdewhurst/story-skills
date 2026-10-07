@@ -39,6 +39,8 @@ export default {
     "narration-opening-anonymous": "{title}. بصوت {narrator}.",
     "narration-closing": "النهاية. استمعتم إلى {title}، تأليف {authors}، بصوت {narrator}.",
     "narration-closing-anonymous": "النهاية. استمعتم إلى {title}، بصوت {narrator}.",
+    "narration-byline": "تأليف {names}.",
+    "narration-contributors": "بمشاركة {names}.",
     "screenplay-credit": "تأليف",
     "screenplay-source": "مقتبس من عمل {authors}",
     "screenplay-source-anonymous": "مقتبس من عمل أدبي",

@@ -38,6 +38,8 @@ export default {
     "narration-opening-anonymous": "{title}. Czyta: {narrator}.",
     "narration-closing": "Koniec. Wysłuchaliście audiobooka {title}. Autor: {authors}. Czyta: {narrator}.",
     "narration-closing-anonymous": "Koniec. Wysłuchaliście audiobooka {title}. Czyta: {narrator}.",
+    "narration-byline": "Autor: {names}.",
+    "narration-contributors": "Autorzy opowiadań: {names}.",
     "screenplay-credit": "Scenariusz",
     "screenplay-source": "Na podstawie utworu (autor: {authors})",
     "screenplay-source-anonymous": "Na podstawie utworu literackiego",

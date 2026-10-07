@@ -39,6 +39,8 @@ export default {
     "narration-opening-anonymous": "{title}. Читає {narrator}.",
     "narration-closing": "Кінець. Ви слухали книжку «{title}». Автор: {authors}. Читає {narrator}.",
     "narration-closing-anonymous": "Кінець. Ви слухали книжку «{title}». Читає {narrator}.",
+    "narration-byline": "Автор: {names}.",
+    "narration-contributors": "Автори оповідань: {names}.",
     "screenplay-credit": "Сценарій",
     "screenplay-source": "За твором (автор: {authors})",
     "screenplay-source-anonymous": "За літературним твором",

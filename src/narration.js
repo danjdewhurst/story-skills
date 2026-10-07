@@ -5,8 +5,9 @@ import { characterCount, flattenHeadings, isSceneBreakLine, plainLinks, separate
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
 // Emphasis stays marked so the narrator knows where the stress falls. The
-// credits are spoken, so they are in the book's language; the rest is the
-// narrator's working notes, in English.
+// credits, a collection's or anthology's story credits among them, are
+// spoken, so they are in the book's language; the rest is the narrator's
+// working notes, in English.
 
 export const NARRATION_WORDS_PER_MINUTE = 155;
 // For a book counted in characters: Japanese narration runs about 300
@@ -36,9 +37,10 @@ export function narrationScript(manuscript, guide) {
   const count = unit === "characters" ? characterCount : wordCount;
   const authors = joinNames(manuscript.meta.authors, labels);
   const narrator = "[narrator]";
+  const stories = storyCredits(manuscript.meta, manuscript.chapters);
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
-    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
+    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body, credit: stories.credit(chapter) })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
@@ -61,6 +63,9 @@ export function narrationScript(manuscript, guide) {
   }
   const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
   lines.push("", "## Opening Credits", "", withoutDoubledStop(credit("narration-opening"), manuscript.title));
+  if (stories.contributors !== "") {
+    lines.push("", stories.contributors);
+  }
   // Section times are cut from the running total, so they add up to the
   // finished runtime instead of each rounding on its own.
   let wordsSoFar = 0;
@@ -68,10 +73,30 @@ export function narrationScript(manuscript, guide) {
     const before = Math.round(wordsSoFar / rate);
     wordsSoFar += section.words;
     const minutes = Math.round(wordsSoFar / rate) - before;
-    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
+    // A story's credit is spoken after its heading. Like the opening and
+    // closing credits, it is not prose, so it is left out of the runtime.
+    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", ...(section.credit ? [section.credit, ""] : []), narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", credit("narration-closing"), "");
   return lines.join("\n");
+}
+
+// The spoken credits of a collection's or anthology's stories (chapter
+// `author`): each story's, after its heading, and the opening's line for
+// the story authors it does not already name, in reading order. A book
+// whose stories all name its own authors, and no one else, is credited
+// once, in the opening, like any single-author book.
+function storyCredits(meta, chapters) {
+  const labels = meta.labels;
+  const own = new Set(meta.authors);
+  const named = chapters.map((chapter) => chapter.authors ?? []).filter((names) => names.length > 0);
+  const sameAsBook = (names) => new Set(names).size === own.size && names.every((name) => own.has(name));
+  const speak = !named.every(sameAsBook);
+  const contributors = [...new Set(named.flat())].filter((name) => !own.has(name));
+  return {
+    credit: (chapter) => (speak && (chapter.authors ?? []).length > 0 ? fillLabel(labels, "narration-byline", { names: joinNames(chapter.authors, labels) }) : ""),
+    contributors: contributors.length === 0 ? "" : fillLabel(labels, "narration-contributors", { names: joinNames(contributors, labels) })
+  };
 }
 
 // A title that ends a sentence itself ("Run!", "Why?") takes no full stop

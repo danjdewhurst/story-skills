@@ -61,6 +61,8 @@ export default {
     "narration-opening-anonymous": "『{title}』。朗読、{narrator}。",
     "narration-closing": "おわり。お聴きいただいたのは、{authors}作『{title}』、朗読は{narrator}でした。",
     "narration-closing-anonymous": "おわり。お聴きいただいたのは『{title}』、朗読は{narrator}でした。",
+    "narration-byline": "作、{names}。",
+    "narration-contributors": "寄稿、{names}。",
     "screenplay-credit": "脚本",
     "screenplay-source": "原作：{authors}",
     "screenplay-source-anonymous": "原作に基づく",

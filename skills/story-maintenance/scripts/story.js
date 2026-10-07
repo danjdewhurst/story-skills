@@ -2013,6 +2013,8 @@ var ar_default = {
     "narration-opening-anonymous": "{title}. بصوت {narrator}.",
     "narration-closing": "النهاية. استمعتم إلى {title}، تأليف {authors}، بصوت {narrator}.",
     "narration-closing-anonymous": "النهاية. استمعتم إلى {title}، بصوت {narrator}.",
+    "narration-byline": "تأليف {names}.",
+    "narration-contributors": "بمشاركة {names}.",
     "screenplay-credit": "تأليف",
     "screenplay-source": "مقتبس من عمل {authors}",
     "screenplay-source-anonymous": "مقتبس من عمل أدبي",
@@ -2218,6 +2220,8 @@ var de_default = {
     "narration-opening-anonymous": "{title}. Gelesen von {narrator}.",
     "narration-closing": "Ende. Sie hörten {title}, geschrieben von {authors}, gelesen von {narrator}.",
     "narration-closing-anonymous": "Ende. Sie hörten {title}, gelesen von {narrator}.",
+    "narration-byline": "Geschrieben von {names}.",
+    "narration-contributors": "Mit Beiträgen von {names}.",
     "screenplay-credit": "Geschrieben von",
     "screenplay-source": "Nach einer Vorlage von {authors}",
     "screenplay-source-anonymous": "Nach einer literarischen Vorlage",
@@ -3584,6 +3588,8 @@ var en_default = {
     "narration-opening-anonymous": "{title}. Narrated by {narrator}.",
     "narration-closing": "The end. You have been listening to {title}, written by {authors}, narrated by {narrator}.",
     "narration-closing-anonymous": "The end. You have been listening to {title}, narrated by {narrator}.",
+    "narration-byline": "Written by {names}.",
+    "narration-contributors": "With contributions by {names}.",
     "screenplay-credit": "Written by",
     "screenplay-source": "Based on the {form} by {authors}",
     "screenplay-source-anonymous": "Based on the {form}",
@@ -3755,6 +3761,8 @@ var es_default = {
     "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
     "narration-closing": "Fin. Ha escuchado {title}, escrito por {authors}, narrado por {narrator}.",
     "narration-closing-anonymous": "Fin. Ha escuchado {title}, narrado por {narrator}.",
+    "narration-byline": "Escrito por {names}.",
+    "narration-contributors": "Con contribuciones de {names}.",
     "screenplay-credit": "Escrito por",
     "screenplay-source": "Basado en la obra de {authors}",
     "screenplay-source-anonymous": "Basado en la obra original",
@@ -4486,6 +4494,8 @@ var fa_default = {
     "narration-opening-anonymous": "{title}. با صدای {narrator}.",
     "narration-closing": "پایان. شما {title}، نوشتهٔ {authors}، را با صدای {narrator} شنیدید.",
     "narration-closing-anonymous": "پایان. شما {title} را با صدای {narrator} شنیدید.",
+    "narration-byline": "نوشتهٔ {names}.",
+    "narration-contributors": "با همکاری {names}.",
     "screenplay-credit": "نوشتهٔ",
     "screenplay-source": "برگرفته از اثری از {authors}",
     "screenplay-source-anonymous": "برگرفته از یک اثر ادبی",
@@ -4639,6 +4649,8 @@ var fr_default = {
     "narration-opening-anonymous": "{title}. Lu par {narrator}.",
     "narration-closing": "Fin. Vous venez d’écouter {title}, écrit par {authors}, lu par {narrator}.",
     "narration-closing-anonymous": "Fin. Vous venez d’écouter {title}, lu par {narrator}.",
+    "narration-byline": "Écrit par {names}.",
+    "narration-contributors": "Avec des contributions de {names}.",
     "screenplay-credit": "Écrit par",
     "screenplay-source": "D’après l’œuvre de {authors}",
     "screenplay-source-anonymous": "D’après l’œuvre originale",
@@ -5832,6 +5844,8 @@ var he_default = {
     "narration-opening-anonymous": "{title}. בקריאת {narrator}.",
     "narration-closing": "הסוף. האזנתם לספר {title} מאת {authors}, בקריאת {narrator}.",
     "narration-closing-anonymous": "הסוף. האזנתם לספר {title}, בקריאת {narrator}.",
+    "narration-byline": "מאת {names}.",
+    "narration-contributors": "בהשתתפות {names}.",
     "screenplay-credit": "נכתב על ידי",
     "screenplay-source": "על פי היצירה מאת {authors}",
     "screenplay-source-anonymous": "על פי יצירה ספרותית",
@@ -5976,6 +5990,8 @@ var hi_default = {
     "narration-opening-anonymous": "{title}। वाचक: {narrator}।",
     "narration-closing": "समाप्त। आप {title} सुन रहे थे, लेखक {authors}, वाचक {narrator}।",
     "narration-closing-anonymous": "समाप्त। आप {title} सुन रहे थे, वाचक {narrator}।",
+    "narration-byline": "लेखक: {names}।",
+    "narration-contributors": "सहयोगी लेखक: {names}।",
     "screenplay-credit": "लेखक",
     "screenplay-source": "{authors} की रचना पर आधारित",
     "screenplay-source-anonymous": "मूल रचना पर आधारित",
@@ -6118,6 +6134,8 @@ var it_default = {
     "narration-opening-anonymous": "{title}. Letto da {narrator}.",
     "narration-closing": "Fine. Avete ascoltato {title}, scritto da {authors}, letto da {narrator}.",
     "narration-closing-anonymous": "Fine. Avete ascoltato {title}, letto da {narrator}.",
+    "narration-byline": "Scritto da {names}.",
+    "narration-contributors": "Con contributi di {names}.",
     "screenplay-credit": "Scritto da",
     "screenplay-source": "Tratto dall’opera di {authors}",
     "screenplay-source-anonymous": "Tratto dall’opera originale",
@@ -6272,6 +6290,8 @@ var ja_default = {
     "narration-opening-anonymous": "『{title}』。朗読、{narrator}。",
     "narration-closing": "おわり。お聴きいただいたのは、{authors}作『{title}』、朗読は{narrator}でした。",
     "narration-closing-anonymous": "おわり。お聴きいただいたのは『{title}』、朗読は{narrator}でした。",
+    "narration-byline": "作、{names}。",
+    "narration-contributors": "寄稿、{names}。",
     "screenplay-credit": "脚本",
     "screenplay-source": "原作：{authors}",
     "screenplay-source-anonymous": "原作に基づく",
@@ -6417,6 +6437,8 @@ var ko_default = {
     "narration-opening-anonymous": "『{title}』. {narrator} 낭독.",
     "narration-closing": "끝. 지금까지 들으신 작품은 『{title}』, {authors} 지음, {narrator} 낭독이었습니다.",
     "narration-closing-anonymous": "끝. 지금까지 들으신 작품은 『{title}』, {narrator} 낭독이었습니다.",
+    "narration-byline": "{names} 지음.",
+    "narration-contributors": "{names} 참여.",
     "screenplay-credit": "각본",
     "screenplay-source": "원작: {authors}",
     "screenplay-source-anonymous": "원작을 바탕으로 함",
@@ -6559,6 +6581,8 @@ var nl_default = {
     "narration-opening-anonymous": "{title}. Voorgelezen door {narrator}.",
     "narration-closing": "Einde. U luisterde naar {title}, geschreven door {authors}, voorgelezen door {narrator}.",
     "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
+    "narration-byline": "Geschreven door {names}.",
+    "narration-contributors": "Met bijdragen van {names}.",
     "screenplay-credit": "Geschreven door",
     "screenplay-source": "Naar het werk van {authors}",
     "screenplay-source-anonymous": "Naar het oorspronkelijke werk",
@@ -6701,6 +6725,8 @@ var pl_default = {
     "narration-opening-anonymous": "{title}. Czyta: {narrator}.",
     "narration-closing": "Koniec. Wysłuchaliście audiobooka {title}. Autor: {authors}. Czyta: {narrator}.",
     "narration-closing-anonymous": "Koniec. Wysłuchaliście audiobooka {title}. Czyta: {narrator}.",
+    "narration-byline": "Autor: {names}.",
+    "narration-contributors": "Autorzy opowiadań: {names}.",
     "screenplay-credit": "Scenariusz",
     "screenplay-source": "Na podstawie utworu (autor: {authors})",
     "screenplay-source-anonymous": "Na podstawie utworu literackiego",
@@ -6877,6 +6903,8 @@ var pt_default = {
     "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
     "narration-closing": "Fim. Você ouviu {title}, escrito por {authors}, narrado por {narrator}.",
     "narration-closing-anonymous": "Fim. Você ouviu {title}, narrado por {narrator}.",
+    "narration-byline": "Escrito por {names}.",
+    "narration-contributors": "Com contribuições de {names}.",
     "screenplay-credit": "Escrito por",
     "screenplay-source": "Baseado na obra de {authors}",
     "screenplay-source-anonymous": "Baseado na obra original",
@@ -7019,6 +7047,8 @@ var ru_default = {
     "narration-opening-anonymous": "{title}. Читает {narrator}.",
     "narration-closing": "Конец. Вы слушали книгу «{title}». Автор: {authors}. Читает {narrator}.",
     "narration-closing-anonymous": "Конец. Вы слушали книгу «{title}». Читает {narrator}.",
+    "narration-byline": "Автор: {names}.",
+    "narration-contributors": "Авторы рассказов: {names}.",
     "screenplay-credit": "Сценарий",
     "screenplay-source": "По произведению (автор: {authors})",
     "screenplay-source-anonymous": "По литературному произведению",
@@ -7164,6 +7194,8 @@ var sv_default = {
     "narration-opening-anonymous": "{title}. Uppläst av {narrator}.",
     "narration-closing": "Slut. Du har lyssnat på {title}, skriven av {authors}, uppläst av {narrator}.",
     "narration-closing-anonymous": "Slut. Du har lyssnat på {title}, uppläst av {narrator}.",
+    "narration-byline": "Skriven av {names}.",
+    "narration-contributors": "Med bidrag av {names}.",
     "screenplay-credit": "Skriven av",
     "screenplay-source": "Baserad på verket av {authors}",
     "screenplay-source-anonymous": "Baserad på originalverket",
@@ -7315,6 +7347,8 @@ var tr_default = {
     "narration-opening-anonymous": "{title}. Seslendiren: {narrator}.",
     "narration-closing": "Son. {title} adlı kitabı dinlediniz. Yazan: {authors}. Seslendiren: {narrator}.",
     "narration-closing-anonymous": "Son. {title} adlı kitabı dinlediniz. Seslendiren: {narrator}.",
+    "narration-byline": "Yazan: {names}.",
+    "narration-contributors": "Katkıda bulunanlar: {names}.",
     "screenplay-credit": "Yazan",
     "screenplay-source": "{authors} tarafından yazılan eserden uyarlanmıştır",
     "screenplay-source-anonymous": "Özgün bir eserden uyarlanmıştır",
@@ -7457,6 +7491,8 @@ var uk_default = {
     "narration-opening-anonymous": "{title}. Читає {narrator}.",
     "narration-closing": "Кінець. Ви слухали книжку «{title}». Автор: {authors}. Читає {narrator}.",
     "narration-closing-anonymous": "Кінець. Ви слухали книжку «{title}». Читає {narrator}.",
+    "narration-byline": "Автор: {names}.",
+    "narration-contributors": "Автори оповідань: {names}.",
     "screenplay-credit": "Сценарій",
     "screenplay-source": "За твором (автор: {authors})",
     "screenplay-source-anonymous": "За літературним твором",
@@ -7610,6 +7646,8 @@ var zh_default = {
     "narration-opening-anonymous": "《{title}》。演播：{narrator}。",
     "narration-closing": "全书完。您收听的是《{title}》，作者{authors}，演播{narrator}。",
     "narration-closing-anonymous": "全书完。您收听的是《{title}》，演播{narrator}。",
+    "narration-byline": "作者：{names}。",
+    "narration-contributors": "收录作者：{names}。",
     "screenplay-credit": "编剧",
     "screenplay-source": "改编自{authors}的作品",
     "screenplay-source-anonymous": "改编自原著",
@@ -7748,6 +7786,8 @@ var labels = {
   "narration-opening-anonymous": "《{title}》。朗讀：{narrator}。",
   "narration-closing": "全書完。您收聽的是《{title}》，作者{authors}，朗讀{narrator}。",
   "narration-closing-anonymous": "全書完。您收聽的是《{title}》，朗讀{narrator}。",
+  "narration-byline": "作者：{names}。",
+  "narration-contributors": "收錄作者：{names}。",
   "screenplay-credit": "編劇",
   "screenplay-source": "改編自{authors}的作品",
   "screenplay-source-anonymous": "改編自原著",
@@ -26973,9 +27013,10 @@ function narrationScript(manuscript, guide) {
   const count = unit === "characters" ? characterCount : wordCount;
   const authors = joinNames(manuscript.meta.authors, labels);
   const narrator = "[narrator]";
+  const stories = storyCredits(manuscript.meta, manuscript.chapters);
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
-    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body })),
+    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body, credit: stories.credit(chapter) })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
   ].map((section) => ({ ...section, words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
@@ -26997,16 +27038,31 @@ function narrationScript(manuscript, guide) {
   }
   const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
   lines.push("", "## Opening Credits", "", withoutDoubledStop(credit("narration-opening"), manuscript.title));
+  if (stories.contributors !== "") {
+    lines.push("", stories.contributors);
+  }
   let wordsSoFar = 0;
   for (const section of sections) {
     const before = Math.round(wordsSoFar / rate);
     wordsSoFar += section.words;
     const minutes = Math.round(wordsSoFar / rate) - before;
-    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", narrationBody(section.body));
+    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", ...section.credit ? [section.credit, ""] : [], narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", credit("narration-closing"), "");
   return lines.join(`
 `);
+}
+function storyCredits(meta, chapters) {
+  const labels = meta.labels;
+  const own = new Set(meta.authors);
+  const named = chapters.map((chapter) => chapter.authors ?? []).filter((names) => names.length > 0);
+  const sameAsBook = (names) => new Set(names).size === own.size && names.every((name) => own.has(name));
+  const speak = !named.every(sameAsBook);
+  const contributors = [...new Set(named.flat())].filter((name) => !own.has(name));
+  return {
+    credit: (chapter) => speak && (chapter.authors ?? []).length > 0 ? fillLabel(labels, "narration-byline", { names: joinNames(chapter.authors, labels) }) : "",
+    contributors: contributors.length === 0 ? "" : fillLabel(labels, "narration-contributors", { names: joinNames(contributors, labels) })
+  };
 }
 function withoutDoubledStop(text, title) {
   const ending = /[.!?…。！？]["”’')\]」』》]*$/u;

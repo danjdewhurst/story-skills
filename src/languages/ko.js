@@ -42,6 +42,8 @@ export default {
     "narration-opening-anonymous": "『{title}』. {narrator} 낭독.",
     "narration-closing": "끝. 지금까지 들으신 작품은 『{title}』, {authors} 지음, {narrator} 낭독이었습니다.",
     "narration-closing-anonymous": "끝. 지금까지 들으신 작품은 『{title}』, {narrator} 낭독이었습니다.",
+    "narration-byline": "{names} 지음.",
+    "narration-contributors": "{names} 참여.",
     "screenplay-credit": "각본",
     "screenplay-source": "원작: {authors}",
     "screenplay-source-anonymous": "원작을 바탕으로 함",

@@ -15,6 +15,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The plain DOCX build now credits the book's authors and editor under its title, as the HTML and print title pages do. (#518)
   - The `author` or `authors` names come first, then `Edited by` and the `editor` names, in the book's language.
   - Each line uses a new centred `Credit` paragraph style, and a book with neither field gets no credit line.
+- The narration script now credits each story in a collection or anthology. A chapter with its own `author` gets a spoken `Written by Ines Calder.` after its heading, and the opening credits add `With contributions by …` for the story authors the book's own credit leaves out; a book whose stories all name its own authors is unchanged. The new `narration-byline` and `narration-contributors` labels are translated in every language pack that has labels. ([#520](https://github.com/danjdewhurst/story-skills/issues/520))
 
 ### Changed
 

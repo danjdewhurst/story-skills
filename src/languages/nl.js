@@ -36,6 +36,8 @@ export default {
     "narration-opening-anonymous": "{title}. Voorgelezen door {narrator}.",
     "narration-closing": "Einde. U luisterde naar {title}, geschreven door {authors}, voorgelezen door {narrator}.",
     "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
+    "narration-byline": "Geschreven door {names}.",
+    "narration-contributors": "Met bijdragen van {names}.",
     "screenplay-credit": "Geschreven door",
     "screenplay-source": "Naar het werk van {authors}",
     "screenplay-source-anonymous": "Naar het oorspronkelijke werk",
