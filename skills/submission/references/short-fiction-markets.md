@@ -144,8 +144,9 @@ open, holds, entries past their window, and stories with no submission out.
 A collection gathers one author's stories; an anthology gathers several
 authors' stories, usually under an editor. The steps below fit both. Each
 story stays an ordinary Story Skills project; the book is one more project
-with each story as a chapter, titled by a `chapter-heading: "{title}"` label
-and with no `form`. In an anthology, put the editor in `story.md` `editor`
+with each story as a chapter and no `form`. Its `story.md` `labels:` list
+holds `chapter-heading: "{title}"`, so each heading shows the title alone; a
+`labels` entry in a chapter's frontmatter has no effect. In an anthology, put the editor in `story.md` `editor`
 and each story's writer in its chapter's `author` (a name, or a list for a
 co-written story), never in the prose: builds print it under the story's
 title and keep it out of the word count. Ask the user for every name; do
