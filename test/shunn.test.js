@@ -36,6 +36,24 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
+function storyWithFields(title = "Open Builds", storyFields = "") {
+  const cwd = makeTempDir();
+  const created = createStoryProject({ cwd, title, force: false });
+  const storyPath = path.join(created.root, "story.md");
+  if (storyFields !== "") {
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(`title: ${title}\n`, `title: ${title}\n${storyFields}`), "utf8");
+  }
+  return { root: created.root, cwd };
+}
+
+function writeChapterFile(root, number, frontmatter, body) {
+  writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
+number: ${number}
+${/^status:/m.test(frontmatter) ? "" : "status: draft"}
+${frontmatter}
+`, `## Chapter Text\n\n${body}\n`);
+}
+
 describe("shunn manuscript format", () => {
   test("writes markdown to the default .shunn.md dist path", () => {
     const { root } = shunnProject();
@@ -144,5 +162,32 @@ describe("shunn manuscript format", () => {
     const result = invoke(cwd, ["build", root, "--format", "nope"]);
     expect(result.code).toBe(2);
     expect(result.err).toContain("Unsupported build format: nope");
+  });
+});
+
+describe("Shunn short-story layout (#135)", () => {
+  test("short-story and flash forms join chapters with a centred # and no headings or page breaks", () => {
+    const { root } = storyWithFields("Gull", "form: short-story\n");
+    writeChapterFile(root, 1, "title: Part 1", "Text one.\n\n* * *\n\nAfter the break.");
+    writeChapterFile(root, 2, "title: Part 2", "Text two.");
+    writeChapterFile(root, 3, "title: Part 3", "");
+
+    const docx = readArchiveText(buildBook(root, { format: "docx", shunn: true }).outFile);
+    expect(docx).not.toContain('w:type="page"');
+    expect(docx).not.toContain("Part 1");
+    expect(docx.match(/<w:t xml:space="preserve">#<\/w:t>/g)).toHaveLength(2);
+
+    const shunn = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
+    expect(shunn).not.toContain("\f");
+    expect(shunn).not.toContain("Part 1");
+    expect(shunn).toContain("Text one.\n\n#\n\nAfter the break.\n\n#\n\nText two.\n");
+    expect(shunn.trimEnd().endsWith("Text two.")).toBe(true);
+  });
+
+  test("a novel keeps chapter headings on new pages", () => {
+    const { root } = storyWithFields("Long", "form: novel\n");
+    writeChapterFile(root, 1, "title: Part 1", "Text one.");
+    const shunn = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
+    expect(shunn).toContain("\f\n# Chapter 1: Part 1");
   });
 });

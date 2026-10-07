@@ -41,6 +41,26 @@ function shunnPdfHtml(language, body) {
   });
 }
 
+function storyWithFields(title = "Open Builds", storyFields = "") {
+  const cwd = makeTempDir();
+  const created = createStoryProject({ cwd, title, force: false });
+  const storyPath = path.join(created.root, "story.md");
+  if (storyFields !== "") {
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(`title: ${title}\n`, `title: ${title}\n${storyFields}`), "utf8");
+  }
+  return { root: created.root, cwd };
+}
+
+function writeChapterFile(root, number, frontmatter, body) {
+  writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
+number: ${number}
+${/^status:/m.test(frontmatter) ? "" : "status: draft"}
+${frontmatter}
+`, `## Chapter Text\n\n${body}\n`);
+}
+
+const SONG = "The old song went:\n\n*Ember given, fire kept,\\\nEmber taken, mountain wept,  \nWhat the Vale has lent.*\n\n> Dear Mara,\n>\n> Come home.\\\n> Your father\n\nShe hummed it anyway.";
+
 describe("scene-break lines in builds (#551)", () => {
   // The same scenes with and without blank lines around each break.
   const spaced = "He left.\n\n* * *\n\nShe came.\n\n---\n\nThen night.\n\n#\n\nMorning.\n";
@@ -238,5 +258,50 @@ describe("paragraph breaks under Node (#551, #599)", () => {
         expect({ format, flags, cli, same: text(out) === expected }).toEqual({ format, flags, cli, same: true });
       }
     }
+  });
+});
+
+describe("hard breaks and blockquotes (#245)", () => {
+  test("a quoted line directly after a plain line starts its own paragraph", () => {
+    const { root } = storyWithFields();
+    writeChapterFile(root, 1, "title: One", "She read the note.\n> Come home.");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toMatch(/<p id="ch01-p1">.*She read the note\.<\/p>\n<blockquote>\n<p id="ch01-p2">.*Come home\.<\/p>\n<\/blockquote>/);
+  });
+
+  test("every paragraph build keeps hard breaks and sets quotes as blockquotes", () => {
+    const { root } = storyWithFields();
+    writeChapterFile(root, 1, "title: Song", SONG);
+
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("<em>Ember given, fire kept,<br>Ember taken, mountain wept,<br>What the Vale has lent.</em>");
+    expect(html).toMatch(/<blockquote>\n<p id="ch01-p3">.*Dear Mara,<\/p>\n<p id="ch01-p4">.*Come home\.<br>Your father<\/p>\n<\/blockquote>\n<p id="ch01-p5">/);
+
+    const print = fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8");
+    expect(print).toContain("<blockquote>\n<p>Dear Mara,</p>\n<p>Come home.<br>Your father</p>\n</blockquote>");
+
+    const epub = readArchiveText(buildBook(root, { format: "epub" }).outFile);
+    expect(epub).toContain("<em>Ember given, fire kept,<br/>Ember taken, mountain wept,<br/>What the Vale has lent.</em>");
+    expect(epub).toContain("<blockquote><p>Dear Mara,</p><p>Come home.<br/>Your father</p></blockquote><p>She hummed it anyway.</p>");
+
+    const docx = readArchiveText(buildBook(root, { format: "docx" }).outFile);
+    expect(docx).toContain(`fire kept,</w:t><w:br/><w:t xml:space="preserve">Ember taken`);
+    expect(docx).toContain(`<w:p><w:pPr><w:pStyle w:val="Quote"/></w:pPr><w:r><w:t xml:space="preserve">Dear Mara,</w:t></w:r></w:p>`);
+    expect(docx).toContain(`w:styleId="Quote"`);
+
+    const shunnDocx = readArchiveText(buildBook(root, { format: "docx", shunn: true, out: "dist/s.docx" }).outFile);
+    expect(shunnDocx).toContain(`<w:ind w:left="720" w:right="720" w:firstLine="0"/>`);
+    expect(shunnDocx).toContain(`Come home.</w:t><w:br/><w:t xml:space="preserve">Your father`);
+
+    const shunn = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
+    expect(shunn).toContain("*Ember given, fire kept,\\\nEmber taken, mountain wept,\\\nWhat the Vale has lent.*");
+    expect(shunn).toContain("> Dear Mara,\n\n> Come home.\\\n> Your father\n\nShe hummed it anyway.");
+  });
+
+  test("a soft line break still joins, and a trailing backslash ends no line", () => {
+    const { root } = storyWithFields();
+    writeChapterFile(root, 1, "title: Soft", "One line\nand the next.\\");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("One line and the next.\\</p>");
   });
 });
