@@ -290,8 +290,9 @@ current when you add a fixture.
 
 ## Check format
 
-`checks.json` fields:
+`checks.json` fields. A top-level key that is not one of these fails both `scripts/check-evals.js` and the checker, so a misspelled field cannot pass silently:
 
+- `name`: the fixture's title in the checker's report. Defaults to the folder name.
 - `brief`: the drafting instruction to give the skill.
 - `skill`: the skill under test (e.g. `chapter-writing`). Required by `scripts/check-evals.js`; `run-skill.js --skill` selects which skill's instructions to load.
 - `required`: case-insensitive canon phrases that must appear in the draft (facts, names, objects). Matching is stem/inflected, so `logbook` also matches `logbooks`. How a phrase's ends match depends on the script of its first and last letter (see [Phrase matching by script](#phrase-matching-by-script)).

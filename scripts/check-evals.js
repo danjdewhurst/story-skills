@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { CHECK_KEYS } from "../evals/run-evals.js";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -275,6 +276,12 @@ export function checkEvals(root = ROOT, log = console.log) {
     if (typeof checks !== "object" || checks === null || Array.isArray(checks)) {
       errors.push(`${name}/checks.json: top level must be an object`);
       continue;
+    }
+    for (const key of Object.keys(checks)) {
+      check(
+        CHECK_KEYS.has(key),
+        `${name}/checks.json: unknown key ${JSON.stringify(key)} (not a checks.json field, see evals/README.md)`
+      );
     }
     check(
       typeof checks.brief === "string" && checks.brief.trim().length > 0,

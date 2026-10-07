@@ -169,6 +169,14 @@ describe("check-evals", () => {
     }
   });
 
+  test("rejects a misspelled top-level field", () => {
+    const root = evalsRoot();
+    addFixture(root, "typo", { ...good, banned_regx: ["Thursday"] });
+    const result = run(root);
+    expect(result.status).toBe(1);
+    expect(result.out).toContain('FAIL typo/checks.json: unknown key "banned_regx"');
+  });
+
   test("warnings still print beside failures", () => {
     const root = evalsRoot();
     addFixture(root, "warned", { ...good, brief: "", banned: ["Thursday"] });

@@ -589,6 +589,11 @@ describe("the checker's prose checks", () => {
     ]);
   });
 
+  test("a misspelled top-level field fails the draft instead of being ignored", () => {
+    const results = checkDraft({ required: ["Petra"], banned_regx: ["Thursday"] }, "", "Petra came on Thursday.\n");
+    expect(results).toContainEqual([false, 'checks.json: unknown key "banned_regx"']);
+  });
+
   test("required_in_order finds each pattern after the one before", () => {
     const checks = { required_in_order: [["story passes", "story reindex", "story check"]] };
     const ok = (draft) => checkDraft(checks, "", draft)[0][0];
