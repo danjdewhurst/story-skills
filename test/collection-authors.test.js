@@ -247,6 +247,19 @@ describe("collection and anthology authors (#473)", () => {
     expect(build(custom, "shunn")).toContain("Selected by Cara Editor");
   });
 
+  // #539: these credits name the work, not the person, so they need no
+  // plural for two editors and no feminine form for an editor who is a
+  // woman; a Hindi byline is the name alone, as a Russian one is.
+  test("Russian, Ukrainian, and Hindi credits fit any number of editors and any gender", () => {
+    const credits = { ru: "Составление: Cara Editor и Ada Writer", uk: "Упорядкування: Cara Editor і Ada Writer", hi: "संपादन: Cara Editor और Ada Writer" };
+    for (const [language, credit] of Object.entries(credits)) {
+      expect(build(anthology(`language: ${language}\neditor:\n  - Cara Editor\n  - Ada Writer\n`), "shunn")).toContain(credit);
+    }
+    const hindi = build(anthology("language: hi\n"), "markdown");
+    expect(hindi).toContain("*Dee Writer और Eve Poet*");
+    expect(hindi).not.toContain("लेखक");
+  });
+
   test("the metadata sheet lists editors and counts an editor as the credit", () => {
     const text = build(anthology(), "metadata");
     expect(text).toContain("| Editor(s) | Cara Editor |");

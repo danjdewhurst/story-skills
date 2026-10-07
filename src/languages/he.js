@@ -1,5 +1,7 @@
 // Hebrew: no letter case; words are spaced. No word lists yet. Labels that
-// address the reader use the plural imperative, which is gender-neutral.
+// address the reader use the plural imperative, which is gender-neutral,
+// and codex labels about a character are nouns, since a verb or participle
+// takes the subject's gender.
 
 export default {
   code: "he",
@@ -75,20 +77,20 @@ export default {
     "codex-note-safe": "מדריך הסיפור ללא ספוילרים: מי ומה יש בסיפור והיכן הם מופיעים. הערות, מצבים, מוות, ידע, רמזים ופתרונות הושמטו; בנו עם {flag} לקבלת המדריך המלא.",
     "codex-no-entities": "עדיין אין דמויות, מקומות או ישויות אחרות.",
     "codex-relationships": "קשרים",
-    "codex-appears-in": "מופיע ב־",
-    "codex-advanced-in": "מתקדם ב־",
-    "codex-linked-from": "מקושר מ־",
+    "codex-appears-in": "הופעות",
+    "codex-advanced-in": "מתקדמת ב־",
+    "codex-linked-from": "אזכורים",
     "codex-changes": "שינויים",
     "codex-change": "החל מ־{chapter}: {field} משתנה ל־{value}",
-    "codex-knows": "יודע",
+    "codex-knows": "ידע",
     "codex-known-from-start": "ידוע מההתחלה",
     "codex-learned-in": "נודע ב־{chapter}",
     "codex-notes": "הערות",
     "codex-role": "תפקיד",
     "codex-aliases": "כינויים",
     "codex-status": "מצב",
-    "codex-dies-in": "מת ב־",
-    "codex-revived-in": "קם לתחייה ב־",
+    "codex-dies-in": "מוות",
+    "codex-revived-in": "חזרה לחיים",
     "codex-type": "סוג",
     "codex-region": "אזור",
     "codex-setting": "סביבה",
@@ -118,7 +120,7 @@ export default {
     "codex-last": "אחרון",
     "codex-longest-gap": "הפער הארוך ביותר",
     "codex-death": "מוות",
-    "codex-dies-in-chapter": "מת בפרק {n}",
+    "codex-dies-in-chapter": "מוות בפרק {n}",
     "codex-threads-note": "שאלות פתוחות והבטחות בלבד, בלי התשובות או המימוש שלהן. רמזים וחוטי עלילה שנפתרו דורשים {flag}.",
     "codex-none": "אין.",
     "codex-question": "שאלה",

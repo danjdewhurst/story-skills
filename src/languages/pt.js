@@ -117,7 +117,7 @@ export default {
     "codex-death": "Morte",
     "codex-dies-in-chapter": "morre no capítulo {n}",
     "codex-threads-note": "Só perguntas em aberto e promessas, sem as respostas nem o cumprimento. Pistas e tramas resolvidas exigem {flag}.",
-    "codex-none": "Nenhum.",
+    "codex-none": "Nenhuma.",
     "codex-question": "Pergunta",
     "codex-raised-in": "Levantada em",
     "codex-resolved-in": "Resolvida em",

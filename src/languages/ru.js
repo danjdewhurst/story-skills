@@ -1,7 +1,8 @@
 // Russian: build labels and narration pace. No word lists yet. A chapter
 // heading sets its title after a full stop (Глава 1. Название), a byline is
 // the name alone, and credits name the author after a colon, which keeps
-// names out of the genitive.
+// names out of the genitive. The editor's credit names the work
+// (Составление), not the person, so it fits any number of editors.
 
 export default {
   code: "ru",
@@ -32,7 +33,7 @@ export default {
     "anchor-title": "Ссылка на {label}",
     by: "",
     byline: "{names}",
-    "edited-by": "Составитель: {names}",
+    "edited-by": "Составление: {names}",
     "approximate-words": "Около {words} слов",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
@@ -103,7 +104,7 @@ export default {
     "codex-time": "Время",
     "codex-scene": "Сцена",
     "codex-chapter": "Глава",
-    "codex-pov": "Фокал",
+    "codex-pov": "Фокальный персонаж",
     "codex-told-late": "вне хронологии",
     "codex-flashback": "ретроспектива: {date}",
     "codex-no-dates": "Пока нет сцен или глав с датами. Укажите у сцен поле {field}, чтобы расположить их во времени истории.",
