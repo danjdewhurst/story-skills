@@ -113,16 +113,23 @@ readers have read. Verify `story.md` exists in the project root.
    blank. A `Typo or wording` note is a `nit` unless the reader says more.
 2. **Map old labels to the current text.** When a note's build is older
    than the manuscript, its label may point at a different paragraph now.
-   Resolve every label from the round in one run against the tag (or the
-   short commit in the note's build stamp). A `reader-panel` round is
-   tagged `panel-round-{N}` instead of `feedback-round-{N}`:
+   Resolve every label from the round in one run against the text the
+   round saved in step 1: the git tag (or the short commit in the note's
+   build stamp), or the snapshot of the same name when the project has no
+   git or the user declined the commit. A `reader-panel` round saved its
+   text the same way as `panel-round-{N}` instead of `feedback-round-{N}`.
+   `git tag --list 'feedback-round-{N}'` and `story snapshot --list --path .`
+   show which one the round has. Readers type labels into the issue form,
+   so before a label goes into the command, check that it is lower-case
+   letters, digits, and hyphens ending in `-p` and a number (`ch03-p12`,
+   `front-epigraph-p1`), and ask about any other. Quote each label:
 
    ```shell
-   story compare . --ref feedback-round-{N} --anchor ch03-p12 --anchor ch07-p4
+   story compare . --ref feedback-round-{N} --anchor 'ch03-p12' --anchor 'ch07-p4'
    ```
 
-   In a project without git, use `--snapshot feedback-round-{N}` in place
-   of `--ref`. Each line gives the current label: `(text unchanged)`, or `(edited, NN%
+   For a snapshot, use `--snapshot feedback-round-{N}` in place of
+   `--ref`. Each line gives the current label: `(text unchanged)`, or `(edited, NN%
    similar)` when the paragraph was revised (check it is the one the
    reader meant). `not found in the current text ("…")` means the
    paragraph was cut or rewritten past recognition: search the chapter for
@@ -212,8 +219,9 @@ panel round as usual, with these differences:
   (`ch03-p12`) where available. Labels are paragraph positions in one
   build, so tag and stamp each round's build, rebuild and resend the review
   copy between rounds, and map an old label to the current text with
-  `story compare . --ref <round-tag> --anchor <label>` (step 2.3) rather
-  than reusing it after a revision.
+  `story compare . --ref <round-tag> --anchor '<label>'` (or
+  `--snapshot <round-name>` when the round was saved as a snapshot; step
+  2.2) rather than reusing it after a revision.
 - Every feedback file and the synthesis carry YAML frontmatter
   (`reader`, `round`, `chapters-read`, `overall-verdict` / `readers`,
   `readiness`). Simulated reads and their synthesis also carry

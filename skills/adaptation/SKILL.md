@@ -128,7 +128,7 @@ Follow `references/fountain.md`.
 Follow `references/picture-book.md`.
 
 1. Set `form: picture-book` in `story.md`, or start a new project with
-   `story init "Title" --form picture-book` (target 500 words).
+   `story init 'Title' --form picture-book` (target 500 words).
 2. Make the pagination plan in `adaptations/picture-book/pagination.md`:
    32 pages, 14 spreads of story, a page-turn beat on each spread.
 3. Keep the text in chapters, one chapter per spread, and the

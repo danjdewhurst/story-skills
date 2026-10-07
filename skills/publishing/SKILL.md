@@ -134,7 +134,7 @@ story build . --format metadata
    `references/copyright-page.md`:
 
    ```shell
-   story add matter "Copyright" --order 0 --heading=false
+   story add matter 'Copyright' --order 0 --heading=false
    ```
 
    Use an `order` lower than every other front page so it sits first

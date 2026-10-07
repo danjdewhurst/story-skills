@@ -63,7 +63,7 @@ Maintain `continuity/clues/` with one file per clue (kebab-case ids). The
 CLI creates them with `story add clue`:
 
 ```shell
-story add clue "The silver locket" --planted chapter-02 --payoff chapter-05
+story add clue 'The silver locket' --planted chapter-02 --payoff chapter-05
 ```
 
 Omit `--payoff` when the payoff is not yet known. `--planted` records the

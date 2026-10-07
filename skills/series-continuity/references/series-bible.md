@@ -74,7 +74,7 @@ characters or events that do not exist in some book's files.
   the id, or keep the old id. Put a new title or epithet in `aliases`, not
   `name`.
 - **Before naming a new character** in a later book, run
-  `story names '<name>' --path <other-book>` against each earlier book, so
+  `story names '<name>' --path '<other-book>'` against each earlier book, so
   a minor character does not echo a major one.
 
 ## Planning a multi-book series
@@ -102,7 +102,7 @@ Plan the series in the first book before drafting later ones:
    own ending; leave the series question open, not the book's.
 4. List the planned books, their working titles, and one-line premises in
    book one's `story.md` `## Series Notes`. Create a book's project with
-   `story init '{Title}' --follows <book-dir>` (or `--precedes`) only when
+   `story init '{Title}' --follows '<book-dir>'` (or `--precedes`) only when
    work on it starts. A planned book with no project needs no links yet.
 5. Decide which canon is fixed now (deaths, the world's rules, the order of
    major reveals) and which stays open. Fix only what book one's ending

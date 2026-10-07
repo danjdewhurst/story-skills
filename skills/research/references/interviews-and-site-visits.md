@@ -6,7 +6,7 @@ really takes. Record them as research notes with `method: interview`,
 `method: site-visit`, or `method: expert-review`.
 
 ```shell
-story add research "Night shift on a cardiac ward" --method interview \
+story add research 'Night shift on a cardiac ward' --method interview \
   --accuracy must-be-accurate --risk medical --used-in chapter-07
 ```
 

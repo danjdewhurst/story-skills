@@ -28,7 +28,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Character arc (starting state, turning points, ending state)
    - Key life events for the timeline
 5. Write the character file using the template in `references/character-template.md`
-6. Save to `characters/{name-kebab}.md`, or use `story add character '{Name}' --role '{role}'` when the CLI is available. Cyrillic and Greek names are transliterated (`Пётр` gives `characters/petr.md`). When the name is in a script with no transliteration table (`李明`), or the user wants a different spelling, choose the ASCII id yourself and pass it: `story add character "李明" --id li-ming --role supporting` keeps `name: 李明` in the file
+6. Save to `characters/{name-kebab}.md`, or use `story add character '{Name}' --role '{role}'` when the CLI is available. Cyrillic and Greek names are transliterated (`Пётр` gives `characters/petr.md`). When the name is in a script with no transliteration table (`李明`), or the user wants a different spelling, choose the ASCII id yourself and pass it: `story add character '李明' --id li-ming --role supporting` keeps `name: 李明` in the file
 7. Update `characters/_index.md` registry table
 8. If relationships reference existing characters, update those character files too
 9. When CLI access is available, run the maintenance pass in the story root:

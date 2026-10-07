@@ -54,7 +54,7 @@ Ask the user:
 
 For a planned chapter, suggest the next beats from its packed context: its outline, the arcs it advances, and the open promises, clues, and questions. For a new chapter there is no packed context yet, so take the scope from the user and the `story next` suggestion. Do not open arc files or `plot/_index.md` to find beats.
 
-Once the scope is agreed, give the chapter its POV and cast so the packed context can include them: create a new chapter with `story add chapter "Title" --pov <character-id> --character <character-id> --location <location-id>`, or set `pov`, `characters`, and `locations` in an existing chapter's frontmatter. Then run `story context chapter-{NN} --path .` (or pass a scene id, `chapter-{NN}-scene-{NN}`, to draft one scene) and build the outline and prose from it.
+Once the scope is agreed, give the chapter its POV and cast so the packed context can include them: create a new chapter with `story add chapter 'Title' --pov <character-id> --character <character-id> --location <location-id>`, or set `pov`, `characters`, and `locations` in an existing chapter's frontmatter. Then run `story context chapter-{NN} --path .` (or pass a scene id, `chapter-{NN}-scene-{NN}`, to draft one scene) and build the outline and prose from it.
 
 ### 3. Build the Outline
 

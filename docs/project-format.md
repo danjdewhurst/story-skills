@@ -579,7 +579,7 @@ Series links need a backlink: a book that lists another in `follows` must appear
 
 ## Characters
 
-Files: `characters/<character-id>.md`. Created with `story add character "Name"`.
+Files: `characters/<character-id>.md`. Created with `story add character 'Name'`.
 
 ```yaml
 ---
@@ -657,7 +657,7 @@ Two pairings the relationship reference allowed before 0.10.0, `former-superviso
 
 ### Locations
 
-Files: `worldbuilding/locations/<location-id>.md`. Created with `story add location "Name"`.
+Files: `worldbuilding/locations/<location-id>.md`. Created with `story add location 'Name'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -695,7 +695,7 @@ A route is two-way unless the destination declares its own route back, which the
 
 ### Systems
 
-Files: `worldbuilding/systems/<system-id>.md`, for magic, technology, religion, economics, and other rule sets. Created with `story add system "Name"`.
+Files: `worldbuilding/systems/<system-id>.md`, for magic, technology, religion, economics, and other rule sets. Created with `story add system 'Name'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -706,7 +706,7 @@ Files: `worldbuilding/systems/<system-id>.md`, for magic, technology, religion, 
 
 ### Factions
 
-Files: `worldbuilding/factions/<faction-id>.md`. Created with `story add faction "Name"`.
+Files: `worldbuilding/factions/<faction-id>.md`. Created with `story add faction 'Name'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -721,7 +721,7 @@ Files: `worldbuilding/factions/<faction-id>.md`. Created with `story add faction
 
 ### Artifacts
 
-Files: `worldbuilding/artifacts/<artifact-id>.md`, for objects that matter to the plot. Created with `story add artifact "Name"`.
+Files: `worldbuilding/artifacts/<artifact-id>.md`, for objects that matter to the plot. Created with `story add artifact 'Name'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -774,7 +774,7 @@ Rules:
 
 ### Arcs
 
-Files: `plot/arcs/<arc-id>.md`. Created with `story add arc "Name"`.
+Files: `plot/arcs/<arc-id>.md`. Created with `story add arc 'Name'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -803,7 +803,7 @@ The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` 
 
 ## Chapters
 
-Files: `chapters/chapter-{NN}.md`. Created with `story add chapter "Title"`, which numbers it after the highest existing chapter unless you pass `--number`.
+Files: `chapters/chapter-{NN}.md`. Created with `story add chapter 'Title'`, which numbers it after the highest existing chapter unless you pass `--number`.
 
 ```yaml
 ---
@@ -883,7 +883,7 @@ Once any chapter has choices, deaths, revivals, knowledge, and progressions foll
 
 ## Scenes
 
-Files: `scenes/{chapter-id}-scene-{NN}.md`. Scene records carry the machine-readable continuity for each scene. Created with `story add scene "Title" --chapter chapter-03`, which numbers the scene after the chapter's last one unless you pass `--scene`.
+Files: `scenes/{chapter-id}-scene-{NN}.md`. Scene records carry the machine-readable continuity for each scene. Created with `story add scene 'Title' --chapter chapter-03`, which numbers the scene after the chapter's last one unless you pass `--scene`.
 
 ```yaml
 ---
@@ -1020,7 +1020,7 @@ The body holds human-readable tables of the same state. `story reindex` never re
 
 ### Questions
 
-Files: `continuity/questions/<question-id>.md`, for open questions the reader or the continuity tracker needs answered. Created with `story add question "Title"`.
+Files: `continuity/questions/<question-id>.md`, for open questions the reader or the continuity tracker needs answered. Created with `story add question 'Title'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -1034,7 +1034,7 @@ Files: `continuity/questions/<question-id>.md`, for open questions the reader or
 
 ### Promises
 
-Files: `continuity/promises/<promise-id>.md`, for setups the story owes the reader a payoff on. Created with `story add promise "Title"`.
+Files: `continuity/promises/<promise-id>.md`, for setups the story owes the reader a payoff on. Created with `story add promise 'Title'`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -1047,7 +1047,7 @@ Files: `continuity/promises/<promise-id>.md`, for setups the story owes the read
 
 ### Clues
 
-Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-play reveals. Created with `story add clue "Title" --planted chapter-02 --payoff chapter-05`.
+Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-play reveals. Created with `story add clue 'Title' --planted chapter-02 --payoff chapter-05`.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -1216,7 +1216,7 @@ A matter page whose id is `copyright` or whose title contains "Copyright" is the
 
 ### Research notes
 
-Files: `research/<research-id>.md`, for the real-world facts the story relies on. Create them with `story add research "Tidal bore timing" --source "..." --used-in chapter-03`. The first note creates `research/_index.md`.
+Files: `research/<research-id>.md`, for the real-world facts the story relies on. Create them with `story add research 'Tidal bore timing' --source '...' --used-in chapter-03`. The first note creates `research/_index.md`.
 
 ```yaml
 ---

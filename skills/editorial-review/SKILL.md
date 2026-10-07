@@ -47,7 +47,7 @@ workflow; offer `git init` if the project has none.
    `medical`, `legal`, or others as they apply), or open one:
 
    ```shell
-   story add research "Deaf community in 1980s Glasgow" --accuracy must-be-accurate --method expert-review --risk cultural --used-in chapter-04
+   story add research 'Deaf community in 1980s Glasgow' --accuracy must-be-accurate --method expert-review --risk cultural --used-in chapter-04
    ```
 
 2. Prepare the brief with `references/sensitivity-reader-brief.md`: which
@@ -187,7 +187,7 @@ For beta readers, editors, or agents who never open a terminal:
    public unless the repository and Pages are private.
 3. Collect issue notes into a feedback round and triage them with
    `feedback-triage`. Resolve labels from an older build with
-   `story compare . --ref <round-tag> --anchor <label>` before acting on
+   `story compare . --ref <round-tag> --anchor '<label>'` before acting on
    them; see `references/editor-rounds.md`.
 
 ### 8. Collaboration and backups

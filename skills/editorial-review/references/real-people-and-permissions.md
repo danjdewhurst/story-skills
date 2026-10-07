@@ -36,7 +36,7 @@ treated differently; that judgement belongs to a lawyer.
 Open or update a research note per risky portrayal:
 
 ```shell
-story add research "Portrayal of the Harbour Board" --accuracy blended --risk defamation --used-in chapter-07
+story add research 'Portrayal of the Harbour Board' --accuracy blended --risk defamation --used-in chapter-07
 ```
 
 Record in the note who is portrayed, what the prose asserts, what is
@@ -78,7 +78,7 @@ market; do not assert it from memory.
 ## Matter-file fields
 
 Each epigraph or quoted page in `matter/` records its state. Create an
-epigraph with `story add matter "Epigraph" --heading=false`, or edit the
+epigraph with `story add matter 'Epigraph' --heading=false`, or edit the
 scaffolded `heading:` key; never add a second `heading:` line.
 
 ```yaml

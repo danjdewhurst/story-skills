@@ -41,7 +41,7 @@ needs rather than ignoring the warnings:
 - **One scene record per spread.** Without one, `story validate` warns
   `has no machine-readable scene records` for every spread and `story next`
   lists `[P1] Add scene records`. Create it with
-  `story add scene "Spread 1" --chapter chapter-01 --scene 1 --pov {pov}`
+  `story add scene 'Spread 1' --chapter chapter-01 --scene 1 --pov {pov}`
   (add `--location` and `--character` for who and where the picture
   shows). The record carries the spread's cast and props for continuity.
 - **`hook` is the page-turn beat.** Set each spread's chapter `hook` to
