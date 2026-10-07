@@ -311,7 +311,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 ### plot-structure
 
-**Purpose.** Chooses a story structure and manages arcs, plot points, foreshadowing, the master timeline, and setup/payoff records.
+**Purpose.** Chooses a story structure and manages arcs, plot points, setup and payoff records, and the planned timeline.
 
 **Triggers.** "Create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "sagging middle", "act structure", "story arc", "plot outline", "snowflake method".
 
@@ -321,15 +321,15 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 1. **Structure:** reads `story.md` for genre, themes, and `form`. For `short-story` and `flash` it uses `short-story-form.md` instead of a multi-act beat sheet. Otherwise it recommends a model from `structure-models.md` based on genre (three-act when unclear), sets the `structure` field in `plot/_index.md`, and fills in the beat sheet. A writer who wants to design the whole book first can follow the Snowflake Method in `snowflake.md` on top of that structure.
 2. **Arcs:** asks for the name, type (`main`, `subplot`, `character`, `thematic`), characters, themes, and optionally the MICE threads the arc carries (a `mice-threads` list such as `event` and `character`). Scaffolds `plot/arcs/{arc-kebab}.md` with `story add arc '{Name}' --type main --character {id} --theme {theme}`, then builds setup, escalations, climax, and resolution in it. `story reindex` lists the arc in `plot/_index.md`; the skill updates only that file's hand-written Theme Tracking section.
-3. **Plot points:** adds rows to the arc's Plot Points table and to `plot/timeline.md`. A plot point that makes a promise to the reader, or raises a mystery, gets a file in `continuity/promises/` or `continuity/questions/`.
-4. **Timeline:** keeps `plot/timeline.md` in chronological order using the `| When | Event | Arc | Chapter |` format, and compares it with `story timeline .` output for the written scenes. `story diagram timeline` draws dated scenes and chapters as a Mermaid timeline, and `story diagram arcs` shows which chapters advance each arc.
-5. **Foreshadowing:** tracks each arc's items as `planned`, `planted`, or `paid-off`. For mystery clues, `story clues .` prints the fair-play matrix and `story diagram clues` the plant-to-reveal flow.
+3. **Plot points:** adds rows to the arc's Plot Points table and to `plot/timeline.md`. A plot point that sets up a payoff or raises a question gets one record, as step 5 describes.
+4. **Timeline:** keeps `plot/timeline.md`, the hand-kept plan of backstory and planned events, in chronological order using the `| When | Event | Arc | Chapter |` format. A drafted scene's `date` and `time` say when it happens, so the plan gets no row per scene; the skill compares the plan with `story timeline .` output for the written scenes. `story diagram timeline` draws dated scenes and chapters as a Mermaid timeline, and `story diagram arcs` shows which chapters advance each arc.
+5. **Setups and payoffs:** gives each setup exactly one record, chosen by use: a mystery clue or red herring in `continuity/clues/` (`story add clue`), any other setup the reader is owed a payoff on in `continuity/promises/` (`story add promise`), a question the reader is left asking in `continuity/questions/` (`story add question`), and a small hint inside one arc, which no command checks, in that arc's Foreshadowing table. Each moves from `planned` to `planted` to `paid-off` (a question from `open` to `answered`). For mystery clues, `story clues .` prints the fair-play matrix and `story diagram clues` the plant-to-reveal flow.
 6. **Pacing:** plans each scene's `outcome` (`yes`, `no`, `yes-but`, `no-and`) and each chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) in the outline, then runs `story pacing .` for a per-chapter dashboard. Its warnings (runs of `yes` outcomes, scene units with no sequel, length outliers, runs of `resolution` endings, drafted chapters with no hook) are prompts to reread, not rules.
 7. **Scaffolding:** creates chapter and scene files with `story add chapter '{Title}' --number {N} --pov {id} --arc {arc-id}` and `story add scene '{Title}' --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`. `--hook` and `--outcome` set the pacing fields at scaffold time.
 
 **Reads.** `story.md`, `plot/_index.md`, `characters/_index.md`, and arc files.
 
-**Writes.** The `structure` field and hand-written sections of `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/promises/*.md`, `continuity/questions/*.md`, and scene `outcome` and chapter `hook` fields.
+**Writes.** The `structure` field and hand-written sections of `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/promises/*.md`, `continuity/clues/*.md`, `continuity/questions/*.md`, and scene `outcome` and chapter `hook` fields.
 
 **CLI.** `story add arc`, `story add chapter`, `story add scene`, `story timeline .`, `story diagram timeline`, `story diagram arcs`, `story clues .`, then `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .`. Generated diagrams go in `dist/` via `--out`, never in entity folders.
 
@@ -389,7 +389,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 1. Loads the pack that matches `story.md` `genre` and `sub-genre`. Multi-genre books load every matching pack. Where packs conflict, you decide which contract wins in each section, and the decision is recorded in `story.md`.
 2. Applies the pack's constraints while planning:
    - **Mystery:** records every clue and red herring with `story add clue '...' --planted chapter-NN --payoff chapter-NN`, marking clues the reader sees before understanding them with `significance-delayed: true` (the `--significance-delayed` flag sets it) and misleading clues with `red-herring: true` (`--red-herring`), whose `payoff` is the chapter that debunks them. A clue added with `--planted` naming an existing chapter starts as `status: planted`; otherwise it starts as `planned`. `--status` overrides either default. `story clues .` prints the fair-play matrix and `story diagram clues` the plant-to-reveal flow.
-   - **Thriller:** records every promised deadline in `continuity/promises/` and tracks story time in `plot/timeline.md`. Thriller and serial chapter endings are checked with `story pacing .` (chapter `hook` values and runs of `resolution` endings).
+   - **Thriller:** records every promised deadline in `continuity/promises/` and gives every scene a `date` and `time`, so `story timeline .` shows the story clock. Thriller and serial chapter endings are checked with `story pacing .` (chapter `hook` values and runs of `resolution` endings).
    - **Serial:** records `season-goal` in `story.md` and `episode-question` in each installment.
    - **MG/YA:** records `target-words` in `story.md` and checks protagonist age and how much adults are involved.
    - **Science fiction:** writes the speculative element's rules, costs, and limits in `worldbuilding/systems/` before the climax relies on them.
@@ -471,7 +471,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Prose pass and companion skill.** The [line-editing](#line-editing) skill ships with Story Skills and owns the prose-quality pass; run it on a drafted chapter before marking it `revised`. The separate [`better-writing`](https://github.com/forjd/better-writing) skill is an optional complement: before drafting, chapter-writing checks for it and uses it for voice calibration and a final pass. If it is missing, the skill continues with its own `writing-guidelines.md`. It offers you the link once, when it drafts the project's first chapter, not every session, and asks before any install.
 
-**Writes.** `chapters/chapter-NN.md`, `scenes/*.md`, `plot/timeline.md`, arc files, `continuity/` records (including `continuity/state.md` after the draft, not as drafting context), and `progress.md` when you keep a log. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand.
+**Writes.** `chapters/chapter-NN.md`, `scenes/*.md` (whose `date` and `time` say when the chapter happens), the `Chapter` cells of planned events in `plot/timeline.md`, arc plot points, the one promise, clue, or question record (or, for a small hint, arc Foreshadowing row) that owns each setup the chapter planted or paid off, `continuity/state.md` after the draft (not as drafting context), and `progress.md` when you keep a log. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand.
 
 **CLI.** `story add chapter` and `story add scene` for scaffolds, then `story reindex .`, `story wordcount . --write`, `story check .`, `story next .`, `story pacing .`, and `story progress .`. `story check` is the continuity result: `story next` can name continuity errors and still exit 0. `story pacing` shows the new chapter's words, scene outcomes, and hook beside the rest of the book. It runs `story progress . --log` instead only when the project has a `progress.md` or you ask to log the session.
 
@@ -700,7 +700,7 @@ The default ladder is `structure`, `character`, `theme`, `continuity`, `pacing`,
 
 **Reads.** `story.md`, `chapters/_index.md`, the target chapters and their neighbours, the character, location, system, and arc files they reference, their scene files, `continuity/state.md`, open questions and promises, and `plot/timeline.md`. Each audit adds its own reads, such as `style-sheet.md` and `glossary/` for a copyedit or `research/` notes for a fact check.
 
-**Writes.** Chapter prose and `status`, `plot/timeline.md`, `scenes/*.md`, `continuity/state.md`, question and promise files, arc plot points and foreshadowing rows, character or location files whose state changed, and `story.md` `revision-passes`. Copyedits can also update `style-sheet.md` and `glossary/`.
+**Writes.** Chapter prose and `status`, `plot/timeline.md`, `scenes/*.md`, `continuity/state.md`, the one promise, clue, or question file (or arc foreshadowing row, for a small hint) that owns each setup it moves, arc plot points, character or location files whose state changed, and `story.md` `revision-passes`. Copyedits can also update `style-sheet.md` and `glossary/`.
 
 **CLI.** It starts by running or reading `story report .`, and `story passes .` when the book is in a named-pass revision. After edits it runs `story reindex .`, `story wordcount . --write`, `story check .`, and `story doctor .`, plus `story series .` when `story.md` has `follows` or `precedes` links. Structural and reveal passes add `story pacing .` and `story clues .`, dialogue changes add `story voices .`, and a named pass ends with `story passes . --done <pass>`. It then compares the result with the snapshot:
 

@@ -47,4 +47,4 @@ Planned for the end of season one.
 
 | Planted | Payoff | Chapter Planted | Chapter Payoff | Status |
 |---------|--------|-----------------|----------------|--------|
-| "You'll be here tomorrow night" | Sallis comes back | chapter-01 | chapter-04 | planted |
+| | | | | planned |

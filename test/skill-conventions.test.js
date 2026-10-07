@@ -681,8 +681,9 @@ describe("skill triggers", () => {
 // table from the entity files, and `story add`, `rename`, `move`, and
 // `remove` reindex for you, so a row added by hand is thrown away. No skill
 // may tell an agent to add or edit one. A sentence that names an `_index.md`
-// file and gives an edit instruction outside its code spans is one, unless
-// it says not to, or it is about a hand-written section reindex keeps.
+// file or a registry and gives an edit instruction outside its code spans is
+// one, unless it says not to, or it is about a hand-written section reindex
+// keeps.
 
 // "add" before an option (`add --region`) or "add up" is no edit.
 const EDIT_VERB = /\b(?:update|edit|keep|maintain|add(?! up\b)(?!\s+`))\b/i;
@@ -718,7 +719,7 @@ function sentences(text) {
 
 function registryEditProblems(text) {
   return sentences(text)
-    .filter(({ sentence }) => /_index\.md/.test(sentence))
+    .filter(({ sentence }) => /_index\.md|\bregistr(?:y|ies)\b/i.test(sentence))
     .filter(({ sentence }) => {
       const prose = sentence.replace(/`[^`]*`/g, (span) => (HAND_WRITTEN_SECTION.test(span) ? span : "`…`"));
       return EDIT_VERB.test(prose) && !NOT_AN_EDIT.test(prose) && !HAND_WRITTEN_SECTION.test(prose);
@@ -734,7 +735,8 @@ describe("generated registries", () => {
       "8. Without the CLI, update the `worldbuilding/_index.md` locations table",
       "Otherwise create the file, and add a row to the Registry table in `glossary/_index.md`",
       "If no CLI is\navailable, keep `research/_index.md` and the `used-in` lists current by\nhand.",
-      "- **Update:** `plot/timeline.md`, arc plot-point tables, and\n  `chapters/_index.md` when chapters move, merge, or split."
+      "- **Update:** `plot/timeline.md`, arc plot-point tables, and\n  `chapters/_index.md` when chapters move, merge, or split.",
+      "Apply the diff: update bible files, registries, `continuity/state.md`, and the scene records."
     ]) {
       expect(flagged(text), text).toBe(1);
     }

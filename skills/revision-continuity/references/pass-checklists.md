@@ -127,10 +127,12 @@ both read as cheap.
   warnings (late plants, unplanted payoffs, clues nobody can notice,
   undebunked red herrings). `story diagram clues` draws the plant-to-reveal
   flow.
-- **Read:** `continuity/promises/`, arc foreshadowing tables,
-  `knowledge-state` in `continuity/state.md`.
-- **Update:** promise/question `status` and chapter fields, foreshadowing
-  rows.
+- **Read:** `continuity/promises/`, `continuity/clues/`,
+  `continuity/questions/`, arc foreshadowing tables (hints with no
+  record), `knowledge-state` in `continuity/state.md`.
+- **Update:** the `status` and chapter fields of the one record that owns
+  each setup (a promise, clue, or question file), or the arc foreshadowing
+  row for a hint with no record.
 
 ## Removability audit (darling-killing)
 
