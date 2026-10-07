@@ -3,11 +3,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { gitEnv, makeTempDir } from "./helpers.js";
 
 const SCRIPT = path.resolve(import.meta.dir, "..", "scripts", "issue-worktree.sh");
 const TEMP_PREFIX = "issue-worktree-";
-const GIT_CONFIG = ["-c", "user.email=test@example.com", "-c", "user.name=Test", "-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false"];
 
 // Every child process runs in a folder this file made. An empty cwd would
 // mean the test process's own folder, which is this repository's checkout.
@@ -20,12 +19,12 @@ function inTemp(cwd) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync("git", [...GIT_CONFIG, ...args], { cwd: inTemp(cwd), encoding: "utf8", stdio: "pipe" }).trim();
+  return execFileSync("git", args, { cwd: inTemp(cwd), encoding: "utf8", stdio: "pipe", env: gitEnv() }).trim();
 }
 
 // A git command expected to fail, such as a rebase that stops.
 function gitStatus(cwd, ...args) {
-  return spawnSync("git", [...GIT_CONFIG, ...args], { cwd: inTemp(cwd), encoding: "utf8" }).status;
+  return spawnSync("git", args, { cwd: inTemp(cwd), encoding: "utf8", env: gitEnv() }).status;
 }
 
 // A shared checkout at <temp>/<checkout>, cloned from a bare origin whose
@@ -46,7 +45,7 @@ function sharedCheckout(checkout, root = makeTempDir(TEMP_PREFIX)) {
 
 // Runs the script as an agent whose project checkout is `shared`.
 function run(shared, args, env = {}, cwd = shared) {
-  const { ISSUE_WORKTREE_ROOT, ...inherited } = process.env;
+  const { ISSUE_WORKTREE_ROOT, ...inherited } = gitEnv();
   const result = spawnSync("bash", [SCRIPT, ...args], {
     cwd: inTemp(cwd),
     encoding: "utf8",
