@@ -28,9 +28,13 @@ export const SEVERITY_LEVELS = ["error", "warning", "off"];
 // The warning codes a severity entry can name.
 export { severityCodes };
 
-// Commands that act on one named entity: a default would send every run to
-// the same target, so cli-defaults refuses them.
-const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
+// Commands that act on named entities: a default would send every run to the
+// same target, so cli-defaults refuses them. Their flags (split --at and
+// --title, move --number, rename --id, knowledge --at) say what one run does,
+// so the whole command is refused rather than flag by flag: a run that leaves
+// one out, such as story split chapter-01 with no --at, gets a usage error
+// instead of acting on a default.
+const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 
 // Flags that name one target or one moment rather than a habit.
 const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
@@ -97,7 +101,7 @@ function parseDefaults(raw, errors) {
       continue;
     }
     if (TARGETED_COMMANDS.has(name)) {
-      errors.push(`${label} names ${name}, which acts on one named entity and cannot take defaults`);
+      errors.push(`${label} names ${name}, which acts on named entities and cannot take defaults`);
       continue;
     }
     if (Object.hasOwn(defaults, name)) {
