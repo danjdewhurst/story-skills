@@ -1,1 +1,36 @@
-{"banned":["it was Ana","it was Ana who","Ana left it","Petra left","Petra had left","Petra left it","mystery solved","the mystery was solved","case closed","the answer is","here is the answer","smuggler","the smuggler"],"banned_regex":["\\bit was\\b.{0,50}\\bwho\\b"],"brief":"State the fair-play contract for this chapter in a short passage that sharpens the question without answering it. End on the open question.","ends_with_question":true,"max_words_ratio":1.6,"min_words_ratio":0.4,"name":"genre-craft-mystery","required":["brass key","sea-chest"],"skill":"genre-craft"}
+{
+  "name": "genre-craft-mystery",
+  "skill": "genre-craft",
+  "brief": "Ledger the clues in this fair-play plan so the project can check it, then state the fair-play contract for chapter 3 in a short passage that sharpens the question without answering it. You cannot run commands here, so give the commands you would run in one fenced shell block, then the passage. End on the open question. Under 300 words in all.",
+  "keep": "file",
+  "required": ["brass key", "sea-chest"],
+  "required_regex": [
+    "story add clue\\b",
+    "--planted[ =]['\"]?chapter-01\\b",
+    "--payoff[ =]['\"]?chapter-12\\b",
+    "--significance-delayed\\b",
+    "--red-herring\\b",
+    "--payoff[ =]['\"]?chapter-07\\b",
+    "--character[ =]['\"]?tomas-reyes\\b",
+    "story clues (?:--path )?\\."
+  ],
+  "banned": [
+    "it was Ana",
+    "it was Ana who",
+    "Ana left it",
+    "Petra left",
+    "Petra had left",
+    "Petra left it",
+    "mystery solved",
+    "the mystery was solved",
+    "case closed",
+    "the answer is",
+    "here is the answer",
+    "smuggler",
+    "the smuggler"
+  ],
+  "banned_regex": ["\\bit was\\b.{0,50}\\bwho\\b"],
+  "ends_with_question": true,
+  "max_words": 300,
+  "baseline_margin": 3
+}

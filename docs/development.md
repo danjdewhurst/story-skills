@@ -512,14 +512,14 @@ An acknowledgement that no longer matches a real collision fails the check, so a
 anti-slop: 36/36 checks passed
 canon-keeping: 35/35 checks passed
 deep-pov: 31/31 checks passed
-genre-craft-mystery: 26/26 checks passed
+genre-craft-mystery: 33/33 checks passed
 motif-restraint: 32/32 checks passed
 no-invention: 36/36 checks passed
 promise-payoff: 41/41 checks passed
 question-stays-open: 34/34 checks passed
-revision-continuity: 30/30 checks passed
+revision-continuity: 29/29 checks passed
 screenplay-fountain: 36/36 checks passed
-series-continuity: 31/31 checks passed
+series-continuity: 35/35 checks passed
 voice-preservation: 28/28 checks passed
 ```
 
@@ -531,9 +531,10 @@ node evals/run-skill.js --model claude-sonnet-5 canon-keeping
 node evals/run-skill.js --skill revision-continuity       # load one skill for every fixture
 node evals/run-skill.js --no-skill --no-judge --out evals/baseline
 node evals/compare-outputs.js evals/baseline evals/outputs
+node evals/compare-outputs.js --no-judge evals/baseline evals/outputs   # baseline margins only, no model call
 ```
 
-`run-skill.js` sends each fixture through `claude -p` with the skill's `SKILL.md` and the reference files it names as the system prompt, writes drafts to `evals/outputs/`, runs the checker, and then asks a judge model (`claude-opus-5` unless `--judge-model` says otherwise) to list any invented canon; one listed claim fails the fixture. The references follow `SKILL.md`'s paths, other skills' files included, then the paths those files name, up to a 48,000-character cap (see [`evals/README.md`](https://github.com/danjdewhurst/story-skills/blob/main/evals/README.md#workflow)). A draft or judge call that fails also fails its fixture, and the summary counts it. So does a judge reply the runner cannot read for certain, such as two different arrays. `compare-outputs.js` does a blind pairwise comparison against a no-skill baseline. Both need the Claude Code CLI on `PATH` with working credentials, cost money, and produce nondeterministic output, so CI never runs them.
+`run-skill.js` sends each fixture through `claude -p` with the skill's `SKILL.md` and the reference files it names as the system prompt, writes drafts to `evals/outputs/`, runs the checker, and then asks a judge model (`claude-opus-5` unless `--judge-model` says otherwise) to list any invented canon; one listed claim fails the fixture. The references follow `SKILL.md`'s paths, other skills' files included, then the paths those files name, up to a 48,000-character cap (see [`evals/README.md`](https://github.com/danjdewhurst/story-skills/blob/main/evals/README.md#workflow)). A draft or judge call that fails also fails its fixture, and the summary counts it. So does a judge reply the runner cannot read for certain, such as two different arrays. `compare-outputs.js` does a blind pairwise comparison against a no-skill baseline, and for a fixture that sets `baseline_margin` it also fails the fixture unless the skill's draft passes that many more checks than the baseline's (`--no-judge` runs only these margin checks). Both need the Claude Code CLI on `PATH` with working credentials, cost money, and produce nondeterministic output, so CI never runs them.
 
 Run the model evals before and after any change to a skill's instructions or references, read the drafts as well as the pass counts, and record the run in the "Last full model run" table in `evals/README.md`. To add a fixture, follow "Adding a fixture" in that README, add its known-good draft, and run `bun run check:evals` and `bun run eval:selftest`.
 

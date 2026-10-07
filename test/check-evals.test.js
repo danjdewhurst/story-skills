@@ -56,6 +56,7 @@ describe("check-evals", () => {
     addFixture(root, "ok", { ...good, banned: ["Thursday"] });
     addFixture(root, "whole-file", { ...good, keep: "file" });
     addFixture(root, "prose", { ...good, keep: "chapter-text" });
+    addFixture(root, "margin", { ...good, baseline_margin: 2 });
     addFixture(root, "pattern", { brief: "Draft.", skill: "chapter-writing", required_regex: ["^---\\n"] });
     const result = run(root);
     expect(result.status).toBe(0);
@@ -74,6 +75,7 @@ describe("check-evals", () => {
       required: ["", 3],
       max_words: -1,
       paragraphs: 1.5,
+      baseline_margin: 0,
       ends_with_question: "yes",
       language: "not a tag",
       keep: "whole",
@@ -109,6 +111,7 @@ describe("check-evals", () => {
       "FAIL fields/checks.json: required must be a list of non-empty strings",
       "FAIL fields/checks.json: max_words must be a positive number",
       "FAIL fields/checks.json: paragraphs must be a positive integer",
+      "FAIL fields/checks.json: baseline_margin must be a positive integer",
       "FAIL fields/checks.json: ends_with_question must be a boolean",
       "FAIL fields/checks.json: language must be a BCP 47 tag",
       'FAIL fields/checks.json: keep must be one of "chapter-text", "file"',

@@ -416,7 +416,7 @@ describe("a fixture's keep option", () => {
   });
 
   test("every fixture whose brief asks for a file or frontmatter gets the file rule and passes its example", () => {
-    const fileFixtures = ["character-progression", "copyright-page", "init-project", "location-routes", "reader-panel", "research-note", "style-sheet", "triage-synthesis"];
+    const fileFixtures = ["character-progression", "copyright-page", "genre-craft-mystery", "init-project", "location-routes", "reader-panel", "research-note", "revision-continuity", "series-continuity", "style-sheet", "triage-synthesis"];
     for (const name of fileFixtures) {
       logs.length = 0;
       const example = fs.readFileSync(path.join(repoRoot, "evals", "examples", `${name}.md`), "utf8");
@@ -533,5 +533,131 @@ describe("compare-outputs with a stubbed judge", () => {
     expect(compareMain([dirA, dirB, "canon-keeping"], { spawn: missing })).toBe(1);
     expect(calls).toBe(2);
     expect(output()).toContain("FAIL judge: `claude` not found on PATH.");
+  });
+});
+
+// What a model with no skill loaded wrote for these briefs: the passage or
+// notes right, the skill's own steps missing or wrong.
+const example = (name) => fs.readFileSync(path.join(repoRoot, "evals", "examples", `${name}.md`), "utf8");
+const noSkillDrafts = {
+  "revision-continuity": () =>
+    example("revision-continuity")
+      .replace("story passes . --start continuity\n", "")
+      .replace("story reindex .\nstory wordcount . --write\nstory check .\n", "story check continuity chapters/chapter-03.md\n")
+      .replace("status: revised", "status: draft"),
+  "series-continuity": () =>
+    example("series-continuity")
+      .replace("current-chapter: 0", "current-chapter: 12")
+      .replace("    fact: key-on-the-door\n", "    fact: key-on-the-door\n    learned-in: the-key-on-the-door/chapter-01\n")
+      .replace("    status: active\n  - artifact: anas-sea-chest", "    status: active\n    since: chapter-01\n  - artifact: anas-sea-chest"),
+  "genre-craft-mystery": () => example("genre-craft-mystery").replace(/```shell[\s\S]*?```\n\n/, ""),
+};
+
+describe("skill-specific checks", () => {
+  const fixture = (name) => loadFixture(path.join(repoRoot, "evals", "fixtures", name));
+  const failed = (name, draft) => {
+    const { checks, inputText } = fixture(name);
+    return checkDraft(checks, inputText, draft).filter(([ok]) => !ok).map(([, desc]) => desc);
+  };
+  const required = (name, i) => `canon kept: /${fixture(name).checks.required_regex[i]}/`;
+  const trap = (name, start) => `trap avoided: /${fixture(name).checks.banned_regex.find((p) => p.startsWith(start))}/`;
+
+  test("revision-continuity needs the pass started, the chapter marked revised, and the maintenance block", () => {
+    expect(failed("revision-continuity", example("revision-continuity"))).toEqual([]);
+    expect(failed("revision-continuity", noSkillDrafts["revision-continuity"]())).toEqual([
+      required("revision-continuity", 0),
+      required("revision-continuity", 1),
+      required("revision-continuity", 2),
+    ]);
+    // The passage's traps read only the chapter text, so the plan may name
+    // the slip it fixes and what stays shut.
+    const draft = example("revision-continuity");
+    const chapterText = draft.indexOf("## Chapter Text");
+    const plan = (text) => draft.replace("Plan: start", `Plan: ${text}; start`);
+    const prose = (text) => draft.slice(0, chapterText) + draft.slice(chapterText).replace("Let them wait.", text);
+    expect(failed("revision-continuity", plan("Tomas still has not opened the sea-chest"))).toEqual([]);
+    expect(failed("revision-continuity", prose("I opened the sea-chest."))).toEqual([trap("revision-continuity", "## Chapter Text[\\s\\S]*\\b(?:opened")]);
+    expect(failed("revision-continuity", prose("I had carried it a week."))).toEqual([trap("revision-continuity", "## Chapter Text[\\s\\S]*\\b(?:a|one) week")]);
+  });
+
+  test("series-continuity needs book two's state at chapter 0, with no chapter of book one carried", () => {
+    expect(failed("series-continuity", example("series-continuity"))).toEqual([]);
+    expect(failed("series-continuity", noSkillDrafts["series-continuity"]())).toEqual([
+      required("series-continuity", 0),
+      trap("series-continuity", "(?:^|\\n)[ \\t-]*learned-in"),
+      trap("series-continuity", "(?:^|\\n)[ \\t-]*since"),
+    ]);
+    const note = (line) => example("series-continuity").replace("## Series Notes\n\n", `## Series Notes\n\n- ${line}\n`);
+    expect(failed("series-continuity", note("Tomas has never opened the sea-chest."))).toEqual([]);
+    expect(failed("series-continuity", note("Nobody has opened it."))).toEqual([]);
+    expect(failed("series-continuity", note("In book two Tomas opened the sea-chest."))).toEqual([trap("series-continuity", "(?<!")]);
+  });
+
+  test("genre-craft-mystery needs the clue ledger the plan describes", () => {
+    expect(failed("genre-craft-mystery", example("genre-craft-mystery"))).toEqual([]);
+    const { checks } = fixture("genre-craft-mystery");
+    expect(failed("genre-craft-mystery", noSkillDrafts["genre-craft-mystery"]())).toEqual(checks.required_regex.map((pattern) => `canon kept: /${pattern}/`));
+  });
+});
+
+describe("compare-outputs baseline margins", () => {
+  const noModel = () => {
+    throw new Error("no model call expected");
+  };
+  function marginDirs(name) {
+    const baseline = makeTempDir("story-cmp-a-");
+    const skill = makeTempDir("story-cmp-b-");
+    fs.writeFileSync(path.join(baseline, `${name}.md`), noSkillDrafts[name]());
+    fs.writeFileSync(path.join(skill, `${name}.md`), example(name));
+    return { baseline, skill };
+  }
+
+  test("--no-judge checks each fixture's margin over the baseline with no model call", () => {
+    const dirs = Object.keys(noSkillDrafts).map(marginDirs);
+    const baseline = dirs[0].baseline;
+    const skill = dirs[0].skill;
+    for (const d of dirs.slice(1)) {
+      for (const file of fs.readdirSync(d.baseline)) fs.copyFileSync(path.join(d.baseline, file), path.join(baseline, file));
+      for (const file of fs.readdirSync(d.skill)) fs.copyFileSync(path.join(d.skill, file), path.join(skill, file));
+    }
+    const names = Object.keys(noSkillDrafts);
+    expect(compareMain(["--no-judge", baseline, skill, ...names], { spawn: noModel })).toBe(0);
+    expect(output()).toContain("genre-craft-mystery: margin met: B passes 33/33 checks, A 25/33, margin 8, needs 3");
+    expect(output()).toContain("revision-continuity: margin met: B passes 29/29 checks, A 26/29, margin 3, needs 2");
+    expect(output()).toContain("series-continuity: margin met: B passes 35/35 checks, A 32/35, margin 3, needs 2");
+    expect(output()).toContain("margins met: 3 of 3");
+    expect(output()).not.toContain("model:");
+
+    // The margin is directional: dir-b is the skill's run.
+    logs.length = 0;
+    expect(compareMain(["--no-judge", skill, baseline, "genre-craft-mystery"], { spawn: noModel })).toBe(1);
+    expect(output()).toContain("genre-craft-mystery: FAIL margin: B passes 25/33 checks, A 33/33, margin -8, needs 3");
+    expect(output()).toContain("margins met: 0 of 1");
+  });
+
+  test("a margin is checked beside the judge, and a missed one fails the run", () => {
+    const { baseline, skill } = marginDirs("genre-craft-mystery");
+    const firstWins = () => ok("1");
+    expect(compareMain([baseline, skill, "genre-craft-mystery"], { spawn: firstWins })).toBe(0);
+    expect(output()).toContain("genre-craft-mystery: margin met");
+    expect(output()).toContain("genre-craft-mystery: tie (order split)");
+
+    logs.length = 0;
+    expect(compareMain([skill, baseline, "genre-craft-mystery"], { spawn: firstWins })).toBe(1);
+    expect(output()).toContain("genre-craft-mystery: FAIL margin");
+    expect(output()).toContain("A: 0  B: 0  ties: 1");
+  });
+
+  test("--no-judge with no margin to check compares nothing and fails", () => {
+    const { baseline, skill } = marginDirs("genre-craft-mystery");
+    fs.writeFileSync(path.join(baseline, "canon-keeping.md"), goodDraft);
+    fs.writeFileSync(path.join(skill, "canon-keeping.md"), goodDraft);
+    expect(compareMain(["--no-judge", baseline, skill, "canon-keeping"], { spawn: noModel })).toBe(1);
+    expect(output()).toContain("no selected fixture sets baseline_margin, and --no-judge skips the judge");
+
+    logs.length = 0;
+    fs.rmSync(path.join(baseline, "genre-craft-mystery.md"));
+    expect(compareMain(["--no-judge", baseline, skill, "genre-craft-mystery"], { spawn: noModel })).toBe(1);
+    expect(output()).toContain("genre-craft-mystery: FAIL (missing draft in one directory)");
   });
 });

@@ -250,7 +250,7 @@ export function checkEvals(root = ROOT, log = console.log) {
         );
       }
     }
-    for (const key of ["paragraphs", "lines"]) {
+    for (const key of ["paragraphs", "lines", "baseline_margin"]) {
       if (key in checks) {
         check(
           Number.isInteger(checks[key]) && checks[key] > 0,
