@@ -289,8 +289,10 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code, unless `severity` in `story.md` promotes a warning to an error. |
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
-| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
+| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer `schema-version` than this CLI knows (`migrate` only, see below), or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source, inside a `.git` folder, or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it, or the project lock could not be created; or `build --pdf` found no PDF engine, or the engine failed. |
+
+Only `migrate` exits `3` for a newer `schema-version`. `validate` and `check` report it as the `schema-too-new` error and exit `1`. The other commands do not check the version.
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
