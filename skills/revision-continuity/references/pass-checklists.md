@@ -185,7 +185,8 @@ polished and then cut. Track it as a custom pass with
      (`target-characters`): `story progress .` then lists every chapter
      against its budget (`chapter-01: 101 of 70 words (144%)`), and
      `story context <chapter>` shows it when the chapter is redrafted.
-  6. After each batch of edits, `story wordcount . --write` and
+  6. After each batch of edits, run `story reindex .`,
+     `story wordcount . --write`, and `story check .`, then
      `story progress .` again, until the total is within the tolerance
      agreed with the user (say 2%).
 - **Read:** `story.md` (`target-words`, `form`), `chapters/_index.md`,
