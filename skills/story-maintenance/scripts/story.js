@@ -103,6 +103,39 @@ function readFilePrefix(filePath, length) {
     fs.closeSync(descriptor);
   }
 }
+function forEachLine(filePath, maxLineBytes, visit) {
+  const { descriptor } = openRegularFile(filePath, Infinity);
+  try {
+    const chunk = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+    let parts = [];
+    let size = 0;
+    let number = 0;
+    const add = (bytes) => {
+      size += bytes.length;
+      if (size > maxLineBytes) {
+        throw Object.assign(projectError(`${filePath}: line ${number + 1} is longer than ${maxLineBytes} bytes`), { longLine: number + 1 });
+      }
+    };
+    let read;
+    while ((read = fs.readSync(descriptor, chunk, 0, chunk.length, null)) > 0) {
+      const data = chunk.subarray(0, read);
+      let start = 0;
+      for (let end = data.indexOf(10);end !== -1; end = data.indexOf(10, start)) {
+        const piece = data.subarray(start, end);
+        add(piece);
+        number += 1;
+        visit(parts.length === 0 ? piece : Buffer.concat([...parts, piece]), number);
+        parts = [];
+        size = 0;
+        start = end + 1;
+      }
+      add(data.subarray(start));
+      parts.push(Buffer.from(data.subarray(start)));
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
 function openRegularFile(filePath, maxBytes) {
   const named = fs.lstatSync(filePath);
   if (named.isSymbolicLink()) {
@@ -405,8 +438,16 @@ function currentText(target) {
 var TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 var RENAME_MARKER = ".story-rename.tmp";
 var UNDO_LOG = ".story-undo.tmp";
+var MAX_UNDO_LINE_BYTES = 6 * MAX_READ_BYTES + 64 * 1024;
+var UNSAFE_TEXT = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 function isUndoablePath(relative) {
-  return relative === RENAME_MARKER || relative.endsWith(".md") && !relative.includes("\\") && relative.split("/").every((part) => part !== "" && !part.startsWith("."));
+  return relative === RENAME_MARKER || relative.endsWith(".md") && !relative.includes("\\") && !UNSAFE_TEXT.test(relative) && relative.split("/").every((part) => part !== "" && !part.startsWith("."));
+}
+function deleteUndoLog(root) {
+  const file = path.join(path.resolve(root), UNDO_LOG);
+  assertWriteAllowed(file);
+  fs.rmSync(file, { force: true });
+  syncFolder(path.dirname(file));
 }
 function contentHash(contents) {
   return crypto.createHash("sha256").update(contents).digest("hex");
@@ -428,8 +469,7 @@ function withUndoLog(root, command, run) {
     if (log.descriptor !== null) {
       fs.closeSync(log.descriptor);
       if (finished || !log.changed) {
-        fs.rmSync(path.join(log.root, UNDO_LOG), { force: true });
-        syncFolder(log.root);
+        deleteUndoLog(log.root);
       }
     }
   }
@@ -445,7 +485,11 @@ function logUndo(target, after) {
   }
   const entry = { path: relative, after: after === null ? null : contentHash(after) };
   if (!log.seen.has(relative)) {
-    entry.before = lstatIfExists(target)?.isFile() ? readTextFile(target) : null;
+    const stats = lstatIfExists(target);
+    entry.before = stats?.isFile() ? readTextFile(target) : null;
+    if (entry.before !== null) {
+      entry.mode = stats.mode & 511;
+    }
   }
   let line = `${JSON.stringify(entry)}
 `;
@@ -21205,7 +21249,7 @@ function applySeverity(result, overrides = NO_OVERRIDES) {
 }
 
 // src/import.js
-import { Buffer as Buffer7 } from "node:buffer";
+import { Buffer as Buffer9 } from "node:buffer";
 import fs13 from "node:fs";
 import path18 from "node:path";
 
@@ -21251,6 +21295,10 @@ function withProjectLock(root, run, options = {}) {
       fs5.rmSync(lockPath, { force: true });
     }
   }
+}
+function lockedByAnother(root) {
+  const projectRoot = path10.resolve(root);
+  return !held.has(realPath(projectRoot)) && readOwner(path10.join(projectRoot, LOCK_FILE))?.alive === true;
 }
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
@@ -21413,118 +21461,15 @@ function realPath(target) {
 }
 
 // src/preview.js
+import { Buffer as Buffer6 } from "node:buffer";
 import fs6 from "node:fs";
 import os3 from "node:os";
-import path12 from "node:path";
-
-// src/undo.js
 import path11 from "node:path";
-var MAX_UNDO_LOG_BYTES = 64 * MAX_READ_BYTES;
-var HEADER_BYTES = 4096;
-var ABSENT = "absent";
-function interruptedChange(root) {
-  const file = path11.join(path11.resolve(root), UNDO_LOG);
-  if (!logExists(file)) {
-    return null;
-  }
-  let header = null;
-  try {
-    header = JSON.parse(readFilePrefix(file, HEADER_BYTES).toString("utf8").split(`
-`)[0]);
-  } catch {}
-  return { command: commandName(header) };
-}
-function assertNoInterruptedChange(root, command) {
-  const interrupted = interruptedChange(root);
-  if (interrupted !== null) {
-    throw refusedError(`${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed, so story ${command} would build on a change made only in part; nothing was changed. Run story doctor --fix to put those files back first, or run that command again, which puts them back and then makes its change`);
-  }
-}
-function undoInterruptedChange(root) {
-  const projectRoot = path11.resolve(root);
-  const logFile = path11.join(projectRoot, UNDO_LOG);
-  if (!logExists(logFile)) {
-    return null;
-  }
-  const { command, files } = readUndoLog(logFile);
-  const at = (relative) => path11.join(projectRoot, ...relative.split("/"));
-  const edited = [...files].filter(([relative, { states }]) => !states.has(currentState(at(relative)))).map(([relative]) => relative);
-  if (edited.length > 0) {
-    const [it, has] = edited.length === 1 ? ["it", "has"] : ["them", "have"];
-    throw projectError(`Cannot put back what ${command} changed before it stopped part way: ${edited.join(", ")} ${has} changed since, and putting ${it} back would lose that change, so nothing was changed. Undo that change and run this again, or delete ${UNDO_LOG} to keep the project as it is, then check it with story validate and story links`);
-  }
-  const restored = [];
-  for (const [relative, { before }] of files) {
-    const target = at(relative);
-    if (currentState(target) === stateOf(before)) {
-      continue;
-    }
-    if (before === null) {
-      assertSafeProjectPath(target, projectRoot);
-      removeFile(target);
-    } else {
-      writeFile(target, before, { root: projectRoot });
-    }
-    restored.push(relative);
-  }
-  removeFile(logFile);
-  return { command, files: restored };
-}
-function logExists(file) {
-  try {
-    return lstatIfExists(file) !== null;
-  } catch {
-    return false;
-  }
-}
-function readUndoLog(logFile) {
-  const lines = decodeUtf8(readFileBytes(logFile, MAX_UNDO_LOG_BYTES), logFile).split(`
-`).slice(0, -1);
-  const files = new Map;
-  lines.slice(1).forEach((line, index) => {
-    const entry = parsedLine(line);
-    const file = files.get(entry?.path);
-    if (!isUndoEntry(entry, file === undefined)) {
-      throw projectError(`${UNDO_LOG} is not an undo log story can read (line ${index + 2}), so nothing was changed. Delete it, then check the project with story validate and story links`);
-    }
-    if (file === undefined) {
-      files.set(entry.path, { before: entry.before, states: new Set([stateOf(entry.before), stateOf(entry.after, true)]) });
-    } else {
-      file.states.add(stateOf(entry.after, true));
-    }
-  });
-  return { command: commandName(lines.length > 0 ? parsedLine(lines[0]) : null), files };
-}
-function parsedLine(line) {
-  try {
-    return JSON.parse(line);
-  } catch {
-    return null;
-  }
-}
-function isUndoEntry(entry, first) {
-  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string");
-}
-function stateOf(value, hashed = false) {
-  return value === null ? ABSENT : hashed ? value : contentHash(value);
-}
-function currentState(target) {
-  try {
-    return lstatIfExists(target) === null ? ABSENT : contentHash(readFileBytes(target));
-  } catch {
-    return null;
-  }
-}
-function commandName(header) {
-  return typeof header?.command === "string" ? header.command.replace(/\p{Cc}/gu, " ") : "a story command";
-}
-
-// src/preview.js
 function previewChanges(root, run) {
-  const projectRoot = path12.resolve(root);
+  const projectRoot = path11.resolve(root);
   requireStoryFile(projectRoot);
   return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
-    fs6.mkdirSync(path12.dirname(copyRoot), { recursive: true });
+    fs6.mkdirSync(path11.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot, cover: coverOf(projectRoot) });
     if (!atRoot) {
       copyLinkedBooks(projectRoot, mirror);
@@ -21532,30 +21477,30 @@ function previewChanges(root, run) {
   });
 }
 function previewNewProject(root, run) {
-  const target = path12.resolve(root);
-  if (target === path12.parse(target).root) {
+  const target = path11.resolve(root);
+  if (target === path11.parse(target).root) {
     throw usageError(`--dry-run cannot preview a project made at ${target}`);
   }
   return inScratch(target, run, (copyRoot, mirror) => {
     const stats = lstatIfExists(target);
-    const ancestor = stats ? path12.dirname(target) : nearestExistingAncestor(target).ancestor;
+    const ancestor = stats ? path11.dirname(target) : nearestExistingAncestor(target).ancestor;
     const isFolder = fs6.statSync(ancestor, { throwIfNoEntry: false })?.isDirectory() === true;
-    fs6.mkdirSync(isFolder ? mirror(ancestor) : path12.dirname(mirror(ancestor)), { recursive: true });
+    fs6.mkdirSync(isFolder ? mirror(ancestor) : path11.dirname(mirror(ancestor)), { recursive: true });
     if (!isFolder) {
-      fs6.symlinkSync(path12.join(path12.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
+      fs6.symlinkSync(path11.join(path11.dirname(mirror(ancestor)), ".story-dry-run-link"), mirror(ancestor));
     }
-    for (let folder = path12.dirname(target);; folder = path12.dirname(folder)) {
-      const story = path12.join(folder, "story.md");
+    for (let folder = path11.dirname(target);; folder = path11.dirname(folder)) {
+      const story = path11.join(folder, "story.md");
       if (lstatIfExists(story)?.isFile()) {
         fs6.mkdirSync(mirror(folder), { recursive: true });
         copyRegularFile(story, mirror(story));
       }
-      if (path12.dirname(folder) === folder) {
+      if (path11.dirname(folder) === folder) {
         break;
       }
     }
     if (stats?.isSymbolicLink()) {
-      fs6.symlinkSync(path12.join(path12.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
+      fs6.symlinkSync(path11.join(path11.dirname(copyRoot), ".story-dry-run-link"), copyRoot);
     } else if (stats?.isDirectory()) {
       copyProject(target, copyRoot, { realSource: realPath2(target), copyRoot, cover: coverOf(target) });
     } else if (stats) {
@@ -21567,14 +21512,14 @@ function previewNewProject(root, run) {
   });
 }
 function inScratch(target, run, prepare) {
-  const scratch = fs6.realpathSync(fs6.mkdtempSync(path12.join(os3.tmpdir(), "story-dry-run-")));
-  const fsRoot = path12.parse(target).root;
+  const scratch = fs6.realpathSync(fs6.mkdtempSync(path11.join(os3.tmpdir(), "story-dry-run-")));
+  const fsRoot = path11.parse(target).root;
   const atRoot = target === fsRoot;
   const mirror = (file) => {
-    const drive = path12.parse(file).root;
-    return path12.join(scratch, drive.replace(/[:\\/]/g, ""), file.slice(drive.length));
+    const drive = path11.parse(file).root;
+    return path11.join(scratch, drive.replace(/[:\\/]/g, ""), file.slice(drive.length));
   };
-  const copyRoot = atRoot ? path12.join(scratch, "project") : mirror(target);
+  const copyRoot = atRoot ? path11.join(scratch, "project") : mirror(target);
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
     prepare(copyRoot, mirror, atRoot);
@@ -21591,12 +21536,12 @@ function inScratch(target, run, prepare) {
   }
 }
 function copyLinkedBooks(projectRoot, mirror) {
-  const parent = path12.dirname(projectRoot);
+  const parent = path11.dirname(projectRoot);
   const realParent = realPath2(parent);
-  const home = (real) => isPathInside(realParent, real) ? path12.join(parent, path12.relative(realParent, real)) : real;
+  const home = (real) => isPathInside(realParent, real) ? path11.join(parent, path11.relative(realParent, real)) : real;
   const alias = (link, book) => {
     if (link !== book && !fs6.existsSync(mirror(link))) {
-      fs6.mkdirSync(path12.dirname(mirror(link)), { recursive: true });
+      fs6.mkdirSync(path11.dirname(mirror(link)), { recursive: true });
       fs6.symlinkSync(mirror(book), mirror(link));
     }
   };
@@ -21617,15 +21562,15 @@ function copyLinkedBooks(projectRoot, mirror) {
       const real = realPath2(link);
       if (!copies.has(real)) {
         const target = mirror(home(real));
-        if (copies.size > MAX_SERIES_BOOKS || !fs6.existsSync(path12.join(real, "story.md")) || fs6.existsSync(target)) {
+        if (copies.size > MAX_SERIES_BOOKS || !fs6.existsSync(path11.join(real, "story.md")) || fs6.existsSync(target)) {
           continue;
         }
-        fs6.mkdirSync(path12.dirname(target), { recursive: true });
+        fs6.mkdirSync(path11.dirname(target), { recursive: true });
         copyProject(real, target, { realSource: real, copyRoot: target });
         copies.set(real, home(real));
       }
       alias(link, copies.get(real));
-      if (path12.dirname(link) === parent && !queued.has(real)) {
+      if (path11.dirname(link) === parent && !queued.has(real)) {
         queued.add(real);
         queue.push(link);
       }
@@ -21646,25 +21591,25 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
       continue;
     }
     for (const target of extractMarkdownLinkTargets(body)) {
-      if (path12.isAbsolute(target) || !path12.basename(target).endsWith(".md")) {
+      if (path11.isAbsolute(target) || !path11.basename(target).endsWith(".md")) {
         continue;
       }
       try {
-        stageLinkTarget(path12.resolve(path12.dirname(file), target), context, 0);
+        stageLinkTarget(path11.resolve(path11.dirname(file), target), context, 0);
       } catch {}
     }
   }
 }
 function linkSources(copyRoot) {
-  const files = [path12.join(copyRoot, "plot", "timeline.md")];
-  for (const folder of [path12.join("plot", "arcs"), MATTER_DIR]) {
+  const files = [path11.join(copyRoot, "plot", "timeline.md")];
+  for (const folder of [path11.join("plot", "arcs"), MATTER_DIR]) {
     let entries = [];
     try {
-      entries = fs6.readdirSync(path12.join(copyRoot, folder), { withFileTypes: true });
+      entries = fs6.readdirSync(path11.join(copyRoot, folder), { withFileTypes: true });
     } catch {
       continue;
     }
-    files.push(...entries.filter((entry) => entry.name.endsWith(".md")).slice(0, MAX_SCAN_FILES).map((entry) => path12.join(copyRoot, folder, entry.name)));
+    files.push(...entries.filter((entry) => entry.name.endsWith(".md")).slice(0, MAX_SCAN_FILES).map((entry) => path11.join(copyRoot, folder, entry.name)));
   }
   return files;
 }
@@ -21673,10 +21618,10 @@ function stageLinkTarget(file, context, hops) {
   if (!isPathInside(scratch, file) || file === scratch) {
     return null;
   }
-  const parts = path12.relative(scratch, file).split(path12.sep);
+  const parts = path11.relative(scratch, file).split(path11.sep);
   let current = scratch;
   for (const [index, part] of parts.entries()) {
-    const next = path12.join(current, part);
+    const next = path11.join(current, part);
     let stats = lstatIfExists(next);
     if (!stats) {
       if (isPathInside(copyRoot, next) || !makeStandIn(next, context, index === parts.length - 1)) {
@@ -21688,7 +21633,7 @@ function stageLinkTarget(file, context, hops) {
       if (hops >= MAX_LINK_HOPS) {
         return null;
       }
-      current = stageLinkTarget(path12.resolve(path12.dirname(next), fs6.readlinkSync(next)), context, hops + 1);
+      current = stageLinkTarget(path11.resolve(path11.dirname(next), fs6.readlinkSync(next)), context, hops + 1);
       if (current === null) {
         return null;
       }
@@ -21704,14 +21649,14 @@ function makeStandIn(copy, { mirror, realOf }, last) {
   if (!stats || !(stats.isSymbolicLink() || stats.isDirectory() || last && stats.isFile())) {
     return false;
   }
-  withWritable(path12.dirname(copy), () => {
+  withWritable(path11.dirname(copy), () => {
     if (stats.isSymbolicLink()) {
       const text = fs6.readlinkSync(real);
-      fs6.symlinkSync(path12.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
+      fs6.symlinkSync(path11.isAbsolute(text) ? mirror(text) : text, copy, isFolder(real) ? "dir" : "file");
     } else if (stats.isDirectory()) {
       fs6.mkdirSync(copy);
-      if (lstatIfExists(path12.join(real, "story.md"))) {
-        fs6.writeFileSync(path12.join(copy, "story.md"), "");
+      if (lstatIfExists(path11.join(real, "story.md"))) {
+        fs6.writeFileSync(path11.join(copy, "story.md"), "");
       }
     } else {
       fs6.writeFileSync(copy, "");
@@ -21742,10 +21687,10 @@ function withWritable(folder, make) {
 function copyProject(source, target, roots, depth = 0) {
   fs6.mkdirSync(target);
   for (const entry of fs6.readdirSync(source, { withFileTypes: true })) {
-    const from = path12.join(source, entry.name);
-    const to = path12.join(target, entry.name);
+    const from = path11.join(source, entry.name);
+    const to = path11.join(target, entry.name);
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs6.existsSync(path12.join(from, "story.md"))) {
+      if (!entry.name.startsWith(".") && !SKIPPED_SCAN_DIRECTORIES.has(entry.name) && depth < MAX_SCAN_DEPTH && !fs6.existsSync(path11.join(from, "story.md"))) {
         copyProject(from, to, roots, depth + 1);
       }
     } else if (entry.isSymbolicLink()) {
@@ -21763,29 +21708,43 @@ function mirrorFolderNames(source, copy) {
   fs6.mkdirSync(copy);
   for (const entry of fs6.readdirSync(source, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      fs6.mkdirSync(path12.join(copy, entry.name));
+      fs6.mkdirSync(path11.join(copy, entry.name));
     } else {
-      fs6.writeFileSync(path12.join(copy, entry.name), "", { flag: "wx" });
+      fs6.writeFileSync(path11.join(copy, entry.name), "", { flag: "wx" });
     }
   }
   fs6.chmodSync(copy, copyMode(source, true));
 }
 function copyRegularFile(from, to, keepHead = false) {
+  if (path11.basename(from) === UNDO_LOG && lockedByAnother(path11.dirname(from))) {
+    return;
+  }
   const { size } = fs6.statSync(from);
   const readable = allowed(from, fs6.constants.R_OK);
-  const limit = path12.basename(from) === UNDO_LOG ? MAX_UNDO_LOG_BYTES : MAX_READ_BYTES;
-  if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER, UNDO_LOG].includes(path12.basename(from))) && size <= limit && readable) {
-    fs6.writeFileSync(to, readFileBytes(from, limit));
+  if (path11.basename(from) === UNDO_LOG && readable) {
+    copyUndoLog(from, to);
+  } else if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER].includes(path11.basename(from))) && size <= MAX_READ_BYTES && readable) {
+    fs6.writeFileSync(to, readFileBytes(from));
   } else {
     fs6.writeFileSync(to, keepHead && readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs6.truncateSync(to, size);
   }
   fs6.chmodSync(to, copyMode(from, false));
 }
+function copyUndoLog(from, to) {
+  fs6.writeFileSync(to, "");
+  try {
+    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs6.appendFileSync(to, Buffer6.concat([line, LINE_FEED])));
+  } catch {
+    fs6.appendFileSync(to, LINE_FEED);
+  }
+}
+var LINE_FEED = Buffer6.from(`
+`);
 function coverOf(root) {
   const cover = existingStoryData(root)?.cover;
   const text = typeof cover === "string" ? cover.trim() : "";
-  return text === "" || PATH_CONTROL_CHARACTERS.test(text) ? null : realPath2(path12.resolve(root, text)).toLowerCase();
+  return text === "" || PATH_CONTROL_CHARACTERS.test(text) ? null : realPath2(path11.resolve(root, text)).toLowerCase();
 }
 function copyMode(source, directory) {
   let mode = fs6.statSync(source).mode & 4095;
@@ -21807,11 +21766,11 @@ function allowed(file, check) {
   }
 }
 function linkTarget(target, { realSource, copyRoot }) {
-  if (!path12.isAbsolute(target)) {
+  if (!path11.isAbsolute(target)) {
     return target;
   }
   const real = realPath2(target);
-  return isPathInside(realSource, real) ? path12.join(copyRoot, path12.relative(realSource, real)) : target;
+  return isPathInside(realSource, real) ? path11.join(copyRoot, path11.relative(realSource, real)) : target;
 }
 function removeScratch(scratch) {
   try {
@@ -21826,7 +21785,7 @@ function makeWritable(directory) {
     fs6.chmodSync(directory, 448);
     for (const entry of fs6.readdirSync(directory, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        makeWritable(path12.join(directory, entry.name));
+        makeWritable(path11.join(directory, entry.name));
       }
     }
   } catch {}
@@ -21995,6 +21954,134 @@ function formatPasses(passes, command = "story passes") {
 // src/validate.js
 import fs7 from "node:fs";
 import path13 from "node:path";
+
+// src/undo.js
+import { Buffer as Buffer7 } from "node:buffer";
+import path12 from "node:path";
+var HEADER_BYTES = 4096;
+var ABSENT = "absent";
+function interruptedChange(root) {
+  const projectRoot = path12.resolve(root);
+  const file = path12.join(projectRoot, UNDO_LOG);
+  if (!logExists(file) || lockedByAnother(projectRoot)) {
+    return null;
+  }
+  let header = null;
+  try {
+    header = JSON.parse(readFilePrefix(file, HEADER_BYTES).toString("utf8").split(`
+`)[0]);
+  } catch {}
+  return { command: commandName(header) };
+}
+function assertNoInterruptedChange(root, command) {
+  const interrupted = interruptedChange(root);
+  if (interrupted !== null && interrupted.command !== command) {
+    throw refusedError(`${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed, so ${command} would build on a change made only in part; nothing was changed. Run story doctor --fix to put those files back first, or run ${interrupted.command} again to finish it`);
+  }
+}
+function safeCommandName(text) {
+  return text.replace(new RegExp(UNSAFE_TEXT.source, "gu"), " ");
+}
+function undoInterruptedChange(root) {
+  const projectRoot = path12.resolve(root);
+  const logFile = path12.join(projectRoot, UNDO_LOG);
+  if (!logExists(logFile)) {
+    return null;
+  }
+  const states = new Map;
+  const command = readUndoLog(logFile, (entry, first) => {
+    if (first) {
+      states.set(entry.path, new Set([stateOf(entry.before), stateOf(entry.after, true)]));
+    } else {
+      states.get(entry.path).add(stateOf(entry.after, true));
+    }
+  });
+  const checked = new Map([...states.keys()].map((relative) => [relative, currentState(projectRoot, relative)]));
+  const edited = [...states].filter(([relative, known]) => !known.has(checked.get(relative))).map(([relative]) => relative);
+  if (edited.length > 0) {
+    const [it, changed] = edited.length === 1 ? ["it", "has changed since, or is reached"] : ["them", "have changed since, or are reached"];
+    throw projectError(`Cannot put back what ${command} changed before it stopped part way: ${edited.join(", ")} ${changed} through a folder outside the project, and putting ${it} back would lose that change, so nothing was changed. Undo that change and run this again, or delete ${UNDO_LOG} to keep the project as it is, then check it with story validate and story links`);
+  }
+  const restored = [];
+  readUndoLog(logFile, (entry, first) => {
+    const state = checked.get(entry.path);
+    if (!first || state === stateOf(entry.before)) {
+      return;
+    }
+    const target = path12.join(projectRoot, ...entry.path.split("/"));
+    const unchangedFrom = state === ABSENT ? null : currentText(target);
+    if (unchangedFrom === null ? state !== ABSENT : contentHash(unchangedFrom) !== state) {
+      throw refusedError(`${entry.path} changed on disk while story was putting back what ${command} changed, so it was left as it is. Run this again to finish`);
+    }
+    if (entry.before === null) {
+      assertSafeProjectPath(target, projectRoot);
+      removeFile(target, { root: projectRoot, unchangedFrom });
+    } else {
+      writeFile(target, entry.before, { root: projectRoot, unchangedFrom, mode: entry.mode });
+    }
+    restored.push(entry.path);
+  });
+  deleteUndoLog(projectRoot);
+  return { command, files: restored };
+}
+function logExists(file) {
+  try {
+    return lstatIfExists(file) !== null;
+  } catch {
+    return false;
+  }
+}
+function readUndoLog(logFile, visit) {
+  const seen = new Set;
+  let command = commandName(null);
+  try {
+    forEachLine(logFile, MAX_UNDO_LINE_BYTES, (bytes, number) => {
+      const entry = parsedLine(bytes);
+      if (number === 1) {
+        command = commandName(entry);
+        return;
+      }
+      const first = !seen.has(entry?.path);
+      if (!isUndoEntry(entry, first)) {
+        throw unreadableLog(number);
+      }
+      seen.add(entry.path);
+      visit(entry, first);
+    });
+  } catch (error) {
+    throw error.longLine === undefined ? error : unreadableLog(error.longLine);
+  }
+  return command;
+}
+function unreadableLog(number) {
+  return projectError(`${UNDO_LOG} is not an undo log story can read (line ${number}), so nothing was changed. Delete it, then check the project with story validate and story links`);
+}
+function parsedLine(bytes) {
+  try {
+    return JSON.parse(decodeUtf8(bytes, UNDO_LOG));
+  } catch {
+    return null;
+  }
+}
+function isUndoEntry(entry, first) {
+  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer7.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
+}
+function stateOf(value, hashed = false) {
+  return value === null ? ABSENT : hashed ? value : contentHash(value);
+}
+function currentState(projectRoot, relative) {
+  const target = path12.join(projectRoot, ...relative.split("/"));
+  try {
+    assertLexicallyInsideRoot(target, projectRoot);
+    assertExistingAncestorInsideRoot(path12.dirname(target), projectRoot);
+    return lstatIfExists(target) === null ? ABSENT : contentHash(readFileBytes(target));
+  } catch {
+    return null;
+  }
+}
+function commandName(header) {
+  return typeof header?.command === "string" ? safeCommandName(header.command) : "a story command";
+}
 
 // src/fountain.js
 var SCENE_SETTINGS = new Map([
@@ -22185,7 +22272,7 @@ function validateProjectOf(project) {
   collectStrayFileWarnings(project, warnings);
   const interrupted = interruptedChange(projectRoot);
   if (interrupted !== null) {
-    errors.push(err("interrupted-change", `${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed: run story doctor --fix to put those files back, or run that command again, which puts them back and then makes its change`, UNDO_LOG));
+    errors.push(err("interrupted-change", `${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed: run story doctor --fix to put those files back, or run ${interrupted.command} again to finish it`, UNDO_LOG));
   }
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path13.basename(file, ".md").toLowerCase())) {
@@ -25277,11 +25364,12 @@ function registryLists(root, kind, file) {
   return safeRead(registryPath, root).includes(`](${link})`);
 }
 function renameEntity(root, options) {
-  return withUndo(root, ["rename", options.kind, options.id], () => renameNow(root, options));
+  return withUndo(root, ["rename", options.kind, options.id, options.name, ...flag("id", options.newId), ...options.prose ? ["--prose"] : []], () => renameNow(root, options));
 }
 function withUndo(root, words, run) {
+  const command = safeCommandName(["story", ...words.filter((word) => word !== undefined).map((word) => shellWord(String(word).trim()))].join(" "));
+  assertNoInterruptedChange(root, command);
   const undone = undoInterruptedChange(root);
-  const command = ["story", ...words.map((word) => String(word ?? "").trim()).filter((word) => word !== "")].join(" ");
   try {
     const result = withUndoLog(root, command, run);
     return undone === null ? result : { ...result, undone };
@@ -25292,6 +25380,9 @@ function withUndo(root, words, run) {
     }
     throw error;
   }
+}
+function flag(name, value) {
+  return value === undefined ? [] : [`--${name}`, value];
 }
 function renameNow(root, options) {
   const project = scanProject(root);
@@ -25613,7 +25704,7 @@ function followQueryFilters(root, plan, kind, oldId, newId) {
   plan.set(filePath, replaceFrontmatter(text, { ...data, queries }));
 }
 function moveEntity(root, options) {
-  return withUndo(root, ["move", options.kind, options.id], () => {
+  return withUndo(root, ["move", options.kind, options.id, ...flag("number", options.number), ...flag("chapter", options.chapter), ...flag("scene", options.scene)], () => {
     const project = scanProject(root);
     assertProjectParses(project, "move");
     const kind = normalizeMoveKind(options.kind);
@@ -26025,7 +26116,7 @@ function assertRestructurable(project, { chapters, scenes, changed, created, cha
   assertWritable(root, [...changed, ...rewrittenFiles(root, "chapter", chapters), ...rewrittenFiles(root, "scene", scenes), ...fixed], created);
 }
 function splitChapter(root, options) {
-  return withUndo(root, ["split", options.id], () => splitNow(root, options));
+  return withUndo(root, ["split", options.id, ...flag("at", options.at), ...flag("title", options.title)], () => splitNow(root, options));
 }
 function splitNow(root, options) {
   const project = scanProject(root);
@@ -27369,7 +27460,7 @@ function unparsedNote(snapshot) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer6 } from "node:buffer";
+import { Buffer as Buffer8 } from "node:buffer";
 import fs10 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -27381,7 +27472,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs10.readS
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer6.alloc(CHUNK_BYTES);
+  const buffer = Buffer8.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -27407,9 +27498,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs10.readS
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer6.from(buffer.subarray(0, read)));
+    chunks.push(Buffer8.from(buffer.subarray(0, read)));
   }
-  return Buffer6.concat(chunks);
+  return Buffer8.concat(chunks);
 }
 function stdinText(command, bytes) {
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
@@ -30542,7 +30633,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered, chapter.authors);
-      const bytes = Buffer7.byteLength(text, "utf8");
+      const bytes = Buffer9.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }
@@ -32984,7 +33075,7 @@ Run story --help to list commands.
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
     const guarded = writesProject(command, parsed.options) && !command.recovers ? () => {
-      assertNoInterruptedChange(root(), name);
+      assertNoInterruptedChange(root(), `story ${name}`);
       return run();
     } : run;
     return writesProject(command, parsed.options) && !isTruthy(parsed.options["dry-run"]) ? withProjectLock(root(), guarded) : guarded();

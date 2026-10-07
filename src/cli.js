@@ -150,10 +150,11 @@ export function runCli(argv, io) {
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
     // While a command that stopped part way has left its undo log, only the
-    // commands that put it back first (`recovers`) may change the project,
-    // and the rest are refused, a --dry-run too (see undo.js).
+    // commands that put it back first (`recovers`: the same command run
+    // again, or doctor --fix) may change the project, and the rest are
+    // refused, a --dry-run too (see undo.js).
     const guarded = writesProject(command, parsed.options) && !command.recovers ? () => {
-      assertNoInterruptedChange(root(), name);
+      assertNoInterruptedChange(root(), `story ${name}`);
       return run();
     } : run;
     // A command that changes the project in place holds its lock for the

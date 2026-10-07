@@ -196,9 +196,10 @@ export function validateProjectOf(project) {
   collectStrayFileWarnings(project, warnings);
   // A split, merge, move, rename, or remove that stopped part way left its
   // undo log, so the project holds only part of that change (see undo.js).
+  // The log of one still running is its own.
   const interrupted = interruptedChange(projectRoot);
   if (interrupted !== null) {
-    errors.push(err("interrupted-change", `${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed: run story doctor --fix to put those files back, or run that command again, which puts them back and then makes its change`, UNDO_LOG));
+    errors.push(err("interrupted-change", `${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed: run story doctor --fix to put those files back, or run ${interrupted.command} again to finish it`, UNDO_LOG));
   }
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {

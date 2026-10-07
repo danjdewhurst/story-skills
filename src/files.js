@@ -66,6 +66,46 @@ export function readFilePrefix(filePath, length) {
   }
 }
 
+// Calls visit(line, number) with each line of a regular file that ends in a
+// line feed, as its bytes without the line feed (valid only during the
+// call), numbered from 1. The file is read a chunk at a time, so no more
+// than one line is held at once, however long the file. What follows the
+// last line feed is not a line. A line longer than `maxLineBytes` is
+// refused with an error whose `longLine` is its number.
+export function forEachLine(filePath, maxLineBytes, visit) {
+  const { descriptor } = openRegularFile(filePath, Infinity);
+  try {
+    const chunk = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+    let parts = [];
+    let size = 0;
+    let number = 0;
+    const add = (bytes) => {
+      size += bytes.length;
+      if (size > maxLineBytes) {
+        throw Object.assign(projectError(`${filePath}: line ${number + 1} is longer than ${maxLineBytes} bytes`), { longLine: number + 1 });
+      }
+    };
+    let read;
+    while ((read = fs.readSync(descriptor, chunk, 0, chunk.length, null)) > 0) {
+      const data = chunk.subarray(0, read);
+      let start = 0;
+      for (let end = data.indexOf(0x0a); end !== -1; end = data.indexOf(0x0a, start)) {
+        const piece = data.subarray(start, end);
+        add(piece);
+        number += 1;
+        visit(parts.length === 0 ? piece : Buffer.concat([...parts, piece]), number);
+        parts = [];
+        size = 0;
+        start = end + 1;
+      }
+      add(data.subarray(start));
+      parts.push(Buffer.from(data.subarray(start)));
+    }
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
 // Opens a regular file of at most `maxBytes` for reading, checking it by
 // name and then again through the open descriptor.
 function openRegularFile(filePath, maxBytes) {
@@ -190,7 +230,7 @@ function invalidUtf8Offset(buffer) {
 // it), so the save is not overwritten. Any failure, a refusal or the file
 // system's, exits as a refused write. `mode` sets the file's permissions
 // in place of the default or the existing file's (a snapshot copy keeps
-// its source's).
+// its source's, and a file an undo puts back its own).
 export function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
   assertWriteAllowed(filePath);
@@ -520,6 +560,18 @@ export const RENAME_MARKER = ".story-rename.tmp";
 // file.
 export const UNDO_LOG = ".story-undo.tmp";
 
+// The longest line an undo log can hold: a file's text is at most
+// MAX_READ_BYTES, JSON writes a byte as at most six (`\u0000`), and the
+// path, hash, and mode fit in the rest. The log is read a line at a time
+// under this limit (forEachLine), so every log story writes can be read
+// back, and a planted one cannot make a command hold more.
+export const MAX_UNDO_LINE_BYTES = 6 * MAX_READ_BYTES + 64 * 1024;
+
+// Control characters, and the marks that reorder text on screen, which a
+// path an undo log names may not hold and a name it prints is shown
+// without, so a planted log cannot drive the terminal or disguise a path.
+export const UNSAFE_TEXT = /[\p{Cc}\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
+
 // The files an undo log may name, by their path from the project root:
 // markdown a scan reads (no part of the path starts with a dot) and the
 // rename marker. Those are all a command that keeps one changes, so a log
@@ -527,7 +579,18 @@ export const UNDO_LOG = ".story-undo.tmp";
 // is never put back.
 export function isUndoablePath(relative) {
   return relative === RENAME_MARKER
-    || (relative.endsWith(".md") && !relative.includes("\\") && relative.split("/").every((part) => part !== "" && !part.startsWith(".")));
+    || (relative.endsWith(".md") && !relative.includes("\\") && !UNSAFE_TEXT.test(relative)
+      && relative.split("/").every((part) => part !== "" && !part.startsWith(".")));
+}
+
+// Deletes the project's undo log and flushes its folder. It is the
+// command's own bookkeeping, like the lock, so it is not a change the
+// command lists.
+export function deleteUndoLog(root) {
+  const file = path.join(path.resolve(root), UNDO_LOG);
+  assertWriteAllowed(file);
+  fs.rmSync(file, { force: true });
+  syncFolder(path.dirname(file));
 }
 
 // The SHA-256 of a file's contents, as an undo log records what a file was
@@ -543,13 +606,14 @@ let undoLog = null;
 // project at `root`. Before writeFile or removeFile changes a file in the
 // project, a line is added to UNDO_LOG with the file's path, a hash of what
 // it is about to hold (null when it is deleted), and, the first time, the
-// text it held (null when it did not exist), and the line is flushed to
-// disk before the change is made. The log is made at the first change, so a
-// command that stops before one leaves none, and is deleted once `run`
-// returns. When `run` throws after a change, or the process is killed or
-// the power fails, the log stays, so the changes can be put back
-// (undoInterruptedChange). `command` names the run in messages, such as
-// `story split chapter-03`. A call inside another adds to the outer log.
+// text it held (null when it did not exist) and its permissions, and the
+// line is flushed to disk before the change is made. The log is made at the
+// first change, so a command that stops before one leaves none, and is
+// deleted once `run` returns. When `run` throws after a change, or the
+// process is killed or the power fails, the log stays, so the changes can
+// be put back (undoInterruptedChange). `command` names the run, as typed,
+// such as `story split chapter-03 --at 2`. A call inside another adds to
+// the outer log.
 export function withUndoLog(root, command, run) {
   if (undoLog !== null) {
     return run();
@@ -566,8 +630,7 @@ export function withUndoLog(root, command, run) {
     if (log.descriptor !== null) {
       fs.closeSync(log.descriptor);
       if (finished || !log.changed) {
-        fs.rmSync(path.join(log.root, UNDO_LOG), { force: true });
-        syncFolder(log.root);
+        deleteUndoLog(log.root);
       }
     }
   }
@@ -587,7 +650,13 @@ function logUndo(target, after) {
   }
   const entry = { path: relative, after: after === null ? null : contentHash(after) };
   if (!log.seen.has(relative)) {
-    entry.before = lstatIfExists(target)?.isFile() ? readTextFile(target) : null;
+    // The text it held, and its permissions, so a file the command deletes
+    // comes back as it was.
+    const stats = lstatIfExists(target);
+    entry.before = stats?.isFile() ? readTextFile(target) : null;
+    if (entry.before !== null) {
+      entry.mode = stats.mode & 0o777;
+    }
   }
   let line = `${JSON.stringify(entry)}\n`;
   const made = log.descriptor === null;

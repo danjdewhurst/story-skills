@@ -1332,9 +1332,15 @@ describe("round eight", () => {
     } finally {
       fs.rmSync = rmSync;
     }
-    // Its undo log would have a rerun put the rename back and make it again
-    // (test/undo.test.js); without one, as a story from before the log left
-    // it, the marker resumes it.
+    // Its undo log has a rerun put the rename back and make it again
+    // (#604); without one, as a story from before the log left it, the
+    // marker resumes it.
+    const logged = path.join(makeTempDir(), "logged");
+    fs.cpSync(root, logged, { recursive: true });
+    const withLog = invoke(path.dirname(logged), ["rename", "character", "mara-tide", "Mara Quill", "--path", logged]);
+    expect(withLog).toMatchObject({ code: 0, err: expect.stringMatching(/^note: story rename character mara-tide 'Mara Quill' stopped part way, so this first put back the \d+ files it had changed\n$/) });
+    expect(withLog.out).toStartWith("Renamed character mara-tide to mara-quill");
+    expect(fs.existsSync(path.join(logged, ".story-rename.tmp"))).toBe(false);
     fs.rmSync(path.join(root, ".story-undo.tmp"));
     const rerun = ["rename", "character", "mara-tide", "Mara Quill", "--path", root];
     // The preview's copy of the project holds the marker too.

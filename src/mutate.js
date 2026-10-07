@@ -61,9 +61,9 @@ import { warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile } from "./exemptions.js";
 import { queryFiltersNaming, retargetFilter, shownFilter, shownQuery } from "./list.js";
 import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
-import { projectActions } from "./report.js";
+import { projectActions, shellWord } from "./report.js";
 import { MENTION_KINDS, proseRenames } from "./mentions.js";
-import { undoInterruptedChange } from "./undo.js";
+import { assertNoInterruptedChange, safeCommandName, undoInterruptedChange } from "./undo.js";
 import {
   STORY_SCHEMA_VERSION,
   REQUIRED_PATHS,
@@ -1441,17 +1441,22 @@ function registryLists(root, kind, file) {
 }
 
 export function renameEntity(root, options) {
-  return withUndo(root, ["rename", options.kind, options.id], () => renameNow(root, options));
+  return withUndo(root, ["rename", options.kind, options.id, options.name, ...flag("id", options.newId), ...(options.prose ? ["--prose"] : [])], () => renameNow(root, options));
 }
 
 // Runs a split, merge, move, rename, or remove under an undo log (see
-// withUndoLog), after putting back any change an earlier one left part way,
-// which the result reports as `undone` ({ command, files }), or, when the
-// command then fails, its error's hint. `words` name the command for the
-// log: ["split", "chapter-03"] is story split chapter-03.
+// withUndoLog). When the same command, with the same arguments, stopped
+// part way and left its log, what it changed is put back first, which the
+// result reports as `undone` ({ command, files }), or, when the command
+// then fails, its error's hint; the log of any other command is refused,
+// since putting it back would change what this one was asked to do (a
+// remove of the chapter a stopped split made). `words` are the command's
+// arguments and flags, which name it as typed: ["split", "chapter-03",
+// "--at", "2"] is story split chapter-03 --at 2.
 function withUndo(root, words, run) {
+  const command = safeCommandName(["story", ...words.filter((word) => word !== undefined).map((word) => shellWord(String(word).trim()))].join(" "));
+  assertNoInterruptedChange(root, command);
   const undone = undoInterruptedChange(root);
-  const command = ["story", ...words.map((word) => String(word ?? "").trim()).filter((word) => word !== "")].join(" ");
   try {
     const result = withUndoLog(root, command, run);
     return undone === null ? result : { ...result, undone };
@@ -1462,6 +1467,12 @@ function withUndo(root, words, run) {
     }
     throw error;
   }
+}
+
+// A flag and its value as withUndo names a command, or nothing when the
+// flag was not given.
+function flag(name, value) {
+  return value === undefined ? [] : [`--${name}`, value];
 }
 
 function renameNow(root, options) {
@@ -1913,7 +1924,7 @@ function followQueryFilters(root, plan, kind, oldId, newId) {
 // bare ids in plot/timeline.md and arc files. References are written first
 // and the moved files last, so an interrupted move can be rerun.
 export function moveEntity(root, options) {
-  return withUndo(root, ["move", options.kind, options.id], () => {
+  return withUndo(root, ["move", options.kind, options.id, ...flag("number", options.number), ...flag("chapter", options.chapter), ...flag("scene", options.scene)], () => {
     const project = scanProject(root);
     assertProjectParses(project, "move");
     const kind = normalizeMoveKind(options.kind);
@@ -2497,7 +2508,7 @@ function assertRestructurable(project, { chapters, scenes, changed, created, cha
 }
 
 export function splitChapter(root, options) {
-  return withUndo(root, ["split", options.id], () => splitNow(root, options));
+  return withUndo(root, ["split", options.id, ...flag("at", options.at), ...flag("title", options.title)], () => splitNow(root, options));
 }
 
 function splitNow(root, options) {

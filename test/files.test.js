@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { MAX_READ_BYTES, readFileBytes, readFilePrefix, readTextFile, removeDirectory, removeFile, syncFolder, writeFile } from "../src/files.js";
+import { MAX_READ_BYTES, forEachLine, readFileBytes, readFilePrefix, readTextFile, removeDirectory, removeFile, syncFolder, writeFile } from "../src/files.js";
 import { makeTempDir } from "./helpers.js";
 
 const SRC = path.join(import.meta.dir, "..", "src");
@@ -153,10 +153,11 @@ describe("bounded reads (#548)", () => {
 });
 
 // Runs `run` and returns the changes it made and the folders it flushed, in
-// order: ["mkdir", folder], ["rename", target], ["rm", file], or ["flush",
-// folder] for an fsync of a descriptor opened on a folder.
+// order: ["mkdir", folder], ["rename", target], ["rm", file], ["rmdir",
+// folder], or ["flush", folder] for an fsync of a descriptor opened on a
+// folder.
 function changesAndFlushes(run) {
-  const real = { openSync: fs.openSync, fsyncSync: fs.fsyncSync, mkdirSync: fs.mkdirSync, renameSync: fs.renameSync, rmSync: fs.rmSync };
+  const real = { openSync: fs.openSync, fsyncSync: fs.fsyncSync, mkdirSync: fs.mkdirSync, renameSync: fs.renameSync, rmSync: fs.rmSync, rmdirSync: fs.rmdirSync };
   const events = [];
   const folders = new Map();
   const spies = [
@@ -182,6 +183,10 @@ function changesAndFlushes(run) {
     spyOn(fs, "rmSync").mockImplementation((file, ...rest) => {
       events.push(["rm", file]);
       return real.rmSync(file, ...rest);
+    }),
+    spyOn(fs, "rmdirSync").mockImplementation((folder, ...rest) => {
+      events.push(["rmdir", folder]);
+      return real.rmdirSync(folder, ...rest);
     })
   ];
   try {
@@ -204,7 +209,7 @@ describe("folder flushes (#604)", () => {
     expect(changesAndFlushes(() => removeFile(file))).toEqual([["rm", file], ["flush", notes]]);
     // Nothing to delete, so nothing to flush.
     expect(changesAndFlushes(() => removeFile(file, { force: true }))).toEqual([["rm", file]]);
-    expect(changesAndFlushes(() => removeDirectory(notes))).toEqual([["flush", root]]);
+    expect(changesAndFlushes(() => removeDirectory(notes))).toEqual([["rmdir", notes], ["flush", root]]);
   });
 
   test("syncFolder skips Windows, which cannot open a folder, and leaves a folder it cannot open or flush as it is", () => {
@@ -212,23 +217,70 @@ describe("folder flushes (#604)", () => {
     const file = path.join(dir, "notes.md");
     fs.writeFileSync(file, "notes\n");
     const open = spyOn(fs, "openSync");
+    const flush = spyOn(fs, "fsyncSync");
     try {
       syncFolder(dir, "win32");
       expect(open).not.toHaveBeenCalled();
-      // A missing folder, and a file, which O_DIRECTORY refuses.
+      // A missing folder, and a file, which O_DIRECTORY refuses to open, so
+      // it is never flushed.
       expect(() => syncFolder(path.join(dir, "missing"))).not.toThrow();
       expect(() => syncFolder(file)).not.toThrow();
+      expect(flush).not.toHaveBeenCalled();
     } finally {
       open.mockRestore();
+      flush.mockRestore();
     }
-    const fsync = spyOn(fs, "fsyncSync").mockImplementation(() => {
-      throw Object.assign(new Error("EINVAL"), { code: "EINVAL" });
-    });
+    // A flush that fails (too many open files, or a file system that cannot
+    // flush a folder) still closes the folder.
+    let opened = null;
+    const realOpen = fs.openSync;
+    const spies = [
+      spyOn(fs, "openSync").mockImplementation((...args) => {
+        opened = realOpen(...args);
+        return opened;
+      }),
+      spyOn(fs, "fsyncSync").mockImplementation(() => {
+        throw Object.assign(new Error("EMFILE"), { code: "EMFILE" });
+      }),
+      spyOn(fs, "closeSync")
+    ];
     try {
       expect(() => syncFolder(dir)).not.toThrow();
+      expect(spies[2]).toHaveBeenCalledWith(opened);
     } finally {
-      fsync.mockRestore();
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
     }
+  });
+
+  test.skipIf(!MKFIFO)("syncFolder never waits on a FIFO put in a folder's place", () => {
+    const fifo = path.join(makeTempDir(), "chapters");
+    expect(spawnSync("mkfifo", [fifo]).status).toBe(0);
+    // In a child, so an open that waits for a writer fails the test rather
+    // than stalling the suite.
+    const script = `
+      const { syncFolder } = await import(${JSON.stringify(pathToFileURL(path.join(SRC, "files.js")).href)});
+      syncFolder(${JSON.stringify(fifo)});
+      console.log("returned");
+    `;
+    const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", timeout: 20000 });
+    expect(result.signal).toBeNull();
+    expect(result.stdout.trim()).toBe("returned");
+  });
+
+  test("forEachLine reads whole lines a chunk at a time, leaves out an unfinished end, and refuses a line over its limit", () => {
+    const file = path.join(makeTempDir(), "log.tmp");
+    // Longer than one chunk, so it spans two reads.
+    const long = "y".repeat(70 * 1024);
+    fs.writeFileSync(file, `a\n${long}\n\nb\nunfinished`);
+    const lines = [];
+    forEachLine(file, 100 * 1024, (line, number) => lines.push([number, line.toString()]));
+    expect(lines).toEqual([[1, "a"], [2, long], [3, ""], [4, "b"]]);
+    expect(() => forEachLine(file, 1000, () => {})).toThrow(expect.objectContaining({ longLine: 2, message: `${file}: line 2 is longer than 1000 bytes` }));
+    // An unfinished end over the limit is refused too, as the line it starts.
+    fs.writeFileSync(file, "z".repeat(2000));
+    expect(() => forEachLine(file, 1000, () => {})).toThrow(expect.objectContaining({ longLine: 1 }));
   });
 });
 
@@ -243,6 +295,8 @@ const ALLOWED_RAW_READS = [
   // The guarded reads themselves: the open in openRegularFile, and the
   // bounded reads of readFilePrefix and readAtMost.
   ["files.js", "read = fs.readSync(descriptor, buffer, filled, length - filled, null);"],
+  // forEachLine reads through openRegularFile, a chunk at a time.
+  ["files.js", "while ((read = fs.readSync(descriptor, chunk, 0, chunk.length, null)) > 0) {"],
   ["files.js", "descriptor = fs.openSync(filePath, SAFE_READ_FLAGS);"],
   ["files.js", "read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);"],
   // syncFolder opens a folder only to flush it, never reading it, and

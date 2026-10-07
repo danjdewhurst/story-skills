@@ -1,10 +1,10 @@
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, RENAME_MARKER, UNDO_LOG, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, MAX_UNDO_LINE_BYTES, RENAME_MARKER, UNDO_LOG, forEachLine, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
-import { MAX_UNDO_LOG_BYTES } from "./undo.js";
-import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
+import { LOCK_FILE, TAKEOVER_FILE, lockedByAnother } from "./lock.js";
 import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, PATH_CONTROL_CHARACTERS, SKIPPED_SCAN_DIRECTORIES, existingStoryData, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
 
@@ -373,29 +373,50 @@ export function mirrorFolderNames(source, copy) {
 }
 
 // Write commands read the text of markdown files only (and import the
-// .gitignore it keeps, rename its marker, and the commands that put back an
-// interrupted change its undo log, which has a larger limit of its own), and
-// no file over the read limit; of any other file (the story.md cover) they
-// check at most the size and, for the cover, the first bytes, which say what
-// kind of image it is. So only readable markdown, the .gitignore, the
-// marker, and the undo log are copied whole. Every other file is a sparse file of the same size, which
+// .gitignore it keeps, and rename its marker), and no file over the read
+// limit; of any other file (the story.md cover) they check at most the size
+// and, for the cover, the first bytes, which say what kind of image it is.
+// So only readable markdown, the .gitignore, and the marker are copied
+// whole, and the undo log a stopped command left (see copyUndoLog). Every other file is a sparse file of the same size, which
 // takes no disk space, and only the cover (`keepHead`) keeps its first bytes,
 // so no other file's contents reach the scratch folder. An unreadable file
 // stays unreadable. The copy is read as a command reads it, so a file
 // swapped for a FIFO or a symlink since the folder was listed is refused
 // rather than followed or waited on.
 function copyRegularFile(from, to, keepHead = false) {
+  // The undo log of a command still running (it holds the project lock) is
+  // its own, so the copy previews the project without it.
+  if (path.basename(from) === UNDO_LOG && lockedByAnother(path.dirname(from))) {
+    return;
+  }
   const { size } = fs.statSync(from);
   const readable = allowed(from, fs.constants.R_OK);
-  const limit = path.basename(from) === UNDO_LOG ? MAX_UNDO_LOG_BYTES : MAX_READ_BYTES;
-  if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER, UNDO_LOG].includes(path.basename(from))) && size <= limit && readable) {
-    fs.writeFileSync(to, readFileBytes(from, limit));
+  if (path.basename(from) === UNDO_LOG && readable) {
+    copyUndoLog(from, to);
+  } else if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER].includes(path.basename(from))) && size <= MAX_READ_BYTES && readable) {
+    fs.writeFileSync(to, readFileBytes(from));
   } else {
     fs.writeFileSync(to, keepHead && readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs.truncateSync(to, size);
   }
   fs.chmodSync(to, copyMode(from, false));
 }
+
+// The commands that put back an interrupted change read its undo log a
+// line at a time, so it is copied that way, with no limit on its size: each
+// whole line, under the limit on one (MAX_UNDO_LINE_BYTES), up to one past
+// it, which the copy holds as a line the commands refuse at the same
+// number.
+function copyUndoLog(from, to) {
+  fs.writeFileSync(to, "");
+  try {
+    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs.appendFileSync(to, Buffer.concat([line, LINE_FEED])));
+  } catch {
+    fs.appendFileSync(to, LINE_FEED);
+  }
+}
+
+const LINE_FEED = Buffer.from("\n");
 
 // The lowercase real path of the cover the story.md at `root` names, as
 // coverImage resolves it, or null when there is none to read.
