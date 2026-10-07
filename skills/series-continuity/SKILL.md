@@ -45,6 +45,9 @@ story init '{Title}' --follows '{existing-book-dir}' --synopsis '{synopsis}'
 
 # Prequel: set before book one
 story init '{Title}' --precedes '{existing-book-dir}' --synopsis '{synopsis}'
+
+# Companion: set alongside book one, with no chronology link
+story init '{Title}' --series '{series-id}' --synopsis '{synopsis}'
 ```
 
 The title and synopsis are the user's own words, and a folder name can hold spaces, so wrap each value in single quotes. Never paste a value into double quotes, where `$(...)`, backticks, and `"` still take effect. A single quote inside a value depends on the shell: write it as `'\''` in a POSIX shell (bash, zsh, sh, Git Bash) and as `''` in PowerShell. Never run the command in cmd.exe, which has no single quotes and runs `&` inside a value; use PowerShell or a POSIX shell.
@@ -52,6 +55,8 @@ The title and synopsis are the user's own words, and a folder name can hold spac
 Run `init` from the folder that contains the existing book, never from inside it: `init` refuses a new book inside another project, and a linked book outside the new book's parent folder. It also refuses a `--series` that differs from the linked book's, and a `--book-number` already used in the series. `init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`, plus `series-title`, `author` or `authors`, and `language` when the linked book sets them. When any book in the linked series has a `book-number`, it sets `book-number` to one more than the highest whole number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
 If the existing book has no `series` yet, pass `--series {series-id}`: `init` also writes that `series` into the existing book's `story.md`. Add matching `book-number` values to both `story.md` files yourself.
+
+A companion has no `follows` or `precedes` link. So `init` inherits nothing from book one, and it writes nothing to book one's `story.md`. Pass `--genre`, `--pov`, and `--tense` to match book one. Use the same `--series` id as book one. Set `series` in book one by hand if it has none. Set `book-number` by hand: pass `--book-number` to the companion's `init`, or write the field in each `story.md`. `story series` does not see an unlinked companion, so compare its canon by hand (see `references/series-bible.md`).
 
 If the CLI is not available, add the fields to both `story.md` files by hand.
 
