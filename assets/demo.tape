@@ -1,11 +1,12 @@
 # Renders assets/demo.gif with VHS (https://github.com/charmbracelet/vhs).
-# Run from the repo root with Node 18+ on the PATH:
+# Run from the repo root with vhs and Node 18+ on the PATH:
 #   vhs assets/demo.tape
-# The official Docker image lacks Node; mount a node binary into it (the
-# binary itself, not a version manager's shim):
+# Or in Docker, with the image assets/vhs.Dockerfile builds. The run
+# mounts the repo read-only and only assets/ writable:
+#   docker build -t story-skills-vhs - < assets/vhs.Dockerfile
 #   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-#     -v /path/to/node:/usr/local/bin/node:ro -v "$PWD":/vhs -w /vhs \
-#     ghcr.io/charmbracelet/vhs assets/demo.tape
+#     -v "$PWD":/vhs:ro -v "$PWD/assets":/vhs/assets -w /vhs \
+#     story-skills-vhs assets/demo.tape
 # assets/screenshot-continuity.tape renders the still of the last frame.
 Output assets/demo.gif
 
