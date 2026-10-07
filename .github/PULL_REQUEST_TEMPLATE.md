@@ -18,8 +18,8 @@
 ```shell
 bun run check:metadata
 bun run check:evals
+bun run check:links
 bun run eval:selftest
-bun run test
 bun run test:coverage
 bun run test:examples
 node skills/story-maintenance/scripts/story.js --help

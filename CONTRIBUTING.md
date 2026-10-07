@@ -43,13 +43,12 @@ bun run check:metadata
 bun run check:evals
 bun run check:links
 bun run eval:selftest
-bun run test
 bun run test:coverage
 bun run test:examples
 node skills/story-maintenance/scripts/story.js --help
 ```
 
-`test:coverage` requires every line and function in `src/` to be covered and at least 85% of the lines in each file in `scripts/` and `evals/`, and also runs `check:fallback`. [CI](docs/development.md#ci) describes the full workflow, including the Node 18, 20, and 22 matrix.
+`test:coverage` runs the whole suite, as `bun run test` does, then requires every line and function in `src/` to be covered and at least 85% of the lines in each file in `scripts/` and `evals/`, and also runs `check:fallback`. [CI](docs/development.md#ci) describes the full workflow, including the Node 18, 20, and 22 matrix.
 
 ## Commits and pull requests
 
