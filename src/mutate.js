@@ -248,6 +248,12 @@ function fillStoryProject(root, title, cwd, options) {
   // The CLI has already split --themes on commas and kept each --theme whole.
   const givenThemes = asArray(options.themes).map((theme) => String(theme).trim()).filter(Boolean);
   const themes = givenThemes.length > 0 ? givenThemes : ["change"];
+  // A folder a split, merge, move, rename, or remove stopped part way in
+  // holds only part of that change, so --force does not build on it (see
+  // undo.js). `command` names the run in the refusal.
+  if (options.force) {
+    assertNoInterruptedChange(root, options.command ?? "story init --force");
+  }
   // A last check before anything is written, such as the parse check import
   // runs on an existing project.
   options.beforeWrite?.(root, existingStory !== null);
