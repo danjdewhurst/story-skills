@@ -89,7 +89,7 @@ function formatCommandsHelp() {
 // report, next, and doctor include it in their checks. check is a pass or
 // fail gate, as links and continuity are, so it refuses with them rather
 // than pass or fail without the severity a CI job set.
-const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
+export const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 
 export function runCli(argv, io) {
   let configured = [];
