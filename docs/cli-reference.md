@@ -28,10 +28,10 @@ The CLI needs Node 18 or newer and has no runtime dependencies. Pick whichever o
 | Installed globally with `npm install -g story-skills` | `story <command>` |
 | Not installed | `npx story-skills <command>` |
 | Unreleased changes from GitHub | `npx --yes --package github:danjdewhurst/story-skills story <command>` |
-| A clone of this repository | `node <clone>/bin/story.js <command>` |
+| A clone of this repository | `node <clone>/bin/story.js <command>` or `bun <clone>/bin/story.js <command>` |
 | Skills copied into an agent, no package | `node <skills-dir>/story-maintenance/scripts/story.js <command>` |
 
-All five run the same code. Run them from the story project folder, so `.` is the project. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
+All five run the same code. Run them from the story project folder, so `.` is the project. [`init`](#init) and [`import`](#import) create a project, so run them from the folder that should hold it, or pass `--dir`; inside an existing project they refuse. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
 
 ### Example projects used on this page
 
@@ -3441,7 +3441,7 @@ The aliases (`--locations`, `--characters`, `--mentions`, `--members`, `--arcs`,
 
 ## The bundled fallback
 
-[`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the whole CLI bundled into one file that runs under plain Node 18 or newer, with no install step. It exists for agents that have the skills copied in but not the npm package. The [story-maintenance skill](../skills/story-maintenance/SKILL.md) tells agents to try `story`, then this file, run with Node from the story project folder. A Story Skills checkout's `bin/story.js` comes in only when the user names the checkout or the agent is working in it.
+[`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the whole CLI bundled into one file that runs under plain Node 18 or newer, with no install step. It exists for agents that have the skills copied in but not the npm package. The [story-maintenance skill](../skills/story-maintenance/SKILL.md) tells agents to try `story`, then this file, run with Node from the story project folder (for `init` and `import`, the folder that will hold the new project). A Story Skills checkout's `bin/story.js` comes in only when the user names the checkout or the agent is working in it.
 
 ```shell
 node skills/story-maintenance/scripts/story.js --version

@@ -139,8 +139,10 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 | Without Node: Homebrew (macOS, Linux) | `brew install danjdewhurst/tap/story-skills`, then `story --help` |
 | Without Node: download a binary | The archive for your system from the [releases page](https://github.com/danjdewhurst/story-skills/releases) |
 | Try unreleased changes from GitHub | `npx --yes --package github:danjdewhurst/story-skills story --help` |
-| From a clone of this repository | `node <clone>/bin/story.js --help`, run from your project folder |
+| From a clone of this repository | `node <clone>/bin/story.js --help` or `bun <clone>/bin/story.js --help` |
 | Bundled copy in an installed skill | `node <skills-directory>/story-maintenance/scripts/story.js --help` |
+
+Run a clone or the bundled copy from your project folder, so `.` is the project; for `init` and `import`, which create a project, run it from the folder that should hold the new one, or pass `--dir`. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust.
 
 The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against. The checksums file lists every archive, so check only the one you downloaded:
 
@@ -187,7 +189,7 @@ story --version
 0.22.1
 ```
 
-The skills look for the CLI in this order: `story`, then the bundled `scripts/story.js` run with Node from the project folder. They use a Story Skills checkout's `bin/story.js` instead only when you name the checkout or the agent is working in it. If none is available, they make the same changes by hand. The rest of this page writes `story`; substitute whichever form you use. Every command and option is listed in the [CLI reference](cli-reference.md).
+The skills look for the CLI in this order: `story`, then the bundled `scripts/story.js` run with Node from the project folder (for `init` and `import`, from the folder that will hold the new project). They use a Story Skills checkout's `bin/story.js` instead only when you name the checkout or the agent is working in it. If none is available, they make the same changes by hand. The rest of this page writes `story`; substitute whichever form you use. Every command and option is listed in the [CLI reference](cli-reference.md).
 
 ## Update, pin, or remove
 

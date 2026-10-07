@@ -145,7 +145,7 @@ brew install danjdewhurst/tap/story-skills   # then: story --help
 
 The binary is the CLI only, and reports the same `story --version` as the npm package. The skills still need an agent such as Claude Code or Codex (see [Quick start](#quick-start)).
 
-From a clone, run `node <clone>/bin/story.js <command>` from your project folder. Copied-skill installs don't need a clone: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
+From a clone, run `node <clone>/bin/story.js <command>` (or `bun <clone>/bin/story.js <command>`) from your project folder, or for `init` and `import` from the folder that should hold the new project. Bun reads `bunfig.toml` and `.env` from the current folder, so use it only in projects you trust. Copied-skill installs don't need a clone: `story-maintenance` bundles a `scripts/story.js` fallback that agents run with Node.
 
 The CLI is for maintenance only. Agents write story content directly to markdown files and never create project-local build or generator scripts to emit the story.
 

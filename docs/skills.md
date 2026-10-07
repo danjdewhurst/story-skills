@@ -36,7 +36,7 @@ Every skill that runs maintenance looks for the CLI in the same order:
 2. `node ../story-maintenance/scripts/story.js <command>`, the bundled fallback, resolved relative to the skill folder
 3. `node <checkout>/bin/story.js <command>`, only when the user names a Story Skills repository checkout or the agent is working in one
 
-The agent gives the script in forms 2 and 3 as an absolute path and runs it with Node from the story project folder, so `.` is the project. It does not use Bun there, which would load the project folder's `bunfig.toml` and `.env`. Every skill words this the same way, and [`test/skill-conventions.test.js`](../test/skill-conventions.test.js) checks it.
+The agent gives the script in forms 2 and 3 as an absolute path and runs it with Node from the folder it would run `story` from: the story project folder, so `.` is the project, or for `init` and `import` the folder that will hold the new project. It does not use Bun there, which would load that folder's `bunfig.toml` and `.env`. Every skill words this the same way, and [`test/skill-conventions.test.js`](../test/skill-conventions.test.js) checks it.
 
 `story-maintenance` itself uses `node scripts/story.js`, because the fallback sits inside its own folder. The fallback is a single Node file with no dependencies, so copied skill installs work without npm:
 
