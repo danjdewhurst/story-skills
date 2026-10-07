@@ -103,8 +103,11 @@ comic character will do and laughs when they do it, at the worst moment.
   absurdly specific, with total commitment; the need is what the story
   makes them learn. Map them to the lie and truth in `theme-craft`
   (`theme-craft/references/lie-truth.md`): the comic flaw is often the lie
-  played for laughs. A lead who never learns is a valid choice if the world
-  or the supporting cast changes around them instead (`arc-type: flat`).
+  played for laughs. A lead who already holds the truth while the world
+  around them changes (the innocent whose decency reforms everyone) is a
+  `flat` arc. A lead who never learns is different: the flaw stays a fixed
+  trait, not a lie the story tests, so give the arc to another character
+  (often the straight man) and record that decision in `story.md` notes.
 - **Comic relief keeps its dignity.** A supporting comic character needs a
   goal of their own, not only jokes (see
   `character-management/references/supporting-characters.md`).
@@ -119,7 +122,9 @@ happens to them is funny.
   at full intensity by the character, as in MG/YA (`mg-ya.md`).
 - **Record the tone line.** Decide how far the book mixes comedy with real
   harm, and where comedy stops: grief, cruelty, a death, the black moment.
-  Write the decision in `story.md` notes so every chapter keeps to it.
+  Write the decision in the `## Tone & Style` section of `story.md`, which
+  `story context` gives the drafting agent for every chapter; it leaves
+  out the free-form notes.
 - **When to undercut.** A joke after a tense or dark beat releases the
   pressure, as horror's recovery period does (`horror.md`). A joke straight
   after a sincere moment the book has earned (the confession, the
@@ -141,11 +146,23 @@ Each sub-genre makes a different promise. Record it as `sub-genre` in
   straight.
 - **Farce.** Maximum escalation in a confined place and a short span of
   time: doors, disguises, mistaken identity, and lies that need more lies.
-  Farce lives on logistics, so track them: give each scene a `time`,
-  `location`, and `characters`, and record each secret in `knowledge-state`
-  in `continuity/state.md` with its `learned-in` chapter. Run
-  `story knowledge <id> --at chapter-NN` before drafting a scene where a
-  character might act on a secret, to confirm they know it yet.
+  Farce lives on logistics, so track them:
+  - **Who is where.** Give each scene a `date`, an exact `time` (`HH:MM`),
+    a `location`, and its `characters`. `story continuity` then reports a
+    character in two places at the same minute (`route-same-time`), and,
+    once the rooms have location `routes`, a dash between them faster than
+    the route allows (`route-too-fast`). It skips scenes with no `date`,
+    and a named time such as `evening` covers a span, so two scenes at
+    `evening` never count as the same minute.
+  - **Who knows what.** Record each secret in `knowledge-state` in
+    `continuity/state.md` with its `learned-in` chapter, and run
+    `story knowledge <id> --at chapter-NN` before drafting a chapter where
+    a character might act on it. That check is per chapter: a secret
+    learned in scene 5 counts as known in scene 2 of the same chapter. For
+    a reveal partway through a chapter, also record it as a `character` and
+    `knowledge` entry in the `state-changes` of the scene where it is
+    learned; `story context <scene-id>` then gives the POV character the
+    secret only in the scenes after that one.
 - **Satire.** Exaggerate a real thing to expose it. The target is
   recognisable, and the exaggeration makes an argument (a controlling idea;
   see `theme-craft/references/controlling-idea.md`); mockery with no point
@@ -157,8 +174,9 @@ Each sub-genre makes a different promise. Record it as `sub-genre` in
 - **Cosy.** Low stakes for the world, high warmth, and a community the
   reader wants to return to. The contract is comfort: violence and lasting
   harm stay off the page or away from the beloved cast, and the ending
-  restores the community. A cosy mystery loads `mystery-fair-play.md` too;
-  its clues still play fair.
+  restores the community. A comic cosy mystery loads `mystery-fair-play.md`
+  too, and its clues still play fair; a cosy mystery not played for laughs
+  needs only the mystery pack.
 - **Comedy over another genre.** Comic fantasy, science fiction, or horror
   keeps that genre's rules: load its pack too. A world whose rules bend for
   a joke loses the logic comedy needs to escalate.
@@ -184,5 +202,5 @@ up.
 - [ ] Call-backs and running gags change on each return, and every running gag ends in a payoff.
 - [ ] Long-range comic set-ups are logged in `continuity/promises/`, and nothing in the climax first appears there.
 - [ ] The stakes matter to the characters, the threat survives the jokes, and earned sincere beats play straight.
-- [ ] The tone line is recorded in `story.md` and holds across the book.
+- [ ] The tone line is recorded in `story.md` `## Tone & Style` and holds across the book.
 - [ ] The sub-genre's contract holds (the romcom's HEA, farce's collision, satire's target, cosy's comfort).

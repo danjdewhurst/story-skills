@@ -46,7 +46,9 @@ exist or be in progress.
    - Science fiction → `references/scifi-pipeline.md`
    - Fantasy (epic, quest, secondary-world) → `references/fantasy.md`
    - Historical fiction → `references/historical.md`
-   - Comedy (romantic comedy, farce, satire, cosy) → `references/comedy.md`
+   - Comedy (romantic comedy, farce, satire, cosy comedy) →
+     `references/comedy.md`; a cosy mystery not played for laughs needs
+     only the mystery pack
    - Serial / episodic / web serial → `references/serial-episodic.md`
    - Multi-genre stories: load each applicable pack; where packs conflict
      (e.g. horror's slow dread vs. thriller's cliffhangers), decide with
@@ -83,8 +85,9 @@ exist or be in progress.
      skill) for every fact the plot leans on and every real person; run
      the `editorial-review` real-people pass for anyone living or recently
      dead.
-   - Comedy: record the comic sub-genre and the tone line (where comedy
-     stops) in `story.md`, each comic lead's flaw in their character file,
+   - Comedy: record the comic sub-genre in `story.md`, the tone line (where
+     comedy stops) in its `## Tone & Style` section, each comic lead's flaw
+     in their character file,
      and call-backs and running gags whose payoff is chapters away in
      `continuity/promises/`. Sentence-level comic timing belongs to the
      `line-editing` skill.
