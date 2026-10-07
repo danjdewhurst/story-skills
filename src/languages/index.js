@@ -289,9 +289,14 @@ export function fillLabel(labels, key, values = {}, escape = (text) => text) {
 
 // Names joined pair by pair with the `and` label: "A and B and C". An `and`
 // label that leaves out {a} or {b} would drop a name, so names are then
-// joined with a comma instead: a byline never loses an author.
+// joined with a comma instead: a byline never loses an author. Only the
+// first {a} and {b} are filled and a repeat is left out: {a} holds the
+// names joined so far, so `{a}{a} {b}` would double the byline at every
+// name, and twenty authors would outgrow the longest string a build can
+// write.
 export function joinNames(names, labels) {
-  const template = String(labels?.and ?? en.labels.and);
-  const joiner = template.includes("{a}") && template.includes("{b}") ? labels : { and: "{a}, {b}" };
+  const filled = new Set();
+  const template = String(labels?.and ?? en.labels.and).replace(/\{([ab])\}/g, (placeholder, key) => (filled.has(key) ? "" : (filled.add(key), placeholder)));
+  const joiner = { and: filled.size === 2 ? template : "{a}, {b}" };
   return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
 }
