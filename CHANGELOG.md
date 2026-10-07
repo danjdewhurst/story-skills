@@ -90,6 +90,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - A language written with its ISO 639-3 code (`dan`, `fin`, `urd`, and others) now finds the pack for its two-letter code. ([#738](https://github.com/danjdewhurst/story-skills/issues/738))
   - `dan` and `fin` had no pack, so their books used the base pack's quotes and dashes.
   - `urd`, `yid`, `kur`, `snd`, `pus`, `div`, and `uig` now build right to left, as `ur`, `yi`, `ku`, `sd`, `ps`, `dv`, and `ug` do.
+- `chapter-numerals: native` now works for the ISO 639-3 codes `urd`, `pus`, `snd`, and `uig`, which print their own digits as `ur`, `ps`, `sd`, and `ug` do. ([#738](https://github.com/danjdewhurst/story-skills/issues/738))
+  - Before, `story validate` reported these codes as needing a language with its own numerals, and builds printed 0-9.
+  - The schema accepts the same codes for `chapter-numerals: native`.
 - `story validate` reports a `language` of `constructor` or `__proto__` as an `invalid-language` error instead of crashing. ([#739](https://github.com/danjdewhurst/story-skills/issues/739))
 - A language tag with an Arabic script name in an extension or private-use part, such as `en-u-nu-arab`, builds left to right. ([#740](https://github.com/danjdewhurst/story-skills/issues/740))
   - Only the script subtag right after the language sets the direction, as `az-Arab` does.
