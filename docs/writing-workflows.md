@@ -767,7 +767,7 @@ The antagonist gets a defensible belief in the counter-premise, a want, a wound,
 Choose two or three motifs and track them.
 ```
 
-The skill picks two or three concrete motifs and tracks them with `planned`, `planted`, and `paid-off` status in `continuity/motifs.md` or a motif table in an arc file.
+The skill picks two or three concrete motifs and tracks them with `planned`, `planted`, and `paid-off` status in `continuity/motifs.md`.
 
 ### 5. Audit the finished draft
 
