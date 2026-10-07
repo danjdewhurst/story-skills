@@ -230,8 +230,12 @@ describe("folder flushes (#604)", () => {
       open.mockRestore();
       flush.mockRestore();
     }
-    // A flush that fails (too many open files, or a file system that cannot
-    // flush a folder) still closes the folder.
+  });
+
+  // Only where syncFolder opens a folder: Windows returns before it does.
+  test.skipIf(!POSIX)("a folder flush that fails still closes the folder", () => {
+    const dir = makeTempDir();
+    // Too many open files, or a file system that cannot flush a folder.
     let opened = null;
     const realOpen = fs.openSync;
     const spies = [
