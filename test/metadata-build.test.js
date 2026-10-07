@@ -50,6 +50,13 @@ ai-disclosure: No AI was used.`);
     expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
+  test("#737 the description limit counts code points, so an emoji is one character", () => {
+    const root = project(`description: ${"\u{1F600}".repeat(2001)}`);
+    const text = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
+    expect(text).toContain("| Description | 2001 characters (limit 4000) |");
+    expect(text).toContain("- [x] Description under 4000 characters (`description`)");
+  });
+
   test("#438 a backslash before a pipe in a table cell is escaped too", () => {
     const root = project("publisher: Back\\| Slash \\*one\\*");
     const text = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");

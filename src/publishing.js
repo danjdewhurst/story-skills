@@ -291,6 +291,8 @@ export const DESCRIPTION_LIMIT = 4000;
 // readiness checklist of what is still missing.
 export function metadataSheet(input) {
   const { title, data, meta, words, characters, pages } = input;
+  // Retailers count characters, so an emoji (two UTF-16 units) counts once.
+  const descriptionLength = [...meta.description].length;
   const seriesName = seriesDisplayName(data);
   const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
   const rows = [
@@ -307,7 +309,7 @@ export function metadataSheet(input) {
     ["Form", typeof data.form === "string" ? data.form : ""],
     characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
     ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
-    ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
+    ["Description", meta.description === "" ? "" : `${descriptionLength} characters (limit ${DESCRIPTION_LIMIT})`],
     ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
     ["BISAC subjects", meta.subjects.join("; ")],
     ["Copyright", meta.copyright],
@@ -320,7 +322,7 @@ export function metadataSheet(input) {
     ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
     ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
     ["Publication date (`publication-date`)", meta.publicationDate !== ""],
-    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
+    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && descriptionLength <= DESCRIPTION_LIMIT],
     [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
     ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
     [`Copyright line (\`copyright\`) or copyright matter page${(input.pendingCopyright ?? []).length > 0 ? ` (pending permission: ${input.pendingCopyright.join(", ")})` : ""}`, meta.copyright !== "" || input.hasCopyrightPage],
