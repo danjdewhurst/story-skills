@@ -869,7 +869,15 @@ test("the scene template records character knowledge as character + knowledge", 
       return [key, value.join(":").trim()];
     })));
   expect(entries.some((entry) => "character" in entry && "knowledge" in entry)).toBe(true);
-  for (const entry of entries.filter((candidate) => "target" in candidate)) {
-    expect(entry.target).not.toContain("character");
+  for (const entry of entries) {
+    // Knowledge belongs to a character entry, and `target` to an artifact.
+    if ("knowledge" in entry) {
+      expect(Object.keys(entry), JSON.stringify(entry)).toContain("character");
+      expect(Object.keys(entry), JSON.stringify(entry)).not.toContain("target");
+    }
+    if ("target" in entry) {
+      expect(entry.target).not.toContain("character");
+      expect(Object.keys(entry)).not.toContain("character");
+    }
   }
 });

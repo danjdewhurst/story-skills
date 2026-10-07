@@ -73,6 +73,20 @@ describe("story list", () => {
     expect(ids(["list", "chapters", "--where", "hook!=question"])).toEqual(["chapter-02", "chapter-09", "chapter-10"]);
   });
 
+  test("an empty list is unset, so !key finds risky research notes with no reviewer", () => {
+    // The publishing skill's checks before publication rely on this.
+    const root = sampleProject();
+    const note = (id, frontmatter) => writeMarkdown(path.join(root, "research", `${id}.md`), `title: ${id}\nstatus: open\n${frontmatter}`, `# ${id}\n`);
+    note("tides", "risk:\n  - safety\nreviewed-by: []");
+    note("bells", "risk:\n  - legal\nreviewed-by:\n  - Ann Reader");
+    note("ferries", "risk:\n  - safety");
+    note("weather", "reviewed-by: []");
+    const ids = (argv) => invoke(root, argv).out.split("\n").filter(Boolean).map((line) => line.split(" ")[0]);
+    expect(ids(["list", "research", "--where", "risk", "--where", "!reviewed-by"])).toEqual(["ferries", "tides"]);
+    expect(ids(["list", "research", "--where", "reviewed-by"])).toEqual(["bells"]);
+    expect(ids(["list", "research", "--where", "!risk"])).toEqual(["weather"]);
+  });
+
   test("no match prints nothing and exits 0", () => {
     const root = sampleProject();
     const { code, out, err } = invoke(root, ["list", "characters", "--where", "role=mentor"]);
