@@ -198,6 +198,23 @@ describe("markdown utilities", () => {
     expect(splitWords("\\`<b>x</b>`\n\\``<b>y</b>`")).toEqual(["x", "b", "y", "b"]);
   });
 
+  test("a line that opens with a backtick run closed on that line is not a fence (#704)", () => {
+    const text = "```x``` a paragraph of prose.\n\n```\nsome code\n```\n\nend words";
+    expect(wordCount(text)).toBe(9);
+    expect(splitWords(text)).toEqual(["x", "a", "paragraph", "of", "prose", "some", "code", "end", "words"]);
+    // A real fence, with an info string, still hides its fence lines.
+    expect(wordCount("```x\ncode here\n```\nend words")).toBe(4);
+    // A comment after such a span is still a comment.
+    expect(scanComments("```x``` <!-- c --> y").text).toBe("```x```  y");
+  });
+
+  test("a backslash-escaped backtick opens no code span, so a comment after it is still a comment (#706)", () => {
+    expect(scanComments("\\`a <!-- c --> b` tail").text).toBe("\\`a  b` tail");
+    expect(scanComments("\\``a <!-- c --> b``").text).toBe("\\``a  b``");
+    // The rest of an escaped run opens a span, and the comment sits inside it.
+    expect(scanComments("\\``a <!-- c --> b`").text).toBe("\\``a <!-- c --> b`");
+  });
+
   test("an entity in a link is read after the link is", () => {
     expect(splitWords("[chapter&#93; two](notes/a-b.md) and [the mill](https://x.org/a&#41;b) ran")).toEqual(["chapter", "two", "and", "the", "mill", "ran"]);
   });
