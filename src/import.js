@@ -3,14 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
-import { checkList, checkSet, fillLabel, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
+import { checkList, checkSet, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
 import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
 import { MAX_READ_BYTES, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
-import { nameList } from "./publishing.js";
+import { buildLabels, nameList } from "./publishing.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
@@ -68,19 +68,8 @@ function buildImportRules(pack) {
     // A speech verb next to a word ("sagte Lena", "Lena fragte") marks a
     // speaker, so a name.
     speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
-    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`),
-    byline: bylinePattern(pack)
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
   };
-}
-
-// A by-line in the manuscript's language, from the words its `byline`
-// build label puts before the names (by, par, von), so import reads back
-// the line story export writes. A language that writes a byline as the
-// names alone has no by-line to find.
-function bylinePattern(pack) {
-  const [before, after = null] = fillLabel(pack.labels, "byline").split("{names}");
-  const word = before.trim();
-  return word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu");
 }
 
 function speechPattern(pack, shape) {
@@ -187,7 +176,11 @@ export function importManuscript(options) {
     const documents = fromStdin
       ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }]
       : readImportSource(source, rules);
-    const chapters = splitChapters(documents, warnings, rules, Boolean(options.bylines));
+    const existing = target === null ? null : existingStoryData(target);
+    // --bylines reads a by-line as story export writes one for this book:
+    // the language's labels, with a kept story.md's own `labels`.
+    const bylines = options.bylines ? bylineReader(buildLabels(existing ?? {}, pack), rules) : null;
+    const chapters = splitChapters(documents, warnings, rules, bylines);
     if (chapters.length === 0) {
       throw usageError("No chapter content found in import source");
     }
@@ -199,7 +192,6 @@ export function importManuscript(options) {
     // `count-unit`) records character-count too, as story wordcount --write
     // does. An existing story.md is kept, so its count-unit and language
     // decide, whatever --language says.
-    const existing = target === null ? null : existingStoryData(target);
     const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
     let totalWords = 0;
     let totalCharacters = 0;
@@ -526,7 +518,8 @@ function splitChapters(documents, warnings, rules, bylines) {
     const source = document.text.replace(/\r\n?/g, "\n");
     const own = storySkillsChapter(source);
     if (own) {
-      chapters.push(own);
+      // Its own `author` comes first: --bylines reads a by-line only when it has none.
+      chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
       continue;
     }
     const body = withoutLeadingFrontmatter(source);
@@ -534,7 +527,7 @@ function splitChapters(documents, warnings, rules, bylines) {
     // included.
     const offset = source.slice(0, source.length - body.length).split("\n").length - 1;
     const text = normalizeSource(body, document.name);
-    const { sections, unused, markdown } = splitByChapterHeadings(text, rules);
+    const { sections, unused, markdown, authors } = splitByChapterHeadings(text, rules, bylines);
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown
@@ -546,10 +539,12 @@ function splitChapters(documents, warnings, rules, bylines) {
       warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     const found = sections.length > 0 ? sections : [singleChapter(text, document)];
-    chapters.push(...(bylines ? withBylines(found, frontmatterAuthors(source, body), rules) : found));
+    chapters.push(...(bylines === null ? found : withBylines(found, authors.length > 0 ? authors : frontmatterAuthors(source, body), bylines)));
   }
 
-  return chapters.filter((chapter) => chapter.prose !== "");
+  // A chapter whose prose was only its by-line is still a story, such as an
+  // exported chapter with no text yet.
+  return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
 }
 
 // A chapter file in Story Skills' own layout, copied from another project,
@@ -567,16 +562,23 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: nameList(data.author) };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author) };
 }
 
-// --bylines: each chapter's author is its own by-line, taken out of its
-// prose, else its file's frontmatter `author`. A by-line alone before the
-// file's first chapter heading, under the story's title, credits the file.
-function withBylines(sections, authors, rules) {
-  const taken = sections.map((section) => ({ ...section, ...takeByline(section.prose, rules) }));
-  const fallback = taken[0].prose === "" && taken[0].authors.length > 0 ? taken[0].authors : authors;
-  return taken.map((section) => ({ ...section, authors: section.authors.length > 0 ? section.authors : fallback }));
+// A name field's names, each on one line, so a line break in one cannot
+// start a new paragraph where story export writes the byline.
+function importedNames(value) {
+  return nameList(value).map((name) => name.replace(/\s+/g, " "));
+}
+
+// --bylines: each chapter's author is the by-line opening its prose, taken
+// out of the prose, else `authors`: the by-line before the file's first
+// chapter heading, or the file's frontmatter `author`.
+function withBylines(sections, authors, bylines) {
+  return sections.map((section) => {
+    const read = leadingByline(section.prose, section.titleLine === true, bylines);
+    return read === null ? { ...section, authors } : { ...section, prose: read.text, authors: read.authors, bylined: true };
+  });
 }
 
 // The names in a source file's frontmatter `author`, or none when it has no
@@ -586,29 +588,80 @@ function frontmatterAuthors(source, body) {
     return [];
   }
   try {
-    return nameList(parseFrontmatter(source).data.author);
+    return importedNames(parseFrontmatter(source).data.author);
   } catch {
     return [];
   }
 }
 
-// A by-line opening the prose ("By Ada Writer", or "*by Ada Writer*" as
-// story export writes one): a paragraph of one short line. A name must not
-// start with a lower-case letter or end a sentence, so "By the time she
-// came." and "By Monday it had gone." stay prose.
-function takeByline(prose, rules) {
-  const [first, next = ""] = prose.split("\n", 2);
-  const line = withoutEmphasis(first.trim());
-  const match = rules.byline === null || next.trim() !== "" || line.length > PLAIN_LINE_MAX_LENGTH ? null : rules.byline.exec(line);
-  const name = match === null ? "" : withoutEmphasis(match[1].trim());
-  if (name === "" || /^\p{Ll}/u.test(name) || /(?:[!?…]|\p{L}{4,}\.)$/u.test(name)) {
-    return { prose, authors: [] };
+// What a by-line looks like in this book: the words the `byline` label
+// puts before the names (by, par, von), and the `and` label's words
+// between two names, as joinNames writes them. A language that writes a
+// byline as the names alone has no by-line to read (`pattern` is null).
+function bylineReader(labels, rules) {
+  const [before, after = null] = labels.byline.split("{names}");
+  const word = before.trim();
+  const and = labels.and.includes("{a}") && labels.and.includes("{b}") ? labels.and : "{a}, {b}";
+  const joiner = /^\{a\}(.*\S.*)\{b\}$/su.exec(and)?.[1];
+  const space = (text) => (/\s/.test(text) ? "\\s+" : "\\s*");
+  return {
+    pattern: word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu"),
+    joiner: joiner === undefined ? null : new RegExp(`${space(joiner[0])}${escapeRegExp(joiner.trim())}${space(joiner.at(-1))}`, "iu"),
+    stopwords: rules.candidateStopwords
+  };
+}
+
+// The by-line opening `text`: its first paragraph, or with `titleLine` (a
+// plain-text title before it) the paragraph after a short first line. It
+// is { text without it, authors }, or null when there is none.
+function leadingByline(text, titleLine, bylines) {
+  const parts = text.split(/(\n[ \t]*\n)/);
+  const tries = titleLine && parts.length > 2 && isTitleLine(parts[0]) ? [0, 1] : [0];
+  for (const index of tries) {
+    const authors = bylineAuthors(parts[index * 2].trim(), bylines);
+    if (authors.length > 0) {
+      parts.splice(index * 2, 2);
+      return { text: parts.join("").trim(), authors };
+    }
   }
-  return { prose: prose.slice(first.length).trim(), authors: [name] };
+  return null;
+}
+
+function isTitleLine(text) {
+  return !text.trim().includes("\n") && text.trim().length <= PLAIN_LINE_MAX_LENGTH;
+}
+
+// The names in a by-line paragraph ("By Ada Writer", "*by Ada Writer and
+// Ben Other*" as story export writes it), or none. When unsure it is
+// prose: a missed by-line is set by hand, deleted prose is lost.
+function bylineAuthors(paragraph, bylines) {
+  const line = withoutEmphasis(paragraph);
+  const match = bylines.pattern === null || line.includes("\n") || line.length > PLAIN_LINE_MAX_LENGTH ? null : bylines.pattern.exec(line);
+  if (match === null) {
+    return [];
+  }
+  const names = (bylines.joiner === null ? [match[1]] : match[1].split(bylines.joiner)).map((name) => withoutEmphasis(name).replace(/\s+/g, " "));
+  return names.every((name) => isBylineName(name, bylines.stopwords)) ? names : [];
+}
+
+// A name: two to six words, each starting with a letter that is not lower
+// case ("Ada", "O’Brien", "Anna-Maria"), an initial ("J.", "J.R.R."), or a
+// short abbreviation ("Jr."), with lower-case particles ("van", "de")
+// between them. No digits, quotes, commas, or other punctuation, and no
+// stopword or calendar word, so "By God, it was me.", "By Christmas he
+// was at sea.", "By Monday the toll had reached 40.", and "Von Osten her."
+// stay prose.
+const BYLINE_WORD = /^(?:(?:\p{Lu}\.)+|\p{Lu}\p{Ll}\.|(?!\p{Ll})\p{L}[\p{L}\p{M}]*(?:['’-][\p{L}\p{M}]+)*)$/u;
+const NAME_PARTICLES = new Set(["al", "bin", "da", "das", "de", "del", "della", "den", "der", "des", "di", "do", "dos", "du", "ibn", "la", "le", "ten", "ter", "van", "von", "y", "zu"]);
+
+function isBylineName(name, stopwords) {
+  const words = name.split(" ");
+  return words.length >= 2 && words.length <= 6 && words.every((word, index) => !stopwords.has(straight(word))
+    && (BYLINE_WORD.test(word) || (index > 0 && index < words.length - 1 && NAME_PARTICLES.has(word))));
 }
 
 function withoutEmphasis(text) {
-  return text.replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
+  return text.trim().replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
 }
 
 // Markdown from Pandoc spells an em dash `---` and an en dash `--`, so a
@@ -688,7 +741,7 @@ function protectComments(text, change) {
 // line, or a prologue or epilogue line, standing alone between blank lines,
 // as in a manuscript saved as text. Lines inside code fences and HTML
 // comments never split.
-function splitByChapterHeadings(text, rules) {
+function splitByChapterHeadings(text, rules, bylines) {
   const lines = text.split("\n");
   const hidden = hiddenLineIndexes(lines);
   const underlines = new Set();
@@ -733,11 +786,17 @@ function splitByChapterHeadings(text, rules) {
   }
 
   if (!current) {
-    return { sections: [], unused, markdown };
+    return { sections: [], unused, markdown, authors: [] };
   }
 
   sections.push(finishChapter(current));
-  const opening = stripTitleHeading(preamble.join("\n"), rules).trim();
+  let opening = stripTitleHeading(preamble.join("\n"), rules).trim();
+  // --bylines: a by-line under the title, before the first chapter, credits
+  // the file's chapters.
+  const credit = bylines === null ? null : leadingByline(opening, !markdown, bylines);
+  if (credit !== null) {
+    opening = credit.text;
+  }
   // In a plain-text manuscript a lone short line before the first chapter is
   // the book title, the counterpart of a markdown `# Title`.
   const plainTitleOnly = markdown ? false : !opening.includes("\n") && opening.length <= PLAIN_LINE_MAX_LENGTH;
@@ -752,7 +811,7 @@ function splitByChapterHeadings(text, rules) {
     sections.unshift({ title: "Opening", prose: opening });
   }
 
-  return { sections, unused, markdown };
+  return { sections, unused, markdown, authors: credit?.authors ?? [] };
 }
 
 // Numbered plain-text chapter lines (`Chapter 3`) that did not split, because
@@ -900,9 +959,11 @@ function singleChapter(text, document) {
     };
   }
 
+  // With no heading, the text may open with a plain title line.
   return {
     title: document.untitled ? "" : titleCaseSlug(path.basename(document.name, path.extname(document.name))),
-    prose: text.trim()
+    prose: text.trim(),
+    titleLine: true
   };
 }
 
