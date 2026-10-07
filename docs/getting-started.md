@@ -42,7 +42,7 @@ claude plugin marketplace add danjdewhurst/story-skills
 claude plugin install story-skills@story-skills
 ```
 
-The marketplace entry is [`.claude-plugin/marketplace.json`](../.claude-plugin/marketplace.json) and the plugin manifest is [`.claude-plugin/plugin.json`](../.claude-plugin/plugin.json).
+The marketplace entry is [`.claude-plugin/marketplace.json`](https://github.com/danjdewhurst/story-skills/blob/main/.claude-plugin/marketplace.json) and the plugin manifest is [`.claude-plugin/plugin.json`](https://github.com/danjdewhurst/story-skills/blob/main/.claude-plugin/plugin.json).
 
 ### Codex
 
@@ -51,7 +51,7 @@ codex plugin marketplace add danjdewhurst/story-skills
 codex plugin add story-skills@story-skills
 ```
 
-Codex reads the marketplace from [`.agents/plugins/marketplace.json`](../.agents/plugins/marketplace.json) and the plugin manifest from [`.codex-plugin/plugin.json`](../.codex-plugin/plugin.json). The plugin offers starter prompts such as "Start a new story." and "Write the next chapter."
+Codex reads the marketplace from [`.agents/plugins/marketplace.json`](https://github.com/danjdewhurst/story-skills/blob/main/.agents/plugins/marketplace.json) and the plugin manifest from [`.codex-plugin/plugin.json`](https://github.com/danjdewhurst/story-skills/blob/main/.codex-plugin/plugin.json). The plugin offers starter prompts such as "Start a new story." and "Write the next chapter."
 
 To work on the skills locally without the plugin, copy them into a directory Codex scans:
 

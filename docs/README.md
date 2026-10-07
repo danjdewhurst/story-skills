@@ -70,10 +70,10 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 
 | Page | What it covers |
 |------|----------------|
-| [Contributing](../CONTRIBUTING.md) | The short version: adding a skill or a CLI command, the checks to run, commit style, and changelog entries |
+| [Contributing](https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md) | The short version: adding a skill or a CLI command, the checks to run, commit style, and changelog entries |
 | [Development guide](development.md) | Repository layout, CLI architecture, tests, the bundled fallback, schema and metadata checks, evals, skill authoring, CI, and releases |
 | [Changelog](../CHANGELOG.md) | User-visible changes in each release, including project format and CLI behaviour changes |
-| [Code of Conduct](../CODE_OF_CONDUCT.md) | The Contributor Covenant 2.1, which applies to everyone taking part |
+| [Code of Conduct](https://github.com/danjdewhurst/story-skills/blob/main/CODE_OF_CONDUCT.md) | The Contributor Covenant 2.1, which applies to everyone taking part |
 
 ## Find it by task
 
@@ -112,7 +112,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Pick out files by frontmatter, such as draft chapters or the scenes a character is in | [CLI reference](cli-reference.md#list) (`story list`), and [Saved queries](project-format.md#saved-queries) for the filters you run often |
 | Share a review copy that readers can annotate by paragraph | [Automation and CI](automation.md) (`review-copy.yml` and the manuscript-note issue form) |
 | Upgrade an older project | [Project format reference](project-format.md#migrating-older-projects) |
-| Change the CLI or a skill | [Contributing](../CONTRIBUTING.md), then the [Development guide](development.md) |
+| Change the CLI or a skill | [Contributing](https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md), then the [Development guide](development.md) |
 | See what changed in a release | [Changelog](../CHANGELOG.md) |
 
 ## Example projects
@@ -139,4 +139,4 @@ The repository includes eleven sample projects in [`examples/`](../examples/). T
 - [`schemas/story.schema.json`](../schemas/story.schema.json): the project format as a JSON schema.
 - [`schemas/result.schema.json`](../schemas/result.schema.json): the `--json` output of the CLI as a JSON schema.
 - [`templates/github/`](../templates/github/): the GitHub Actions workflows and the reader-note issue form to copy into a story repository.
-- [`AGENTS.md`](../AGENTS.md): the short rules for coding agents working on this repository.
+- [`AGENTS.md`](https://github.com/danjdewhurst/story-skills/blob/main/AGENTS.md): the short rules for coding agents working on this repository.

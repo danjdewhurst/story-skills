@@ -5,7 +5,7 @@ import { makeTempDir, writeMarkdown } from "./helpers.js";
 import { createStoryProject } from "../src/story.js";
 import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage.js";
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
-import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
+import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, repoPath, slugify } from "../scripts/check-links.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
 import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkPluginManifests, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual, readWorkflows, repositoryUrl } from "../scripts/check-metadata.js";
 import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
@@ -13,7 +13,7 @@ import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
 import { PREFLIGHT } from "../scripts/release.js";
 import { CI_WAIT } from "../scripts/publish-gate.js";
-import { relativeLinks } from "../scripts/check-package.js";
+import { packageFiles, relativeLinks, unshippedLinks } from "../scripts/check-package.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
 import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
@@ -1044,6 +1044,41 @@ describe("check-links", () => {
     ]);
   });
 
+  // #569: docs that ship in the npm package link files the package leaves
+  // out by GitHub URL, so those URLs are checked against the checkout.
+  test("checks links to this repository's main branch on GitHub (#569)", () => {
+    const repo = "https://github.com/danjdewhurst/story-skills";
+    const root = linkRepo({
+      "AGENTS.md": "# Agent Instructions\n",
+      "evals/README.md": "# Evals\n\n## Skill coverage\n",
+      ".github/workflows/ci.yml": "",
+      ".github/PULL_REQUEST_TEMPLATE.md": `[guide](${repo}/blob/main/AGENTS.md) [gone](${repo}/blob/main/GONE.md)\n`,
+      "docs/README.md": [
+        `[a](${repo}/blob/main/AGENTS.md#agent-instructions) [e](${repo}/blob/main/evals/README.md#skill-coverage)`,
+        `[w](${repo}/tree/main/.github/workflows) [ci](${repo}/blob/main/.github/workflows/ci.yml?plain=1#L3) [root](${repo}/tree/main)`,
+        `[gone](${repo}/blob/main/scripts/gone.js) [bad](${repo}/blob/main/AGENTS.md#nope) [up](${repo}/blob/main/../outside.md)`,
+        `[issues](${repo}/issues/1) [tag](${repo}/blob/v0.1.0/gone.md) [fork](https://github.com/someone/story-skills/blob/main/gone.md) [branch](${repo}/blob/mainline/gone.md)`
+      ].join("\n")
+    });
+    expect(checkLinks(root).failures).toEqual([
+      `.github/PULL_REQUEST_TEMPLATE.md:1: ${repo}/blob/main/GONE.md points at a missing file`,
+      `docs/README.md:3: ${repo}/blob/main/scripts/gone.js points at a missing file`,
+      `docs/README.md:3: ${repo}/blob/main/AGENTS.md#nope has no heading or anchor #nope in AGENTS.md`,
+      `docs/README.md:3: ${repo}/blob/main/../outside.md points outside the repository`
+    ]);
+  });
+
+  test("repoPath maps main-branch GitHub URLs to root-relative paths", () => {
+    const repo = "https://github.com/danjdewhurst/story-skills";
+    expect(repoPath(`${repo}/blob/main/docs/cli.md#check`)).toBe("/docs/cli.md#check");
+    expect(repoPath(`${repo}/tree/main/evals/`)).toBe("/evals/");
+    expect(repoPath(`${repo}/tree/main`)).toBe("/");
+    expect(repoPath(`${repo}/blob/main?plain=1`)).toBe("/?plain=1");
+    for (const other of [`${repo}/issues/1`, `${repo}/blob/v1.0.0/README.md`, `${repo}/blob/mainline/README.md`, "https://example.com/blob/main/x.md", "docs/cli.md"]) {
+      expect(repoPath(other)).toBeNull();
+    }
+  });
+
   test("the repository's own markdown links resolve", () => {
     expect(checkLinks().failures).toEqual([]);
   });
@@ -1809,14 +1844,48 @@ describe("the published README only links to files the package ships (#401)", ()
     ]);
   });
 
-  test("every relative README link is inside package.json files", () => {
+  test("relativeLinks skips inline code, comments, queries, and root-relative paths", () => {
+    const markdown = "`[code](code.md)` <!-- [hidden](hidden.md) --> [q](docs/a.md?plain=1#L2) [root](/AGENTS.md) [bad](100%.md)\n";
+    expect(relativeLinks(markdown)).toEqual(["100%.md", "docs/a.md"]);
+  });
+
+  // #569: check:package read only the README, so docs/ shipped about thirty
+  // links to files the tarball leaves out.
+  test("unshippedLinks checks every shipped markdown file against the shipped files (#569)", () => {
+    const texts = {
+      "README.md": "[docs](docs/) [guide](docs/guide.md#part) [root](./)",
+      "CHANGELOG.md": "[c](CONTRIBUTING.md#changelog)",
+      "docs/guide.md": "[up](../README.md) [agents](../AGENTS.md) [evals](../evals/README.md) [case](Guide.md) [out](../../outside.md) [pkg](..)",
+      "skills/demo/SKILL.md": "[ref](references/a.md) [docs](../../docs/guide.md) [test](../../test/demo.test.js)",
+      "skills/demo/references/a.md": "fine",
+      "bin/story.js": "[not](markdown.md)"
+    };
+    expect(unshippedLinks(Object.keys(texts), (file) => texts[file])).toEqual([
+      "CHANGELOG.md -> CONTRIBUTING.md",
+      "docs/guide.md -> ../../outside.md",
+      "docs/guide.md -> ../AGENTS.md",
+      "docs/guide.md -> ../evals/README.md",
+      "docs/guide.md -> Guide.md",
+      "skills/demo/SKILL.md -> ../../test/demo.test.js"
+    ]);
+  });
+
+  test("packageFiles lists every file under a folder but node_modules", () => {
+    const dir = makeTempDir("story-package-files-");
+    for (const file of ["README.md", "docs/guide.md", "docs/deep/x.md", "node_modules/dep/README.md"]) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+      fs.writeFileSync(path.join(dir, file), "");
+    }
+    expect(packageFiles(dir)).toEqual(["README.md", "docs/deep/x.md", "docs/guide.md"]);
+  });
+
+  test("every relative link in the shipped markdown is inside package.json files (#569)", () => {
     const pkg = JSON.parse(readRepo("package.json"));
-    const shipped = new Set([...pkg.files, "package.json"]);
-    const outside = relativeLinks(readRepo("README.md")).filter((link) => {
-      const top = link.replace(/^\.\//, "").split("/")[0];
-      return !shipped.has(top) || !fs.existsSync(path.join(repoRoot, link));
-    });
-    expect(outside).toEqual([]);
+    const shipped = ["package.json", ...pkg.files.flatMap((entry) =>
+      fs.statSync(path.join(repoRoot, entry)).isDirectory() ? packageFiles(path.join(repoRoot, entry), `${entry}/`) : [entry]
+    )];
+    expect(shipped.filter((file) => file.startsWith("docs/") && file.endsWith(".md")).length).toBeGreaterThan(10);
+    expect(unshippedLinks(shipped, readRepo)).toEqual([]);
   });
 
   test("exports exposes package.json and the schemas, not src", () => {
