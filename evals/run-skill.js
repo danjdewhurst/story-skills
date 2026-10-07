@@ -98,7 +98,7 @@ Draft:
 
 List every canon claim the draft makes that a reader of the context could not have taken from it: a new named character, place, or object; a new rule of the world; a resolved mystery or answered open question; a changed established fact (a name, age, date, cause of death, or an object behaving differently than stated); an event the context never mentions.
 
-Do not list: rewording, reordering, or cuts; showing rather than telling; ordinary sensory detail consistent with the location (smells, weather, textures); a character's plausible thoughts or feelings; bracketed gap markers such as [name needed]; a heading that names the scene; workflow the draft describes rather than story it tells, such as commands to run, project files to check or update, and skills, templates, or rules to follow.
+Do not list: rewording, reordering, or cuts; showing rather than telling; ordinary sensory detail consistent with the location (smells, weather, textures); a character's plausible thoughts or feelings; bracketed gap markers such as [name needed]; a heading that names the scene; workflow the draft describes rather than story it tells, such as the commands to run, project files to check or update, and skills, templates, or rules to follow. That covers a command's syntax and flags, not its free text: read a quoted title, description, or note inside a command or file for invented canon like any other sentence.
 
 Reply with a JSON array of short strings, one per invented canon claim, and nothing else. Reply with [] if there are none.`;
 

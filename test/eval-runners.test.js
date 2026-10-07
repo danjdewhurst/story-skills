@@ -67,7 +67,8 @@ describe("run-skill with a stubbed model", () => {
     expect(promptOf(draftCall.args)).toContain("Petra's supply boat calls.");
     expect(promptOf(judgeCall.args)).toContain(goodDraft.trim());
     // A plan's commands and file targets are workflow, not invented canon.
-    expect(promptOf(judgeCall.args)).toContain("workflow the draft describes rather than story it tells, such as commands to run");
+    expect(promptOf(judgeCall.args)).toContain("workflow the draft describes rather than story it tells, such as the commands to run");
+    expect(promptOf(judgeCall.args)).toContain("read a quoted title, description, or note inside a command or file for invented canon");
     // The system prompt file is removed once each call is done.
     expect(fs.existsSync(draftCall.systemFile)).toBe(false);
 
@@ -463,9 +464,15 @@ describe("a fixture's keep option", () => {
     // The 150-word cap counts the prose under ## Chapter Text, not the frontmatter.
     const padded = `${goodChapterFile}\n${"The wind keeps on at the glass. ".repeat(10)}\n`;
     expect(failed(padded)).toEqual([endsOnChoiceRe, expect.stringMatching(/^length of the chapter text 1\d\d words <= 150/)]);
-    // The prose ends on the choice: "choose" in its last line, or a question.
-    expect(failed(goodChapterFile.replace("You have to choose.", "Do you ring the bell, or keep the lamp burning?"))).toEqual([]);
-    expect(failed(goodChapterFile.replace("You have to choose.", "You stand at the glass."))).toEqual([endsOnChoiceRe]);
+    // The prose ends on the choice: "choose" in its last line, or a question
+    // about the bell or the lamp, quoted or in emphasis or not.
+    const ending = (text) => failed(goodChapterFile.replace("You have to choose.", text));
+    expect(ending("Do you ring the bell, or keep the lamp burning?")).toEqual([]);
+    expect(ending('"The bell, or the lamp?"')).toEqual([]);
+    expect(ending("*The bell, or the lamp?*")).toEqual([]);
+    expect(ending("You stand at the glass.")).toEqual([endsOnChoiceRe]);
+    // A last question that is not about the choice does not count.
+    expect(ending("You stand at the glass.\n\nWhat now?")).toEqual([endsOnChoiceRe]);
     expect(padded.split(/\s+/).filter(Boolean).length).toBeLessThan(230);
 
     expect(failed(stripPreamble(goodChapterFile))).toEqual(expect.arrayContaining([titleRe, toFiveRe, toSixRe, 'canon kept: "Chapter Text"']));
@@ -547,15 +554,72 @@ describe("compare-outputs with a stubbed judge", () => {
 });
 
 describe("the checker's prose checks", () => {
-  test("read an inline code span as one word, so a command's own spacing is not the draft's", () => {
+  test("read an inline command as one word, so its own spacing is not the draft's", () => {
     const badlyFormed = (draft) =>
       checkDraft({}, "", draft)
         .filter(([ok, desc]) => !ok && desc.startsWith("well formed"))
         .map(([, desc]) => desc);
     expect(badlyFormed("Then run `story reindex .`, `story wordcount . --write`, and `story check .`.\n")).toEqual([]);
     expect(badlyFormed("Then run story reindex . and rest.\n")).toEqual(["well formed: no space before punctuation"]);
+    // Other inline code is still read as prose.
+    expect(badlyFormed("He wrote `the end , at last` on the slate.\n")).toEqual(["well formed: no space before punctuation"]);
     // Phrase checks still read the code.
     expect(checkDraft({ required: ["story reindex"] }, "", "Run `story reindex .` now.\n")[0]).toEqual([true, 'canon kept: "story reindex"']);
+  });
+
+  test("a scope reads only its part of the reply, and fails every check when the part is missing", () => {
+    const checks = {
+      chapter_text: { banned: ["a week"], requires_first_person: true },
+      chapter_frontmatter: { required_regex: ["(?:^|\\n)status: revised"] },
+    };
+    const reply = "Plan: fix \"a week\".\n\n```markdown\n---\nstatus: revised\n---\n\n# Chapter 3\n\n## Outline\n\n---\n\n## Chapter Text\n\nI waited.\n```\n\nI changed \"a week\" to three days.\n";
+    const results = (draft) => checkDraft(checks, "", draft).filter(([, desc]) => /^chapter (?:text|frontmatter):/.test(desc));
+    expect(results(reply)).toEqual([
+      [true, 'chapter text: trap avoided: "a week"'],
+      [true, "chapter text: first-person narration present"],
+      [true, "chapter frontmatter: canon kept: /(?:^|\\n)status: revised/"],
+    ]);
+    // The chapter text ends at the fence that closes its block; with no fence
+    // it runs on to the end, and the rule above the heading opens no block.
+    expect(results(reply.replace("\n```\n\nI changed", "\nI changed"))[0]).toEqual([false, 'chapter text: trap avoided: "a week"']);
+    expect(results("No chapter here.\n")).toEqual([
+      [false, 'chapter text: trap avoided: "a week" (no chapter text in the draft)'],
+      [false, "chapter text: first-person narration present (no chapter text in the draft)"],
+      [false, "chapter frontmatter: canon kept: /(?:^|\\n)status: revised/ (no chapter frontmatter in the draft)"],
+    ]);
+  });
+
+  test("required_in_order finds each pattern after the one before", () => {
+    const checks = { required_in_order: [["story passes", "story reindex", "story check"]] };
+    const ok = (draft) => checkDraft(checks, "", draft)[0][0];
+    expect(ok("story passes\nstory reindex\nstory check\n")).toBe(true);
+    expect(ok("story reindex\nstory passes\nstory check\n")).toBe(false);
+    expect(ok("story passes\nstory reindex\n")).toBe(false);
+  });
+
+  test("every fixture's checks stay fast on long, repetitive drafts", () => {
+    const fragment =
+      'story passes . --start continuity story reindex . story wordcount . --write story add clue "key hour" --planted chapter-01 ' +
+      "--characters tomas-reyes, --red-herring it was a who opened the inside the a week I took the bell lamp choose ? “ « ' \" " +
+      "status: revised answers who learned-in: since: object-state: knowledge-state: fact: romance 1. no ";
+    const reps = Math.ceil(100_000 / fragment.length);
+    const drafts = [
+      `## Chapter Text\n${fragment.repeat(reps)}`,
+      `## Chapter Text\n${`${fragment}\n`.repeat(reps)}`,
+      `${"---\nstatus: revised\nnumber: 3\n".repeat(reps * 4)}## Chapter Text\nI took it.`,
+      "object-state:\n  - x: y\nknowledge-state:\n  - fact: z\n---\n".repeat(reps * 3),
+      `## Chapter Text\n${" 'a “b «c \"d ".repeat(reps * 6)}`,
+      `1. ${"no word ".repeat(50)}romance\n`.repeat(reps),
+    ];
+    const fixturesDir = path.join(repoRoot, "evals", "fixtures");
+    for (const name of fs.readdirSync(fixturesDir)) {
+      const { checks, inputText } = loadFixture(path.join(fixturesDir, name));
+      for (const draft of drafts) {
+        const started = performance.now();
+        checkDraft(checks, inputText, draft);
+        expect(performance.now() - started).toBeLessThan(2000);
+      }
+    }
   });
 });
 
@@ -582,44 +646,117 @@ describe("skill-specific checks", () => {
     const { checks, inputText } = fixture(name);
     return checkDraft(checks, inputText, draft).filter(([ok]) => !ok).map(([, desc]) => desc);
   };
-  const required = (name, i) => `canon kept: /${fixture(name).checks.required_regex[i]}/`;
-  const trap = (name, start) => `trap avoided: /${fixture(name).checks.banned_regex.find((p) => p.startsWith(start))}/`;
+  // Swaps `from` for `to` in a fixture's example, failing if `from` is absent.
+  const edit = (name, ...pairs) =>
+    pairs.reduce((draft, [from, to]) => {
+      expect(draft).toContain(from);
+      return draft.replace(from, to);
+    }, example(name));
 
-  test("revision-continuity needs the pass started, the chapter marked revised, and the maintenance block", () => {
-    expect(failed("revision-continuity", example("revision-continuity"))).toEqual([]);
-    expect(failed("revision-continuity", noSkillDrafts["revision-continuity"]())).toEqual([
-      required("revision-continuity", 0),
-      required("revision-continuity", 1),
-      required("revision-continuity", 2),
-    ]);
-    // The passage's traps read only the chapter text, so the plan may name
-    // the slip it fixes and what stays shut.
-    const draft = example("revision-continuity");
-    const chapterText = draft.indexOf("## Chapter Text");
-    const plan = (text) => draft.replace("Plan: start", `Plan: ${text}; start`);
-    const prose = (text) => draft.slice(0, chapterText) + draft.slice(chapterText).replace("Let them wait.", text);
-    expect(failed("revision-continuity", plan("Tomas still has not opened the sea-chest"))).toEqual([]);
-    expect(failed("revision-continuity", prose("I opened the sea-chest."))).toEqual([trap("revision-continuity", "## Chapter Text[\\s\\S]*\\b(?:opened")]);
-    expect(failed("revision-continuity", prose("I had carried it a week."))).toEqual([trap("revision-continuity", "## Chapter Text[\\s\\S]*\\b(?:a|one) week")]);
+  test("revision-continuity needs the pass started first, the chapter marked revised, and the maintenance block", () => {
+    const name = "revision-continuity";
+    const { checks } = fixture(name);
+    const [maintenance, beforeEdit] = checks.required_in_order.map((seq) => `in order: ${seq.map((p) => `/${p}/`).join(", then ")}`);
+    const revised = `chapter frontmatter: canon kept: /${checks.chapter_frontmatter.required_regex[1]}/`;
+    expect(failed(name, example(name))).toEqual([]);
+    expect(failed(name, noSkillDrafts[name]())).toEqual([maintenance, beforeEdit, revised]);
+
+    // `status: revised` counts only in the chapter's own frontmatter.
+    expect(failed(name, edit(name, ["status: revised", "status: draft"], ["Plan:", "status: revised\n\nPlan:"]))).toEqual([revised]);
+    expect(failed(name, edit(name, ["---\ntitle: Three Days", "title: Three Days"]))).toEqual(
+      expect.arrayContaining([`${revised} (no chapter frontmatter in the draft)`])
+    );
+    // The pass starts before the maintenance and before the edit.
+    expect(failed(name, edit(name, ["story passes . --start continuity\n", ""], ["story check .\n", "story check .\nstory passes . --start continuity\n"]))).toEqual([maintenance]);
+    expect(failed(name, edit(name, ["story passes . --start continuity", "story passes --start=continuity --path ."]))).toEqual([]);
+  });
+
+  test("revision-continuity's chapter text keeps the person, tense, and three days, and opens nothing", () => {
+    const name = "revision-continuity";
+    const { checks } = fixture(name);
+    const trap = (start) => `chapter text: trap avoided: /${checks.chapter_text.banned_regex.find((p) => p.startsWith(start))}/`;
+    const opened = trap("(?<!");
+    const duration = trap("\\b(?:(?:a|one|two");
+    const prose = (from, to) => edit(name, [from, to]);
+
+    // First person and past tense are read from the narration, not the dialogue.
+    const thirdPerson = edit(
+      name,
+      ["I took the brass key from my pocket and weighed it in my palm.", 'He took the brass key from his pocket. "I can wait," he said.'],
+      ["Three days I had carried it", "Three days he had carried it"],
+      ["I knelt by the chest and kept my hands on my knees.", "He knelt by the chest."],
+      ["knows I found it", "knows he found it"]
+    );
+    expect(failed(name, thirdPerson)).toEqual(["chapter text: first-person narration present"]);
+    const presentTense = edit(
+      name,
+      ["I took the brass key from my pocket and weighed it in my palm.", "I take the brass key from my pocket and weigh it in my palm."],
+      ["I knelt by the chest", "I kneel by the chest"]
+    );
+    expect(failed(name, presentTense)).toEqual([expect.stringMatching(/^chapter text: past-tense narration \(.*present tense: "I take"\)$/)]);
+
+    expect(failed(name, prose("Three days I had carried it", "Seven days I had carried it"))).toEqual(['chapter text: canon kept: "three days"', duration]);
+    expect(failed(name, prose("Let them wait.", "I opened Ana's sea-chest."))).toEqual([opened]);
+    expect(failed(name, prose("Let them wait.", "I opened the\nchest."))).toEqual([opened]);
+    expect(failed(name, prose("Let them wait.", "I had not opened the chest in four winters."))).toEqual([]);
+    expect(failed(name, prose("Let them wait.", "Inside lay her logbook."))).toEqual(expect.arrayContaining([trap("\\binside")]));
+    // A closing note after the fenced chapter is not chapter text.
+    const fenced = example(name).replace("\n---\ntitle:", "\n```markdown\n---\ntitle:") + '```\n\nChanged "a week" to three days.\n';
+    expect(failed(name, fenced)).toEqual([]);
   });
 
   test("series-continuity needs book two's state at chapter 0, with no chapter of book one carried", () => {
-    expect(failed("series-continuity", example("series-continuity"))).toEqual([]);
-    expect(failed("series-continuity", noSkillDrafts["series-continuity"]())).toEqual([
-      required("series-continuity", 0),
-      trap("series-continuity", "(?:^|\\n)[ \\t-]*learned-in"),
-      trap("series-continuity", "(?:^|\\n)[ \\t-]*since"),
+    const name = "series-continuity";
+    const { checks } = fixture(name);
+    const required = (start) => `canon kept: /${checks.required_regex.find((p) => p.startsWith(start))}/`;
+    const trap = (start) => `trap avoided: /${checks.banned_regex.find((p) => p.startsWith(start))}/`;
+    expect(failed(name, example(name))).toEqual([]);
+    expect(failed(name, noSkillDrafts[name]())).toEqual([
+      required("(?:^|\\n)current-chapter"),
+      trap("(?:^|\\n)[ \\t-]*learned-in"),
+      trap("(?:^|\\n)[ \\t-]*since"),
     ]);
-    const note = (line) => example("series-continuity").replace("## Series Notes\n\n", `## Series Notes\n\n- ${line}\n`);
-    expect(failed("series-continuity", note("Tomas has never opened the sea-chest."))).toEqual([]);
-    expect(failed("series-continuity", note("Nobody has opened it."))).toEqual([]);
-    expect(failed("series-continuity", note("In book two Tomas opened the sea-chest."))).toEqual([trap("series-continuity", "(?<!")]);
+
+    // The state is a continuity-state frontmatter block with the carried entries.
+    expect(failed(name, edit(name, ["type: continuity-state\n", ""]))).toEqual([required("(?:^|\\n)---")]);
+    expect(failed(name, edit(name, ["  - artifact: brass-key\n", "  - artifact: brass-lamp\n"]))).toEqual([required("(?:^|\\n)object-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*artifact:[ \\t]*['\"]?brass-key")]);
+    const factsOutside = edit(name, ["knowledge-state:\n", "knowledge-state: []\nnotes:\n"]);
+    expect(failed(name, factsOutside)).toEqual([
+      required("(?:^|\\n)knowledge-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*fact:[ \\t]*['\"]?key-on-the-door"),
+      required("(?:^|\\n)knowledge-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*fact:[ \\t]*['\"]?board-wants"),
+    ]);
+
+    // A negation counts only right before "opened"; "answers who" is a resolution.
+    const note = (line) => example(name).replace("## Series Notes\n\n", `## Series Notes\n\n- ${line}\n`);
+    const opened = trap("(?<!\\b(?:not|never)\\s+(?:(?:yet|once|ever|been)\\s+)?|n't");
+    const answers = trap("(?<!\\b(?:not|never)\\s+|n't\\s+)\\banswer");
+    for (const ok of ["Tomas has never opened the sea-chest.", "Nobody has opened it.", "Tomas hasn't opened the chest.", "No one has ever opened it.", "Book two does not answer it."]) {
+      expect(failed(name, note(ok))).toEqual([]);
+    }
+    for (const bad of ["Nobody knows Tomas opened the sea-chest last winter.", "He couldn't wait and opened the chest.", "No one but Tomas opened it.", "Tomas opened Ana's sea-chest."]) {
+      expect(failed(name, note(bad))).toEqual([opened]);
+    }
+    expect(failed(name, note("Book two answers who left the key: Petra."))).toEqual([answers]);
   });
 
-  test("genre-craft-mystery needs the clue ledger the plan describes", () => {
-    expect(failed("genre-craft-mystery", example("genre-craft-mystery"))).toEqual([]);
-    const { checks } = fixture("genre-craft-mystery");
-    expect(failed("genre-craft-mystery", noSkillDrafts["genre-craft-mystery"]())).toEqual(checks.required_regex.map((pattern) => `canon kept: /${pattern}/`));
+  test("genre-craft-mystery needs each clue on its own line with its flags and chapters", () => {
+    const name = "genre-craft-mystery";
+    const { checks } = fixture(name);
+    const [key, hour, herring, clues] = checks.required_regex.map((pattern) => `canon kept: /${pattern}/`);
+    const invented = `trap avoided: /${checks.banned_regex[0]}/`;
+    expect(failed(name, example(name))).toEqual([]);
+    expect(failed(name, noSkillDrafts[name]())).toEqual([key, hour, herring, clues]);
+
+    const keyLine = '"The brass key on the lamp-room door" --planted chapter-01 --payoff chapter-12 --character tomas-reyes';
+    const hourLine = "--character tomas-reyes --significance-delayed";
+    const herringLine = "--character tomas-reyes --character petra-lindqvist --red-herring";
+    // The flags swapped between the hour and the herring.
+    expect(failed(name, edit(name, [hourLine, "--character tomas-reyes --red-herring"], [herringLine, "--character tomas-reyes --character petra-lindqvist --significance-delayed"]))).toEqual([hour, herring]);
+    expect(failed(name, edit(name, [keyLine, keyLine.replace("chapter-01", "chapter-02")]))).toEqual([key]);
+    expect(failed(name, edit(name, [herringLine, "--character tomas-reyes --red-herring"]))).toEqual([herring]);
+    expect(failed(name, edit(name, ["story reindex .", 'story add clue "A fisherman\'s boot print" --planted chapter-02 --payoff chapter-12\nstory reindex .']))).toEqual([invented]);
+    // Every valid form of the flags counts.
+    expect(failed(name, edit(name, [keyLine, '"The brass key on the lamp-room door" --planted=chapter-01 --payoff=chapter-12 --characters tomas-reyes,petra-lindqvist']))).toEqual([]);
   });
 });
 
@@ -627,39 +764,37 @@ describe("compare-outputs baseline margins", () => {
   const noModel = () => {
     throw new Error("no model call expected");
   };
-  function marginDirs(name) {
+  function marginDirs(names = Object.keys(noSkillDrafts)) {
     const baseline = makeTempDir("story-cmp-a-");
     const skill = makeTempDir("story-cmp-b-");
-    fs.writeFileSync(path.join(baseline, `${name}.md`), noSkillDrafts[name]());
-    fs.writeFileSync(path.join(skill, `${name}.md`), example(name));
+    for (const name of names) {
+      fs.writeFileSync(path.join(baseline, `${name}.md`), noSkillDrafts[name]());
+      fs.writeFileSync(path.join(skill, `${name}.md`), example(name));
+    }
     return { baseline, skill };
   }
 
   test("--no-judge checks each fixture's margin over the baseline with no model call", () => {
-    const dirs = Object.keys(noSkillDrafts).map(marginDirs);
-    const baseline = dirs[0].baseline;
-    const skill = dirs[0].skill;
-    for (const d of dirs.slice(1)) {
-      for (const file of fs.readdirSync(d.baseline)) fs.copyFileSync(path.join(d.baseline, file), path.join(baseline, file));
-      for (const file of fs.readdirSync(d.skill)) fs.copyFileSync(path.join(d.skill, file), path.join(skill, file));
-    }
-    const names = Object.keys(noSkillDrafts);
-    expect(compareMain(["--no-judge", baseline, skill, ...names], { spawn: noModel })).toBe(0);
-    expect(output()).toContain("genre-craft-mystery: margin met: B passes 33/33 checks, A 25/33, margin 8, needs 3");
-    expect(output()).toContain("revision-continuity: margin met: B passes 29/29 checks, A 26/29, margin 3, needs 2");
-    expect(output()).toContain("series-continuity: margin met: B passes 35/35 checks, A 32/35, margin 3, needs 2");
+    const { baseline, skill } = marginDirs();
+    // With no fixture named, only the fixtures that set a margin are compared.
+    expect(compareMain(["--no-judge", baseline, skill], { spawn: noModel })).toBe(0);
+    expect(output()).toContain("genre-craft-mystery: margin met: B passes 30/30 checks, A 26/30, margin 4, needs 3");
+    expect(output()).toContain("revision-continuity: margin met: B passes 32/32 checks, A 29/32, margin 3, needs 2");
+    expect(output()).toContain("series-continuity: margin met: B passes 40/40 checks, A 37/40, margin 3, needs 2");
     expect(output()).toContain("margins met: 3 of 3");
+    expect(output()).toMatch(/skipped, no baseline_margin: anti-slop, branch-choices, .*, voice-preservation\n/);
+    expect(output()).not.toContain("missing draft");
     expect(output()).not.toContain("model:");
 
     // The margin is directional: dir-b is the skill's run.
     logs.length = 0;
     expect(compareMain(["--no-judge", skill, baseline, "genre-craft-mystery"], { spawn: noModel })).toBe(1);
-    expect(output()).toContain("genre-craft-mystery: FAIL margin: B passes 25/33 checks, A 33/33, margin -8, needs 3");
+    expect(output()).toContain("genre-craft-mystery: FAIL margin: B passes 26/30 checks, A 30/30, margin -4, needs 3");
     expect(output()).toContain("margins met: 0 of 1");
   });
 
   test("a margin is checked beside the judge, and a missed one fails the run", () => {
-    const { baseline, skill } = marginDirs("genre-craft-mystery");
+    const { baseline, skill } = marginDirs(["genre-craft-mystery"]);
     const firstWins = () => ok("1");
     expect(compareMain([baseline, skill, "genre-craft-mystery"], { spawn: firstWins })).toBe(0);
     expect(output()).toContain("genre-craft-mystery: margin met");
@@ -671,11 +806,17 @@ describe("compare-outputs baseline margins", () => {
     expect(output()).toContain("A: 0  B: 0  ties: 1");
   });
 
-  test("--no-judge with no margin to check compares nothing and fails", () => {
-    const { baseline, skill } = marginDirs("genre-craft-mystery");
+  test("--no-judge names the fixtures it skips, and fails when it compares nothing", () => {
+    const { baseline, skill } = marginDirs(["genre-craft-mystery"]);
     fs.writeFileSync(path.join(baseline, "canon-keeping.md"), goodDraft);
     fs.writeFileSync(path.join(skill, "canon-keeping.md"), goodDraft);
+    expect(compareMain(["--no-judge", baseline, skill, "canon-keeping", "genre-craft-mystery"], { spawn: noModel })).toBe(0);
+    expect(output()).toContain("skipped, no baseline_margin: canon-keeping");
+    expect(output()).toContain("margins met: 1 of 1");
+
+    logs.length = 0;
     expect(compareMain(["--no-judge", baseline, skill, "canon-keeping"], { spawn: noModel })).toBe(1);
+    expect(output()).toContain("skipped, no baseline_margin: canon-keeping");
     expect(output()).toContain("no selected fixture sets baseline_margin, and --no-judge skips the judge");
 
     logs.length = 0;

@@ -1,19 +1,18 @@
 {
   "name": "series-continuity",
   "skill": "series-continuity",
-  "brief": "Write book two's `## Series Notes` section for its story.md and the frontmatter of its opening continuity/state.md that carry this canon into book two. State each fact so a new draft cannot contradict it. Name no new characters, add no new history, resolve nothing.",
+  "brief": "Write book two's `## Series Notes` section for its story.md and the frontmatter of its opening continuity/state.md that carry this canon into book two. State each fact so a new draft cannot contradict it. Name no new characters, add no new history, resolve nothing. Under 400 words.",
   "keep": "file",
-  "required": [
-    "Series Notes",
-    "Ana",
-    "Fresnel",
-    "paraffin",
-    "sea-chest"
-  ],
+  "required": ["Ana", "Fresnel", "paraffin", "sea-chest"],
   "required_regex": [
-    "(?:^|\\n)[ \\t]*current-chapter: *0\\b",
-    "fact: *['\"]?key-on-the-door\\b",
-    "fact: *['\"]?board-wants-conversion\\b"
+    "(?:^|\\n)##[ \\t]+Series Notes\\b",
+    "(?:^|\\n)---[ \\t]*\\n(?:(?!---)[^\\n]{0,300}\\n){0,80}?type:[ \\t]*['\"]?continuity-state['\"]?[ \\t]*\\n",
+    "(?:^|\\n)current-chapter:[ \\t]*0[ \\t]*(?:\\n|$)",
+    "(?:^|\\n)character-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*character:[ \\t]*['\"]?tomas-reyes\\b",
+    "(?:^|\\n)object-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*artifact:[ \\t]*['\"]?brass-key\\b",
+    "(?:^|\\n)object-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*artifact:[ \\t]*['\"]?anas-sea-chest\\b",
+    "(?:^|\\n)knowledge-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*fact:[ \\t]*['\"]?key-on-the-door\\b",
+    "(?:^|\\n)knowledge-state:[ \\t]*\\n(?:[ \\t-][^\\n]*\\n)*?[ \\t]*-?[ \\t]*fact:[ \\t]*['\"]?board-wants-conversion\\b"
   ],
   "banned": [
     "is now electric",
@@ -35,8 +34,9 @@
   "banned_regex": [
     "(?:^|\\n)[ \\t-]*learned-in:[ \\t]*[^\\s#]",
     "(?:^|\\n)[ \\t-]*since:[ \\t]*[^\\s#]",
-    "(?<!\\b(?:not|never|nobody|no one)\\s+(?:\\w+\\s+){0,2}|n't\\s+(?:\\w+\\s+){0,2})\\bopened (?:the (?:sea[- ]?)?chest|it)\\b",
-    "\\b(?:is|was|has been|had been|gets|got) (?:now )?answered\\b"
+    "(?<!\\b(?:not|never)\\s+(?:(?:yet|once|ever|been)\\s+)?|n't\\s+(?:(?:yet|once|ever|been)\\s+)?|\\b(?:nobody|no one|no-one)\\s+(?:(?:has|had|ever)\\s+){1,2})\\b(?:opened|unlocked|forced)\\s+(?:(?:[\\w'-]+\\s+){0,2}?(?:sea[- ]?)?chest|it)\\b",
+    "(?<!\\b(?:not|never)\\s+|n't\\s+)\\banswer(?:s|ed)?\\s+(?:who\\b|it\\b|the (?:question|mystery)\\b)",
+    "\\b(?:is|was|has been|had been|gets|got|will be) (?:now |finally )?answered\\b"
   ],
   "max_words": 400,
   "baseline_margin": 2

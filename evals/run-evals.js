@@ -234,12 +234,16 @@ function stripCodeFences(text) {
   return text.replace(/```[\s\S]*?```/g, "").replace(/```[\s\S]*$/g, "");
 }
 
+// An inline code span that holds a command: `story reindex .` has a space
+// before its full stop by design.
+const COMMAND_SPAN_RE = /`(?:story|node|bun|bunx|npm|npx|git|gh|claude)[ \t][^`\n]*`/g;
+
 // The prose the well-formedness and structural checks read: the draft
-// without its fenced blocks, and with each inline code span on one line
-// read as a single word, since a command such as `story reindex .` has a
-// space before its full stop by design.
+// without its fenced blocks, and with each inline command read as a single
+// word. Other inline code keeps its text, so prose in backticks is still
+// checked.
 function proseText(text) {
-  return stripCodeFences(text).replace(/`[^`\n]+`/g, "code");
+  return stripCodeFences(text).replace(COMMAND_SPAN_RE, "code");
 }
 
 // Nonblank lines outside code fences: the line count of a poem.
@@ -335,15 +339,197 @@ function isNumber(v) {
   return typeof v === "number" && !Number.isNaN(v);
 }
 
-// The prose under a `## Chapter Text` heading, or the whole text when it has
-// none. A fixture with `"keep": "file"` scores the whole chapter file, but
-// its brief's length limit is about the prose, so its length checks count
-// only this.
+// The prose under a `## Chapter Text` heading: from the heading to the next
+// fence line (the one that closes the block a fenced chapter file sits in,
+// or opens the block after it), the next `#` or `##` heading, or the end of
+// the reply. Null when the reply has no such heading.
 const CHAPTER_TEXT_RE = /^##\s+chapter text\b[^\n]*$/im;
+const CHAPTER_TEXT_END_RE = /^(?: {0,3}(?:`{3,}|~{3,})|#{1,2}[ \t])/m;
 
-export function chapterText(text) {
+function chapterTextOrNull(text) {
   const m = CHAPTER_TEXT_RE.exec(text);
-  return m ? text.slice(m.index + m[0].length) : text;
+  if (!m) return null;
+  const rest = text.slice(m.index + m[0].length);
+  const end = CHAPTER_TEXT_END_RE.exec(rest);
+  return end ? rest.slice(0, end.index) : rest;
+}
+
+// The chapter text, or the whole text when it has none. A fixture with
+// `"keep": "file"` scores the whole chapter file, but its brief's length
+// limit is about the prose, so its length checks count only this.
+export function chapterText(text) {
+  return chapterTextOrNull(text) ?? text;
+}
+
+const FENCE_LINE_RE = /^---[ \t]*$/;
+// A line a frontmatter block may hold: a top-level key, an indented line,
+// a list item, or a blank line. A heading or prose line ends the block.
+const FRONTMATTER_LINE_RE = /^(?:[\w-]+:(?:\s|$)|[ \t]+\S|-[ \t]|\s*$)/;
+
+// The frontmatter of the chapter file in a reply: the last `---` block of
+// YAML lines that closes before the `## Chapter Text` heading. A `---` rule
+// between the outline and the chapter text opens no block. Null when there
+// is none.
+function chapterFrontmatterOrNull(text) {
+  const m = CHAPTER_TEXT_RE.exec(text);
+  if (!m) return null;
+  const lines = text.slice(0, m.index).split("\n");
+  let found = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (!FENCE_LINE_RE.test(lines[i])) continue;
+    let j = i + 1;
+    while (j < lines.length && !FENCE_LINE_RE.test(lines[j]) && FRONTMATTER_LINE_RE.test(lines[j])) j++;
+    if (j < lines.length && j > i + 1 && FENCE_LINE_RE.test(lines[j])) {
+      found = lines.slice(i + 1, j).join("\n");
+      i = j;
+    }
+  }
+  return found;
+}
+
+// The parts of a reply a fixture can scope checks to (`chapter_text`,
+// `chapter_frontmatter` in checks.json), each with the label its results
+// carry.
+const SCOPES = [
+  ["chapter_text", "chapter text", chapterTextOrNull],
+  ["chapter_frontmatter", "chapter frontmatter", chapterFrontmatterOrNull],
+];
+
+// Quoted speech, so the narration checks can leave it out: an "I" in a line
+// of dialogue is not first-person narration. Single quotes count only away
+// from letters, so an apostrophe (didn't, Tomas') is not one. Each quote is
+// bounded so an unclosed one cannot make the scan quadratic.
+const DIALOGUE_RE =
+  /"[^"\n]{0,2000}"|“[^”\n]{0,2000}”|«[^»\n]{0,2000}»|(?<![\p{L}\p{N}])'(?:[^'\n]|'(?=\p{L})){0,2000}?'(?![\p{L}\p{N}])/gu;
+
+function narration(text) {
+  return text.replace(DIALOGUE_RE, " ");
+}
+
+// First-person action verbs in the present ("I take the key"): narration a
+// past-tense brief rules out. Reflective verbs (I am, I think, I wonder) are
+// left out, since past-tense narration uses them too, and so are verbs whose
+// past is the same word (put, set, shut).
+const PRESENT_TENSE_ACTION_RE =
+  /\bI (?:take|turn|kneel|walk|climb|carry|hold|stand|sit|look|reach|open|light|trim|lift|weigh)\b/i;
+
+function runPattern(pattern, text, flags = "iu") {
+  return new RegExp(pattern, flags).test(text);
+}
+
+/**
+ * The phrase, pattern, and order checks of `checks` on `text`, each result
+ * labelled with `prefix`. A null `text` is a scope the draft lacks: every
+ * check fails, so a draft without the part scores no better for it.
+ */
+function textChecks(checks, text, language, prefix = "", missing = "") {
+  const results = [];
+  const push = (ok, desc) => results.push([text !== null && ok, `${prefix}${desc}${text === null ? missing : ""}`]);
+  const body = text ?? "";
+
+  for (const fact of checks.required || []) {
+    if (typeof fact !== "string") {
+      results.push([false, `${prefix}required canon must be a string, got ${fact}`]);
+      continue;
+    }
+    push(phraseFound(fact, body, true, language), `canon kept: "${fact}"`);
+  }
+
+  for (const phrase of checks.banned || []) {
+    if (typeof phrase !== "string") {
+      results.push([false, `${prefix}banned phrase must be a string, got ${phrase}`]);
+      continue;
+    }
+    // Banned phrases inflect like required ones: a draft that "delves",
+    // "treasures", or "shows Petra the keys" springs the same trap as the
+    // base form. See phraseFound's inflect flag.
+    push(!phraseFound(phrase, body, true, language), `trap avoided: "${phrase}"`);
+  }
+
+  for (const pattern of checks.required_regex || []) {
+    if (typeof pattern !== "string") {
+      results.push([false, `${prefix}required pattern must be a string, got ${pattern}`]);
+      continue;
+    }
+    let ok;
+    try {
+      ok = runPattern(pattern, body);
+    } catch (err) {
+      results.push([false, `${prefix}required pattern invalid: /${pattern}/ (${err})`]);
+      continue;
+    }
+    push(ok, `canon kept: /${pattern}/`);
+  }
+
+  for (const pattern of checks.banned_regex || []) {
+    if (typeof pattern !== "string") {
+      results.push([false, `${prefix}banned pattern must be a string, got ${pattern}`]);
+      continue;
+    }
+    let ok;
+    try {
+      // Unicode mode, so a pattern can bound a word with \p{L}, which
+      // holds next to accented letters where \b does not.
+      ok = runPattern(pattern, body) === false;
+    } catch (err) {
+      results.push([false, `${prefix}banned pattern invalid: /${pattern}/ (${err})`]);
+      continue;
+    }
+    push(ok, `trap avoided: /${pattern}/`);
+  }
+
+  // Each pattern of a sequence must match after the previous one's match:
+  // one forward scan, so the check stays linear where a single pattern of
+  // the form a[\s\S]*?b[\s\S]*?c would not.
+  for (const sequence of checks.required_in_order || []) {
+    if (!Array.isArray(sequence) || !sequence.every((p) => typeof p === "string")) {
+      results.push([false, `${prefix}required_in_order entries must be lists of patterns, got ${JSON.stringify(sequence)}`]);
+      continue;
+    }
+    const desc = `in order: ${sequence.map((p) => `/${p}/`).join(", then ")}`;
+    let ok = true;
+    try {
+      let from = 0;
+      for (const pattern of sequence) {
+        const re = new RegExp(pattern, "giu");
+        re.lastIndex = from;
+        const m = re.exec(body);
+        if (!m) {
+          ok = false;
+          break;
+        }
+        from = m.index + m[0].length;
+      }
+    } catch (err) {
+      results.push([false, `${prefix}required_in_order pattern invalid (${err})`]);
+      continue;
+    }
+    push(ok, desc);
+  }
+  return results;
+}
+
+// The voice checks of a `chapter_text` scope, on its narration: quoted
+// dialogue is left out, and past tense also fails a first-person action verb
+// in the present.
+function narrationChecks(checks, text, prefix, missing) {
+  const results = [];
+  const told = narration(text ?? "");
+  const push = (ok, desc) => results.push([text !== null && ok, `${prefix}${desc}${text === null ? missing : ""}`]);
+  if (checks.requires_first_person === true) {
+    FIRST_PERSON_RE.lastIndex = 0;
+    push(FIRST_PERSON_RE.test(told), "first-person narration present");
+  }
+  if (checks.requires_past_tense === true) {
+    PAST_TENSE_RE.lastIndex = 0;
+    const markers = told.match(PAST_TENSE_RE) || [];
+    const present = told.match(PRESENT_TENSE_ACTION_RE);
+    push(
+      markers.length >= PAST_TENSE_MIN_MARKERS && !present,
+      `past-tense narration (${markers.length} marker(s), need ${PAST_TENSE_MIN_MARKERS}${present ? `; present tense: "${present[0]}"` : ""})`
+    );
+  }
+  return results;
 }
 
 export function checkDraft(checks, inputText, draftText) {
@@ -352,61 +538,15 @@ export function checkDraft(checks, inputText, draftText) {
   const normInput = normalizeApos(inputText);
   const proseOnly = proseText(normDraft);
 
-  for (const fact of checks.required || []) {
-    if (typeof fact !== "string") {
-      results.push([false, `required canon must be a string, got ${fact}`]);
-      continue;
-    }
-    results.push([
-      phraseFound(fact, normDraft, true, checks.language),
-      `canon kept: "${fact}"`,
-    ]);
-  }
-
-  for (const phrase of checks.banned || []) {
-    if (typeof phrase !== "string") {
-      results.push([false, `banned phrase must be a string, got ${phrase}`]);
-      continue;
-    }
-    // Banned phrases inflect like required ones: a draft that "delves",
-    // "treasures", or "shows Petra the keys" springs the same trap as the
-    // base form. See phraseFound's inflect flag.
-    results.push([
-      !phraseFound(phrase, normDraft, true, checks.language),
-      `trap avoided: "${phrase}"`,
-    ]);
-  }
-
-  for (const pattern of checks.required_regex || []) {
-    if (typeof pattern !== "string") {
-      results.push([false, `required pattern must be a string, got ${pattern}`]);
-      continue;
-    }
-    let ok;
-    try {
-      ok = new RegExp(pattern, "iu").test(normDraft);
-    } catch (err) {
-      results.push([false, `required pattern invalid: /${pattern}/ (${err})`]);
-      continue;
-    }
-    results.push([ok, `canon kept: /${pattern}/`]);
-  }
-
-  for (const pattern of checks.banned_regex || []) {
-    if (typeof pattern !== "string") {
-      results.push([false, `banned pattern must be a string, got ${pattern}`]);
-      continue;
-    }
-    let ok;
-    try {
-      // Unicode mode, so a pattern can bound a word with \p{L}, which
-      // holds next to accented letters where \b does not.
-      ok = new RegExp(pattern, "iu").test(normDraft) === false;
-    } catch (err) {
-      results.push([false, `banned pattern invalid: /${pattern}/ (${err})`]);
-      continue;
-    }
-    results.push([ok, `trap avoided: /${pattern}/`]);
+  results.push(...textChecks(checks, normDraft, checks.language));
+  for (const [key, label, find] of SCOPES) {
+    const scoped = checks[key];
+    if (!scoped || typeof scoped !== "object" || Array.isArray(scoped)) continue;
+    const text = find(normDraft);
+    const prefix = `${label}: `;
+    const missing = ` (no ${label} in the draft)`;
+    results.push(...textChecks(scoped, text, checks.language, prefix, missing));
+    if (key === "chapter_text") results.push(...narrationChecks(scoped, text, prefix, missing));
   }
 
   for (const [pattern, desc] of wellFormed(checks.language)) {

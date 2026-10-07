@@ -3,16 +3,15 @@
   "skill": "genre-craft",
   "brief": "Ledger the clues in this fair-play plan so the project can check it, then state the fair-play contract for chapter 3 in a short passage that sharpens the question without answering it. You cannot run commands here, so give the commands you would run in one fenced shell block, then the passage. End on the open question. Under 300 words in all.",
   "keep": "file",
-  "required": ["brass key", "sea-chest"],
+  "required": [
+    "brass key",
+    "sea-chest"
+  ],
   "required_regex": [
-    "story add clue\\b",
-    "--planted[ =]['\"]?chapter-01\\b",
-    "--payoff[ =]['\"]?chapter-12\\b",
-    "--significance-delayed\\b",
-    "--red-herring\\b",
-    "--payoff[ =]['\"]?chapter-07\\b",
-    "--character[ =]['\"]?tomas-reyes\\b",
-    "story clues (?:--path )?\\."
+    "(?:^|\\n)(?=[^\\n]*\\bstory add clue\\b)(?=[^\\n]*\\bkey\\b)(?=[^\\n]*--planted[ =]['\"]?chapter-01\\b)(?=[^\\n]*--payoff[ =]['\"]?chapter-12\\b)(?=[^\\n]*--characters?[ =]['\"]?(?:[a-z0-9-]+,[ \\t]*)*tomas-reyes\\b)(?![^\\n]*--significance-delayed)(?![^\\n]*--red-herring)",
+    "(?:^|\\n)(?=[^\\n]*\\bstory add clue\\b)(?=[^\\n]*\\b(?:hour|noon|dusk)\\b)(?=[^\\n]*--planted[ =]['\"]?chapter-01\\b)(?=[^\\n]*--payoff[ =]['\"]?chapter-12\\b)(?=[^\\n]*--characters?[ =]['\"]?(?:[a-z0-9-]+,[ \\t]*)*tomas-reyes\\b)(?=[^\\n]*--significance-delayed)(?![^\\n]*--red-herring)",
+    "(?:^|\\n)(?=[^\\n]*\\bstory add clue\\b)(?=[^\\n]*\\b(?:petra|thursday|boat)\\b)(?=[^\\n]*--planted[ =]['\"]?chapter-02\\b)(?=[^\\n]*--payoff[ =]['\"]?chapter-07\\b)(?=[^\\n]*--characters?[ =]['\"]?(?:[a-z0-9-]+,[ \\t]*)*petra-lindqvist\\b)(?=[^\\n]*--red-herring)",
+    "story clues\\b"
   ],
   "banned": [
     "it was Ana",
@@ -29,7 +28,10 @@
     "smuggler",
     "the smuggler"
   ],
-  "banned_regex": ["\\bit was\\b.{0,50}\\bwho\\b"],
+  "banned_regex": [
+    "\\bstory add clue[ \\t]+(?:\"(?![^\"\\n]*\\b(?:key|hour|noon|dusk|petra|thursday|boat|chest)\\b)[^\"\\n]*\"|'(?![^'\\n]*\\b(?:key|hour|noon|dusk|petra|thursday|boat|chest)\\b)[^'\\n]*')",
+    "\\bit was\\b.{0,50}\\bwho\\b"
+  ],
   "ends_with_question": true,
   "max_words": 300,
   "baseline_margin": 3
