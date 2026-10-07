@@ -56,6 +56,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story continuity` checks a promise or clue planted in a chapter that has no file for the payoff gap, as it checks one with a file. ([#701](https://github.com/danjdewhurst/story-skills/issues/701))
   - The warning says how many chapters ago the setup was planted, so a scheduled `chapter-NN` that is not written yet counts too.
 
+- `story continuity` reports a destroyed or lost artifact that a later chapter or scene lists in its `characters`, as it does one in `mentions`. ([#702](https://github.com/danjdewhurst/story-skills/issues/702))
+  - The message says `lists <artifact>, destroyed/lost since <chapter>`. A chapter or scene that names the artifact in `mentions` keeps the `mentions` message.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
