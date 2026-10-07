@@ -793,7 +793,8 @@ export function gridReport(root, options = {}) {
 // filter.
 export function listReport(root, kind, where = [], query = undefined) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where, query) };
+  const { warnings, ...list } = buildList(project, kind, where, query);
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings, ...list };
 }
 
 // Mermaid source for one diagram kind, printed or written to --out, with

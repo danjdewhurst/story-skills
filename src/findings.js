@@ -84,6 +84,7 @@ export const FINDING_CODES = {
   "duplicate-pass": "error",
   "duplicate-query": "error",
   "invalid-query": "error",
+  "query-unknown-key": "warning",
   "exemption-pattern-too-short": "error",
   "exemption-unknown-code": "error",
   "exemption-code-not-dismissible": "error",
@@ -287,6 +288,7 @@ export const FINDING_CODES = {
   "choices-dropped": "warning",
   "leftover-references": "warning",
   "stale-exemption": "warning",
+  "stale-query": "warning",
   "ambiguous-references": "warning",
   // story split and story merge
   "split-references": "warning",

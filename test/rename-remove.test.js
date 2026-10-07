@@ -1,7 +1,8 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createEntity, createStoryProject, moveEntity, reindexProject, removeEntity, renameEntity } from "../src/story.js";
+import { parseFrontmatter } from "../src/frontmatter.js";
+import { createEntity, createStoryProject, mergeChapters, moveEntity, reindexProject, removeEntity, renameEntity, validateProject } from "../src/story.js";
 import { makeTempDir, whileWriting, writeMarkdown } from "./helpers.js";
 
 function project(title) {
@@ -422,5 +423,73 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
     expect(result.warnings.map((finding) => finding.message)).toEqual([
       "references to 1984 in worldbuilding/artifacts/ring.md (owner) could mean the character or faction 1984, and rename left them alone, so they now name the faction: change any that meant the character to orwell"
     ]);
+  });
+});
+
+describe("saved story.md queries follow rename, move, and merge, and remove reports them (#532)", () => {
+  function withQueries(root, lines) {
+    const file = path.join(root, "story.md");
+    const text = fs.readFileSync(file, "utf8");
+    const end = text.indexOf("\n---\n", 4);
+    fs.writeFileSync(file, `${text.slice(0, end)}\n${["queries:", ...lines].join("\n")}${text.slice(end)}`, "utf8");
+  }
+  const where = (root) => parseFrontmatter(read(root, "story.md")).data.queries.map((query) => query.where);
+
+  test("rename points each filter that names the old id at the new one, and leaves the rest as written", () => {
+    const root = project("Query Rename");
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "character", name: "Ilse Marrow" });
+    withQueries(root, [
+      "  - name: mara-drafts",
+      "    kind: chapters",
+      "    where: [status=draft, \" pov = mara-quill \", characters!=mara-quill, mara-quill, title=mara-quill]",
+      "  - name: ilse",
+      "    kind: scenes",
+      "    where: [pov=ilse-marrow]",
+      "  - name: unfinished",
+      "    kind: scenes"
+    ]);
+    renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Vale" });
+    expect(where(root)).toEqual([
+      ["status=draft", " pov = mara-vale ", "characters!=mara-vale", "mara-quill", "title=mara-quill"],
+      ["pov=ilse-marrow"],
+      undefined
+    ]);
+    expect(validateProject(root).errors.map((error) => error.message)).toEqual(["story.md query unfinished is missing where"]);
+  });
+
+  test("move and merge point chapter filters at the chapter's new id", () => {
+    const root = project("Query Move");
+    for (const number of [1, 2, 3]) {
+      createEntity(root, { kind: "chapter", name: `Chapter ${number}`, number });
+    }
+    withQueries(root, ["  - name: opening", "    kind: scenes", "    where: [chapter=chapter-01]", "  - name: middle", "    kind: scenes", "    where: [chapter=chapter-03]"]);
+    moveEntity(root, { kind: "chapter", id: "chapter-01", number: 4 });
+    expect(where(root)).toEqual([["chapter=chapter-04"], ["chapter=chapter-03"]]);
+    mergeChapters(root, { id: "chapter-03", next: "chapter-04" });
+    expect(where(root)).toEqual([["chapter=chapter-03"], ["chapter=chapter-03"]]);
+  });
+
+  test("remove leaves the filters that name the removed id and lists them (stale-query)", () => {
+    const root = project("Query Remove");
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    withQueries(root, [
+      "  - name: mara-drafts",
+      "    kind: chapters",
+      "    where: [status=draft, pov=mara-quill]",
+      "  - name: without-mara",
+      "    kind: scenes",
+      "    where: [\"characters != mara-quill\", pov=mara-quill]",
+      "  - name: unrelated",
+      "    kind: scenes",
+      "    where: [pov]"
+    ]);
+    const before = read(root, "story.md");
+    const removed = removeEntity(root, { kind: "character", id: "mara-quill" });
+    expect(read(root, "story.md")).toBe(before);
+    expect(removed.warnings.filter((warning) => warning.code === "stale-query").map((warning) => [warning.message, warning.file])).toEqual([[
+      "story.md queries mara-drafts (pov=mara-quill), without-mara (characters!=mara-quill, pov=mara-quill) still filter on character mara-quill, which remove does not change: update or delete those filters",
+      "story.md"
+    ]]);
   });
 });

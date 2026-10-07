@@ -12,7 +12,7 @@
 
 import path from "node:path";
 import { projectError, usageError } from "./exit-codes.js";
-import { err } from "./findings.js";
+import { err, warn } from "./findings.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { suggestion } from "./options.js";
 import { oneLine } from "./unicode.js";
@@ -49,6 +49,16 @@ const QUERY_KEYS = ["name", "kind", "where"];
 // A query name, spelled as schemas/story.schema.json spells an id.
 const KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+// The line breaks JavaScript's `.` does not match: a comparison's value is
+// one line.
+const LINE_BREAK = /[\n\r\u2028\u2029]/;
+
+// Characters JSON.stringify leaves raw that could still act on a terminal or
+// a CI log, or make the text read as other text: DEL and the C1 controls
+// (U+009B starts an escape sequence on some terminals), the line and
+// paragraph separators, and the bidirectional marks and controls.
+const UNSAFE_IN_MESSAGE = /[\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+
 // The kind entry for a plural or singular name.
 export function listKind(name) {
   if (typeof name !== "string" || name.trim() === "") {
@@ -78,19 +88,28 @@ export function parseWhere(text) {
 
 // A filter, or what is wrong with it: `problem` is "value" for a comparison
 // with nothing after its operator and "shape" for text of no filter's form.
+// A comparison's key runs to the first = or !, which must start the
+// operator; its value is the rest, on one line. The text is read with
+// indexOf-style scans rather than one regular expression, which backtracked
+// in quadratic time on a long run of spaces in story.md.
 function readWhere(text) {
   const filter = String(text).trim();
-  const comparison = /^([^=!]+?)\s*(!=|=)\s*(.*)$/.exec(filter);
-  if (comparison) {
-    const [, key, operator, value] = comparison;
+  const at = filter.search(/[=!]/);
+  if (at > 0 && (filter[at] === "=" || filter[at + 1] === "=")) {
+    const operator = filter[at] === "=" ? "=" : "!=";
+    const key = filter.slice(0, at).trimEnd();
+    const value = filter.slice(at + operator.length).trimStart();
     if (value === "") {
       return { problem: "value", text: filter, key, operator };
     }
-    return { key, op: operator === "=" ? "eq" : "ne", value };
+    if (!LINE_BREAK.test(value)) {
+      return { key, op: operator === "=" ? "eq" : "ne", value };
+    }
   }
-  const presence = /^(!?)([^=!\s]+)$/.exec(filter);
-  if (presence) {
-    return { key: presence[2], op: presence[1] === "!" ? "absent" : "present", value: null };
+  const absent = filter.startsWith("!");
+  const key = absent ? filter.slice(1) : filter;
+  if (key !== "" && !/[=!\s]/.test(key)) {
+    return { key, op: absent ? "absent" : "present", value: null };
   }
   return { problem: "shape", text: filter };
 }
@@ -99,25 +118,30 @@ function readWhere(text) {
 // by chapter and scene, matter by order, the rest by file name), each with
 // its id, file, title, and the frontmatter values of the filtered keys.
 // With a saved query, its kind is the one listed and its filters come
-// before the --where ones; a kind given as well must be the query's.
+// before the --where ones; a kind given as well must be the query's. A
+// query's filter on a key the kind does not have is a warning, as story
+// validate reports it, and matches as an unset key; a --where one is a
+// usage error.
 export function buildList(project, kindName, whereValues = [], queryName = undefined) {
   const query = queryName === undefined ? null : savedQuery(project, queryName);
-  const entry = query === null ? listKind(kindName) : queryKind(query, kindName);
-  const given = [whereValues].flat().filter((value) => value !== undefined && value !== true);
-  const filters = [...(query?.where ?? []), ...given].map(parseWhere);
+  const entry = query === null ? listKind(kindName) : queryKind(query.item, kindName);
+  const saved = (query?.item.where ?? []).map(parseWhere);
+  const given = [whereValues].flat().filter((value) => value !== undefined && value !== true).map(parseWhere);
+  const filters = [...saved, ...given];
   const entities = project[entry.collection];
-  const queryField = query?.name ?? null;
+  const queryField = query === null ? null : String(queryName).trim();
+  const warnings = query?.warnings ?? [];
   // A file that fails to parse is missing from the scan, so any list would
   // be partial and a key only it sets would look like a typo: list nothing,
   // and let the caller report the parse errors.
   if ((project.fileErrors ?? []).length > 0) {
-    return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items: [] };
+    return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items: [], warnings };
   }
 
   const known = knownKeys(project, entry);
-  for (const filter of filters) {
-    if (!known.includes(filter.key)) {
-      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${keyHint(filter.key, known)}`, "where");
+  for (const filter of given) {
+    if (!known.has(filter.key)) {
+      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${keyHint(filter.key, [...known])}`, "where");
     }
   }
 
@@ -130,58 +154,81 @@ export function buildList(project, kindName, whereValues = [], queryName = undef
       title: String(entity[entry.title]),
       fields: Object.fromEntries(keys.map((key) => [key, entity.frontmatter?.[key] ?? null]))
     }));
-  return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items };
+  return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items, warnings };
 }
 
 // A key the schema defines, or one any file of this kind sets, is a real
-// filter; anything else is most likely a typo.
+// filter; anything else is most likely a typo. A Set, in that order, so a
+// kind with many files and keys is read once.
 function knownKeys(project, entry) {
-  const known = [...FRONTMATTER_KEYS[entry.schema]];
+  const known = new Set(FRONTMATTER_KEYS[entry.schema]);
   for (const entity of project[entry.collection]) {
     for (const key of Object.keys(entity.frontmatter ?? {})) {
-      if (!known.includes(key)) {
-        known.push(key);
-      }
+      known.add(key);
     }
   }
   return known;
 }
 
-function keyHint(key, known) {
-  const near = nearMissKeys(key, known);
+// "; did you mean ..." for the `candidates` `key` most likely misspells.
+function keyHint(key, candidates) {
+  const near = nearMissKeys(key, candidates);
   return near.length > 0 ? `; did you mean ${near.map((candidate) => `"${candidate}"`).join(" or ")}?` : "";
 }
 
-// The story.md query named `name`, refused as story validate reports it: a
-// name no query has is a usage error, and a story.md that does not parse or
-// a query with problems leaves the project unusable for it.
+// `value` quoted for a message, with every character that could act on a
+// terminal or a CI log escaped: JSON.stringify escapes the C0 controls (so
+// an ESC or a line break that would start a GitHub workflow command), and
+// UNSAFE_IN_MESSAGE the rest.
+function quoted(value) {
+  return JSON.stringify(value).replace(UNSAFE_IN_MESSAGE, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
+// A query name as messages show it: a kebab-case one as written, anything
+// else quoted.
+function shownName(name) {
+  return typeof name === "string" && KEBAB_NAME.test(name) ? name : quoted(name);
+}
+
+// A query's name as text: an unquoted `name: 2025` parses as a number, and
+// --query 2025 should still find it, to report that it needs quotes.
+function nameText(name) {
+  return typeof name === "number" || typeof name === "boolean" ? String(name) : name;
+}
+
+// The story.md query named `name` and its warnings, refused as story
+// validate reports it: a name no query has is a usage error, and a
+// story.md that does not parse or a query with errors leaves the project
+// unusable for it.
 function savedQuery(project, name) {
   const wanted = String(name).trim();
   if (wanted === "") {
     throw usageError("--query needs the name of a story.md query");
   }
   if (project.story.unreadable) {
-    throw projectError(`story.md cannot be parsed; fix it before running story list --query ${wanted}`);
+    throw projectError(`story.md cannot be parsed; fix it before running story list --query ${quoted(wanted)}`);
   }
   const raw = project.story.data.queries;
   if (raw !== undefined && !Array.isArray(raw)) {
-    throw projectError(`story.md frontmatter field queries must be a list; fix it before running story list --query ${wanted}`);
+    throw projectError(`story.md frontmatter field queries must be a list; fix it before running story list --query ${quoted(wanted)}`);
   }
   const entries = (raw ?? []).map((item, index) => ({ item, index })).filter(({ item }) => isMapping(item));
-  const named = entries.filter(({ item }) => item.name === wanted);
+  const named = entries.filter(({ item }) => nameText(item.name) === wanted);
   if (named.length === 0) {
-    const names = [...new Set(entries.map(({ item }) => item.name).filter((candidate) => typeof candidate === "string" && candidate !== ""))];
+    const names = [...new Set(entries.map(({ item }) => nameText(item.name)).filter((candidate) => typeof candidate === "string" && candidate !== ""))];
     throw usageError(names.length === 0
-      ? `Unknown query "${wanted}": story.md has no queries`
-      : `Unknown query "${wanted}" (story.md queries: ${names.join(", ")})${suggestion(wanted, names)}`);
+      ? `Unknown query ${quoted(wanted)}: story.md has no queries`
+      : `Unknown query ${quoted(wanted)} (story.md queries: ${names.map(shownName).join(", ")})${suggestion(wanted, names)}`);
   }
-  const problems = named.length > 1
-    ? [`story.md lists query ${wanted} more than once`]
-    : queryProblems(project, named[0].item, named[0].index).map((finding) => finding.message);
-  if (problems.length > 0) {
-    throw projectError(`Fix story.md query ${wanted} before running it: ${problems.join("; ")}`);
+  if (named.length > 1) {
+    throw projectError(`Fix story.md query ${shownName(wanted)} before running it: story.md lists query ${shownName(wanted)} more than once`);
   }
-  return named[0].item;
+  const { item, index } = named[0];
+  const problems = queryProblems(project, item, index, (entry) => knownKeys(project, entry));
+  if (problems.errors.length > 0) {
+    throw projectError(`Fix story.md query ${shownName(wanted)} before running it: ${problems.errors.map((finding) => finding.message).join("; ")}`);
+  }
+  return { item, warnings: problems.warnings };
 }
 
 // The kind entry of a checked saved query. A kind given on the command line
@@ -194,87 +241,158 @@ function queryKind(query, kindName) {
   return entry;
 }
 
-// The problems with story.md `queries`, as findings for story validate: a
+// The problems with story.md `queries`, as story validate reports them: a
 // field that is not a list of mappings, a name used twice, and each query's
-// own problems (see queryProblems).
+// own errors and warnings (see queryProblems). Each kind's keys are read
+// once, however many queries list it.
 export function queryFindings(project) {
+  const errors = [];
+  const warnings = [];
   const raw = project.story.data.queries;
   if (raw === undefined) {
-    return [];
+    return { errors, warnings };
   }
   if (!Array.isArray(raw)) {
-    return [err("field-not-list", "story.md frontmatter field queries must be a list", "story.md")];
+    errors.push(err("field-not-list", "story.md frontmatter field queries must be a list", "story.md"));
+    return { errors, warnings };
   }
-  const findings = [];
+  const keysByKind = new Map();
+  const knownFor = (entry) => {
+    if (!keysByKind.has(entry)) {
+      keysByKind.set(entry, knownKeys(project, entry));
+    }
+    return keysByKind.get(entry);
+  };
   const seen = new Set();
   raw.forEach((item, index) => {
     if (!isMapping(item)) {
-      findings.push(err("field-invalid-items", "story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", "story.md"));
+      errors.push(err("field-invalid-items", "story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", "story.md"));
       return;
     }
-    findings.push(...queryProblems(project, item, index));
+    const problems = queryProblems(project, item, index, knownFor);
+    errors.push(...problems.errors);
+    warnings.push(...problems.warnings);
     if (typeof item.name === "string" && seen.has(item.name)) {
-      findings.push(err("duplicate-query", `story.md lists query ${item.name} more than once`, "story.md"));
+      errors.push(err("duplicate-query", `story.md lists query ${shownName(item.name)} more than once`, "story.md"));
     }
     seen.add(item.name);
   });
-  return findings;
+  return { errors, warnings };
 }
 
 // The problems with one saved query, which story validate reports and
-// story list --query refuses to run: a missing or non-kebab-case name, a
-// missing or unknown kind, a where that is not a list of filters, a filter
-// --where could not read, a key the kind does not have (checked only while
-// every file parses, as buildList checks it), and any other key.
-function queryProblems(project, item, index) {
-  const findings = [];
+// story list --query reports too. Errors, which stop --query: a missing,
+// unquoted-number, or non-kebab-case name, a missing or unknown kind, a
+// where that is not a list of filters or is empty, a filter --where could
+// not read, and any other key. A warning: a filter on a key the kind neither
+// defines nor any of its files sets, which may be a typo or a key no file
+// sets yet (checked only while every file parses, as buildList checks it).
+// `knownFor` gives a kind's known keys.
+function queryProblems(project, item, index, knownFor) {
+  const errors = [];
+  const warnings = [];
   const label = typeof item.name === "string" && KEBAB_NAME.test(item.name) ? `story.md query ${item.name}` : `story.md queries[${index}]`;
   const extra = Object.keys(item).filter((key) => !QUERY_KEYS.includes(key));
   if (extra.length > 0) {
-    findings.push(err("invalid-query", `${label} has ${extra.join(", ")}: a query takes only name, kind, and where`, "story.md"));
+    errors.push(err("invalid-query", `${label} has ${extra.join(", ")}: a query takes only name, kind, and where`, "story.md"));
   }
   if (item.name === undefined) {
-    findings.push(err("missing-field", `${label} is missing name`, "story.md"));
+    errors.push(err("missing-field", `${label} is missing name`, "story.md"));
+  } else if (typeof item.name === "number" || typeof item.name === "boolean") {
+    errors.push(err("field-not-text", `${label} name ${String(item.name)} is not text: quote it, such as name: "${String(item.name)}"`, "story.md"));
   } else if (typeof item.name !== "string" || !KEBAB_NAME.test(item.name)) {
-    findings.push(err("id-not-kebab", `${label} name ${JSON.stringify(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
+    errors.push(err("id-not-kebab", `${label} name ${quoted(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
   }
 
   let entry = null;
   if (item.kind === undefined) {
-    findings.push(err("missing-field", `${label} is missing kind`, "story.md"));
+    errors.push(err("missing-field", `${label} is missing kind`, "story.md"));
   } else if (QUERY_KINDS.has(item.kind)) {
     entry = listKind(item.kind);
   } else {
     const near = typeof item.kind === "string" ? suggestion(item.kind, KIND_NAMES) : "";
-    findings.push(err("invalid-query", `${label} kind ${JSON.stringify(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
+    errors.push(err("invalid-query", `${label} kind ${quoted(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
   }
 
   if (item.where === undefined) {
-    findings.push(err("missing-field", `${label} is missing where`, "story.md"));
-    return findings;
+    errors.push(err("missing-field", `${label} is missing where`, "story.md"));
+    return { errors, warnings };
   }
-  if (!Array.isArray(item.where) || item.where.length === 0 || !item.where.every((filter) => typeof filter === "string")) {
-    findings.push(err("invalid-query", `${label} where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
-    return findings;
+  if (Array.isArray(item.where) && item.where.length === 0) {
+    errors.push(err("invalid-query", `${label} where needs at least one filter, such as where: [status=draft]`, "story.md"));
+    return { errors, warnings };
+  }
+  if (!Array.isArray(item.where) || !item.where.every((filter) => typeof filter === "string")) {
+    errors.push(err("invalid-query", `${label} where must be a list of filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
+    return { errors, warnings };
   }
   const filters = [];
   for (const text of item.where) {
     const filter = readWhere(text);
     if (filter.problem === "value") {
-      findings.push(err("invalid-query", `${label} where filter ${JSON.stringify(filter.text)} needs a value after ${filter.operator}; write ${filter.key} for a key that is set, or "!${filter.key}" for one that is not`, "story.md"));
+      errors.push(err("invalid-query", `${label} where filter ${quoted(filter.text)} needs a value after ${filter.operator}; write ${quoted(filter.key)} for a key that is set, or ${quoted(`!${filter.key}`)} for one that is not`, "story.md"));
     } else if (filter.problem === "shape") {
-      findings.push(err("invalid-query", `${label} cannot read where filter ${JSON.stringify(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
+      errors.push(err("invalid-query", `${label} cannot read where filter ${quoted(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
     } else {
       filters.push(filter);
     }
   }
   if (entry !== null && (project.fileErrors ?? []).length === 0) {
-    const known = knownKeys(project, entry);
-    for (const filter of filters.filter((candidate) => !known.includes(candidate.key))) {
-      findings.push(err("invalid-query", `${label} filters on ${filter.key}, which no ${entry.singular} file sets and the schema does not define${keyHint(filter.key, known)}`, "story.md"));
+    const known = knownFor(entry);
+    // The guess looks only among the schema's keys: a story.md can hold many
+    // queries and a file many custom keys, and comparing every pair would
+    // take minutes.
+    for (const filter of filters.filter((candidate) => !known.has(candidate.key))) {
+      warnings.push(warn("query-unknown-key", `${label} filters on ${quoted(filter.key)}, which no ${entry.singular} file sets and the schema does not define, so it matches as unset${keyHint(filter.key, FRONTMATTER_KEYS[entry.schema])}`, "story.md"));
     }
   }
-  return findings;
+  return { errors, warnings };
+}
+
+// The story.md queries with a filter that compares a reference key with
+// `id` (key=id or key!=id), where `isReferenceKey` says whether a key can
+// name the entity: the filters rename, move, and merge point at a new id,
+// and remove reports. Each entry gives the query's index, the query, and
+// the positions of those filters in its where.
+export function queryFiltersNaming(queries, isReferenceKey, id) {
+  if (!Array.isArray(queries)) {
+    return [];
+  }
+  const found = [];
+  queries.forEach((item, index) => {
+    if (!isMapping(item) || !Array.isArray(item.where)) {
+      return;
+    }
+    const positions = [];
+    item.where.forEach((text, position) => {
+      const filter = typeof text === "string" ? readWhere(text) : {};
+      if (filter.value === id && isReferenceKey(filter.key)) {
+        positions.push(position);
+      }
+    });
+    if (positions.length > 0) {
+      found.push({ index, item, positions });
+    }
+  });
+  return found;
+}
+
+// A filter queryFiltersNaming found, comparing with `newId` instead, with
+// the rest of its text as written.
+export function retargetFilter(text, newId) {
+  const end = text.trimEnd().length;
+  return `${text.slice(0, end - readWhere(text).value.length)}${newId}${text.slice(end)}`;
+}
+
+// A filter queryFiltersNaming found, as remove's warning shows it.
+export function shownFilter(text) {
+  const filter = readWhere(text);
+  return `${filter.key}${filter.op === "eq" ? "=" : "!="}${filter.value}`;
+}
+
+// A query from queryFiltersNaming, named as messages name it.
+export function shownQuery({ item, index }) {
+  return typeof item.name === "string" && KEBAB_NAME.test(item.name) ? item.name : `queries[${index}]`;
 }
 
 function isMapping(value) {
