@@ -1567,6 +1567,14 @@ describe("move", () => {
     moveEntity(root, { kind: "chapter", id: "chapter-03", number: 4 });
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-04.md"), "utf8")).toContain("\r\n# Chapter 4\r\n");
 
+    // The first `# Chapter N` heading counts, after other headings and a
+    // fenced one.
+    const fourth = path.join(root, "chapters", "chapter-04.md");
+    fs.writeFileSync(fourth, fs.readFileSync(fourth, "utf8").replace("\r\n# Chapter 4\r\n", "\r\n## Epigraph\r\n\r\n> The sea keeps nothing.\r\n\r\n```\r\n# Chapter 4: in a fence\r\n```\r\n\r\n# Chapter 4: Two\r\n"));
+    moveEntity(root, { kind: "chapter", id: "chapter-04", number: 6 });
+    const sixth = fs.readFileSync(path.join(root, "chapters", "chapter-06.md"), "utf8");
+    expect(sixth).toContain("\r\n```\r\n# Chapter 4: in a fence\r\n```\r\n\r\n# Chapter 6: Two\r\n");
+
     // A body with no heading at all moves unchanged.
     const bare = path.join(root, "chapters", "chapter-01.md");
     const body = "\nJust prose.\n";

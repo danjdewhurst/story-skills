@@ -224,12 +224,18 @@ describe("story split", () => {
     expect(fs.existsSync(path.join(root, "scenes", "chapter-03-scene-02.md"))).toBe(true);
   });
 
-  test("warns when the new last chapter takes an id an abandoned thread still names", () => {
+  test("warns when the new last chapter takes an id an abandoned thread still names, and refuses any other reference to it (#578)", () => {
     const root = book();
     setProse(root, "chapter-04", "They landed.\n\nNight fell.\n");
     createEntity(root, { kind: "promise", name: "The Duel", planted: "chapter-05", status: "abandoned" });
     createEntity(root, { kind: "clue", name: "The Ring", planted: "chapter-05" });
+    const before = snapshot(root);
+    expect(() => splitChapter(root, { id: "chapter-04", at: "Night fell." })).toThrow("continuity/clues/the-ring.md names chapter-05, which has no file yet, and this split would give that id to its new chapter, the rest of chapter-04, so it would point at that chapter. Point it at the chapter it means first: chapter-04 if it belongs in the text that moves (then point it at chapter-05 after the split), or chapter-06 for the chapter after it; nothing was changed");
+    expect(snapshot(root)).toEqual(before);
+    const clue = path.join(root, "continuity", "clues", "the-ring.md");
+    fs.writeFileSync(clue, read(root, "continuity", "clues", "the-ring.md").replace("planted: chapter-05", "planted: chapter-06"), "utf8");
     const result = splitChapter(root, { id: "chapter-04", at: "Night fell." });
+    expect(data(root, "continuity", "clues", "the-ring.md").planted).toBe("chapter-06");
     expect(result.newId).toBe("chapter-05");
     expect(codes(result)).toEqual(["adopted-references"]);
     expect(result.warnings[0].message).toBe("chapter-05 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/the-duel.md. Clear them if the cut threads do not belong there");
@@ -262,6 +268,34 @@ describe("story split", () => {
     mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
     expect(data(root, "continuity", "promises", "the-return.md").payoff).toBe("chapter-04");
     expect(data(root, "chapters", "chapter-04.md").title).toBe("Four");
+  });
+
+  test("counts the renumbered chapter's own links and every file, but only the chapter id, and leaves the registries to reindex (#578)", () => {
+    // A link in the chapter that moves, to the chapter after it, and a bare
+    // id in the timeline: the plural message.
+    const root = book();
+    const fourth = path.join(root, "chapters", "chapter-04.md");
+    fs.appendFileSync(fourth, "\nNext: [chapter five](chapter-05.md).\n");
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-05: the return, planned\n");
+    expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-04.md, plot/timeline.md name chapter-05, which has no file yet, and this split would renumber chapter-04 to chapter-05, so they would point at that chapter. Point them at the chapter they mean first: chapter-04 if they belong there (the split then carries them to chapter-05), or chapter-06 for the chapter after it; nothing was changed");
+
+    // A planned scene id under the number is no reference to the chapter:
+    // the renumbering warns about it, naming the split.
+    const scene = book();
+    fs.appendFileSync(path.join(scene, "plot", "timeline.md"), "\n- chapter-05-scene-01: planned\n");
+    const result = splitChapter(scene, { id: "chapter-02", at: "1" });
+    expect(result.warnings.filter((warning) => warning.code === "adopted-references").map((warning) => warning.message)).toEqual([
+      "chapter-05 was already referenced before this split, and those references now point at the moved chapter: plot/timeline.md. Check them"
+    ]);
+
+    // A registry still listing a chapter deleted by hand is rebuilt, not
+    // refused.
+    const stale = book();
+    createEntity(stale, { kind: "chapter", name: "Five" });
+    fs.rmSync(path.join(stale, "chapters", "chapter-05.md"));
+    expect(read(stale, "chapters", "_index.md")).toContain("chapter-05.md");
+    expect(splitChapter(stale, { id: "chapter-02", at: "1" }).newId).toBe("chapter-03");
+    expect(data(stale, "chapters", "chapter-05.md").title).toBe("Four");
   });
 
   test("names split in the adopted-references warning of a scene it moves (#537)", () => {
@@ -476,6 +510,42 @@ describe("story merge", () => {
     expect(text).toContain("# Chapter 2: Two\n\n<!-- KEEP-ME -->\nA note above the heading.\n\n## Outline\n\n1. Opening beat\n2. Escalation\n3. Turn or decision\n1. Opening beat\n2. Escalation\n3. Turn or decision\n\n<!-- after the beats -->\n\n<!-- after the divider -->\n\n---\n\n## Chapter Text\n\nMara walked");
     expect(text).not.toContain("# Chapter 3");
     expect(prose(root, "chapter-02")).toBe(`${CHAPTER_TWO.trim()}\n\n* * *\n\nThe ferry crossed.`);
+  });
+
+  test("keeps a comment on the last beat of either chapter on its line, and never puts beats inside one (#578)", () => {
+    const root = book();
+    const second = path.join(root, "chapters", "chapter-02.md");
+    const third = path.join(root, "chapters", "chapter-03.md");
+    fs.writeFileSync(second, read(root, "chapters", "chapter-02.md").replace("3. Turn or decision\n", "3. Turn or decision <!-- two -->\n"), "utf8");
+    fs.writeFileSync(third, read(root, "chapters", "chapter-03.md").replace("3. Turn or decision\n", "3. Turn or decision <!-- three -->\n"), "utf8");
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(read(root, "chapters", "chapter-02.md")).toContain("## Outline\n\n1. Opening beat\n2. Escalation\n3. Turn or decision <!-- two -->\n1. Opening beat\n2. Escalation\n3. Turn or decision <!-- three -->\n\n---\n\n## Chapter Text\n");
+
+    const open = book();
+    const kept = path.join(open, "chapters", "chapter-02.md");
+    fs.writeFileSync(kept, read(open, "chapters", "chapter-02.md").replace("3. Turn or decision\n", "3. Turn or decision <!-- TODO:\nrework this\n-->\n"), "utf8");
+    mergeChapters(open, { id: "chapter-02", next: "chapter-03" });
+    expect(read(open, "chapters", "chapter-02.md")).toContain("3. Turn or decision <!-- TODO:\nrework this\n-->\n\n1. Opening beat\n2. Escalation\n3. Turn or decision\n\n---\n\n## Chapter Text\n");
+  });
+
+  test("takes only the second chapter's own heading for its heading (#578)", () => {
+    // No chapter heading, and a level-1 heading inside the outline.
+    const root = book();
+    const third = path.join(root, "chapters", "chapter-03.md");
+    fs.writeFileSync(third, read(root, "chapters", "chapter-03.md").replace("# Chapter 3: Three\n\n", "").replace("3. Turn or decision\n", "3. Turn or decision\n\n# Ideas\n\n- a ferry strike\n"), "utf8");
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(read(root, "chapters", "chapter-02.md")).toContain("3. Turn or decision\n\n# Ideas\n\n- a ferry strike\n\n---\n\n## Chapter Text\n");
+
+    // No `## Chapter Text` or outline, and text above the heading: the
+    // heading still goes, and the text joins the notes.
+    const bare = createStoryProject({ cwd: makeTempDir(), title: "Bare Merge" }).root;
+    writeMarkdown(path.join(bare, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "\n# Chapter 1: One\n\nFirst words.\n");
+    writeMarkdown(path.join(bare, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "\nA note above the heading.\n# Chapter 2: Two\n\nSecond words.\n");
+    mergeChapters(bare, { id: "chapter-01", next: "chapter-02" });
+    const text = read(bare, "chapters", "chapter-01.md");
+    expect(text).toContain("# Chapter 1: One\n\nA note above the heading.\n\n## Chapter Text\n\nFirst words.\n\n* * *\n\nSecond words.\n");
+    expect(text).not.toContain("Chapter 2");
+    expect(prose(bare, "chapter-01")).toBe("First words.\n\n* * *\n\nSecond words.");
   });
 
   test("names merge in the adopted-references warning of a scene it moves (#537)", () => {

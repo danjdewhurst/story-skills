@@ -100,6 +100,22 @@ describe("--dry-run", () => {
     });
   }
 
+  test("a split refused under --dry-run exits 4 with no preview and writes nothing", () => {
+    // The example's state learns something in chapter-05, which has no file.
+    const root = copyExample("the-unraveled-thread");
+    fs.appendFileSync(path.join(root, "chapters", "chapter-02.md"), "\n\n* * *\n\nThe constable came at dusk.\n");
+    const before = snapshot(root);
+    const text = invoke(root, ["split", "chapter-02", "--at", "1", "--dry-run"]);
+    expect(text.code).toBe(4);
+    expect(text.out).toBe("");
+    expect(text.err).toContain("continuity/state.md names chapter-05, which has no file yet, and this split would renumber chapter-04 to chapter-05");
+    const json = invokeJson(root, ["split", "chapter-02", "--at", "1", "--dry-run", "--json"]);
+    expect(json.code).toBe(4);
+    expect(json.envelope).toMatchObject({ ok: false, data: null, writes: [] });
+    expect(json.envelope.diagnostics.map((entry) => entry.code)).toEqual(["write-refused"]);
+    expect(snapshot(root)).toEqual(before);
+  });
+
   test("the text output lists each change and says nothing was written", () => {
     const root = copyExample("the-unraveled-thread");
     const before = snapshot(root);
