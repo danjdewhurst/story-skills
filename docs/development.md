@@ -255,7 +255,7 @@ An option entry has these fields:
 Parsing rules worth knowing when you add a flag:
 
 - Value options accept `--name value` or `--name=value`. A value that starts with `--` must use the `=` form.
-- Boolean options accept `--name`, `--name=false`, or a following literal (`true`, `false`, `1`, `0`, `yes`, `no`, `on`, `off`). Read them with `isTruthy(parsed.options.name)`.
+- Boolean options accept `--name` or the inline form `--name=<value>`, where `<value>` is `true`, `false`, `1`, `0`, `yes`, `no`, `on`, or `off`. A boolean word after the flag, such as `--write false`, is refused with exit 2, so a value must use the `=` form. Read them with `isTruthy(parsed.options.name)`.
 - `-h` / `--help` and `-v` / `--version` are handled before any command runs.
 
 ### Adding a command
