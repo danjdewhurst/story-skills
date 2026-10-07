@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { UNDO_LOG } from "../src/files.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { createEntity, createStoryProject, mergeChapters, moveEntity, reindexProject, removeEntity, renameEntity, validateProject } from "../src/story.js";
 import { makeTempDir, whileWriting, writeMarkdown } from "./helpers.js";
@@ -299,7 +300,9 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
 
   // Runs a rename that is killed once it has deleted the old file, at the
   // first write to `target` (a registry the reindex rewrites) or, for the
-  // marker, at its delete.
+  // marker, at its delete. Its undo log would have a rerun put the rename
+  // back and make it again (test/undo.test.js), so the log is deleted, as
+  // when a story from before the log was killed: the marker resumes it.
   function killedAfterDelete(oldFile, target, run) {
     const { renameSync, rmSync } = fs;
     const kill = (file) => {
@@ -321,6 +324,9 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
       fs.renameSync = renameSync;
       fs.rmSync = rmSync;
     }
+    const log = path.join(oldFile, "..", "..", UNDO_LOG);
+    expect(fs.existsSync(log)).toBe(true);
+    fs.rmSync(log);
   }
 
   test("rename refuses an id that never existed, though an entity has the new name", () => {

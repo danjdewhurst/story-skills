@@ -333,7 +333,7 @@ describe("story split", () => {
     expect(prose(root, "chapter-03").replace(/\r/g, "")).toStartWith("The boat was late.");
   });
 
-  test("the CLI says what moved, and a split stopped part way says a rerun cannot finish it", () => {
+  test("the CLI says what moved, and a split refused before its first write changes nothing", () => {
     const root = book();
     const io = memoryIo(root);
     expect(runCli(["split", "chapter-02", "--at", "1"], io)).toBe(0);
@@ -355,7 +355,7 @@ describe("story split", () => {
     expect(snapshot(stray)).toEqual(before);
   });
 
-  test("a step that fails after another wrote says a rerun cannot finish the job", () => {
+  test("a step that fails after another wrote says a rerun puts the changes back and starts over", () => {
     const root = book();
     const file = path.join(root, "notes.md");
     const fail = (wrote) => () => {
@@ -365,7 +365,7 @@ describe("story split", () => {
       throw Object.assign(new Error("disk full"), { hint: "run it again" });
     };
     expect(() => restructureWrites(root, fail(false))).toThrow(expect.objectContaining({ hint: "run it again" }));
-    expect(() => restructureWrites(root, fail(true))).toThrow(expect.objectContaining({ hint: expect.stringContaining("a rerun cannot finish the job") }));
+    expect(() => restructureWrites(root, fail(true))).toThrow(expect.objectContaining({ hint: expect.stringContaining("run the same command again, which puts them back and starts over, or run story doctor --fix to put them back") }));
   });
 
   test("refuses before writing when a file it would rewrite is read-only", () => {

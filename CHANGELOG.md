@@ -57,6 +57,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story build --anonymous` leaves every name out of a Shunn manuscript, for a market that reads blind. (#525)
   - It works with `--format shunn`, its `--pdf`, and `--format docx --shunn`, and drops the byline, editor credit, contact lines, story bylines, and the running head's surname.
   - It cannot be a `cli-defaults` entry.
+- `split`, `merge`, `move`, `rename`, and `remove` can now be put back when they stop part way, whether killed, cut off by a power loss, or stopped by an error such as a full disk. Each keeps an undo log, `.story-undo.tmp`, while it runs; `story validate` reports one left behind (`interrupted-change`), and `story doctor --fix` or a rerun of any of the five puts the files back first, so rerunning the stopped command finishes it. Other write commands are refused until then, and a file edited since is never overwritten. ([#604](https://github.com/danjdewhurst/story-skills/issues/604))
 
 ### Changed
 

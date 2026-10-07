@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, RENAME_MARKER, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, RENAME_MARKER, UNDO_LOG, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
+import { MAX_UNDO_LOG_BYTES } from "./undo.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, PATH_CONTROL_CHARACTERS, SKIPPED_SCAN_DIRECTORIES, existingStoryData, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
@@ -372,11 +373,12 @@ export function mirrorFolderNames(source, copy) {
 }
 
 // Write commands read the text of markdown files only (and import the
-// .gitignore it keeps, and rename its marker), and no file over the read
-// limit; of any other file (the story.md cover) they check at most the size
-// and, for the cover, the first bytes, which say what kind of image it is.
-// So only readable markdown, the .gitignore, and the marker are copied
-// whole. Every other file is a sparse file of the same size, which
+// .gitignore it keeps, rename its marker, and the commands that put back an
+// interrupted change its undo log, which has a larger limit of its own), and
+// no file over the read limit; of any other file (the story.md cover) they
+// check at most the size and, for the cover, the first bytes, which say what
+// kind of image it is. So only readable markdown, the .gitignore, the
+// marker, and the undo log are copied whole. Every other file is a sparse file of the same size, which
 // takes no disk space, and only the cover (`keepHead`) keeps its first bytes,
 // so no other file's contents reach the scratch folder. An unreadable file
 // stays unreadable. The copy is read as a command reads it, so a file
@@ -385,8 +387,9 @@ export function mirrorFolderNames(source, copy) {
 function copyRegularFile(from, to, keepHead = false) {
   const { size } = fs.statSync(from);
   const readable = allowed(from, fs.constants.R_OK);
-  if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER].includes(path.basename(from))) && size <= MAX_READ_BYTES && readable) {
-    fs.writeFileSync(to, readFileBytes(from));
+  const limit = path.basename(from) === UNDO_LOG ? MAX_UNDO_LOG_BYTES : MAX_READ_BYTES;
+  if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER, UNDO_LOG].includes(path.basename(from))) && size <= limit && readable) {
+    fs.writeFileSync(to, readFileBytes(from, limit));
   } else {
     fs.writeFileSync(to, keepHead && readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");
     fs.truncateSync(to, size);

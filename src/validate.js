@@ -8,7 +8,8 @@ import { characterLifeline, diesAgainIn } from "./deaths.js";
 import { validateProgressions } from "./progressions.js";
 import { parseFrontmatter, scalarText } from "./frontmatter.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
-import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
+import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN, UNDO_LOG } from "./files.js";
+import { interruptedChange } from "./undo.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
 import { copyrightPageTodos, isCopyrightMatter, isPlaceholder, publishingMeta, validateNames, validatePublishing } from "./publishing.js";
@@ -193,6 +194,12 @@ export function validateProjectOf(project) {
   validatePortablePaths(project, warnings);
   warnings.push(...substituteStoryIdWarnings(project));
   collectStrayFileWarnings(project, warnings);
+  // A split, merge, move, rename, or remove that stopped part way left its
+  // undo log, so the project holds only part of that change (see undo.js).
+  const interrupted = interruptedChange(projectRoot);
+  if (interrupted !== null) {
+    errors.push(err("interrupted-change", `${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed: run story doctor --fix to put those files back, or run that command again, which puts them back and then makes its change`, UNDO_LOG));
+  }
   for (const file of ENTITY_SCAN_DIRS.flatMap((dir) => entityFileNames(projectRoot, dir))) {
     if (WINDOWS_RESERVED_ID.test(path.basename(file, ".md").toLowerCase())) {
       warnings.push(warn("windows-reserved-name", `${file} uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity`, file));

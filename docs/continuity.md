@@ -1565,7 +1565,7 @@ Actions:
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5 --path examples/the-unraveled-thread, then outline scenes to advance The Ledger Trail.
 ```
 
-`story doctor --fix` first applies the mechanical repairs the checks call for (`migrate`, `wordcount --write`, and `reindex`), never touching prose, then prints this report for what remains and exits 1 while a check still has an error. `--dry-run` shows the repairs without making them. See [doctor](cli-reference.md#doctor) for which finding triggers which repair.
+`story doctor --fix` first puts back a `split`, `merge`, `move`, `rename`, or `remove` that stopped part way (see [Interrupted changes](cli-reference.md#interrupted-changes)), then applies the mechanical repairs the checks call for (`migrate`, `wordcount --write`, and `reindex`), never touching prose, then prints this report for what remains and exits 1 while a check still has an error. `--dry-run` shows the repairs without making them. See [doctor](cli-reference.md#doctor) for which finding triggers which repair.
 
 ### Actions and priorities
 

@@ -512,7 +512,8 @@ describe("interrupted rename (#181, #192)", () => {
     failingRemove(/ilya-venn\.md$/, () => renameEntity(root, { kind: "character", id: "ilya-venn", name: "Zed Quill" }));
     expect(listDir(root, "characters")).toEqual(["_index.md", "ilya-venn.md", "zed-quill.md"]);
     const rerun = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
-    expect(rerun.err).toBe("");
+    // It puts back what the killed run changed, then renames (#604).
+    expect(rerun.err).toMatch(/^note: story rename character ilya-venn stopped part way, so this first put back the \d+ files it had changed\n$/);
     expect(rerun.code).toBe(0);
     expect(listDir(root, "characters")).toEqual(["_index.md", "zed-quill.md"]);
     expect(messages(validateLinks(root).errors)).toEqual([]);
@@ -520,6 +521,19 @@ describe("interrupted rename (#181, #192)", () => {
 });
 
 describe("interrupted move (#191, #193, #194)", () => {
+  // Runs `check` on the project a move stopped part way, and on a copy
+  // without its undo log, as a move by an older story left it. A rerun
+  // finishes the move either way: with the log it puts back what the
+  // stopped run changed and moves again (#604), and without one it finishes
+  // where the run stopped.
+  function withAndWithoutLog(root, check) {
+    const copy = path.join(makeTempDir(), "copy");
+    fs.cpSync(root, copy, { recursive: true });
+    fs.rmSync(path.join(copy, ".story-undo.tmp"));
+    check(root);
+    check(copy);
+  }
+
   function book() {
     const root = newProject();
     createEntity(root, { kind: "character", name: "Mara" });
@@ -539,10 +553,12 @@ describe("interrupted move (#191, #193, #194)", () => {
     // The old scene is already gone; the chapter is still there to rerun.
     expect(listDir(root, "scenes")).not.toContain("chapter-01-scene-01.md");
     expect(listDir(root, "chapters")).toContain("chapter-01.md");
-    expect(moveEntity(root, { kind: "chapter", id: "chapter-01", number: 5 }).id).toBe("chapter-05");
-    expect(listDir(root, "chapters")).toEqual(["_index.md", "chapter-02.md", "chapter-03.md", "chapter-05.md"]);
-    expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-02-scene-01.md", "chapter-02-scene-02.md", "chapter-05-scene-01.md"]);
-    expect(messages(validateLinks(root).errors)).toEqual([]);
+    withAndWithoutLog(root, (project) => {
+      expect(moveEntity(project, { kind: "chapter", id: "chapter-01", number: 5 }).id).toBe("chapter-05");
+      expect(listDir(project, "chapters")).toEqual(["_index.md", "chapter-02.md", "chapter-03.md", "chapter-05.md"]);
+      expect(listDir(project, "scenes")).toEqual(["_index.md", "chapter-02-scene-01.md", "chapter-02-scene-02.md", "chapter-05-scene-01.md"]);
+      expect(messages(validateLinks(project).errors)).toEqual([]);
+    });
   });
 
   test("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
@@ -560,10 +576,12 @@ describe("interrupted move (#191, #193, #194)", () => {
     const root = book();
     failingRemove(/chapter-02-scene-02\.md$/, () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-01" }));
     expect(listDir(root, "scenes")).toContain("chapter-01-scene-02.md");
-    const rerun = invoke(root, ["move", "scene", "chapter-02-scene-02", "--chapter", "chapter-01"]);
-    expect(rerun.out).toContain("to chapter-01-scene-02");
-    expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-01-scene-02.md", "chapter-02-scene-01.md"]);
-    expect(messages(validateLinks(root).errors)).toEqual([]);
+    withAndWithoutLog(root, (project) => {
+      const rerun = invoke(project, ["move", "scene", "chapter-02-scene-02", "--chapter", "chapter-01"]);
+      expect(rerun.out).toContain("to chapter-01-scene-02");
+      expect(listDir(project, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-01-scene-02.md", "chapter-02-scene-01.md"]);
+      expect(messages(validateLinks(project).errors)).toEqual([]);
+    });
   });
 
   test("a move onto an identical placeholder is refused", () => {

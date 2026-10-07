@@ -118,14 +118,17 @@ const WRITE_OPTIONS = ["dry-run", "json"];
 // that changes the project in place: true, or a function of the parsed
 // options for one that writes only with a flag (wordcount --write). runCli
 // holds the project lock around such a run, except with --dry-run (see
-// lock.js). init and import lock the folder they fill themselves, and the
-// builds write only generated files, so they take no lock. `run` receives
-// { parsed, io, cwd, root, overrides, defaulted }, where root() resolves
-// the project path and overrides holds the story.md severity overrides and
-// the exemptions that name a code (see findingOverrides), passed to
-// applySeverity, and returns the exit code. story.md cli-defaults are
-// already merged into parsed.options; `defaulted` names the flags they
-// filled in.
+// lock.js). `recovers` marks a write command that first puts back a change
+// another stopped part way (split, merge, move, rename, remove, and doctor
+// --fix; see undo.js); runCli refuses every other write command while such
+// a change's undo log is in the project. init and import lock the folder
+// they fill themselves, and the builds write only generated files, so they
+// take no lock. `run` receives { parsed, io, cwd, root, overrides,
+// defaulted }, where root() resolves the project path and overrides holds
+// the story.md severity overrides and the exemptions that name a code (see
+// findingOverrides), passed to applySeverity, and returns the exit code.
+// story.md cli-defaults are already merged into parsed.options; `defaulted`
+// names the flags they filled in.
 export const COMMANDS = [
   {
     name: "init",
@@ -853,6 +856,7 @@ export const COMMANDS = [
     project: "positional",
     options: ["fix", ...WRITE_OPTIONS],
     writes: (options) => isTruthy(options.fix),
+    recovers: true,
     run(context) {
       const { parsed, io, cwd, root, overrides } = context;
       const options = { displayPath: displayPath(parsed), overrides };
@@ -913,6 +917,7 @@ export const COMMANDS = [
     args: Infinity,
     options: ["id", "prose", ...WRITE_OPTIONS],
     writes: true,
+    recovers: true,
     run(context) {
       const { parsed, cwd } = context;
       const options = {
@@ -938,6 +943,7 @@ export const COMMANDS = [
     args: 2,
     options: WRITE_OPTIONS,
     writes: true,
+    recovers: true,
     run(context) {
       const { parsed } = context;
       const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
@@ -958,6 +964,7 @@ export const COMMANDS = [
     args: 2,
     options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
     writes: true,
+    recovers: true,
     run(context) {
       const { parsed } = context;
       const options = {
@@ -983,6 +990,7 @@ export const COMMANDS = [
     args: 1,
     options: ["at", "title", ...WRITE_OPTIONS],
     writes: true,
+    recovers: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
@@ -1002,6 +1010,7 @@ export const COMMANDS = [
     args: 2,
     options: WRITE_OPTIONS,
     writes: true,
+    recovers: true,
     run(context) {
       const { parsed } = context;
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
@@ -1239,8 +1248,18 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe, det
       writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
+  if (result.undone !== undefined) {
+    io.stderr.write(undoneNote(result.undone, dryRun));
+  }
   io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result, changes));
   return writeFindings(io, findings);
+}
+
+// What a split, merge, move, rename, or remove put back first: the change
+// another one left part way (see undo.js).
+function undoneNote({ command, files }, dryRun) {
+  const count = `${files.length} ${files.length === 1 ? "file" : "files"}`;
+  return `note: ${command} stopped part way, so this ${dryRun ? "would first put" : "first put"} back the ${count} it had changed\n`;
 }
 
 // Runs `write(projectRoot)`, recording the changes it makes, or with
@@ -1363,7 +1382,8 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
   }
   for (const repair of repairs) {
     const count = repair.changes.length === 0 ? "no changes" : `${repair.changes.length} ${repair.changes.length === 1 ? "change" : "changes"}`;
-    lines.push(`- story ${repair.command} (${repair.codes.join(", ")}): ${count}`);
+    // The undo is not a command of its own (see undo.js).
+    lines.push(`- ${repair.command === "undo" ? "Put back an interrupted change" : `story ${repair.command}`} (${repair.codes.join(", ")}): ${count}`);
     for (const change of repair.changes) {
       lines.push(`  ${change.action.padEnd(7)} ${change.path}`);
     }

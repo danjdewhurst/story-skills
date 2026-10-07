@@ -230,9 +230,12 @@ export function removeFile(filePath, options = {}) {
       fs.accessSync(path.dirname(path.resolve(filePath)), fs.constants.W_OK);
     }
   } else {
+    if (existed) {
+      logUndo(target, null);
+    }
     fs.rmSync(filePath, { force: Boolean(options.force) });
     if (existed) {
-      syncFolder(path.dirname(target));
+      afterChange(target);
     }
   }
   if (existed) {
@@ -434,8 +437,9 @@ function writeWholeFile(filePath, contents, options) {
         throw Object.assign(new Error(`Refusing to write ${projectPath(path.resolve(options.root), target)}: a folder on its path was replaced while story was writing it and now leads outside the project, so nothing was written there. Run the command again`), { changedOnDisk: true });
       }
     }
+    logUndo(target, contents);
     fs.renameSync(temporary, target);
-    syncFolder(path.dirname(target));
+    afterChange(target);
   } catch (error) {
     // Only a file this write made is removed.
     if (created) {
@@ -508,6 +512,106 @@ export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 // never existed. Hidden, never scanned, and in the starter .gitignore as a
 // `.story-*.tmp` file.
 export const RENAME_MARKER = ".story-rename.tmp";
+
+// At the project root while split, merge, move, rename, or remove changes
+// the project (see withUndoLog): what each file held before the command
+// changed it, so a run stopped part way can be put back (see undo.js).
+// Hidden, never scanned, and in the starter .gitignore as a `.story-*.tmp`
+// file.
+export const UNDO_LOG = ".story-undo.tmp";
+
+// The files an undo log may name, by their path from the project root:
+// markdown a scan reads (no part of the path starts with a dot) and the
+// rename marker. Those are all a command that keeps one changes, so a log
+// naming anything else, such as .git/config, was not written by story and
+// is never put back.
+export function isUndoablePath(relative) {
+  return relative === RENAME_MARKER
+    || (relative.endsWith(".md") && !relative.includes("\\") && relative.split("/").every((part) => part !== "" && !part.startsWith(".")));
+}
+
+// The SHA-256 of a file's contents, as an undo log records what a file was
+// about to hold.
+export function contentHash(contents) {
+  return crypto.createHash("sha256").update(contents).digest("hex");
+}
+
+// The undo log open in this process, or null.
+let undoLog = null;
+
+// Runs `run`, a command that changes several files, with an undo log for the
+// project at `root`. Before writeFile or removeFile changes a file in the
+// project, a line is added to UNDO_LOG with the file's path, a hash of what
+// it is about to hold (null when it is deleted), and, the first time, the
+// text it held (null when it did not exist), and the line is flushed to
+// disk before the change is made. The log is made at the first change, so a
+// command that stops before one leaves none, and is deleted once `run`
+// returns. When `run` throws after a change, or the process is killed or
+// the power fails, the log stays, so the changes can be put back
+// (undoInterruptedChange). `command` names the run in messages, such as
+// `story split chapter-03`. A call inside another adds to the outer log.
+export function withUndoLog(root, command, run) {
+  if (undoLog !== null) {
+    return run();
+  }
+  const log = { root: path.resolve(root), command, descriptor: null, seen: new Set(), changed: false };
+  undoLog = log;
+  let finished = false;
+  try {
+    const result = run();
+    finished = true;
+    return result;
+  } finally {
+    undoLog = null;
+    if (log.descriptor !== null) {
+      fs.closeSync(log.descriptor);
+      if (finished || !log.changed) {
+        fs.rmSync(path.join(log.root, UNDO_LOG), { force: true });
+        syncFolder(log.root);
+      }
+    }
+  }
+}
+
+// Adds the line for a change to `target` (`after` is what it is about to
+// hold, or null when it is deleted) to the open undo log, making the log
+// headed by its command at the first change, and flushes it to disk.
+function logUndo(target, after) {
+  const log = undoLog;
+  if (log === null || !isPathInside(log.root, target)) {
+    return;
+  }
+  const relative = projectPath(log.root, target);
+  if (!isUndoablePath(relative)) {
+    throw new Error(`${relative} is not a file the undo log of ${log.command} can put back`);
+  }
+  const entry = { path: relative, after: after === null ? null : contentHash(after) };
+  if (!log.seen.has(relative)) {
+    entry.before = lstatIfExists(target)?.isFile() ? readTextFile(target) : null;
+  }
+  let line = `${JSON.stringify(entry)}\n`;
+  const made = log.descriptor === null;
+  if (made) {
+    // Only this user can read it: it holds the text of the files it names.
+    log.descriptor = fs.openSync(path.join(log.root, UNDO_LOG), "ax", 0o600);
+    line = `${JSON.stringify({ command: log.command, started: new Date().toISOString() })}\n${line}`;
+  }
+  fs.writeFileSync(log.descriptor, line, "utf8");
+  fs.fsyncSync(log.descriptor);
+  if (made) {
+    syncFolder(log.root);
+  }
+  log.seen.add(relative);
+}
+
+// After a file was written or deleted: flushes its folder, and marks the
+// open undo log as having a change to put back.
+function afterChange(target) {
+  syncFolder(path.dirname(target));
+  if (undoLog !== null) {
+    undoLog.changed = true;
+  }
+}
 
 // The most of the target's name the temporary name keeps, in UTF-8 bytes:
 // with the leading dot, `.story-`, the 16-character suffix, and `.tmp`, it
