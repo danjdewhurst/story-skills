@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { LABEL_KEYS, languagePack } from "../src/languages/index.js";
 import { buildBook, createStoryProject } from "../src/story.js";
+import { UNSPACED_LETTERS } from "../src/words.js";
 import { makeTempDir, writeMarkdown } from "./helpers.js";
 
 // The languages with translated labels, and Traditional Chinese.
@@ -189,10 +190,13 @@ describe("codex labels", () => {
   // The death column's cell names the chapter and never repeats the
   // column's heading word (Turkish bölümde only contains ölüm).
   test("the death column does not repeat its heading", () => {
+    // A heading in Han, Kana, or Southeast Asian script has no spaces to
+    // find whole words by, so it is matched as text.
+    const unspaced = new RegExp(`[${UNSPACED_LETTERS}]`, "u");
     const repeats = TRANSLATED.filter((tag) => {
-      const { labels, segmentation } = languagePack(tag);
+      const { labels } = languagePack(tag);
       const [heading, cell] = [labels["codex-death"], labels["codex-dies-in-chapter"]];
-      return segmentation === "space" ? new RegExp(word(heading).source, "iu").test(cell) : cell.includes(heading);
+      return unspaced.test(heading) ? cell.includes(heading) : new RegExp(word(heading).source, "iu").test(cell);
     });
     expect(repeats).toEqual([]);
   });

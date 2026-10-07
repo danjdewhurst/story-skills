@@ -8,7 +8,6 @@ export default {
   name: "Hebrew",
   cased: false,
   script: "Hebr",
-  segmentation: "space",
   narrationRate: 125,
   labels: {
     chapter: "פרק {n}",

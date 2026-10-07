@@ -11,7 +11,6 @@ export default {
   name: "Chinese",
   cased: false,
   script: "Hans",
-  segmentation: "character",
   dialogueDash: null,
   countUnit: "characters",
   // Usual lengths by form, in characters, from the China Writers

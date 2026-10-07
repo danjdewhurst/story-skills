@@ -8,7 +8,6 @@ export default {
   name: "Hindi",
   cased: false,
   script: "Deva",
-  segmentation: "space",
   labels: {
     chapter: "अध्याय {n}",
     "chapter-heading": "{chapter}: {title}",
