@@ -41,6 +41,13 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
 // the base project sets no language, and the schema requires one for them.
 // test/schema.test.js checks the generated language patterns for them
 // against validate (#529); the test never sets language with those fields.
+
+// List entries whose values validate reads as text or ids, and the key
+// that holds them: any key, except in a route, where hours is a number and
+// validate asks for quotes around a mode as the schema does.
+const LIST_ENTRIES = [["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes", "to"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]];
+const entryKey = (key = "[^.\\]]+") => `\\]\\.${key}`;
+
 const EXCEPTIONS = [
   { kind: "chapter", field: "number", side: "validate", match: /^filename-number-mismatch/, reason: "the number must match the chapter's file name, which the schema never sees" },
   { kind: "scene", field: "chapter", side: "validate", match: /^filename-number-mismatch/, reason: "the chapter must match the scene's file name" },
@@ -57,13 +64,11 @@ const EXCEPTIONS = [
   { kind: "exemptions", field: "exemptions", side: "validate", reason: "an exemption's code must carry the chapter or file it names, and a pattern or file must match the project, which depend on the finding codes and the project's files" },
   // validate reads an unquoted number in a list entry as the text or id it
   // spells, so all-digit ids work (#169); the schema asks for the quotes.
-  ...[["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]]
-    .map(([kind, field]) => ({ kind, field, side: "schema", match: /: expected string, got (?:integer|number|boolean)$/, reason: "validate reads an unquoted number or other scalar in a list entry as the text or id it spells (#169)" })),
+  ...LIST_ENTRIES.map(([kind, field, key]) => ({ kind, field, side: "schema", match: new RegExp(`${entryKey(key)}: expected string, got (?:integer|number|boolean)$`), reason: "validate reads an unquoted number or other scalar in a list entry as the text or id it spells (#169)" })),
   // Ids in list entries are references: links reports one that names no
   // entity (which covers one that is not kebab-case), validate only that
   // each is a single value.
-  ...[["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]]
-    .map(([kind, field]) => ({ kind, field, side: "schema", match: /does not match \^\[a-z0-9\]\+/, reason: "an id in a list entry is a reference, which links checks against the project" })),
+  ...LIST_ENTRIES.map(([kind, field, key]) => ({ kind, field, side: "schema", match: new RegExp(`${entryKey(key)}: ".*" does not match \\^\\[a-z0-9\\]\\+`), reason: "an id in a list entry is a reference, which links checks against the project" })),
   // story continuity, not validate, requires the key that says whom or what
   // a state entry is about, and a knowledge-state entry's knows (#565).
   { kind: "state", field: "character-state", side: "schema", match: /: missing required character$/, reason: "story continuity reports a character-state entry with no character (state-missing-character)" },
@@ -426,6 +431,8 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
         const found = findingsWith("continuity/state.md", list, [`${list}:`, ...entry], "$.continuity");
         expect(found.schema, `${list} without ${key}`).toEqual([`$.continuity.${list}[0]: missing required ${key}`]);
         expect(found.continuity, `${list} without ${key}`).toContain(`continuity/state.md ${message}`);
+        // validate leaves these to story continuity on purpose.
+        expect(found.validate, `${list} without ${key}`).toEqual([]);
       }
       const whole = findingsWith("continuity/state.md", "knowledge-state", ["knowledge-state:", "  - character: mara-quill", "    knows: the tide turns at dusk"], "$.continuity");
       expect(whole.schema).toEqual([]);

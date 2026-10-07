@@ -73,8 +73,10 @@ export function withSession(sessions, date, counts) {
   return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
 }
 
+// A session's date as written, or "" when it is not text: a list such as
+// [2024-01-05] is not a date, though String would flatten it into one.
 function sessionDate(session) {
-  return String(session?.date ?? "").trim();
+  return typeof session?.date === "string" ? session.date.trim() : "";
 }
 
 // Valid sessions only, in date order, as { date, words, characters }, with

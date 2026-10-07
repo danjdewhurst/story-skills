@@ -130,6 +130,19 @@ exemptions:
     const conditional = { if: { properties: { calendar: false } }, then: { required: ["date"] } };
     expect(validateAgainstSchema({}, conditional)).toEqual(["$: missing required date"]);
     expect(validateAgainstSchema({ calendar: [] }, conditional)).toEqual([]);
+    // Wherever a subschema can stand: items, if, then, allOf, and a $ref.
+    expect(validateAgainstSchema([1, 2], { items: false })).toEqual(["$[0]: not allowed", "$[1]: not allowed"]);
+    expect(validateAgainstSchema([], { items: false })).toEqual([]);
+    expect(validateAgainstSchema([1], { items: true })).toEqual([]);
+    expect(validateAgainstSchema({ calendar: [] }, { if: { required: ["calendar"] }, then: false })).toEqual(["$: not allowed"]);
+    expect(validateAgainstSchema({}, { if: { required: ["calendar"] }, then: false })).toEqual([]);
+    expect(validateAgainstSchema({}, { if: false, then: { required: ["date"] } })).toEqual([]);
+    expect(validateAgainstSchema({}, { if: true, then: { required: ["date"] } })).toEqual(["$: missing required date"]);
+    expect(validateAgainstSchema(1, { allOf: [true, false] })).toEqual(["$: not allowed"]);
+    expect(validateAgainstSchema(1, { $ref: "#/$defs/never", $defs: { never: false } })).toEqual(["$: not allowed"]);
+    expect(validateAgainstSchema(1, { $ref: "#/$defs/always", $defs: { always: true } })).toEqual([]);
+    expect(() => validateAgainstSchema({}, { if: false })).toThrow("Schema if without then at #");
+    expect(() => validateAgainstSchema({}, { then: false })).toThrow("Schema then without if at #");
   });
 
   test("applies keywords beside $ref", () => {
@@ -353,6 +366,53 @@ status: alive
       `$.scenes[chapter-01-scene-01].date: "2023-02-29" does not match ${schema.$defs.realDateOrText.pattern}`
     ]);
     expect(errors("2024-13-45", { calendar: [{ month: "Thaw", days: 50 }] })).toEqual([]);
+  });
+
+  // Editors check frontmatter against the schema with backtracking regex
+  // engines, where two quantifiers that can match the same text, such as
+  // \s*(?:day)?\s*, take quadratic time on a long value that fails. So each
+  // generated pattern must do about 8 times the work on input 8 times as
+  // long; quadratic work would be about 64 times. Each run is repeated
+  // until it takes long enough to time, and the best of three counts.
+  test("the generated patterns take linear time on long input that fails", () => {
+    const time = (regex, text, repeat) => {
+      let best = Infinity;
+      for (let round = 0; round < 3; round += 1) {
+        const start = performance.now();
+        for (let index = 0; index < repeat; index += 1) {
+          regex.test(text);
+        }
+        best = Math.min(best, performance.now() - start);
+      }
+      return best;
+    };
+    const inputs = [
+      (n) => `${" ".repeat(n)}x`,
+      (n) => `2024-02-29${" ".repeat(n)}x`,
+      (n) => `${" ".repeat(n)}2024-02-29${" ".repeat(n)}x`,
+      (n) => `${"\t ".repeat(n)}[TODO`,
+      (n) => `ja${"-a".repeat(n)}!`,
+      (n) => `zh-yue${"-abcdefgh".repeat(n)} !`,
+      (n) => `${"a".repeat(n)}`,
+      (n) => `${"0".repeat(n)}-`,
+      (n) => `${"-".repeat(n)}`
+    ];
+    const slow = [];
+    for (const [pointer, source] of Object.entries(generatedPatterns())) {
+      const regex = new RegExp(source, "u");
+      for (const [index, input] of inputs.entries()) {
+        const short = input(500);
+        let repeat = 1;
+        while (time(regex, short, repeat) < 1 && repeat < 1 << 14) {
+          repeat *= 2;
+        }
+        const ratio = time(regex, input(4000), repeat) / time(regex, short, repeat);
+        if (ratio > 24) {
+          slow.push(`${pointer} input ${index}: ${ratio.toFixed(1)} times the work`);
+        }
+      }
+    }
+    expect(slow).toEqual([]);
   });
 
   test("the generated patterns are up to date (run node scripts/schema-patterns.js)", () => {

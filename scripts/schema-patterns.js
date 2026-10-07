@@ -232,13 +232,16 @@ export function nativeNumeralsLanguagePattern() {
   return languageTagPattern((tag) => nativeNumerals(tag) !== null);
 }
 
-// The generated patterns, by JSON pointer into the schema.
+// The generated patterns, by JSON pointer into the schema. Each runs in
+// linear time: no two quantifiers next to each other can match the same
+// text, so a backtracking validator never tries every split of a long
+// value.
 export function generatedPatterns() {
   const day = calendarDayPattern();
   return {
     "/$defs/realDate/pattern": `^\\s*${day}\\s*$`,
     "/$defs/realDateOrText/pattern": `^(?:(?!\\s*\\d{4}-\\d{2}-\\d{2}\\s*$)|\\s*${day}\\s*$)`,
-    "/properties/story/properties/publication-date/pattern": `^(?:\\s*${day}?\\s*$|\\s*\\[[Tt][Oo][Dd][Oo]\\b)`,
+    "/properties/story/properties/publication-date/pattern": `^(?:\\s*(?:${day}\\s*)?$|\\s*\\[[Tt][Oo][Dd][Oo]\\b)`,
     "/properties/story/allOf/0/then/properties/language/pattern": `^\\s*${verticalLanguagePattern()}\\s*$`,
     "/properties/story/allOf/1/then/properties/language/pattern": `^\\s*${nativeNumeralsLanguagePattern()}\\s*$`
   };

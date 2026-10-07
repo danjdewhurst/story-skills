@@ -125,7 +125,7 @@ function matchesType(value, type) {
 
 function resolveRef(schema, ref) {
   const target = ref.startsWith("#/") ? ref.slice(2).split("/").reduce((node, key) => node?.[key], schema) : undefined;
-  if (!target || typeof target !== "object") {
+  if (typeof target !== "boolean" && (!target || typeof target !== "object")) {
     throw new Error(`Unsupported $ref ${ref}`);
   }
   return target;
@@ -133,8 +133,9 @@ function resolveRef(schema, ref) {
 
 // Dependency-free validator for the JSON Schema keywords story.schema.json
 // and result.schema.json use, and for the boolean schemas true (anything)
-// and false (nothing, so `"calendar": false` under properties means no
-// calendar). Unknown keywords throw so the schemas cannot quietly outgrow it.
+// and false (nothing) wherever a subschema can stand, so `"calendar": false`
+// under properties means no calendar. Unknown keywords throw so the schemas
+// cannot quietly outgrow it.
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
   "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "exclusiveMinimum", "minLength",
@@ -160,7 +161,7 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
       assertSupportedSchema(child, root, `${at}/${group}/${key}`);
     }
   }
-  if (schema.items) {
+  if (schema.items !== undefined) {
     assertSupportedSchema(schema.items, root, `${at}/items`);
   }
   for (const [index, child] of (schema.allOf ?? []).entries()) {
@@ -168,11 +169,12 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
   }
   // `if` and `then` only work as a pair here (there is no `else`), so a
   // lone one is a mistake rather than a no-op.
-  if (Boolean(schema.if) !== Boolean(schema.then)) {
-    throw new Error(`Schema ${schema.if ? "if" : "then"} without ${schema.if ? "then" : "if"} at ${at}`);
+  const lone = schema.if === undefined ? "then" : "if";
+  if ((schema.if === undefined) !== (schema.then === undefined)) {
+    throw new Error(`Schema ${lone} without ${lone === "if" ? "then" : "if"} at ${at}`);
   }
   for (const keyword of ["if", "then"]) {
-    if (schema[keyword]) {
+    if (schema[keyword] !== undefined) {
       assertSupportedSchema(schema[keyword], root, `${at}/${keyword}`);
     }
   }
@@ -213,7 +215,7 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
   if (typeof value === "number" && schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
     errors.push(`${at}: ${value} must be greater than ${schema.exclusiveMinimum}`);
   }
-  if (Array.isArray(value) && schema.items) {
+  if (Array.isArray(value) && schema.items !== undefined) {
     value.forEach((item, index) => {
       const label = item && typeof item === "object" && typeof item.id === "string" ? `${at}[${item.id}]` : `${at}[${index}]`;
       errors.push(...validateAgainstSchema(item, schema.items, root, label));
@@ -235,7 +237,7 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
     errors.push(...validateAgainstSchema(value, child, root, at));
   }
   // `then` applies only when the value matches `if`.
-  if (schema.if && schema.then && validateAgainstSchema(value, schema.if, root, at).length === 0) {
+  if (schema.if !== undefined && validateAgainstSchema(value, schema.if, root, at).length === 0) {
     errors.push(...validateAgainstSchema(value, schema.then, root, at));
   }
   return errors;

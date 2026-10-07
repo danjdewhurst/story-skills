@@ -93,6 +93,17 @@ describe("story progress", () => {
     expect(fs.readFileSync(log, "utf8")).toBe(saved);
   });
 
+  // String would flatten [2026-09-01] into a date; validate reports it, and
+  // --log refuses to write until it is fixed.
+  test("a session whose date is a list is left out", () => {
+    const { root } = progressProject();
+    writeMarkdown(path.join(root, "progress.md"), "type: progress-log\nsessions:\n  - date: [2026-09-01]\n    words: 10\n  - date: 2026-09-02\n    words: 20", "# Progress Log\n");
+    const progress = projectProgress(root, { date: "2026-09-03" });
+    expect(progress.sessions).toBe(1);
+    expect(progress.lastSession.date).toBe("2026-09-02");
+    expect(() => projectProgress(root, { log: true, date: "2026-09-01" })).toThrow("progress.md sessions[0] date must be a YYYY-MM-DD date");
+  });
+
   test("--log refuses an unparsable progress.md and a bad --date", () => {
     const { root } = progressProject();
     expect(() => projectProgress(root, { date: "2026-02-30" })).toThrow("progress --date date must be a real YYYY-MM-DD calendar day, got 2026-02-30");
@@ -112,7 +123,7 @@ describe("story progress", () => {
   test("validate checks deadline, chapter targets, and the log", () => {
     const { root } = progressProject("deadline: 2026-13-01");
     writeChapter(root, 3, 10, "target-words: 0");
-    writeMarkdown(path.join(root, "progress.md"), "type: notes\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-09-01\n    words: -1\n  - words: 3\n  - nope\n  - date: \"  \"\n    words: 4\n  - date:\n    words: 4");
+    writeMarkdown(path.join(root, "progress.md"), "type: notes\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-09-01\n    words: -1\n  - words: 3\n  - nope\n  - date: \"  \"\n    words: 4\n  - date:\n    words: 4\n  - date: [2026-09-02]\n    words: 4\n  - date: 20260903\n    words: 4");
     const errors = messages(validateProject(root).errors);
 
     expect(errors).toContain("story.md deadline date must be a real YYYY-MM-DD calendar day, got 2026-13-01");
@@ -124,6 +135,9 @@ describe("story progress", () => {
     // A blank date, which story progress leaves out, is no date either.
     expect(errors).toContain("progress.md sessions[4] requires a date");
     expect(errors).toContain("progress.md sessions[5] requires a date");
+    // A list is not a date, though it holds one.
+    expect(errors).toContain("progress.md sessions[6] date must be a YYYY-MM-DD date");
+    expect(errors).toContain("progress.md sessions[7] date must be a YYYY-MM-DD date");
     expect(errors).toContain("progress.md frontmatter field sessions must contain objects");
   });
 
