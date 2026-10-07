@@ -18480,7 +18480,7 @@ function buildList(project, kindName, whereValues = [], queryName = undefined) {
     id: entity.id,
     file: path6.relative(project.root, entity.file).split(path6.sep).join("/"),
     title: String(entity[entry.title]),
-    fields: Object.fromEntries(keys.map((key) => [key, entity.frontmatter?.[key] ?? null]))
+    fields: Object.fromEntries(keys.map((key) => [key, ownField(entity.frontmatter ?? {}, key) ?? null]))
   }));
   return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items, warnings };
 }
@@ -18666,8 +18666,11 @@ function shownQuery({ item, index }) {
 function isMapping2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
+function ownField(frontmatter, key) {
+  return Object.hasOwn(frontmatter, key) ? frontmatter[key] : undefined;
+}
 function matches(frontmatter, filter) {
-  const value = frontmatter[filter.key];
+  const value = ownField(frontmatter, filter.key);
   switch (filter.op) {
     case "present":
       return isSet(value);

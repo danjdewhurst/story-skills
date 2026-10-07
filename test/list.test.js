@@ -214,6 +214,15 @@ describe("story list --query (#532)", () => {
     expect(out).toBe("chapter-10  Chapter 10  chapters/chapter-10.md  status=draft  pov=ilse  hook=cliffhanger\n");
   });
 
+  test("a query on a name every object inherits, such as constructor, matches only files that set it (#734)", () => {
+    const root = sampleProject();
+    configure(root, "queries:\n  - name: inherited\n    kind: chapters\n    where: [constructor]\n  - name: not-inherited\n    kind: chapters\n    where: [\"!constructor\"]");
+    expect(JSON.parse(invoke(root, ["list", "--query", "inherited", "--json"]).out).data.items).toEqual([]);
+    const unset = JSON.parse(invoke(root, ["list", "--query", "not-inherited", "--json"]).out).data;
+    expect(unset.items.map((item) => item.id)).toEqual(["chapter-01", "chapter-02", "chapter-09", "chapter-10"]);
+    expect(unset.items[0].fields).toEqual({ constructor: null });
+  });
+
   test("a kind given as well must be the query's, in either form", () => {
     const root = sampleProject();
     configure(root, QUERIES);

@@ -133,6 +133,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A file that fails to read or parse still exits `1`, as before.
 - `story timeline` names story calendar dates in its empty-state line. ([#703](https://github.com/danjdewhurst/story-skills/issues/703))
   - The line now reads `add date (YYYY-MM-DD, or a story calendar date) and time`, so a book with a `calendar` is not told to use only `YYYY-MM-DD`.
+- A saved query that filters on a name every object inherits, such as `where: [constructor]`, matches only the files that set that key. ([#734](https://github.com/danjdewhurst/story-skills/issues/734))
+  - Before, `constructor` matched every chapter, and `!constructor` matched none.
+  - Such a key now reads as unset, as the `query-unknown-key` warning already says.
 
 ## [0.23.0] - 2026-10-07
 
