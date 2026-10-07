@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
@@ -555,5 +557,25 @@ describe("sweep fixes", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "x the grey tide rose. y z the grey tide rose. w the grey tide rose.");
     expect(proseReport(root).phrases).toContainEqual({ phrase: "the grey tide rose", count: 3 });
+  });
+});
+
+describe("#708 long chapters", () => {
+  test("a chapter with 200,000 sentences reports its longest sentence without overflowing the stack", () => {
+    const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
+    if (probe.error || probe.status !== 0) {
+      console.warn("Skipping the Node sentence statistics check: node is not on PATH.");
+      return;
+    }
+    // Bun's stack takes far more spread arguments than Node's, so this runs
+    // the analysis under Node, where Math.max over 200,000 values threw.
+    const prose = pathToFileURL(path.join(import.meta.dirname, "..", "src", "prose.js")).href;
+    const script = `import(${JSON.stringify(prose)}).then(({ analyzeChapter, proseRules }) => {
+      const analysis = analyzeChapter("Go. ".repeat(200000), proseRules({}, []));
+      console.log(JSON.stringify(analysis.sentences));
+    })`;
+    const result = spawnSync("node", ["-e", script], { encoding: "utf8" });
+    expect(result.stderr).toBe("");
+    expect(JSON.parse(result.stdout)).toEqual({ count: 200000, mean: 1, longest: 1, spread: 0 });
   });
 });

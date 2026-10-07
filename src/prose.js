@@ -613,7 +613,10 @@ function sentenceStats(lengths) {
   }
   const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
   const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
-  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
+  // A loop, not Math.max(...lengths): spreading a long chapter's sentences
+  // into one call overflows the stack in Node.
+  const longest = lengths.reduce((most, value) => Math.max(most, value));
+  return { count: lengths.length, mean, longest, spread: Math.sqrt(variance) };
 }
 
 function countMatching(words, predicate, pack) {
