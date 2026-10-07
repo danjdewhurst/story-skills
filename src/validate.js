@@ -1325,6 +1325,12 @@ function validateLocations(project, errors, warnings) {
         errors.push(err("invalid-route-hours", `${label} route to ${route.to ?? "?"} hours must be a positive number`, label));
       }
       requireScalar(route, "mode", `${label} route to ${route.to ?? "?"}`, errors, label);
+      // mode is free text (ferry, on foot), and the codex and travel
+      // messages show it only when it is text, so ask for quotes as for
+      // other text fields.
+      if (typeof route.mode === "number" || typeof route.mode === "boolean") {
+        errors.push(err("field-not-text", `${label} route to ${route.to ?? "?"} mode must be text: quote it as mode: "${route.mode}"`, label));
+      }
     }
     validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
   }
@@ -1893,9 +1899,10 @@ export function validateProgressLog(project, errors) {
       return;
     }
     const label = `${PROGRESS_FILE} sessions[${index}]`;
-    const dateError = storyDateError(entry.date);
-    if (entry.date === undefined || dateError !== "") {
-      errors.push(err("invalid-date", `${label} ${dateError || "requires a date"}`, PROGRESS_FILE));
+    // A blank date is no date: story progress leaves the session out.
+    const dateError = String(entry.date ?? "").trim() === "" ? "requires a date" : storyDateError(entry.date);
+    if (dateError !== "") {
+      errors.push(err("invalid-date", `${label} ${dateError}`, PROGRESS_FILE));
     } else if (seen.has(String(entry.date).trim())) {
       errors.push(err("duplicate-session-date", `${label} repeats date ${String(entry.date).trim()}`, PROGRESS_FILE));
     } else {

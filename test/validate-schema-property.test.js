@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter, stringifyFrontmatter } from "../src/frontmatter.js";
-import { validateProject } from "../src/story.js";
+import { checkProjectContinuity, validateLinks, validateProject } from "../src/story.js";
 import { SCHEMA_PATH, buildSchemaDocument, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir } from "./helpers.js";
 
@@ -29,10 +29,11 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
   ? Math.floor(Math.random() * 2 ** 31)
   : Number(process.env.STORY_PROPERTY_SEED ?? 20260928);
 
-// Rules one side checks that the other cannot express, and deliberate
-// differences. Each names the kind and field mutated and the side that
-// rejected; `match`, when set, must match that side's first reason, so an
-// exception cannot hide a different disagreement on the same field.
+// Rules one side checks that the other cannot express, rules another
+// command owns, and deliberate differences. Each names the kind and field
+// mutated and the side that rejected; `match`, when set, must match each of
+// that side's reasons, so an exception cannot hide a different
+// disagreement on the same field.
 //
 // writing-mode: vertical and chapter-numerals: native need no exception:
 // the base project sets no language, and the schema requires one for them.
@@ -65,7 +66,11 @@ const EXCEPTIONS = [
   // each is a single value.
   ...[["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]]
     .map(([kind, field]) => ({ kind, field, side: "schema", match: /does not match \^\[a-z0-9\]\+/, reason: "an id in a list entry is a reference, which links checks against the project" })),
-  { kind: "research", field: "used-in", side: "schema", match: /does not match/, reason: "used-in names chapters, which links checks against the project; validate checks only that each is text" }
+  // story continuity, not validate, requires the key that says whom or what
+  // a state entry is about, and a knowledge-state entry's knows (#565).
+  { kind: "state", field: "character-state", side: "schema", match: /: missing required character$/, reason: "story continuity reports a character-state entry with no character (state-missing-character)" },
+  { kind: "state", field: "object-state", side: "schema", match: /: missing required artifact$/, reason: "story continuity reports an object-state entry with no artifact (state-missing-artifact)" },
+  { kind: "state", field: "knowledge-state", side: "schema", match: /: missing required (?:character|knows)$/, reason: "story continuity reports a knowledge-state entry with no character or knows (state-missing-character, state-missing-knows)" }
 ];
 
 const deref = (node) => (node?.$ref ? deref(node.$ref.slice(2).split("/").reduce((at, key) => at[key], schema)) : node ?? {});
@@ -392,6 +397,61 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
       expect(errorsWith("continuity/state.md", "character-state", ["character-state:", "  - character: mara-quill", "    emotional: []"])).toEqual(["continuity/state.md character-state[0] emotional must be a single value, not a list"]);
       // An undocumented key stays free-form, as the schema leaves it.
       expect(errorsWith("continuity/state.md", "character-state", ["character-state:", "  - character: mara-quill", "    mood-notes: []"])).toEqual([]);
+    });
+  });
+
+  // Where the schema and the CLI disagreed in both directions (#565): each
+  // rewrite returns the schema's errors under `prefix` and each command's
+  // messages for the file.
+  describe("the rules the schema and the CLI now share", () => {
+    function findingsWith(file, key, lines, prefix) {
+      const root = baseProject();
+      const target = path.join(root, file);
+      fs.writeFileSync(target, withField(fs.readFileSync(target, "utf8"), key, lines));
+      const about = (findings) => findings.filter((finding) => finding.file === file).map((finding) => finding.message);
+      return {
+        schema: validateAgainstSchema(buildSchemaDocument(root), schema).filter((error) => error.startsWith(prefix)),
+        validate: about(validateProject(root).errors),
+        links: about(validateLinks(root).errors),
+        continuity: about(checkProjectContinuity(root).errors)
+      };
+    }
+
+    test("a state entry names its character or artifact, and knowledge has knows, as story continuity requires", () => {
+      const cases = [
+        ["character-state", ["  - location: the-mill"], "character", "character-state[0] references missing character (unset)"],
+        ["object-state", ["  - owner: mara-quill"], "artifact", "object-state[0] references missing artifact (unset)"],
+        ["knowledge-state", ["  - knows: the tide turns at dusk"], "character", "knowledge-state[0] references missing character (unset)"],
+        ["knowledge-state", ["  - character: mara-quill"], "knows", "knowledge-state[0] is missing knows"]
+      ];
+      for (const [list, entry, key, message] of cases) {
+        const found = findingsWith("continuity/state.md", list, [`${list}:`, ...entry], "$.continuity");
+        expect(found.schema, `${list} without ${key}`).toEqual([`$.continuity.${list}[0]: missing required ${key}`]);
+        expect(found.continuity, `${list} without ${key}`).toContain(`continuity/state.md ${message}`);
+      }
+      const whole = findingsWith("continuity/state.md", "knowledge-state", ["knowledge-state:", "  - character: mara-quill", "    knows: the tide turns at dusk"], "$.continuity");
+      expect(whole.schema).toEqual([]);
+      expect(whole.continuity).toEqual([]);
+    });
+
+    test("a route's mode is text for both", () => {
+      const routes = (mode) => ["routes:", "  - to: the-mill", "    hours: 2", `    mode: ${mode}`];
+      const number = findingsWith("worldbuilding/locations/the-mill.md", "routes", routes("3"), "$.worldbuilding.locations[the-mill]");
+      expect(number.schema).toEqual(["$.worldbuilding.locations[the-mill].routes[0].mode: expected string, got integer"]);
+      expect(number.validate).toEqual(["worldbuilding/locations/the-mill.md route to the-mill mode must be text: quote it as mode: \"3\""]);
+      const text = findingsWith("worldbuilding/locations/the-mill.md", "routes", routes("ferry"), "$.worldbuilding.locations[the-mill]");
+      expect(text.schema).toEqual([]);
+      expect(text.validate).toEqual([]);
+    });
+
+    test("used-in is a list of text for both, and story links checks the chapters", () => {
+      const named = findingsWith("research/lighthouses.md", "used-in", ["used-in:", "  - Chapter One"], "$.research[lighthouses]");
+      expect(named.schema).toEqual([]);
+      expect(named.validate).toEqual([]);
+      expect(named.links).toEqual(["research/lighthouses.md references chapter Chapter One which must be kebab-case"]);
+      const empty = findingsWith("research/lighthouses.md", "used-in", ["used-in:", "  - \"\""], "$.research[lighthouses]");
+      expect(empty.schema).toEqual(["$.research[lighthouses].used-in[0]: \"\" does not match \\S"]);
+      expect(empty.validate).toEqual(["research/lighthouses.md frontmatter field used-in must contain only non-empty strings"]);
     });
   });
 });

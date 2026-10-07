@@ -685,7 +685,7 @@ routes:
 | `routes[].hours` | number > 0 | yes | The fastest the journey can be made, in hours. |
 | `routes[].mode` | string | no | Free text, such as `cart`, `ferry`, or `on foot`. |
 
-A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is a list or mapping rather than a single value. `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
+A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is not text: a list, a mapping, or a number or `true` written without quotes (`mode: "4"`). `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
 
 ### Systems
 
