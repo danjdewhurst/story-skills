@@ -621,24 +621,25 @@ Templates from 0.21.0 and earlier pinned a git tag with `STORY_REF: "v0.20.0"` a
 - [P3] Rename workflow STORY_REF: .github/workflows/review-copy.yml:47 sets the legacy STORY_REF; change the line to STORY_VERSION: "<cli>" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).
 ```
 
-A newer pin means CI runs checks your CLI does not have yet, so the note asks you to update the CLI rather than the workflow. It names the command for the way you installed the CLI, judged from where its code runs:
+A newer pin means CI runs checks your CLI does not have yet, so the note asks you to update the CLI rather than the workflow. All the newer pins share one note, which lists each line and names the newest release (with each line's release in brackets when they differ). It names the command for the way you installed the CLI, judged from where its code runs:
 
 | Installed with | The note says |
 |---|---|
 | `npm install -g` | `update it with npm install -g story-skills@<new>` |
 | A `package.json` dependency | `update the story-skills dependency in <folder>/package.json to <new>` |
-| `npx` or `bunx` | `run that release with npx story-skills@<new>` (or `bunx`) |
+| `npx` | `install that release with npm install -g story-skills@<new>` |
+| `bunx` | `install that release with bun add -g story-skills@<new>` |
 | `bun add -g` | `update it with bun add -g story-skills@<new>` |
 | Homebrew | `update it with brew upgrade story-skills` |
 | A downloaded binary | `download the <new> binary for your system from` the release page |
 | The bundled `scripts/story.js` in the skills | `update the Story Skills plugin or skills, which carry this bundled CLI` |
-| A clone of this repository | `update the clone in <folder> with git pull` |
+| A clone of this repository | `update the clone in <folder> with git pull`, or, with a release tag checked out, `with git fetch --tags and git checkout v<new>` |
 
-Any other layout, such as pnpm, gets `update it to <new>` and a pointer to [Update, pin, or remove](getting-started.md#update-pin-or-remove).
+`npx` and `bunx` users are told to install globally because `npx` reads the `.npmrc` in the folder it runs in, and a cloned story repository can carry one that points at another registry; a global npm or Bun install ignores the project's `.npmrc` and `bunfig.toml`. Any other layout, such as pnpm, Yarn Plug'n'Play, or `story-skills` as a dependency of another package, gets `update it to <new>` and a pointer to [Update, pin, or remove](getting-started.md#update-pin-or-remove).
 
-Versions compare in semver order: `1.0.0-rc.1` is older than `1.0.0` and newer than `0.9.0`, and build metadata such as `+ci.7` does not count. A `STORY_VERSION` that is not one exact release, such as `latest`, a range like `^0.22.0`, or `0.22`, gets no version note, since `doctor` cannot tell which release CI installs.
+Versions compare in semver order: `1.0.0-rc.1` is older than `1.0.0` and newer than `0.9.0`, and build metadata such as `+ci.7` does not count. A `STORY_VERSION` that is not one exact release gets no version note, since `doctor` cannot tell which release CI installs. That covers `latest`, a range like `^0.22.0`, `0.22`, a number with a leading zero or too large to compare exactly, and a prerelease or build label over 64 characters.
 
-A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line, and one that names a branch or commit gets a `STORY_PACKAGE` line instead. A workflow with an uncommented `STORY_PACKAGE` line gets no `STORY_VERSION` note, since its install step does not use that pin. When there is a workflow note, the `Project is mechanically healthy` action is left out.
+A legacy `STORY_REF` that names a release newer than the CLI keeps that release, prerelease included, in the suggested line, and one that names a branch or commit gets a `STORY_PACKAGE` line instead. The note repeats the ref only when it is at most 100 letters, digits, and `_./@+-`, and says `<ref>` otherwise. A non-empty, uncommented `STORY_PACKAGE` silences the `STORY_VERSION` notes in its own `env` block and in the jobs and steps inside its owner, since their install step does not use that pin. So one at the top of the file covers the whole workflow, one in a job covers that job, and one in a step covers that step. An empty `STORY_PACKAGE: ""` does not count, as the templates' `${STORY_PACKAGE:-...}` treats it as unset. When there is a workflow note, the `Project is mechanically healthy` action is left out.
 
 It reads only the `STORY_VERSION:` and `STORY_REF:` lines, ignores commented-out ones, and says nothing when there is no workflows folder. A workflow file that is a symlink, a FIFO, or larger than 5 MiB is skipped without being read. `story next` and `story report` leave it out. Keeping your local CLI current and running `story doctor` now and then is enough to notice a stale pin.
 

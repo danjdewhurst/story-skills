@@ -10,7 +10,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Added
 
-- `story doctor` adds a `[P3] Update local CLI version` action when a copied workflow's `STORY_VERSION` is newer than the CLI you run, since CI then reports findings your local checks miss. It names the update command for how the CLI was installed (npm, npx, bunx, Bun, Homebrew, a downloaded binary, the skills' bundled copy, or a clone) when it can tell. Pins now compare in semver order, so `1.0.0-rc.1` is older than `1.0.0`, and a pin that is not one exact release, such as `latest`, gets no version note. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
+- `story doctor` adds one `[P3] Update local CLI version` action when copied workflows pin a `STORY_VERSION` newer than the CLI you run, since CI then reports findings your local checks miss. It names the update command for how the CLI was installed (npm, Bun, Homebrew, a downloaded binary, the skills' bundled copy, or a clone) when it can tell. Pins now compare in semver order, so `1.0.0-rc.1` is older than `1.0.0`, and a pin that is not one exact release, such as `latest`, gets no version note. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
 
 ### Changed
 
@@ -21,6 +21,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
+- `story doctor` no longer lets an empty `STORY_PACKAGE`, or one set in another job or step, hide a workflow's `STORY_VERSION` note. Only a non-empty `STORY_PACKAGE` counts, and only for the workflow, job, or step whose `env` sets it. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
 - `cli-defaults` in `story.md` can no longer name `split` or `merge`, so a default `at` cannot make `story split chapter-01` split without `--at`. `story validate` reports such an entry, and other commands refuse to run until it is gone, as for `add`, `rename`, `move`, `remove`, and `knowledge`. ([#566](https://github.com/danjdewhurst/story-skills/issues/566))
 - `story check` refuses to run with exit code 3 while `cli-defaults` or `severity` in `story.md` is invalid, as `links` and `continuity` do. Before, it ran without the project's severity overrides and exited 1. ([#566](https://github.com/danjdewhurst/story-skills/issues/566))
 - An error ends with `(story.md cli-defaults set ...)` only when it is about a flag a default filled in, such as an `--out` file it cannot write. Before, any error that held a default's value blamed it, so `story progress --date 2024-13-02` blamed a default `weeks: 2`. ([#566](https://github.com/danjdewhurst/story-skills/issues/566))

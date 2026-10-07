@@ -30,9 +30,29 @@ function writeWorkflow(dir, name, text) {
 const [major, minor, patch] = VERSION.split(".").map(Number);
 const older = patch > 0 ? `${major}.${minor}.${patch - 1}` : minor > 0 ? `${major}.${minor - 1}.0` : "0.0.0";
 const newer = `${major}.${minor}.${patch + 1}`;
+const newest = `${major}.${minor + 1}.0`;
 
 function pinLines(out) {
   return out.split("\n").filter((line) => line.includes("workflow"));
+}
+
+// The update command in the newer-pin note when `script` runs doctor.
+function spawnHint(script, root) {
+  const result = spawnSync(process.execPath, [script, "doctor", root], { encoding: "utf8", timeout: 20000 });
+  expect(result.status).toBe(0);
+  const lines = pinLines(result.stdout);
+  expect(lines).toHaveLength(1);
+  return lines[0].replace(/^.* story check here does not; /, "").replace(/\.$/, "");
+}
+
+// A copy of the CLI's bin/ and src/ at `dir`, as an install lays it out.
+function copyCli(dir) {
+  const repoDir = path.resolve(import.meta.dir, "..");
+  for (const name of ["bin", "src"]) {
+    fs.cpSync(path.join(repoDir, name), path.join(dir, name), { recursive: true });
+  }
+  fs.copyFileSync(path.join(repoDir, "package.json"), path.join(dir, "package.json"));
+  return path.join(dir, "bin", "story.js");
 }
 
 describe("story doctor workflow pins", () => {
@@ -60,11 +80,23 @@ describe("story doctor workflow pins", () => {
   test("notes a STORY_VERSION newer than the CLI, with how to update this CLI (#536)", () => {
     const { repo, root } = newRepo();
     writeWorkflow(repo, "story-checks.yml", `env:\n  STORY_VERSION: "v${newer}+ci.7"\n`);
-    const hint = cliUpdateHint(newer);
-    // The suite runs from a clone of this repository.
-    expect(hint).toBe(`update the clone in ${path.resolve(import.meta.dir, "..").replace(/\\/g, "/")} with git pull`);
     expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
-      `- [P3] Update local CLI version: ../.github/workflows/story-checks.yml:2 installs story-skills ${newer}, newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${hint}.`
+      `- [P3] Update local CLI version: ../.github/workflows/story-checks.yml:2 installs story-skills ${newer}, newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${cliUpdateHint(newer)}.`
+    ]);
+  });
+
+  test("gives one note for every newer pin, naming the newest release (#536)", () => {
+    const { repo, root } = newRepo();
+    writeWorkflow(repo, "a.yml", `env:\n  STORY_VERSION: "${newer}"\n`);
+    writeWorkflow(root, "b.yml", `env:\n  STORY_VERSION: "${newer}"\n`);
+    writeWorkflow(root, "c.yml", `env:\n  STORY_VERSION: "${newer}"\n`);
+    const tail = `newer than this CLI (${VERSION}), so CI can report findings that story check here does not;`;
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
+      `- [P3] Update local CLI version: .github/workflows/b.yml:2, .github/workflows/c.yml:2 and ../.github/workflows/a.yml:2 install story-skills ${newer}, ${tail} ${cliUpdateHint(newer)}.`
+    ]);
+    writeWorkflow(root, "c.yml", `env:\n  STORY_VERSION: "${newest}"\n`);
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
+      `- [P3] Update local CLI version: .github/workflows/b.yml:2 (${newer}), .github/workflows/c.yml:2 (${newest}) and ../.github/workflows/a.yml:2 (${newer}) install story-skills releases ${tail} ${cliUpdateHint(newest)}.`
     ]);
   });
 
@@ -72,7 +104,8 @@ describe("story doctor workflow pins", () => {
     const { root } = newRepo();
     writeWorkflow(root, "a.yml", `env:\n  STORY_VERSION: "${VERSION}-rc.1"\n`);
     writeWorkflow(root, "b.yml", `env:\n  STORY_VERSION: "${newer}-rc.1"\n`);
-    for (const [index, value] of ["latest", `^${VERSION}`, `${major}.${minor}`, `${newer}junk`, `${newer}.1`, ""].entries()) {
+    const skipped = ["latest", `^${VERSION}`, `${major}.${minor}`, `${newer}junk`, `${newer}.1`, "", `${major}.0${minor + 1}.0`, `${newer}-01`, `${major}.${minor}.9007199254740993`, `${newer}-${"a".repeat(65)}`];
+    for (const [index, value] of skipped.entries()) {
       writeWorkflow(root, `skip-${index}.yml`, `env:\n  STORY_VERSION: "${value}"\n`);
     }
     expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
@@ -82,39 +115,95 @@ describe("story doctor workflow pins", () => {
   });
 
   test("compares versions in semver order, ignoring build metadata", () => {
-    const ordered = ["1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "1.0.1", "1.2.0", "2.0.0"];
-    const shuffled = [...ordered].reverse().map(parseVersion);
-    expect(shuffled.sort(compareVersions).map((version) => version.text)).toEqual(ordered);
+    const ordered = ["1.0.0-0", "1.0.0-2", "1.0.0-10", "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11", "1.0.0-rc.1", "1.0.0", "1.0.1", "1.2.0", "2.0.0"];
+    const parsed = ordered.map(parseVersion);
+    for (const [i, left] of parsed.entries()) {
+      for (const [j, right] of parsed.entries()) {
+        expect([ordered[i], ordered[j], Math.sign(compareVersions(left, right))]).toEqual([ordered[i], ordered[j], Math.sign(i - j)]);
+      }
+    }
     expect(compareVersions(parseVersion("1.0.0+a"), parseVersion("v1.0.0+b"))).toBe(0);
-    expect(compareVersions(parseVersion("1.0.0-rc.1"), parseVersion("1.0.0-rc.1"))).toBe(0);
     expect(parseVersion("v1.2.3-rc.1+build.4")).toEqual({ numbers: [1, 2, 3], pre: ["rc", "1"], text: "1.2.3-rc.1" });
     expect(parseVersion("1.2.3+build.4").text).toBe("1.2.3");
-    for (const value of ["latest", "1.2", "1.2.3.4", "1.2.3-", "1.2.3-rc..1", "1.2.3 ", "x1.2.3", ""]) {
-      expect(parseVersion(value)).toBeNull();
+    for (const value of ["1.2.3-0a", `1.2.3-${"a".repeat(64)}`, `1.2.3+${"a".repeat(64)}`, "9007199254740991.0.0"]) {
+      expect(parseVersion(value)).not.toBeNull();
+    }
+    const invalid = ["latest", "1.2", "1.2.3.4", "1.2.3-", "1.2.3-rc..1", "1.2.3 ", "x1.2.3", "", "01.2.3", "1.02.3", "1.2.03", "1.2.3-01", "9007199254740992.0.0", "1.2.3-9007199254740992", `1.2.3-${"a".repeat(65)}`, `1.2.3+${"a".repeat(65)}`];
+    for (const value of invalid) {
+      expect([value, parseVersion(value)]).toEqual([value, null]);
     }
   });
 
   test("names the update command for how the CLI was installed (#536)", () => {
     const missing = path.join(makeTempDir(), "missing");
     const at = (file, execPath = missing) => cliUpdateHint("9.1.0", file, execPath);
+    const slash = (file) => file.replace(/\\/g, "/");
+    const docs = "update it to 9.1.0 (see Update or pin the CLI in docs/getting-started.md)";
     expect(at("/$bunfs/root/story", "/home/linuxbrew/.linuxbrew/Cellar/story-skills/9.0.0/bin/story")).toBe("update it with brew upgrade story-skills");
     expect(at("B:\\~BUN\\root\\story.exe", "C:\\Users\\a\\story.exe")).toBe("download the 9.1.0 binary for your system from https://github.com/danjdewhurst/story-skills/releases/tag/v9.1.0");
-    expect(at("/home/a/.npm/_npx/3f99/node_modules/story-skills/src/workflows.js")).toBe("run that release with npx story-skills@9.1.0");
-    expect(at("C:\\Users\\a\\AppData\\Local\\npm-cache\\_npx\\3f99\\node_modules\\story-skills\\src\\workflows.js")).toBe("run that release with npx story-skills@9.1.0");
-    expect(at("/tmp/bunx-1000-story-skills@latest/node_modules/story-skills/src/workflows.js")).toBe("run that release with bunx story-skills@9.1.0");
+    // npx and bunx would read the project's .npmrc or bunfig.toml, so their
+    // users get the global install.
+    expect(at("/home/a/.npm/_npx/3f99/node_modules/story-skills/src/workflows.js")).toBe("install that release with npm install -g story-skills@9.1.0");
+    expect(at("C:\\Users\\a\\AppData\\Local\\npm-cache\\_npx\\3f99\\node_modules\\story-skills\\src\\workflows.js")).toBe("install that release with npm install -g story-skills@9.1.0");
+    expect(at("/tmp/bunx-1000-story-skills@latest/node_modules/story-skills/src/workflows.js")).toBe("install that release with bun add -g story-skills@9.1.0");
     expect(at("/home/a/.bun/install/global/node_modules/story-skills/src/workflows.js")).toBe("update it with bun add -g story-skills@9.1.0");
-    const npmPrefix = path.join(makeTempDir(), "lib").replace(/\\/g, "/");
-    expect(at(`${npmPrefix}/node_modules/story-skills/src/workflows.js`)).toBe("update it with npm install -g story-skills@9.1.0");
-    const book = makeTempDir();
-    fs.writeFileSync(path.join(book, "package.json"), "{}\n");
-    const dependency = book.replace(/\\/g, "/");
-    expect(at(`${dependency}/node_modules/story-skills/src/workflows.js`)).toBe(`update the story-skills dependency in ${dependency}/package.json to 9.1.0`);
-    expect(at("/home/a/.local/share/pnpm/global/5/node_modules/.pnpm/story-skills@9.0.0/node_modules/story-skills/src/workflows.js")).toBe("update it to 9.1.0 (see Update or pin the CLI in docs/getting-started.md)");
+    const base = makeTempDir();
+    expect(at(`${slash(base)}/lib/node_modules/story-skills/src/workflows.js`)).toBe("update it with npm install -g story-skills@9.1.0");
+    expect(at("C:\\Users\\a\\AppData\\Roaming\\npm\\node_modules\\story-skills\\src\\workflows.js")).toBe("update it with npm install -g story-skills@9.1.0");
+    expect(at("C:\\nvm4w\\nodejs\\node_modules\\story-skills\\src\\workflows.js")).toBe("update it with npm install -g story-skills@9.1.0");
+    expect(at(`${slash(base)}/elsewhere/node_modules/story-skills/src/workflows.js`)).toBe(docs);
+    fs.writeFileSync(path.join(base, "package.json"), "{}\n");
+    expect(at(`${slash(base)}/node_modules/story-skills/src/workflows.js`)).toBe(`update the story-skills dependency in ${slash(base)}/package.json to 9.1.0`);
+    // Another package's dependency, pnpm's store, and a Yarn Plug'n'Play zip.
+    expect(at(`${slash(base)}/node_modules/foo/node_modules/story-skills/src/workflows.js`)).toBe(docs);
+    expect(at("/home/a/.local/share/pnpm/global/5/node_modules/.pnpm/story-skills@9.0.0/node_modules/story-skills/src/workflows.js")).toBe(docs);
+    expect(at(`${slash(base)}/.yarn/cache/story-skills-npm-9.0.0-1a2b.zip/node_modules/story-skills/src/workflows.js`)).toBe(docs);
     expect(at("/home/a/.claude/plugins/cache/story-skills/story-skills/9.0.0/skills/story-maintenance/scripts/story.js")).toBe("update the Story Skills plugin or skills, which carry this bundled CLI (see Update the skills in docs/getting-started.md)");
+  });
+
+  test("tells a clone on a branch to pull and one on a release tag to check out the new tag (#536)", () => {
     const clone = makeTempDir();
-    expect(at(`${clone.replace(/\\/g, "/")}/src/workflows.js`)).toBe("update it to 9.1.0 (see Update or pin the CLI in docs/getting-started.md)");
-    fs.writeFileSync(path.join(clone, ".git"), "gitdir: elsewhere\n");
-    expect(at(`${clone.replace(/\\/g, "/")}/src/workflows.js`)).toBe(`update the clone in ${clone.replace(/\\/g, "/")} with git pull`);
+    const at = () => cliUpdateHint("9.1.0", `${clone.replace(/\\/g, "/")}/src/workflows.js`);
+    expect(at()).toBe("update it to 9.1.0 (see Update or pin the CLI in docs/getting-started.md)");
+    fs.mkdirSync(path.join(clone, ".git"));
+    fs.writeFileSync(path.join(clone, ".git", "HEAD"), "ref: refs/heads/main\n");
+    expect(at()).toBe(`update the clone in ${clone.replace(/\\/g, "/")} with git pull`);
+    fs.writeFileSync(path.join(clone, ".git", "HEAD"), "0123456789abcdef0123456789abcdef01234567\n");
+    expect(at()).toBe(`update the clone in ${clone.replace(/\\/g, "/")} with git fetch --tags and git checkout v9.1.0`);
+    // A linked worktree's .git file names its git folder.
+    fs.renameSync(path.join(clone, ".git"), path.join(clone, "worktree-git"));
+    fs.writeFileSync(path.join(clone, ".git"), "gitdir: worktree-git\n");
+    expect(at()).toContain("git checkout v9.1.0");
+    fs.writeFileSync(path.join(clone, ".git"), "not a gitdir line\n");
+    expect(at()).toBe("update it to 9.1.0 (see Update or pin the CLI in docs/getting-started.md)");
+  });
+
+  test("names the update command from where the running CLI's code is (#536)", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "story-checks.yml", `env:\n  STORY_VERSION: "${newer}"\n`);
+    const repoDir = path.resolve(import.meta.dir, "..");
+    expect(spawnHint(path.join(repoDir, "skills", "story-maintenance", "scripts", "story.js"), root)).toBe("update the Story Skills plugin or skills, which carry this bundled CLI (see Update the skills in docs/getting-started.md)");
+    // bin/story.js runs the same src/workflows.js as this test.
+    expect(spawnHint(path.join(repoDir, "bin", "story.js"), root)).toBe(cliUpdateHint(newer));
+  });
+
+  // The runtime reports a module's real path, which on Windows can differ
+  // from a temporary folder's 8.3 short name.
+  test.skipIf(process.platform === "win32")("names the update command for a copy of the CLI where each install puts it (#536)", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "story-checks.yml", `env:\n  STORY_VERSION: "${newer}"\n`);
+    const base = fs.realpathSync(makeTempDir());
+    const novel = path.join(base, "novel");
+    fs.mkdirSync(novel);
+    fs.writeFileSync(path.join(novel, "package.json"), "{}\n");
+    expect(spawnHint(copyCli(path.join(novel, "node_modules", "story-skills")), root)).toBe(`update the story-skills dependency in ${novel}/package.json to ${newer}`);
+    expect(spawnHint(copyCli(path.join(base, "lib", "node_modules", "story-skills")), root)).toBe(`update it with npm install -g story-skills@${newer}`);
+    const clone = path.join(base, "story-skills");
+    const script = copyCli(clone);
+    expect(spawnHint(script, root)).toBe(`update it to ${newer} (see Update or pin the CLI in docs/getting-started.md)`);
+    fs.mkdirSync(path.join(clone, ".git"));
+    fs.writeFileSync(path.join(clone, ".git", "HEAD"), "ref: refs/heads/main\n");
+    expect(spawnHint(script, root)).toBe(`update the clone in ${clone} with git pull`);
   });
 
   test.skipIf(process.platform === "win32")("follows a symlinked binary into Homebrew's Cellar (#536)", () => {
@@ -189,6 +278,64 @@ describe("story doctor workflow pins", () => {
     const lines = pinLines(invoke(root, ["doctor"]).out);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(".github/workflows/b.yml:2 installs");
+  });
+
+  test("keeps a STORY_REF prerelease, and shows a STORY_REF that is not one release only when it looks like a ref (#536)", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "a.yml", `env:\n  STORY_REF: "v${newer}-rc.1"\n`);
+    writeWorkflow(root, "b.yml", `env:\n  STORY_REF: "v${newer}junk"\n`);
+    writeWorkflow(root, "c.yml", `env:\n  STORY_REF: "0.22"\n`);
+    writeWorkflow(root, "d.yml", `env:\n  STORY_REF: "${"x".repeat(101)}"\n`);
+    writeWorkflow(root, "e.yml", `env:\n  STORY_REF: "ref\u001b[2J"\n`);
+    writeWorkflow(root, "f.yml", `env:\n  STORY_REF: ""\n`);
+    const copy = "and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).";
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
+      `- [P3] Rename workflow STORY_REF: .github/workflows/a.yml:2 sets the legacy STORY_REF; change the line to STORY_VERSION: "${newer}-rc.1" ${copy}`,
+      `- [P3] Rename workflow STORY_REF: .github/workflows/b.yml:2 sets the legacy STORY_REF to v${newer}junk; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#v${newer}junk" ${copy}`,
+      `- [P3] Rename workflow STORY_REF: .github/workflows/c.yml:2 sets the legacy STORY_REF to 0.22; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#0.22" ${copy}`,
+      `- [P3] Rename workflow STORY_REF: .github/workflows/d.yml:2 sets the legacy STORY_REF to a value that is not a release; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#<ref>" ${copy}`,
+      `- [P3] Rename workflow STORY_REF: .github/workflows/e.yml:2 sets the legacy STORY_REF to a value that is not a release; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#<ref>" ${copy}`,
+      `- [P3] Rename workflow STORY_REF: .github/workflows/f.yml:2 sets the legacy STORY_REF to an empty value; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#<ref>" ${copy}`
+    ]);
+  });
+
+  test("counts only a non-empty STORY_PACKAGE, set for the pin's own workflow, job, or step (#536)", () => {
+    const { root } = newRepo();
+    writeWorkflow(root, "empty.yml", `env:\n  STORY_VERSION: "${newer}"\n  STORY_PACKAGE: ""\n`);
+    const jobs = [
+      "env:",
+      `  STORY_VERSION: "${older}"`,
+      "jobs:",
+      "  a:",
+      "    env:",
+      '      STORY_PACKAGE: "github:danjdewhurst/story-skills#main"',
+      "    steps:",
+      "      - name: Install",
+      "        env:",
+      `          STORY_VERSION: "${older}"`,
+      "  b:",
+      "    steps:",
+      "      - name: Install",
+      "        env:",
+      `          STORY_VERSION: "${older}"`,
+      "        run: |",
+      "          npm install --global \"${STORY_PACKAGE:-story-skills@$STORY_VERSION}\"",
+      "",
+      "      # A later step's override does not reach the step above.",
+      "      - env:",
+      '          STORY_PACKAGE: "github:danjdewhurst/story-skills#main"',
+      `          STORY_VERSION: "${older}"`,
+      "        run: story check .",
+      ""
+    ];
+    writeWorkflow(root, "jobs.yml", jobs.join("\n"));
+    // The workflow's own pin and job b's first step are not overridden; job
+    // a's step and job b's second step are.
+    expect(pinLines(invoke(root, ["doctor"]).out)).toEqual([
+      `- [P3] Update workflow CLI version: .github/workflows/jobs.yml:2 installs story-skills ${older}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`,
+      `- [P3] Update workflow CLI version: .github/workflows/jobs.yml:15 installs story-skills ${older}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`,
+      `- [P3] Update local CLI version: .github/workflows/empty.yml:2 installs story-skills ${newer}, newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${cliUpdateHint(newer)}.`
+    ]);
   });
 
   test("drops the healthy action when a workflow needs upgrading", () => {
