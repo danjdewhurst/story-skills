@@ -931,5 +931,9 @@ describe("import chapter authors", () => {
     const japanese = importFolder({ "01-umi.md": "# 海\n\nby Ada Writer\n\n海は静かだった。\n" }, ["--bylines", "--language", "ja"]);
     expect(japanese.chapters[0].frontmatter.author).toBeUndefined();
     expect(prose(japanese.root, 1)).toStartWith("by Ada Writer");
+    // A Hindi byline is the name alone too (#539), so a लेखक: line stays prose.
+    const hindi = importFolder({ "01-hawa.md": "# हवा\n\nलेखक: Asha Rao\n\nहवा चली।\n" }, ["--bylines", "--language", "hi"]);
+    expect(hindi.chapters[0].frontmatter.author).toBeUndefined();
+    expect(prose(hindi.root, 1)).toStartWith("लेखक: Asha Rao");
   });
 });

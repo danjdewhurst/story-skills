@@ -190,6 +190,11 @@ describe("narration build", () => {
     const japanese = narration(collection("language: ja\n", ["山田", "佐藤"]));
     expect(japanese).toContain("『Tales』。朗読、[narrator]。\n\n寄稿、山田、佐藤。");
     expect(japanese).toContain("作、佐藤。");
+    // Hindi credits name the work, not the person, so they take no gender (#539).
+    const hindi = narration(collection("language: hi\neditor: Cara Editor\n", ["Zoe Quill", ["Dee Writer", "Ben Other"]]));
+    expect(hindi).toContain("संपादन: Cara Editor।\n\nसहयोग: Zoe Quill और Dee Writer और Ben Other।");
+    expect(hindi).toContain("लेखन: Dee Writer और Ben Other।");
+    expect(hindi).not.toMatch(/लेखक|संपादक/);
     const custom = narration(collection("editor: Cara Editor\nlabels:\n  - narration-byline: \"A story by {names}.\"\n  - narration-edited-by: \"Selected by {names}.\"\n  - narration-contributors: \"Stories by {names}.\"\n", ["Ben Other"]));
     expect(custom).toContain("Selected by Cara Editor.\n\nStories by Ben Other.");
     expect(custom).toContain("A story by Ben Other.");
