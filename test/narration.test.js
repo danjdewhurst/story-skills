@@ -54,6 +54,17 @@ function build(root, format) {
   return fs.readFileSync(buildBook(root, { format, out: `dist/book.${format}` }).outFile, "utf8");
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("narration build", () => {
   test("writes the pronunciation guide, credits, runtimes, and pauses", () => {
     const root = project();
@@ -238,5 +249,14 @@ describe("#231 narration script", () => {
     expect(script).toContain("\nThe Letter\n");
     expect(script).toContain("Who Burns Next? Narrated by [narrator].");
     expect(script).not.toContain("Next?.");
+  });
+});
+
+describe("review fixes", () => {
+  test("multi-line pronunciations stay on one table row", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "glossary", "terms", "sgian.md"), "term: Sgian\ncategory: term\npronunciation: \"SKEE-an\\ndubh\"", "# S\n");
+    const text = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+    expect(text).toContain("| Sgian | SKEE-an dubh | term |");
   });
 });

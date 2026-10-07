@@ -42,6 +42,17 @@ function writeChapter(root, number, body, extra = "status: draft") {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("story clues", () => {
   test("draws plants and reveals per chapter, sorted by plant", () => {
     const { root } = clueProject(4);
@@ -136,5 +147,15 @@ describe("#221 clues header counts what the manuscript has done", () => {
     const report = clueReport(root);
     expect(report.totals).toEqual({ clues: 2, redHerrings: 0, planted: 1, revealed: 0 });
     expect(formatClueMatrix(report)).toContain("Clues: 2 live (0 red herrings), 1 planted, 0 revealed");
+  });
+});
+
+describe("review fixes", () => {
+  test("a string significance-delayed does not count as delayed", () => {
+    const { root } = reviewProject();
+    for (const id of ["a", "b", "c"]) {
+      writeMarkdown(path.join(root, "continuity", "clues", `${id}.md`), `title: ${id}\nstatus: planted\nplanted: chapter-01\ncharacters:\n  - x${id === "a" ? "\nsignificance-delayed: \"false\"" : ""}`, `# ${id}\n`);
+    }
+    expect(messages(clueReport(root).warnings)).toContain("no clue is significance-delayed: every clue announces its meaning when planted");
   });
 });

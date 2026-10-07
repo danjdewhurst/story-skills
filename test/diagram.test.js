@@ -125,6 +125,17 @@ function baseProject(chapters = 5) {
   return root;
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("story diagram", () => {
   test("relationships draws one edge per pair, family edges heavy, and marks the dead", () => {
     const { root } = diagramFixture();
@@ -369,5 +380,25 @@ date: 2024-01-01
     const timeline = diagramProject(root, { kind: "timeline" }).text;
     expect(timeline).toContain("    day : chapter-01\n");
     expect(timeline).not.toMatch(/: *\n/);
+  });
+});
+
+describe("review fixes", () => {
+  test("diagram refuses to write from a partly unreadable project", () => {
+    const { root, cwd } = reviewProject();
+    writeMarkdown(path.join(root, "characters", "bad.md"), "name: Bad\n      - broken", "# Bad\n");
+    expect(diagramProject(root, { kind: "relationships", out: "dist/rel.mmd" })).toMatchObject({ ok: false });
+    expect(fs.existsSync(path.join(root, "dist", "rel.mmd"))).toBe(false);
+    const result = invoke(cwd, ["diagram", "relationships", "--path", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("Diagram failed");
+  });
+
+  test("arc nodes never collide with chapter nodes", () => {
+    const { root } = reviewProject();
+    createEntity(root, { kind: "arc", name: "Chapter 01" });
+    const text = diagramProject(root, { kind: "arcs" }).text;
+    expect(text).toContain('  arc__chapter_01(["Chapter 01"])');
+    expect(text).toContain('  chapter_01["1. One"]');
   });
 });

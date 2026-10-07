@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { DEFAULT_PASSES, formatPasses, nextPass, passChecks, readPasses, updatePasses } from "../src/passes.js";
 import { createEntity, createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages, whileWriting } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, whileWriting, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -22,6 +22,17 @@ function setStoryField(root, text) {
   const storyPath = path.join(root, "story.md");
   const raw = fs.readFileSync(storyPath, "utf8");
   fs.writeFileSync(storyPath, raw.replace("schema-version: 2\n", `schema-version: 2\n${text}\n`), "utf8");
+}
+
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
 }
 
 describe("story passes", () => {
@@ -159,5 +170,16 @@ describe("#76 revision pass checks", () => {
     fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^status: \w+/m, "status: revising"));
     expect(invoke(cwd, ["passes", "book", "--init"]).code).toBe(0);
     expect(invoke(cwd, ["next", "book"]).out).toContain("Run story timeline book, story pacing book, story diagram arcs --path book. Mark it with story passes book --done structure.");
+  });
+});
+
+describe("review fixes", () => {
+  test("pass updates keep extra fields and refuse to rewrite a malformed list", () => {
+    const { root } = reviewProject("revision-passes:\n  - pass: structure\n    status: pending\n    note: check act two");
+    projectPasses(root, { done: "structure" });
+    expect(fs.readFileSync(path.join(root, "story.md"), "utf8")).toContain("  - pass: structure\n    status: done\n    note: check act two");
+
+    const broken = reviewProject("revision-passes:\n  - pass: Bad Name");
+    expect(() => projectPasses(broken.root, { init: true })).toThrow("Fix revision-passes in story.md before changing it");
   });
 });

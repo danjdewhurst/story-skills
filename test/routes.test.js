@@ -115,6 +115,17 @@ function continuity(root) {
   return checkContinuity(scanProject(root));
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("location routes", () => {
   test("validate and links accept well-formed routes", () => {
     const root = routeProject();
@@ -265,5 +276,49 @@ describe("routes", () => {
     expect(messages(continuity(root).errors)).toEqual([]);
     writeBaseScene(root, 1, 2, "date: 2024-05-01\ntime: \"10:17\"\nlocation: gamma\ncharacters:\n  - ann");
     expect(continuity(root).errors).toHaveLength(1);
+  });
+});
+
+describe("review fixes", () => {
+  test("routes to undeclared places never join the travel graph", () => {
+    const { root } = reviewProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "harbor.md"), "name: Harbor\ntype: town\nroutes:\n  - to: typo\n    hours: 10", "# H\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "mill.md"), "name: Mill\ntype: mill\nroutes:\n  - to: typo\n    hours: 10", "# M\n");
+    for (const [scene, location, time] of [[1, "harbor", "08:00"], [2, "mill", "09:00"]]) {
+      writeMarkdown(path.join(root, "scenes", `chapter-01-scene-0${scene}.md`), `title: S${scene}\nchapter: chapter-01\nscene: ${scene}\nstatus: draft\nlocation: ${location}\ndate: 2024-05-01\ntime: "${time}"\ncharacters:\n  - mara`, "# S\n");
+    }
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+  });
+
+  test("travel checks compare every earlier sighting and read scene times at their widest", () => {
+    const { root } = reviewProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "x.md"), "name: X\ntype: town\nroutes:\n  - to: y\n    hours: 10\n  - to: z\n    hours: 30", "# X\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "y.md"), "name: Y\ntype: town", "# Y\n");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "z.md"), "name: Z\ntype: town", "# Z\n");
+    const scene = (chapter, number, fields) => writeMarkdown(path.join(root, "scenes", `${chapter}-scene-0${number}.md`), `title: ${chapter} ${number}\nchapter: ${chapter}\nscene: ${number}\nstatus: draft\ncharacters:\n  - mara\n${fields}`, "# S\n");
+    // An untimed scene between two timed ones across midnight hides nothing.
+    scene("chapter-01", 1, "location: x\ndate: 2020-01-01\ntime: \"23:00\"");
+    scene("chapter-01", 2, "location: x\ndate: 2020-01-02");
+    scene("chapter-01", 3, "location: y\ndate: 2020-01-02\ntime: \"01:00\"");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
+      "scenes/chapter-01-scene-03.md puts mara at y 2h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 10h"
+    ]);
+
+    // An untimed earlier scene starts at midnight at the latest-possible reading; 25h < 30h.
+    for (const number of [1, 2, 3]) {
+      fs.rmSync(path.join(root, "scenes", `chapter-01-scene-0${number}.md`));
+    }
+    scene("chapter-01", 1, "location: x\ndate: 2020-01-01");
+    scene("chapter-01", 2, "location: z\ndate: 2020-01-02\ntime: \"01:00\"");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
+      "scenes/chapter-01-scene-02.md puts mara at z at most 25h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 30h"
+    ]);
+
+    // Morning to afternoon can span 06:00 to 16:00, so a 9h route is possible.
+    scene("chapter-01", 1, "location: x\ndate: 2020-01-01\ntime: morning");
+    scene("chapter-01", 2, "location: y\ndate: 2020-01-01\ntime: afternoon");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 });
