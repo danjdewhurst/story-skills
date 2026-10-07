@@ -1,3 +1,4 @@
+import { dayHours } from "./calendar.js";
 import { parseClockTime, parseStoryDate, readingUnits } from "./continuity.js";
 import { roundedShares } from "./plural.js";
 import { projectPath } from "./files.js";
@@ -115,7 +116,7 @@ function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   // matching how story continuity reads them.
   const parsedDate = parseStoryDate(unit.date || "", project.calendar);
   const time = unit.time;
-  const minutes = parseClockTime(time || "");
+  const minutes = parseClockTime(time || "", dayHours(project.calendar));
   return {
     id: unit.id,
     file: projectPath(project.root, unit.file),

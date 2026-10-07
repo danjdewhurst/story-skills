@@ -88,7 +88,7 @@
         "release-warn-days": { "type": "integer", "minimum": 0, "description": "Serial: how many days before its release date story progress and story next warn about an episode with no prose (release-undrafted). Default 3; 0 warns only from the day it is due." },
         "calendar": {
           "type": "array",
-          "description": "A secondary world's calendar, as a list of entries in order: each month (- month: Thaw then days: 30), an optional weekdays entry (- weekdays: [Hearthday, Stoneday] with an optional first-weekday, the weekday of the first day of year 1), and optional eras (- era: Age of Embers with abbrev, direction forward or backward, and years). Chapter and scene dates are then written under it, such as 3 Thaw 301 AE or 301-02-03 AE. story validate also rejects an entry that names none or more than one of month, era, and weekdays, repeated names, no months, a backward era that is not the first, and a forward era other than the last without years.",
+          "description": "A secondary world's calendar, as a list of entries in order: each month (- month: Thaw then days: 30), an optional weekdays entry (- weekdays: [Hearthday, Stoneday] with an optional first-weekday, the weekday of the first day of year 1), optional eras (- era: Age of Embers with abbrev, direction forward or backward, and years), and an optional hours-per-day entry (- hours-per-day: 30), the length of the day for scene and chapter times, 24 when unset. Chapter and scene dates are then written under it, such as 3 Thaw 301 AE or 301-02-03 AE. story validate also rejects an entry that names none or more than one of month, era, weekdays, and hours-per-day, repeated names, a repeated weekdays or hours-per-day entry, no months, a backward era that is not the first, and a forward era other than the last without years.",
           "items": {
             "type": "object",
             "properties": {
@@ -99,7 +99,8 @@
               "era": { "$ref": "#/$defs/calendarName" },
               "abbrev": { "$ref": "#/$defs/calendarName" },
               "direction": { "enum": ["forward", "backward"] },
-              "years": { "type": "integer", "minimum": 1 }
+              "years": { "type": "integer", "minimum": 1 },
+              "hours-per-day": { "type": "integer", "minimum": 1, "maximum": 100, "description": "The hours in a day of the calendar, from 1 to 100 (HH:MM has two hour digits). A time's hour must be below it." }
             },
             "allOf": [
               { "if": { "required": ["month"] }, "then": { "required": ["days"] } }

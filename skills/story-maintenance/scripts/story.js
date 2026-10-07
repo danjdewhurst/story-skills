@@ -1009,13 +1009,21 @@ function formatClueMatrix(matrix) {
 
 // src/calendar.js
 var CALENDAR_NAME = /^\s*[^\s\d,][^,]*$/u;
-var KINDS = ["month", "era", "weekdays"];
+var KINDS = ["month", "era", "weekdays", "hours-per-day"];
 var DIRECTIONS = ["forward", "backward"];
+var DEFAULT_HOURS_PER_DAY = 24;
+var MAX_HOURS_PER_DAY = 100;
 function isName(value) {
   return typeof value === "string" && CALENDAR_NAME.test(value);
 }
 function isCount(value) {
   return Number.isSafeInteger(value) && value >= 1;
+}
+function isDayLength(value) {
+  return isCount(value) && value <= MAX_HOURS_PER_DAY;
+}
+function dayHours(calendar) {
+  return calendar?.hoursPerDay ?? DEFAULT_HOURS_PER_DAY;
 }
 function ordinalSuffix(day) {
   const tens = day % 100;
@@ -1036,16 +1044,17 @@ function parseCalendar(value) {
   }
   const problems = [];
   if (!Array.isArray(value)) {
-    return { calendar: { invalid: true }, problems: ["must be a list of month, era, and weekdays entries"] };
+    return { calendar: { invalid: true }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
   }
   const months = [];
   const eras = [];
   let weekdays = null;
   let firstWeekday = 0;
+  let hoursPerDay = null;
   value.forEach((entry, index) => {
     const at = `entry ${index + 1}`;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      problems.push(`${at} must be a month, era, or weekdays entry, such as - month: Thaw then days: 30`);
+      problems.push(`${at} must be a month, era, weekdays, or hours-per-day entry, such as - month: Thaw then days: 30`);
       return;
     }
     const before = problems.length;
@@ -1058,6 +1067,9 @@ function parseCalendar(value) {
       if (entry[key] !== undefined && !isCount(entry[key])) {
         problems.push(`${at} ${key} must be a whole number 1 or more, got ${entry[key]}`);
       }
+    }
+    if (entry["hours-per-day"] !== undefined && !isDayLength(entry["hours-per-day"])) {
+      problems.push(`${at} hours-per-day must be a whole number from 1 to ${MAX_HOURS_PER_DAY}, got ${entry["hours-per-day"]}`);
     }
     if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
       problems.push(`${at} direction must be forward or backward, got ${entry.direction}`);
@@ -1073,7 +1085,7 @@ function parseCalendar(value) {
     }
     const kinds = KINDS.filter((kind) => entry[kind] !== undefined);
     if (kinds.length !== 1) {
-      problems.push(`${at} must name exactly one of month, era, or weekdays${kinds.length > 1 ? `, not ${kinds.join(" and ")}` : ""}`);
+      problems.push(`${at} must name exactly one of month, era, weekdays, or hours-per-day${kinds.length > 1 ? `, not ${kinds.join(" and ")}` : ""}`);
       return;
     }
     if (problems.length > before) {
@@ -1088,6 +1100,12 @@ function parseCalendar(value) {
         backward: entry.direction === "backward",
         years: entry.years ?? null
       });
+    } else if (kinds[0] === "hours-per-day") {
+      if (hoursPerDay !== null) {
+        problems.push(`${at} repeats hours-per-day; give it once`);
+      } else {
+        hoursPerDay = entry["hours-per-day"];
+      }
     } else if (weekdays !== null) {
       problems.push(`${at} repeats weekdays; list them all in one entry`);
     } else if (entry.weekdays.length === 0) {
@@ -1117,7 +1135,7 @@ function parseCalendar(value) {
     }
   });
   if (problems.length > 0) {
-    return { calendar: { invalid: true }, problems };
+    return { calendar: { invalid: true, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY }, problems };
   }
   let start = 1;
   for (const era of eras) {
@@ -1132,7 +1150,7 @@ function parseCalendar(value) {
     offset += month.days;
   }
   return {
-    calendar: { invalid: false, months, yearDays: offset, weekdays: weekdays ?? [], firstWeekday, eras },
+    calendar: { invalid: false, months, yearDays: offset, weekdays: weekdays ?? [], firstWeekday, eras, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY },
     problems: []
   };
 }
@@ -14343,7 +14361,7 @@ function chapterFile(title, number, options, unit, calendar = null) {
   if (dateError) {
     throw usageError(dateError);
   }
-  const timeError = storyTimeError(options.time);
+  const timeError = storyTimeError(options.time, { calendar });
   if (timeError) {
     throw usageError(timeError);
   }
@@ -14383,7 +14401,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
   if (dateError) {
     throw usageError(dateError);
   }
-  const timeError = storyTimeError(options.time);
+  const timeError = storyTimeError(options.time, { calendar });
   if (timeError) {
     throw usageError(timeError);
   }
@@ -16171,13 +16189,15 @@ var TIME_RANKS = new Map([
 ]);
 function checkClock(project, errors, warnings) {
   const calendarInvalid = project.calendar?.invalid === true;
+  const hours = dayHours(project.calendar);
+  const clock = hours === DEFAULT_HOURS_PER_DAY ? "" : ` (the story calendar's ${hours}-hour day runs 00:00 to ${lastClockTime(hours)})`;
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
     if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
-    if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
-      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label, chapterOf(scene)));
+    if (scene.time !== "" && parseClockTime(scene.time, hours) === undefined) {
+      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"${clock}`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
       warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label, chapterOf(scene)));
@@ -16190,8 +16210,8 @@ function checkClock(project, errors, warnings) {
     if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative2(project, chapter.file), chapter.id));
     }
-    if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative2(project, chapter.file), chapter.id));
+    if (chapter.time !== "" && parseClockTime(chapter.time, hours) === undefined) {
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"${clock}`, relative2(project, chapter.file), chapter.id));
     }
   }
   const strands = new Map;
@@ -16205,7 +16225,7 @@ function checkClock(project, errors, warnings) {
     if (!parsed) {
       continue;
     }
-    const minutes = parseClockTime(unit.time);
+    const minutes = parseClockTime(unit.time, hours);
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative2(project, unit.file),
       file: relative2(project, unit.file),
@@ -16215,7 +16235,7 @@ function checkClock(project, errors, warnings) {
       time: minutes === undefined ? "" : unit.time.trim(),
       days: parsed.days,
       minutes,
-      ...sceneWindow(parsed.days, unit.time),
+      ...sceneWindow(parsed.days, unit.time, hours),
       travelHours: isChapter ? 0 : unit.travelHours,
       flashback: !isChapter && unit.flashbackTo !== ""
     });
@@ -16223,7 +16243,7 @@ function checkClock(project, errors, warnings) {
   for (const stamps of strands.values()) {
     checkClockOrder(stamps, errors, warnings);
   }
-  checkRouteTravel(project, errors);
+  checkRouteTravel(project, hours, errors);
 }
 function readingUnits(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
@@ -16319,14 +16339,22 @@ var TIME_RANGES = new Map([
   ["evening", [1020, 1319]],
   ["night", [1200, 1439]]
 ]);
-function sceneWindow(days, time) {
+function sceneWindow(days, time, hours = DEFAULT_HOURS_PER_DAY) {
   const text = String(time ?? "").trim().toLowerCase();
   const named = TIME_RANGES.get(text);
-  const exact = named === undefined ? parseClockTime(text) : undefined;
-  const [from, to] = named ?? (exact === undefined ? [0, 1439] : [exact, exact]);
-  return { earliest: days * 1440 + from, latest: days * 1440 + to, exact: exact !== undefined };
+  const exact = named === undefined ? parseClockTime(text, hours) : undefined;
+  const dayMinutes = hours * 60;
+  const span = named && [dayMinute(named[0], hours), dayMinute(named[1] + 1, hours) - 1];
+  const [from, to] = span ?? (exact === undefined ? [0, dayMinutes - 1] : [exact, exact]);
+  return { earliest: days * dayMinutes + from, latest: days * dayMinutes + to, exact: exact !== undefined };
 }
-function checkRouteTravel(project, errors) {
+function dayMinute(minute, hours) {
+  return Math.round(minute * hours / DEFAULT_HOURS_PER_DAY);
+}
+function lastClockTime(hours) {
+  return `${String(hours - 1).padStart(2, "0")}:59`;
+}
+function checkRouteTravel(project, hours, errors) {
   const graph = routeGraph(project.locations);
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
   const chapterStrand = new Map(project.chapters.map((chapter) => [chapter.id, String(chapter.strand ?? "")]));
@@ -16336,7 +16364,7 @@ function checkRouteTravel(project, errors) {
     if (!parsed || scene.location === "") {
       continue;
     }
-    const window = sceneWindow(parsed.days, scene.time);
+    const window = sceneWindow(parsed.days, scene.time, hours);
     const present = new Set(scene.characters.map(idText).filter((id) => id !== ""));
     const pov = idText(scene.pov) || chapterPov.get(scene.chapter) || "";
     if (pov !== "") {
@@ -16531,12 +16559,14 @@ function parseStoryDate(value, calendar = null) {
   const parsed = parseCalendarDate(value, calendar);
   return parsed.problem ? undefined : parsed;
 }
-function storyTimeError(value) {
+function storyTimeError(value, { calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
   }
-  if (parseClockTime(String(value)) === undefined) {
-    return `time must be HH:MM or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
+  const hours = dayHours(calendar);
+  if (parseClockTime(String(value), hours) === undefined) {
+    const clock = hours === DEFAULT_HOURS_PER_DAY ? "HH:MM" : `HH:MM from 00:00 to ${lastClockTime(hours)} (the story calendar's ${hours}-hour day)`;
+    return `time must be ${clock} or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
   }
   return "";
 }
@@ -16557,14 +16587,14 @@ function parseClockDate(value) {
   }
   return { text: value.trim(), days };
 }
-function parseClockTime(value) {
+function parseClockTime(value, dayLength = DEFAULT_HOURS_PER_DAY) {
   const text = value.trim().toLowerCase();
   if (text === "") {
     return;
   }
   const named = TIME_RANKS.get(text);
   if (named !== undefined) {
-    return named;
+    return dayMinute(named, dayLength);
   }
   const match = /^(\d{2}):(\d{2})$/.exec(text);
   if (!match) {
@@ -16572,7 +16602,7 @@ function parseClockTime(value) {
   }
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) {
+  if (hours >= dayLength || minutes > 59) {
     return;
   }
   return hours * 60 + minutes;
@@ -20855,7 +20885,7 @@ function markToldLate(dated) {
 function timelineEntry(project, { unit, chapter, isChapter, orphan }, reading) {
   const parsedDate = parseStoryDate(unit.date || "", project.calendar);
   const time = unit.time;
-  const minutes = parseClockTime(time || "");
+  const minutes = parseClockTime(time || "", dayHours(project.calendar));
   return {
     id: unit.id,
     file: projectPath(project.root, unit.file),
@@ -21455,7 +21485,7 @@ function fountainScript(input) {
       lines.push("", `[[No scene records for ${inline(chapter.id)}: add them to outline this chapter.]]`);
     }
     for (const scene of chapter.scenes) {
-      lines.push("", sceneHeading(scene, pack), "", `= ${inline(scene.title)}`, "");
+      lines.push("", sceneHeading(scene, pack, input.hoursPerDay), "", `= ${inline(scene.title)}`, "");
       const notes = [`Source: ${inline(scene.id)}`];
       if (scene.cast.length > 0) {
         notes.push(`Characters: ${scene.cast.map((name) => upperCase(inline(name), pack)).join(", ")}`);
@@ -21481,9 +21511,9 @@ function fountainScript(input) {
 `)}
 `;
 }
-function sceneHeading(scene, pack = languagePack()) {
+function sceneHeading(scene, pack = languagePack(), hoursPerDay = DEFAULT_HOURS_PER_DAY) {
   const place = upperCase(inline(scene.locationName), pack) || "LOCATION TBD";
-  const time = timeOfDay(scene.time, pack);
+  const time = timeOfDay(scene.time, pack, hoursPerDay);
   const text = `${place}${time === "" ? "" : ` - ${time}`}`.replace(/[\s#]+$/, "") || "LOCATION TBD";
   const prefix = SCENE_SETTINGS.get(scene.setting);
   if (prefix !== undefined) {
@@ -21492,15 +21522,16 @@ function sceneHeading(scene, pack = languagePack()) {
   const forced = text.replace(/^[^\p{L}\p{N}]+/u, "");
   return `.${forced === "" ? "LOCATION TBD" : forced}`;
 }
-function timeOfDay(value, pack = languagePack()) {
+function timeOfDay(value, pack = languagePack(), hoursPerDay = DEFAULT_HOURS_PER_DAY) {
   const text = inline(value);
   const named = NAMED_TIMES.get(text.toLowerCase());
   if (named !== undefined) {
     return named;
   }
-  const minutes = parseClockTime(text);
+  const minutes = parseClockTime(text, hoursPerDay);
   if (minutes !== undefined) {
-    return minutes >= 6 * 60 && minutes < 18 * 60 ? "DAY" : "NIGHT";
+    const day = hoursPerDay * 60;
+    return minutes * 4 >= day && minutes * 4 < day * 3 ? "DAY" : "NIGHT";
   }
   return upperCase(text, pack);
 }
@@ -27894,6 +27925,7 @@ function screenplayOutline(project, book) {
     labels: book.meta.labels,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     pack: project.pack,
+    hoursPerDay: dayHours(project.calendar),
     chapters,
     warnings
   };

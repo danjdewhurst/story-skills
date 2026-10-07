@@ -1,9 +1,11 @@
 // A secondary world's calendar, from the story.md `calendar` list: months
-// (each `month` with its `days`), an optional `weekdays` entry, and
-// optional `era` entries. Chapter and scene dates written under it, such as
-// `3 Thaw 301 AE` or `301-02-03 AE`, become a day number, the same `days`
-// a YYYY-MM-DD date gives, so the clock, travel, timeline, and chronology
-// checks compare them unchanged. Clock times keep their 24-hour day.
+// (each `month` with its `days`), an optional `weekdays` entry, optional
+// `era` entries, and an optional `hours-per-day` entry. Chapter and scene
+// dates written under it, such as `3 Thaw 301 AE` or `301-02-03 AE`, become
+// a day number, the same `days` a YYYY-MM-DD date gives, so the clock,
+// travel, timeline, and chronology checks compare them unchanged. Clock
+// times run from 00:00 to the last minute of the calendar's day, 24 hours
+// unless `hours-per-day` says otherwise; an hour keeps 60 minutes.
 //
 // The year has no leap days: every year is the sum of the month lengths.
 // Eras run in list order. A `backward` era (only the first may be one)
@@ -18,8 +20,13 @@
 // uses the same pattern.
 export const CALENDAR_NAME = /^\s*[^\s\d,][^,]*$/u;
 
-const KINDS = ["month", "era", "weekdays"];
+const KINDS = ["month", "era", "weekdays", "hours-per-day"];
 const DIRECTIONS = ["forward", "backward"];
+
+export const DEFAULT_HOURS_PER_DAY = 24;
+// An `HH:MM` time has two hour digits, so the last hour of a day is 99.
+// schemas/story.schema.json uses the same maximum.
+export const MAX_HOURS_PER_DAY = 100;
 
 function isName(value) {
   return typeof value === "string" && CALENDAR_NAME.test(value);
@@ -27,6 +34,17 @@ function isName(value) {
 
 function isCount(value) {
   return Number.isSafeInteger(value) && value >= 1;
+}
+
+function isDayLength(value) {
+  return isCount(value) && value <= MAX_HOURS_PER_DAY;
+}
+
+// The hours in a day of the story calendar: its `hours-per-day`, or 24 for
+// a book without a calendar or a calendar that does not set it. An invalid
+// calendar keeps a valid `hours-per-day`, so its times still read.
+export function dayHours(calendar) {
+  return calendar?.hoursPerDay ?? DEFAULT_HOURS_PER_DAY;
 }
 
 // The English ordinal suffix for a day: 1st, 2nd, 3rd, 4th, 11th, 21st.
@@ -55,16 +73,17 @@ export function parseCalendar(value) {
   }
   const problems = [];
   if (!Array.isArray(value)) {
-    return { calendar: { invalid: true }, problems: ["must be a list of month, era, and weekdays entries"] };
+    return { calendar: { invalid: true }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
   }
   const months = [];
   const eras = [];
   let weekdays = null;
   let firstWeekday = 0;
+  let hoursPerDay = null;
   value.forEach((entry, index) => {
     const at = `entry ${index + 1}`;
     if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      problems.push(`${at} must be a month, era, or weekdays entry, such as - month: Thaw then days: 30`);
+      problems.push(`${at} must be a month, era, weekdays, or hours-per-day entry, such as - month: Thaw then days: 30`);
       return;
     }
     // Each key's shape is checked wherever it appears, as the schema does.
@@ -78,6 +97,9 @@ export function parseCalendar(value) {
       if (entry[key] !== undefined && !isCount(entry[key])) {
         problems.push(`${at} ${key} must be a whole number 1 or more, got ${entry[key]}`);
       }
+    }
+    if (entry["hours-per-day"] !== undefined && !isDayLength(entry["hours-per-day"])) {
+      problems.push(`${at} hours-per-day must be a whole number from 1 to ${MAX_HOURS_PER_DAY}, got ${entry["hours-per-day"]}`);
     }
     if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
       problems.push(`${at} direction must be forward or backward, got ${entry.direction}`);
@@ -93,7 +115,7 @@ export function parseCalendar(value) {
     }
     const kinds = KINDS.filter((kind) => entry[kind] !== undefined);
     if (kinds.length !== 1) {
-      problems.push(`${at} must name exactly one of month, era, or weekdays${kinds.length > 1 ? `, not ${kinds.join(" and ")}` : ""}`);
+      problems.push(`${at} must name exactly one of month, era, weekdays, or hours-per-day${kinds.length > 1 ? `, not ${kinds.join(" and ")}` : ""}`);
       return;
     }
     if (problems.length > before) {
@@ -108,6 +130,12 @@ export function parseCalendar(value) {
         backward: entry.direction === "backward",
         years: entry.years ?? null
       });
+    } else if (kinds[0] === "hours-per-day") {
+      if (hoursPerDay !== null) {
+        problems.push(`${at} repeats hours-per-day; give it once`);
+      } else {
+        hoursPerDay = entry["hours-per-day"];
+      }
     } else if (weekdays !== null) {
       problems.push(`${at} repeats weekdays; list them all in one entry`);
     } else if (entry.weekdays.length === 0) {
@@ -137,7 +165,7 @@ export function parseCalendar(value) {
     }
   });
   if (problems.length > 0) {
-    return { calendar: { invalid: true }, problems };
+    return { calendar: { invalid: true, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY }, problems };
   }
   let start = 1;
   for (const era of eras) {
@@ -152,7 +180,7 @@ export function parseCalendar(value) {
     offset += month.days;
   }
   return {
-    calendar: { invalid: false, months, yearDays: offset, weekdays: weekdays ?? [], firstWeekday, eras },
+    calendar: { invalid: false, months, yearDays: offset, weekdays: weekdays ?? [], firstWeekday, eras, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY },
     problems: []
   };
 }
