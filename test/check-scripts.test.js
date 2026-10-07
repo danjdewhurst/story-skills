@@ -1268,6 +1268,15 @@ describe("check-links", () => {
     expect(JSON.parse(readRepo("package.json")).scripts["check:links"]).toBe("node scripts/check-links.js");
     expect(readRepo(".github/workflows/ci.yml")).toContain("bun run check:links");
   });
+
+  test("ci renders the print contents with WeasyPrint and pdftotext (#762)", () => {
+    // html-build.test.js skips its rendering block without both tools, so CI
+    // must install them in a job that runs that file.
+    const jobs = workflowJobs(readRepo(".github/workflows/ci.yml"));
+    expect(Object.keys(jobs)).toContain("print-render");
+    expect(jobs["print-render"]).toContain("sudo apt-get install -y weasyprint poppler-utils");
+    expect(jobs["print-render"]).toContain("bun test --timeout 60000 ./test/html-build.test.js");
+  });
 });
 
 describe("github workflows", () => {
