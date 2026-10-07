@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
-import { checkExamples } from "../scripts/check-examples.js";
+import { EXPECTED_WARNINGS, checkExamples, collectAdvisory } from "../scripts/check-examples.js";
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
@@ -45,5 +45,32 @@ describe("check-examples", () => {
     expect(result.err).toContain("Example validation failed:");
     expect(result.err).toContain("kirimi-eki-no-wasuremono registry is stale: chapters/_index.md (run story reindex)");
     expect(result.err).toContain("the-unraveled-thread continuity is missing expected error");
+  });
+
+  test("fails a mentions or pacing warning that the example does not exempt", () => {
+    const dir = examplesCopy(["kirimi-eki-no-wasuremono"]);
+    const root = path.join(dir, "kirimi-eki-no-wasuremono");
+    expect(collectAdvisory([], "kirimi-eki-no-wasuremono", root)).toEqual([]);
+    fs.rmSync(path.join(root, "continuity", "exemptions.md"));
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace(/^hook: .*\n/m, ""));
+    expect(collectAdvisory([], "kirimi-eki-no-wasuremono", root)).toEqual([
+      "kirimi-eki-no-wasuremono mentions warning: chapters/chapter-02.md lists character morita-fumi in mentions but never names it; add the name the chapter uses as an alias, or drop the mention",
+      "kirimi-eki-no-wasuremono pacing warning: chapter-01 has no hook: record how the chapter ending pulls the reader on"
+    ]);
+  });
+
+  test("holds an example that keeps advisory warnings to exactly those warnings", () => {
+    const root = path.join(examplesRoot, "the-unraveled-thread");
+    expect(collectAdvisory([], "the-unraveled-thread", root)).toEqual([]);
+    const expected = { pacing: { reason: "test", warnings: ["a warning that is gone"] } };
+    expect(collectAdvisory([], "the-unraveled-thread", root, expected)).toEqual([
+      "the-unraveled-thread pacing is missing expected warning: a warning that is gone",
+      `the-unraveled-thread pacing has unexpected warning: ${EXPECTED_WARNINGS["the-unraveled-thread"].pacing.warnings[0]}`
+    ]);
+    // Every example that keeps a warning says why.
+    for (const entry of Object.values(EXPECTED_WARNINGS).flatMap(Object.values)) {
+      expect(entry.reason.trim()).not.toBe("");
+    }
   });
 });

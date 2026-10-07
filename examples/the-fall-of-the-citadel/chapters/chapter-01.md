@@ -12,6 +12,7 @@ characters:
 arcs-advanced:
   - the-coup
 status: draft
+hook: question
 word-count: 248
 ---
 

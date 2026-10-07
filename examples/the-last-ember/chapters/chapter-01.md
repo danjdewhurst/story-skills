@@ -12,6 +12,7 @@ mentions:
 arcs-advanced:
   - seras-reclamation
 status: draft
+hook: decision
 word-count: 993
 ---
 
