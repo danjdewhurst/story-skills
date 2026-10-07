@@ -517,11 +517,6 @@ var IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
 }
-function ignoresCase(folder, name) {
-  const other = name === name.toUpperCase() ? name.toLowerCase() : name.toUpperCase();
-  const [first, second] = [name, other].map((each) => fs.lstatSync(path.join(folder, each), { bigint: true, throwIfNoEntry: false }));
-  return other !== name && first !== undefined && second !== undefined && first.dev === second.dev && first.ino === second.ino;
-}
 function isShortNameOf(name, longName) {
   const match = /^([^~.]{1,6})~\d+(?:\.([^.]{1,3}))?$/.exec(name);
   const dot = longName.lastIndexOf(".");
@@ -797,6 +792,7 @@ var FINDING_CODES = {
   "split-references": "warning",
   "split-scenes": "warning",
   "merge-conflicts": "warning",
+  "folder-not-removed": "warning",
   "kept-story-options": "warning",
   "unsplit-chapter-lines": "warning",
   "usage-error": "error",
@@ -25268,79 +25264,153 @@ function restoreSnapshot(root, options = {}) {
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
   const manifest = listSnapshots(projectRoot).snapshots.find((snapshot) => snapshot.id === id);
-  const saved = restoreSources(projectRoot, options.name);
+  const plan = options.plan ?? planRestore(projectRoot, options.name, options);
   let parses = true;
   try {
     assertProjectParses(scanProject(directory), "rebuild the registries");
   } catch {
     parses = false;
   }
-  const nameKey = options.caseInsensitive ?? ignoresCase(projectRoot, "story.md") ? (relative) => relative.toLowerCase() : (relative) => relative;
-  const present = new Map(markdownFiles(projectRoot).map((file) => [nameKey(projectPath(projectRoot, file)), file]));
-  const writes = [];
-  for (const [relative, source] of saved) {
-    const target = present.get(nameKey(relative)) ?? path13.join(projectRoot, ...relative.split("/"));
-    const text = readTextFile(source);
-    const existing = lstatIfExists(target);
-    const current = existing?.isFile() ? currentText(target) : null;
-    if (current === text) {
-      continue;
-    }
-    writes.push({ path: projectPath(projectRoot, target), target, text, created: existing === null, original: current });
-  }
-  const kept = new Set([...saved.keys()].map(nameKey));
-  const deletes = [...present].filter(([key]) => !kept.has(key)).map(([, file]) => ({ path: projectPath(projectRoot, file), target: file, original: readTextFile(file) }));
   const restored = { name: manifest?.name ?? id, id };
-  if (writes.length === 0 && deletes.length === 0) {
+  if (plan.writes.length === 0 && plan.deletes.length === 0) {
     return { restored, safety: null, created: [], updated: [], deleted: [], removedFolders: [], reindexed: false, warnings: [] };
   }
   const safetyId = nextSafetyId(projectRoot, id);
   const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
+  const at = (relative) => path13.join(projectRoot, ...relative.split("/"));
   const done = { created: [], updated: [], deleted: [], removedFolders: [] };
+  const warnings = [];
   try {
-    for (const write of writes) {
-      writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
+    for (const write of plan.writes) {
+      writeFile(at(write.path), write.text, { root: projectRoot, unchangedFrom: write.original });
       done[write.created ? "created" : "updated"].push(write.path);
     }
-    for (const file of deletes) {
-      removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
+    for (const file of plan.deletes) {
+      removeFile(at(file.path), { root: projectRoot, unchangedFrom: file.original });
       done.deleted.push(file.path);
     }
-    for (const folder of deletedFolders(deletes, nameKey)) {
-      const full = path13.join(projectRoot, ...folder.split("/"));
-      if (options.occupied?.has(folder) !== true && fs9.readdirSync(full).length === 0) {
-        removeDirectory(full, { action: "rmdir" });
-        done.removedFolders.push(folder);
-      }
-    }
+    done.removedFolders = removeEmptiedFolders(projectRoot, plan.folders, warnings);
     if (parses) {
       reindexProject(projectRoot);
     }
   } catch (error) {
     const changed = done.created.length + done.updated.length + done.deleted.length;
-    const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${writes.length + deletes.length} files changed)`;
+    const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${plan.writes.length + plan.deletes.length} files changed)`;
     const code = exitCodeFor(error);
     throw Object.assign(new Error(`Restoring snapshot ${id} stopped: ${error.message}
 ${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the project as it was before: story snapshot --restore ${safetyId} puts it back`), {
       exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
     });
   }
-  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings };
 }
-var PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap((folder) => folder.split("/").map((_, depth, parts) => parts.slice(0, depth + 1).join("/"))))];
-function deletedFolders(deletes, nameKey) {
-  const keep = new Set(PROJECT_FOLDERS.map(nameKey));
-  const folders = new Set;
-  for (const file of deletes) {
-    const parts = file.path.split("/").slice(0, -1);
-    for (let depth = 1;depth <= parts.length; depth += 1) {
-      folders.add(parts.slice(0, depth).join("/"));
+function planRestore(root, name, { identity = fileIdentity } = {}) {
+  const projectRoot = path13.resolve(root);
+  const { id, saved } = restoreSources(projectRoot, name);
+  const spell = projectSpelling(projectRoot, identity, id);
+  const writes = [];
+  const reached = new Map;
+  for (const [relative, source] of saved) {
+    const spelled = spell(relative);
+    if (reached.has(spelled)) {
+      throw refusedError(`Cannot restore snapshot ${id}: its ${reached.get(spelled)} and ${relative} are one file in this project (${spelled}), whose folder does not tell the two spellings apart. Nothing was changed`);
+    }
+    reached.set(spelled, relative);
+    const target = path13.join(projectRoot, ...spelled.split("/"));
+    const text = readTextFile(source);
+    const existing = lstatIfExists(target);
+    const current = existing?.isFile() ? currentText(target) : null;
+    if (current === text) {
+      continue;
+    }
+    writes.push({ path: spelled, text, created: existing === null, original: current });
+  }
+  const deletes = markdownFiles(projectRoot).map((file) => projectPath(projectRoot, file)).filter((file) => !reached.has(file)).map((file) => ({ path: file, original: readTextFile(path13.join(projectRoot, ...file.split("/"))) }));
+  return { writes, deletes, folders: emptiedFolders(projectRoot, deletes.map((file) => file.path), writes, identity) };
+}
+function fileIdentity(file) {
+  const stats = fs9.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+  return stats === undefined ? null : `${stats.dev}:${stats.ino}`;
+}
+function projectSpelling(projectRoot, identity, id) {
+  const listings = new Map;
+  const identities = new Map;
+  const listing = (folder) => {
+    if (!listings.has(folder)) {
+      listings.set(folder, lstatIfExists(folder)?.isDirectory() ? fs9.readdirSync(folder).sort() : null);
+    }
+    return listings.get(folder);
+  };
+  const identityOf = (file) => {
+    if (!identities.has(file)) {
+      identities.set(file, identity(file));
+    }
+    return identities.get(file);
+  };
+  return (relative) => {
+    const parts = relative.split("/");
+    let folder = projectRoot;
+    for (let index = 0;index < parts.length; index += 1) {
+      const names = listing(folder);
+      if (names === null) {
+        break;
+      }
+      if (!names.includes(parts[index])) {
+        const found = identityOf(path13.join(folder, parts[index]));
+        if (found === null) {
+          break;
+        }
+        const same = names.filter((name) => identityOf(path13.join(folder, name)) === found);
+        if (same.length !== 1) {
+          throw refusedError(`Cannot restore snapshot ${id}: the project finds ${relative} under another spelling, but cannot tell which of its files that is${same.length > 1 ? ` (${same.join(", ")})` : ""}. Nothing was changed`);
+        }
+        parts[index] = same[0];
+      }
+      folder = path13.join(folder, parts[index]);
+    }
+    return parts.join("/");
+  };
+}
+var PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap(foldersOf).concat(PROJECT_DIRECTORIES))];
+function foldersOf(relative) {
+  const parts = relative.split("/").slice(0, -1);
+  return parts.map((_, depth) => parts.slice(0, depth + 1).join("/"));
+}
+function emptiedFolders(projectRoot, deletes, writes, identity) {
+  const at = (relative) => path13.join(projectRoot, ...relative.split("/"));
+  const deleted = new Set(deletes);
+  const receiving = new Set(writes.flatMap((write) => foldersOf(write.path)));
+  const kept = new Set(PROJECT_FOLDERS.map((folder) => identity(at(folder))).filter((found) => found !== null));
+  const emptied = new Set;
+  const depth = (folder) => folder.split("/").length;
+  const candidates = [...new Set(deletes.flatMap(foldersOf))].sort((a, b) => depth(b) - depth(a) || (a < b ? -1 : a > b ? 1 : 0));
+  for (const folder of candidates) {
+    if (receiving.has(folder) || kept.has(identity(at(folder)))) {
+      continue;
+    }
+    if (fs9.readdirSync(at(folder)).every((name) => deleted.has(`${folder}/${name}`) || emptied.has(`${folder}/${name}`))) {
+      emptied.add(folder);
     }
   }
-  return [...folders].filter((folder) => !keep.has(nameKey(folder))).sort().reverse();
+  return [...emptied];
 }
-function restoreSources(root, name) {
-  const projectRoot = path13.resolve(root);
+function removeEmptiedFolders(projectRoot, folders, warnings) {
+  const removed = [];
+  for (const folder of folders) {
+    const full = path13.join(projectRoot, ...folder.split("/"));
+    try {
+      assertSafeProjectDirectory(full, projectRoot);
+      if (fs9.readdirSync(full).length === 0) {
+        removeDirectory(full, { action: "rmdir" });
+        removed.push(folder);
+      }
+    } catch (error) {
+      warnings.push(warn("folder-not-removed", `Could not remove ${folder}/, which the restore left empty (${error.code ?? error.message}): delete it yourself if you do not need it`, folder));
+    }
+  }
+  return removed;
+}
+function restoreSources(projectRoot, name) {
   const { directory, id } = existingSnapshot(projectRoot, name);
   if (lstatIfExists(path13.join(directory, "story.md"))?.isFile() !== true) {
     throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
@@ -25348,14 +25418,12 @@ function restoreSources(root, name) {
   const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
   const checked = new Set;
   for (const relative of saved.keys()) {
-    const parts = relative.split("/").slice(0, -1);
-    for (let depth = 1;depth <= parts.length; depth += 1) {
-      const folder = parts.slice(0, depth).join("/");
+    for (const folder of foldersOf(relative)) {
       if (checked.has(folder)) {
         continue;
       }
       checked.add(folder);
-      const full = path13.join(projectRoot, ...parts.slice(0, depth));
+      const full = path13.join(projectRoot, ...folder.split("/"));
       const stats = lstatIfExists(full);
       if (stats?.isSymbolicLink()) {
         throw refusedError(`Cannot restore snapshot ${id}: ${folder}/ is a symlink, and ${relative} would be written through it. Nothing was changed`);
@@ -25365,7 +25433,7 @@ function restoreSources(root, name) {
       }
     }
   }
-  return saved;
+  return { id, saved };
 }
 function nextSafetyId(projectRoot, id) {
   const prefix = `before-restore-${id}-`;
@@ -29903,9 +29971,9 @@ function runRestore(context, name) {
   const projectRoot = context.root();
   const seed = (target) => {
     if (target === projectRoot) {
-      return new Set;
+      return;
     }
-    restoreSources(projectRoot, restore);
+    const plan = planRestore(projectRoot, restore);
     const folder = path19.join(projectRoot, SNAPSHOTS_DIR);
     const { directory } = existingSnapshot(projectRoot, restore);
     for (const entry of fs15.readdirSync(folder, { withFileTypes: true })) {
@@ -29920,27 +29988,9 @@ function runRestore(context, name) {
       }
     }
     fs15.cpSync(directory, path19.join(target, SNAPSHOTS_DIR, path19.basename(directory)), { recursive: true });
-    return fullerFolders(projectRoot, target);
+    return plan;
   };
-  const caseInsensitive = ignoresCase(projectRoot, "story.md");
-  return runWrite(context, "snapshot", (target) => {
-    const occupied = seed(target);
-    return restoreSnapshot(target, { name: restore, caseInsensitive, occupied });
-  }, formatRestore, formatRestorePreview);
-}
-function fullerFolders(source, copy, prefix = "", found = new Set) {
-  for (const entry of fs15.readdirSync(copy, { withFileTypes: true })) {
-    if (entry.isDirectory() && !entry.name.startsWith(".")) {
-      const folder = `${prefix}${entry.name}`;
-      const from = path19.join(source, entry.name);
-      const to = path19.join(copy, entry.name);
-      if (fs15.readdirSync(from).some((child) => lstatIfExists(path19.join(to, child)) === null)) {
-        found.add(folder);
-      }
-      fullerFolders(from, to, `${folder}/`, found);
-    }
-  }
-  return found;
+  return runWrite(context, "snapshot", (target) => restoreSnapshot(target, { name: restore, plan: seed(target) }), formatRestore, formatRestorePreview);
 }
 function runWrite({ parsed, io, root, overrides }, command, write, describe, detail = () => "") {
   const projectRoot = root();
