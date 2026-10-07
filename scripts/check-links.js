@@ -9,10 +9,13 @@
  * link to a markdown file (or on a bare #fragment link) must match a heading
  * slug or an explicit <a id/name> anchor there. A pull request or issue
  * template is shown on the pull request or issue page, where a relative link
- * resolves against that page, so its links must be full URLs. Fenced code,
- * inline code, HTML comments, links with a scheme (https:, mailto:), and
- * template placeholders such as {name-kebab}.md are skipped. Run from
- * anywhere; exits non-zero on failure.
+ * resolves against that page, so its links must be full URLs. A link to a
+ * file on this repository's main branch on GitHub (/blob/main/ or
+ * /tree/main/) is checked like a link from the repository root: docs that
+ * ship in the npm package link that way to files the package leaves out.
+ * Fenced code, inline code, HTML comments, other links with a scheme (https:,
+ * mailto:), and template placeholders such as {name-kebab}.md are skipped.
+ * Run from anywhere; exits non-zero on failure.
  */
 
 import fs from "node:fs";
@@ -234,6 +237,16 @@ export function extractLinks(text) {
   return links;
 }
 
+// A file or folder on this repository's main branch on GitHub.
+const REPO_URL = /^https:\/\/github\.com\/danjdewhurst\/story-skills\/(?:blob|tree)\/main(?=[/?#]|$)\/?/i;
+
+// The root-relative path (/docs/cli.md#check) that a link to this repository
+// on GitHub names, or null for any other link.
+export function repoPath(target) {
+  const match = REPO_URL.exec(target);
+  return match ? `/${target.slice(match[0].length)}` : null;
+}
+
 // Links that are not local paths, or are templates rather than real paths.
 export function isSkipped(target) {
   return target === ""
@@ -269,12 +282,14 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
     }
     return cache.get(target);
   };
-  for (const { target, line } of extractLinks(text)) {
+  for (const { target: link, line } of extractLinks(text)) {
+    const fromUrl = repoPath(link);
+    const target = fromUrl ?? link;
     if (isSkipped(target)) {
       continue;
     }
-    if (pageTemplate && !target.startsWith("#")) {
-      failures.push(`${relative}:${line}: ${target} is relative, but this template is shown on the pull request or issue page; use a full https:// URL`);
+    if (pageTemplate && fromUrl === null && !target.startsWith("#")) {
+      failures.push(`${relative}:${line}: ${link} is relative, but this template is shown on the pull request or issue page; use a full https:// URL`);
       continue;
     }
     const hashAt = target.indexOf("#");
@@ -289,15 +304,15 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
     // it, and a symlink on the way (docs/up -> ../..) can lead there too.
     // plugins/story-skills -> .. resolves to the root itself, which is inside.
     if (isOutside(path.resolve(root), resolved)) {
-      failures.push(`${relative}:${line}: ${target} points outside the repository`);
+      failures.push(`${relative}:${line}: ${link} points outside the repository`);
       continue;
     }
     if (!fs.existsSync(resolved)) {
-      failures.push(`${relative}:${line}: ${target} points at a missing file`);
+      failures.push(`${relative}:${line}: ${link} points at a missing file`);
       continue;
     }
     if (isOutside(realRoot, fs.realpathSync(resolved))) {
-      failures.push(`${relative}:${line}: ${target} points outside the repository through a symlink`);
+      failures.push(`${relative}:${line}: ${link} points outside the repository through a symlink`);
       continue;
     }
     if (fragment === null || fragment === "" || !resolved.endsWith(".md") || !fs.statSync(resolved).isFile()) {
@@ -308,7 +323,7 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
       continue;
     }
     if (!anchors(resolved).has(fragment.toLowerCase()) && !anchors(resolved).has(fragment)) {
-      failures.push(`${relative}:${line}: ${target} has no heading or anchor #${fragment} in ${path.relative(root, resolved).split(path.sep).join("/")}`);
+      failures.push(`${relative}:${line}: ${link} has no heading or anchor #${fragment} in ${path.relative(root, resolved).split(path.sep).join("/")}`);
     }
   }
   return failures;

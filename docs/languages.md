@@ -202,7 +202,7 @@ Record the rest of the book's conventions (quote marks, spacing, numbers, forms 
 
 The drafting, editing, and critique skills (chapter-writing, discovery-drafting, scene-craft, voice-style, verse-craft, revision-continuity, line-editing, and reader-panel) read `language` and write, edit, and critique in it. Craft advice built on English word lists, such as filter words, `-ly` adverbs, and *said*, is labelled as English, and where a CLI check is skipped for the book's language the skill does that pass by reading. story-init asks for the language; voice-style and line-editing settle the dialogue punctuation with you and record it in the style sheet; verse-craft scans by the language's own tradition; publishing and submission mark which conventions belong to the English-language market. [Writing in another language](writing-workflows.md#writing-in-another-language) covers the workflow, and the [Skills catalogue](skills.md#stories-in-other-languages) describes each skill.
 
-The repository's [evals](../evals/README.md) include drafting and line-editing fixtures in French, Japanese, and Arabic, seeded from the three example projects.
+The repository's [evals](https://github.com/danjdewhurst/story-skills/blob/main/evals/README.md) include drafting and line-editing fixtures in French, Japanese, and Arabic, seeded from the three example projects.
 
 ## Contributing a language pack
 

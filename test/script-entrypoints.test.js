@@ -225,7 +225,12 @@ describe("check-package entry point", () => {
     return { run, calls };
   }
 
-  function fakePackage({ readme = "See [the docs](docs/README.md).\n", exportsField = true, bin = { story: "bin/story.js" } } = {}) {
+  function fakePackage({
+    readme = "See [the docs](docs/README.md).\n",
+    docs = "[Back](../README.md) and [the guide](https://github.com/danjdewhurst/story-skills/blob/main/AGENTS.md).\n",
+    exportsField = true,
+    bin = { story: "bin/story.js" }
+  } = {}) {
     const dir = makeTempDir("story-fake-package-");
     const pkg = { name: "story-skills", version: VERSION, bin };
     if (exportsField) pkg.exports = { "./package.json": "./package.json", "./schemas/*": "./schemas/*" };
@@ -233,7 +238,7 @@ describe("check-package entry point", () => {
     fs.writeFileSync(path.join(dir, "README.md"), readme);
     for (const file of ["docs/README.md", "schemas/story.schema.json", "schemas/result.schema.json", "src/cli.js"]) {
       fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
-      fs.writeFileSync(path.join(dir, file), "{}");
+      fs.writeFileSync(path.join(dir, file), file.endsWith(".md") ? docs : "{}");
     }
     return dir;
   }
@@ -276,7 +281,12 @@ describe("check-package entry point", () => {
 
   const failures = [
     ["a wrong version", () => fakeNpm(fakePackage(), { version: "0.0.0" }), `Installed story --version printed "0.0.0", expected ${VERSION}`],
-    ["a README link to an unshipped file", () => fakeNpm(fakePackage({ readme: "[guide](CONTRIBUTING.md)\n" })), "README links to files the package does not ship: CONTRIBUTING.md"],
+    ["a README link to an unshipped file", () => fakeNpm(fakePackage({ readme: "[guide](CONTRIBUTING.md)\n" })), "Shipped markdown links to files the package does not ship: README.md -> CONTRIBUTING.md"],
+    [
+      "a docs link to an unshipped file (#569)",
+      () => fakeNpm(fakePackage({ docs: "[agents](../AGENTS.md) [evals](../evals/README.md#skill-coverage)\n" })),
+      "Shipped markdown links to files the package does not ship: docs/README.md -> ../AGENTS.md, docs/README.md -> ../evals/README.md"
+    ],
     ["an exported src/", () => fakeNpm(fakePackage({ exportsField: false })), "story-skills/src/cli.js resolves, but src/ should not be exported"]
   ];
   for (const [name, npm, message] of failures) {

@@ -9,29 +9,73 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { extractLinks, isSkipped } from "./check-links.js";
 import { packageBin, spawnCommand } from "./spawn-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // Markdown and HTML link targets that are paths inside the package, without
-// their #fragment: inline links (with or without a title or <angle> target),
-// reference definitions, and src/href attributes in either quote style.
-// Fenced code is skipped so shell examples are not links.
+// their #fragment or ?query, as check:links reads them: inline links (with or
+// without a title or <angle> target), reference definitions, and src, href,
+// and srcset attributes. Code, comments, and frontmatter are skipped, and so
+// are root-relative paths (/docs), which name nothing inside an installed
+// package.
 export function relativeLinks(markdown) {
-  const prose = markdown.replace(/^```[\s\S]*?^```/gm, "");
-  const patterns = [
-    /\]\(\s*(?:<([^>\n]+)>|([^)\s]+))/g,
-    /^ {0,3}\[[^\]\n]+\]:[ \t]*(?:<([^>\n]+)>|(\S+))/gm,
-    /\b(?:src|href)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
-  ];
   const links = new Set();
-  for (const match of patterns.flatMap((pattern) => [...prose.matchAll(pattern)])) {
-    const target = (match[1] ?? match[2]).split("#")[0];
-    if (target && !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("/")) {
-      links.add(decodeURIComponent(target));
+  for (const { target } of extractLinks(markdown)) {
+    const file = target.replace(/[?#].*$/, "");
+    if (file && !isSkipped(file) && !file.startsWith("/")) {
+      try {
+        links.add(decodeURIComponent(file));
+      } catch {
+        links.add(file);
+      }
     }
   }
   return [...links].sort();
+}
+
+// Every file under `dir`, as /-separated paths relative to it, skipping
+// node_modules. Symlinks are not followed.
+export function packageFiles(dir, prefix = "") {
+  const files = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const entry of entries) {
+    const relative = `${prefix}${entry.name}`;
+    if (entry.isDirectory() && entry.name !== "node_modules") {
+      files.push(...packageFiles(path.join(dir, entry.name), `${relative}/`));
+    } else if (entry.isFile()) {
+      files.push(relative);
+    }
+  }
+  return files;
+}
+
+// The relative links in the shipped markdown that name nothing the package
+// ships, as "file -> link". `files` is every shipped file as a /-separated
+// path from the package root, and `read(file)` returns one's text. The
+// package's markdown is read from node_modules too, so a link to anything
+// left out of package.json `files` (AGENTS.md, evals/, scripts/) needs an
+// absolute GitHub URL. Paths are compared exactly, so a link that differs
+// only in case fails here as it would on a case-sensitive disk.
+export function unshippedLinks(files, read) {
+  const shipped = new Set(files);
+  for (const file of files) {
+    for (let dir = path.posix.dirname(file); dir !== "."; dir = path.posix.dirname(dir)) {
+      shipped.add(dir);
+    }
+  }
+  const broken = [];
+  for (const file of files.filter((name) => name.endsWith(".md"))) {
+    for (const link of relativeLinks(read(file))) {
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), link)).replace(/(.)\/$/, "$1");
+      const inside = target !== ".." && !target.startsWith("../");
+      if (!inside || (target !== "." && !shipped.has(target))) {
+        broken.push(`${file} -> ${link}`);
+      }
+    }
+  }
+  return broken;
 }
 
 function execRun(command, args, cwd, host) {
@@ -74,12 +118,9 @@ export function checkPackage({
     run(...story(["validate", path.join(installed, "examples", "the-last-ember")]), installDir);
     run(process.execPath, [path.join(installed, "skills", "story-maintenance", "scripts", "story.js"), "--version"], installDir);
 
-    // The README is read from node_modules too, so a relative link must point
-    // at a file the package ships; anything else needs an absolute URL.
-    const readme = fs.readFileSync(path.join(installed, "README.md"), "utf8");
-    const broken = relativeLinks(readme).filter((link) => !fs.existsSync(path.join(installed, link)));
+    const broken = unshippedLinks(packageFiles(installed), (file) => fs.readFileSync(path.join(installed, file), "utf8"));
     if (broken.length > 0) {
-      throw new Error(`README links to files the package does not ship: ${broken.join(", ")}`);
+      throw new Error(`Shipped markdown links to files the package does not ship: ${broken.join(", ")}`);
     }
 
     // `exports` keeps package.json and the schemas resolvable and the source private.
