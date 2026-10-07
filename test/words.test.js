@@ -8,7 +8,7 @@ import { openingWords } from "../src/html.js";
 import { splitWords, wordCount } from "../src/markdown.js";
 import { tokenizeDocument } from "../src/similarity.js";
 import { createStoryProject, synopsisBook } from "../src/story.js";
-import { segmentRun, wordSpans } from "../src/words.js";
+import { WORD_PATTERN, segmentRun, wordSpans } from "../src/words.js";
 import { expectLinearTime, makeTempDir, NODE_ON_PATH } from "./helpers.js";
 
 // Sentences whose dictionary segmentation is the same under Bun and Node 18,
@@ -176,5 +176,30 @@ describe("#208 Chinese and Japanese count per character", () => {
     expect(wordCount("これは日本語の文章です。")).toBe(11);
     expect(wordCount("コーヒー and tea")).toBe(6);
     expect(wordCount("Plain English words stay whole.")).toBe(5);
+  });
+});
+
+describe("#709 a combining mark stays in its word, and NFD and NFC give the same words", () => {
+  test("a dakuten after a kana letter composes, so NFD and NFC split the same", () => {
+    const nfd = "がっこう が";
+    const nfc = nfd.normalize("NFC");
+    expect(splitWords(nfd)).toEqual(splitWords(nfc));
+    expect(splitWords(nfd)).toEqual(["が", "っ", "こ", "う", "が"]);
+    expect(wordCount(nfd)).toBe(5);
+  });
+
+  test("the span of a composed word covers the letter as written", () => {
+    const nfd = "がっこう";
+    const [first] = wordSpans(nfd, WORD_PATTERN);
+    expect(first.word).toBe("が");
+    expect(nfd.slice(first.start, first.end)).toBe("が");
+  });
+
+  test("a mark that does not compose stays with the Han character before it", () => {
+    expect(splitWords("東́京")).toEqual(["東́", "京"]);
+  });
+
+  test("a Latin letter with a combining accent is one word in NFC form", () => {
+    expect(splitWords("café au lait")).toEqual(["café", "au", "lait"]);
   });
 });
