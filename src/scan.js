@@ -2020,9 +2020,6 @@ function fileLines(markdown, indexes) {
   return indexes.map((index) => frontmatterLines + index + 1);
 }
 
-// Commands never search parent folders for story.md (see
-// docs/project-format.md), but a run from inside a project, such as its
-// chapters/ folder, gets a hint naming the nearest project root above it.
 // Post-hoc notes count only above `## Chapter Text`: everything below that
 // heading is prose, counted and exported as part of the book.
 function hasPostHocNotes(body) {
@@ -2030,6 +2027,9 @@ function hasPostHocNotes(body) {
   return chapterText !== null && /^## Chapter Notes \(post-hoc\)\s*$/m.test(body.slice(0, chapterText.index));
 }
 
+// Commands never search parent folders for story.md (see
+// docs/project-format.md), but a run from inside a project, such as its
+// chapters/ folder, gets a hint naming the nearest project root above it.
 function parentProjectHint(projectRoot) {
   let current = path.dirname(projectRoot);
   while (!fs.existsSync(path.join(current, "story.md"))) {
