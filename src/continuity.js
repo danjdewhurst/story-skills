@@ -433,11 +433,21 @@ function stalePlannedWarning(label, entry, context) {
 }
 
 // A setup and its payoff are ordered by chapter number, including a
-// scheduled `chapter-NN` that has no chapter file yet.
+// scheduled `chapter-NN` that has no chapter file yet. In a branching book
+// the order is the one along the choices: a payoff on a sibling branch is
+// not read before its setup, so only a path that reads the payoff first is
+// out of order.
 function scheduledOutOfOrder(context, first, second) {
   const firstNumber = referencedChapterNumber(context.chapterNumbers, first);
   const secondNumber = referencedChapterNumber(context.chapterNumbers, second);
-  return firstNumber !== undefined && secondNumber !== undefined && secondNumber < firstNumber;
+  if (firstNumber === undefined || secondNumber === undefined) {
+    return false;
+  }
+  const { chronology } = context;
+  if (chronology.branching && chronology.numbers.has(first) && chronology.numbers.has(second)) {
+    return chronology.readAfter(first, second);
+  }
+  return secondNumber < firstNumber;
 }
 
 function referencedChapterNumber(chapterNumbers, id) {

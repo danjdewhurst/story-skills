@@ -144,6 +144,21 @@ describe("path-sensitive continuity", () => {
     expect(messages[0]).toContain("chapter-04");
   });
 
+  test("a clue paid off on a sibling branch with a lower number is not out of order (#700)", () => {
+    const root = diamond();
+    writeMarkdown(path.join(root, "continuity", "clues", "lamp-oil.md"), "title: Lamp oil\nstatus: paid-off\nplanted: chapter-03\npayoff: chapter-02", "# Lamp oil\n");
+    writeMarkdown(path.join(root, "continuity", "promises", "sealed-letter.md"), "title: Sealed letter\nstatus: paid-off\nplanted: chapter-03\npayoff: chapter-02", "# Sealed letter\n");
+    const first = checkProjectContinuity(root);
+    expect(codes(first, "clue-payoff-before-plant")).toEqual([]);
+    expect(codes(first, "promise-payoff-before-plant")).toEqual([]);
+
+    // Chapter 2 lies on a path through chapter 4, so a payoff in 2 for a
+    // setup in 4 is still read before it.
+    writeMarkdown(path.join(root, "continuity", "clues", "lamp-oil.md"), "title: Lamp oil\nstatus: paid-off\nplanted: chapter-04\npayoff: chapter-02", "# Lamp oil\n");
+    const messages = codes(checkProjectContinuity(root), "clue-payoff-before-plant");
+    expect(messages).toEqual(["continuity/clues/lamp-oil.md pays off in chapter-02 before it is planted in chapter-04"]);
+  });
+
   test("chapters in one loop fall back to number order", () => {
     const root = project("Loop");
     character(root, "mara-finn");

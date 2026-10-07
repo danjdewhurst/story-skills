@@ -16424,7 +16424,14 @@ function stalePlannedWarning(label, entry, context) {
 function scheduledOutOfOrder(context, first, second) {
   const firstNumber = referencedChapterNumber(context.chapterNumbers, first);
   const secondNumber = referencedChapterNumber(context.chapterNumbers, second);
-  return firstNumber !== undefined && secondNumber !== undefined && secondNumber < firstNumber;
+  if (firstNumber === undefined || secondNumber === undefined) {
+    return false;
+  }
+  const { chronology } = context;
+  if (chronology.branching && chronology.numbers.has(first) && chronology.numbers.has(second)) {
+    return chronology.readAfter(first, second);
+  }
+  return secondNumber < firstNumber;
 }
 function referencedChapterNumber(chapterNumbers, id) {
   if (typeof id !== "string" || id === "") {
