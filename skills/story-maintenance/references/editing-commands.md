@@ -1,6 +1,6 @@
 # Editing Commands
 
-How the commands that create, rename, move, split, merge, and remove entity files behave, and what to check after them. `SKILL.md` says when to run each command; read the matching section here before running one or explaining its result. Run any of them with `--dry-run` first when the change touches many files. `docs/cli-reference.md` lists every flag.
+How the commands that create, rename, move, split, merge, and remove entity files, and the `import` that builds a project from a manuscript, behave, and what to check after them. `SKILL.md` says when to run each command; read the matching section here before running one or explaining its result. Run any of them with `--dry-run` first when the change touches many files. `docs/cli-reference.md` lists every flag.
 
 ## add, rename, and remove
 
@@ -53,3 +53,12 @@ See the `editorial-review` skill.
 `validate` warns when a final chapter relies on open or disputed research (invented notes never trigger this), and when a note with a `risk` is used in a final or complete chapter with no `reviewed-by`.
 
 See the `research` skill.
+
+## import
+
+`import` when the user has an existing manuscript or chapter drafts and wants a Story Skills project built from them.
+
+- Follow up by creating character and location files from the printed entity candidates, and by setting `form` and `target-words` in `story.md` (import refuses `--form`; without them `story validate` never checks length and `story progress` has no target).
+- Directory sources import in natural file-name order (`chapter-2` before `chapter-10`).
+- `import --force` into an existing directory deletes every `chapter-NN.md` in `chapters/` before writing the imported chapters, so confirm with the user before forcing an import over a project with drafted chapters. It first saves the project as snapshot `before-import-<n>` and prints `story snapshot --restore before-import-<n>`; tell the user that name, since that restore puts the old chapters back.
+- A Story Skills chapter file keeps its `author`; for a collection or anthology of other files, add `--bylines` to set each chapter's `author` from the by-line opening its prose (`By Ben Other`, taken out of the prose) or its file's frontmatter `author`. A line that is not clearly a by-line stays in the prose, so check the chapters left without `author` and set it by hand.
