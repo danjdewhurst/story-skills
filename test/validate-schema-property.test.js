@@ -148,19 +148,16 @@ function baseProject() {
 
 // Values from the example projects, per field name: realistic valid values,
 // including lists of mappings (routes, progressions, choices).
-function exampleValues() {
+// An example that does not parse throws, so the run fails; a skipped file
+// would shrink the value pool without any failure (#773).
+function exampleValues(examples = path.join(repoRoot, "examples")) {
   const values = {};
-  const examples = path.join(repoRoot, "examples");
   for (const file of fs.readdirSync(examples, { recursive: true })) {
     if (!String(file).endsWith(".md")) {
       continue;
     }
-    let data;
-    try {
-      data = parseFrontmatter(fs.readFileSync(path.join(examples, file), "utf8")).data;
-    } catch {
-      continue;
-    }
+    const filePath = path.join(examples, file);
+    const { data } = parseFrontmatter(fs.readFileSync(filePath, "utf8"), filePath);
     for (const [key, value] of Object.entries(data)) {
       (values[key] ??= []).push(value);
     }
@@ -267,6 +264,12 @@ describe("story validate and schemas/story.schema.json agree (#295)", () => {
     const root = baseProject();
     expect(validateProject(root).errors).toEqual([]);
     expect(validateAgainstSchema(buildSchemaDocument(root), schema)).toEqual([]);
+  });
+
+  test("an example that does not parse fails the run (#773)", () => {
+    const dir = makeTempDir();
+    fs.writeFileSync(path.join(dir, "bad.md"), "# No frontmatter here\n");
+    expect(() => exampleValues(dir)).toThrow("bad.md is missing YAML frontmatter");
   });
 
   // Each run takes a few milliseconds (more on slower CI runners), so a deep
