@@ -35,6 +35,10 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
 // that side's reasons, so an exception cannot hide a different
 // disagreement on the same field.
 //
+// Dates need no exception: the schema's YYYY-MM-DD patterns are generated
+// from the check validate runs, so they refuse 2024-13-45 and 2023-02-29
+// too (#530).
+//
 // writing-mode: vertical and chapter-numerals: native need no exception:
 // the base project sets no language, and the schema requires one for them.
 // Which set languages qualify is left to validate (#467), and the test
@@ -45,10 +49,6 @@ const EXCEPTIONS = [
   { kind: "scene", field: "scene", side: "validate", match: /^filename-number-mismatch/, reason: "the scene number must match the scene's file name" },
   { kind: "story", field: "isbn", side: "validate", match: /^invalid-isbn/, reason: "an ISBN's check digit is arithmetic, not a pattern" },
   { kind: "story", field: "cover", side: "validate", match: /^invalid-cover: story\.md cover .* (?:does not exist|is not a file|must be inside the project)$/, reason: "the cover file must exist on disk" },
-  { kind: "story", field: "deadline", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "a date must be a real calendar day (no 2024-13-45), which a pattern cannot check" },
-  { kind: "story", field: "publication-date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline" },
-  { kind: "chapter", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for deadline; the schema allows any text, since continuity only warns about a date not shaped YYYY-MM-DD" },
-  { kind: "scene", field: "date", side: "validate", match: /real YYYY-MM-DD calendar day/, reason: "as for chapter date" },
   { kind: "story", field: "calendar", side: "validate", match: /^invalid-calendar: story\.md calendar (?:entry \d+ (?:must name exactly one of month, era, or weekdays|first-weekday must be one of the weekdays|repeats weekdays|weekdays needs at least one name)|needs at least one month entry|era .+ (?:counts backward, but only the first era may|needs years)|.+ appears more than once)/, reason: "a calendar entry must be exactly one kind, with months, unique names, and eras in a readable order, which needs counting and comparing across entries" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
   { kind: "story", field: "severity", side: "validate", match: /^invalid-cli-config/, reason: "an unknown key in a severity entry is rejected, and the schema checker has no additionalProperties" },
@@ -179,12 +179,12 @@ function generator(seed) {
 // Raw YAML scalars, as a writer might type them: strings, numbers, odd
 // scalars other YAML tools read as numbers, booleans, or null, empty and
 // blank values, placeholders, and values with the shape of an id, chapter,
-// date, or time.
+// date (real, impossible, or a leap day), or time.
 const SCALARS = [
   "text", "Mara Quill", "\"quoted\"", "''", "\"\"", "\"  \"", "[TODO: fill in]",
   "0", "1", "-1", "3", "2.5", "-2.5", "100000", "0451", "1e3", ".5",
   "yes", "no", "true", "false", "~", "null", "[]",
-  "mara-quill", "chapter-01", "chapter-99", "2024-01-05", "2024-13-45", "08:30", "25:61", "dawn"
+  "mara-quill", "chapter-01", "chapter-99", "2024-01-05", "2024-13-45", "2024-02-29", "2023-02-29", "08:30", "25:61", "dawn"
 ];
 
 function enumValues(property) {

@@ -52,6 +52,7 @@ All scripts live in `package.json`.
 | `bun run eval:selftest` | `evals/run-evals.js --all evals/examples` | Changes to the eval checker or fixtures |
 | `bun run build:fallback` | `scripts/build-fallback.js`, a `bun build` of `bin/story.js` into the skill folder | After any change to `src/` |
 | `bun run check:fallback` | `scripts/check-fallback.js` | Confirms the committed fallback matches a fresh build from the pinned Bun |
+| `bun run build:schema-patterns` | `scripts/schema-patterns.js`, which writes the [generated patterns](#schema) into `schemas/story.schema.json` | After changing how validate reads a date |
 | `bun run check:node-help` | `node skills/story-maintenance/scripts/story.js --help` | Confirms the fallback runs under Node |
 | `bun run release <bump>` | `scripts/release.js` | Cutting a release (maintainers only) |
 
@@ -410,7 +411,9 @@ When you change the project format, update the examples, the schema, and the tes
 - `continuity`: the durable state from `continuity/state.md` and the `exemptions` list from `continuity/exemptions.md`.
 - `progressLog` and `styleSheet`, when `progress.md` and `style-sheet.md` exist.
 
-It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, `exclusiveMinimum`, `minLength`, `allOf`, `if`, and `then`. `type` may be a single type or an array of types, such as `["string", "integer"]`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
+It then validates the document with a small built-in validator. The validator supports only the keywords the schema uses: `$schema`, `$id`, `$comment`, `$defs`, `title`, `description`, `$ref`, `type`, `required`, `properties`, `items`, `enum`, `const`, `pattern`, `minimum`, `exclusiveMinimum`, `minLength`, `allOf`, `if`, and `then`, and the boolean schemas `true` and `false` (so `"calendar": false` under `properties` in an `if` means story.md has no calendar). `type` may be a single type or an array of types, such as `["string", "integer"]`. It walks the whole schema first and throws on any other keyword, so the schema cannot quietly outgrow the validator. If you need a new keyword, add support for it in `check-schema.js` with tests.
+
+Some patterns are generated rather than written by hand, so they cannot drift from the code `story validate` runs. [`scripts/schema-patterns.js`](../scripts/schema-patterns.js) builds a real `YYYY-MM-DD` day, leap years included, from `parseClockDate` (`$defs/realDate`, `$defs/realDateOrText`, and `publication-date`). `bun run build:schema-patterns` writes them into the schema in place. `test/schema.test.js` fails when one is out of date, and checks each against validate: 29 February of every year from 0000 to 9999, and every month and day of sample years.
 
 The schema check runs as part of `test:examples` and in `test/schema.test.js`, which also checks that projects scaffolded by `story init` and `story add` match the schema. You can run it on its own:
 
@@ -431,7 +434,7 @@ Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-th
 
 It fails when `validate` rejects the file and the schema accepts it, or the other way round.
 
-A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, a real calendar date, or an unquoted number read as an id. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
+A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, or an unquoted number read as an id. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
 
 `bun run test` runs a fixed seed, and CI also runs seeds 1 to 5. To search further, run more iterations or another seed, and write what it finds to a file:
 
