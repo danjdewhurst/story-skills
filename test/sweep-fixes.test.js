@@ -1303,17 +1303,30 @@ describe("round eight", () => {
     // ...so a rerun finishes the job.
     expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }).id).toBe("mara-tide");
     expect(messages(validateLinks(root).errors)).toEqual([]);
-    // Killed after the old file was deleted, only the reindex was missed: the
-    // registry row links the new file but still shows the old name. A rerun
-    // resumes rather than failing with "does not exist" (#579).
-    const index = path.join(root, "characters", "_index.md");
-    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("| Mara Tide |", "| Mara Quill |"));
-    const resumed = invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root]);
-    expect(resumed.out).toContain("Finished an interrupted rename of character mara-quill to mara-tide");
+    // Killed after the old file was deleted, the rename left its marker; a
+    // rerun resumes rather than failing with "does not exist" (#579).
+    const marker = path.join(root, ".story-rename.tmp");
+    const { rmSync } = fs;
+    fs.rmSync = (file, options) => {
+      if (path.resolve(String(file)) === marker) {
+        throw new Error("killed");
+      }
+      return rmSync(file, options);
+    };
+    try {
+      expect(() => renameEntity(root, { kind: "character", id: "mara-tide", name: "Mara Quill" })).toThrow("killed");
+    } finally {
+      fs.rmSync = rmSync;
+    }
+    const rerun = ["rename", "character", "mara-tide", "Mara Quill", "--path", root];
+    // The preview's copy of the project holds the marker too.
+    expect(invoke(path.dirname(root), [...rerun, "--dry-run"])).toEqual({ code: 0, out: "delete  .story-rename.tmp\nDry run: story rename would make 1 change; nothing was written\n", err: "" });
+    expect(fs.existsSync(marker)).toBe(true);
+    const resumed = invoke(path.dirname(root), rerun);
+    expect(resumed.out).toContain("Finished an interrupted rename of character mara-tide to mara-quill");
     expect(resumed).toMatchObject({ code: 0, err: "" });
-    expect(fs.readFileSync(index, "utf8")).toContain("| Mara Tide |");
-    // Once finished, a rerun has no evidence left and is refused.
-    expect(invoke(path.dirname(root), ["rename", "character", "mara-quill", "Mara Tide", "--path", root])).toMatchObject({ code: 2, err: expect.stringContaining("character mara-quill does not exist") });
+    // Once finished, a rerun has no marker left and is refused.
+    expect(invoke(path.dirname(root), rerun)).toMatchObject({ code: 2, err: expect.stringContaining("character mara-tide does not exist") });
     // Renaming onto another entity with the same name is still refused.
     createEntity(root, { kind: "character", name: "Other" });
     createEntity(root, { kind: "character", name: "Other Two" });

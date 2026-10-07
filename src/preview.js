@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MAX_READ_BYTES, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
+import { MAX_READ_BYTES, RENAME_MARKER, isPathInside, lstatIfExists, nearestExistingAncestor, readFileBytes, readFilePrefix, readTextFile, recordChanges } from "./files.js";
 import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE } from "./lock.js";
 import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, PATH_CONTROL_CHARACTERS, SKIPPED_SCAN_DIRECTORIES, existingStoryData, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
@@ -351,10 +351,11 @@ function copyProject(source, target, roots, depth = 0) {
 }
 
 // Write commands read the text of markdown files only (and import the
-// .gitignore it keeps), and no file over the read limit; of any other file
-// (the story.md cover) they check at most the size and, for the cover, the
-// first bytes, which say what kind of image it is. So only readable markdown
-// is copied whole. Every other file is a sparse file of the same size, which
+// .gitignore it keeps, and rename its marker), and no file over the read
+// limit; of any other file (the story.md cover) they check at most the size
+// and, for the cover, the first bytes, which say what kind of image it is.
+// So only readable markdown, the .gitignore, and the marker are copied
+// whole. Every other file is a sparse file of the same size, which
 // takes no disk space, and only the cover (`keepHead`) keeps its first bytes,
 // so no other file's contents reach the scratch folder. An unreadable file
 // stays unreadable. The copy is read as a command reads it, so a file
@@ -363,7 +364,7 @@ function copyProject(source, target, roots, depth = 0) {
 function copyRegularFile(from, to, keepHead = false) {
   const { size } = fs.statSync(from);
   const readable = allowed(from, fs.constants.R_OK);
-  if ((from.endsWith(".md") || path.basename(from) === ".gitignore") && size <= MAX_READ_BYTES && readable) {
+  if ((from.endsWith(".md") || [".gitignore", RENAME_MARKER].includes(path.basename(from))) && size <= MAX_READ_BYTES && readable) {
     fs.writeFileSync(to, readFileBytes(from));
   } else {
     fs.writeFileSync(to, keepHead && readable ? readFilePrefix(from, IMAGE_SIGNATURE_BYTES) : "");

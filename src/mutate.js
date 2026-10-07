@@ -20,6 +20,7 @@ import {
   makeDirectories,
   portablePath,
   projectPath,
+  RENAME_MARKER,
   readTextFile,
   recordChanges,
   removeFile,
@@ -113,7 +114,6 @@ import {
   glossaryIndex,
   matterIndex,
   researchIndex,
-  registryCell,
   styleSheet,
   requireSingleLineName,
   buildEntity,
@@ -1253,19 +1253,20 @@ export function renameEntity(root, options) {
   const newFile = path.join(project.root, config.dir, `${newId}.md`);
   assertSafeProjectPath(newFile, project.root);
   if (!fs.existsSync(oldFile)) {
-    // A rename killed after deleting the old file missed only the reindex:
-    // every reference was rewritten before the file moved. So resume only
-    // when the target has the requested name, nothing still names the old
-    // id, and the registry still shows the reindex is missing (see
-    // registryAwaitsRetitle); otherwise the old id is simply missing (a typo,
-    // or a rename that already finished), and an unrelated entity that
-    // happens to have this name must not absorb its references.
-    if (newFile !== oldFile && fs.existsSync(newFile) && readMarkdown(newFile, project.root).data[config.titleField] === name
-      && registryAwaitsRetitle(project.root, kind, newFile, name)
+    // A rename killed after deleting the old file missed at most its
+    // reindex: every reference was rewritten before the file moved. Its
+    // marker says which rename it was, so resume only when the marker names
+    // this one, the new file exists, and nothing still names the old id;
+    // otherwise the old id is simply missing (a typo, or a rename that
+    // already finished), and an unrelated entity that happens to have this
+    // name must not absorb its references.
+    const marker = renameMarker(project.root);
+    if (marker?.kind === kind && marker.id === oldId && marker.newId === newId && marker.name === name && fs.existsSync(newFile)
       && replaceEntityReferences(project.root, kind, oldId, newId, new Map()).size === 0) {
       const reindexed = reindexProject(project.root);
       // The killed run never printed its warnings.
       const warnings = ambiguousReferenceWarnings(project.root, kind, oldId, newFile, newId);
+      removeFile(path.join(project.root, RENAME_MARKER), { force: true });
       return { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), resumed: true, warnings };
     }
     throw usageError(`${kind} ${oldId} does not exist`);
@@ -1316,6 +1317,10 @@ export function renameEntity(root, options) {
     warnings = warnings.concat(ambiguousReferenceWarnings(project.root, kind, oldId, oldFile, newId));
 
     assertWritable(project.root, [...plan.keys(), oldFile], interrupted ? [] : [newFile]);
+    // Before the first change, so a rerun can finish the rename even once
+    // the old file is gone (see renameMarker). A marker an earlier rename
+    // left is replaced, so it passes no unchangedFrom.
+    writeFile(path.join(project.root, RENAME_MARKER), `${JSON.stringify({ kind, id: oldId, newId, name })}\n`, { root: project.root });
     // References first, the entity file last: if the command is killed
     // partway, the old file still exists and a rerun finishes the job.
     commitWrites(() => {
@@ -1331,6 +1336,10 @@ export function renameEntity(root, options) {
     warnings = warnings.concat(linkedBookIdWarnings(project, kind, oldId, newId));
   }
   const reindexed = reindexProject(project.root);
+  if (newFile !== oldFile) {
+    // Finished, so a rerun reports the old id as missing.
+    removeFile(path.join(project.root, RENAME_MARKER), { force: true });
+  }
   const result = { kind, oldId, id: newId, file: newFile, changed: [newFile].concat(reindexed.changed), warnings };
   if (prose) {
     result.prose = { edits: prose.edits, aliases: prose.aliases, shared: prose.shared.length, review: prose.review };
@@ -1339,42 +1348,51 @@ export function renameEntity(root, options) {
   return result;
 }
 
-// Whether the registry row for `file` still shows another name than `name`:
-// the reference rewrite of a rename pointed the old entity's row at the new
-// file, and only the reindex after the delete gives it the new name. A rename
-// that finished, or an entity that merely has this name, is listed under it,
-// and a registry that does not list the file at all is no evidence either.
-function registryAwaitsRetitle(root, kind, file, name) {
-  const dir = entityConfig(kind).dir;
-  const registry = [dir, path.posix.dirname(dir)].map((entry) => path.posix.join(entry, "_index.md")).find((entry) => REGISTRY_FILES.has(entry));
-  const registryPath = registry && path.join(root, registry);
-  if (!registryPath || !fs.existsSync(registryPath)) {
-    return false;
+// The rename the marker at the project root names, as { kind, id, newId,
+// name }, or null when there is none or it cannot be read. renameEntity
+// writes it before its first change and deletes it after its reindex.
+function renameMarker(root) {
+  const file = path.join(root, RENAME_MARKER);
+  if (!fs.existsSync(file)) {
+    return null;
   }
-  const cell = `[${path.basename(file, ".md")}](${projectPath(path.dirname(registryPath), file)}) |`;
-  const row = safeRead(registryPath, root).split(/\r?\n/).find((line) => line.startsWith("| ") && line.trimEnd().endsWith(cell));
-  return row !== undefined && !row.startsWith(`| ${registryCell(name)} |`);
+  try {
+    return JSON.parse(safeRead(file, root));
+  } catch {
+    return null;
+  }
 }
 
 // A field that can name another kind too (mentions, owner, controlled-by)
 // is left alone by rename and remove when an entity of that kind has the
-// same id, since the reference could mean either. Lists the files that hold
-// such references, so the writer can check which entity each one meant;
-// `newId` is the rename's new id, or null for a remove.
+// same id, since the reference could mean either. Lists each file that holds
+// such references, with the fields they are in, so the writer can check
+// which entity each one meant; `newId` is the rename's new id, or null for a
+// remove. Values match as rename and remove match them, so an unquoted
+// `owner: 1984` counts.
 function ambiguousReferenceWarnings(root, kind, id, excludedFile, newId = null) {
   const warnings = [];
+  const probe = `${id}-ambiguous-probe`;
   for (const [other, fields] of kindsSharingFields(kind)) {
     if (!fs.existsSync(path.join(root, entityConfig(other).dir, `${id}.md`))) {
       continue;
     }
-    const context = { ...entityReferenceContext(root, kind, id), isReferenceKey: (key) => fields.includes(key) };
-    const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), idRenamer(id, `${id}-ambiguous-probe`), (body) => body);
-    if (plan.size === 0) {
+    const found = new Map();
+    for (const field of fields) {
+      const context = { ...entityReferenceContext(root, kind, id), isReferenceKey: (key) => key === field };
+      const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), (value) => (idText(value) === id ? probe : value), (body) => body);
+      for (const file of plan.keys()) {
+        const shown = projectPath(root, file);
+        found.set(shown, (found.get(shown) ?? []).concat(field));
+      }
+    }
+    if (found.size === 0) {
       continue;
     }
-    const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
+    const files = [...found.keys()].sort();
+    const listed = files.map((file) => `${file} (${found.get(file).join(", ")})`).join(", ");
     const action = newId === null ? `remove left them alone, so they now name the ${other}: delete any that meant the ${kind}` : `rename left them alone, so they now name the ${other}: change any that meant the ${kind} to ${newId}`;
-    warnings.push(warn("ambiguous-references", `${fields.join(" and ")} references to ${id} in ${files.join(", ")} could mean the ${kind} or ${other} ${id}, and ${action}`, files.length === 1 ? files[0] : null));
+    warnings.push(warn("ambiguous-references", `references to ${id} in ${listed} could mean the ${kind} or ${other} ${id}, and ${action}`, files.length === 1 ? files[0] : null));
   }
   return warnings;
 }
