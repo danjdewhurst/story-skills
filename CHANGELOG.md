@@ -14,7 +14,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - This matters since CI then reports findings your local checks miss.
   - It names the update command for how the CLI was installed (npm, Bun, Homebrew, a downloaded binary, the skills' bundled copy, or a clone) when it can tell.
   - Pins now compare in semver order, so `1.0.0-rc.1` is older than `1.0.0`, and a pin that is not one exact release, such as `latest`, gets no version note.
-- `story validate` now warns about a `[TODO` marker in a matter page's text or title, such as the `[TODO: author to supply]` the publishing skill leaves on the copyright page's ISBN line, or inside a `story.md` field the generated copyright page prints (`matter-todo-markers`). `export` and every build that prints the page repeat the warning and still build, and the metadata sheet's readiness checklist names each page; promote the code to `level: error` in `story.md` to make a release build fail. A `[TODO` inside a link destination, a URL, or an HTML tag no longer counts as a chapter `todo-markers` marker either, since no reader sees it. ([#557](https://github.com/danjdewhurst/story-skills/issues/557))
+- `story validate` now warns about a `[TODO` marker in a matter page's text or title, or inside a `story.md` field the generated copyright page prints (`matter-todo-markers`). ([#557](https://github.com/danjdewhurst/story-skills/issues/557))
+  - One such marker is the `[TODO: author to supply]` the publishing skill leaves on the copyright page's ISBN line.
+  - `export` and every build that prints the page repeat the warning and still build, and the metadata sheet's readiness checklist names each page.
+  - Promote the code to `level: error` in `story.md` to make a release build fail.
+  - A `[TODO` inside a link destination, a URL, or an HTML tag no longer counts as a chapter `todo-markers` marker either, since no reader sees it.
 - The plain DOCX build now credits the book's authors and editor under its title, as the HTML and print title pages do. (#518)
   - The `author` or `authors` names come first, then `Edited by` and the `editor` names, in the book's language.
   - Each line uses a new centred `Credit` paragraph style, and a book with neither field gets no credit line.
