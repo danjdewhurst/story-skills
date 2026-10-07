@@ -173,8 +173,12 @@ avoids saying).
 3. For uniform-rhythm warnings, revise sentence length by intent (short for
    impact, long for flow), not by formula.
 4. For similar names, ask the user before renaming; check replacements with
-   `story names '<Candidate>'`, then use
-   `story rename character <id> '<New Name>'` so references follow.
+   `story names '<Candidate>'`. Preview the rename with
+   `story rename character <id> '<New Name>' --prose --dry-run`, show the
+   user the replacements, then run it without `--dry-run`, so the chapter
+   text follows as well as the references. Without `--prose` the prose
+   keeps the old name. Check the matches it leaves as written as the
+   `character-management` skill's rename steps describe.
 5. For `story voices` warnings, revise the dialogue or update the
    character's `voice-words`/`voice-avoid` when the draft has found a
    better voice; ask the user before changing canon.
