@@ -9804,6 +9804,27 @@ function setextSceneBreakLines(markdownBody) {
   }
   return found;
 }
+var CJK_CHARACTER2 = /^[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\u3000-\u303f\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee]$/u;
+var WIDE_PUNCTUATION = /^[\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
+var EDGE_MARKUP = new Set(["*", "_", "`"]);
+function edgeCharacter(text, atEnd) {
+  let index = atEnd ? text.length - 1 : 0;
+  while (index >= 0 && index < text.length && EDGE_MARKUP.has(text[index])) {
+    index += atEnd ? -1 : 1;
+  }
+  if (index < 0 || index >= text.length) {
+    return "";
+  }
+  const pairStart = atEnd && index > 0 && /[\udc00-\udfff]/.test(text[index]) && /[\ud800-\udbff]/.test(text[index - 1]);
+  return String.fromCodePoint(text.codePointAt(pairStart ? index - 1 : index));
+}
+function softBreak(before, after) {
+  const left = edgeCharacter(String(before), true);
+  const right = edgeCharacter(String(after), false);
+  const cjkLeft = CJK_CHARACTER2.test(left);
+  const cjkRight = CJK_CHARACTER2.test(right);
+  return cjkLeft && (cjkRight || WIDE_PUNCTUATION.test(right)) || cjkRight && WIDE_PUNCTUATION.test(left) ? "" : " ";
+}
 var SOURCE_SPACE = new Set([" ", "\t", `
 `, "\v", "\f", "\r", "\u2028", "\u2029"]);
 var SOURCE_SPACE_RUN = /[ \t\n\v\f\r\u2028\u2029]+/g;
@@ -19043,14 +19064,12 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       return;
     }
-    const joined = lines.map((line, index) => {
-      if (index === lines.length - 1) {
-        return line;
+    const texts = lines.map((line, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
+    const joined = texts.map((text, index) => {
+      if (index === texts.length - 1) {
+        return text;
       }
-      if (/\\$/.test(line)) {
-        return `${line.slice(0, -1)}${LINE_BREAK}`;
-      }
-      return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
+      return /\\$| {2,}$/.test(lines[index]) ? `${text}${LINE_BREAK}` : `${text}${softBreak(text, texts[index + 1])}`;
     }).join("");
     const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
     const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
@@ -26433,14 +26452,15 @@ function inkProse(body) {
   const out = [];
   for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/).flatMap(splitAtSceneBreaks)) {
     const lines = paragraph.split(/\r?\n/);
-    let current = [];
+    let current = "";
     lines.forEach((line, index) => {
       const last = index === lines.length - 1;
       const broken = !last && HARD_BREAK.test(line);
-      current.push((broken ? line.replace(/\\$/, "") : line).trim());
+      const text = (broken ? line.replace(/\\$/, "") : line).trim();
+      current = current === "" ? text : `${current}${softBreak(current, text)}${text}`;
       if (broken || last) {
-        out.push(inkLine(current.join(" ")));
-        current = [];
+        out.push(inkLine(current));
+        current = "";
       }
     });
     out.push("");

@@ -263,6 +263,44 @@ export function setextSceneBreakLines(markdownBody) {
   return found;
 }
 
+// Chinese and Japanese characters: Han, kana, the CJK symbols and
+// punctuation block (。、「」 and the ideographic space), and the fullwidth
+// and halfwidth forms besides halfwidth Hangul. Korean, set with spaces
+// between words, is not among them.
+const CJK_CHARACTER = /^[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\u3000-\u303f\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee]$/u;
+// Punctuation Chinese and Japanese set at full width though Unicode leaves
+// its width open: dashes, ellipses, and curly quotes.
+const WIDE_PUNCTUATION = /^[\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
+const EDGE_MARKUP = new Set(["*", "_", "`"]);
+
+// The character at the end (or start) of `text`, past any emphasis or code
+// markers, so `**強調**` ends with 調.
+function edgeCharacter(text, atEnd) {
+  let index = atEnd ? text.length - 1 : 0;
+  while (index >= 0 && index < text.length && EDGE_MARKUP.has(text[index])) {
+    index += atEnd ? -1 : 1;
+  }
+  if (index < 0 || index >= text.length) {
+    return "";
+  }
+  // From the end, a character outside the BMP is a surrogate pair.
+  const pairStart = atEnd && index > 0 && /[\udc00-\udfff]/.test(text[index]) && /[\ud800-\udbff]/.test(text[index - 1]);
+  return String.fromCodePoint(text.codePointAt(pairStart ? index - 1 : index));
+}
+
+// What a soft line break between two lines of one paragraph becomes:
+// nothing between two Chinese or Japanese characters, which set no space
+// between words, or between one of them and the full-width punctuation
+// beside it, as CSS joins such lines; otherwise a space. `before` and
+// `after` are the lines without the layout whitespace at the break.
+export function softBreak(before, after) {
+  const left = edgeCharacter(String(before), true);
+  const right = edgeCharacter(String(after), false);
+  const cjkLeft = CJK_CHARACTER.test(left);
+  const cjkRight = CJK_CHARACTER.test(right);
+  return (cjkLeft && (cjkRight || WIDE_PUNCTUATION.test(right))) || (cjkRight && WIDE_PUNCTUATION.test(left)) ? "" : " ";
+}
+
 // Whitespace that only lays out the markdown source: ASCII spaces, tabs,
 // and line ends, and the Unicode line and paragraph separators. A space a
 // writer types as text is not layout and stays: the no-break space and

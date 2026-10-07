@@ -5,6 +5,8 @@ import { shunnHtml } from "../src/packaging.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
+const repoRoot = path.join(import.meta.dir, "..");
+
 // A one-chapter book in `language` with `prose` as its chapter text.
 function project(language, prose) {
   const { root } = createStoryProject({ cwd: makeTempDir(), title: "Breaks", language, force: false });
@@ -86,5 +88,74 @@ describe("scene-break lines in builds (#551)", () => {
       "chapters/chapter-01.md has 2 --- scene breaks right under a line of text (lines 10, 12): builds print scene breaks, but markdown viewers read them as heading underlines, so put a blank line above each"
     );
     expect(warnings(spaced)).toEqual([]);
+  });
+});
+
+describe("soft-wrapped Chinese and Japanese lines in builds (#599)", () => {
+  test("kirimi-eki-no-wasuremono wrapped after each sentence builds as it does unwrapped", () => {
+    const copy = (name) => {
+      const root = path.join(makeTempDir(), name);
+      fs.cpSync(path.join(repoRoot, "examples", "kirimi-eki-no-wasuremono"), root, { recursive: true });
+      return root;
+    };
+    const original = copy("kirimi-eki-no-wasuremono");
+    const wrapped = copy("kirimi-eki-no-wasuremono");
+    let wraps = 0;
+    for (const name of ["chapter-01.md", "chapter-02.md", "chapter-03.md"]) {
+      const chapter = path.join(wrapped, "chapters", name);
+      const [head, prose] = fs.readFileSync(chapter, "utf8").split("## Chapter Text");
+      // A break after each 。 that does not end its line or close a quote.
+      const broken = prose.replace(/。(?=[^」\n])/g, () => {
+        wraps += 1;
+        return "。\n";
+      });
+      fs.writeFileSync(chapter, `${head}## Chapter Text${broken}`, "utf8");
+    }
+    expect(wraps).toBeGreaterThan(20);
+    const expected = builds(original);
+    const output = builds(wrapped);
+    for (const format of ["epub", "docx", "shunnDocx", "shunn", "html", "print", "ink"]) {
+      expect({ format, same: output[format] === expected[format] }).toEqual({ format, same: true });
+    }
+    // The narration script keeps the lines as written, as the markdown
+    // export does.
+    expect(output.narration).not.toBe(expected.narration);
+  });
+
+  test("a line break between Chinese or Japanese characters is dropped, and a space kept beside other text, in every format", () => {
+    const prose = [
+      "一行目の文。",
+      "二行目の文。",
+      "",
+      "東京で",
+      "Alice に会った。",
+      "She said hi.",
+      "「こんにちは」と",
+      "言った。",
+      "",
+      "他说：",
+      "\u201c你好。\u201d",
+      "然后走了。",
+      "",
+      "The lamp",
+      "is dark.",
+      ""
+    ].join("\n");
+    const output = { ...builds(project("ja", prose)), shunnPdf: shunnPdfHtml("ja", prose) };
+    delete output.narration;
+    for (const [format, text] of Object.entries(output)) {
+      expect({
+        format,
+        japanese: text.includes("一行目の文。二行目の文。"),
+        mixed: text.includes("東京で Alice に会った。 She said hi. 「こんにちは」と言った。"),
+        chinese: text.includes("他说：\u201c你好。\u201d然后走了。"),
+        latin: text.includes("The lamp is dark.")
+      }).toEqual({ format, japanese: true, mixed: true, chinese: true, latin: true });
+    }
+  });
+
+  test("a hard line break between Chinese or Japanese lines stays a break", () => {
+    const epub = readArchiveText(buildBook(project("ja", "一行目。\\\n二行目。  \n三行目。\n"), { format: "epub" }).outFile);
+    expect(epub).toContain("<p>一行目。<br/>二行目。<br/>三行目。</p>");
   });
 });

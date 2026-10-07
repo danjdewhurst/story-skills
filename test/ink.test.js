@@ -161,10 +161,10 @@ describe("ink build", () => {
     expect(text).toContain("=== a ===\nThe lamp is dark, and the sun is down.\n\nRoses are red,\nviolets\nblue.\\\\\\\\ Done \\\\\n\n-> END\n");
   });
 
-  test("ends a paragraph at a scene-break line", () => {
-    const body = "He left.\n* * *\nShe came\nback.";
+  test("ends a paragraph at a scene-break line and joins wrapped Chinese and Japanese lines with no space", () => {
+    const body = "He left.\n* * *\nShe came\nback.\n一行目の文。\n二行目の文。";
     const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
-    expect(text).toContain("=== a ===\nHe left.\n\n\\* * *\n\nShe came back.\n\n-> END\n");
+    expect(text).toContain("=== a ===\nHe left.\n\n\\* * *\n\nShe came back. 一行目の文。二行目の文。\n\n-> END\n");
   });
 
   test("escapes the title and author tags onto one line each", () => {
