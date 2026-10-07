@@ -818,7 +818,7 @@ All three read these `story.md` fields for the title page:
 | Field | Type | Used for |
 |-------|------|----------|
 | `author` or `authors` | Text, or a list of text | The byline under `by`. As in every build, `authors` wins when both are set, and its names are joined with "and". Left out when neither is set. |
-| `editor` | Text, or a list of text | An anthology's editor, credited after the byline as `Edited by Miriam Hale`. With no author set, the editor's credit takes the byline's place, and the PDF's running head uses the editor's name. |
+| `editor` | Text, or a list of text | An anthology's editor, credited after the byline as `Edited by Miriam Hale`. With no author set, the editor's credit takes the byline's place, and the running head of the DOCX and PDF uses the editor's name. |
 | `contact` | List of text lines (a single string also works) | Your name, address, email, and so on, one line each. |
 
 ```yaml
@@ -851,7 +851,7 @@ The grove was quieter than it should have been.
 
 In the `.shunn.md` file, a form-feed character (`\f`) on its own line before each chapter heading marks the page break, and each prose paragraph is joined onto one line with a blank line after it. Markdown emphasis such as `*italic*` is left as written.
 
-The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It sets the page to US Letter (or A4 with `--paper a4`) with 1 in margins. It does not add a running header or page numbers. Add those in a word processor if a market requires them, and check each market's own guidelines.
+The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It sets the page to US Letter (or A4 with `--paper a4`) with 1 in margins. Every page after the title page has a running head at the top right with the author, the title, and the page number (`Ada Writer / The Last Ember / 2`), as in the PDF. The page number is a Word page field, so it stays correct when you edit the file. Check each market's own guidelines.
 
 The PDF is laid out as Shunn sets a manuscript page: US Letter (or A4 with `--paper a4`) with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and a running head of the author, title, and page number at the top right of every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
 

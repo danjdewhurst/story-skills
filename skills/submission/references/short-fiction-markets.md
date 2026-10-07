@@ -17,11 +17,12 @@ too often to trust.
 - The manuscript is the Shunn build with `form: short-story` or `form: flash`
   in `story.md` (see Build the manuscript in `SKILL.md`). When a market reads
   anonymously (its guidelines say so), the Shunn build is not anonymous: its
-  first page carries the author's name, contact block, and byline. The build
-  has no option to drop them, so tell the user to remove all three from the
-  built file in `dist/`, and anything else that names them, such as a page
-  header they added, before sending. Follow the market's own anonymity
-  rules.
+  first page carries the author's name, contact block, and byline, and the
+  DOCX and PDF running head on every later page names the author. The build
+  has no option to drop them, so tell the user to remove all of them from
+  the built file in `dist/` (in the DOCX, edit the header so it keeps only
+  the title and page number), and anything else that names the author,
+  before sending. Follow the market's own anonymity rules.
 - Word-count limits are the market's own. `word-count-norms.md` gives the
   usual bands for short story, novelette, and novella; a story that sits
   over a market's limit does not go to that market unless the user cuts it
