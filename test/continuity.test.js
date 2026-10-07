@@ -603,6 +603,17 @@ describe("timeline and the clock", () => {
     expect(messages(continuity(root).errors)).toEqual(["chapters/chapter-03.md lists ann, who died in chapter-02; move posthumous appearances to mentions"]);
   });
 
+  test("a promise or clue planted in a chapter with no file still gets the payoff gap warning (#701)", () => {
+    const root = baseProject(5);
+    fs.rmSync(path.join(root, "chapters", "chapter-02.md"));
+    writeMarkdown(path.join(root, "continuity", "promises", "the-lantern.md"), "title: The lantern\nstatus: planted\nplanted: chapter-02", "# The lantern\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "the-lamp.md"), "title: The lamp\nstatus: planted\nplanted: chapter-02", "# The lamp\n");
+    expect(messages(continuity(root).warnings).filter((message) => message.includes("has no payoff yet")).sort()).toEqual([
+      "continuity/clues/the-lamp.md was planted in chapter-02, 3 chapters ago, and has no payoff yet",
+      "continuity/promises/the-lantern.md was planted in chapter-02, 3 chapters ago, and has no payoff yet"
+    ]);
+  });
+
   test("a flash-forward prologue gives one warning and later chapters are still checked (#156)", () => {
     const root = baseProject(5);
     writeBaseChapter(root, 1, "date: 2034-01-01");
