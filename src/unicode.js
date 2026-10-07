@@ -93,3 +93,49 @@ export function composedText(text) {
   };
   return { text: composed, original: (start, end) => [at(start, false), at(end, true)] };
 }
+
+// The characters that end a line. A run of whitespace holding one is folded
+// to a space by oneLine.
+const LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/;
+
+// `text` on one line, trimmed: each run of whitespace that holds a line
+// break becomes one space, and other runs are kept as written. Each run is
+// matched once, so a long run of spaces costs no more than its length.
+export function oneLine(text) {
+  return String(text).replace(/[\s\u0085]+/g, (space) => (LINE_BREAK.test(space) ? " " : space)).trim();
+}
+
+let graphemes;
+
+function graphemeSegments(text) {
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  return graphemes.segment(text);
+}
+
+// The characters a reader sees in `text`: grapheme clusters after NFC, so a
+// letter and its accent, a Devanagari or Thai consonant and its vowel sign,
+// and an emoji with its modifiers each count once.
+export function graphemeCount(text) {
+  let count = 0;
+  for (const _ of graphemeSegments(nfc(text))) {
+    count += 1;
+  }
+  return count;
+}
+
+// A grapheme cluster a terminal draws two columns wide: one that starts with
+// an East Asian wide or fullwidth character (Hangul, CJK punctuation and
+// ideographs, kana, Yi, fullwidth forms, Tangut) or an emoji, or that asks
+// for emoji presentation (U+FE0F). One that starts with a combining mark, a
+// control or format character, or a Hangul vowel or final takes none.
+const WIDE = /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{16fe0}-\u{16fe4}\u{17000}-\u{18cff}\u{1b000}-\u{1b2ff}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}]|\p{Emoji_Presentation})|\ufe0f/u;
+const ZERO_WIDTH = /^[\p{M}\p{Cc}\p{Cf}\u1160-\u11ff\ud7b0-\ud7ff]/u;
+
+// The columns `text` takes in a monospaced terminal, for padding a table.
+export function displayWidth(text) {
+  let width = 0;
+  for (const { segment } of graphemeSegments(String(text))) {
+    width += WIDE.test(segment) ? 2 : ZERO_WIDTH.test(segment) ? 0 : 1;
+  }
+  return width;
+}

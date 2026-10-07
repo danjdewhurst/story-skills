@@ -136,6 +136,20 @@ describe("story list", () => {
     expect(out).toBe("chapter-03  Two Lines  chapters/chapter-03.md  number=3  hook=a b\n");
   });
 
+  test("--where compares a multi-line value on one line, as story grid shows a beat (#531)", () => {
+    const root = sampleProject();
+    writeChapter(root, 3, "beat: |\n  Break into\n    Two\n");
+    writeChapter(root, 4, "beat: Break into Two");
+    const { code, out } = invoke(root, ["list", "chapters", "--where", "beat=Break into Two"]);
+    expect(code).toBe(0);
+    expect(out).toBe([
+      "chapter-03  Chapter 3  chapters/chapter-03.md  beat=Break into Two",
+      "chapter-04  Chapter 4  chapters/chapter-04.md  beat=Break into Two",
+      ""
+    ].join("\n"));
+    expect(invoke(root, ["list", "chapters", "--where", "beat!=Break into Two", "--where", "beat"]).out).toBe("");
+  });
+
   test("--json gives the filters and each match's fields, and matches the result schema", () => {
     const root = sampleProject();
     const { code, out, err } = invoke(root, ["list", "chapters", "--where", "pov=ilse", "--where", "!hook", "--json"]);

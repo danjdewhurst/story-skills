@@ -44,7 +44,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 | [`story timeline [path]`](#story-timeline) | What order do events happen in story time? Whose book is it? Who disappears? |
 | [`story pacing [path]`](#story-pacing) | Do scenes cost the characters enough, do chapters end with a pull, and are any chapters out of proportion? |
 | [`story clues [path]`](#story-clues) | Where is each clue planted and revealed, and does the mystery play fair? |
-| [`story grid [path]`](#story-grid) | Which chapters advance each arc, and which beat does each chapter carry (or how does it end)? |
+| [`story grid [path]`](#story-grid) | Which chapters advance each arc, which beat does each chapter carry, and how does it end? |
 | [`story prose [path\|-]`](#story-prose) | Where does the prose lean on filter words, adverbs, said-bookisms, or off-sheet spellings? |
 | [`story voices [path\|-]`](#story-voices) | How does each character talk, and do any two sound alike? |
 | [`story names <name...>`](#story-names) | Is this candidate name already taken, or too close to one in use? |
@@ -820,7 +820,7 @@ story grid .
 story grid . --format csv --from 10 --to 20
 ```
 
-Prints the plot grid of arcs by chapter, the outliner view Plottr and Scrivener give: a row per arc with an `x` in each chapter whose frontmatter, or one of whose scenes, lists the arc in `arcs-advanced`, then a `(beat)` row of each chapter's [`beat`](project-format.md#chapters). A book where no chapter records a beat gets a `(hook)` row of chapter hooks and an `(outcomes)` row of scene outcomes in its place. It is a markdown table by default and CSV with `--format csv`; `--from` and `--to` narrow a wide book to a range of chapters. It raises no findings of its own.
+Prints the plot grid of arcs by chapter, the outliner view Plottr and Scrivener give: a row per arc with an `x` in each chapter whose frontmatter, or one of whose scenes, lists the arc in `arcs-advanced`, then a `(beat)` row of each chapter's [`beat`](project-format.md#chapters) once any chapter has one, a `(hook)` row of chapter hooks, and an `(outcomes)` row of scene outcomes. It is a markdown table by default and CSV with `--format csv`; `--from` and `--to` narrow a wide book to a range of chapters. It raises no findings of its own.
 
 Read it for shape rather than errors:
 
@@ -830,7 +830,7 @@ Read it for shape rather than errors:
 - **An `(unknown)` row** is an id in `arcs-advanced` with no arc file; `story validate` reports it as an error. Add the arc with `story add arc` or fix the id.
 - **The `(beat)` row** lays the beat sheet over the book. Check that each beat falls near its place in the structure (a `Midpoint` near the middle chapter) and that the arcs it turns have an `x` in that column.
 
-The full option list is in the [CLI reference](cli-reference.md#grid). [`story diagram arcs`](#story-diagram) draws the same links as a Mermaid graph, and [`story pacing`](#story-pacing) checks the hooks and outcomes, which it lists whether or not the book has beats.
+The full option list is in the [CLI reference](cli-reference.md#grid). [`story diagram arcs`](#story-diagram) draws the same links as a Mermaid graph, and [`story pacing`](#story-pacing) checks the hooks and outcomes the grid lists.
 
 ## Books not in English
 

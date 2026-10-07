@@ -6,6 +6,7 @@ import path from "node:path";
 import { usageError } from "./exit-codes.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { suggestion } from "./options.js";
+import { oneLine } from "./unicode.js";
 
 // Each kind `list` takes: its plural name (the canonical one), its singular,
 // the scan collection it reads, its schema definition in FRONTMATTER_KEYS,
@@ -126,8 +127,11 @@ function isSet(value) {
 
 // A scalar equal to `wanted`, or a list with an item equal to it. Numbers
 // and booleans compare as their text, so `number=3` and `sequel=true` work.
+// A value written over several lines compares on one, as the list prints
+// it and story grid shows a beat, so `beat=Break into Two` finds a block
+// scalar.
 function contains(value, wanted) {
-  return (Array.isArray(value) ? value : [value]).some((item) => isScalar(item) && String(item).trim() === wanted);
+  return (Array.isArray(value) ? value : [value]).some((item) => isScalar(item) && oneLine(item) === wanted);
 }
 
 function isScalar(value) {
@@ -140,6 +144,8 @@ export function formatList(report) {
   if (report.items.length === 0) {
     return "";
   }
+  // A multi-line title or value folds onto one line, so each match stays
+  // one line.
   const rows = report.items.map((item) => ({ ...item, title: oneLine(item.title) }));
   const idWidth = Math.max(...rows.map((item) => item.id.length));
   const titleWidth = Math.max(...rows.map((item) => item.title.length));
@@ -155,10 +161,4 @@ export function formatList(report) {
 function formatValue(value) {
   const text = (item) => (isScalar(item) ? String(item) : JSON.stringify(item));
   return oneLine(Array.isArray(value) ? value.map(text).join(",") : text(value));
-}
-
-// A multi-line title or value folds onto one line, so each match stays one
-// line.
-function oneLine(text) {
-  return text.trim().replace(/\s*\n\s*/g, " ");
 }

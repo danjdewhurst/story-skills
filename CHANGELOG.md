@@ -21,7 +21,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A book whose stories all name its own authors gets no story credits.
   - The new `narration-byline`, `narration-edited-by`, and `narration-contributors` labels are translated in every language pack that has labels.
 - Chapters take an optional `beat` field, the beat-sheet beat they carry, set by hand or with `story add chapter --beat`. (#531)
-  - `story grid` shows a `(beat)` row in place of the hook and outcome rows once any chapter has one, and `story context` and a spoiler codex show it too.
+  - `story grid` shows a `(beat)` row above the hook and outcome rows once any chapter has one, and `story context` and a spoiler codex show it too.
   - Any text is accepted, such as `Midpoint`, `All Is Lost`, or your own label; `story validate` warns `beat-too-long` above 60 characters.
 
 ### Changed

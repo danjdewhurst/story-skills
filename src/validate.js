@@ -24,7 +24,7 @@ import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.
 import { plural } from "./plural.js";
 import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
-import { nfc } from "./unicode.js";
+import { graphemeCount, nfc } from "./unicode.js";
 import { canonicalPath, isBookNumber, seriesLinks, validateSeriesLinks } from "./series.js";
 import { err, warn } from "./findings.js";
 import { EXEMPTIONS_FILE, exemptionFile, exemptionProblems, isChapterId } from "./exemptions.js";
@@ -1486,7 +1486,7 @@ function validateChapters(project, errors, warnings) {
     // them, so any label is accepted. Only its type and length are checked.
     if (data.beat !== undefined) {
       requireScalar(data, "beat", label, errors);
-      const length = typeof data.beat === "string" ? [...beatText(data.beat)].length : 0;
+      const length = typeof data.beat === "string" ? graphemeCount(beatText(data.beat)) : 0;
       if (length > BEAT_MAX_LENGTH) {
         warnings.push(warn("beat-too-long", `${label} beat is ${length} characters long: keep it to a short label of at most ${BEAT_MAX_LENGTH} characters, such as Midpoint, and put the detail in the chapter outline`, label));
       }

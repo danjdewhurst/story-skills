@@ -4,7 +4,8 @@ import { languagePack } from "../src/languages/index.js";
 import { checkNames, nameWords } from "../src/names.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
 import { checkProjectContinuity, createStoryProject, mentionsReport, voicesReport } from "../src/story.js";
-import { composedText, nfc } from "../src/unicode.js";
+import { beatText } from "../src/scan.js";
+import { composedText, displayWidth, graphemeCount, nfc, oneLine } from "../src/unicode.js";
 import { wordMatcher } from "../src/words.js";
 import { makeTempDir, messages, writeMarkdown } from "./helpers.js";
 
@@ -143,5 +144,53 @@ describe("names and prose in different Unicode forms", () => {
     const report = voicesReport(root);
     expect(report.profiles.map((entry) => [entry.id, entry.lines])).toEqual([["renee", 2]]);
     expect(messages(report.warnings)).toContain(`renee says "cafe\u0301", which is in their voice-avoid list (chapter-01)`);
+  });
+});
+
+describe("one-line text, grapheme counts, and display widths", () => {
+  test("oneLine folds a run of whitespace that holds a line break, and keeps other runs", () => {
+    expect(oneLine("  Break into \n    Two  \r\n")).toBe("Break into Two");
+    expect(oneLine("All  Is \t Lost")).toBe("All  Is \t Lost");
+    expect(oneLine("a\u2028b\u0085c\vd")).toBe("a b c d");
+    expect(beatText("Mid\u001bpoint\tnow\u009b")).toBe("Mid\ufffdpoint now\ufffd");
+  });
+
+  // A pattern such as /\s*[\r\n]\s*/ backtracks over every space of a long run
+  // with no line break, so 8 times the spaces cost 64 times the time. These
+  // compare the cost of two lengths with each other, not with a clock.
+  test("a long run of spaces costs time in proportion to its length", () => {
+    const cost = (fold, length) => {
+      const text = `a${" ".repeat(length)}b`;
+      let best = Infinity;
+      for (let run = 0; run < 5; run += 1) {
+        const started = performance.now();
+        fold(text);
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    for (const fold of [oneLine, beatText]) {
+      const short = cost(fold, 1 << 12);
+      const long = cost(fold, 1 << 15);
+      expect(long).toBeLessThan(short * 24 + 1);
+    }
+  });
+
+  test("graphemeCount counts what a reader sees, after NFC", () => {
+    expect(graphemeCount("Midpoint")).toBe(8);
+    expect(graphemeCount("e\u0301".repeat(3))).toBe(3);
+    expect(graphemeCount("कि".repeat(4))).toBe(4);
+    expect(graphemeCount("กิ".repeat(4))).toBe(4);
+    expect(graphemeCount("🔥👩‍👩‍👧🇬🇧")).toBe(3);
+  });
+
+  test("displayWidth gives wide characters two columns and marks none", () => {
+    expect(displayWidth("Arc")).toBe(3);
+    expect(displayWidth("中点")).toBe(4);
+    expect(displayWidth("カタカナ한국어")).toBe(14);
+    expect(displayWidth("Ａ\u3000B")).toBe(5);
+    expect(displayWidth("Cafe\u0301")).toBe(4);
+    expect(displayWidth("\u0301")).toBe(0);
+    expect(displayWidth("🔥 👩‍👩‍👧 🇬🇧 ❤️ 1️⃣")).toBe(14);
   });
 });

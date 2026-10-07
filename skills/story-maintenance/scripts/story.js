@@ -8463,6 +8463,31 @@ function composedText(text) {
   };
   return { text: composed, original: (start, end) => [at(start, false), at(end, true)] };
 }
+var LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/;
+function oneLine(text) {
+  return String(text).replace(/[\s\u0085]+/g, (space) => LINE_BREAK.test(space) ? " " : space).trim();
+}
+var graphemes;
+function graphemeSegments(text) {
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  return graphemes.segment(text);
+}
+function graphemeCount(text) {
+  let count = 0;
+  for (const _ of graphemeSegments(nfc(text))) {
+    count += 1;
+  }
+  return count;
+}
+var WIDE = /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{16fe0}-\u{16fe4}\u{17000}-\u{18cff}\u{1b000}-\u{1b2ff}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}]|\p{Emoji_Presentation})|\ufe0f/u;
+var ZERO_WIDTH = /^[\p{M}\p{Cc}\p{Cf}\u1160-\u11ff\ud7b0-\ud7ff]/u;
+function displayWidth(text) {
+  let width = 0;
+  for (const { segment } of graphemeSegments(String(text))) {
+    width += WIDE.test(segment) ? 2 : ZERO_WIDTH.test(segment) ? 0 : 1;
+  }
+  return width;
+}
 
 // src/languages/locale.js
 var COMPARERS = new Map;
@@ -10099,14 +10124,14 @@ function trimBlankLines(text) {
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
-var graphemes;
+var graphemes2;
 function characterCount(markdown) {
   const text = countedText(plainLinks(String(markdown).replace(/\uE000/g, " "))).split(`
 `).filter((line) => !isSceneBreak(line)).join(`
 `).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
-  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  graphemes2 ??= new Intl.Segmenter("en", { granularity: "grapheme" });
   let count = 0;
-  for (const _ of graphemes.segment(text)) {
+  for (const _ of graphemes2.segment(text)) {
     count += 1;
   }
   return count;
@@ -14248,7 +14273,7 @@ What changes because of this arc.
 }
 var BEAT_MAX_LENGTH = 60;
 function beatText(value) {
-  return String(value).trim().replace(/\s*[\r\n\u2028\u2029]\s*/g, " ");
+  return oneLine(value).replace(/\t/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "�");
 }
 function chapterFile(title, number, options, unit, calendar = null) {
   const dateError = storyDateError(options.date, { calendar });
@@ -17431,11 +17456,13 @@ function gridFormat(value) {
 function gridTable(grid) {
   const header = ["Arc", ...grid.chapters.map((chapter) => String(chapter.number))];
   const arcRows = grid.rows.map((row) => [row.known ? row.id : `${row.id} (unknown)`, ...row.cells.map((cell) => cell ? "x" : "")]);
-  const labelRows = grid.beats ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]] : [
+  return [
+    header,
+    ...arcRows,
+    ...grid.beats ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]] : [],
     [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
     [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
   ];
-  return [header, ...arcRows, ...labelRows];
 }
 function formatGrid(grid, format = "markdown") {
   const table = gridTable(grid);
@@ -17443,8 +17470,8 @@ function formatGrid(grid, format = "markdown") {
 }
 function formatMarkdown(table) {
   const escaped = table.map((row) => row.map((cell) => cell.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ")));
-  const widths = escaped[0].map((_, column) => Math.max(3, ...escaped.map((row) => row[column].length)));
-  const line = (cells) => `| ${cells.map((cell, column) => cell.padEnd(widths[column])).join(" | ")} |`;
+  const widths = escaped[0].map((_, column) => Math.max(3, ...escaped.map((row) => displayWidth(row[column]))));
+  const line = (cells) => `| ${cells.map((cell, column) => cell + " ".repeat(widths[column] - displayWidth(cell))).join(" | ")} |`;
   const rule = `|${widths.map((width, column) => column === 0 ? "-".repeat(width + 2) : `:${"-".repeat(width)}:`).join("|")}|`;
   return `${[line(escaped[0]), rule, ...escaped.slice(1).map(line)].join(`
 `)}
@@ -17456,7 +17483,8 @@ function formatCsv(table) {
 `;
 }
 function csvCell(value) {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 // src/list.js
@@ -17625,7 +17653,7 @@ function isSet(value) {
   return value !== undefined && value !== null && value !== "" && !(Array.isArray(value) && value.length === 0);
 }
 function contains(value, wanted) {
-  return (Array.isArray(value) ? value : [value]).some((item) => isScalar(item) && String(item).trim() === wanted);
+  return (Array.isArray(value) ? value : [value]).some((item) => isScalar(item) && oneLine(item) === wanted);
 }
 function isScalar(value) {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
@@ -17647,9 +17675,6 @@ function formatList(report) {
 function formatValue(value) {
   const text = (item) => isScalar(item) ? String(item) : JSON.stringify(item);
   return oneLine(Array.isArray(value) ? value.map(text).join(",") : text(value));
-}
-function oneLine(text) {
-  return text.trim().replace(/\s*\n\s*/g, " ");
 }
 
 // src/build-style.js
@@ -19193,7 +19218,7 @@ function htmlBook(manuscript, ownIndent = false) {
     const runs = inlineRuns(paragraph.text);
     return {
       html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
+      text: runs.map((run) => run.text).join("").split(LINE_BREAK2).join(" ").replace(/\s+/g, " ").trim(),
       quote: paragraph.quote
     };
   });
@@ -19409,7 +19434,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
         continue;
       }
       const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK).join(`\\
+      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK2).join(`\\
 ${prefix}`)}`, "");
     }
   }
@@ -19497,7 +19522,7 @@ ${body.join(`
 `;
 }
 function docxTextXml(text) {
-  return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
+  return String(text).split(LINE_BREAK2).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
 function paragraphXml(script, text, style = "", runs = [{ text }]) {
   const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
@@ -19513,7 +19538,7 @@ function inlineRuns(text) {
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
-  const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
+  const isSpace = (char) => char === undefined || char === LINE_BREAK2 || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
   for (let index = 0;index < text.length; ) {
     const char = text[index];
@@ -19640,7 +19665,7 @@ function inlineHtml(text) {
   return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
 }
 function runMarkup(run, escape, lineBreak) {
-  let markup = escape(run.text).split(LINE_BREAK).join(lineBreak);
+  let markup = escape(run.text).split(LINE_BREAK2).join(lineBreak);
   if (run.em) {
     markup = `<em>${markup}</em>`;
   }
@@ -19649,7 +19674,7 @@ function runMarkup(run, escape, lineBreak) {
   }
   return markup;
 }
-var LINE_BREAK = "";
+var LINE_BREAK2 = "";
 function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
@@ -19664,15 +19689,15 @@ function markdownParagraphs(markdown, ownIndent = false) {
         return text;
       }
       if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
-        return `${text}${LINE_BREAK}`;
+        return `${text}${LINE_BREAK2}`;
       }
       return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
     }).join("");
-    const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
-    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
+    const parts = collapseSourceSpace(joined).split(LINE_BREAK2).map(trimSourceSpace);
+    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK2);
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK2) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
   const source = splitFences(markdown.replace(/\r\n?/g, `
 `)).flatMap((part) => plainLinks(part.fenced ? withoutFenceMarkers(part.text) : part.text).split(`
@@ -22381,7 +22406,7 @@ function validateChapters(project, errors, warnings) {
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     if (data.beat !== undefined) {
       requireScalar(data, "beat", label, errors);
-      const length = typeof data.beat === "string" ? [...beatText(data.beat)].length : 0;
+      const length = typeof data.beat === "string" ? graphemeCount(beatText(data.beat)) : 0;
       if (length > BEAT_MAX_LENGTH) {
         warnings.push(warn("beat-too-long", `${label} beat is ${length} characters long: keep it to a short label of at most ${BEAT_MAX_LENGTH} characters, such as Midpoint, and put the detail in the chapter outline`, label));
       }
@@ -26719,7 +26744,7 @@ ${rows.join(`
 `)}
 </tbody></table></div>`);
   }
-  if (site.grid.rows.length > 0 && site.grid.chapters.length > 0) {
+  if (site.grid.chapters.length > 0 && (site.grid.rows.length > 0 || site.spoilers && site.grid.beats)) {
     const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
     const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label2(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
@@ -26888,9 +26913,9 @@ function notesHtml(site, entity) {
           return line.trim();
         }
         if (/\\$/.test(line)) {
-          return `${line.slice(0, -1).trim()}${LINE_BREAK}`;
+          return `${line.slice(0, -1).trim()}${LINE_BREAK2}`;
         }
-        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
+        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK2}` : `${line.trim()} `;
       }).join("");
       out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];
@@ -30549,8 +30574,8 @@ var COMMANDS = [
     usage: "grid [path]",
     summary: [
       "Print the plot grid: arcs by chapter from",
-      "arcs-advanced, with each chapter's beat (or its",
-      "hook and scene outcomes), as a markdown table or",
+      "arcs-advanced, with each chapter's beat, hook,",
+      "and scene outcomes, as a markdown table or",
       "--format csv"
     ],
     project: "positional",

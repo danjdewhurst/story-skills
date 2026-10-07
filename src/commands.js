@@ -605,8 +605,8 @@ export const COMMANDS = [
     usage: "grid [path]",
     summary: [
       "Print the plot grid: arcs by chapter from",
-      "arcs-advanced, with each chapter's beat (or its",
-      "hook and scene outcomes), as a markdown table or",
+      "arcs-advanced, with each chapter's beat, hook,",
+      "and scene outcomes, as a markdown table or",
       "--format csv"
     ],
     project: "positional",

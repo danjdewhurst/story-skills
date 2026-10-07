@@ -1,12 +1,13 @@
 // Plot grid: arcs as rows and chapters as columns, as Plottr and Scrivener's
 // outliner lay a book out, built from each chapter's (and its scenes')
-// arcs-advanced, plus a row for each chapter's beat. A book that records no
-// beats gets a row for each chapter's hook and one for its scene outcomes in
-// its place. A view only: unknown arc ids are validate errors, so the grid
-// shows them as rows but raises no finding of its own.
+// arcs-advanced, plus a row for each chapter's beat (once any chapter has
+// one), one for its hook, and one for its scene outcomes. A view only:
+// unknown arc ids are validate errors, so the grid shows them as rows but
+// raises no finding of its own.
 
 import { usageError } from "./exit-codes.js";
 import { SCENE_OUTCOMES } from "./pacing.js";
+import { displayWidth } from "./unicode.js";
 
 export const GRID_FORMATS = ["markdown", "csv"];
 
@@ -57,8 +58,9 @@ export function buildGrid(project, options = {}) {
   const chapters = all.slice(start, end + 1);
   return {
     range: { from: chapters[0]?.id ?? null, to: chapters.at(-1)?.id ?? null, total: all.length },
-    // Whether any chapter in the whole book records a beat, so a range of
-    // chapters with none still shows the same rows as the rest of the book.
+    // Whether any chapter in the whole book records a beat, and so whether
+    // the grid has a beat row: a range of chapters with none still shows
+    // the same rows as the rest of the book.
     beats: all.some((chapter) => chapter.beat !== ""),
     chapters: chapters.map((chapter) => ({
       id: chapter.id,
@@ -98,18 +100,18 @@ export function gridFormat(value) {
 }
 
 // The grid as a table of strings: a header row of chapter numbers, a row
-// per arc with x where the chapter advances it, then the beat row, or the
-// hook and outcome rows in a book with no beats.
+// per arc with x where the chapter advances it, then the beat row in a book
+// with beats, and the hook and outcome rows.
 function gridTable(grid) {
   const header = ["Arc", ...grid.chapters.map((chapter) => String(chapter.number))];
   const arcRows = grid.rows.map((row) => [row.known ? row.id : `${row.id} (unknown)`, ...row.cells.map((cell) => (cell ? "x" : ""))]);
-  const labelRows = grid.beats
-    ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]]
-    : [
-      [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
-      [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
-    ];
-  return [header, ...arcRows, ...labelRows];
+  return [
+    header,
+    ...arcRows,
+    ...(grid.beats ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]] : []),
+    [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
+    [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
+  ];
 }
 
 export function formatGrid(grid, format = "markdown") {
@@ -118,11 +120,12 @@ export function formatGrid(grid, format = "markdown") {
 }
 
 // Every column is padded to its widest cell, so chapter 100 lines up with
-// chapter 9 and the source reads as a grid too.
+// chapter 9 and the source reads as a grid too. Widths are terminal columns,
+// so a beat in Chinese or with an emoji lines up as well.
 function formatMarkdown(table) {
   const escaped = table.map((row) => row.map((cell) => cell.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, " ")));
-  const widths = escaped[0].map((_, column) => Math.max(3, ...escaped.map((row) => row[column].length)));
-  const line = (cells) => `| ${cells.map((cell, column) => cell.padEnd(widths[column])).join(" | ")} |`;
+  const widths = escaped[0].map((_, column) => Math.max(3, ...escaped.map((row) => displayWidth(row[column]))));
+  const line = (cells) => `| ${cells.map((cell, column) => cell + " ".repeat(widths[column] - displayWidth(cell))).join(" | ")} |`;
   const rule = `|${widths.map((width, column) => (column === 0 ? "-".repeat(width + 2) : `:${"-".repeat(width)}:`)).join("|")}|`;
   return `${[line(escaped[0]), rule, ...escaped.slice(1).map(line)].join("\n")}\n`;
 }
@@ -131,6 +134,10 @@ function formatCsv(table) {
   return table.map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
 }
 
+// A cell a spreadsheet would read as a formula (=, +, -, or @ first, or a
+// tab or carriage return, which some read past) gets a ' first, so a beat
+// or arc id opens as the text it is.
 function csvCell(value) {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, "\"\"")}"` : value;
+  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
 }

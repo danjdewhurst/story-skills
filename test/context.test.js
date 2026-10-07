@@ -356,6 +356,9 @@ state-changes:
     expect(textOf(contextOf(root, "chapter-02"))).toContain("- Beat: Midpoint\n- Hook: question\n");
     expect(textOf(contextOf(root, "chapter-02-scene-01"))).toContain("- Beat: Midpoint\n");
     expect(textOf(contextOf(root, "chapter-01"))).not.toContain("- Beat:");
+    // An escape sequence in a beat cannot reach the terminal.
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("beat: Midpoint", "beat: \"Mid\\u001b[2Jpoint\""), "utf8");
+    expect(textOf(contextOf(root, "chapter-02"))).toContain("- Beat: Mid\ufffd[2Jpoint\n");
   });
 
   test("omitted items name every file they draw on", () => {

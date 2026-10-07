@@ -758,7 +758,7 @@
             "total": { "$ref": "#/$defs/count", "description": "Chapters in the whole book, shown or not." }
           }
         },
-        "beats": { "type": "boolean", "description": "True when any chapter in the whole book records a beat: the text grid then prints a (beat) row in place of the (hook) and (outcomes) rows." },
+        "beats": { "type": "boolean", "description": "True when any chapter in the whole book records a beat: the text grid then prints a (beat) row above the (hook) and (outcomes) rows." },
         "chapters": {
           "type": "array",
           "description": "The columns, in chapter number order.",

@@ -397,12 +397,12 @@ function progressPage(site) {
     });
     body.push(`<h2>${label(site, "codex-chapters")}</h2>\n<div class="scroll"><table><thead><tr>${columns(site, ["codex-chapter", "codex-status", "codex-pov", countColumn, "codex-target"])}</tr></thead><tbody>\n${rows.join("\n")}\n</tbody></table></div>`);
   }
-  if (site.grid.rows.length > 0 && site.grid.chapters.length > 0) {
+  // Beats, hooks, and outcomes tell how the story turns, so only a spoiler
+  // codex shows them, as story grid does below the arcs. A spoiler codex of
+  // a book with beats shows the grid even when no chapter advances an arc.
+  if (site.grid.chapters.length > 0 && (site.grid.rows.length > 0 || (site.spoilers && site.grid.beats))) {
     const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
     const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
-    // Beats, hooks, and outcomes tell how the story turns, so only a spoiler
-    // codex shows them. With the room a page has, it shows all three, where
-    // story grid shows the beats in place of the other two.
     if (site.spoilers) {
       if (site.grid.beats) {
         rows.push(`<tr><td>${label(site, "codex-beat")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.beat)}</td>`).join("")}</tr>`);
