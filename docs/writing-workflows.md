@@ -1808,29 +1808,29 @@ The source project gains `pronunciation` fields and glossary translations, and a
 
 ## Checks by workflow
 
-Which commands each skill runs when it finishes. All take the project path, `.` here.
+Every skill that changes story files finishes with the maintenance block, in this order: `story reindex .`, `story wordcount . --write`, then `story check .` (see [The maintenance loop](#the-maintenance-loop)). The table lists the other commands each skill runs. All take the project path, `.` here.
 
-| Workflow | `wordcount --write` | `reindex` | `links` | `validate` | `continuity` | Other |
-|----------|:---:|:---:|:---:|:---:|:---:|-------|
-| Premise workshop (`premise-workshop`) | | | | ✓ | | `init --form`, `names`, `report` |
-| Project setup (`story-init`) | | | | ✓ | | `init --form`, `next` (suggested) |
-| Plot (`plot-structure`) | | ✓ | ✓ | ✓ | | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
-| Character, world (`character-management`, `worldbuilding`) | | ✓ | ✓ | ✓ | | `names`, `diagram relationships`/`locations` |
-| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `next`, `pacing`, `progress` (`--log` if you keep a log) |
-| Discovery chapter (`discovery-drafting`) | ✓ | ✓ | ✓ | ✓ | ✓ | `progress --log` |
-| Scene craft (`scene-craft`) | | ✓ | ✓ | ✓ | ✓ | `pacing` |
-| Theme (`theme-craft`) | | ✓ | ✓ | ✓ | | |
-| Voice (`voice-style`) | ✓ | | ✓ | ✓ | | `prose`, `voices` |
-| Genre packs (`genre-craft`) | | ✓ | ✓ | ✓ | ✓ | `clues` (mystery), `pacing` (thriller, serial) |
-| Research (`research`) | | ✓ | ✓ | ✓ | | |
-| Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
-| Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `build --pdf` |
-| Reader panel (`reader-panel`) | | ✓ | ✓ | ✓ | | `snapshot` (without git), `build --format html --stamp`, `context`, `prose` |
-| Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | `build --format html` |
-| Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
-| Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
-| Publishing (`publishing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
-| Adaptation (`adaptation`) | ✓ | ✓ | ✓ | ✓ | ✓ | `build --format narration`, `timeline`, `names`, `compare --against` |
+| Workflow | Other commands |
+|----------|----------------|
+| Premise workshop (`premise-workshop`) | `init --form`, `names`, `report` |
+| Project setup (`story-init`) | `init --form`, `next` (suggested) |
+| Plot (`plot-structure`) | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
+| Character, world (`character-management`, `worldbuilding`) | `names`, `diagram relationships`/`locations` |
+| Outline-first chapter (`chapter-writing`) | `context`, `next`, `pacing`, `progress` (`--log` if you keep a log) |
+| Discovery chapter (`discovery-drafting`) | `progress --log` |
+| Scene craft (`scene-craft`) | `pacing` |
+| Theme (`theme-craft`) | None |
+| Voice (`voice-style`) | `prose`, `voices` |
+| Genre packs (`genre-craft`) | `clues` (mystery), `pacing` (thriller, serial) |
+| Research (`research`) | None |
+| Revision (`revision-continuity`) | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
+| Line editing (`line-editing`) | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `build --pdf` |
+| Reader panel (`reader-panel`) | `snapshot` (without git), `build --format html --stamp`, `context`, `prose` |
+| Feedback (`feedback-triage`) | `build --format html` |
+| Editorial review (`editorial-review`) | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
+| Submission (`submission`) | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
+| Publishing (`publishing`) | `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
+| Adaptation (`adaptation`) | `build --format narration`, `timeline`, `names`, `compare --against` |
 
 When in doubt, `story doctor .` runs the health checks and prints a repair step for each finding. For automating these checks on every push, see [Automation and CI](automation.md).
 

@@ -242,8 +242,8 @@ jobs:
                promises, questions, and the timeline.
             5. Run the maintenance commands and make them pass, apart from any
                matter-todo-markers finding:
-               story wordcount ${{ env.STORY_DIR }} --write
                story reindex ${{ env.STORY_DIR }}
+               story wordcount ${{ env.STORY_DIR }} --write
                story check ${{ env.STORY_DIR }}
             6. Commit everything on the branch with git commit -m. Make the
                message's first line "Draft chapter <number>: <title>" (or
