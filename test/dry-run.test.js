@@ -506,6 +506,26 @@ describe("--dry-run", () => {
     expect(refused.err).toContain("sets dry-run, which would stop the command changing anything");
   });
 
+  test("a snapshot sees a rewrite of an unreadable file that keeps its size (#755)", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const root = makeTempDir();
+    const secret = path.join(root, "secret.txt");
+    fs.writeFileSync(secret, "aaaa");
+    fs.chmodSync(secret, 0o000);
+    const before = snapshot(root);
+    fs.chmodSync(secret, 0o600);
+    // File times are coarse, so wait for the clock to move on before the rewrite.
+    const until = Date.now() + 10;
+    while (Date.now() < until) {
+      // Spin until the clock has moved on.
+    }
+    fs.writeFileSync(secret, "bbbb");
+    fs.chmodSync(secret, 0o000);
+    expect(diff(before, snapshot(root))).toEqual([{ action: "update", path: "secret.txt" }]);
+  });
+
   test("a dry run copies symlinks and read-only folders without touching the project", () => {
     if (CHMOD_IGNORED) {
       return;

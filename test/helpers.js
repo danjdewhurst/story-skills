@@ -269,7 +269,11 @@ export function treeSnapshot(root) {
         try {
           entries[key] = fs.readFileSync(full).toString("base64");
         } catch {
-          entries[key] = `unreadable ${fs.statSync(full).mode}`;
+          // The bytes cannot be read, so the stats stand in for them. An atomic
+          // write changes the inode, and a rewrite that keeps the size changes
+          // the modification and change times once the clock has moved on.
+          const stats = fs.statSync(full);
+          entries[key] = `unreadable ${stats.mode} ${stats.size} ${stats.ino} ${stats.mtimeMs} ${stats.ctimeMs}`;
         }
       }
     }
