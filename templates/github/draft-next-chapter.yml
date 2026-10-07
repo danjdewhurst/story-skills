@@ -6,8 +6,10 @@
 # the next chapter, and commits it to a draft/ branch. The workflow then checks
 # the commit itself, pushes the branch, and opens the pull request: a ready one
 # when the checks pass, a draft one listing the failures when they do not.
-# You review the chapter like any other PR; the story-checks workflow keeps
-# continuity errors from merging.
+# You review the chapter like any other PR. The publish job runs the story
+# checks on the first commit, then opens a ready pull request when they pass,
+# or a draft one that lists the failures when they do not. story-checks.yml
+# does not run on that first commit (see below).
 #
 # Setup:
 #   1. Add an ANTHROPIC_API_KEY repository secret.
