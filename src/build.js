@@ -349,8 +349,10 @@ function removeStaleCodexPages(directory, written) {
     const stale = stalePages(folder);
     stale.forEach((file) => removeFile(file));
     // Counted before the pages go, so a --dry-run, which deletes none, sees
-    // the folder the real build would empty.
-    if (folder !== directory && fs.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
+    // the folder the real build would empty. A dry run also does not write
+    // the new pages, so it keeps a folder that one of them goes into.
+    const keptByWrite = isPlanning() && [...written].some((file) => path.dirname(file) === folder);
+    if (folder !== directory && !keptByWrite && fs.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
       removeDirectory(folder);
     }
   }
