@@ -1,4 +1,5 @@
 import { checkList, languagePack } from "./languages/index.js";
+import { upperCase } from "./languages/locale.js";
 import { escapeRegExp } from "./markdown.js";
 import { SENTENCE_OPENERS, anyOf, charClass, punctuation } from "./punctuation.js";
 
@@ -13,8 +14,19 @@ import { SENTENCE_OPENERS, anyOf, charClass, punctuation } from "./punctuation.j
 // language without one still keeps them. In a pack with
 // `capitalInitials`, any capital letter is an initial too (É. Zola); only
 // capitals, so a one-letter word (Russian я, Portuguese é) still ends a
-// sentence.
+// sentence. A capital alone, outside a run of initials (J. R., U.S.,
+// z. B.), may be a word instead (plan B, So do I); see loneCapitalEnds.
 const INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+const CAPITAL_INITIALS = "(?:\\p{Lu}\\.)*\\p{Lu}";
+// A letter right before the stop that follows another initial (J. R,
+// U.S, z. B), so it belongs to a run of initials.
+const INITIAL_RUN = /(?:^|[^\p{L}\p{N}])\p{L}\. ?\p{L}$/u;
+// The word before a lone capital (do in "So do I"), after one space.
+const WORD_BEFORE_CAPITAL = /(?:^|\s)(\S+) \p{Lu}$/u;
+// Japanese particles that tie a quote to the clause after it, so a stop
+// inside the quote does not end the sentence: 「はい。」と言った。 is one.
+// Only Japanese writes them, so this holds in any language.
+const QUOTATIVE = /^(?:と|って)/;
 const NEVER = "(?!)";
 // How many characters either side of a stop decide whether it ends a
 // sentence.
@@ -56,7 +68,12 @@ function buildRules(pack) {
   const spacedClosers = [...SPACED_CLOSERS].filter((mark) => marks.closers.includes(mark) && !marks.openers.includes(mark)).join("");
   // Likewise an opening guillemet may stand before a space (« Quoi ? »).
   const spacedOpeners = [...SPACED_OPENERS].filter((mark) => marks.openers.includes(mark) && !marks.closers.includes(mark)).join("");
-  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} )*`;
+  // A dialogue dash opens a sentence too, with or without a space after it
+  // (—Vete. —Ella se giró., – Kom hit.). In a script without case nothing
+  // after the dash tells a new sentence from a tag (ماذا؟ — قال أحمد.), so
+  // there it opens none.
+  const dashes = pack.cased === false ? "" : marks.dashes;
+  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} |${anyOf(dashes)} ?)*`;
   // After a full-width stop, which needs no space, a closing mark that can
   // also open a quote in this language (“ closes „…“ but opens “…”) is taken
   // only when it closes a quote still open in the sentence; see
@@ -74,9 +91,19 @@ function buildRules(pack) {
   // Japanese, Thai) starts a sentence as a capital does. In a pack for such
   // a script (`cased: false`) any letter starts one.
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
+  // Capitalised words that are never names (She, Nobody, Monday), as
+  // story import reads them.
+  const nonNames = either([...words("candidateStopwords"), ...words("calendarWords")]);
   return {
-    title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
-    capitalInitial: pack.capitalInitials === true ? new RegExp(`(?:^|[\\s${openers}(])(?:\\p{Lu}\\.)*\\p{Lu}$`, "u") : null,
+    title: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("titleAbbreviations"))})$`),
+    initial: new RegExp(`(?:^|[\\s${openers}(])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
+    // The next word is an initial too (I. M. Pei).
+    nextInitial: new RegExp(`^${opening}\\p{Lu}\\.`, "u"),
+    // The next word is never a name, whole or before a contraction (It's).
+    nextNonName: new RegExp(`^${opening}(?:${nonNames})(?![\\p{L}\\p{N}]|['’]\\p{Lu})`, "u"),
+    nonName: new RegExp(`^(?:${nonNames})$`, "u"),
+    // One-letter pronouns (English I), which a stop after ends a sentence.
+    pronouns: new Set((checkList(pack, "beatPronouns") ?? []).filter((word) => [...word].length === 1).map((word) => upperCase(word, pack))),
     // In a pack with `ordinalStop`, a number before the stop is an ordinal
     // (am 3. Mai) and is read like a context abbreviation.
     context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...(pack.ordinalStop === true ? ["\\d+"] : [])])})$`),
@@ -101,12 +128,13 @@ function buildRules(pack) {
 
 // The end of a sentence that a full-width stop ends at `end`, past any
 // closing quotes and brackets after it. A mark that can also open a quote
-// counts only when a quote it closes is still open in the sentence.
-function closingQuotes(text, start, end, rules) {
+// counts only when a quote it closes is still open in the sentence; see
+// openQuotes.
+function closingQuotes(text, start, end, rules, quoteOpen) {
   let position = end;
   while (position < text.length) {
     const mark = text[position];
-    if (!rules.fullWidthCloser.test(mark) && !(rules.ambiguous.includes(mark) && quoteOpen(text.slice(start, position), mark, rules))) {
+    if (!rules.fullWidthCloser.test(mark) && !(rules.ambiguous.includes(mark) && quoteOpen(start, position, mark))) {
       break;
     }
     position += 1;
@@ -114,10 +142,30 @@ function closingQuotes(text, start, end, rules) {
   return position;
 }
 
-function quoteOpen(sentence, mark, rules) {
-  return rules.pairs.some(({ open, close }) => close === mark && (open === close
-    ? sentence.split(mark).length % 2 === 0
-    : sentence.lastIndexOf(open) > sentence.lastIndexOf(close)));
+// Whether a quote that `mark` closes is open in text.slice(start, position):
+// an odd number of marks when both are the same, else an opener after the
+// last closer. The text is read forward once per sentence, since a
+// quotative と keeps a sentence going past many stops.
+function openQuotes(text, rules) {
+  let start = -1;
+  let read = 0;
+  let counts = new Map();
+  let last = new Map();
+  return (from, position, mark) => {
+    if (from !== start || position < read) {
+      start = from;
+      read = from;
+      counts = new Map();
+      last = new Map();
+    }
+    for (; read < position; read += 1) {
+      counts.set(text[read], (counts.get(text[read]) ?? 0) + 1);
+      last.set(text[read], read);
+    }
+    return rules.pairs.some(({ open, close }) => close === mark && (open === close
+      ? (counts.get(mark) ?? 0) % 2 === 1
+      : (last.get(open) ?? -1) > (last.get(close) ?? -1)));
+  };
 }
 
 // Whether `text` already ends a sentence with one of the pack's stops, so
@@ -137,11 +185,16 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
     return [];
   }
   const rules = sentenceRules(pack);
+  const quoteOpen = openQuotes(normalized, rules);
   const sentences = [];
   let start = 0;
   for (const match of normalized.matchAll(rules.end)) {
     if (rules.fullWidth.test(match[0])) {
-      const end = closingQuotes(normalized, start, match.index + match[0].length, rules);
+      const stop = match.index + match[0].length;
+      const end = closingQuotes(normalized, start, stop, rules, quoteOpen);
+      if (end > stop && QUOTATIVE.test(normalized.slice(end, end + 2))) {
+        continue;
+      }
       sentences.push(normalized.slice(start, end).trim());
       start = end;
       continue;
@@ -159,7 +212,7 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
     const abbreviation = match[0] === "." && (rules.context.test(before)
       ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next)
-      : rules.title.test(before) || (rules.capitalInitial !== null && rules.capitalInitial.test(before)));
+      : rules.title.test(before) || (rules.initial.test(before) && !loneCapitalEnds(before, next, rules)));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
@@ -172,6 +225,22 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
     sentences.push(rules.finished.test(tail) ? tail : `${tail}.`);
   }
   return sentences.filter((sentence) => sentence !== "");
+}
+
+// Whether the stop after a capital alone, outside a run of initials, ends
+// the sentence rather than an initial (J. Smith, Anna K. Smith): the next
+// word is never a name (plan B. Nobody agreed.), or the capital is a
+// pronoun (English I) after a word that is not a name (So do I.). Before
+// another initial (I. M. Pei) it never does.
+function loneCapitalEnds(before, next, rules) {
+  if (!/\p{Lu}$/u.test(before) || INITIAL_RUN.test(before) || rules.nextInitial.test(next)) {
+    return false;
+  }
+  if (rules.nextNonName.test(next)) {
+    return true;
+  }
+  const word = WORD_BEFORE_CAPITAL.exec(before);
+  return rules.pronouns.has(before.at(-1)) && word !== null && (/^\p{Ll}/u.test(word[1]) || rules.nonName.test(word[1].replace(/[,;:]$/, "")));
 }
 
 // "I… I don't": the word after an ellipsis repeats the word before it.

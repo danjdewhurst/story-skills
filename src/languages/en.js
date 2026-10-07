@@ -170,12 +170,17 @@ export default {
       and: "and"
     },
 
-    // Capitalised words that are not names, for import's entity candidates.
-    // The calendar words are added to these.
+    // Capitalised words that are not names, for import's entity candidates
+    // and for sentence splitting, where a capital alone before one ends the
+    // sentence (plan B. Nobody agreed.). The calendar words are added to
+    // these.
     candidateStopwords: [
-      "A", "An", "And", "At", "But", "By", "Dr", "For", "He", "Her", "His", "I", "If", "In", "It", "Its",
-      "Mr", "Mrs", "Ms", "No", "Not", "Of", "On", "Or", "She", "That", "The", "Then", "They", "Their",
-      "This", "To", "We", "When", "While", "With", "Yes", "You"
+      "A", "An", "And", "Anybody", "Anyone", "Anything", "As", "At", "But", "By", "Dr", "Everybody",
+      "Everyone", "Everything", "For", "He", "Her", "Here", "Him", "His", "How", "I", "If", "In", "It",
+      "Its", "Me", "Mr", "Mrs", "Ms", "My", "No", "Nobody", "None", "Not", "Nothing", "Now", "Of", "On",
+      "Or", "Our", "Perhaps", "She", "So", "Somebody", "Someone", "Something", "That", "The", "Their",
+      "Them", "Then", "There", "These", "They", "This", "Those", "To", "Us", "We", "What", "When", "Where",
+      "While", "Who", "Why", "With", "Yes", "Yet", "You", "Your"
     ],
 
     // Leading words that are titles or articles, not names: "Lord Maren" is

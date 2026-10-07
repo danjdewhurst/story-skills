@@ -3514,41 +3514,74 @@ var en_default = {
       "A",
       "An",
       "And",
+      "Anybody",
+      "Anyone",
+      "Anything",
+      "As",
       "At",
       "But",
       "By",
       "Dr",
+      "Everybody",
+      "Everyone",
+      "Everything",
       "For",
       "He",
       "Her",
+      "Here",
+      "Him",
       "His",
+      "How",
       "I",
       "If",
       "In",
       "It",
       "Its",
+      "Me",
       "Mr",
       "Mrs",
       "Ms",
+      "My",
       "No",
+      "Nobody",
+      "None",
       "Not",
+      "Nothing",
+      "Now",
       "Of",
       "On",
       "Or",
+      "Our",
+      "Perhaps",
       "She",
+      "So",
+      "Somebody",
+      "Someone",
+      "Something",
       "That",
       "The",
-      "Then",
-      "They",
       "Their",
+      "Them",
+      "Then",
+      "There",
+      "These",
+      "They",
       "This",
+      "Those",
       "To",
+      "Us",
       "We",
+      "What",
       "When",
+      "Where",
       "While",
+      "Who",
+      "Why",
       "With",
       "Yes",
-      "You"
+      "Yet",
+      "You",
+      "Your"
     ],
     titleWords: [
       "the",
@@ -10971,6 +11004,10 @@ function anyOf(marks) {
 
 // src/sentences.js
 var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
+var CAPITAL_INITIALS = "(?:\\p{Lu}\\.)*\\p{Lu}";
+var INITIAL_RUN = /(?:^|[^\p{L}\p{N}])\p{L}\. ?\p{L}$/u;
+var WORD_BEFORE_CAPITAL = /(?:^|\s)(\S+) \p{Lu}$/u;
+var QUOTATIVE = /^(?:と|って)/;
 var NEVER = "(?!)";
 var CONTEXT_WINDOW = 64;
 var CLOSING_MARKS = ")\\]*_";
@@ -10993,7 +11030,8 @@ function buildRules(pack) {
   const closers = charClass(marks.closers);
   const spacedClosers = [...SPACED_CLOSERS].filter((mark) => marks.closers.includes(mark) && !marks.openers.includes(mark)).join("");
   const spacedOpeners = [...SPACED_OPENERS].filter((mark) => marks.openers.includes(mark) && !marks.closers.includes(mark)).join("");
-  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} )*`;
+  const dashes = pack.cased === false ? "" : marks.dashes;
+  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} |${anyOf(dashes)} ?)*`;
   const ambiguous = [...marks.closers].filter((mark) => marks.openers.includes(mark)).join("");
   const plainClosers = charClass([...marks.closers].filter((mark) => !ambiguous.includes(mark)).join(""));
   const ends = [
@@ -11001,9 +11039,14 @@ function buildRules(pack) {
     marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+`
   ].filter(Boolean);
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
+  const nonNames = either([...words("candidateStopwords"), ...words("calendarWords")]);
   return {
-    title: new RegExp(`(?:^|[\\s${openers}(])(?:${[...words("titleAbbreviations"), INITIALS].join("|")})$`),
-    capitalInitial: pack.capitalInitials === true ? new RegExp(`(?:^|[\\s${openers}(])(?:\\p{Lu}\\.)*\\p{Lu}$`, "u") : null,
+    title: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("titleAbbreviations"))})$`),
+    initial: new RegExp(`(?:^|[\\s${openers}(])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
+    nextInitial: new RegExp(`^${opening}\\p{Lu}\\.`, "u"),
+    nextNonName: new RegExp(`^${opening}(?:${nonNames})(?![\\p{L}\\p{N}]|['’]\\p{Lu})`, "u"),
+    nonName: new RegExp(`^(?:${nonNames})$`, "u"),
+    pronouns: new Set((checkList(pack, "beatPronouns") ?? []).filter((word) => [...word].length === 1).map((word) => upperCase(word, pack))),
     context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...pack.ordinalStop === true ? ["\\d+"] : []])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     end: new RegExp(ends.join("|") || NEVER, "g"),
@@ -11016,19 +11059,35 @@ function buildRules(pack) {
     firstWord: new RegExp(`^${opening}([\\p{L}\\p{N}'’]+)`, "u")
   };
 }
-function closingQuotes(text, start, end, rules) {
+function closingQuotes(text, start, end, rules, quoteOpen) {
   let position = end;
   while (position < text.length) {
     const mark = text[position];
-    if (!rules.fullWidthCloser.test(mark) && !(rules.ambiguous.includes(mark) && quoteOpen(text.slice(start, position), mark, rules))) {
+    if (!rules.fullWidthCloser.test(mark) && !(rules.ambiguous.includes(mark) && quoteOpen(start, position, mark))) {
       break;
     }
     position += 1;
   }
   return position;
 }
-function quoteOpen(sentence, mark, rules) {
-  return rules.pairs.some(({ open, close }) => close === mark && (open === close ? sentence.split(mark).length % 2 === 0 : sentence.lastIndexOf(open) > sentence.lastIndexOf(close)));
+function openQuotes(text, rules) {
+  let start = -1;
+  let read = 0;
+  let counts = new Map;
+  let last = new Map;
+  return (from, position, mark) => {
+    if (from !== start || position < read) {
+      start = from;
+      read = from;
+      counts = new Map;
+      last = new Map;
+    }
+    for (;read < position; read += 1) {
+      counts.set(text[read], (counts.get(text[read]) ?? 0) + 1);
+      last.set(text[read], read);
+    }
+    return rules.pairs.some(({ open, close }) => close === mark && (open === close ? (counts.get(mark) ?? 0) % 2 === 1 : (last.get(open) ?? -1) > (last.get(close) ?? -1)));
+  };
 }
 function endsSentence(text, pack = languagePack()) {
   return sentenceRules(pack).finished.test(String(text).trim());
@@ -11039,11 +11098,16 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     return [];
   }
   const rules = sentenceRules(pack);
+  const quoteOpen = openQuotes(normalized, rules);
   const sentences = [];
   let start = 0;
   for (const match of normalized.matchAll(rules.end)) {
     if (rules.fullWidth.test(match[0])) {
-      const end = closingQuotes(normalized, start, match.index + match[0].length, rules);
+      const stop = match.index + match[0].length;
+      const end = closingQuotes(normalized, start, stop, rules, quoteOpen);
+      if (end > stop && QUOTATIVE.test(normalized.slice(end, end + 2))) {
+        continue;
+      }
       sentences.push(normalized.slice(start, end).trim());
       start = end;
       continue;
@@ -11055,7 +11119,7 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before) || rules.capitalInitial !== null && rules.capitalInitial.test(before));
+    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before) || rules.initial.test(before) && !loneCapitalEnds(before, next, rules));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
@@ -11068,6 +11132,16 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     sentences.push(rules.finished.test(tail) ? tail : `${tail}.`);
   }
   return sentences.filter((sentence) => sentence !== "");
+}
+function loneCapitalEnds(before, next, rules) {
+  if (!/\p{Lu}$/u.test(before) || INITIAL_RUN.test(before) || rules.nextInitial.test(next)) {
+    return false;
+  }
+  if (rules.nextNonName.test(next)) {
+    return true;
+  }
+  const word = WORD_BEFORE_CAPITAL.exec(before);
+  return rules.pronouns.has(before.at(-1)) && word !== null && (/^\p{Ll}/u.test(word[1]) || rules.nonName.test(word[1].replace(/[,;:]$/, "")));
 }
 function isStammer(before, next, rules) {
   const last = /([\p{L}\p{N}'’]+)$/u.exec(before);
