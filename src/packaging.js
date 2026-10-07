@@ -458,15 +458,15 @@ function shunnRunXml(script, text, decoration) {
 
 // The running head's parts, as the PDF and DOCX print them before the page
 // number: Shunn's surname and short title, each left out when empty.
-// story.md `surname` and `short-title` set them; otherwise the surname is
-// the last word of the first author's name (`meta.lead`, an editor's in an
-// anthology with no author), and the short title is the title before any
-// subtitle. Each part is one line, and is cut to fit (see headFit), so the
-// head never wraps.
+// story.md `surname` and `short-title` set them, and are used whole.
+// Otherwise the surname comes from the first author's name (`meta.lead`, an
+// editor's in an anthology with no author; see headSurname) and the short
+// title is the title before any subtitle, each cut to fit (see headFit), so
+// a head the build works out never wraps.
 export function shunnHeadParts(meta) {
-  const name = oneLine(meta.surname || headSurname(meta.lead ?? meta.author ?? ""));
-  const title = oneLine(meta.shortTitle || headTitle(meta.title));
-  return [headFit(name, HEAD_NAME_COLUMNS), headFit(title, HEAD_TITLE_COLUMNS)].filter((part) => part !== "");
+  const name = meta.surname ? oneLine(meta.surname) : headFit(headSurname(meta.lead ?? meta.author ?? "", meta.pack?.familyNameFirst), HEAD_NAME_COLUMNS, meta.labels);
+  const title = meta.shortTitle ? oneLine(meta.shortTitle) : headFit(headTitle(meta.title), HEAD_TITLE_COLUMNS, meta.labels);
+  return [name, title].filter((part) => part !== "");
 }
 
 // Courier sets 65 characters across a Letter page's text and 62 across
@@ -479,20 +479,26 @@ const HEAD_TITLE_COLUMNS = 30;
 // and spaces is one space (LINE_BREAK too, which would split a DOCX run),
 // and none is left at the ends. Typed no-break and ideographic spaces stay.
 function oneLine(text) {
-  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\uE001]+/g, " ").replace(/^ | $/g, "");
+  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\ue001]+/g, " ").replace(/^ | $/g, "");
 }
 
-// The surname in a name: its last word, past a generational suffix (Jr.,
-// Sr., III) and a comma before it. A name with no spaces, as Chinese and
-// Japanese names are written, is used whole.
-const NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv)\.?$/i;
+// The surname in a name: its last word, past a suffix or degree (Jr., III,
+// PhD, M.D.), or its first word in a language that puts the family name
+// first (`familyFirst`, from the language pack: Chinese, Japanese, Korean,
+// Hungarian). Only the part before a comma counts, so "King, Jr.", "Smith,
+// PhD", and "Smith, John" all give the surname. A name written with no
+// spaces is used whole.
+const NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv|phd|ph\.d|md|m\.d|esq)\.?$/i;
 
-function headSurname(name) {
-  const words = oneLine(name).split(" ").map((word) => word.replace(/,+$/, "")).filter((word) => word !== "");
+function headSurname(name, familyFirst = false) {
+  const words = (oneLine(name).split(",").find((part) => part.trim() !== "") ?? "").split(" ").filter((word) => word !== "");
+  if (familyFirst) {
+    return words[0] ?? "";
+  }
   while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
     words.pop();
   }
-  return words.length === 0 ? "" : words[words.length - 1];
+  return words[words.length - 1] ?? "";
 }
 
 // The title before a subtitle: up to a colon and a space, a full-width
@@ -512,20 +518,35 @@ function headColumns(char) {
 }
 
 // `text` cut to `limit` columns: at the last space or hyphen that fits, or
-// in the middle of a word longer than the limit, without the punctuation
-// or spaces the cut leaves at the end.
-function headFit(text, limit) {
+// in the middle of a word longer than the limit, less what the cut leaves
+// dangling (see withoutDangling).
+function headFit(text, limit, labels) {
   let kept = "";
   let width = 0;
   for (const char of text) {
     width += headColumns(char);
     if (width > limit) {
       const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
-      return (cut > 0 ? kept.slice(0, cut) : kept).replace(/[\s,;:\u2013\u2014-]+$/u, "");
+      return withoutDangling(cut > 0 ? kept.slice(0, cut) : kept, labels);
     }
     kept += char;
   }
   return text;
+}
+
+// A cut part without the spaces, punctuation, and joining words at its end:
+// "&", "/", "and", and the word of the book's `and` label ("und" in German),
+// so "Salt and" is "Salt".
+function withoutDangling(text, labels) {
+  const joiners = new Set(["and", String(labels?.and ?? "").replace(/\{[ab]\}/g, "").trim().toLowerCase()]);
+  const dangling = /[\s,;:/&\u2013\u2014\u3001\uff0c-]+$/u;
+  let rest = text.replace(dangling, "");
+  let space = rest.lastIndexOf(" ");
+  while (space > 0 && joiners.has(rest.slice(space + 1).toLowerCase())) {
+    rest = rest.slice(0, space).replace(dangling, "");
+    space = rest.lastIndexOf(" ");
+  }
+  return rest;
 }
 
 // The DOCX headers, as the PDF sets them: every page but the first carries

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { languagePack } from "../src/languages/index.js";
 import { shunnHeadParts, shunnHtml } from "../src/packaging.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, messages, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
@@ -162,6 +163,41 @@ describe("the Shunn DOCX running head (#525)", () => {
     expect(surname("\u6751\u4e0a\u6625\u6a39")).toBe("\u6751\u4e0a\u6625\u6a39");
   });
 
+  test("only the part of a name before a comma counts", () => {
+    const surname = (lead) => shunnHeadParts({ lead, title: "Lamp" })[0];
+    expect(surname("Mary Smith, PhD")).toBe("Smith");
+    expect(surname("Mary Smith, M.D.")).toBe("Smith");
+    expect(surname("Smith, John")).toBe("Smith");
+    expect(surname("Smith, Jr.")).toBe("Smith");
+    expect(surname(", Smith")).toBe("Smith");
+    // A degree or title without the comma is passed over too.
+    expect(surname("Mary Smith PhD")).toBe("Smith");
+    expect(surname("Mary Smith Ph.D.")).toBe("Smith");
+    expect(surname("Mary Smith MD")).toBe("Smith");
+    expect(surname("John Smith Esq.")).toBe("Smith");
+  });
+
+  test("a book in a language that puts the family name first takes the first word", () => {
+    // The example's author is written as the family name, a space, then the
+    // given name.
+    const cwd = makeTempDir();
+    const root = path.join(cwd, "kirimi-eki-no-wasuremono");
+    fs.cpSync(path.join(import.meta.dir, "..", "examples", "kirimi-eki-no-wasuremono"), root, { recursive: true });
+    expect(fs.readFileSync(path.join(root, "story.md"), "utf8")).toContain("author: \u6d45\u91ce \u5343\u5c0b\nlanguage: ja\n");
+    const head = headText(headerPart(docxParts(root, { shunn: true }), "default"));
+    expect(head).toBe("\u6d45\u91ce / \u9727\u898b\u99c5\u306e\u5fd8\u308c\u3082\u306e / ");
+
+    const surname = (lead, language) => shunnHeadParts({ lead, title: "Lamp", pack: languagePack(language) })[0];
+    expect(surname("Szab\u00f3 Magda", "hu")).toBe("Szab\u00f3");
+    expect(surname("\uae40 \ubbfc\uc218", "ko")).toBe("\uae40");
+    expect(surname("\u738b \u5c0f\u660e", "zh-Hant")).toBe("\u738b");
+    expect(surname("Wong Kar Wai", "yue")).toBe("Wong");
+    expect(surname("Asano Chihiro", "ja-Latn")).toBe("Asano");
+    // Other languages keep the last word.
+    expect(surname("Magda Szab\u00f3", "de")).toBe("Szab\u00f3");
+    expect(surname("Ada Writer", "en")).toBe("Writer");
+  });
+
   test("the short title is the title before a subtitle, cut at a word to fit", () => {
     const title = (text) => shunnHeadParts({ lead: "", title: text })[0];
     expect(title("Lamp: A Story of Light")).toBe("Lamp");
@@ -171,7 +207,6 @@ describe("the Shunn DOCX running head (#525)", () => {
     expect(title("Lamp\u00a0: une histoire")).toBe("Lamp");
     expect(title("Re:Zero")).toBe("Re:Zero");
     expect(title("\u2014And Then")).toBe("\u2014And Then");
-    expect(title("The Extraordinarily Long and Winding Road Home")).toBe("The Extraordinarily Long and");
     expect(title("The Long Cold Night, the Short Day")).toBe("The Long Cold Night, the Short");
     expect(title("The Long, Cold, Endless Nights, Again")).toBe("The Long, Cold, Endless");
     expect(title("The Long and Cold Night-Time-Wanderers")).toBe("The Long and Cold Night-Time");
@@ -179,10 +214,31 @@ describe("the Shunn DOCX running head (#525)", () => {
     expect(title("A title of exactly thirty char")).toBe("A title of exactly thirty char");
   });
 
+  test("a cut drops the joining word or mark it leaves at the end", () => {
+    const title = (text, labels) => shunnHeadParts({ lead: "", title: text, labels })[0];
+    expect(title("The Extraordinarily Long and Winding Road Home")).toBe("The Extraordinarily Long");
+    expect(title("The Extraordinarily Long AND Winding Road Home")).toBe("The Extraordinarily Long");
+    expect(title("The Extraordinarily Long & Winding Road Home")).toBe("The Extraordinarily Long");
+    expect(title("The Extraordinarily Long / Winding Road Home")).toBe("The Extraordinarily Long");
+    expect(title("The Extraordinarily Long and & Winding Road")).toBe("The Extraordinarily Long");
+    // The book's own `and`, from its language or a label of its own.
+    const german = languagePack("de").labels;
+    expect(title("Die au\u00dferordentlich lange und gewundene Stra\u00dfe", german)).toBe("Die au\u00dferordentlich lange");
+    expect(title("La route extraordinairement et longue", { and: "{a} et {b}" })).toBe("La route extraordinairement");
+    // The head carries the label through a build.
+    expect(docxHead("title: Die au\u00dferordentlich lange und gewundene Stra\u00dfe\nauthor: Ada\nlanguage: de\n")).toBe("Ada / Die au\u00dferordentlich lange / ");
+    // A word that only ends in a joiner stays.
+    expect(title("The Extraordinarily Long Grand Winding Road")).toBe("The Extraordinarily Long Grand");
+  });
+
   test("story.md surname and short-title set the head, and validate wants them as text", () => {
     expect(docxHead("title: The Left Hand of Darkness\nauthor: Ursula K. Le Guin\nsurname: Le Guin\nshort-title: Left Hand\n")).toBe("Le Guin / Left Hand / ");
     // A set surname wins over the editor too.
     expect(docxHead("title: Lamp\neditor: Cara Editor\nsurname: Editor & Other\n")).toBe("Editor &amp; Other / Lamp / ");
+    // A surname or short title set by hand is used whole, however long.
+    expect(docxHead("title: Lamp\nauthor: Ada\nsurname: Kowalczyk & Henderson-Smythe\nshort-title: A Very Long Short Title That Goes On and On\n"))
+      .toBe("Kowalczyk &amp; Henderson-Smythe / A Very Long Short Title That Goes On and On / ");
+    expect(shunnHeadParts({ lead: "Ada", surname: "Le\nGuin", shortTitle: " Left\tHand ", title: "Lamp" })).toEqual(["Le Guin", "Left Hand"]);
     const root = lampProject("title: Lamp\nsurname: 12\nshort-title:\n  - Lamp\n");
     expect(messages(validateProject(root).errors)).toEqual(expect.arrayContaining([
       "story.md frontmatter field surname must be text",
@@ -190,12 +246,12 @@ describe("the Shunn DOCX running head (#525)", () => {
     ]));
   });
 
-  test("the head never wraps, however long the name and title", () => {
+  test("a head the build works out never wraps, however long the name and title", () => {
     const long = "Wolfeschlegelsteinhausenbergerdorff Ruthersfordington-Smythe";
     // A4 is the narrower page: 62 Courier columns between its margins.
     for (const meta of [
       { lead: long, title: `${long} and the ${long}` },
-      { lead: "Ada", surname: long, shortTitle: long, title: "Lamp" },
+      { lead: `${long}${long}`, title: `${long}${long}` },
       { lead: "\u6751\u4e0a\u6625\u6a39\u6751\u4e0a\u6625\u6a39\u6751\u4e0a\u6625\u6a39", title: "\u8272\u5f69\u3092\u6301\u305f\u306a\u3044\u591a\u5d0e\u3064\u304f\u308b\u3068\u3001\u5f7c\u306e\u5de1\u793c\u306e\u5e74\u3068\u5f7c\u306e\u5de1\u793c\u306e\u5e74" },
       { lead: "\uae40\ubbfc\uc218\uae40\ubbfc\uc218\uae40\ubbfc\uc218\uae40\ubbfc\uc218", title: "\ud55c\uad6d\uc5b4 \uc81c\ubaa9\uc774 \uc544\uc8fc \uae38\uace0 \uae38\uace0 \ub610 \uae38\uc5b4\uc11c \ub05d\uc774 \uc5c6\ub2e4" }
     ]) {
@@ -241,16 +297,18 @@ describe("the Shunn DOCX running head (#525)", () => {
     // of the line: the left.
     const docxSide = (head) => (head.includes("<w:bidi/>") ? "left" : "right");
     const pdfSide = (html) => /@page \{ [^@]*@top-(left|right) \{ content: /.exec(html)[1];
-    for (const [language, side] of [["en", "right"], ["ar", "left"], ["he", "left"], ["ja", "right"]]) {
+    // A Japanese book takes the family name first, so its surname is Ada.
+    for (const [language, side, surname] of [["en", "right", "Writer"], ["ar", "left", "Writer"], ["he", "left", "Writer"], ["ja", "right", "Ada"]]) {
       const head = headerPart(docxParts(lampProject(`title: Lamp: A Story\nauthor: Ada Writer\nlanguage: ${language}\n`), { shunn: true }), "default");
+      const pack = languagePack(language);
       const html = shunnHtml({ meta: { language }, chapters: [{ heading: "One", byline: "", body: "First." }] }, {
-        title: "Lamp: A Story", author: "Ada Writer", lead: "Ada Writer", editors: "", labels: undefined, contact: [], words: 1, pack: undefined, shortForm: false
+        title: "Lamp: A Story", author: "Ada Writer", lead: "Ada Writer", editors: "", labels: pack.labels, contact: [], words: 1, pack, shortForm: false
       });
       expect(docxSide(head)).toBe(side);
       expect(pdfSide(html)).toBe(side);
       expect(html).toContain(`@page :first { @top-${side} { content: none; } }`);
-      expect(html).toContain(`@top-${side} { content: "Writer / " "Lamp / " counter(page);`);
-      expect(headText(head)).toBe("Writer / Lamp / ");
+      expect(html).toContain(`@top-${side} { content: "${surname} / " "Lamp / " counter(page);`);
+      expect(headText(head)).toBe(`${surname} / Lamp / `);
     }
   });
 

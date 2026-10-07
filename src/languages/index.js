@@ -168,6 +168,11 @@ export function projectLanguage(storyData) {
 
 const RESOLVED = new Map();
 
+// Languages that write the family name first (浅野 千尋, Szabó Magda), by
+// pack key: Chinese (every Chinese language layers zh), Japanese, Korean, and
+// Hungarian, which has no pack of its own. See familyNameFirst below.
+const FAMILY_NAME_FIRST = new Set(["zh", "ja", "ko", "hu"]);
+
 // The pack for a language tag: the base pack, then the packs for the
 // macrolanguage (zh for zh-yue) and each prefix of the lookup tag (fr, then
 // fr-ca), whichever exist. A Chinese language (cmn, yue, zh-yue) layers zh,
@@ -207,6 +212,9 @@ function resolvePack(language) {
   // throw. Runtimes can differ here (Node writes en-UK as en-GB, Bun keeps
   // it), so nothing else may depend on it.
   pack.locale = canonicalTag(lookup) ?? canonicalTag(subtags[0]) ?? "und";
+  // Whether names in the language put the family name first, so the
+  // surname is a name's first word rather than its last.
+  pack.familyNameFirst = [...keys].some((key) => FAMILY_NAME_FIRST.has(key));
   return deepFreeze(pack);
 }
 

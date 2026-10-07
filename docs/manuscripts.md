@@ -861,12 +861,12 @@ The PDF is laid out as Shunn sets a manuscript page: US Letter (or A4 with `--pa
 
 Every page of the DOCX and PDF after the title page has a running head at the top right (the top left in a right-to-left book): the author's surname, a short title, and the page number, as in `Writer / The Last Ember / 2`. The build works out the two parts:
 
-- **Surname:** the last word of the first author's name (the first editor's in an anthology with no author), passing over a final `Jr.`, `Sr.`, `Jnr`, `Snr`, `II`, `III`, or `IV`. So `Martin Luther King, Jr.` gives `King`. A name written without spaces, as Chinese and Japanese names are, is used whole.
+- **Surname:** the last word of the first author's name (the first editor's in an anthology with no author), passing over a final `Jr.`, `Sr.`, `Jnr`, `Snr`, `II`, `III`, `IV`, `PhD`, `MD`, or `Esq.`. Only the part before a comma counts, so `Martin Luther King, Jr.` and `King, Martin` both give `King`, and `Mary Smith, PhD` gives `Smith`. In a book in Chinese, Japanese, Korean, or Hungarian (its `language`), which write the family name first, the surname is the first word instead: `浅野 千尋` gives `浅野`, and `Szabó Magda` gives `Szabó`. A name written without spaces is used whole.
 - **Short title:** the title up to its subtitle, which starts at the first colon followed by a space, full-width colon (`：`), or em dash. So `The Last Ember: Book One` gives `The Last Ember`.
 
-To keep the head on one line, the surname is cut to 20 characters and the short title to 30, at the last space or hyphen that fits, or within a single longer word. A Chinese, Japanese, or Korean character counts as two. A line break or other control character in either part becomes a space.
+To keep the head on one line, the surname the build works out is cut to 20 characters and the short title to 30, at the last space or hyphen that fits, or within a single longer word. A Chinese, Japanese, or Korean character counts as two. A cut also drops a joining word or mark it leaves at the end: `&`, `/`, `and`, or the book's own `and` (`und` in German), so `The Long and Winding Road Home` becomes `The Long`, not `The Long and`. A line break or other control character in either part becomes a space.
 
-A surname of more than one word (`Le Guin`), co-authors, or a short title you choose need `surname` and `short-title` in `story.md`, which the build uses in place of its own, cut to the same lengths:
+A surname of more than one word (`Le Guin`), a Latin-script name in a Chinese, Japanese, or Korean book, co-authors, or a short title you choose need `surname` and `short-title` in `story.md`. The build uses them in place of its own, whole and never cut, so keep them short: together, about 50 characters fit on one line.
 
 ```yaml
 author: Ursula K. Le Guin
