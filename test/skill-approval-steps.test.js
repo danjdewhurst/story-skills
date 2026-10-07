@@ -29,6 +29,15 @@ const FENCE = /^\s*(```|~~~)/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 const REMOVE = /story\s+remove\s+(?:chapter|scene)\s+[<{a-z]/g;
 const TAG = /git\s+tag\s+[<{a-z]/g;
+
+// The command that starts at `index`: its text up to the next code span or
+// the next `story` word, with whitespace folded so a wrapped line still counts.
+function commandAt(text, index) {
+  const rest = text.slice(index);
+  const end = rest.slice(1).search(/`|\bstory\b/);
+  return (end === -1 ? rest : rest.slice(0, end + 1)).replace(/\s+/g, " ");
+}
+
 // Every git add, stage, or commit, with any options before the subcommand
 // (`git -C .. add`, `git -c x=y commit`), in code or in prose. Each loop
 // step takes one whole option word, or `-C`/`-c` and the value after it, and
@@ -147,11 +156,14 @@ describe("skills guard commands that delete or freeze prose (#543)", () => {
     expect(skillSteps.some((step) => step.where.startsWith("feedback-triage/SKILL.md:"))).toBe(true);
   });
 
-  test("every story remove chapter or scene instruction has a --dry-run in the same step", () => {
-    const instructions = skillSteps.filter((step) => step.text.match(REMOVE));
+  test("every story remove chapter or scene instruction has a --dry-run on the same command", () => {
+    const instructions = skillSteps.flatMap((step) => [...step.text.matchAll(REMOVE)].map((match) => ({
+      where: step.where,
+      command: commandAt(step.text, match.index)
+    })));
     expect(instructions.length).toBeGreaterThan(0);
-    for (const step of instructions) {
-      expect(step.text, `${step.where} removes without --dry-run`).toMatch(/--dry-run/);
+    for (const { where, command } of instructions) {
+      expect(command, `${where} removes without --dry-run`).toMatch(/--dry-run/);
     }
   });
 
