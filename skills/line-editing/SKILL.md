@@ -1,6 +1,6 @@
 ---
 name: line-editing
-description: This skill should be used when the user asks to "line edit", "edit my prose", "polish this chapter", "tighten the prose", "improve the sentences", "copyedit", "proofread", "proof pass", "check grammar and punctuation", "dialogue punctuation", "make the voices distinct", "everyone sounds the same", "read it aloud", "read-aloud pass", "text to speech", or wants a sentence-level quality pass on drafted chapters that preserves the author's voice. NOT for creating the style sheet or checking voice consistency (use voice-style).
+description: This skill should be used when the user asks to "line edit", "edit my prose", "polish this chapter", "tighten the prose", "improve the sentences", "copyedit", "proofread", "proof pass", "check grammar and punctuation", "dialogue punctuation", "make the voices distinct", "everyone sounds the same", "read it aloud", "read-aloud pass", "text to speech", or wants a sentence-level quality pass on drafted chapters that preserves the author's voice. NOT for creating the style sheet, recording character voices, or checking voice consistency (use voice-style).
 ---
 
 # Line Editing
@@ -43,7 +43,7 @@ check plainly does not fit it, do that pass by reading.
 - Preparing a manuscript for beta readers, an editor, or submission
 - The `line`, `copyedit`, or `proof` revision pass is next in `story passes`
 - NOT for structural, plot, or continuity revision (use `revision-continuity`; line-edit only after those passes, or the polish is wasted)
-- NOT for setting house style or the voice description (use `voice-style`; this skill applies it)
+- NOT for setting house style, the voice description, or each character's recorded voice (use `voice-style`; this skill applies them)
 - NOT for scene-level craft such as deep POV, subtext, or exposition strategy (use `scene-craft`)
 - NOT for acting on external reader notes (use `feedback-triage`)
 - NOT for writing or scanning verse (use `verse-craft`); this skill only

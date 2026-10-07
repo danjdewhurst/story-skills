@@ -1,6 +1,6 @@
 ---
 name: story-maintenance
-description: This skill should be used when the user asks to validate, reindex, repair registries, check links, run the story CLI's continuity, pacing, clue, voice, or name checks, count words, summarize a story project, import an existing manuscript, export a manuscript, build a review copy or print interior, generate a diagram, record revision-pass status with `story passes`, run the story CLI, or perform deterministic maintenance on a Story Skills markdown project. It runs the CLI and reads its output; NOT for judging a finding or revising the story to fix it (use revision-continuity for continuity errors and revision passes, plot-structure for pacing, voice-style for voices and prose, genre-craft for clues and fair play).
+description: This skill should be used when the user asks to "validate", "reindex", "repair registries", "check links", "run the continuity, pacing, clue, voice, or name checks", "count words", "summarize a story project", "import an existing manuscript", "export a manuscript", "run a build", "generate a diagram", "record revision-pass status with `story passes`", "run the story CLI", or wants deterministic maintenance on a Story Skills markdown project. It runs the CLI and reads its output; NOT for judging a finding or revising the story to fix it (use revision-continuity for continuity errors and revision passes, plot-structure for pacing, voice-style for voices and prose, genre-craft for clues and fair play), or for sharing a review copy with readers (use feedback-triage).
 ---
 
 # Story Maintenance

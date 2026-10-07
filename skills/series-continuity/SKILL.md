@@ -1,6 +1,6 @@
 ---
 name: series-continuity
-description: This skill should be used when the user asks to "write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible", or needs to keep canon consistent across multiple Story Skills projects. NOT for a standalone book (use story-init) or continuity within one book (use revision-continuity).
+description: This skill should be used when the user asks to "write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible", "pitch my series", "series pitch", "multi-book pitch", or needs to plan, pitch, or keep canon consistent across multiple Story Skills projects. NOT for a standalone book (use story-init), continuity within one book (use revision-continuity), or a query, pitch, or synopsis for a single book (use submission).
 ---
 
 # Series Continuity
@@ -27,7 +27,7 @@ Links are relative paths from the book root, and every link needs a matching bac
 - Carrying characters, locations, systems, factions, artifacts, or glossary terms into another book
 - Revising a book that other books in the series depend on
 - Keeping a series bible, or planning and pitching a series of several books (see `references/series-bible.md`)
-- NOT for a single standalone book (use `story-init`) or for within-book continuity (use `revision-continuity`)
+- NOT for a single standalone book (use `story-init`), for within-book continuity (use `revision-continuity`), or for the query letter, pitch, or synopsis of a single book (use `submission`). A series pitch stays here: the series overview and the series line in book one's query (see `references/series-bible.md`)
 
 ## Starting a Linked Book
 

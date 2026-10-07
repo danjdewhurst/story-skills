@@ -1,13 +1,13 @@
 ---
 name: worldbuilding
-description: This skill should be used when the user asks to "create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", "map", "travel times", "routes", "calendar", "moons", "seasons", "naming language", "conlang names", "trade routes", "supply lines", "magic cost", or wants to develop any aspect of a story's world and setting.
+description: This skill should be used when the user asks to "create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", "map", "travel times", "routes", "calendar", "moons", "seasons", "naming language", "conlang names", "trade routes", "supply lines", "magic cost", "add a glossary term", "glossary", "invented word", or wants to develop any aspect of a story's world and setting. NOT for a glossary for translators (use adaptation).
 ---
 
 # Worldbuilding
 
 ## Overview
 
-Create and manage world elements for a story project. Locations, systems (magic, politics, technology, etc.), factions, and artifacts are stored as markdown files in the `worldbuilding/` directory with YAML frontmatter. All elements cross-reference characters and other story elements.
+Create and manage world elements for a story project. Locations, systems (magic, politics, technology, etc.), factions, and artifacts are stored as markdown files in the `worldbuilding/` directory with YAML frontmatter, and glossary terms for the world's invented words in `glossary/terms/`. All elements cross-reference characters and other story elements.
 
 ## Prerequisites
 
@@ -97,6 +97,18 @@ Then:
 2. Update the Artifacts table in `worldbuilding/_index.md`
 3. If an owner or location is listed, verify those files exist and cross-reference back
 4. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
+
+## Adding A Glossary Term
+
+Record an invented word, title, rank, or concept that the prose must spell and use the same way every time as a glossary term in `glossary/terms/`.
+
+1. Read `glossary/_index.md` for the existing terms, then run `story names '{Term}'` to catch a clash with another name or term
+2. Use `story add term '{Term}' --category '{person|place|faction|artifact|concept|term|other}'` when the CLI is available, with `--alias '{Variant}'` once for each accepted variant; it writes `glossary/terms/{term-kebab}.md` and updates `glossary/_index.md`. Otherwise create the file with frontmatter fields `term`, `category`, and `aliases`, and add a row to the Registry table in `glossary/_index.md`
+3. Fill `## Definition` (what it means in the story) and `## Usage Notes` (spelling, capitalisation, who uses it, and what it never means). Add a `pronunciation` when the term is invented or easily misread
+4. When the term's capitalisation or hyphenation is a house-style decision, record it in `style-sheet.md` too (see the `voice-style` skill)
+5. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
+
+A glossary for translators belongs to the `adaptation` skill, which adds a `## Translations` section to these term files.
 
 ## Updating World Elements
 

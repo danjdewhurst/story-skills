@@ -1,6 +1,6 @@
 ---
 name: discovery-drafting
-description: This skill should be used when the user asks about "pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "reverse outline", "cut a subplot", "dead end", "drafting sprint", "writing cadence", or wants to draft a story by discovery with retrospective bible reconciliation. NOT for outline-first drafting, or mysteries and other clue-dependent genres where setup must come before payoff (use chapter-writing).
+description: This skill should be used when the user asks about "pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "dead end", "drafting sprint", "writing cadence", or wants to draft a story by discovery with retrospective bible reconciliation. NOT for outline-first drafting, or mysteries and other clue-dependent genres where setup must come before payoff (use chapter-writing), or a reverse outline, a subplot cut, or another revision pass on existing chapters (use revision-continuity).
 ---
 
 # Discovery Drafting
@@ -28,7 +28,10 @@ start — arcs get built during reconciliation.
 - Starting a project from a situation/character rather than a plot
 - NOT for mysteries or other clue-dependent genres where setup must precede
   payoff (use chapter-writing; see `genre-craft`)
-- NOT for revising existing chapters (use `revision-continuity`)
+- NOT for revising existing chapters, including a reverse outline of the
+  draft or cutting a subplot as a revision pass (use `revision-continuity`).
+  The reverse outline inside the reconcile loop, and cutting dead ends in a
+  batch review, stay here
 - The user can switch modes per project or per chapter; record the mode so
   audits know which discipline applies
 

@@ -16,7 +16,7 @@ This page is for writers and agent operators who want to know what each of the 2
 
 Each skill is a folder under [`skills/`](../skills/) containing a `SKILL.md` file and, usually, a `references/` folder. The `SKILL.md` frontmatter has a `name` and a `description`. The description lists the phrases that should trigger the skill ("start a new story", "write the next chapter", "continuity check"), and your agent matches your request against those descriptions to decide which skill to load. You don't need to name a skill. Asking in plain words is enough, though naming one ("use the scene-craft skill") also works.
 
-Each trigger phrase belongs to one skill, and most descriptions end with a "NOT for" line that points neighbouring requests elsewhere. That is why similar-sounding requests can land on different skills: "premise" goes to premise-workshop but "controlling idea" to theme-craft, "pacing" and "sagging middle" go to plot-structure but "chapter hook" to scene-craft, and "voice fingerprints" goes to voice-style but "everyone sounds the same" to line-editing. The **Triggers** and **Not for** lines below list them for each skill.
+Each trigger phrase belongs to one skill, and most descriptions end with a "NOT for" line that points neighbouring requests elsewhere. That is why similar-sounding requests can land on different skills: "premise" goes to premise-workshop but "controlling idea" to theme-craft, "pacing" and "sagging middle" go to plot-structure but "chapter hook" to scene-craft, "voice fingerprints" goes to voice-style but "everyone sounds the same" to line-editing, "choose your own adventure" goes to interactive-fiction but "turn the book into Ink or Twine" to adaptation, and "pitch my series" goes to series-continuity but "pitch" to submission. The **Triggers** and **Not for** lines below list them for each skill, and [`test/skill-conventions.test.js`](../test/skill-conventions.test.js) checks that no two skills claim the same phrase and that each **Triggers** line matches its skill's description.
 
 Once loaded, a skill tells the agent what to read, what to ask you, which files to edit, and which maintenance commands to run afterwards. Reference files hold templates and craft guidance that the skill loads when it needs them, so the main instructions stay short.
 
@@ -59,7 +59,7 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Start a new book from scratch | [story-init](#story-init) | "Start a new story" |
 | Turn an existing manuscript into a project | [story-maintenance](#story-maintenance) (`story import`) | "Import my draft" |
 | Add or change a character, relationship, or family tree | [character-management](#character-management) | "Create a character" |
-| Build a place, magic system, faction, or object; set travel times, a calendar, or naming rules | [worldbuilding](#worldbuilding) | "Design a magic system" |
+| Build a place, magic system, faction, or object; set travel times, a calendar, or naming rules; add a glossary term | [worldbuilding](#worldbuilding) | "Design a magic system" |
 | Choose a story structure, plan arcs, track foreshadowing, fix a sagging middle | [plot-structure](#plot-structure) | "Create a plot arc" |
 | Work out what the book is about, or design the antagonist | [theme-craft](#theme-craft) | "What's the controlling idea?" |
 | Follow a genre's rules: fair-play clues, romance beats, a ticking clock | [genre-craft](#genre-craft) | "Plan a fair-play mystery" |
@@ -69,13 +69,13 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Fix a flat scene, an info dump, an opening, or a chapter ending | [scene-craft](#scene-craft) | "Fix the info dump in chapter 2" |
 | Keep spelling, voice, and house style consistent, or lint prose | [voice-style](#voice-style) | "Set up a style sheet for this book" |
 | Write a poem, limerick, or song, or check that verse scans | [verse-craft](#verse-craft) | "Does this limerick scan?" |
-| Plan, draft, or revise a branching book whose chapters carry choices | [interactive-fiction](#interactive-fiction) | "Plan where the branches rejoin" |
+| Plan, draft, or revise a branching or choose-your-own-adventure book whose chapters carry choices | [interactive-fiction](#interactive-fiction) | "Plan where the branches rejoin" |
 | Revise or continuity-check existing chapters, or work through revision passes | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Line edit, copyedit, proofread, or make the voices distinct | [line-editing](#line-editing) | "Line edit chapter 3" |
 | Get a simulated first read before human readers see the draft | [reader-panel](#reader-panel) | "Give me a simulated beta read" |
 | Process notes from alpha or beta readers, or send them a review copy | [feedback-triage](#feedback-triage) | "Triage the beta feedback" |
 | Brief a sensitivity reader, clear permissions, disclose AI use, or work with an editor or co-author | [editorial-review](#editorial-review) | "Do I need a sensitivity reader?" |
-| Write a sequel, prequel, or companion book | [series-continuity](#series-continuity) | "Start a prequel to The Last Ember" |
+| Write a sequel, prequel, or companion book, or pitch a series | [series-continuity](#series-continuity) | "Start a prequel to The Last Ember" |
 | Query agents, submit short stories to magazines, order a collection, write a blurb, or track submissions | [submission](#submission) | "Help me query agents" |
 | Self-publish: ISBNs, metadata, print interior, launch, rights | [publishing](#publishing) | "Help me self-publish this book" |
 | Make an audiobook script, screenplay, picture book, comic, or translation, or turn a linear book into an interactive edition | [adaptation](#adaptation) | "Make an audiobook narration script" |
@@ -138,7 +138,7 @@ The main handoffs:
 | [premise-workshop](#premise-workshop) | Optional `premise-notes.md`, then `story.md` premise fields and notes after init | `init --form`, `names`, `reindex`, `wordcount --write`, `check`, `report` |
 | [story-init](#story-init) | Whole project scaffold, `story.md`, all registries | `init --form`, `reindex`, `wordcount --write`, `check` (then suggests `next`) |
 | [character-management](#character-management) | `characters/*.md`, `characters/_index.md` | `names`, `add character`, `diagram relationships`, `reindex`, `wordcount --write`, `check` |
-| [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md` | `names`, `add faction`, `add artifact`, `diagram locations`, `reindex`, `wordcount --write`, `check` |
+| [worldbuilding](#worldbuilding) | `worldbuilding/{locations,systems,factions,artifacts}/*.md`, `glossary/terms/*.md` | `names`, `add faction`, `add artifact`, `add term`, `diagram locations`, `reindex`, `wordcount --write`, `check` |
 | [plot-structure](#plot-structure) | `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/{promises,questions}/` | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `grid`, `diagram timeline`/`arcs`/`clues`, `reindex`, `wordcount --write`, `check` |
 | [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `wordcount --write`, `check` |
 | [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `wordcount --write`, `check` |
@@ -246,7 +246,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Triggers.** "Create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character".
 
-**Not for.** Character voices or dialogue style ([voice-style](#voice-style)).
+**Not for.** Recording or checking character voices ([voice-style](#voice-style)), rewriting dialogue so the voices differ ([line-editing](#line-editing)), or a thematic arc's lie, truth, and arc type ([theme-craft](#theme-craft)). This skill sets a character's voice when it builds the profile.
 
 **Workflow.**
 
@@ -274,9 +274,11 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 ### worldbuilding
 
-**Purpose.** Creates locations, systems (magic, politics, technology, religion, economy, military, social, education), factions, and artifacts under `worldbuilding/`.
+**Purpose.** Creates locations, systems (magic, politics, technology, religion, economy, military, social, education), factions, and artifacts under `worldbuilding/`, and glossary terms for the world's invented words under `glossary/terms/`.
 
-**Triggers.** "Create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", "map", "travel times", "routes", "calendar", "moons", "seasons", "naming language", "conlang names", "trade routes", "supply lines", "magic cost".
+**Triggers.** "Create a location", "add a location", "magic system", "political system", "build the world", "add culture", "world history", "technology system", "religion", "economy", "map", "travel times", "routes", "calendar", "moons", "seasons", "naming language", "conlang names", "trade routes", "supply lines", "magic cost", "add a glossary term", "glossary", "invented word".
+
+**Not for.** A glossary for translators ([adaptation](#adaptation), which adds a `## Translations` section to the same term files).
 
 **Workflow.**
 
@@ -285,14 +287,15 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 - **Systems:** uses the prompts for that system type in `world-element-types.md`, saves to `worldbuilding/systems/{name-kebab}.md`, and cross-references the characters who use it. Calendars, naming languages, economies, and magic costs also use their own references below.
 - **Factions:** `story add faction '{Name}' --type '{family|guild|government|military|religion|company|community|criminal|other}'`, covering ideology, power base, members, and conflicts.
 - **Artifacts:** `story add artifact '{Name}' --type '{object|weapon|document|technology|relic|symbol|resource|other}'`, covering function, costs, history, and current owner and location.
+- **Glossary terms:** `story add term '{Term}' --category '{person|place|faction|artifact|concept|term|other}'` with `--alias` for each accepted variant, after `story names '{Term}'`, for an invented word, title, rank, or concept the prose must use the same way every time. Fills the term's definition and usage notes, and a `pronunciation` when it helps. House-style capitalisation and hyphenation also go in `style-sheet.md` ([voice-style](#voice-style)).
 
-Every element goes into the matching table in `worldbuilding/_index.md`, and the world overview is kept current.
+Every element goes into the matching table in `worldbuilding/_index.md`, and every term into `glossary/_index.md`, and the world overview is kept current.
 
-**Reads.** `story.md`, `worldbuilding/_index.md`, and the character files it links.
+**Reads.** `story.md`, `worldbuilding/_index.md`, `glossary/_index.md`, and the character files it links.
 
-**Writes.** `worldbuilding/**/*.md`, `worldbuilding/_index.md`, and backlinks in character files.
+**Writes.** `worldbuilding/**/*.md`, `worldbuilding/_index.md`, `glossary/terms/*.md`, `glossary/_index.md`, and backlinks in character files.
 
-**CLI.** `story names`, `story add faction`, `story add artifact`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location '{Name}'` (with `--region`, `--population`, `--controlled-by`) and `story add system '{Name}'` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
+**CLI.** `story names`, `story add faction`, `story add artifact`, `story add term`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location '{Name}'` (with `--region`, `--population`, `--controlled-by`) and `story add system '{Name}'` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
 
 **References.**
 
@@ -379,7 +382,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Triggers.** "Mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "fantasy", "quest", "chosen one", "historical fiction", "period voice", "anachronism", "serial", "episodic", "web serial", "genre conventions".
 
-**Not for.** Genre voice at the sentence level (that is the `better-writing` skill's job) or literary fiction, whose conventions don't reduce to checkable rules.
+**Not for.** A clue check as a revision pass ([revision-continuity](#revision-continuity)), genre voice at the sentence level (that is the `better-writing` skill's job), or literary fiction, whose conventions don't reduce to checkable rules.
 
 **Workflow.**
 
@@ -482,9 +485,9 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Purpose.** Drafting without an outline ("pantsing"). You start from a one-paragraph story kernel, write forward, and bring the bible up to date after each chapter. It is the counterpart to chapter-writing's outline-first approach.
 
-**Triggers.** "Pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "reverse outline", "cut a subplot", "dead end", "drafting sprint", "writing cadence".
+**Triggers.** "Pantsing", "discovery write", "write without an outline", "discovery draft", "write into the dark", "story kernel", "reconcile a chapter", "dead end", "drafting sprint", "writing cadence".
 
-**Not for.** Mysteries and other clue-dependent genres where setup has to come before payoff (use chapter-writing with [genre-craft](#genre-craft)), or revising existing chapters. You can switch mode per project or per chapter.
+**Not for.** Mysteries and other clue-dependent genres where setup has to come before payoff (use chapter-writing with [genre-craft](#genre-craft)), or revising existing chapters, including a reverse outline of the draft or cutting a subplot ([revision-continuity](#revision-continuity)). The reverse outline inside the reconcile loop, and cutting dead ends in a batch review, stay here. You can switch mode per project or per chapter.
 
 **Workflow.**
 
@@ -564,7 +567,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Triggers.** "Create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints".
 
-**Not for.** Character personality or arc ([character-management](#character-management)), scene craft such as deep POV ([scene-craft](#scene-craft)), or the line-by-line prose pass itself: line edit, copyedit, read-aloud, and proof belong to [line-editing](#line-editing), which reads this style sheet and runs the same checks. "Everyone sounds the same" goes to line-editing too.
+**Not for.** Character personality or arc ([character-management](#character-management)), scene craft such as deep POV ([scene-craft](#scene-craft)), or the line-by-line prose pass itself: line edit, copyedit, read-aloud, and proof belong to [line-editing](#line-editing), which reads this style sheet and runs the same checks. This skill records each character's voice and checks it; rewriting dialogue to make the voices distinct ("everyone sounds the same") goes to line-editing too.
 
 **Workflow.**
 
@@ -627,9 +630,9 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Purpose.** Plans, drafts, and revises a branching book: a project whose chapters are passages joined by `choices` in their frontmatter. It shapes the choice graph with you, drafts each passage so its prose holds on every path that reaches it, keeps continuity by path, and builds the book as Twine or ink. [`examples/the-gull-rock-light`](../examples/the-gull-rock-light/) is a small example.
 
-**Triggers.** "Write a branching story", "plan the branches", "choice graph", "add a choice", "gamebook", "draft a branch", "where the branches rejoin", "add an ending", "unreachable chapter", "path continuity", "state-differs-by-path".
+**Triggers.** "Write a branching story", "interactive fiction", "choose your own adventure", "plan the branches", "choice graph", "add a choice", "gamebook", "draft a branch", "where the branches rejoin", "add an ending", "unreachable chapter", "path continuity", "state-differs-by-path".
 
-**Not for.** Turning a finished linear book into an interactive edition ([adaptation](#adaptation), which hands the edition project back here for drafting), drafting a linear chapter ([chapter-writing](#chapter-writing)), or a linear continuity audit ([revision-continuity](#revision-continuity)).
+**Not for.** Turning a finished linear book into an interactive edition in Ink or Twine ([adaptation](#adaptation), which hands the edition project back here for drafting), drafting a linear chapter ([chapter-writing](#chapter-writing)), or a linear continuity audit ([revision-continuity](#revision-continuity)).
 
 **Hard rules.** It never invents a branch, ending, or choice you have not agreed, and never removes a chapter or scene without your approval, given after a snapshot and a `--dry-run`. It never writes rejoin prose that is true on only one incoming path, and never silences `state-differs-by-path` with an `object-state` entry the rejoin's prose does not make true. Ink logic goes in a built copy under `adaptations/interactive/`, never in chapters.
 
@@ -657,9 +660,9 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Purpose.** Revises existing chapters without breaking continuity: targeted edits, audits, developmental and structural passes, and checks before the next chapter. It also tracks a full revision as a ladder of named passes. See [Continuity and analysis](continuity.md) for the checks it relies on.
 
-**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", "cut to a word count", "length pass", or a request to prepare existing material for the next revision pass.
+**Triggers.** "Revise a chapter", "continuity check", "find inconsistencies", "audit character state", "check timeline consistency", "developmental edit", "structural revision", "reverse outline", "cut a subplot", "revision passes", "what pass next", "pacing check" (as a revision pass), "clue check", "cut to a word count", "length pass", or a request to prepare existing material for the next revision pass.
 
-**Not for.** Planning book structure ([plot-structure](#plot-structure)), scene-level craft ([scene-craft](#scene-craft)), voice consistency ([voice-style](#voice-style)). It runs the sentence-level line edit, copyedit, and proof passes by handing them to [line-editing](#line-editing), which owns the "line edit" and "polish this chapter" triggers.
+**Not for.** Planning book structure ([plot-structure](#plot-structure)), scene-level craft ([scene-craft](#scene-craft)), voice consistency ([voice-style](#voice-style)), or reconciling a chapter drafted by discovery ([discovery-drafting](#discovery-drafting)). It runs the sentence-level line edit, copyedit, and proof passes by handing them to [line-editing](#line-editing), which owns the "line edit" and "polish this chapter" triggers.
 
 **Named revision passes.** A full revision is tracked in `story.md` `revision-passes`, so the big structural work happens before the polish and the order survives between sessions:
 
@@ -720,7 +723,7 @@ It also draws on the references of [scene-craft](#scene-craft), [theme-craft](#t
 
 **Triggers.** "Line edit", "edit my prose", "polish this chapter", "tighten the prose", "improve the sentences", "copyedit", "proofread", "proof pass", "check grammar and punctuation", "dialogue punctuation", "make the voices distinct", "everyone sounds the same", "read it aloud", "read-aloud pass", "text to speech".
 
-**Not for.** Structural, plot, or continuity revision ([revision-continuity](#revision-continuity); line-edit only after those passes, or the polish is wasted), setting house style or the voice description ([voice-style](#voice-style); this skill applies it), scene-level craft such as deep POV or subtext ([scene-craft](#scene-craft)), or acting on external reader notes ([feedback-triage](#feedback-triage)).
+**Not for.** Structural, plot, or continuity revision ([revision-continuity](#revision-continuity); line-edit only after those passes, or the polish is wasted), setting house style, the voice description, or each character's recorded voice ([voice-style](#voice-style); this skill applies them), scene-level craft such as deep POV or subtext ([scene-craft](#scene-craft)), or acting on external reader notes ([feedback-triage](#feedback-triage)).
 
 **Hard rules.** It never rewrites a passage wholesale without your permission, and applies only the edits you accept unless you tell it to apply them all. A line edit never changes events, facts, or who knows what; an edit that would goes to revision-continuity. Edits are made in the chapter markdown, never through a script that rewrites prose in bulk.
 
@@ -785,13 +788,13 @@ feedback-triage treats persona agreement as one signal, not convergence, confirm
 
 **Purpose.** Handles alpha and beta reader feedback in rounds: one file per reader, no revision until the round is complete, then a synthesis with a readiness verdict and a revision plan.
 
-**Triggers.** "Process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub".
+**Triggers.** "Process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "reader readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", "triage the reader panel".
 
-**Not for.** Revising the manuscript ([revision-continuity](#revision-continuity) runs the plan), the agent's own critique of the draft, or rounds with a professional editor ([editorial-review](#editorial-review)).
+**Not for.** Revising the manuscript ([revision-continuity](#revision-continuity) runs the plan), the agent's own critique of the draft, rounds with a professional editor ([editorial-review](#editorial-review)), or checking a manuscript is ready to query or publish ([submission](#submission) or [publishing](#publishing)).
 
 **Workflow.**
 
-1. **Set up the round.** Picks the chapters and two to four readers and creates `feedback/round-{N}/`. It builds a review copy readers can open without a terminal, `story build . --format html`, from text it can get back: in a git project it checks that `.gitignore` lists `dist/`, shows `git status` for the book's folder, asks about any private file it lists, and, with your approval, commits that folder and tags the round (`feedback-round-{N}`); without git, or if you decline the commit, it takes a `story snapshot` instead. It never pushes or moves a tag without your approval. The copy is one HTML file in `dist/` with a table of contents and a clickable anchor beside every paragraph (`ch03-p12` is chapter 3, paragraph 12), which readers cite in their notes. For a project on GitHub it offers, with your approval, the `templates/github/review-copy.yml` workflow (publishes the copy to GitHub Pages on each push to `main`) and the `manuscript-note.yml` issue form (anchor, note type, how much it affected the read, and the note; create a `manuscript-note` label first). It then adds a stub `feedback/round-{N}/{reader-kebab}.md` per reader. The stubs double as the round's checklist.
+1. **Set up the round.** Picks the chapters and two to four readers and creates `feedback/round-{N}/`. It builds a review copy readers can open without a terminal, `story build . --format html`, from text it can get back: in a git project it checks that `.gitignore` lists `dist/`, shows `git status` for the book's folder, asks about any private file it lists, and, with your approval, commits that folder and tags the round (`feedback-round-{N}`); without git, or if you decline the commit, it takes a `story snapshot` instead. It never pushes or moves a tag without your approval. The copy is one HTML file in `dist/` with a table of contents and a clickable anchor beside every paragraph (`ch03-p12` is chapter 3, paragraph 12), which readers cite in their notes. For a project on GitHub it offers, with your approval, the `templates/github/review-copy.yml` workflow (publishes the copy to GitHub Pages on each push to `main`) and the `manuscript-note.yml` issue form (anchor, note type, how much it affected the read, and the note; create a `manuscript-note` label first), and warns that a public Pages site makes the manuscript public. This is the one place the skills set up the GitHub review copy; editorial-review and story-maintenance point here. It then adds a stub `feedback/round-{N}/{reader-kebab}.md` per reader. The stubs double as the round's checklist.
 2. **Collect.** Records each reader's notes, quoted or closely paraphrased, keeping each note's paragraph anchor in its **Where** line, and checks every problem note against canon: verified, contradicts canon (usually a setup problem), or outside canon's scope. Nothing is revised until every reader is in, or the round is formally closed without a late reader. Sensitivity and authenticity reads use the same file shape; editorial-review commissions them.
 3. **Synthesise.** Sorts each finding as convergent (two or more readers agree), divergent (readers disagree, adjudicated against canon and premise), single-reader (weighed by how specific it is), or declined with a recorded reason. Writes `feedback/round-{N}/synthesis.md` with a `readiness` verdict of `ready`, `needs-revision`, or `not-ready`, and a numbered revision plan that names files.
 4. **Hand off.** A `needs-revision` or `not-ready` verdict goes to [revision-continuity](#revision-continuity). A `ready` verdict closes the round.
@@ -815,11 +818,11 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 ### editorial-review
 
-**Purpose.** Runs the workflows that involve people outside the agent: briefing sensitivity and authenticity readers, a real-people and defamation-risk pass, permissions for quoted material, an AI-use disclosure statement, rounds with a human editor, review copies for readers who never open a terminal, and collaboration between co-authors. It prepares materials, tracks state in frontmatter, and flags risks.
+**Purpose.** Runs the workflows that involve people outside the agent: briefing sensitivity and authenticity readers, a real-people and defamation-risk pass, permissions for quoted material, an AI-use disclosure statement, rounds with a human editor, and collaboration between co-authors. It prepares materials, tracks state in frontmatter, and flags risks.
 
 **Triggers.** "Sensitivity reader", "authenticity reader", "cultural review", "is this portrayal okay", "real people in my novel", "defamation", "can I use song lyrics", "epigraph permission", "permissions", "quote permission", "fair use", "AI disclosure", "do I need to disclose AI", "send to my editor", "editorial round", "Word file for my editor", "editor review copy", "co-author", "collaborate on a book", "shared world", "back up my book", "does this echo my source", "similarity check", "check overlap with my earlier books".
 
-**Not for.** Contracts or selling rights ([publishing](#publishing)), synthesising reader notes ([feedback-triage](#feedback-triage); this skill hands notes to it), fact-checking ([research](#research); this skill adds the review layer on top), the agent's own prose edit ([line-editing](#line-editing)) or structural revision ([revision-continuity](#revision-continuity)), or query letters and retailer copy ([submission](#submission)).
+**Not for.** Contracts or selling rights ([publishing](#publishing)), synthesising reader notes or setting up review copies for readers ([feedback-triage](#feedback-triage); this skill hands notes to it), fact-checking ([research](#research); this skill adds the review layer on top), the agent's own prose edit ([line-editing](#line-editing)) or structural revision ([revision-continuity](#revision-continuity)), or query letters and retailer copy ([submission](#submission)).
 
 **Hard rules.** It gives no legal advice: it flags risk and recommends a publishing lawyer. It never contacts anyone, and never sends, emails, uploads, pushes, or publishes without your instruction. It never records a review, permission, credit, or disclosure you have not confirmed; unknown values stay `pending` or unset. Reviewers are named in `reviewed-by` only with their consent, otherwise by role. It never commits, tags, pushes, or changes branches without your approval.
 
@@ -831,14 +834,14 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 4. **Overlap with other text.** Runs `story similarity . --against <file|folder|git-ref>` when you worry a passage echoes a source or an earlier book too closely, and reports each shared run with both locations. It says what was compared and what wasn't. It never calls a passage copied or a manuscript "original", sends a deliberate quotation to the permissions step, and leaves rewrites to you.
 5. **AI-use disclosure.** Asks how AI tools were used and how much published text was generated rather than written by you, then drafts a plain `ai-disclosure` statement for `story.md`. It asks you to check each retailer's, agent's, or market's current terms rather than quoting policy from memory. `story build . --format metadata` shows the statement.
 6. **Editor rounds.** Shows `git status` for the book's folder, asks about any private file it lists, and, with your approval, commits that folder and tags the draft sent (`sent-to-editor-1`) and builds the file the editor wants (`story build . --format docx`, or `--format shunn`). When edits come back you accept or reject them in Word, and the agent transfers the accepted text into the markdown chapter by chapter, never by a bulk script. Queries that change events go to revision-continuity, editorial letters to feedback-triage, and `story compare . --ref sent-to-editor-1` shows how deep the round went.
-7. **Review copies.** Builds the HTML copy with paragraph anchors and offers the GitHub Pages workflow and issue form (see [feedback-triage](#feedback-triage)), warning that a public Pages site makes the manuscript public.
+7. **Review copies.** Builds the HTML copy with paragraph anchors for a reader who never opens a terminal, and hands the GitHub Pages workflow and issue form to [feedback-triage](#feedback-triage), which sets them up.
 8. **Collaboration and backups.** Lists every author under `authors` in `story.md`, and sets up one branch per author or chapter, pull requests to `main`, a `CODEOWNERS` file for shared-world canon, and a remote pushed after every session as the backup. Two people typing in one file at once is out of scope; take turns per file through branches.
 
 `story validate .` warns when a note with any `risk` is used in a `final` or `complete` chapter with no `reviewed-by`, when a matter page is still `permission: pending` on a complete story, and when `granted` has no `rights-holder`.
 
 **Reads.** `story.md`, drafted chapters, character and setting files, `research/` notes, and `matter/` pages.
 
-**Writes.** Research notes (`risk`, `reviewed-by`), matter frontmatter (`permission`, `rights-holder`, `credit`), `story.md` `ai-disclosure` and `authors`, feedback rounds, and, with your approval, `.github/` files and `CODEOWNERS`.
+**Writes.** Research notes (`risk`, `reviewed-by`), matter frontmatter (`permission`, `rights-holder`, `credit`), `story.md` `ai-disclosure` and `authors`, feedback rounds, and, with your approval, a `CODEOWNERS` file.
 
 **CLI.** `story add research`, `story build . --format docx`, `html`, `shunn`, or `metadata`, `story compare . --ref <tag>`, `story similarity . --against <text>`, then `story reindex .`, `story wordcount . --write`, and `story check .` after changes.
 
@@ -857,7 +860,7 @@ Anchors are paragraph positions, so a revision moves them. Rebuild and resend th
 
 **Triggers.** "Write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", "submit a short story", "magazine submission", "short-fiction markets", "simultaneous submission", "reprint rights", "order a short story collection".
 
-**Not for.** Self-publishing production (ISBNs, retailer metadata, print interiors, launch, rights): use [publishing](#publishing), which reuses the blurb and retailer description this skill drafts. Also not for revising the manuscript ([revision-continuity](#revision-continuity)) or reader feedback rounds ([feedback-triage](#feedback-triage)).
+**Not for.** Self-publishing production (ISBNs, retailer metadata, print interiors, launch, rights): use [publishing](#publishing), which reuses the blurb and retailer description this skill drafts. Also not for pitching a series of several books or writing its series overview ([series-continuity](#series-continuity); the query for book one is still drafted here), revising the manuscript ([revision-continuity](#revision-continuity)), or reader feedback rounds ([feedback-triage](#feedback-triage)).
 
 **Hard rules.** It never invents your bio, contact details, agents, guidelines, or responses (it leaves `[TODO: author to supply]` where your details belong), and it never sends or uploads anything; you submit. [Submission prep](writing-workflows.md#submission-prep) lists the rules in full.
 
@@ -931,9 +934,9 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Purpose.** Turns a story project into another form or language: an audiobook narration script, a screenplay in Fountain, a picture-book pagination plan, a comics script, an interactive-fiction branch map, or a translated edition. The story project stays the source of truth. Adaptation files live in `adaptations/`, except translations, which become their own project folder with the same ids.
 
-**Triggers.** "Make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive fiction", "Ink", "Twine", "choose your own adventure", "translate the book", "translation", "foreign edition", "glossary for translators".
+**Triggers.** "Make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive edition", "turn the book into Ink or Twine", "translate the book", "translation", "foreign edition", "glossary for translators".
 
-**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), or new prose in the source book ([chapter-writing](#chapter-writing)). Verse goes to [verse-craft](#verse-craft); nonfiction and poetry collections are outside the story project model, though a [short-story collection](series.md#short-story-collections-and-anthologies) fits.
+**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), new prose in the source book ([chapter-writing](#chapter-writing)), or writing a new branching or choose-your-own-adventure story ([interactive-fiction](#interactive-fiction)). Verse, including rhyming picture-book text, goes to [verse-craft](#verse-craft); nonfiction and poetry collections are outside the story project model, though a [short-story collection](series.md#short-story-collections-and-anthologies) fits.
 
 **Hard rules.** It never changes the source manuscript to suit an adaptation without your approval. It never puts adaptation `.md` files in the project root, where `story validate` reports them as stray files; they go in `adaptations/` or use another extension such as `.fountain`. It never invents a pronunciation for a real place, person, or language. It gives working figures for audio-platform specs and tells you to check the current spec, and treats narrator, illustrator, and translator contracts as matters for publishing's contract checklist and a professional.
 
@@ -967,9 +970,9 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Purpose.** Plans and maintains sequels, prequels, and companion books as linked projects, and checks the canon they share. Each book stays a standalone project. The books point at each other through `series`, `book-number`, `follows`, and `precedes` in `story.md`. See [Series](series.md) for the full model.
 
-**Triggers.** "Write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible".
+**Triggers.** "Write a sequel", "write a prequel", "start book two", "continue the series", "companion novel", "spin-off", "link books in a series", "carry characters into the next book", "series continuity", "series bible", "pitch my series", "series pitch", "multi-book pitch".
 
-**Not for.** A standalone book ([story-init](#story-init)) or continuity within one book ([revision-continuity](#revision-continuity)). The structure of individual serial installments belongs to [genre-craft](#genre-craft).
+**Not for.** A standalone book ([story-init](#story-init)), continuity within one book ([revision-continuity](#revision-continuity)), or the query letter, pitch, or synopsis of a single book ([submission](#submission)). A series pitch stays here: the series overview and the series line in book one's query. The structure of individual serial installments belongs to [genre-craft](#genre-craft).
 
 **Workflow.**
 
@@ -1005,9 +1008,9 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Purpose.** Runs the deterministic side of a project through the CLI: validation, reindexing, word counts, links, continuity, prose linting, pacing, clue, voice, and name checks, revision-pass tracking, Mermaid diagrams, timeline, progress, comparison, series checks, reports, migration, entity operations, import, export, builds, knowledge queries, and synopses. The creative skills still own story decisions. The [CLI reference](cli-reference.md) documents every command and flag.
 
-**Triggers.** "Validate my story project", "reindex", "repair registries", "check links", "run the continuity, pacing, clue, voice, or name checks", "count words", "summarize the project", "import an existing manuscript", "export a manuscript", "build a review copy or print interior", "generate a diagram", "record revision-pass status with `story passes`", "run the story CLI".
+**Triggers.** "Validate", "reindex", "repair registries", "check links", "run the continuity, pacing, clue, voice, or name checks", "count words", "summarize a story project", "import an existing manuscript", "export a manuscript", "run a build", "generate a diagram", "record revision-pass status with `story passes`", "run the story CLI".
 
-**Not for.** Judging a finding or revising the story to fix it. Continuity errors and revision passes go to [revision-continuity](#revision-continuity), pacing to [plot-structure](#plot-structure), voices and prose to [voice-style](#voice-style), and clues and fair play to [genre-craft](#genre-craft). story-maintenance runs the CLI, reads its output, and fixes mechanical problems such as broken references and stale registries.
+**Not for.** Judging a finding or revising the story to fix it. Continuity errors and revision passes go to [revision-continuity](#revision-continuity), pacing to [plot-structure](#plot-structure), voices and prose to [voice-style](#voice-style), and clues and fair play to [genre-craft](#genre-craft). Sharing a review copy with readers, including the GitHub Pages workflow, goes to [feedback-triage](#feedback-triage). story-maintenance runs the CLI, reads its output, and fixes mechanical problems such as broken references and stale registries.
 
 **When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet, Fountain screenplay skeleton), and `synopsis`.
 

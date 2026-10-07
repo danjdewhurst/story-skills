@@ -21,6 +21,9 @@ readers have read. Verify `story.md` exists in the project root.
 ## When to Use
 
 - Starting a feedback round (recruiting readers, sending chapters out)
+- Giving readers a review copy, including the GitHub Pages review-copy
+  workflow and the reader-note issue form (step 1 of the workflow; other
+  skills point here)
 - Recording feedback as it arrives
 - Synthesizing a completed round into decisions
 - NOT for revising the manuscript (use `revision-continuity` with the
@@ -81,18 +84,24 @@ readers have read. Verify `story.md` exists in the project root.
    chapter and the paragraph's position in that build, not a permanent id:
    any earlier edit in the chapter renumbers it, and `story move` changes
    its chapter part. Ask readers to cite the label, the build stamp, and the
-   paragraph's first few words with each note. For projects on GitHub, the
-   `templates/github/review-copy.yml` workflow publishes the HTML copy to
-   GitHub Pages on each push to main, stamped with the date and short
-   commit, with a **Note** link beside every label (`--note-url`) that
-   opens the issue form prefilled with the label, build, and first words, and `templates/github/ISSUE_TEMPLATE/manuscript-note.yml` gives
-   readers an issue form with label, build, first few words, note type
-   (typo or wording, confusing, continuity, pacing, character, sensitivity
-   or authenticity, loved this, other), how much it affected their reading,
-   and the note. Create a
-   `manuscript-note` label first; GitHub only applies existing labels. Copy them into the story
-   repository's `.github/workflows/` and `.github/ISSUE_TEMPLATE/` only with
-   the user's approval.
+   paragraph's first few words with each note.
+
+   **GitHub review copy.** This is the setup the other skills point to.
+   For a project on GitHub, offer the templates from the Story Skills
+   repository (https://github.com/danjdewhurst/story-skills,
+   `templates/github/`). The `review-copy.yml` workflow publishes the HTML
+   copy to GitHub Pages on each push to `main`, stamped with the date and
+   short commit, with a **Note** link beside every label (`--note-url`)
+   that opens the issue form prefilled with the label, build, and first
+   words. The `ISSUE_TEMPLATE/manuscript-note.yml` issue form asks readers
+   for the label, build, first few words, note type (typo or wording,
+   confusing, continuity, pacing, character, sensitivity or authenticity,
+   loved this, other), how much it affected their reading, and the note.
+   Copy them into the story repository's `.github/workflows/` and
+   `.github/ISSUE_TEMPLATE/` only with the user's approval, and create a
+   `manuscript-note` label first; GitHub only applies existing labels.
+   Warn that a public Pages site makes the manuscript public unless the
+   repository and Pages are private.
 4. For each expected reader, create a stub file from
    `references/feedback-template.md` at
    `feedback/round-{N}/{reader-kebab}.md` with frontmatter filled in and the

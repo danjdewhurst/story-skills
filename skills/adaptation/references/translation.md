@@ -43,7 +43,7 @@ archive playback.
   faction names, units, and recurring phrases (oaths, sayings,
   catchphrases).
 - Add terms the glossary lacks: `story add term 'Name' --category
-  <category>`.
+  <category>` (the `worldbuilding` skill owns glossary terms).
 
 ## Names
 
