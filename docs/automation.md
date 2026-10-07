@@ -134,7 +134,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-The check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `synopsis`, `passes`, and the commands that write the project take `--json`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+Every command takes `--json`: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `grid`, `synopsis`, `passes`, the commands that change the project, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {
@@ -171,6 +171,12 @@ To act on a set of files without parsing their YAML, ask [`story list`](cli-refe
 
 ```shell
 story list chapters --where status=draft --where pov=ilse --json | jq -r '.data.items[].file'
+```
+
+A build job can read the file it made from `writes`, or from `data.outFile`, rather than work out its name from the story id. With `--pdf`, `data.engine` names the engine that rendered it:
+
+```shell
+story build --format epub --json | jq -r '.data.outFile'
 ```
 
 ### Failing on warnings

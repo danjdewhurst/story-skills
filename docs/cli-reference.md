@@ -286,7 +286,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. It works on the check and analysis commands: `validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`; on the commands that print text to keep: `diagram`, `grid`, `synopsis`, and `passes`; and on the commands that change the project in place: `add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`. Other commands refuse it (`--json does not apply to story export`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
 
 Every result has the same envelope:
 
@@ -297,7 +297,7 @@ Every result has the same envelope:
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. |
-| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, and every file a write command changed. `passes`, `progress`, `diagram`, and `synopsis` also list these changes in `data.changes`, as the write commands do. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
+| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, every file a write command changed, the manuscript `export` wrote, the file `build` wrote (every page, for a codex), and every file `init` or `import` wrote, a linked book's `story.md` included. `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` also list these changes in `data.changes`, as the write commands do. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
@@ -336,6 +336,20 @@ story continuity examples/the-unraveled-thread --json
 
 The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, `mkdir` (a folder made), or `rmdir` (a folder a [snapshot restore](#restoring-a-snapshot) emptied and removed, listed after the files it held) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
 
+`export`, `build`, `init`, and `import` put what they wrote in `data`, with `dryRun` and `changes` as above. `changes` is relative to the project root for `export` and `build`, and to the new project's folder for `init` and `import`, so a file outside it starts with `../`. The warnings they print after their output are their diagnostics, such as [`empty-chapter`](#codes-validate), [`substitute-story-id`](#codes-validate), or [`derived-ifid`](#codes-build-and-export) from a build, [`kept-story-options`](#codes-init-and-import) from `init` and `import`, and `unsplit-chapter-lines` from `import`. For `export` and `build`, a warning a [`severity`](#defaults-and-severity-from-storymd) entry promotes makes `ok` false and exits 1, as in a text run.
+
+- `export`: `outFile` (the absolute path of the manuscript) and `chapters`.
+- `build`: `format` (`md` reads as `markdown`), `outFile` (the folder, for `codex`), `chapters`, `pages` (the pages of a `codex`, else `null`), `pdf` (`true` with `--pdf`), and `engine` (the PDF engine that rendered it, or with `--dry-run` the one found and not run, else `null`).
+- `init` and `import`: `root` (the project's absolute path), `storyId`, `keptStory` (`true` when `--force` kept an existing `story.md`; after `import`, run `story links`, since the old chapters were replaced), `ignoredOptions` (the options the kept `story.md` did not take: `title`, or a flag such as `--genre`), and `gitignore` (`created`, `kept`, or `missing-dist` for a kept `.gitignore` that does not ignore `dist/`, which a text run reports as a `note:`).
+- `init` adds `linkedBooks`, the absolute paths of the books `--follows` or `--precedes` linked to, whose `story.md` got the backlink.
+- `import` adds `chapters` (the chapter files written), `unit` (`words` or `characters`), `words`, `characterCount` (for a book [counted in characters](project-format.md#counting-in-characters), else `null`), and `candidates`, the entity candidates as `{ "name", "count" }`.
+
+To print the files a build wrote:
+
+```shell
+story build --format epub --json | jq -r '.writes[]'
+```
+
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
 
 ### Previewing changes with --dry-run
@@ -370,7 +384,7 @@ Dry run: story build would make 2 changes; nothing was written
 
 `init` and `import` list their changes relative to the new project's folder, which is `.` when it would be made (`mkdir   .`); `init --follows` or `--precedes` also lists the linked book's `story.md` it would add the backlink to, such as `update  ../the-last-ember/story.md`. `import` reindexes the chapters it writes, so its dry run runs on a copy of the folder it would fill (the copy is empty for a new project, and copied as above for `--force` into an existing one), reading the manuscript where it is. Both print the same warnings and notes as the real run, but not the `Created` or `Imported` line or the entity candidates.
 
-With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, and `synopsis` report `dryRun` and `changes` on every run. `export`, `build`, `init`, and `import` have no `--json`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
+With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` report `dryRun` and `changes` on every run. The rest of `data` is the real run's, so `import --dry-run --json` gives the entity candidates and `build --pdf --dry-run --json` the engine in `data.engine`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
 
 ### Where commands write
 
@@ -445,6 +459,7 @@ Scaffolds a new story project: `story.md`, `style-sheet.md`, `plot/timeline.md`,
 | `--precedes <path>` | This book is set before the story at `<path>`; repeatable | |
 | `--force` | Use an existing directory: add missing starter files, never overwrite existing ones | Off |
 | `--dry-run` | List the files and folders it would create, and the linked books it would update, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: the project's `root` and `storyId`, `keptStory`, `ignoredOptions`, `gitignore`, `linkedBooks`, `dryRun`, and `changes`, with the files written in `writes` (see [JSON output](#json-output)) | Off |
 
 An empty `--genre`, `--pov`, or `--tense` (such as `--tense=` from an unset shell variable) is refused with `--tense cannot be empty: leave it out to use the default`; `import` does the same.
 
@@ -555,7 +570,7 @@ Creates a new project from an existing manuscript. `<source>` is a single `.md`,
 
 Each chapter is written to `chapters/chapter-NN.md` with `status: draft` and its word count, and the registries are rebuilt. `import` then prints up to 25 capitalised names that appear three or more times, as candidates for `story add character` or `story add location`.
 
-`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, `--force`, and `--dry-run`, with the same meaning as for `init` except that `--force` also replaces the chapters (see the warning below), and writes the same `.gitignore` (or prints the same note about a kept one). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
+`import` accepts `--dir`, `--genre`, `--sub-genre`, `--setting-era`, `--theme`, `--themes`, `--pov`, `--tense`, `--synopsis`, `--force`, `--dry-run`, and `--json`, with the same meaning as for `init` except that `--force` also replaces the chapters (see the warning below), and writes the same `.gitignore` (or prints the same note about a kept one). Its `--json` result adds the chapters written, their length, and the entity candidates (see [JSON output](#json-output)). The series options (`--series`, `--book-number`, `--follows`, `--precedes`) and `--form` are errors (`--form does not apply to story import`); add `form` to `story.md` by hand after importing. Without `--synopsis`, the synopsis placeholder names the source file.
 
 `--language <tag>` names the manuscript's language, a BCP 47 tag such as `fr` or `pt-BR`; a value that is not one is a usage error. It picks the language pack whose heading words (`Chapter`, `Prologue`, `Part`, spelled-out numbers) split the chapters and whose stopwords filter the entity candidates: English, Spanish (`Capítulo veintiuno`, `Prólogo`), French (`Chapitre vingt et un`, `Prologue`), and German (`Kapitel Einundzwanzig`, `Erstes Kapitel`, `1. Kapitel`, `Prolog`) have them, with ordinal-first part headings (`Primera parte`, `Première partie`, `Erster Teil`), and German leaves out capitalised common nouns (`die Tür`) from the candidates. In another language only the markdown or text structure is used, never English headings, unless the project's `style-sheet.md` supplies the words (see [Word lists](project-format.md#word-lists)); `import --force` into an existing project reads its style sheet. A new project records the tag as `language` in its `story.md`. Without `--language`, `import --force` into an existing project uses that project's `story.md` `language`, and a new project uses English and writes no `language`. A `--language` that differs from a kept `story.md` is named in the `kept-story-options` warning, since `story.md` is not changed.
 
@@ -2758,7 +2773,7 @@ These commands produce files for reading or submission. The source of truth stay
 ### export
 
 ```text
-story export [path] [--out <file>] [--include-pending] [--dry-run]
+story export [path] [--out <file>] [--include-pending] [--dry-run] [--json]
 ```
 
 Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out, and so are matter pages with `permission: pending` or a permission that cannot be read (see [Pending permissions](#pending-permissions)). The file uses LF line endings, even from a CRLF checkout.
@@ -2768,6 +2783,7 @@ Writes one markdown manuscript: the story title, front matter pages, every chapt
 | `--out <file>` | Output path, relative to the project root | `dist/manuscript.md` |
 | `--include-pending` | Keep matter pages whose `permission` is `pending`. `cli-defaults` cannot set it | Off |
 | `--dry-run` | List the file and folders it would write, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: `data.outFile` (the absolute path), `data.chapters`, `data.dryRun`, and `data.changes`, with the file in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
 
 ```text
 $ story export
@@ -2790,7 +2806,7 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run]
+story build [path] [--format <name>] [--shunn] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run] [--json]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -2809,6 +2825,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--include-pending` | With a build that prints matter pages (`markdown`, `epub`, `docx` without `--shunn`, `html`, `print`, and `narration`), keep the pages whose `permission` is `pending`. An error with any other build. `cli-defaults` cannot set it. See [Pending permissions](#pending-permissions) | Off |
 | `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
 | `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: `data.format`, `data.outFile` (the absolute path, or the `codex` folder), `data.chapters`, `data.pages` (for `codex`), `data.pdf`, `data.engine` (for `--pdf`), `data.dryRun`, and `data.changes`, with the files written in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
 
 | Format | Default output | Contents |
 |---|---|---|
