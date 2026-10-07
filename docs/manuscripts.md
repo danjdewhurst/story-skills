@@ -374,6 +374,8 @@ A page whose `permission` is `pending` is left out of `story export` and of ever
 warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
 ```
 
+A page whose permission cannot be read is left out the same way: one with a key that misspells `permission` (`permissions`, `Permission`), or a value other than `not-needed`, `granted`, or `public-domain` (`Pending`, `[pending]`, a blank). The warning then says `has permissions rather than permission` or `permission is not one of not-needed, granted, or public-domain`. A page with no `permission` at all prints as before.
+
 So no file you send, upload, or publish carries quoted material that is not cleared yet, and the [review copy workflow](automation.md#review-copy-workflow) never puts the page on GitHub Pages. Once the rights holder agrees, set `permission: granted` and `rights-holder`, and the next build includes the page. To see the page in a proof that only you read, such as a print PDF to check the layout, add `--include-pending` to that one command. Do not share that file. `cli-defaults` in `story.md` cannot set `include-pending`, so it never reaches a build that you did not run by hand.
 
 A matter page whose id is `copyright`, or whose title contains the word "Copyright" in any letter case, counts as the book's copyright page. The EPUB marks it as a copyright page wherever it sits. When it is front matter, the print interior places it before the contents and the narration script skips it; a back-matter copyright page stays at the end of the print interior and is narrated.
@@ -606,7 +608,7 @@ The prose is copied as written, markdown included, with LF line endings even whe
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
 | `--out <file>` | Output file. Defaults to `dist/manuscript.md`. See [Output paths](#output-paths-and-what-is-disposable). |
-| `--include-pending` | Keep the matter pages whose `permission` is `pending`. See [Front and back matter](#front-and-back-matter). |
+| `--include-pending` | Keep the matter pages whose `permission` is `pending` or cannot be read. See [Front and back matter](#front-and-back-matter). |
 
 With `--out manuscript.md`, the manuscript lands in the project root, and `story validate` then warns about it:
 
@@ -677,7 +679,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 | `--pdf` | With `--format print` or `--format shunn`, render to PDF with an installed engine. An error with every other format. See [PDF output](#pdf-output). |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
 | `--spoilers` | With `--format codex`, include notes, statuses, deaths, knowledge, clues, and resolutions. An error with every other format. |
-| `--include-pending` | With a build that includes matter, keep the pages whose `permission` is `pending`, which are otherwise left out. An error with every other build. See [Front and back matter](#front-and-back-matter). |
+| `--include-pending` | With a build that includes matter, keep the pages whose `permission` is `pending` or cannot be read, which are otherwise left out. An error with every other build. See [Front and back matter](#front-and-back-matter). |
 | `--out <file>` | Output file instead of the default in `dist/`; for `codex`, a folder. |
 
 Any other format is an error:
@@ -1135,9 +1137,10 @@ Notes on the fields:
 - **Estimated print pages** uses the [print interior](#print-interior) estimate for the two most common trims.
 - **Description** shows its length against a 4,000-character limit; the full text follows under `## Description`.
 - **Cover** is the `cover` path as written. The readiness box is ticked only when that file is an image the EPUB build would accept.
-- The copyright item is ticked by either a `copyright` line or a copyright matter page.
-- The permissions item is ticked unless a matter page has `permission: pending`; it then reads ``Permissions cleared for quoted matter (`permission`; pending: <ids>)``, naming each pending page.
+- The copyright item is ticked by either a `copyright` line or a copyright matter page that the builds print. A copyright page they leave out for its permission adds ``(pending permission: <id>)``.
+- The permissions item is ticked unless a matter page has `permission: pending`, or a permission that cannot be read (see [Front and back matter](#front-and-back-matter)); it then reads ``Permissions cleared for quoted matter (`permission`; pending: <ids>)``, naming each such page.
 - The two `[TODO` items name each chapter, then each written matter page, that still holds a `[TODO` marker a reader would see (not one inside an HTML comment or a link destination; a matter page's `title` counts), such as ``No `[TODO` markers on matter pages (found in: copyright)``.
+- The sheet reads the book as the other builds print it, so the page estimates leave out the matter pages they leave out.
 
 The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
 
@@ -1476,7 +1479,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |
 | `Unsupported paper: <paper>. ...` | An unknown `--paper` with the Shunn PDF or DOCX | Use `letter` or `a4`. |
 | `--paper applies only to --format shunn --pdf and --format docx --shunn ...` | `--paper` with another build | Leave it out, or use `--trim` to size a print interior. |
-| `--include-pending applies only to builds that print matter pages: ...` | `--include-pending` with a build that has no matter pages, such as Shunn, metadata, or codex | Leave it out. |
+| `--include-pending applies only to builds that print matter pages; --format <name> prints none` | `--include-pending` with a build that has no matter pages, such as Shunn, metadata, or codex | Leave it out. |
 | `Unsupported synopsis length: <n>. Supported pages: 1, 3` | An unsupported `--pages` value | Use `1` or `3`. |
 | `Refusing to access path outside project root: <path>` | A relative `--out` that leaves the project | Use a path inside the project, or an absolute path. |
 | `<path>: Refusing to write through symlink` | The `--out` file is a symlink | Delete the symlink or choose another file. |

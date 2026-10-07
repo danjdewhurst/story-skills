@@ -440,10 +440,11 @@ The `build` job:
 
 1. Checks out the repository without persisting the token (`persist-credentials: false`) and sets up Node 24.
 2. Runs `story check`, which runs `validate`, `links`, and `continuity`. If any of them fails, nothing is built or published, so readers never get a copy with broken references or a contradicted continuity contract. Readers keep the last good copy.
-3. Looks for a chapter file in `$STORY_DIR/chapters`. With none, the remaining steps and the `deploy` job are skipped.
-4. Builds the review copy with `story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --out "$GITHUB_WORKSPACE/review-site/index.html"`. The stamp prints the build date and short commit at the top of the copy, so readers can say which build a note refers to. `--note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml"` puts a **Note** link beside every paragraph label that opens the issue form with the label, the build, and the paragraph's first few words already filled in. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable). A matter page whose `permission` is still `pending` is left out; see [Pages waiting for permission](#pages-waiting-for-permission).
-5. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
-6. Uploads the `review-site` folder as the Pages site.
+3. Looks for matter waiting for permission: it warns in the job log about each `matter/` file with a line such as `permission: pending` (any key that starts with `perm`, in any case). This step reads the files itself, so it warns whatever `STORY_VERSION` installs; see [Pages waiting for permission](#pages-waiting-for-permission).
+4. Looks for a chapter file in `$STORY_DIR/chapters`. With none, the remaining steps and the `deploy` job are skipped.
+5. Builds the review copy with `story build "$STORY_DIR" --format html --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}" --out "$GITHUB_WORKSPACE/review-site/index.html"`. The stamp prints the build date and short commit at the top of the copy, so readers can say which build a note refers to. `--note-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml"` puts a **Note** link beside every paragraph label that opens the issue form with the label, the build, and the paragraph's first few words already filled in. The `--out` path is absolute because a relative `--out` is resolved against the project root and may not leave it; see [Output paths](manuscripts.md#output-paths-and-what-is-disposable). A matter page whose `permission` is still `pending` is left out; see [Pages waiting for permission](#pages-waiting-for-permission).
+6. Uploads `index.html` as a workflow artifact named `review-copy`, which you can download from the run page.
+7. Uploads the `review-site` folder as the Pages site.
 
 The `deploy` job then publishes that site with `actions/deploy-pages` to the `github-pages` environment.
 
@@ -460,7 +461,7 @@ The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill sets this up f
 
 ### Pages waiting for permission
 
-An epigraph, song lyric, or poem quoted on a matter page may need the rights holder's permission before anyone else reads it. While its `permission` is `pending`, `story build` leaves the page out of the review copy, so the workflow never publishes it, and the build step's log names each page it left out:
+An epigraph, song lyric, or poem quoted on a matter page may need the rights holder's permission before anyone else reads it. While its `permission` is `pending`, or misspelt, or any value but `not-needed`, `granted`, or `public-domain`, `story build` leaves the page out of the review copy, so the workflow never publishes it, and the build step's log names each page it left out:
 
 ```text
 warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
@@ -476,7 +477,13 @@ severity:
     level: error
 ```
 
-The build step then fails, and nothing is uploaded or deployed. `STORY_VERSION` must name a release after 0.22.1; earlier releases publish pending pages.
+The build step then fails, and nothing is uploaded or deployed. A page with no text yet is never printed, so it is not reported and cannot fail the build.
+
+`STORY_VERSION` must name a release after 0.22.1 for the build to leave the page out; 0.22.1 and earlier publish it. The template's **Look for matter waiting for permission** step does not depend on the release: it greps `matter/` itself and warns in the job log about each page whose permission line says `pending`:
+
+```text
+Warning: ./matter/epigraph.md has permission pending. Story Skills releases after 0.22.1 leave the page out of the review copy; 0.22.1 and earlier publish it.
+```
 
 ### Review rounds and changing labels
 

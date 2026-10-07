@@ -310,7 +310,7 @@ export function metadataSheet(input) {
     [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
     [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
     ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
-    ["Copyright line (`copyright`) or copyright matter page", meta.copyright !== "" || input.hasCopyrightPage],
+    [`Copyright line (\`copyright\`) or copyright matter page${(input.pendingCopyright ?? []).length > 0 ? ` (pending permission: ${input.pendingCopyright.join(", ")})` : ""}`, meta.copyright !== "" || input.hasCopyrightPage],
     // The build checks the file; a path alone is not a cover.
     ["Cover image (`cover`)", Boolean(input.coverReady)],
     ["Cover alt text (`cover-alt`)", meta.coverAlt !== ""],
