@@ -490,7 +490,7 @@ bun run eval:selftest    # checker self-test against known-good drafts
 node evals/run-skill.js  # full model run (needs Claude Code credentials)
 ```
 
-Every published change needs a new version in `package.json`, `.codex-plugin/plugin.json` (Codex's version source), `.claude-plugin/plugin.json` (Claude Code's), and `src/version.js` (printed by `story --version`), so installed users receive updates. Marketplace entries stay unversioned to avoid duplicate version state.
+The release script sets a new version in `package.json`, `.codex-plugin/plugin.json` (Codex's version source), `.claude-plugin/plugin.json` (Claude Code's), and `src/version.js` (printed by `story --version`) at each release, so installed users receive updates. Marketplace entries stay unversioned to avoid duplicate version state.
 
 Don't bump these by hand. The release script bumps all four, plus the template `STORY_VERSION` pins and the version examples in the docs, moves the `Unreleased` entries in `CHANGELOG.md` under the new version (and refuses to run while there are none), rebuilds the fallback, runs the local preflight checks (a subset of CI), commits `chore: release X.Y.Z`, tags `vX.Y.Z`, pushes, and creates a GitHub release with generated notes. The tag push runs the Publish workflow, which waits for CI to pass on `main` for the release commit, then publishes the package to npm with provenance through trusted publishing. The script requires a clean `main` that matches `origin/main`, a logged-in `gh`, admin rights on the repository (only admins can create `v*` tags), and a version that isn't already on npm:
 
