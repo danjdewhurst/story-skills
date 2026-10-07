@@ -177,8 +177,11 @@ function renderTimeline({ title, nodes }) {
   return mermaid(lines);
 }
 
-// The node a clue with no payoff chapter yet points at.
+// The node a clue with no payoff chapter yet points at. Its Mermaid id has
+// a prefix, as arcNodeId gives arcs, so a chapter with the id unrevealed
+// stays its own node.
 const UNREVEALED = "unrevealed";
+const UNREVEALED_NODE = "clue__unrevealed";
 
 function clueModel(project) {
   const chapters = sortedChapters(project);
@@ -224,11 +227,11 @@ function renderClues({ nodes, edges }) {
     }
     const herring = edge.kind === "red-herring";
     const text = edgeLabel(herring ? `${edge.label} (red herring)` : edge.label);
-    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED}(("not yet revealed"))`;
+    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED_NODE}(("not yet revealed"))`;
     lines.push(`  ${nodeId(edge.from)} ${herring ? "-.->" : "-->"}${text} ${to}`);
   }
   if (nodes.some((node) => node.kind === "unrevealed")) {
-    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED} open`);
+    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED_NODE} open`);
   }
   return mermaid(lines);
 }

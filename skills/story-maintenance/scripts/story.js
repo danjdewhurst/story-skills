@@ -27957,6 +27957,7 @@ function renderTimeline({ title, nodes }) {
   return mermaid(lines);
 }
 var UNREVEALED = "unrevealed";
+var UNREVEALED_NODE = "clue__unrevealed";
 function clueModel(project) {
   const chapters = sortedChapters(project);
   const known = new Set(chapters.map((chapter) => chapter.id));
@@ -27998,11 +27999,11 @@ function renderClues({ nodes, edges }) {
     }
     const herring = edge.kind === "red-herring";
     const text = edgeLabel(herring ? `${edge.label} (red herring)` : edge.label);
-    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED}(("not yet revealed"))`;
+    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED_NODE}(("not yet revealed"))`;
     lines.push(`  ${nodeId(edge.from)} ${herring ? "-.->" : "-->"}${text} ${to}`);
   }
   if (nodes.some((node) => node.kind === "unrevealed")) {
-    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED} open`);
+    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED_NODE} open`);
   }
   return mermaid(lines);
 }

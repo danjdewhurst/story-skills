@@ -1202,9 +1202,9 @@ flowchart LR
   chapter_03 ~~~ chapter_04
   chapter_01 -->|"Edran's Margin Notes"| chapter_04
   chapter_03 -->|"The Burned Page"| chapter_04
-  chapter_02 -.->|"The Constable's Silence (red herring)"| unrevealed(("not yet revealed"))
+  chapter_02 -.->|"The Constable's Silence (red herring)"| clue__unrevealed(("not yet revealed"))
   classDef open stroke-dasharray: 4 4
-  class unrevealed open
+  class clue__unrevealed open
 ```
 
 Node ids replace hyphens with underscores, because Mermaid cannot always parse hyphens next to arrows; the labels carry the readable names. An id that is a Mermaid keyword, such as `end`, `graph`, `subgraph`, `style`, `class`, or `click`, gets `_node` appended, so a location called `end` becomes `end_node`. In the timeline, colons in times and titles become `∶`, because Mermaid's timeline syntax splits on colons.

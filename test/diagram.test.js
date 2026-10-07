@@ -184,9 +184,9 @@ describe("story diagram", () => {
     const text = diagramProject(root, { kind: "clues" }).text;
     expect(text).toContain("  chapter_01 ~~~ chapter_02\n");
     expect(text).toContain("  chapter_01 -->|\"Ash\"| chapter_03\n");
-    expect(text).toContain("  chapter_02 -.->|\"Glove (red herring)\"| unrevealed((\"not yet revealed\"))\n");
+    expect(text).toContain("  chapter_02 -.->|\"Glove (red herring)\"| clue__unrevealed((\"not yet revealed\"))\n");
     expect(text).not.toContain("Cut");
-    expect(text).toContain("class unrevealed open");
+    expect(text).toContain("class clue__unrevealed open");
   });
 
   test("arcs joins each arc to the chapters and scenes that advance it", () => {
@@ -371,7 +371,7 @@ payoff: chapter-03
     addRoutes(root, "alpha", "- to: beta\n  hours: 2\n  mode: boat (fast)");
 
     const clues = diagramProject(root, { kind: "clues" }).text;
-    expect(clues).toContain(`chapter_02 -.->|"The Silence (odd) (red herring)"| unrevealed`);
+    expect(clues).toContain(`chapter_02 -.->|"The Silence (odd) (red herring)"| clue__unrevealed`);
     expect(clues).toContain(`chapter_01 -->|"blank"| chapter_03`);
     expect(clues).not.toContain("||");
     expect(diagramProject(root, { kind: "locations" }).text).toContain(`alpha ---|"2h boat (fast)"| beta`);
@@ -405,6 +405,17 @@ describe("review fixes", () => {
     const text = diagramProject(root, { kind: "arcs" }).text;
     expect(text).toContain('  arc__chapter_01(["Chapter 01"])');
     expect(text).toContain('  chapter_01["1. One"]');
+  });
+
+  test("a chapter named unrevealed does not merge with the not-yet-revealed node", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "chapters", "unrevealed.md"), "title: Lost\nnumber: 2\nstatus: draft", "## Chapter Text\n\nWords.\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "glove.md"), "title: Glove\nstatus: planted\nplanted: unrevealed", "# Glove\n");
+    const text = diagramProject(root, { kind: "clues" }).text;
+    expect(text).toContain('  unrevealed["2. Lost"]\n');
+    expect(text).toContain('  unrevealed -->|"Glove"| clue__unrevealed(("not yet revealed"))\n');
+    expect(text).toContain("class clue__unrevealed open");
+    expect(text).not.toContain(' unrevealed((');
   });
 });
 
