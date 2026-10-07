@@ -138,7 +138,7 @@ describe("story pacing", () => {
     expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8")).toContain("outcome: no-and");
     expect(messages(validateProject(root).errors)).toEqual([]);
 
-    expect(() => createEntity(root, { kind: "scene", name: "Bad", chapter: "chapter-01", outcome: "maybe" })).toThrow();
+    expect(() => createEntity(root, { kind: "scene", name: "Bad", chapter: "chapter-01", outcome: "maybe" })).toThrow('Unsupported scene outcome "maybe": expected one of yes, no, yes-but, no-and');
     writeScene(root, "chapter-01", 3, "outcome: maybe");
     writeChapter(root, 2, "status: draft\nhook: meh", 5);
     const errors = messages(validateProject(root).errors);

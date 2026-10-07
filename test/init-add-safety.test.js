@@ -75,7 +75,7 @@ function listDir(root, dir) {
 function readOnly(file, run) {
   fs.chmodSync(file, 0o444);
   try {
-    expect(run).toThrow();
+    expect(run).toThrow(`EACCES: permission denied, access '${file}'`);
   } finally {
     fs.chmodSync(file, 0o644);
   }
@@ -626,7 +626,7 @@ describe("interrupted add (#202)", () => {
     expect(rerun.out).toContain("Finished an interrupted add of character nia-holt");
     expect(messages(validateLinks(root).errors)).toEqual([]);
     // A finished add is listed in the registry, so adding it again is refused.
-    expect(() => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" })).toThrow("already exists");
+    expect(() => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" })).toThrow("characters/nia-holt.md already exists");
   });
 
   test("rerunning an unnumbered scene add does not create a second copy", () => {

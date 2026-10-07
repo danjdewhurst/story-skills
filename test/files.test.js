@@ -1065,7 +1065,7 @@ describe("sweep fixes", () => {
     const dir = makeTempDir();
     fs.mkdirSync(path.join(dir, "target"));
     fs.writeFileSync(path.join(dir, "target", "keep.md"), "x");
-    expect(() => writeFile(path.join(dir, "target"), "text")).toThrow();
+    expect(() => writeFile(path.join(dir, "target"), "text")).toThrow(`${path.join(dir, "target")}: EISDIR`);
     expect(fs.readdirSync(dir)).toEqual(["target"]);
   });
 
@@ -1111,7 +1111,7 @@ describe("sweep fixes", () => {
     fs.linkSync(target, path.join(makeTempDir(), "elsewhere.md"));
     fs.chmodSync(dir, 0o555);
     try {
-      expect(() => writeFile(target, "new")).toThrow();
+      expect(() => writeFile(target, "new")).toThrow(`Cannot replace hard-linked ${target}: EACCES`);
       expect(fs.readdirSync(dir)).toEqual(["book.md"]);
     } finally {
       fs.chmodSync(dir, 0o755);
