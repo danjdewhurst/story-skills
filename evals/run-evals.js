@@ -30,6 +30,35 @@ const KNOWN_MARKERS = new Set([
   "mean_word_length",
 ]);
 
+// Every top-level field a checks.json may set. The checker and
+// scripts/check-evals.js reject any other, so a misspelled field fails
+// instead of being ignored.
+export const CHECK_KEYS = new Set([
+  "name",
+  "brief",
+  "skill",
+  "keep",
+  "language",
+  "baseline_margin",
+  "required",
+  "required_regex",
+  "required_in_order",
+  "banned",
+  "banned_regex",
+  "chapter_text",
+  "chapter_frontmatter",
+  "max_words",
+  "max_words_ratio",
+  "min_words_ratio",
+  "paragraphs",
+  "lines",
+  "ends_with_question",
+  "requires_first_person",
+  "requires_past_tense",
+  "voice_drift",
+  "expected_overlaps",
+]);
+
 function normalizeApos(text) {
   return text.replace(/[’‘ʼ]/g, "'");
 }
@@ -538,6 +567,9 @@ export function checkDraft(checks, inputText, draftText) {
   const normInput = normalizeApos(inputText);
   const proseOnly = proseText(normDraft);
 
+  for (const key of Object.keys(checks)) {
+    if (!CHECK_KEYS.has(key)) results.push([false, `checks.json: unknown key ${JSON.stringify(key)}`]);
+  }
   results.push(...textChecks(checks, normDraft, checks.language));
   for (const [key, label, find] of SCOPES) {
     const scoped = checks[key];
