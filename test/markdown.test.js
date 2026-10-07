@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, setextSceneBreakLines, splitAtSceneBreaks, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, setextSceneBreakLines, softBreak, splitAtSceneBreaks, titleCaseSlug, wordCount } from "../src/markdown.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -168,5 +168,38 @@ describe("scene-break lines (#551)", () => {
     expect(setextSceneBreakLines("He left.\n---\n")).toEqual([1]);
     expect(setextSceneBreakLines("## Outline\n\n1. Beat\n---\n\nHe left.\n---\n")).toEqual([6]);
     expect(setextSceneBreakLines("\r\n## Chapter Text\r\n\r\nHe left.\r\n---\r\nShe came.\r\n")).toEqual([4]);
+  });
+});
+
+describe("soft line breaks (#599)", () => {
+  test("join two Chinese or Japanese characters with no space", () => {
+    expect(softBreak("一行目の文。", "二行目の文。")).toBe("");
+    expect(softBreak("カタカナ", "ひらがな")).toBe("");
+    expect(softBreak("他说：", "我来了。")).toBe("");
+    expect(softBreak("ｶﾀｶﾅ", "ＡＢＣ")).toBe("");
+    expect(softBreak("文。", "\u3000次の段落")).toBe("");
+    // Past emphasis and code markers, and with a character outside the BMP.
+    expect(softBreak("**強調**", "_です_")).toBe("");
+    expect(softBreak("`コード`", "\u{20bb7}野家")).toBe("");
+    expect(softBreak("吉\u{20bb7}", "野家")).toBe("");
+  });
+
+  test("join curly quotes, dashes, and ellipses to a Chinese or Japanese character", () => {
+    expect(softBreak("他说：", "\u201c你好。\u201d")).toBe("");
+    expect(softBreak("\u201c你好。\u201d", "他说。")).toBe("");
+    expect(softBreak("彼は言った", "\u2026\u2026")).toBe("");
+    expect(softBreak("\u2014\u2014", "そうか")).toBe("");
+  });
+
+  test("keep the space everywhere else", () => {
+    expect(softBreak("The lamp", "is dark.")).toBe(" ");
+    expect(softBreak("東京で", "Alice")).toBe(" ");
+    expect(softBreak("Alice", "に会った。")).toBe(" ");
+    expect(softBreak("He said\u2014", "\u201cthere.\u201d")).toBe(" ");
+    // Korean sets spaces between words, halfwidth Hangul included.
+    expect(softBreak("안녕하세요", "반갑습니다")).toBe(" ");
+    expect(softBreak("\uffa1", "文")).toBe(" ");
+    expect(softBreak("", "文")).toBe(" ");
+    expect(softBreak("**", "文")).toBe(" ");
   });
 });

@@ -9,7 +9,7 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, softBreak, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -873,14 +873,17 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       return;
     }
-    const joined = lines.map((line, index) => {
-      if (index === lines.length - 1) {
-        return line;
+    // Each line without the layout whitespace at its ends, which a soft
+    // break replaces and a hard break (the backslash, or the trailing
+    // spaces) drops.
+    const texts = lines.map((line, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
+    const joined = texts.map((text, index) => {
+      if (index === texts.length - 1) {
+        return text;
       }
-      if (/\\$/.test(line)) {
-        return `${line.slice(0, -1)}${LINE_BREAK}`;
-      }
-      return / {2,}$/.test(line) ? `${line}${LINE_BREAK}` : `${line} `;
+      // A soft break is a space, except between Chinese or Japanese
+      // characters (see softBreak).
+      return /\\$| {2,}$/.test(lines[index]) ? `${text}${LINE_BREAK}` : `${text}${softBreak(text, texts[index + 1])}`;
     }).join("");
     // Only layout whitespace collapses, so a typed no-break or ideographic
     // space reaches the book (see collapseSourceSpace). A hard-broken line
