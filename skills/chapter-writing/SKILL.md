@@ -62,7 +62,7 @@ Create a beat-by-beat outline listing:
 - Each scene/beat and what it accomplishes
 - POV character and location for each beat
 - Which arc plot points are advanced
-- Any promise, clue, or question from the packed context to plant or pay off, and any small arc hint
+- Any setup to plant or pay off: the open promises, clues, and questions in the packed context, and any the user names
 - Any machine-readable state changes the scene should record
 - Each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`) and how the chapter ends (`hook`)
 
