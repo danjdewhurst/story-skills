@@ -395,6 +395,9 @@ describe("progressions follow reference rewrites", () => {
     const { root } = progressionProject();
     moveEntity(root, { kind: "chapter", id: "chapter-02", number: 5 });
     const mara = read(root, "characters", "mara-finn.md");
+    // Each progression must be there first: a missing one has indexOf -1, which still sorts first.
+    expect(mara).toContain("  - from: chapter-03\n    field: role\n    value: antagonist\n");
+    expect(mara).toContain("  - from: chapter-03\n    field: arc\n    value: the-drowning\n");
     expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-05"));
     expect(mara).toContain("  - from: chapter-05\n    field: status\n    value: missing\n");
     expect(messages(validateProject(root).errors)).toEqual([]);
@@ -422,6 +425,8 @@ progressions:
     moveEntity(root, { kind: "chapter", id: "chapter-01", number: 9 });
     moveEntity(root, { kind: "chapter", id: "chapter-02", number: 1 });
     const mara = read(root, "characters", "mara-finn.md");
+    expect(mara).toContain("  - from: chapter-03\n    field: role\n    value: antagonist\n");
+    expect(mara).toContain("  - from: chapter-01\n    field: status\n    value: missing\n");
     expect(mara.indexOf("from: chapter-03")).toBeLessThan(mara.indexOf("from: chapter-01"));
     expect(messages(validateProject(root).errors).filter((error) => error.includes("progressions"))).toEqual([]);
   });
