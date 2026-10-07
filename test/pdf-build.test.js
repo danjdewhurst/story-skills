@@ -115,6 +115,22 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(call.html).toContain("<h2>Chapter 1: First Light</h2>");
   });
 
+  test("a print PDF warns about a [TODO marker on a matter page it prints; a Shunn PDF prints no matter (#557)", () => {
+    const root = pdfProject();
+    writeMarkdown(path.join(root, "matter", "copyright.md"), "title: Copyright\nplacement: front\norder: 0\nheading: false", "Copyright © 2026 Mara Quill\n\nISBN [TODO: author to supply]\n");
+    const bin = makeTempDir();
+    fakeEngine(bin, "prince");
+    const log = path.join(makeTempDir(), "log.jsonl");
+    const env = { PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "" };
+
+    const print = runWith(env, ["build", root, "--format", "print", "--pdf"], root);
+    expect(print.code).toBe(0);
+    expect(print.err).toBe("warning: matter/copyright.md still has 1 [TODO marker, which this build prints: fill it in before you publish [matter-todo-markers]\n");
+    const shunn = runWith(env, ["build", root, "--format", "shunn", "--pdf"], root);
+    expect(shunn.code).toBe(0);
+    expect(shunn.err).toBe("");
+  });
+
   test("--paper a4 sets the Shunn PDF on A4, from the command line or a story.md default", () => {
     const bin = makeTempDir();
     fakeEngine(bin, "prince");

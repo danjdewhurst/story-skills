@@ -10,6 +10,7 @@ import {
   chapterHeading,
   chapterProse,
   characterCount,
+  countTodoMarkers,
   extractSection,
   kebabCase,
   scanComments,
@@ -30,6 +31,7 @@ import { wordSpans } from "./words.js";
 import { fillLabel, joinNames } from "./languages/index.js";
 import { endsSentence, splitSentences } from "./sentences.js";
 import { warn } from "./findings.js";
+import { plural } from "./plural.js";
 import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode, withFlags } from "./exit-codes.js";
 import {
   scanProject,
@@ -57,7 +59,8 @@ const MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 
 export function exportManuscript(root, options = {}) {
   const project = scanProject(root);
-  const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
+  const action = options.generatedBy === undefined ? "export" : "build";
+  const manuscript = manuscriptParts(project, action);
   assertMatterTitles(project);
   const output = resolveOutputPath(project, options.out, EXPORT_FILE, options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
@@ -76,7 +79,7 @@ export function exportManuscript(root, options = {}) {
   manuscript.back.forEach(pushMatter);
 
   writeFile(output.outFile, `${lines.join("\n").trimEnd()}\n`, output.writeOptions);
-  return { outFile: output.outFile, chapters: project.chapters.length, warnings: manuscript.warnings };
+  return { outFile: output.outFile, chapters: project.chapters.length, warnings: [...manuscript.warnings, ...matterTodoWarnings(project, manuscript, { action })] };
 }
 
 export function buildBook(root, options = {}) {
@@ -179,7 +182,8 @@ export function buildBook(root, options = {}) {
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
-      todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
+      todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id),
+      todoMatter: project.matter.filter((entry) => entry.todoMarkers > 0).map((entry) => entry.id)
     }), output.writeOptions);
   } else if (format === "twee" || format === "ink") {
     const { branches, ifid } = interactiveStory(project, manuscript, format);
@@ -190,20 +194,24 @@ export function buildBook(root, options = {}) {
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true }));
   } else if (format === "html" || format === "print") {
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   }
 
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
@@ -225,7 +233,9 @@ function buildPdf(project, format, { trim, paper }, output, options) {
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   // A --dry-run finds the engine but does not run it.
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
-  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
+  // The Shunn manuscript prints no matter.
+  const warnings = format === "print" ? [...manuscript.warnings, ...matterTodoWarnings(project, manuscript)] : manuscript.warnings;
+  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings };
 }
 
 // `build --format codex`: the story bible as linked pages in a folder,
@@ -770,6 +780,7 @@ export function manuscriptParts(project, action = "build") {
     .filter((entry) => entry.placement === placement && !entry.empty)
     .map((entry) => ({
       id: entry.id,
+      file: entry.file,
       title: entry.title,
       heading: entry.heading,
       copyright: isCopyrightMatter(entry),
@@ -796,6 +807,24 @@ export function manuscriptParts(project, action = "build") {
     back,
     warnings
   };
+}
+
+// A matter page the book prints with a `[TODO` marker still in it, such as
+// the `[TODO: author to supply]` the publishing skill leaves on a copyright
+// page's ISBN line. Only the builds that print matter ask: the Shunn,
+// metadata, Fountain, Twee, and ink builds print none, and narration skips a
+// front-matter copyright page. The page generated from story.md has no file.
+function matterTodoWarnings(project, manuscript, { action = "build", narration = false } = {}) {
+  const printed = [...manuscript.front.filter((entry) => !(narration && entry.copyright)), ...manuscript.back];
+  return printed.flatMap((entry) => {
+    const markers = entry.file === undefined ? 0 : countTodoMarkers(entry.body);
+    if (markers === 0) {
+      return [];
+    }
+    const file = relative(project, entry.file);
+    const them = markers === 1 ? "it" : "them";
+    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: fill ${them} in before you publish`, file)];
+  });
 }
 
 // A matter page's title is its EPUB <title> and contents entry, even without
