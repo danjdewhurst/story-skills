@@ -680,15 +680,39 @@ describe("skill triggers", () => {
 // Registries are generated (#553): `story reindex` rebuilds every `_index.md`
 // table from the entity files, and `story add`, `rename`, `move`, and
 // `remove` reindex for you, so a row added by hand is thrown away. No skill
-// may tell an agent to add or edit one. A sentence that names an `_index.md`
-// file or a registry and gives an edit instruction outside its code spans is
-// one, unless it says not to, or it is about a hand-written section reindex
-// keeps.
+// may tell an agent to add or edit one.
+//
+// The check reads each sentence as clauses, split at `;`, `:`, a dash, or a
+// comma that starts a new subject ("so", "which", "it", a `story` command).
+// A clause edits a registry when, after an edit verb in any form ("add",
+// "updates", "appending", "fill in", "record"), an item of what it edits
+// names an `_index.md` file or a registry, or names a table or row while
+// the clause before it or the sentence before it names an `_index.md` file.
+// It is no edit when its subject is a `story` command or the CLI ("`story
+// add` lists it in ..."), when a negation comes before the verb, or when
+// the item is a hand-written section reindex keeps ("the Relationship Map
+// section in `characters/_index.md`"). Items are split at "and", "or", and
+// commas, and an item that starts with a negation or another verb ("leave",
+// "never", "run", "rebuilds") ends what the verb edits. A past participle
+// ("added") is an edit verb only in the passive ("a row is added"), so "the
+// id recorded in every registry" describes rather than instructs. Only a
+// registry's own tables count for the table rule ("the Factions table", "its
+// rows"), not "the arc's Plot Points table".
 
-// "add" before an option (`add --region`) or "add up" is no edit.
-const EDIT_VERB = /\b(?:update|edit|keep|maintain|add(?! up\b)(?!\s+`))\b/i;
-const NOT_AN_EDIT = /\b(?:do not|don't|never|leave)\b/i;
-const HAND_WRITTEN_SECTION = /relationship map|family trees|world overview|story structure|theme tracking|`structure`/i;
+const EDIT_VERB = /\b(?:updat(?:e[sd]?|ing)|edit(?:s|ed|ing)?|keep(?:s|ing)?|kept|maintain(?:s|ed|ing)?|add(?:s|ed|ing)?|append(?:s|ed|ing)?|insert(?:s|ed|ing)?|record(?:s|ed|ing)?|fill(?:s|ed|ing)?\s+in|writ(?:e|es|ing|ten)|wrote)\b/gi;
+const PARTICIPLE = /^(?:updated|edited|kept|maintained|added|appended|inserted|recorded|filled\s+in|written)$/i;
+const PASSIVE = /\b(?:is|are|was|were|be|been|being|get|gets|got|has|have|had)\s+(?:\w+ly\s+)?$/i;
+const ITEM_STOP = /^(?:(?:then|so)\s+)?(?:leave|let|never|not|do not|don't|run|read|check|rebuild|rebuilds|regenerates?|reindex(?:es)?)\b/i;
+const REGISTRY_TABLE = /\b(?:registry|locations|systems|factions|artifacts|arcs|chapters|scenes|questions|promises|clues|terms|matter|research|characters)\s+table\b|\b(?:the|its|their)\s+(?:table|rows?)\b/i;
+// "add up" and "keep in mind" edit nothing.
+const IDIOM = /^(?:add(?:s|ed|ing)?\s+up|keep(?:s|ing)?\s+in\s+mind)\b/i;
+const NEGATION = /\b(?:do not|don't|never|not|leave|no one|nobody)\b/i;
+const HAND_WRITTEN_SECTION = /relationship map|family trees|world overview|story structure|theme tracking/i;
+const SPAN = /\u0001(\d+)\u0001/g;
+const CLAUSE_BREAK = /\s*;\s*|:\s+|\s[-—–]\s|,\s+(?=(?:so|then|which|but|because|while|when|where|since|until|unless|it|they|reindex)\b|\u0001\d+\u0001)/i;
+const ITEM_BREAK = /,\s*(?:and|or)\s+|,\s+|\s+(?:and|or)\s+/i;
+const SUBJECT = /^(?:(?:and|or|so|then|but)\s+)?(?:it|they|which|reindex|the cli)\b/i;
+const SUBJECT_BEFORE_VERB = /(?:^|\s)(?:it|they|which|reindex|the cli)\s*$/i;
 
 // The sentences of a markdown text outside code blocks, each with the first
 // line of its block. A blank line, heading, list item, or table row starts a
@@ -717,14 +741,58 @@ function sentences(text) {
   return blocks.flatMap((entry) => entry.text.trim().split(/(?<=[.!?])\s+(?=[A-Z*`])/).map((sentence) => ({ line: entry.line, sentence })));
 }
 
+// A sentence with each code span replaced by a numbered marker, so splitting
+// and verb matching never look inside a span.
+function maskSpans(sentence) {
+  const spans = [];
+  const text = sentence.replace(/`[^`]*`/g, (span) => `\u0001${spans.push(span.slice(1, -1)) - 1}\u0001`);
+  return { text, spans };
+}
+
 function registryEditProblems(text) {
-  return sentences(text)
-    .filter(({ sentence }) => /_index\.md|\bregistr(?:y|ies)\b/i.test(sentence))
-    .filter(({ sentence }) => {
-      const prose = sentence.replace(/`[^`]*`/g, (span) => (HAND_WRITTEN_SECTION.test(span) ? span : "`…`"));
-      return EDIT_VERB.test(prose) && !NOT_AN_EDIT.test(prose) && !HAND_WRITTEN_SECTION.test(prose);
-    })
-    .map(({ line, sentence }) => `line ${line}: ${sentence}`);
+  const problems = [];
+  let previousNamesIndex = false;
+  for (const { line, sentence } of sentences(text)) {
+    const { text: masked, spans } = maskSpans(sentence);
+    const spanIn = (part) => [...part.matchAll(SPAN)].map(([, index]) => spans[Number(index)]);
+    const namesIndex = (part) => spanIn(part).some((span) => /_index\.md/.test(span));
+    const namesRegistry = (part) => namesIndex(part) || /\bregistr(?:y|ies)\b/i.test(part);
+    const namesFile = (part) => spanIn(part).some((span) => /\.md\b|\//.test(span));
+    const handWritten = (part) => HAND_WRITTEN_SECTION.test(part) || spanIn(part).some((span) => span === "structure" || HAND_WRITTEN_SECTION.test(span));
+    let contextNamesIndex = previousNamesIndex;
+    let flagged = false;
+    for (const clause of masked.split(CLAUSE_BREAK)) {
+      const verbs = [...clause.matchAll(EDIT_VERB)].filter((verb) => {
+        const after = clause.slice(verb.index);
+        // A verb naming an option (`add --region`) edits nothing.
+        const next = after.slice(verb[0].length).match(/^\s*\u0001(\d+)\u0001/);
+        const passive = !PARTICIPLE.test(verb[0]) || PASSIVE.test(clause.slice(0, verb.index));
+        return passive && !IDIOM.test(after) && !(next && spans[Number(next[1])].startsWith("--"));
+      });
+      const verb = verbs[0];
+      const before = verb ? clause.slice(0, verb.index) : "";
+      const subject = before.replace(SPAN, (marker, index) => (spans[Number(index)].startsWith("story ") ? " it " : marker));
+      if (verb && !NEGATION.test(before) && !SUBJECT.test(subject.trim()) && !SUBJECT_BEFORE_VERB.test(subject)) {
+        for (const item of clause.slice(verb.index + verb[0].length).split(ITEM_BREAK)) {
+          if (ITEM_STOP.test(item.trim())) {
+            break;
+          }
+          if (handWritten(item)) {
+            continue;
+          }
+          if (namesRegistry(item) || (contextNamesIndex && REGISTRY_TABLE.test(item) && !namesFile(item))) {
+            flagged = true;
+          }
+        }
+      }
+      contextNamesIndex ||= namesIndex(clause);
+    }
+    if (flagged) {
+      problems.push(`line ${line}: ${sentence}`);
+    }
+    previousNamesIndex = namesIndex(masked);
+  }
+  return problems;
 }
 
 describe("generated registries", () => {
@@ -736,7 +804,22 @@ describe("generated registries", () => {
       "Otherwise create the file, and add a row to the Registry table in `glossary/_index.md`",
       "If no CLI is\navailable, keep `research/_index.md` and the `used-in` lists current by\nhand.",
       "- **Update:** `plot/timeline.md`, arc plot-point tables, and\n  `chapters/_index.md` when chapters move, merge, or split.",
-      "Apply the diff: update bible files, registries, `continuity/state.md`, and the scene records."
+      "Apply the diff: update bible files, registries, `continuity/state.md`, and the scene records.",
+      "Add `{character-id}` to `characters/_index.md`.",
+      "Update `characters/_index.md`; never skip the status column.",
+      "Update the arcs table in `plot/_index.md` and the Story Structure section.",
+      "Update the Theme Tracking section and the arcs table in `plot/_index.md`.",
+      "Append a row to `characters/_index.md`.",
+      "Record the arc in `plot/_index.md`.",
+      "Fill in the `glossary/_index.md` table.",
+      "The agent adds a row to `characters/_index.md`.",
+      "A row is added to `characters/_index.md` by hand.",
+      "The agent updates `characters/_index.md` after each character.",
+      "Finish by updating `characters/_index.md`.",
+      "Each pass edits the rows in `chapters/_index.md`.",
+      "The skill keeps `research/_index.md` current by hand.",
+      "Open `worldbuilding/_index.md`. Add the faction to the Factions table.",
+      "Open `worldbuilding/_index.md`; add the faction to the Factions table."
     ]) {
       expect(flagged(text), text).toBe(1);
     }
@@ -749,6 +832,16 @@ describe("generated registries", () => {
       "Create it with `story add location 'L'` (add `--region` as known); it lists it in `worldbuilding/_index.md`.",
       "Add up the chapters' counts and compare the arc's share with its weight in `plot/_index.md`.",
       "Do not add or edit rows in `chapters/_index.md` by hand.",
+      "When you add a character, `story add` lists it in `characters/_index.md`.",
+      "Keep in mind that `story reindex .` rebuilds `characters/_index.md`.",
+      "`story add` adds the row to `characters/_index.md` for you.",
+      "Use `story add term 'T'`; it writes `glossary/terms/t.md` and updates `glossary/_index.md`.",
+      "Keep the frontmatter fields current by hand, and leave the `research/_index.md` and `matter/_index.md` tables to the next `story reindex .`.",
+      "Read `plot/_index.md`. Add the plot point to the arc's Plot Points table in `plot/arcs/a.md`.",
+      "Set `structure` in `plot/_index.md`. Record the disasters as the first rows of the arc's Plot Points table.",
+      "The story id recorded in every registry is the kebab-case form of the title.",
+      "After editing `title`, run `story reindex .` to rewrite the id in every registry.",
+      "Records each setup in its record, and rebuilds registries with `story reindex`.",
       "```markdown\nUpdate `characters/_index.md`\n```"
     ]) {
       expect(flagged(text), text).toBe(0);

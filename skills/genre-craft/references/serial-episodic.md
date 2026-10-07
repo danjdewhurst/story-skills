@@ -34,8 +34,8 @@ visible from the first installment:
 - "Find out who is killing the oath-bound."
 
 The season goal gives installments their direction and the finale its
-payoff. Record it in `story.md` (`season-goal:`) or the top of
-`plot/_index.md`. A serial without a season goal drifts — readers can feel
+payoff. Record it in `story.md` (`season-goal:`) or in the hand-written
+`## Story Structure` section of `plot/_index.md`. A serial without a season goal drifts — readers can feel
 the absence by installment five.
 
 ## The per-episode dramatic question
