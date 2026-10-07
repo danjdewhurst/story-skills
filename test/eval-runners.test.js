@@ -93,13 +93,13 @@ describe("run-skill with a stubbed model", () => {
     }
   });
 
-  test("the judge's last JSON array counts, past brackets in its prose", () => {
+  test("the judge's one JSON array counts, past prose brackets and footnotes", () => {
     const cases = [
       ['The draft keeps [name needed] as a gap.\n["Petra owns a radio"]', 1],
-      ['["the [name needed] marker names Ana", "a \\"quoted\\" ] bracket"]', 2],
+      ['["a \\" ] b", "the [name needed] marker names Ana"]', 2],
       ["Gap markers such as [name needed] are fine.\n\n[]", 0],
-      ['First pass: ["Petra owns a radio"]\nOn reflection the context says so. Final: []', 0],
-      ['[["nested"]] is not a flat list.\n["Petra owns a radio"]', 1],
+      ['["Petra owns a radio"] (see [1])', 1],
+      ['["Petra owns a radio"]\n\nOnce more: ["Petra owns a radio"]', 1],
     ];
     for (const [judge, count] of cases) {
       logs.length = 0;
@@ -108,9 +108,31 @@ describe("run-skill with a stubbed model", () => {
       expect(JSON.parse(fs.readFileSync(path.join(out, "canon-keeping.claims.json"), "utf8"))).toHaveLength(count);
       expect(output()).not.toContain("FAIL judge");
     }
+  });
+
+  test("a judge reply that leaves the claims in doubt fails the fixture", () => {
+    const cases = [
+      // The draft is model-written, so it can steer the judge into a second array.
+      ['["Mara has a sister"]\n\nIf there were none I would reply [].', 'judge returned 2 different arrays: ["Mara has a sister"] vs []'],
+      ['First pass: ["Petra owns a radio"]\nFinal: []', "judge returned 2 different arrays"],
+      ["Claims: [", 'judge reply has a "[" that never closes: Claims: ['],
+      ['["Petra owns a radio"]\n[see ["Ana left the key"]]', 'judge reply has an array inside brackets that are not JSON: [see ["Ana left the key"]]'],
+      ['[{"claim": "Petra owns a radio"}]', "judge returned a non-string array"],
+    ];
+    for (const [judge, message] of cases) {
+      logs.length = 0;
+      const out = makeTempDir("story-run-skill-");
+      expect(runSkillMain(["--out", out, "canon-keeping"], { spawn: modelStub({ judge }).spawn })).toBe(1);
+      expect(output()).toContain(`FAIL judge: ${message}`);
+      expect(output()).toMatch(/FAIL canon-keeping \(checker (\d+)\/\1, judge failed\)/);
+      expect(fs.existsSync(path.join(out, "canon-keeping.claims.json"))).toBe(false);
+    }
+    // One pass over the reply, however many brackets never close.
     logs.length = 0;
-    expect(runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge: "Claims: [" }).spawn })).toBe(1);
-    expect(output()).toContain("FAIL judge: judge did not return a JSON array: Claims: [");
+    const started = performance.now();
+    expect(runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge: "[ ".repeat(40_000) }).spawn })).toBe(1);
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(output()).toContain('FAIL judge: judge reply has a "[" that never closes');
   });
 
   test("a failed draft or judge call stays in the summary and fails the run", () => {
@@ -199,42 +221,88 @@ describe("the reference files a skill loads", () => {
     const skillsDir = skillsTree({
       "a/SKILL.md": [
         "Read `references/big.md` first, then [the template](../b/references/template.md#fields).",
-        "Write `chapters/chapter-{NN}.md`, never `../b/SKILL.md`, `../../outside.md`, or `references/missing.md`.",
-        "See `references/big.md` again and `references/small.md`.",
+        "Write `chapters/chapter-{NN}.md`, never `../b/SKILL.md`, `../../outside.md`, `references/linked.md`,",
+        "`references/out/secret.md`, or `references/missing.md`.",
+        "See `references/big.md` again, `references/small.md`, and `b/references/other.md`.",
       ].join("\n"),
       "a/references/big.md": `${"x".repeat(80)} names \`deep.md\` and \`../../c/references/far.md\``,
-      "a/references/small.md": "small, names `../../b/references/template.md` and `huge.md`",
+      // `references/huge.md` here means the skill folder's references.
+      "a/references/small.md": "small, names `../../b/references/template.md` and `references/huge.md`",
       "a/references/deep.md": "deep",
-      "a/references/huge.md": "h".repeat(200),
+      "a/references/huge.md": `${"h".repeat(200)} names \`beyond.md\` and \`deep.md\``,
+      "a/references/beyond.md": "beyond",
       "a/references/unnamed.md": "never named",
       "b/SKILL.md": "another skill",
       "b/references/template.md": "**Where:** {label}",
+      "b/references/other.md": "other",
       "c/references/far.md": "far, names `../../a/references/huge.md`",
     });
-    fs.writeFileSync(path.join(skillsDir, "..", "outside.md"), "outside");
+    // Outside the skills folder, reached by name and through symlinks.
+    const outside = path.dirname(skillsDir);
+    fs.writeFileSync(path.join(outside, "outside.md"), "outside");
+    fs.mkdirSync(path.join(outside, "out"));
+    fs.writeFileSync(path.join(outside, "out", "secret.md"), "secret");
+    fs.symlinkSync(path.join(outside, "outside.md"), path.join(skillsDir, "a", "references", "linked.md"));
+    fs.symlinkSync(path.join(outside, "out"), path.join(skillsDir, "a", "references", "out"), "dir");
+
     const skillDir = path.join(skillsDir, "a");
     const size = (rel) => fs.readFileSync(path.join(skillsDir, rel), "utf8").length;
-    const direct = size("a/references/big.md") + size("b/references/template.md") + size("a/references/small.md");
+    const direct = ["a/references/big.md", "b/references/template.md", "a/references/small.md", "b/references/other.md"]
+      .reduce((n, rel) => n + size(rel), 0);
 
-    // Room for deep.md and far.md but not huge.md, which small.md names first.
+    // Room for deep.md and far.md but not huge.md, which small.md names next.
     const refs = skillReferences(skillDir, { skillsDir, cap: direct + size("a/references/deep.md") + size("c/references/far.md") });
-    expect(refs.loaded.map((r) => r.label)).toEqual([
+    const labels = refs.loaded.map((r) => r.label);
+    expect(labels).toEqual([
       "references/big.md",
       "../b/references/template.md",
       "references/small.md",
+      "../b/references/other.md",
       "references/deep.md",
       "../c/references/far.md",
     ]);
     expect(refs.loaded[1].text).toBe("**Where:** {label}");
-    expect(refs.leftOut).toEqual(["references/huge.md"]);
+    // beyond.md is named only by the left-out huge.md, so it is left out too;
+    // deep.md, which huge.md also names, stays loaded.
+    expect(refs.leftOut).toEqual(["references/huge.md", "references/beyond.md"]);
     expect(refs.chars).toBe(refs.loaded.reduce((n, r) => n + r.text.length, 0));
+    // A file nothing names never loads, nor does a file outside the skills
+    // folder, by name or through a symlink.
+    expect(labels).not.toContain("references/unnamed.md");
+    expect(refs.loaded.map((r) => r.text).join("\n")).not.toMatch(/outside|secret|another skill/);
+    // Reference-like names that point to no file are reported; project paths are not.
+    expect(refs.unresolved).toEqual([
+      "references/linked.md (in SKILL.md)",
+      "references/out/secret.md (in SKILL.md)",
+      "references/missing.md (in SKILL.md)",
+    ]);
 
     // The files SKILL.md names load whatever their size; the rest wait for room.
     const tight = skillReferences(skillDir, { skillsDir, cap: 10 });
-    expect(tight.loaded.map((r) => r.label)).toEqual(["references/big.md", "../b/references/template.md", "references/small.md"]);
-    expect(tight.leftOut).toEqual(["references/deep.md", "../c/references/far.md", "references/huge.md"]);
-    expect(skillReferences(skillDir, { skillsDir }).leftOut).toEqual([]);
+    expect(tight.loaded.map((r) => r.label)).toEqual(["references/big.md", "../b/references/template.md", "references/small.md", "../b/references/other.md"]);
+    expect(tight.leftOut).toEqual(["references/deep.md", "../c/references/far.md", "references/huge.md", "references/beyond.md"]);
+    const all = skillReferences(skillDir, { skillsDir });
+    expect(all.leftOut).toEqual([]);
+    expect(all.loaded.map((r) => r.label)).toContain("references/beyond.md");
     expect(MAX_REFERENCE_CHARS).toBe(48_000);
+  });
+
+  test("an unclosed code span full of anchors does not slow the scan", () => {
+    const skillsDir = skillsTree({ "a/SKILL.md": `\`${"a.md#".repeat(50_000)}` });
+    const started = performance.now();
+    expect(skillReferences(path.join(skillsDir, "a"), { skillsDir }).loaded).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test("every reference file is reachable from its SKILL.md", () => {
+    const skillsDir = path.join(repoRoot, "skills");
+    for (const skill of fs.readdirSync(skillsDir)) {
+      const refsDir = path.join(skillsDir, skill, "references");
+      if (!fs.existsSync(path.join(skillsDir, skill, "SKILL.md")) || !fs.existsSync(refsDir)) continue;
+      const labels = new Set(skillReferences(path.join(skillsDir, skill), { cap: Infinity }).loaded.map((r) => r.label));
+      const unreached = fs.readdirSync(refsDir).filter((name) => name.endsWith(".md") && !labels.has(`references/${name}`));
+      expect(unreached, `${skill}: no link or code path from SKILL.md reaches these`).toEqual([]);
+    }
   });
 
   test("the reader-panel fixture sees the feedback template its banned_regex checks", () => {
@@ -246,13 +314,20 @@ describe("the reference files a skill loads", () => {
     expect(system).toContain("<!-- references/line-editor.md -->");
     expect(system).toContain("<!-- ../feedback-triage/references/feedback-template.md -->");
     expect(system).toContain("- **Where:** {paragraph label in the current build");
-    // A file SKILL.md never names is not loaded, and no SKILL.md but its own.
-    expect(system.match(/^name: /gm)).toHaveLength(1);
+    // feedback-triage's synthesis template sits beside the feedback template,
+    // but nothing reader-panel loads names it.
+    expect(system).not.toContain("synthesis-template.md");
+    expect(system).not.toMatch(/<!-- [^\n]*SKILL\.md -->/);
+    const skillText = fs.readFileSync(path.join(repoRoot, "skills", "reader-panel", "SKILL.md"), "utf8");
+    expect(system.split(skillText)).toHaveLength(2);
   });
 
   test("premise-workshop loads the other skills' references it links to", () => {
     const stub = modelStub({ draft: fs.readFileSync(path.join(repoRoot, "evals", "examples", "premise-logline.md"), "utf8") });
-    runSkillMain(["--no-judge", "--out", makeTempDir("story-run-skill-"), "premise-logline"], { spawn: stub.spawn });
+    expect(runSkillMain(["--no-judge", "--out", makeTempDir("story-run-skill-"), "premise-logline"], { spawn: stub.spawn })).toBe(0);
+    // Its links reach past the cap, and the log names what was left out.
+    expect(output()).toMatch(/left out over the 48000-character cap: [^\n]*\.\.\/revision-continuity\/references\/pass-checklists\.md/);
+    expect(stub.calls[0].system).not.toContain("<!-- ../revision-continuity/references/pass-checklists.md -->");
     expect(stub.calls[0].system).toContain("<!-- ../story-init/references/title-logline.md -->\n\n# Title & Logline");
     expect(stub.calls[0].system).toContain("<!-- ../theme-craft/references/controlling-idea.md -->\n\n# The Controlling Idea");
   });
@@ -327,7 +402,7 @@ describe("a fixture's keep option", () => {
     const stub = modelStub({ draft: goodChapterFile });
     expect(runSkillMain(["--out", out, "branch-choices"], { spawn: stub.spawn })).toBe(0);
     expect(stub.calls[0].system).toContain("story-skills interactive-fiction workflow");
-    expect(stub.calls[0].system).toContain("return only the file content the brief asks for, frontmatter included");
+    expect(stub.calls[0].system).toContain("return only what the brief asks for, in the form it asks for, frontmatter included");
     expect(stub.calls[0].system).not.toContain("return only the final draft prose");
     // The judge keeps the prose rule: it is not drafting a file.
     expect(stub.calls[1].system).toContain("return only the final draft prose");
@@ -340,14 +415,14 @@ describe("a fixture's keep option", () => {
     expect(baseline.calls[0].system).toContain("frontmatter included");
   });
 
-  test("every fixture whose brief asks for a file gets the file rule and passes its example", () => {
-    const fileFixtures = ["character-progression", "copyright-page", "location-routes", "reader-panel", "research-note", "style-sheet", "triage-synthesis"];
+  test("every fixture whose brief asks for a file or frontmatter gets the file rule and passes its example", () => {
+    const fileFixtures = ["character-progression", "copyright-page", "init-project", "location-routes", "reader-panel", "research-note", "style-sheet", "triage-synthesis"];
     for (const name of fileFixtures) {
       logs.length = 0;
       const example = fs.readFileSync(path.join(repoRoot, "evals", "examples", `${name}.md`), "utf8");
       const stub = modelStub({ draft: `Here is the file:\n\`\`\`markdown\n${example}\`\`\`\n` });
       expect(runSkillMain(["--no-judge", "--out", makeTempDir("story-run-skill-"), name], { spawn: stub.spawn })).toBe(0);
-      expect(stub.calls[0].system).toContain("return only the file content the brief asks for, frontmatter included");
+      expect(stub.calls[0].system).toContain("return only what the brief asks for, in the form it asks for, frontmatter included");
       expect(stub.calls[0].system).not.toContain("return only the final draft prose");
       expect(output()).toContain(`PASS ${name}`);
     }

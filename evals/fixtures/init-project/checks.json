@@ -19,6 +19,7 @@
     "\\bstory init\\s+'The Keeper's Key'"
   ],
   "brief": "Set up the project from the user's answers. Return the exact command you would run in a fenced shell block, then, in a second fenced block, the full story.md frontmatter as it should read once setup is finished. No commentary.",
+  "keep": "file",
   "max_words": 220,
   "min_words_ratio": 0.5,
   "name": "init-project",

@@ -62,10 +62,11 @@ export const MAX_REFERENCE_CHARS = 48_000;
 // A fixture's `keep` (checks.json) says what of the reply is scored:
 // "chapter-text" (the default) keeps only the prose under `## Chapter Text`,
 // "file" keeps the whole reply, frontmatter included, for fixtures whose
-// brief asks for a file (a chapter's `choices`, a feedback file, a style
-// sheet, an entity's frontmatter).
+// brief asks for a file or frontmatter (a chapter's `choices`, a feedback
+// file, a style sheet, an entity's frontmatter, a command and the
+// `story.md` it leaves).
 const PROSE_RULE = "Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.";
-const FILE_RULE = "Output rules for this run: return only the file content the brief asks for, frontmatter included. No preamble, no change note, no diagnostic audit, no closing remark.";
+const FILE_RULE = "Output rules for this run: return only what the brief asks for, in the form it asks for, frontmatter included. No preamble, no change note, no diagnostic audit, no closing remark.";
 
 function outputRule(keep) {
   return keep === "file" ? FILE_RULE : PROSE_RULE;
@@ -98,26 +99,50 @@ Do not list: rewording, reordering, or cuts; showing rather than telling; ordina
 
 Reply with a JSON array of short strings, one per invented canon claim, and nothing else. Reply with [] if there are none.`;
 
-// A path a skill file names: a link target or a code span ending in `.md`,
-// with any `#anchor` dropped.
-const PATH_MENTION_RE = /(?:\]\(|`)([^\s`()<>]+?\.md)(?:#[^\s`()]*)?(?=[`)])/g;
+// A link target or a code span: the text after `](` or a backtick, up to the
+// backtick or `)` that closes it. The run cannot hold either closer, so a
+// failed match gives back at most its own run and the scan stays linear.
+const PATH_MENTION_RE = /(?:\]\(|`)([^\s`()]+)(?=[`)])/g;
 
-// The skill files `file` names, resolved from its folder as a link would be,
-// in the order it names them. Only existing files inside `skillsDir` count,
-// and never a SKILL.md: a project path such as `chapters/chapter-{NN}.md`, a
-// path that leaves the skills folder, or another skill's instructions is
-// not reference material.
-function namedFiles(file, text, skillsDir) {
-  const files = [];
+// The `.md` paths a skill file names, in order, with any `#anchor` dropped.
+function mentionedPaths(text) {
+  const names = [];
   for (const m of text.matchAll(PATH_MENTION_RE)) {
-    const target = path.resolve(path.dirname(file), m[1]);
-    const rel = path.relative(skillsDir, target);
-    if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) continue;
-    if (path.basename(target) === "SKILL.md") continue;
-    if (!fs.statSync(target, { throwIfNoEntry: false })?.isFile()) continue;
-    files.push(target);
+    const hash = m[1].indexOf("#");
+    const name = hash < 0 ? m[1] : m[1].slice(0, hash);
+    if (name.endsWith(".md") && !/[<>]/.test(name)) names.push(name);
   }
-  return files;
+  return names;
+}
+
+function isInside(dir, target) {
+  const rel = path.relative(dir, target);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
+
+// The real path of the reference file `name` points to, or null. It resolves
+// from the naming file's folder, as a link would; else from that file's
+// skill folder, for a reference that names a sibling as
+// `references/x.md`; else from the skills folder, for the
+// `chapter-writing/references/writing-guidelines.md` form some skills use
+// for another skill's file. Only a regular file whose real path is inside
+// the skills folder counts, so a symlink cannot pull a file from elsewhere
+// into the prompt, and never a SKILL.md: a project path such as
+// `chapters/chapter-{NN}.md` or another skill's instructions is not
+// reference material.
+function resolveNamed(file, name, realSkills) {
+  const skillFolder = path.join(realSkills, path.relative(realSkills, file).split(path.sep)[0]);
+  for (const base of [path.dirname(file), skillFolder, realSkills]) {
+    let real;
+    try {
+      real = fs.realpathSync(path.resolve(base, name));
+    } catch {
+      continue;
+    }
+    if (!isInside(realSkills, real) || path.basename(real) === "SKILL.md") continue;
+    if (fs.statSync(real).isFile()) return real;
+  }
+  return null;
 }
 
 /**
@@ -126,18 +151,37 @@ function namedFiles(file, text, skillsDir) {
  * `../feedback-triage/references/feedback-template.md`), then the files
  * those name, breadth-first. Every file SKILL.md names loads. A file only a
  * reference names loads while the total reference text stays within `cap`
- * characters; past that it is left out, and so are the files only it names.
- * Each file has a label: its path from the skill folder, as SKILL.md would
- * write it.
+ * characters; past that it is left out, and so is every file that only
+ * left-out files lead to. Each file has a label: its path from the skill
+ * folder, as SKILL.md would write it. `unresolved` lists the names with a
+ * `references/` folder in them that point to no file, with the file that
+ * names each, so a reference named in a form the runner cannot follow shows
+ * in the run log.
  */
 export function skillReferences(skillDir, { skillsDir = SKILLS_DIR, cap = MAX_REFERENCE_CHARS } = {}) {
-  const skillFile = path.join(skillDir, "SKILL.md");
-  const label = (file) => path.relative(skillDir, file).split(path.sep).join("/");
+  const realSkills = fs.realpathSync(skillsDir);
+  const home = fs.realpathSync(skillDir);
+  const skillFile = path.join(home, "SKILL.md");
+  const label = (file) => path.relative(home, file).split(path.sep).join("/");
+  const unresolved = [];
+  const named = (file, text, noteMisses = true) => {
+    const files = [];
+    for (const name of mentionedPaths(text)) {
+      const target = resolveNamed(file, name, realSkills);
+      if (target) {
+        files.push(target);
+      } else if (noteMisses && /(?:^|\/)references\//.test(name)) {
+        const miss = `${name} (in ${label(file)})`;
+        if (!unresolved.includes(miss)) unresolved.push(miss);
+      }
+    }
+    return files;
+  };
   const seen = new Set([skillFile]);
   const loaded = [];
   const leftOut = [];
   let chars = 0;
-  let level = namedFiles(skillFile, fs.readFileSync(skillFile, "utf8"), skillsDir);
+  let level = named(skillFile, fs.readFileSync(skillFile, "utf8"));
   for (let depth = 1; level.length > 0; depth++) {
     const next = [];
     for (const file of level) {
@@ -145,16 +189,25 @@ export function skillReferences(skillDir, { skillsDir = SKILLS_DIR, cap = MAX_RE
       seen.add(file);
       const text = fs.readFileSync(file, "utf8");
       if (depth > 1 && chars + text.length > cap) {
-        leftOut.push(label(file));
+        leftOut.push(file);
         continue;
       }
       chars += text.length;
       loaded.push({ label: label(file), text });
-      next.push(...namedFiles(file, text, skillsDir));
+      next.push(...named(file, text));
     }
     level = next;
   }
-  return { loaded, leftOut, chars };
+  // Every loaded file is seen by now, so what a left-out file leads to and
+  // nothing loaded names is left out with it.
+  for (let i = 0; i < leftOut.length; i++) {
+    for (const file of named(leftOut[i], fs.readFileSync(leftOut[i], "utf8"), false)) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      leftOut.push(file);
+    }
+  }
+  return { loaded, leftOut: leftOut.map(label), unresolved, chars };
 }
 
 function buildSystemPrompt(skillName, withSkill, keep) {
@@ -303,48 +356,75 @@ export function stripPreamble(text, keep = "chapter-text") {
   return body.join("\n").trim() + "\n";
 }
 
-// The end (exclusive) of the bracketed span that opens at `start`, skipping
-// brackets inside JSON strings, or -1 if it never closes.
-function closingBracket(text, start) {
-  let depth = 0;
+// The top-level bracket pairs of the judge's reply, in one pass. Quotes
+// count only inside brackets, where they open JSON strings whose brackets
+// do not count. A pair inside a closed pair is part of it, and `nested`
+// marks a pair that holds one.
+function bracketSpans(raw) {
+  const open = [];
+  const spans = [];
   let inString = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i];
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
     if (inString) {
       if (ch === "\\") i++;
       else if (ch === '"') inString = false;
-    } else if (ch === '"') inString = true;
-    else if (ch === "[") depth++;
-    else if (ch === "]" && --depth === 0) return i + 1;
-  }
-  return -1;
-}
-
-// The judge is told to reply with the array alone, but a reply can carry
-// prose around it, and that prose can hold brackets ("[name needed]"). Take
-// the last span that parses as JSON; a nested array is part of its parent.
-function lastJsonArray(raw) {
-  let found = null;
-  for (let i = raw.indexOf("["); i >= 0; i = raw.indexOf("[", i + 1)) {
-    const end = closingBracket(raw, i);
-    if (end < 0) continue;
-    try {
-      found = { value: JSON.parse(raw.slice(i, end)), text: raw.slice(i, end) };
-      i = end - 1;
-    } catch {
-      // A bracket in the judge's prose, not JSON.
+    } else if (ch === "[") {
+      open.push(i);
+    } else if (open.length === 0) {
+      continue;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === "]") {
+      const start = open.pop();
+      let nested = false;
+      while (spans.length > 0 && spans.at(-1).start > start) {
+        spans.pop();
+        nested = true;
+      }
+      spans.push({ start, end: i + 1, nested });
     }
   }
-  return found;
+  return { spans, unclosed: open.length > 0 };
 }
 
+const isFootnote = (value) => value.length > 0 && value.every((v) => typeof v === "number");
+
+/**
+ * The claims in the judge's reply. The judge is told to reply with one JSON
+ * array of strings, but its input holds model-written draft text, so a reply
+ * it was steered into must fail rather than pass. Prose brackets that are not
+ * JSON (`[name needed]`) and number-only arrays (a footnote such as `[1]`)
+ * are passed over. Anything else that leaves the claims in doubt is an
+ * error: no array, an array of anything but strings, two different arrays
+ * (`["a claim"]` and then `[]`), a bracket that never closes, or a bracketed
+ * span that holds an array but does not parse.
+ */
 export function parseJudgeJson(raw) {
-  const found = lastJsonArray(raw);
-  if (!found) throw new Error(`judge did not return a JSON array: ${raw.slice(0, 200)}`);
-  if (!found.value.every((s) => typeof s === "string")) {
-    throw new Error(`judge returned a non-string array: ${found.text.slice(0, 200)}`);
+  const { spans, unclosed } = bracketSpans(raw);
+  if (unclosed) throw new Error(`judge reply has a "[" that never closes: ${raw.slice(0, 200)}`);
+  const arrays = [];
+  for (const { start, end, nested } of spans) {
+    const text = raw.slice(start, end);
+    let value;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      if (nested) throw new Error(`judge reply has an array inside brackets that are not JSON: ${text.slice(0, 200)}`);
+      continue;
+    }
+    if (isFootnote(value)) continue;
+    if (!value.every((s) => typeof s === "string")) {
+      throw new Error(`judge returned a non-string array: ${text.slice(0, 200)}`);
+    }
+    arrays.push(value);
   }
-  return found.value;
+  if (arrays.length === 0) throw new Error(`judge did not return a JSON array of strings: ${raw.slice(0, 200)}`);
+  const distinct = new Set(arrays.map((a) => JSON.stringify(a)));
+  if (distinct.size > 1) {
+    throw new Error(`judge returned ${distinct.size} different arrays: ${[...distinct].join(" vs ").slice(0, 200)}`);
+  }
+  return arrays[0];
 }
 
 export function programArgs(argv = process.argv) {
@@ -440,6 +520,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
     if (references) {
       const leftOut = references.leftOut.length > 0 ? `; left out over the ${MAX_REFERENCE_CHARS}-character cap: ${references.leftOut.join(", ")}` : "";
       console.log(`  references: ${references.loaded.map((r) => r.label).join(", ") || "(none)"} (${references.chars} characters)${leftOut}`);
+      if (references.unresolved.length > 0) console.log(`  unresolved reference names: ${references.unresolved.join(", ")}`);
     }
     console.log(`  system sha256: ${sha256(systemPrompt)}`);
     // Provenance saved next to the draft so a run can be audited later.
