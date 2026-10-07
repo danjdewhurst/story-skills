@@ -92,6 +92,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
+- A write now flushes the folder it renamed the new file into, and a delete or a new folder flushes its folder too, so a power loss can no longer keep some of a command's changes and lose earlier ones. Windows, which cannot open a folder, skips the folder flush. ([#604](https://github.com/danjdewhurst/story-skills/issues/604))
 - `story doctor` no longer lets an empty `STORY_PACKAGE`, or one set in another job or step, hide a workflow's `STORY_VERSION` note. Only a non-empty `STORY_PACKAGE` counts, and only for the workflow, job, or step whose `env` sets it. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
 - `cli-defaults` in `story.md` can no longer name `split` or `merge`, so a default `at` cannot make `story split chapter-01` split without `--at`. `story validate` reports such an entry, and other commands refuse to run until it is gone, as for `add`, `rename`, `move`, `remove`, and `knowledge`. ([#566](https://github.com/danjdewhurst/story-skills/issues/566))
 - `story check` refuses to run with exit code 3 while `cli-defaults` or `severity` in `story.md` is invalid, as `links` and `continuity` do. Before, it ran without the project's severity overrides and exited 1. ([#566](https://github.com/danjdewhurst/story-skills/issues/566))
