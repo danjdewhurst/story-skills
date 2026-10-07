@@ -76,6 +76,22 @@ describe("#109 discovered chapters", () => {
   });
 });
 
+describe("#564 continuity warning count in next", () => {
+  test("the continuity warnings action says warning for one and warnings for more", () => {
+    const root = newProject();
+    // A drafted chapter that continuity/state.md has not caught up with is
+    // one warning; a promise planted three chapters back with no payoff, a
+    // second.
+    writeChapter(root, 1, "Words.");
+    expect(actionLines(root)).toContain("[P1] Review continuity warnings: Run story continuity . and review 1 continuity warning.\n");
+    for (const number of [2, 3, 4]) {
+      writeChapter(root, number, "Words.");
+    }
+    writeMarkdown(path.join(root, "continuity", "promises", "the-letter.md"), "title: The Letter\nstatus: planted\nplanted: chapter-01", "# The Letter\n");
+    expect(actionLines(root)).toContain("[P1] Review continuity warnings: Run story continuity . and review 2 continuity warnings.\n");
+  });
+});
+
 describe("#111 validation warnings in next", () => {
   test("validate warnings get an action instead of the healthy fallback", () => {
     const root = newProject();
