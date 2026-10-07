@@ -5,7 +5,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { kebabCase } from "../src/markdown.js";
 import { buildBook, createEntity, createStoryProject, reindexProject, renameEntity, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, NODE_ON_PATH, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -202,13 +202,14 @@ describe("a project whose title and folder name have no ASCII letters or digits"
     const validation = validateProject(root);
     expect(messages(validation.errors)).toEqual([]);
     expect(messages(validation.warnings)).toContain(substitute("story-d209412e", "the title"));
-    // The Node fallback CLI hashes the same.
+  });
+
+  test.skipIf(!NODE_ON_PATH)("the Node fallback CLI hashes the title to the same story id", () => {
+    const root = movedProject("東京物語", "東京");
     const bundle = path.resolve(import.meta.dir, "..", "skills", "story-maintenance", "scripts", "story.js");
     const node = spawnSync("node", [bundle, "build", root, "--format", "epub", "--out", "dist/node.epub"], { encoding: "utf8" });
-    if (node.error?.code !== "ENOENT") {
-      expect(node.status).toBe(0);
-      expect(node.stderr).toContain(substitute("story-d209412e", "the title"));
-    }
+    expect(node.status).toBe(0);
+    expect(node.stderr).toContain(substitute("story-d209412e", "the title"));
   });
 
   test("each title hashes to its own id, in either Unicode form, and no title hashes the folder name", () => {

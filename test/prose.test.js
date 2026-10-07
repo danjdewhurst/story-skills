@@ -6,7 +6,7 @@ import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
 import { computeWordCounts, createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { expectLinearGrowth, expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearGrowth, expectLinearGrowthFresh, expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function proseProject(title = "Prose Story") {
   const cwd = makeTempDir();
@@ -514,13 +514,17 @@ describe("prose lint", () => {
 
 describe("sweep fixes", () => {
   test("prose and voices stay linear on long unclosed quotes", () => {
-    const root = sweepProject();
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    appendProse(root, "chapters/chapter-01.md", `${"“".repeat(30000)} ${"\"".repeat(30000)} ${"\"a,\" said Bob. ".repeat(4000)}`);
-    const started = performance.now();
-    proseReport(root);
-    invoke(path.dirname(root), ["voices", root]);
-    expect(performance.now() - started).toBeLessThan(5000);
+    // Each run checks a fresh chapter whose quote runs are `units` long.
+    const timeRun = (units) => {
+      const root = sweepProject();
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      appendProse(root, "chapters/chapter-01.md", `${"“".repeat(units)} ${"\"".repeat(units)} ${"\"a,\" said Bob. ".repeat(units / 7.5)}`);
+      const started = performance.now();
+      proseReport(root);
+      invoke(path.dirname(root), ["voices", root]);
+      return performance.now() - started;
+    };
+    expectLinearGrowthFresh(timeRun, 30000, { limit: 5000 });
   });
 
   test("prose treats unclosed straight and single quotes as speech to the end", () => {

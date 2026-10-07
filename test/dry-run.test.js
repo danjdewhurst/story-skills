@@ -222,10 +222,7 @@ describe("--dry-run", () => {
     ].sort((a, b) => (a.path < b.path ? -1 : 1)));
   });
 
-  test("a dry run meets what the real run meets: unreadable and oversized notes, other projects, assets, and unwritable folders", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a dry run meets what the real run meets: unreadable and oversized notes, other projects, assets, and unwritable folders", () => {
     const root = copyExample("the-unraveled-thread");
     const notes = path.join(root, "notes");
     fs.mkdirSync(notes);
@@ -305,10 +302,7 @@ describe("--dry-run", () => {
     ]);
   });
 
-  test("a dry run of import onto a FIFO answers as the real run, without reading it", () => {
-    if (process.platform === "win32") {
-      return;
-    }
+  test.skipIf(process.platform === "win32")("a dry run of import onto a FIFO answers as the real run, without reading it", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1\n\nText.\n");
     expect(spawnSync("mkfifo", [path.join(cwd, "pipe")]).status).toBe(0);
@@ -506,10 +500,7 @@ describe("--dry-run", () => {
     expect(refused.err).toContain("sets dry-run, which would stop the command changing anything");
   });
 
-  test("a snapshot sees a rewrite of an unreadable file that keeps its size (#755)", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a snapshot sees a rewrite of an unreadable file that keeps its size (#755)", () => {
     const root = makeTempDir();
     const secret = path.join(root, "secret.txt");
     fs.writeFileSync(secret, "aaaa");
@@ -527,10 +518,7 @@ describe("--dry-run", () => {
     expect(diff(before, snapshot(root))).toEqual([{ action: "update", path: "secret.txt" }]);
   });
 
-  test("a dry run copies symlinks and read-only folders without touching the project", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a dry run copies symlinks and read-only folders without touching the project", () => {
     const root = copyExample("the-unraveled-thread");
     const notes = path.join(root, "notes");
     writeMarkdown(path.join(notes, "frozen", "note.md"), "type: note", "edran-vale\n");

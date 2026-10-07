@@ -7,6 +7,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { deflateRaw, huffmanLengths } from "../src/deflate.js";
+import { NODE_ON_PATH } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const FALLBACK = path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js");
@@ -54,8 +55,6 @@ function fibonacci(count) {
   }
   return values.slice(0, count);
 }
-
-const nodeMissing = () => spawnSync("node", ["--version"]).status !== 0;
 
 describe("deflate (#589)", () => {
   test("zlib inflates every stream back to its input", () => {
@@ -131,12 +130,8 @@ describe("deflate (#589)", () => {
     expect(crypto.createHash("sha256").update(stream).digest("hex")).toBe("f01078944f1716c231feb5d1907af3cbe8fbd0422f4a1f472ab5002ee5fb7a3a");
   });
 
-  test("node deflates a multi-block input to the same bytes as bun", () => {
-    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
-    if (nodeMissing()) {
-      console.warn("Skipping the cross-runtime deflate test: node is not on PATH.");
-      return;
-    }
+  // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+  test.skipIf(!NODE_ON_PATH)("node deflates a multi-block input to the same bytes as bun", () => {
     const stats = {};
     const stream = deflateRaw(fs.readFileSync(FALLBACK), { stats });
     expect(stats.blocks.length).toBeGreaterThan(5);

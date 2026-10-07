@@ -8,7 +8,7 @@ import { COMMANDS } from "../src/commands.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { KIND_ALIASES, buildEntity, scanProject } from "../src/scan.js";
 import { createEntity, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, NODE_ON_PATH, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -719,23 +719,12 @@ word-count: 9
     expect(validation.out).not.toContain("warning:");
   });
 
-  test("runs the bundled story-maintenance fallback script under Node", () => {
+  test.skipIf(!NODE_ON_PATH)("runs the bundled story-maintenance fallback script under Node", () => {
     const repoRoot = path.resolve(import.meta.dirname, "..");
     const bundle = path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js");
 
     // process.execPath is Bun under `bun test`, so the Node-compat bundle must
     // be spawned via an explicit `node` lookup instead.
-    let nodeAvailable = true;
-    try {
-      const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
-      nodeAvailable = probe.status === 0;
-    } catch {
-      nodeAvailable = false;
-    }
-    if (!nodeAvailable) {
-      console.warn("Skipping fallback behavioral tests: node is not on PATH.");
-      return;
-    }
 
     const runBundle = (args, cwd = repoRoot) =>
       spawnSync("node", [bundle, ...args], { cwd, encoding: "utf8" });

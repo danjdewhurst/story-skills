@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { deflateRaw } from "../src/deflate.js";
 import { buildBook, createStoryProject } from "../src/story.js";
-import { makeTempDir, readArchiveEntries, writeMarkdown } from "./helpers.js";
+import { makeTempDir, NODE_ON_PATH, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
@@ -97,12 +97,8 @@ describe("zip writer", () => {
     }
   });
 
-  test("bun, node, and the node fallback build the same bytes (#589)", () => {
-    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
-    if (spawnSync("node", ["--version"]).status !== 0) {
-      console.warn("Skipping the cross-runtime build test: node is not on PATH.");
-      return;
-    }
+  // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+  test.skipIf(!NODE_ON_PATH)("bun, node, and the node fallback build the same bytes (#589)", () => {
     const root = bookProject(PNG_BYTES);
     // A long chapter of varied prose, so its entry spans several deflate
     // blocks.

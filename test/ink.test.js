@@ -168,11 +168,9 @@ describe("ink build", () => {
   });
 
   test("joins a paragraph of many lines in linear time", () => {
-    const body = "一行目の文。\n".repeat(200000);
-    const started = performance.now();
-    const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
-    expect(performance.now() - started).toBeLessThan(2000);
-    expect(text).toContain(`=== a ===\n${"一行目の文。".repeat(200000)}\n`);
+    const source = (body) => inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
+    expectLinearTime(source, (n) => "一行目の文。\n".repeat(n), { length: 200000 });
+    expect(source("一行目の文。\n".repeat(200000))).toContain(`=== a ===\n${"一行目の文。".repeat(200000)}\n`);
   });
 
   test("a long run of spaces inside a line is read in linear time", () => {

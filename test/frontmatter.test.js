@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "../src/frontmatter.js";
 import { createEntity, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { expectLinearTime, makeTempDir, memoryIo } from "./helpers.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -723,18 +723,25 @@ Body`);
     expect(stringifyFrontmatter({ a: "Sera\u00a0", b: "\u3000Sera" })).toBe('---\na: "Sera\u00a0"\nb: "\u3000Sera"\n---\n\n');
   });
 
+  // Front matter with n spaces in two values, and n / 6 tags.
+  const longFrontmatter = (n) => `---\ngenre: a${" ".repeat(n)}b #c\nnote: "a"${" ".repeat(n)}x #c\ntags: [${Array.from({ length: n / 6 }, (_, index) => `t${index}`).join(", ")}]\n---\nBody`;
+  const rewrite = (markdown) => {
+    const { data } = parseFrontmatter(markdown);
+    return { data, next: replaceFrontmatter(markdown, { ...data, genre: "x", tags: [...data.tags].reverse() }) };
+  };
+
   test("splits a comment off a long run of spaces in linear time", () => {
     const spaces = " ".repeat(300000);
-    const markdown = `---\ngenre: a${spaces}b #c\nnote: "a"${spaces}x #c\ntags: [${Array.from({ length: 50000 }, (_, index) => `t${index}`).join(", ")}]\n---\nBody`;
     const started = performance.now();
-    const { data } = parseFrontmatter(markdown);
+    const { data, next } = rewrite(longFrontmatter(300000));
     expect(data.genre).toBe(`a${spaces}b`);
     expect(data.note).toBe(`"a"${spaces}x`);
-    const next = replaceFrontmatter(markdown, { ...data, genre: "x", tags: [...data.tags].reverse() });
     expect(next).toContain("genre: x #c\n");
     expect(next).toContain("tags: [t49999, t49998, ");
-    // Linear work takes milliseconds; the quadratic version took minutes.
+    // A backstop only: the quadratic version took minutes, and the growth
+    // check below shows that as well.
     expect(performance.now() - started).toBeLessThan(10000);
+    expectLinearTime((markdown) => rewrite(markdown), longFrontmatter, { length: 300000 });
   });
 
   test("quotes a flow list's first entry when it starts with the word TODO", () => {

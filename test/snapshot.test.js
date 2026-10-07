@@ -184,28 +184,30 @@ describe("story snapshot", () => {
     expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "draft"]);
   });
 
-  test("keeps each file's permissions, and keeps .snapshots/ out of git unless its .gitignore is deleted", () => {
+  test.skipIf(CHMOD_IGNORED)("keeps each file's permissions in a snapshot", () => {
     const { cwd, root } = project();
     const notes = path.join(root, "research", "private.md");
     writeMarkdown(notes, "title: Private");
     fs.appendFileSync(path.join(root, ".gitignore"), "research/private.md\n");
-    const chapter = path.join(root, "chapters", "chapter-01.md");
-    if (!CHMOD_IGNORED) {
-      fs.chmodSync(notes, 0o600);
-      fs.chmodSync(chapter, 0o640);
-      fs.chmodSync(path.join(root, "chapters", "chapter-02.md"), 0o444);
-    }
+    fs.chmodSync(notes, 0o600);
+    fs.chmodSync(path.join(root, "chapters", "chapter-01.md"), 0o640);
+    fs.chmodSync(path.join(root, "chapters", "chapter-02.md"), 0o444);
     expect(invoke(cwd, ["snapshot", "draft", "--path", root]).code).toBe(0);
     const dir = path.join(root, ".snapshots", "draft");
-    if (!CHMOD_IGNORED) {
-      expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o600);
-      expect(fs.statSync(path.join(dir, "chapters", "chapter-01.md")).mode & 0o777).toBe(0o640);
-      // Read-only for everyone, but its owner can replace it.
-      expect(fs.statSync(path.join(dir, "chapters", "chapter-02.md")).mode & 0o777).toBe(0o644);
-      fs.chmodSync(notes, 0o640);
-      expect(invoke(cwd, ["snapshot", "draft", "--force", "--path", root]).code).toBe(0);
-      expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o640);
-    }
+    expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(path.join(dir, "chapters", "chapter-01.md")).mode & 0o777).toBe(0o640);
+    // Read-only for everyone, but its owner can replace it.
+    expect(fs.statSync(path.join(dir, "chapters", "chapter-02.md")).mode & 0o777).toBe(0o644);
+    fs.chmodSync(notes, 0o640);
+    expect(invoke(cwd, ["snapshot", "draft", "--force", "--path", root]).code).toBe(0);
+    expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o640);
+  });
+
+  test("keeps .snapshots/ out of git unless its .gitignore is deleted", () => {
+    const { cwd, root } = project();
+    writeMarkdown(path.join(root, "research", "private.md"), "title: Private");
+    fs.appendFileSync(path.join(root, ".gitignore"), "research/private.md\n");
+    expect(invoke(cwd, ["snapshot", "draft", "--path", root]).code).toBe(0);
     const ignore = path.join(root, ".snapshots", ".gitignore");
     expect(fs.readFileSync(ignore, "utf8")).toBe("# Snapshots copy every markdown file, including ones git ignores, so git\n# ignores them. Delete this file to commit your snapshots.\n*\n");
     git(root, "init", "-q");

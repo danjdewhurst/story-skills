@@ -32,7 +32,9 @@ describe("init .gitignore", () => {
     fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1\n\nThe tide came in.\n");
     const { root } = importManuscript({ cwd, source: "draft.md", title: "Salt Road" });
     const { outFile } = buildBook(root);
-    expect(path.relative(root, outFile).split(path.sep)[0]).toBe("dist");
+    const folder = path.relative(root, outFile).split(path.sep)[0];
+    expect(folder).toBe("dist");
+    expect(fs.readFileSync(path.join(root, ".gitignore"), "utf8").split("\n")).toContain(`${folder}/`);
   });
 
   test("--force adds a missing .gitignore to an existing project", () => {

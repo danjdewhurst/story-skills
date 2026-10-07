@@ -473,10 +473,7 @@ describe("raw reads (#548)", () => {
 });
 
 describe("atomic writes (#190, #197)", () => {
-  test("a write that fails partway leaves the chapter whole and names it", () => {
-    if (process.platform === "win32") {
-      return;
-    }
+  test.skipIf(process.platform === "win32")("a write that fails partway leaves the chapter whole and names it", () => {
     const root = safetyProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     const chapter = path.join(root, "chapters", "chapter-01.md");
@@ -569,10 +566,7 @@ describe("atomic writes (#190, #197)", () => {
     expect(Buffer.byteLength(temporary[0], "utf8")).toBeLessThanOrEqual(255);
   });
 
-  test("a rewrite keeps a mode the umask would have narrowed", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a rewrite keeps a mode the umask would have narrowed", () => {
     const dir = makeTempDir();
     const target = path.join(dir, "chapter.md");
     fs.writeFileSync(target, "old");
@@ -737,10 +731,7 @@ describe("atomic writes (#190, #197)", () => {
     expect(fs.readdirSync(dir)).toEqual(["chapter.md"]);
   });
 
-  test("a read-only file stays refused", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a read-only file stays refused", () => {
     const dir = makeTempDir();
     const target = path.join(dir, "chapter.md");
     fs.writeFileSync(target, "old");
@@ -1027,7 +1018,7 @@ describe("sweep fixes", () => {
     fs.rmSync(path.join(root, "plot", "timeline.md"));
     fs.symlinkSync("/dev/zero", path.join(root, "plot", "timeline.md"));
     // In a child, so a read that never ends fails the test rather than
-    // stalling the suite. The child times its own calls, so the 5 s bound
+    // stalling the suite. The child times its own calls, so the 20 s backstop
     // covers the work and not the child's start-up.
     const script = `
       const story = await import(${JSON.stringify(pathToFileURL(path.join(SRC, "story.js")).href)});
@@ -1045,7 +1036,7 @@ describe("sweep fixes", () => {
     expect(outcome.total).toBe(0);
     expect(outcome.linksOk).toBe(false);
     expect(outcome.errors.join("\n")).toContain("through symlink");
-    expect(outcome.elapsed).toBeLessThan(5000);
+    expect(outcome.elapsed).toBeLessThan(20000);
   });
 
   test("--out through a hard link replaces the link instead of the chapter", () => {
@@ -1072,10 +1063,7 @@ describe("sweep fixes", () => {
     expect(fs.readdirSync(dir)).toEqual(["target"]);
   });
 
-  test("writes keep file permissions and refuse read-only files", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("writes keep file permissions and refuse read-only files", () => {
     const root = sweepProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     appendProse(root, "chapters/chapter-01.md", "Some words here.");
@@ -1087,7 +1075,19 @@ describe("sweep fixes", () => {
     expect(fs.statSync(chapter).mode & 0o777).toBe(0o600);
   });
 
-  test("a hard-linked target is replaced with its permissions kept", () => {
+  test("a hard-linked target is replaced, and its other link keeps the old text", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outDir = makeTempDir();
+    const target = path.join(outDir, "book.md");
+    fs.writeFileSync(target, "old");
+    fs.linkSync(target, path.join(outDir, "other.md"));
+    exportManuscript(root, { out: target });
+    expect(fs.readFileSync(path.join(outDir, "other.md"), "utf8")).toBe("old");
+    expect(fs.readdirSync(outDir).sort()).toEqual(["book.md", "other.md"]);
+  });
+
+  test.skipIf(CHMOD_IGNORED)("a hard-linked target keeps its mode when it is replaced", () => {
     const root = sweepProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     const outDir = makeTempDir();
@@ -1096,17 +1096,10 @@ describe("sweep fixes", () => {
     fs.chmodSync(target, 0o640);
     fs.linkSync(target, path.join(outDir, "other.md"));
     exportManuscript(root, { out: target });
-    if (!CHMOD_IGNORED) {
-      expect(fs.statSync(target).mode & 0o777).toBe(0o640);
-    }
-    expect(fs.readFileSync(path.join(outDir, "other.md"), "utf8")).toBe("old");
-    expect(fs.readdirSync(outDir).sort()).toEqual(["book.md", "other.md"]);
+    expect(fs.statSync(target).mode & 0o777).toBe(0o640);
   });
 
-  test("a failed hard-link replacement leaves no temporary file", async () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a failed hard-link replacement leaves no temporary file", async () => {
     const { writeFile } = await import("../src/story.js");
     const dir = makeTempDir();
     const target = path.join(dir, "book.md");
@@ -1121,10 +1114,7 @@ describe("sweep fixes", () => {
     }
   });
 
-  test("a failed hard-link replacement names the target", async () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("a failed hard-link replacement names the target", async () => {
     const { writeFile } = await import("../src/story.js");
     const dir = makeTempDir();
     const target = path.join(dir, "book.md");

@@ -10,7 +10,7 @@ import { OPTIONS, optionFamily } from "../src/options.js";
 import { PROSE_THRESHOLDS, proseThresholds } from "../src/prose.js";
 import { BUILD_EXTENSIONS } from "../src/build.js";
 import { createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearGrowth, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
@@ -408,19 +408,24 @@ describe("cli-defaults", () => {
     expect(unknown.code).toBe(2);
     expect(unknown.err).toStartWith("Unknown PDF engine: nonsense. Name one of");
     expect(unknown.err).not.toContain("cli-defaults");
-    // Chrome in /Applications on macOS (as on CI runners) would count as an engine.
-    if (process.platform !== "darwin") {
-      const none = withEnv(noEngines, () => invoke(cwd, ["build", root]));
-      expect(none.code).toBe(4);
-      expect(none.err).toStartWith("No PDF engine found on PATH");
-      expect(none.err).toEndWith("(story.md cli-defaults set --pdf)\n");
-    }
     const storyFile = path.join(root, "story.md");
     fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace("    pdf: true\n", "    pdf: true\n    pdf-engine: weasyprint\n"), "utf8");
     const missing = withEnv(noEngines, () => invoke(cwd, ["build", root]));
     expect(missing.code).toBe(4);
     expect(missing.err).toStartWith("PDF engine weasyprint was not found on PATH");
     expect(missing.err).toEndWith("(story.md cli-defaults set --pdf-engine weasyprint)\n");
+  });
+
+  // Chrome in /Applications on macOS (as on CI runners) would count as an engine.
+  test.skipIf(process.platform === "darwin")("a build with no PDF engine names the default --pdf it came from (#566)", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words here.");
+    configure(root, "cli-defaults:\n  - command: build\n    format: print\n    pdf: true");
+    const noEngines = { PATH: makeTempDir(), ProgramFiles: "", "ProgramFiles(x86)": "", LOCALAPPDATA: "" };
+    const none = withEnv(noEngines, () => invoke(cwd, ["build", root]));
+    expect(none.code).toBe(4);
+    expect(none.err).toStartWith("No PDF engine found on PATH");
+    expect(none.err).toEndWith("(story.md cli-defaults set --pdf)\n");
   });
 
   test("defaults of one linked group all apply, unless the command line gives one (#566)", () => {
@@ -441,10 +446,7 @@ describe("cli-defaults", () => {
     expect(grid.code).toBe(2);
     expect(JSON.parse(grid.out).diagnostics[0].message).toEndWith(`(story.md cli-defaults set --format ${"x".repeat(40000)})`);
     // An error message holding user text is not searched, so many unclosed [-- cost nothing.
-    const where = "[-- ".repeat(100000);
-    const started = performance.now();
-    const list = invoke(cwd, ["list", "chapters", "--where", where, "--path", root]);
-    expect(performance.now() - started).toBeLessThan(2000);
+    const list = expectLinearGrowth((where) => invoke(cwd, ["list", "chapters", "--where", where, "--path", root]), (n) => "[-- ".repeat(n / 4), 400000);
     expect(list.code).toBe(2);
     expect(list.err).toStartWith("Cannot read --where [-- [-- ");
   });

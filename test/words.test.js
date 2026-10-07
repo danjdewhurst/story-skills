@@ -9,7 +9,7 @@ import { splitWords, wordCount } from "../src/markdown.js";
 import { tokenizeDocument } from "../src/similarity.js";
 import { createStoryProject, synopsisBook } from "../src/story.js";
 import { segmentRun, wordSpans } from "../src/words.js";
-import { makeTempDir } from "./helpers.js";
+import { expectLinearTime, makeTempDir, NODE_ON_PATH } from "./helpers.js";
 
 // Sentences whose dictionary segmentation is the same under Bun and Node 18,
 // 20, 22, and 24: short, common words with no ambiguous split.
@@ -104,12 +104,7 @@ describe("#307 scripts written without spaces", () => {
     expect(text).toContain(`Logline: ${THAI}`);
   });
 
-  test("Node splits them the same way, and a long run quickly", () => {
-    const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
-    if (probe.error || probe.status !== 0) {
-      console.warn("Skipping the Node segmentation check: node is not on PATH.");
-      return;
-    }
+  test.skipIf(!NODE_ON_PATH)("Node splits them the same way, and a long run quickly", () => {
     const markdown = pathToFileURL(path.join(import.meta.dirname, "..", "src", "markdown.js")).href;
     // The long run is timed against one a quarter of its length, each the
     // fastest of three runs taken in turn. Windowed, it takes about four
@@ -170,9 +165,8 @@ describe("#209 numbers, times, URLs, and emails are one word", () => {
   });
 
   test("stays linear on long runs", () => {
-    const started = performance.now();
-    wordCount(`${"a.".repeat(50000)} ${"b".repeat(100000)} ${"x_".repeat(50000)}`);
-    expect(performance.now() - started).toBeLessThan(2000);
+    const make = (n) => `${"a.".repeat(n / 6)} ${"b".repeat(n / 3)} ${"x_".repeat(n / 6)}`;
+    expectLinearTime((text) => wordCount(text), make, { length: 200000 });
   });
 });
 

@@ -6,7 +6,7 @@ import { compareSimilarity, formatSimilarity, similarityOptions, tokenizeDocumen
 import { wordCount } from "../src/markdown.js";
 import { createStoryProject, similarityReport, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearTime, git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -136,11 +136,10 @@ describe("similarity matching", () => {
   });
 
   test("highly repetitive text on both sides stays fast", () => {
-    const the = Array.from({ length: 20000 }, () => "the").join(" ");
-    const started = performance.now();
-    const report = compareSimilarity([doc("c.md", the)], [doc("r.txt", the)], { minWords: 8, label: "r" });
-    expect(report.passages.map((passage) => passage.words)).toEqual([20000]);
-    expect(performance.now() - started).toBeLessThan(3000);
+    const compare = (text) => compareSimilarity([doc("c.md", text)], [doc("r.txt", text)], { minWords: 8, label: "r" });
+    const the = (n) => Array.from({ length: n / 4 }, () => "the").join(" ");
+    expect(compare(the(80000)).passages.map((passage) => passage.words)).toEqual([20000]);
+    expectLinearTime((text) => compare(text), the, { length: 80000 });
   });
 
   test("a run across paragraphs names both labels and joins the text with a slash", () => {
@@ -423,8 +422,8 @@ describe("story similarity", () => {
     expect(report.words).toBe(150000);
     expect(report.reference.words).toBe(300000);
     expect(report.passages.map((passage) => [passage.file, passage.words, passage.reference.file])).toEqual([["chapters/chapter-18.md", 30, "book-2.txt"]]);
-    // The budget allows for a slow CI runner; locally this takes well under
-    // a second.
-    expect(elapsed).toBeLessThan(5000);
+    // A backstop for a run that never ends. It leaves room for a loaded CI
+    // runner: locally this takes well under a second.
+    expect(elapsed).toBeLessThan(20000);
   });
 });

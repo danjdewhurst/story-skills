@@ -5,7 +5,7 @@ import path from "node:path";
 import { shunnHtml, writeDocx } from "../src/packaging.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, computeWordCounts, createStoryProject, exportManuscript, splitChapter, validateProject } from "../src/story.js";
-import { makeTempDir, messages, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, messages, NODE_ON_PATH, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
 
 // Collections and anthologies (#473): a chapter's own `author` and the
 // book's `editor`.
@@ -131,12 +131,8 @@ describe("collection and anthology authors (#473)", () => {
     expect(entries["word/styles.xml"]).toContain(`<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/></w:rPr></w:style>`);
   });
 
-  test("a credited DOCX is byte for byte the same from Bun, Node, and the Node fallback (#518)", () => {
-    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
-    if (spawnSync("node", ["--version"]).status !== 0) {
-      console.warn("Skipping the cross-runtime DOCX credit test: node is not on PATH.");
-      return;
-    }
+  // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+  test.skipIf(!NODE_ON_PATH)("a credited DOCX is byte for byte the same from Bun, Node, and the Node fallback (#518)", () => {
     const root = anthology("language: de\nauthors:\n  - Ada Writer\n  - Bo Two\neditor: Cara Editor\n");
     const built = fs.readFileSync(buildBook(root, { format: "docx", out: "dist/bun.docx" }).outFile);
     expect(built.length).toBeGreaterThan(0);

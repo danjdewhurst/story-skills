@@ -22,7 +22,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages, CHMOD_IGNORED } from "./helpers.js";
+import { makeTempDir, memoryIo, writeMarkdown, messages, CHMOD_IGNORED, SYMLINKS_SUPPORTED } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -416,33 +416,23 @@ describe("series traversal limits", () => {
     expect(messages(report.errors).join("\n")).toContain("points outside the series directory");
   });
 
-  test("refuses links that escape the scope through a symlink", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("refuses links that escape the scope through a symlink", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Linked");
     const outside = makeTempDir();
     const outsideBook = createStoryProject({ title: "Far Away", cwd: outside }).root;
-    try {
-      fs.symlinkSync(outsideBook, path.join(cwd, "sneaky"), "dir");
-    } catch {
-      console.warn("Skipping series symlink test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(outsideBook, path.join(cwd, "sneaky"), "dir");
     setStory(root, { follows: ["../sneaky"] });
     const report = seriesReport(root);
     expect(report.ok).toBe(false);
     expect(messages(report.errors).join("\n")).toContain("points outside the series directory");
   });
 
-  test("visits a book reached through a symlink alias only once", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("visits a book reached through a symlink alias only once", () => {
     const cwd = makeTempDir();
     const root = book(cwd, "Linked");
     const other = book(cwd, "Other");
-    try {
-      fs.symlinkSync(other, path.join(cwd, "alias"), "dir");
-    } catch {
-      console.warn("Skipping series symlink test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(other, path.join(cwd, "alias"), "dir");
     setStory(root, { follows: ["../other", "../alias"] });
     setStory(other, { precedes: ["../linked"] });
     const report = seriesReport(root);
@@ -476,17 +466,12 @@ describe("series traversal limits", () => {
     expect(messages(report.errors).join("\n")).toContain("../book-one: Refusing to use project directory outside root");
   });
 
-  test("orders a book reached through a symlink and through its real path as one book", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("orders a book reached through a symlink and through its real path as one book", () => {
     const cwd = makeTempDir();
     const opening = book(cwd, "Opening");
     const middle = book(cwd, "Zeta");
     const last = book(cwd, "Alpha");
-    try {
-      fs.symlinkSync(middle, path.join(cwd, "zeta-alias"), "dir");
-    } catch {
-      console.warn("Skipping series alias test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(middle, path.join(cwd, "zeta-alias"), "dir");
     setStory(opening, { precedes: ["../zeta-alias", "../alpha"] });
     setStory(last, { follows: ["../zeta"] });
 

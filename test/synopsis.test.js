@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { wordCount } from "../src/markdown.js";
 import { truncateWords } from "../src/build.js";
 import { createEntity, createStoryProject, synopsisBook } from "../src/story.js";
-import { expectLinearGrowth, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearGrowth, expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function synopsisProject(title = "The Long Valley") {
   const cwd = makeTempDir();
@@ -294,10 +294,8 @@ describe("#438 truncation drops trailing headings and blank lines quickly", () =
 
   test("a long run of heading and tab lines before the cut finishes fast", () => {
     // The old trailing-lines regex backtracked exponentially on this input.
-    const text = `a\n${"#\t\n".repeat(5000)}b c`;
-    const started = performance.now();
-    expect(truncateWords(text, 2)).toBe(`a\n${"#\t\n".repeat(5000)}b…\n`);
-    expect(performance.now() - started).toBeLessThan(1000);
+    expect(truncateWords(`a\n${"#\t\n".repeat(5000)}b c`, 2)).toBe(`a\n${"#\t\n".repeat(5000)}b…\n`);
+    expectLinearTime((text) => truncateWords(text, 2), (n) => `a\n${"#\t\n".repeat(n / 3)}b c`, { length: 15000 });
   });
 });
 
