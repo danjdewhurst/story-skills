@@ -1016,6 +1016,26 @@ word-count: 0
     expect(docx).toContain('<w:t xml:space="preserve">He left—then wrote to https://example.com/a_b.</w:t>');
   });
 
+  test("validate warns about footnotes, which builds print as written (#592)", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Footnotes", force: false });
+    const chapterPath = path.join(created.root, "chapters", "chapter-01.md");
+    const chapter = (prose) => writeMarkdown(chapterPath, "title: One\nnumber: 1\nstatus: draft", `\n## Chapter Text\n\n${prose}`);
+    const warnings = () => validateProject(created.root).warnings.filter((warning) => warning.code === "unsupported-footnote").map((warning) => [warning.message, warning.file]);
+    chapter("He left.[^1]\n\n[^1]: The note.\n\n> She stayed.[^b]\n>\n> [^b]: Another.\n\n`[^c]: code` <!-- [^d]: a comment -->\n");
+    expect(warnings()).toEqual([[
+      "chapters/chapter-01.md has 2 footnotes (lines 11, 15): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work each note into the prose or a back-matter page",
+      "chapters/chapter-01.md"
+    ]]);
+    const epub = readArchiveText(buildBook(created.root, { format: "epub" }).outFile);
+    expect(epub).toContain("<p>He left.[^1]</p><p>[^1]: The note.</p>");
+    chapter("He left.[^1]\n\n[^1]: The note.\n");
+    expect(warnings()[0][0]).toBe("chapters/chapter-01.md has a footnote (line 11): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work the note into the prose or a back-matter page");
+    // A marker with no definition is text in a markdown viewer too.
+    chapter("Item [^1] on the list.\n");
+    expect(warnings()).toEqual([]);
+  });
+
   test("rename leaves overlapping entity ids and prose words intact", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });

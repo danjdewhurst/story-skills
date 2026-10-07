@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, characterCount, countTodoMarkers, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, characterCount, countTodoMarkers, countedText, extractSection, flattenHeadings, footnoteLines, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
 import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
@@ -469,6 +469,31 @@ describe("inline markdown edge cases (#592)", () => {
     // space like the character itself.
     expect(splitWords("one &#xE000; two  three https://x.com")).toEqual(["one", "two", "three", "https://x.com"]);
     expect(characterCount("&mdash;&#x4E00;&nbsp;&#12354;")).toBe(3);
+  });
+
+  test("finds footnote definitions in the prose, by line", () => {
+    const prose = [
+      "## Chapter Notes",
+      "",
+      "[^0]: A note before the prose.",
+      "",
+      "## Chapter Text",
+      "",
+      "He left.[^1] A marker alone [^2] is no footnote.",
+      "",
+      "[^1]: The note.",
+      "> [^long note]: Quoted.",
+      "<!-- [^3]: In a comment. -->",
+      "```",
+      "[^4]: In a fence.",
+      "```",
+      "`[^5]: In a code span.`",
+      "[^]: Empty.",
+      ""
+    ].join("\n");
+    expect(footnoteLines(prose)).toEqual([8, 9]);
+    expect(footnoteLines(prose.replace(/\n/g, "\r\n"))).toEqual([8, 9]);
+    expectLinearTime(footnoteLines, (n) => `[^${"[^".repeat(n / 2)}`);
   });
 
   test("link destinations, titles, and autolinks are read in linear time", () => {

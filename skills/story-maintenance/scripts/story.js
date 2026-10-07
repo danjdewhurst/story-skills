@@ -579,6 +579,7 @@ var FINDING_CODES = {
   "todo-markers": "warning",
   "unclosed-comment": "warning",
   "ambiguous-scene-break": "warning",
+  "unsupported-footnote": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
   "beat-too-long": "warning",
@@ -10565,6 +10566,17 @@ function setextSceneBreakLines(markdownBody) {
   }
   return found;
 }
+var FOOTNOTE_DEFINITION = /^[ \t>]*\[\^[^\]\n]+\]:/;
+function footnoteLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, `
+`);
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const first = masked.slice(0, start).split(`
+`).length - 1;
+  return masked.slice(start).split(`
+`).flatMap((line, index) => FOOTNOTE_DEFINITION.test(line) ? [first + index] : []);
+}
 var CJK_CHARACTER2 = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
 var WIDE_PUNCTUATION = /^[\u00b7\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
 var COMBINING = /^[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\u302a-\u302f\u3099\u309a\ufe00-\ufe0f\ufe20-\ufe2f\u{e0100}-\u{e01ef}]$/u;
@@ -13861,7 +13873,8 @@ function scanProject(root) {
       ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
-      setextBreaks: setextBreaks(markdown),
+      setextBreaks: fileLines(markdown, setextSceneBreakLines(markdown.body)),
+      footnotes: fileLines(markdown, footnoteLines(markdown.body)),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       releaseDate: data["release-date"],
@@ -15200,10 +15213,10 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   }
   return entities;
 }
-function setextBreaks(markdown) {
+function fileLines(markdown, indexes) {
   const frontmatterLines = markdown.rawMarkdown.slice(0, markdown.rawMarkdown.length - markdown.body.length).split(`
 `).length - 1;
-  return setextSceneBreakLines(markdown.body).map((index) => frontmatterLines + index + 1);
+  return indexes.map((index) => frontmatterLines + index + 1);
 }
 function hasPostHocNotes(body) {
   const chapterText = /^## Chapter Text\s*$/im.exec(body);
@@ -21959,6 +21972,10 @@ function validateProjectOf(project) {
     if (chapter.setextBreaks.length > 0) {
       const one = chapter.setextBreaks.length === 1;
       warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
+    }
+    if (chapter.footnotes.length > 0) {
+      const one = chapter.footnotes.length === 1;
+      warnings.push(warn("unsupported-footnote", `${file} has ${one ? "a footnote" : `${chapter.footnotes.length} footnotes`} (${one ? "line" : "lines"} ${chapter.footnotes.join(", ")}): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work ${one ? "the note" : "each note"} into the prose or a back-matter page`, file));
     }
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
