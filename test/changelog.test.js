@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { hasVersionSection, promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
-import { CHANGELOG_LEAD_LIMIT, checkChangelogEntries, checkChangelogVersion } from "../scripts/check-metadata.js";
+import { CHANGELOG_LEAD_LIMIT, checkChangelogEntries, checkChangelogVersion, shownLength } from "../scripts/check-metadata.js";
 import { changelogProblemFor, updateChangelog } from "../scripts/release.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -107,21 +107,64 @@ Intro.
   });
 
   // #605: entries were single paragraphs of up to 2,000 characters.
-  test("check:metadata keeps each entry's first line short and leaves sub-bullets alone", () => {
-    const link = `([#605](https://github.com/danjdewhurst/story-skills/issues/605${"/x".repeat(100)}))`;
-    const lead = "a".repeat(CHANGELOG_LEAD_LIMIT - "(#605)".length - 1);
-    const fits = changelog(`\n### Fixed\n\n- ${lead} ${link}\n  - ${"Detail. ".repeat(60)}\n    - ${"More. ".repeat(60)}\n\n`);
-    expect(checkChangelogEntries([], fits)).toEqual([]);
+  const failure = (line, length) =>
+    `CHANGELOG.md:${line} entry's lead is ${length} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`;
+  const fixed = (entries) => changelog(`\n### Fixed\n\n${entries}\n\n`);
+  const link = `([#605](https://github.com/danjdewhurst/story-skills/issues/605${"/x".repeat(100)}))`;
+  const lead = "a".repeat(CHANGELOG_LEAD_LIMIT - "(#605)".length - 1);
 
-    const tooLong = changelog(`\n### Fixed\n\n- ${lead}b ${link}\n* ${"c".repeat(250)}\n\n`);
-    expect(checkChangelogEntries([], tooLong)).toEqual([
-      `CHANGELOG.md:9 entry's first line is ${CHANGELOG_LEAD_LIMIT + 1} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`,
-      `CHANGELOG.md:10 entry's first line is 250 characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`
-    ]);
-    expect(checkChangelogEntries([], tooLong.replaceAll("\n", "\r\n"))).toHaveLength(2);
+  test("check:metadata keeps each entry's lead short and leaves sub-bullets alone", () => {
+    const fits = fixed(`- ${lead} ${link}\n  - ${"Detail. ".repeat(60)}\n    - ${"More. ".repeat(60)}\n  1. ${"Step. ".repeat(60)}`);
+    expect(checkChangelogEntries([], fits)).toEqual([]);
+    expect(checkChangelogEntries([], fits.replaceAll("\n", "\r\n"))).toEqual([]);
+
+    const tooLong = fixed(`- ${lead}b ${link}\n* ${"c".repeat(250)}\n+ ${"d".repeat(250)}\n-\t${"e".repeat(250)}`);
+    const failures = [failure(9, CHANGELOG_LEAD_LIMIT + 1), failure(10, 250), failure(11, 250), failure(12, 250)];
+    expect(checkChangelogEntries([], tooLong)).toEqual(failures);
+    expect(checkChangelogEntries([], tooLong.replaceAll("\n", "\r\n"))).toEqual(failures);
   });
 
-  test("the repository changelog keeps every entry's first line short", () => {
+  test("the lead runs on through continuation lines up to a sub-bullet or a blank line", () => {
+    const words = (count) => "word ".repeat(count).trim();
+    // Wrapped onto an unindented line, onto an indented line that is no
+    // sub-bullet, and a short sentence with a long paragraph after it.
+    expect(checkChangelogEntries([], fixed(`- Short.\n${words(50)}`))).toEqual([failure(9, 256)]);
+    expect(checkChangelogEntries([], fixed(`- Short.\n  ${words(50)}\n  - Detail.`))).toEqual([failure(9, 256)]);
+    expect(checkChangelogEntries([], fixed(`- ${words(30)}\n${words(10)}\n  ${words(10)}`))).toEqual([failure(9, 249)]);
+    // A sub-bullet, a blank line, a heading, or the next entry ends the lead.
+    expect(checkChangelogEntries([], fixed(`- Short.\n  - ${words(50)}`))).toEqual([]);
+    expect(checkChangelogEntries([], fixed(`- Short.\n  * ${words(50)}\n  + ${words(50)}\n  2) ${words(50)}`))).toEqual([]);
+    expect(checkChangelogEntries([], fixed(`- Short.\n\n  ${words(50)}`))).toEqual([]);
+    expect(checkChangelogEntries([], fixed(`- Short.\n### Added\n${words(50)}`))).toEqual([]);
+    expect(checkChangelogEntries([], fixed(`- Short.\n- ${words(30)}`))).toEqual([]);
+  });
+
+  test("a link counts as its text, whatever brackets and parentheses it holds", () => {
+    expect(shownLength("[`story check [path]`](docs/cli-reference.md#story-check-path)")).toBe(20);
+    expect(shownLength("See [Foo](https://en.wikipedia.org/wiki/Foo_(bar)).")).toBe(8);
+    expect(shownLength("a [b [c] d](u) e")).toBe(11);
+    expect(shownLength("(see [a](b)")).toBe(6);
+    expect(shownLength("![cover](cover.png) art")).toBe(10);
+    // Not links: an escaped bracket, a bracket inside a code span, no target.
+    expect(shownLength("\\[x](y)")).toBe(7);
+    expect(shownLength("`[x](y)`")).toBe(8);
+    expect(shownLength("``a`b`` [x]")).toBe(11);
+    expect(shownLength("[a]( b")).toBe(6);
+
+    const linked = `- ${"a".repeat(167)} [\`story check [path]\`](docs/cli-reference.md#story-check-path)`;
+    expect(shownLength(linked.slice(2))).toBe(188);
+    expect(checkChangelogEntries([], fixed(linked))).toEqual([]);
+  });
+
+  test("measuring a lead stays fast on unmatched brackets, parentheses, and backticks", () => {
+    for (const text of ["[".repeat(80000), "[a](".repeat(20000), "`[".repeat(40000), "(".repeat(80000), "]((".repeat(30000)]) {
+      const started = performance.now();
+      expect(checkChangelogEntries([], fixed(`- ${text}`))).toHaveLength(1);
+      expect(performance.now() - started).toBeLessThan(1000);
+    }
+  });
+
+  test("the repository changelog keeps every entry's lead short", () => {
     expect(checkChangelogEntries([], fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"))).toEqual([]);
   });
 

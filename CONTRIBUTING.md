@@ -65,7 +65,7 @@ Write each entry so a reader can scan the list:
 
 - Lead with one short sentence that says what changed for users, not how it was built, and end that line with the issue or pull request link.
 - Put the detail in indented sub-bullets, one idea each: the flags, fields, codes, and messages involved, what happened before, and anything users must do. Leave implementation detail to the linked issue.
-- Keep the first line to 200 characters, not counting link targets. `bun run check:metadata` fails on a longer one.
+- Keep the lead, everything before the first sub-bullet or blank line, to 200 characters, not counting link targets. `bun run check:metadata` fails on a longer one.
 
 ```markdown
 - `story snapshot --restore` now removes the folders its deletes leave empty. ([#524](https://github.com/danjdewhurst/story-skills/issues/524))

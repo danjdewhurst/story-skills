@@ -253,22 +253,105 @@ export function checkChangelogVersion(failures, packageVersion, changelog) {
 
 // Each changelog entry leads with one short sentence saying what changed for
 // users, and the detail goes in indented sub-bullets, so a reader can scan the
-// top-level list (#605). A link counts as its text, since its target is not shown.
+// top-level list (#605). The lead is the entry's first paragraph: the bullet
+// line and any lines that continue it, up to a sub-bullet or a blank line.
 export const CHANGELOG_LEAD_LIMIT = 200;
 
+const ENTRY = /^[-*+][ \t]/;
+const LEAD_ENDS = /^(?:[ \t]+(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)| {0,3}#{1,6}(?:[ \t]|$)|[-*+][ \t]|\s*$)/;
+
 export function checkChangelogEntries(failures, changelog) {
-  changelog.split(/\r?\n/).forEach((line, index) => {
-    if (!/^[-*] /.test(line)) {
-      return;
+  const lines = changelog.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    if (!ENTRY.test(lines[index])) {
+      continue;
     }
-    const length = line.slice(2).replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").length;
+    const lead = [lines[index].slice(2).trim()];
+    for (let next = index + 1; next < lines.length && !LEAD_ENDS.test(lines[next]); next++) {
+      lead.push(lines[next].trim());
+    }
+    const length = shownLength(lead.join(" "));
     if (length > CHANGELOG_LEAD_LIMIT) {
       failures.push(
-        `CHANGELOG.md:${index + 1} entry's first line is ${length} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`
+        `CHANGELOG.md:${index + 1} entry's lead is ${length} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`
       );
     }
-  });
+  }
   return failures;
+}
+
+// The characters a reader sees, with each inline link `[text](target)` shown
+// as its text. A bracket inside a code span is not markup, link text may hold
+// nested brackets, and a target may hold balanced parentheses. Every step is
+// one pass over the text, so a line of unmatched brackets stays fast.
+export function shownLength(text) {
+  const size = text.length;
+  // Code spans: a run of backticks closes at the next run of the same length.
+  const runs = [];
+  for (let i = 0; i < size; i++) {
+    if (text[i] === "`") {
+      const start = i;
+      while (text[i + 1] === "`") {
+        i++;
+      }
+      runs.push({ start, length: i - start + 1 });
+    }
+  }
+  const closer = new Array(runs.length).fill(-1);
+  const lastByLength = new Map();
+  for (let k = runs.length - 1; k >= 0; k--) {
+    closer[k] = lastByLength.get(runs[k].length) ?? -1;
+    lastByLength.set(runs[k].length, k);
+  }
+  const codeEnd = new Int32Array(size + 1).fill(-1);
+  for (let k = 0; k < runs.length; k++) {
+    if (closer[k] >= 0) {
+      const close = runs[closer[k]];
+      codeEnd[runs[k].start] = close.start + close.length;
+      k = closer[k];
+    }
+  }
+  // Pair brackets and parentheses outside code spans, skipping escaped ones.
+  const bracketClose = new Int32Array(size + 1).fill(-1);
+  const parenClose = new Int32Array(size + 1).fill(-1);
+  const brackets = [];
+  const parens = [];
+  for (let i = 0; i < size; i++) {
+    if (codeEnd[i] >= 0) {
+      i = codeEnd[i] - 1;
+    } else if (text[i] === "\\") {
+      i++;
+    } else if (text[i] === "[") {
+      brackets.push(i);
+    } else if (text[i] === "]" && brackets.length > 0) {
+      bracketClose[brackets.pop()] = i;
+    } else if (text[i] === "(") {
+      parens.push(i);
+    } else if (text[i] === ")" && parens.length > 0) {
+      parenClose[parens.pop()] = i;
+    }
+  }
+  // Count, dropping each link's brackets and target.
+  const skipTo = new Int32Array(size + 1).fill(-1);
+  let shown = 0;
+  for (let i = 0; i < size; ) {
+    if (skipTo[i] >= 0) {
+      i = skipTo[i];
+    } else if (codeEnd[i] >= 0) {
+      shown += codeEnd[i] - i;
+      i = codeEnd[i];
+    } else if (text[i] === "\\") {
+      shown += Math.min(2, size - i);
+      i += 2;
+    } else if (text[i] === "[" && bracketClose[i] >= 0 && text[bracketClose[i] + 1] === "(" && parenClose[bracketClose[i] + 1] >= 0) {
+      skipTo[bracketClose[i]] = parenClose[bracketClose[i] + 1] + 1;
+      i++;
+    } else {
+      shown++;
+      i++;
+    }
+  }
+  return shown;
 }
 
 export function checkMarketplaces({ packageName, packageVersion, claudeMarketplace, agentsMarketplace, exists }) {
