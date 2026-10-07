@@ -187,7 +187,7 @@ story --version
 0.22.1
 ```
 
-The skills look for the CLI in this order: `story`, then `node <checkout>/bin/story.js` from a Story Skills checkout, then the bundled `scripts/story.js` run with Node, each run from the project folder. If none is available, they make the same changes by hand. The rest of this page writes `story`; substitute whichever form you use. Every command and option is listed in the [CLI reference](cli-reference.md).
+The skills look for the CLI in this order: `story`, then the bundled `scripts/story.js` run with Node from the project folder. They use a Story Skills checkout's `bin/story.js` instead only when you name the checkout or the agent is working in it. If none is available, they make the same changes by hand. The rest of this page writes `story`; substitute whichever form you use. Every command and option is listed in the [CLI reference](cli-reference.md).
 
 ## Update, pin, or remove
 

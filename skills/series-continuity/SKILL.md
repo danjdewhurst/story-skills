@@ -140,7 +140,7 @@ story check .
 story series .
 ```
 
-If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning.
+If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root.
 
 ## Conventions
 

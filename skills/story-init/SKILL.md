@@ -51,13 +51,13 @@ The story id recorded in every registry is the kebab-case form of the title (`--
 
 `init` also writes a `.gitignore` listing `dist/` (build output), `.story.lock`, leftover `.*.story-*.tmp` and `.story-*.tmp` files, and OS and editor swap files, but only when the project has none. It never edits an existing `.gitignore`; if it prints `note: .gitignore was kept and does not ignore dist/`, tell the user and offer to add a `dist/` line (or remove a `!dist/...` negation).
 
-If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning. For example, with the skills installed in `~/.claude/skills`, run this from the folder that will hold the new project:
+If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root. Skills live in different places for each agent and install method, so do not guess a path: resolve `../story-maintenance/scripts/story.js` against the folder that holds this `SKILL.md`. With `<skills>` standing for the absolute path of the folder that holds this skill's folder, run the same `init` from the folder that will hold the new project, with each value quoted as above:
 
 ```shell
-node ~/.claude/skills/story-maintenance/scripts/story.js init "{Title}"
+node <skills>/story-maintenance/scripts/story.js init '{Title}' --form '{form}' --genre '{genre}' --sub-genre '{sub-genre}' --setting-era '{era}' --pov '{pov-style}' --tense '{tense}' --synopsis '{synopsis}' --theme '{theme-1}' --theme '{theme-2}'
 ```
 
-If neither command is available, create the files manually using the steps below.
+If no CLI is available, create the files manually using the steps below.
 
 2. Create the folder structure at the current working directory:
 
@@ -279,7 +279,7 @@ story wordcount . --write
 story check .
 ```
 
-If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning.
+If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root.
 
 ## Reference Files
 

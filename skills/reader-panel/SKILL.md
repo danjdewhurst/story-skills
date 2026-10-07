@@ -163,7 +163,7 @@ user plainly that the notes are simulated, and which personas ran.
 
 ## CLI Maintenance
 
-Use the Story CLI when it is available. If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning. If no CLI is available, read the chapters in range directly and cite chapter and paragraph positions by hand.
+Use the Story CLI when it is available. If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root. If no CLI is available, read the chapters in range directly and cite chapter and paragraph positions by hand.
 
 The CLI does not read `feedback/`, so panel files never cause validation
 errors. Run `story build . --format html --stamp panel-round-{N}` for the

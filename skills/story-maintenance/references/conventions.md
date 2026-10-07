@@ -30,4 +30,4 @@ These conventions apply across all story skills. Every `SKILL.md` links here and
 ## Scripts
 
 - **Markdown-first artifacts** - create and edit story content directly in the target `.md` files. Do not create project-local build scripts, generator scripts, or bulk writer scripts (for example `build-*.js`) to emit story files.
-- **CLI helpers stay external** - the only JavaScript helper agents should run is the installed or bundled Story CLI (`story`, `bin/story.js` in a Story Skills checkout, or `story-maintenance/scripts/story.js`, run from the story project folder) for deterministic maintenance. Do not copy it into the user's story project, and remove any unavoidable scratch helper before finishing.
+- **CLI helpers stay external** - the only JavaScript helper agents should run is the installed or bundled Story CLI (`story`, or `story-maintenance/scripts/story.js` or a Story Skills checkout's `bin/story.js` run with Node from the story project folder) for deterministic maintenance. Do not copy it into the user's story project, and remove any unavoidable scratch helper before finishing.
