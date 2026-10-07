@@ -169,10 +169,10 @@ function failingRemove(pattern, run) {
   }
 }
 
-function readOnly(file, run) {
+function readOnly(file, run, message) {
   fs.chmodSync(file, 0o444);
   try {
-    expect(run).toThrow();
+    expect(run).toThrow(message);
   } finally {
     fs.chmodSync(file, 0o644);
   }
@@ -682,7 +682,7 @@ describe("reference handling in add, rename, remove, and move", () => {
 
     // A broken entity file still aborts with nothing changed.
     writeMarkdown(path.join(root, "worldbuilding", "artifacts", "odd.md"), "name: Odd\nmeta:\n  nested: yes");
-    expect(() => renameEntity(root, { kind: "character", id: "kael-storm", name: "Kael Three" })).toThrow();
+    expect(() => renameEntity(root, { kind: "character", id: "kael-storm", name: "Kael Three" })).toThrow("Cannot rename: fix this file first (story validate reports it):\n- worldbuilding/artifacts/odd.md: Unsupported frontmatter line: nested: yes (line 4)");
     expect(fs.existsSync(path.join(root, "characters", "kael-storm.md"))).toBe(true);
   });
 
@@ -1026,7 +1026,7 @@ describe("interrupted move (#191, #193, #194)", () => {
       return;
     }
     const root = book();
-    readOnly(path.join(root, "chapters", "chapter-03.md"), () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }));
+    readOnly(path.join(root, "chapters", "chapter-03.md"), () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }), "Cannot write to chapters/chapter-03.md (permission denied)");
     expect(moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }).id).toBe("chapter-03-scene-01");
     expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-02-scene-01.md", "chapter-03-scene-01.md"]);
     expect(scanProject(root).chapters.find((chapter) => chapter.id === "chapter-03").characters).toContain("edran");

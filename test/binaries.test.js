@@ -75,7 +75,7 @@ describe("standalone binaries (#296)", () => {
     const zip = fs.readFileSync(archive);
     zip[100] ^= 0xff;
     fs.writeFileSync(archive, zip);
-    expect(() => verifyZip(archive, "story.exe", executable)).toThrow();
+    expect(() => verifyZip(archive, "story.exe", executable)).toThrow(`${archive} does not unpack to story.exe`);
 
     // A stored entry is compared as it is.
     const random = noise(64);
