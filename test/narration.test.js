@@ -42,6 +42,18 @@ function narration(root) {
   return fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
 }
 
+function newProject(title = "Bugs") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
+}
+
+function build(root, format) {
+  return fs.readFileSync(buildBook(root, { format, out: `dist/book.${format}` }).outFile, "utf8");
+}
+
 describe("narration build", () => {
   test("writes the pronunciation guide, credits, runtimes, and pauses", () => {
     const root = project();
@@ -213,5 +225,18 @@ describe("narration section times add up (#216)", () => {
     const minutes = [...script.matchAll(/\[about (\d+) min\]/g)].reduce((sum, match) => sum + Number(match[1]), 0);
     expect(script).toContain("0h 14m");
     expect(minutes).toBe(14);
+  });
+});
+
+describe("#231 narration script", () => {
+  test("in-prose headings are paragraphs, and a title ending in ? gets no extra period", () => {
+    const root = newProject("Who Burns Next?");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Start.\n\n## The Letter\n\n> Dear Kael.\n\nShe folded it away.");
+    const script = build(root, "narration");
+    expect(script.match(/^## .*$/gm)).toEqual(["## Pronunciation Guide", "## Opening Credits", "## Chapter 1: One", "## Closing Credits"]);
+    expect(script).toContain("\nThe Letter\n");
+    expect(script).toContain("Who Burns Next? Narrated by [narrator].");
+    expect(script).not.toContain("Next?.");
   });
 });

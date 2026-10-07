@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { wordCount } from "../src/markdown.js";
 import { truncateWords } from "../src/build.js";
-import { createStoryProject, synopsisBook } from "../src/story.js";
+import { createEntity, createStoryProject, synopsisBook } from "../src/story.js";
 import { expectLinearGrowth, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function synopsisProject(title = "The Long Valley") {
@@ -55,6 +55,10 @@ She confronts the miller at dawn.
 ## Resolution
 
 The valley keeps its secret.`;
+
+function newProject(title = "Bugs") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
 
 describe("synopsis builder", () => {
   test("uses the first synopsis sentence as the premise", () => {
@@ -303,5 +307,22 @@ describe("synopsis performance (#92)", () => {
       return root;
     };
     expectLinearGrowth(synopsisBook, project, 24000);
+  });
+});
+
+describe("#229 synopsis skips HTML comments", () => {
+  test("comments stay out of the logline and arc sections", () => {
+    const root = newProject("SP");
+    const storyFile = path.join(root, "story.md");
+    const story = fs.readFileSync(storyFile, "utf8");
+    fs.writeFileSync(storyFile, story.replace(/## Synopsis\n[\s\S]*?(\n## |$)/, "## Synopsis\n\n<!-- TODO: sharpen this. Maybe mention the twin. -->\nA diver finds a drowned bell. It rings for the dead.\n$1"));
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arcFile = path.join(root, "plot", "arcs", "main.md");
+    const arc = fs.readFileSync(arcFile, "utf8");
+    fs.writeFileSync(arcFile, arc.replace(/(## Setup\n)[\s\S]*?(\n## )/, "$1\n<!-- note: check dates -->\nMara lives on the reef. She hates the bell.\n$2"));
+    const { text } = synopsisBook(root);
+    expect(text).toContain("Logline: A diver finds a drowned bell.");
+    expect(text).toContain("## Main\n\nMara lives on the reef. She hates the bell.");
+    expect(text).not.toContain("<!--");
   });
 });

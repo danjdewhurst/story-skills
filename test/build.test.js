@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { shunnWordCount } from "../src/packaging.js";
 import { textDirection } from "../src/publishing.js";
-import { buildBook, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveEntries, writeMarkdown, messages } from "./helpers.js";
+import { buildBook, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
+import { makeTempDir, readArchiveEntries, writeMarkdown, messages, readArchiveText } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -33,6 +33,18 @@ function entry(file, name) {
 
 function words(count) {
   return Array.from({ length: count }, () => "word").join(" ");
+}
+
+function bugsProject(title = "Bugs") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
+}
+
+function build(root, format) {
+  return fs.readFileSync(buildBook(root, { format, out: `dist/book.${format}` }).outFile, "utf8");
 }
 
 describe("build and export bug fixes", () => {
@@ -190,5 +202,19 @@ describe("build and export bug fixes", () => {
     const empty = newProject("Empty");
     // No chapters: an unknown trim is reported before "No chapters found".
     expect(() => buildBook(empty, { format: "print", trim: "b5" })).toThrow("Unsupported trim size: b5");
+  });
+});
+
+describe("#184 a # scene break with a trailing space", () => {
+  test("stays a scene break in every build; an empty ## heading is dropped", () => {
+    const root = bugsProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "First part.\n\n#\n\nSecond part.\n\n# \n\nThird.\n\n## \n\nFourth.");
+    expect(build(root, "html").match(/class="scene-break"/g)).toHaveLength(2);
+    const narration = build(root, "narration").replace(/\n+/g, " ");
+    expect(narration).toContain("First part. [pause] Second part. [pause] Third. Fourth.");
+    const docx = readArchiveText(buildBook(root, { format: "docx", out: "dist/book.docx" }).outFile);
+    expect(docx.match(/\* \* \*/g)).toHaveLength(2);
+    expect(docx).not.toContain(">##<");
   });
 });

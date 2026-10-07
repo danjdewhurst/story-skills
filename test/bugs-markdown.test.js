@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { chapterProse, extractSection, scanComments, splitWords, wordCount } from "../src/markdown.js";
-import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveText, writeMarkdown, messages } from "./helpers.js";
+import { chapterProse, extractSection, scanComments, wordCount } from "../src/markdown.js";
+import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
+import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function newProject(title = "Bugs") {
   return createStoryProject({ cwd: makeTempDir(), title }).root;
@@ -60,55 +60,6 @@ describe("#119 word counts match what builds print", () => {
     expect(html).toContain("She walked to the mill at dawn.");
     expect(html).not.toContain("mill.md");
     expect(html).not.toContain("map.png");
-  });
-});
-
-describe("#184 a # scene break with a trailing space", () => {
-  test("stays a scene break in every build; an empty ## heading is dropped", () => {
-    const root = newProject();
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    appendProse(root, "chapters/chapter-01.md", "First part.\n\n#\n\nSecond part.\n\n# \n\nThird.\n\n## \n\nFourth.");
-    expect(build(root, "html").match(/class="scene-break"/g)).toHaveLength(2);
-    const narration = build(root, "narration").replace(/\n+/g, " ");
-    expect(narration).toContain("First part. [pause] Second part. [pause] Third. Fourth.");
-    const docx = readArchiveText(buildBook(root, { format: "docx", out: "dist/book.docx" }).outFile);
-    expect(docx.match(/\* \* \*/g)).toHaveLength(2);
-    expect(docx).not.toContain(">##<");
-  });
-});
-
-describe("#207 combining marks and joiners stay inside words", () => {
-  test("Indic, vowelled Arabic, Persian ZWNJ, NFD Latin, and Unicode hyphens", () => {
-    expect(splitWords("नमस्ते दुनिया")).toEqual(["नमस्ते", "दुनिया"]);
-    expect(wordCount("كَتَبَ الوَلَدُ")).toBe(2);
-    expect(wordCount("می‌خواهم بروم")).toBe(2);
-    expect(wordCount("résumé naïve".normalize("NFD"))).toBe(2);
-    expect(wordCount("well‑known well‐known hyphen­ation")).toBe(3);
-  });
-
-  test("style-sheet and watch-word boundaries do not match inside a marked word", async () => {
-    const { analyzeChapter, proseRules } = await import("../src/prose.js");
-    const rules = proseRules({ "watch-words": ["cafe", "नमस"] }, []);
-    const analysis = analyzeChapter("She ordered a café au lait. नमस्ते.".normalize("NFD"), rules);
-    expect(analysis.watch).toEqual([]);
-    expect(analyzeChapter("A cafe here.", rules).watch).toEqual([{ word: "cafe", count: 1 }]);
-  });
-});
-
-describe("#209 numbers, times, URLs, and emails are one word", () => {
-  test("counts each as one word", () => {
-    expect(wordCount("He paid $1,000 in 1999.")).toBe(5);
-    expect(wordCount("Pi is 3.14 today")).toBe(4);
-    expect(wordCount("9:30 train")).toBe(2);
-    expect(wordCount("See https://example.com/a/b now")).toBe(3);
-    expect(wordCount("Email bob@example.com now")).toBe(3);
-    expect(splitWords("Chapter 1: One")).toEqual(["Chapter", "1", "One"]);
-  });
-
-  test("stays linear on long runs", () => {
-    const started = performance.now();
-    wordCount(`${"a.".repeat(50000)} ${"b".repeat(100000)} ${"x_".repeat(50000)}`);
-    expect(performance.now() - started).toBeLessThan(2000);
   });
 });
 
@@ -185,35 +136,5 @@ describe("#228 heading variants", () => {
     const root = newProject();
     writeChapter(root, "\nChapter 1: Arrival\n==================\n\nShe came home.\n");
     expect(computeWordCounts(root).total).toBe(3);
-  });
-});
-
-describe("#229 synopsis skips HTML comments", () => {
-  test("comments stay out of the logline and arc sections", () => {
-    const root = newProject("SP");
-    const storyFile = path.join(root, "story.md");
-    const story = fs.readFileSync(storyFile, "utf8");
-    fs.writeFileSync(storyFile, story.replace(/## Synopsis\n[\s\S]*?(\n## |$)/, "## Synopsis\n\n<!-- TODO: sharpen this. Maybe mention the twin. -->\nA diver finds a drowned bell. It rings for the dead.\n$1"));
-    createEntity(root, { kind: "arc", name: "Main" });
-    const arcFile = path.join(root, "plot", "arcs", "main.md");
-    const arc = fs.readFileSync(arcFile, "utf8");
-    fs.writeFileSync(arcFile, arc.replace(/(## Setup\n)[\s\S]*?(\n## )/, "$1\n<!-- note: check dates -->\nMara lives on the reef. She hates the bell.\n$2"));
-    const { text } = synopsisBook(root);
-    expect(text).toContain("Logline: A diver finds a drowned bell.");
-    expect(text).toContain("## Main\n\nMara lives on the reef. She hates the bell.");
-    expect(text).not.toContain("<!--");
-  });
-});
-
-describe("#231 narration script", () => {
-  test("in-prose headings are paragraphs, and a title ending in ? gets no extra period", () => {
-    const root = newProject("Who Burns Next?");
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    appendProse(root, "chapters/chapter-01.md", "Start.\n\n## The Letter\n\n> Dear Kael.\n\nShe folded it away.");
-    const script = build(root, "narration");
-    expect(script.match(/^## .*$/gm)).toEqual(["## Pronunciation Guide", "## Opening Credits", "## Chapter 1: One", "## Closing Credits"]);
-    expect(script).toContain("\nThe Letter\n");
-    expect(script).toContain("Who Burns Next? Narrated by [narrator].");
-    expect(script).not.toContain("Next?.");
   });
 });

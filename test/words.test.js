@@ -138,3 +138,38 @@ describe("#307 scripts written without spaces", () => {
     expect(output.ms.long).toBeLessThan(8 * output.ms.short + 25);
   });
 });
+
+describe("#207 combining marks and joiners stay inside words", () => {
+  test("Indic, vowelled Arabic, Persian ZWNJ, NFD Latin, and Unicode hyphens", () => {
+    expect(splitWords("नमस्ते दुनिया")).toEqual(["नमस्ते", "दुनिया"]);
+    expect(wordCount("كَتَبَ الوَلَدُ")).toBe(2);
+    expect(wordCount("می‌خواهم بروم")).toBe(2);
+    expect(wordCount("résumé naïve".normalize("NFD"))).toBe(2);
+    expect(wordCount("well‑known well‐known hyphen­ation")).toBe(3);
+  });
+
+  test("style-sheet and watch-word boundaries do not match inside a marked word", async () => {
+    const { analyzeChapter, proseRules } = await import("../src/prose.js");
+    const rules = proseRules({ "watch-words": ["cafe", "नमस"] }, []);
+    const analysis = analyzeChapter("She ordered a café au lait. नमस्ते.".normalize("NFD"), rules);
+    expect(analysis.watch).toEqual([]);
+    expect(analyzeChapter("A cafe here.", rules).watch).toEqual([{ word: "cafe", count: 1 }]);
+  });
+});
+
+describe("#209 numbers, times, URLs, and emails are one word", () => {
+  test("counts each as one word", () => {
+    expect(wordCount("He paid $1,000 in 1999.")).toBe(5);
+    expect(wordCount("Pi is 3.14 today")).toBe(4);
+    expect(wordCount("9:30 train")).toBe(2);
+    expect(wordCount("See https://example.com/a/b now")).toBe(3);
+    expect(wordCount("Email bob@example.com now")).toBe(3);
+    expect(splitWords("Chapter 1: One")).toEqual(["Chapter", "1", "One"]);
+  });
+
+  test("stays linear on long runs", () => {
+    const started = performance.now();
+    wordCount(`${"a.".repeat(50000)} ${"b".repeat(100000)} ${"x_".repeat(50000)}`);
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+});
