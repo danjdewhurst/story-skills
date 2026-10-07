@@ -1,6 +1,7 @@
 // Arabic: no letter case; words are spaced. No word lists yet. Codex
 // labels about a character are nouns, since a verb takes the subject's
-// gender, and the codex notes use the passive, not a masculine imperative.
+// gender, and labels that ask the reader to do something use the passive
+// or a verbal noun (يُرجى ذكر, كتابة ملاحظة), not a masculine imperative.
 
 export default {
   code: "ar",
@@ -26,11 +27,11 @@ export default {
     "review-intro": "نسخة المراجعة.",
     "review-intro-build": "نسخة المراجعة، الإصدار {build}.",
     "review-labels": "لكل فقرة تسمية مثل {label} (الفصل 3، الفقرة 12).",
-    "review-quote": "اذكر التسمية في كل ملاحظة مع الكلمات الأولى من الفقرة، ليتمكن المؤلف من العثور على الموضع بدقة حتى بعد تغيّر النص.",
-    "review-quote-build": "اذكر التسمية والإصدار في كل ملاحظة مع الكلمات الأولى من الفقرة، ليتمكن المؤلف من العثور على الموضع بدقة حتى بعد تغيّر النص.",
+    "review-quote": "يُرجى ذكر التسمية في كل ملاحظة مع الكلمات الأولى من الفقرة، ليمكن العثور على الموضع بدقة حتى بعد تغيّر النص.",
+    "review-quote-build": "يُرجى ذكر التسمية والإصدار في كل ملاحظة مع الكلمات الأولى من الفقرة، ليمكن العثور على الموضع بدقة حتى بعد تغيّر النص.",
     "review-note-link": "يفتح رابط «ملاحظة» بجانب كل تسمية ملاحظةً مملوءة بهذه البيانات مسبقًا.",
     note: "ملاحظة",
-    "note-title": "اكتب ملاحظة على {label}",
+    "note-title": "كتابة ملاحظة على {label}",
     "anchor-title": "رابط إلى {label}",
     by: "بقلم",
     byline: "بقلم {names}",
@@ -73,7 +74,7 @@ export default {
     "codex-promises": "الوعود",
     "codex-clues": "القرائن",
     "codex-note-spoilers": "مرجع القصة كاملًا بما يكشف أحداثها: ملاحظات الكيانات، وحالاتها، والوفيات، وما تعرفه الشخصيات، والقرائن، وكيف يُحسم كل خيط.",
-    "codex-note-safe": "مرجع القصة من دون كشف أحداثها: من وما في القصة، وأين يظهر. حُذفت الملاحظات والحالات والوفيات وما تعرفه الشخصيات والقرائن والحلول؛ ويُبنى المرجع كاملًا باستخدام {flag}.",
+    "codex-note-safe": "مرجع القصة من دون كشف أحداثها: من وما في القصة، ومواضع الظهور. حُذفت الملاحظات والحالات والوفيات وما تعرفه الشخصيات والقرائن والحلول؛ ويُبنى المرجع كاملًا باستخدام {flag}.",
     "codex-no-entities": "لا توجد شخصيات أو أماكن أو كيانات أخرى بعد.",
     "codex-relationships": "العلاقات",
     "codex-appears-in": "مواضع الظهور",
@@ -97,7 +98,7 @@ export default {
     "codex-routes": "الطرق",
     "codex-hours": "{hours} س",
     "codex-members": "الأعضاء",
-    "codex-owner": "المالك",
+    "codex-owner": "في حوزة",
     "codex-themes": "الموضوعات",
     "codex-pronunciation": "النطق",
     "codex-date": "التاريخ",
@@ -119,7 +120,7 @@ export default {
     "codex-last": "الأخير",
     "codex-longest-gap": "أطول غياب",
     "codex-death": "الوفاة",
-    "codex-dies-in-chapter": "الوفاة في الفصل {n}",
+    "codex-dies-in-chapter": "الفصل {n}",
     "codex-threads-note": "الأسئلة المفتوحة والوعود فقط، من دون أجوبتها أو الوفاء بها. تتطلب القرائن والخيوط المحسومة {flag}.",
     "codex-none": "لا شيء.",
     "codex-question": "السؤال",

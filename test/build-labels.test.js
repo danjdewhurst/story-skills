@@ -143,6 +143,37 @@ describe("build labels", () => {
     expect(narration).toContain("at 300 characters per minute (6 characters)");
   });
 
+  // #539: Hindi and Arabic credits and requests name the work or use the
+  // passive, never a masculine word for the writer, narrator, or reader.
+  test("Hindi credits name the work and set a byline without by", () => {
+    const root = project("Hawa", "language: hi\nauthor: Asha Rao\n");
+    chapter(root, 1, "हवा", "हवा चली।");
+    const shunn = build(root, "shunn");
+    expect(shunn).toContain("Hawa\nAsha Rao\n\n");
+    const narration = build(root, "narration");
+    expect(narration).toContain("Hawa। लेखन: Asha Rao। स्वर: [narrator]।");
+    expect(narration).toContain("समाप्त। आपने Hawa सुना। लेखन: Asha Rao। स्वर: [narrator]।");
+    const fountain = build(root, "fountain");
+    expect(fountain).toContain("Credit: लेखन\nAuthor: Asha Rao\n");
+    const anonymous = project("Hawa", "language: hi\n");
+    chapter(anonymous, 1, "हवा", "हवा चली।");
+    const unsigned = build(anonymous, "narration");
+    expect(unsigned).toContain("Hawa। स्वर: [narrator]।");
+    expect(unsigned).toContain("समाप्त। आपने Hawa सुना। स्वर: [narrator]।");
+    const reviews = [build(root, "html"), build(root, "html", { stamp: "2" })];
+    expect(reviews.map((html) => html.includes("ताकि पाठ बदलने के बाद भी ठीक वही जगह मिल सके।"))).toEqual([true, true]);
+    expect([shunn, narration, fountain, unsigned, ...reviews].filter((text) => /लेखक|वाचक/.test(text))).toEqual([]);
+  });
+
+  test("the Arabic review copy asks for notes in the passive", () => {
+    const root = project("Rih", "language: ar\n");
+    chapter(root, 1, "ريح", "هبّت الريح.");
+    const reviews = [build(root, "html", { noteUrl: "https://example.com/notes/new" }), build(root, "html", { stamp: "2" })];
+    expect(reviews.map((html) => html.includes("يُرجى ذكر التسمية"))).toEqual([true, true]);
+    expect(reviews[0]).toContain('title="كتابة ملاحظة على ch01-p1"');
+    expect(reviews.filter((html) => /اذكر|اكتب/.test(html))).toEqual([]);
+  });
+
   test("story.md labels override the pack, and chapter-label and contents-label still work", () => {
     const root = project("Teile", [
       "language: de",

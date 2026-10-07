@@ -116,7 +116,7 @@ export default {
     "codex-last": "آخرین",
     "codex-longest-gap": "طولانی‌ترین غیبت",
     "codex-death": "مرگ",
-    "codex-dies-in-chapter": "مرگ در فصل {n}",
+    "codex-dies-in-chapter": "فصل {n}",
     "codex-threads-note": "فقط پرسش‌های باز و وعده‌ها، بدون پاسخ یا تحقق آن‌ها. سرنخ‌ها و رشته‌های گره‌گشایی‌شده به {flag} نیاز دارند.",
     "codex-none": "موردی نیست.",
     "codex-question": "پرسش",
