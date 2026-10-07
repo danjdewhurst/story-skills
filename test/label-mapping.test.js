@@ -38,6 +38,16 @@ function revisedPair() {
   return { dir, old: oldRoot, root };
 }
 
+function stampProject(title = "Open Issues") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title, force: false });
+  return { cwd, root };
+}
+
+function writeStampChapter(root, number, body, extra = "status: draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
+}
+
 describe("story compare --anchor", () => {
   test("maps unchanged, edited, deleted, and unknown labels against another copy", () => {
     const { dir, root } = revisedPair();
@@ -241,5 +251,42 @@ describe("build --format html --note-url", () => {
   test("the review-copy workflow links labels to the note form", () => {
     const workflow = fs.readFileSync(path.join(import.meta.dir, "..", "templates", "github", "review-copy.yml"), "utf8");
     expect(workflow).toContain("--note-url \"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/issues/new?template=manuscript-note.yml\"");
+  });
+});
+
+describe("#241 #240 review copy build stamp", () => {
+  test("--stamp prints the build label; default builds carry none", () => {
+    const { root } = stampProject();
+    writeStampChapter(root, 1, "One.\n\nTwo.");
+    const plain = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(plain).toContain("<p class=\"note\">Review copy. Every paragraph");
+    expect(plain).toContain("first few words");
+    const stamped = fs.readFileSync(buildBook(root, { format: "html", stamp: "beta <round> 1\n" }).outFile, "utf8");
+    expect(stamped).toContain("Review copy, build <code>beta &lt;round&gt; 1</code>.");
+    expect(stamped).toContain("Quote the label and the build");
+  });
+
+  test("--stamp is refused with other formats or empty", () => {
+    const { cwd, root } = stampProject();
+    writeStampChapter(root, 1, "One.");
+    expect(() => buildBook(root, { format: "epub", stamp: "x" })).toThrow("--stamp applies only to --format html");
+    expect(() => buildBook(root, { format: "html", stamp: " " })).toThrow("--stamp needs a label");
+    const result = invoke(cwd, ["build", root, "--format", "html", "--stamp", "2026-09-27 abc1234"]);
+    expect(result.code).toBe(0);
+  });
+
+  test("the issue form asks for the build and the first few words", () => {
+    const form = fs.readFileSync(path.join(import.meta.dir, "..", "templates", "github", "ISSUE_TEMPLATE", "manuscript-note.yml"), "utf8");
+    expect(form).toContain("id: build");
+    expect(form).toContain("id: quote");
+    const workflow = fs.readFileSync(path.join(import.meta.dir, "..", "templates", "github", "review-copy.yml"), "utf8");
+    expect(workflow).toContain("--stamp");
+  });
+
+  test("docs and skills no longer call paragraph labels stable", () => {
+    const repo = path.join(import.meta.dir, "..");
+    for (const file of ["docs/cli-reference.md", "skills/feedback-triage/SKILL.md", "skills/story-maintenance/SKILL.md", "src/html.js"]) {
+      expect(fs.readFileSync(path.join(repo, file), "utf8")).not.toMatch(/stable (?:label|anchor|paragraph anchor)/);
+    }
   });
 });

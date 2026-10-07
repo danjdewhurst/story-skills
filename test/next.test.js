@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { runCli } from "../src/cli.js";
 import { createEntity, createStoryProject, projectActions, validateProject } from "../src/story.js";
-import { makeTempDir, messages } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 function newProject(title = "Gull") {
   const cwd = makeTempDir();
@@ -11,6 +12,22 @@ function newProject(title = "Gull") {
 
 function actionLines(root, options) {
   return projectActions(root, options).actions.map((item) => `[${item.priority}] ${item.title}: ${item.detail}`).join("\n");
+}
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function project(title = "Open Issues") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title, force: false });
+  return { cwd, root };
+}
+
+function writeChapter(root, number, body, extra = "status: draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
 }
 
 describe("#109 discovered chapters", () => {
@@ -84,5 +101,23 @@ describe("#111 validation warnings in next", () => {
       expect(lines).toContain("Refresh word counts");
       expect(lines).not.toContain("Review validation warnings");
     }
+  });
+});
+
+describe("#77 next drafts an empty outlined chapter before adding one", () => {
+  test("suggests the first chapter with no prose", () => {
+    const { cwd, root } = project("Fresh Book");
+    createEntity(root, { kind: "chapter", name: "Chapter 1", number: 1 });
+    const result = invoke(cwd, ["next", root]);
+    expect(result.out).toContain("[P2] Draft chapter 1: chapters/chapter-01.md has no prose yet (status outline)");
+    expect(result.out).not.toContain("Draft chapter 2");
+  });
+
+  test("suggests a new chapter once every chapter has prose", () => {
+    const { cwd, root } = project();
+    writeChapter(root, 1, "Some drafted words here.");
+    const text = invoke(cwd, ["next", root]).out;
+    expect(text).toContain("Draft chapter 2");
+    expect(text).toContain("story add chapter");
   });
 });

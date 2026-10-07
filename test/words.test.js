@@ -173,3 +173,12 @@ describe("#209 numbers, times, URLs, and emails are one word", () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 });
+
+describe("#208 Chinese and Japanese count per character", () => {
+  test("each Han, Hiragana, or Katakana character is a word", () => {
+    expect(splitWords("我是一个学生。他很好。")).toHaveLength(9);
+    expect(wordCount("これは日本語の文章です。")).toBe(11);
+    expect(wordCount("コーヒー and tea")).toBe(6);
+    expect(wordCount("Plain English words stay whole.")).toBe(5);
+  });
+});

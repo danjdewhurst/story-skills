@@ -32,6 +32,16 @@ ${frontmatter.trim()}
 `, `# ${id}\n`);
 }
 
+function project(title = "Open Issues") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title, force: false });
+  return { cwd, root };
+}
+
+function writeChapter(root, number, body, extra = "status: draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
+}
+
 describe("story clues", () => {
   test("draws plants and reveals per chapter, sorted by plant", () => {
     const { root } = clueProject(4);
@@ -114,5 +124,17 @@ describe("clue matrix columns (#223)", () => {
     });
     expect(text).toContain("Clue     9  10  20 100\n");
     expect(text).toContain("knife    .   P   .   R  planted");
+  });
+});
+
+describe("#221 clues header counts what the manuscript has done", () => {
+  test("a planned clue with scheduled chapters counts as neither planted nor revealed", () => {
+    const { root } = project();
+    writeChapter(root, 1, "Words.");
+    writeMarkdown(path.join(root, "continuity", "clues", "muddy-boot.md"), "title: Muddy Boot\nstatus: planned\nplanted: chapter-07\npayoff: chapter-09\ncharacters:\n  - x", "# Muddy Boot\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "torn-cuff.md"), "title: Torn Cuff\nstatus: planted\nplanted: chapter-01\npayoff: chapter-09\ncharacters:\n  - x", "# Torn Cuff\n");
+    const report = clueReport(root);
+    expect(report.totals).toEqual({ clues: 2, redHerrings: 0, planted: 1, revealed: 0 });
+    expect(formatClueMatrix(report)).toContain("Clues: 2 live (0 red herrings), 1 planted, 0 revealed");
   });
 });
