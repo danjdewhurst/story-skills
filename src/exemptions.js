@@ -183,22 +183,23 @@ export function exemptionMatches(exemption, finding) {
 
 // Moves the findings an exemption matches into `dismissed`, with the first
 // matching entry's reason and index. Warnings always; errors only when
-// `errors` is set, as story continuity does. `ok` reflects only the errors
-// that remain.
-export function dismissByExemptions(result, exemptions, { errors: withErrors }) {
+// `errors` is set, as story continuity does, and then only those that
+// `dismissable` accepts (every error by default). `ok` reflects only the
+// errors that remain.
+export function dismissByExemptions(result, exemptions, { errors: withErrors, dismissable = () => true }) {
   if (exemptions.length === 0) {
     return result;
   }
   const dismissed = [...(result.dismissed ?? [])];
-  const keep = (findings) => findings.filter((finding) => {
-    const match = exemptions.find((exemption) => exemptionMatches(exemption, finding));
+  const keep = (findings, canDismiss) => findings.filter((finding) => {
+    const match = canDismiss(finding) ? exemptions.find((exemption) => exemptionMatches(exemption, finding)) : undefined;
     if (match) {
       dismissed.push({ finding, reason: match.reason, index: match.index });
     }
     return !match;
   });
-  const errors = withErrors ? keep(result.errors) : result.errors;
-  const warnings = keep(result.warnings);
+  const errors = withErrors ? keep(result.errors, dismissable) : result.errors;
+  const warnings = keep(result.warnings, () => true);
   if (dismissed.length === (result.dismissed ?? []).length) {
     return result;
   }

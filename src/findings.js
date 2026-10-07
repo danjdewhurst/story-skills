@@ -322,10 +322,10 @@ export function severityCodes() {
 }
 
 // The errors story continuity reports: an exemption can dismiss these, where
-// every other error means the project is broken and stays an error.
-// test/finding-codes.test.js checks the list against src/continuity.js.
+// every other error means the project is broken and stays an error. An
+// unreadable file is not one of them: the checker cannot read what it would
+// dismiss. test/finding-codes.test.js checks the list against src/continuity.js.
 export const CONTINUITY_ERROR_CODES = [
-  "unreadable-file",
   "entry-not-mapping",
   "revived-without-death",
   "died-in-missing-chapter",

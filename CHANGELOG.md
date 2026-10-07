@@ -40,6 +40,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story validate` rejects an exemption key one typo away from a known key, such as `patern` or `chapterr`, so a typo no longer widens the entry. ([#695](https://github.com/danjdewhurst/story-skills/issues/695))
   - The entry stops taking effect, and validate reports `exemption-misspelled-key`. `story continuity` no longer dismisses findings with that entry.
 
+- `story continuity` no longer lets an exemption dismiss an unreadable file, so a chapter it cannot read stays an error. ([#697](https://github.com/danjdewhurst/story-skills/issues/697))
+  - An entry with `code: unreadable-file` is rejected by `story validate` as `exemption-code-not-dismissible`. An entry with only a `file` and `pattern` no longer dismisses that error either.
+  - `docs/continuity.md` states the exception.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
