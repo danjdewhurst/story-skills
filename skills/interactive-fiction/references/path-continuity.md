@@ -117,6 +117,8 @@ in the built Twine or ink file; record the decision in
 | Malformed `choices` (no `text`, link syntax in `text`, a `to` that is not kebab-case) | `story validate` | Fix the entry |
 | Choices dropped by `story remove chapter` | `story remove` (warning) | Give each named chapter a new choice unless it is now a deliberate ending |
 
+After you add, move, or remove a chapter or a choice, run `story reindex .`, `story wordcount . --write`, and `story check .`.
+
 ## Hand Checklist
 
 The checker cannot judge these; check them before a draft is done:

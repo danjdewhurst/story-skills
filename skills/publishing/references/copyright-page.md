@@ -13,7 +13,7 @@ another page already uses it). `--heading=false` writes `heading: false`
 one). Then write the page
 from the template. Without this page, every build except Shunn (markdown,
 EPUB, DOCX, HTML, print, and `story export`) generates a minimal one from
-`copyright`.
+`copyright`. After you add or fill the page, run `story reindex .`, `story wordcount . --write`, and `story check .`.
 Ask the author for every name, credit, and number; never invent them.
 Write `[TODO: author to supply]` for one the author does not have yet,
 such as an ISBN not yet bought. `story validate` and every build that

@@ -43,7 +43,8 @@ Record in the note who is portrayed, what the prose asserts, what is
 documented (with sources) versus invented, and the decision taken. After
 a legal read, add `publishing lawyer` to the note's `reviewed-by` list
 (or the lawyer's name with consent). `story validate .` warns while a note with a `risk`
-is used in a final chapter without `reviewed-by`.
+is used in a final chapter without `reviewed-by`. After you add or edit a note, run `story reindex .`,
+`story wordcount . --write`, and `story check .`.
 
 ## Permissions for quoted material
 
