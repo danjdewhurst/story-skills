@@ -17,10 +17,10 @@ import { wholeWords, wordMatcher } from "./words.js";
 // found as story prose finds watch words. Only the first letter of a name
 // of two or more words may differ in case ("The Hollow" matches "the
 // Hollow"); a one-word name written in lower case also matches with a
-// capital, at the start of a sentence. Possessives (Maren's) and hyphenated
-// compounds (Vale-born) count. Each place in the text goes to the longest
-// name found there, so "Edran Vale" is not also a mention of a location
-// called Vale; a name two entities share counts for both. Names and prose
+// capital. Possessives (Maren's) and hyphenated compounds (Vale-born) count.
+// Each place in the text goes to the longest name found there, so "Edran
+// Vale" is not also a mention of a location called Vale; a name two entities
+// share counts for both. Names and prose
 // are compared in NFC, so a name typed with é or が finds prose written
 // with e + U+0301 or か + U+3099, and the other way round; lines, columns,
 // and excerpts are those of the file as written.
