@@ -2107,10 +2107,24 @@ function existingChapter(project, value, missing) {
   return chapter;
 }
 
-// The usable choices of every chapter, each with its chapter: none in a
-// linear book.
+// A chapter's `choices` entries as written, malformed ones included: only
+// a missing field or an empty list means no choices, and any other value
+// that is not a list (null, "", a word) is one malformed entry.
+function choiceEntries(chapter) {
+  return chapter.choices === undefined ? [] : Array.isArray(chapter.choices) ? chapter.choices : [chapter.choices];
+}
+
+// Every choice entry in the book, malformed ones included, each with its
+// chapter, its index, and its `to` and `text` when they are text, else
+// null: a renumbering rewrites the `to` of a list entry that names a
+// renumbered chapter, whether or not the rest of the entry is valid.
 function bookChoices(project) {
-  return project.chapters.flatMap((chapter) => chapterChoices(chapter, "").choices.map((choice) => ({ ...choice, chapter })));
+  return project.chapters.flatMap((chapter) => choiceEntries(chapter).map((entry, index) => ({
+    chapter,
+    index,
+    to: Array.isArray(chapter.choices) && typeof entry?.to === "string" ? entry.to : null,
+    text: typeof entry?.text === "string" ? entry.text : null
+  })));
 }
 
 // A choice as a refusal names it: its file and index.
@@ -2118,34 +2132,51 @@ function choiceLabel(project, chapter, index) {
   return `${relative(project, chapter.file)} choices[${index}]`;
 }
 
+// The items a refusal lists, the first few of them when there are many, so
+// a book with thousands of choices still gets a message one can read.
+const LISTED_ITEMS = 10;
+
+function listedItems(items) {
+  return items.length <= LISTED_ITEMS ? items.join(", ") : `${items.slice(0, LISTED_ITEMS).join(", ")}, and ${items.length - LISTED_ITEMS} more`;
+}
+
+// Frontmatter text in a message, with control characters shown as U+FFFD
+// so none reaches the terminal.
+function shownText(text) {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "\ufffd");
+}
+
 // In a branching book a chapter's place comes from the choices that lead to
 // it, and its own choices end it. A split or merge there is safe only when
 // it changes where no choice leads and what text a choice ends: the
-// chapters it splits or joins have no choices (a malformed one counts), and
-// no choice leads to `folded`, the chapter a merge folds into the one
-// before, since a reader who took it would land at the start of that one
-// instead. The renumbering rewrites every other `to`, as move does. Returns
+// chapters it splits or joins have no choices, and no choice leads to
+// `folded`, the chapter a merge folds into the one before, since a reader
+// who took it would land at the start of that one instead. A malformed
+// choice counts in both, since the renumbering rewrites its `to` all the
+// same. The renumbering rewrites every other `to`, as move does. Returns
 // the book's choices: none in a linear book.
 function refuseUnsafeBranching(project, command, chapters, folded = null) {
   const choices = bookChoices(project);
   if (choices.length === 0) {
     return choices;
   }
-  const own = chapters.flatMap((chapter) => asArray(chapter.choices).map((choice, index) => `${choiceLabel(project, chapter, index)}${typeof choice?.to === "string" ? ` (to ${choice.to})` : ""}`));
+  const own = choices.filter((choice) => chapters.includes(choice.chapter))
+    .map((choice) => `${choiceLabel(project, choice.chapter, choice.index)}${choice.to === null ? "" : ` (to ${shownText(choice.to)})`}`);
   if (own.length > 0) {
-    throw refusedError(`story ${command} works on a branching book only when ${command === "split" ? "the chapter it splits has" : "the chapters it merges have"} no choices, since a chapter's choices end it and a ${command} would change the passage they end: ${own.join(", ")}. Restructure the book by hand with story add chapter, story move, and story remove`);
+    throw refusedError(`story ${command} works on a branching book only when ${command === "split" ? "the chapter it splits has" : "the chapters it merges have"} no choices, since a chapter's choices end it and a ${command} would change the passage they end: ${listedItems(own)}. Restructure the book by hand with story add chapter, story move, and story remove`);
   }
   const leading = choices.filter((choice) => choice.to === folded?.id).map((choice) => choiceLabel(project, choice.chapter, choice.index));
   if (leading.length > 0) {
     const [it, leads] = leading.length === 1 ? ["it", "leads"] : ["them", "lead"];
-    throw refusedError(`story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of ${chapters[0].id} instead: ${leading.join(", ")} ${leads} to ${folded.id}. Point ${it} at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove`);
+    throw refusedError(`story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of ${chapters[0].id} instead: ${listedItems(leading)} ${leads} to ${folded.id}. Point ${it} at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove`);
   }
   return choices;
 }
 
 // The choices whose `to` the renumbering of `run` by `step` rewrites, as
 // { file, index, text, from, to }: each in its chapter's file after the
-// renumbering, for the split or merge to list.
+// renumbering, for the split or merge to list. `text` is null for a choice
+// with none.
 function retargetedChoices(project, choices, run, step) {
   const renumbered = new Map(run.map((entry) => [entry.id, canonicalChapterId(entry.number + step)]));
   return choices.filter((choice) => renumbered.has(choice.to)).map((choice) => ({
@@ -2184,7 +2215,8 @@ function followingRun(project, number) {
 // adopted-references warning of the move. An abandoned thread may keep the
 // id a new chapter takes, as add chapter allows, so it only warns
 // (abandonedThreadWarnings). A choice that leads to the id is named by its
-// index, since the chapter would take over where it leads.
+// index, since the chapter would take over where it leads, and a chapter
+// file that also names the id elsewhere (a link in its text) says so.
 function refuseSplitAdoption(project, chapter, run) {
   const last = run.at(-1);
   const number = (last ?? chapter).number + 1;
@@ -2197,11 +2229,18 @@ function refuseSplitAdoption(project, chapter, run) {
   if (files.length === 0) {
     return;
   }
-  const choices = bookChoices(project).filter((choice) => choice.to === target);
-  const named = files.flatMap((file) => {
-    const leading = choices.filter((choice) => relative(project, choice.chapter.file) === file);
-    return leading.length === 0 ? [file] : leading.map((choice) => choiceLabel(project, choice.chapter, choice.index));
-  });
+  const leading = new Map();
+  for (const choice of bookChoices(project)) {
+    if (choice.to === target) {
+      const file = relative(project, choice.chapter.file);
+      if (!leading.has(file)) {
+        leading.set(file, []);
+      }
+      leading.get(file).push(`${file} choices[${choice.index}]`);
+    }
+  }
+  const elsewhere = new Set(leading.size === 0 ? [] : adoptedReferenceFiles(project.root, "chapter", target, null, renameChapterIdText, withoutChoices));
+  const named = files.flatMap((file) => (leading.has(file) ? [...leading.get(file), ...(elsewhere.has(file) ? [`other references in ${file}`] : [])] : [file]));
   const [it, them, means, belongs] = named.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
   const change = last === undefined
     ? `this split would give that id to its new chapter, the rest of ${chapter.id}`
@@ -2209,7 +2248,7 @@ function refuseSplitAdoption(project, chapter, run) {
   const keep = last === undefined
     ? `${chapter.id} if ${belongs} in the text that moves (then point ${them} at ${target} after the split)`
     : `${last.id} if ${belongs} there (the split then carries ${them} to ${target})`;
-  throw refusedError(`${named.join(", ")} ${named.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
+  throw refusedError(`${listedItems(named)} ${named.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
 }
 
 // Renumbers each chapter of `run` by `step` with move chapter: from the
@@ -2341,13 +2380,17 @@ function splitAt(paragraphs, index, marker, chapterId) {
   };
 }
 
+// A chapter's reference context without the `to` of choices.
+function withoutChoices(context) {
+  return { ...context, isReferenceKey: (key, listKey) => key !== "to" && context.isReferenceKey(key, listKey) };
+}
+
 // The files besides `excluded` that name `chapterId` in a reference field, a
 // link to its file, or a bare id in the timeline and arc bodies. Registries
 // are left out, since reindex rewrites them, and so are choices: one that
 // leads to the chapter leads to its start, which stays in it.
 function chapterReferenceFiles(root, chapterId, excluded) {
-  const named = entityReferenceContext(root, "chapter", chapterId);
-  const context = { ...named, isReferenceKey: (key, listKey) => key !== "to" && named.isReferenceKey(key, listKey) };
+  const context = withoutChoices(entityReferenceContext(root, "chapter", chapterId));
   const probe = `${chapterId}-reference-probe`;
   // Only the chapter id itself: its scene ids follow their scenes.
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe),
@@ -2432,7 +2475,9 @@ export function splitChapter(root, options) {
   // In a branching book a chapter with no choices is an ending, so the
   // first half gets one choice, leading on to the rest: without it the
   // reader would stop there, and no choice would lead to the new chapter.
-  const added = choices.length === 0 ? null : { file: relative(project, chapter.file), index: 0, text: CONTINUE_CHOICE, to: newId };
+  // A book whose only choices are malformed is linear to the branch
+  // checks, so it gets none.
+  const added = project.chapters.some((entry) => chapterChoices(entry, "").choices.length > 0) ? { file: relative(project, chapter.file), index: 0, text: CONTINUE_CHOICE, to: newId } : null;
 
   // Scene records have no place in the text, so they follow it in order: the
   // records of the scenes before the split stay, the rest move.
@@ -2929,9 +2974,10 @@ const BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 
 // The files besides `excludedFile` (when not null) that already reference
 // `id` (a scheduled chapter, a planned character, a link left by remove): an
-// entity given that id takes them over. `rename` finds bare ids.
-function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText) {
-  const context = entityReferenceContext(root, kind, id);
+// entity given that id takes them over. `rename` finds bare ids, and
+// `narrow` can leave some references out (withoutChoices).
+function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText, narrow = (context) => context) {
+  const context = narrow(entityReferenceContext(root, kind, id));
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
   const plan = planReferenceRewrites(root, context, new Map(excludedFile === null ? [] : [[excludedFile, null]]), idRenamer(id, probe), (body, file) => {

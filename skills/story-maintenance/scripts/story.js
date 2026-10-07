@@ -25570,25 +25570,40 @@ function existingChapter(project, value, missing) {
   }
   return chapter;
 }
+function choiceEntries(chapter) {
+  return chapter.choices === undefined ? [] : Array.isArray(chapter.choices) ? chapter.choices : [chapter.choices];
+}
 function bookChoices(project) {
-  return project.chapters.flatMap((chapter) => chapterChoices(chapter, "").choices.map((choice) => ({ ...choice, chapter })));
+  return project.chapters.flatMap((chapter) => choiceEntries(chapter).map((entry, index) => ({
+    chapter,
+    index,
+    to: Array.isArray(chapter.choices) && typeof entry?.to === "string" ? entry.to : null,
+    text: typeof entry?.text === "string" ? entry.text : null
+  })));
 }
 function choiceLabel(project, chapter, index) {
   return `${relative(project, chapter.file)} choices[${index}]`;
+}
+var LISTED_ITEMS = 10;
+function listedItems(items) {
+  return items.length <= LISTED_ITEMS ? items.join(", ") : `${items.slice(0, LISTED_ITEMS).join(", ")}, and ${items.length - LISTED_ITEMS} more`;
+}
+function shownText(text) {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "�");
 }
 function refuseUnsafeBranching(project, command, chapters, folded = null) {
   const choices = bookChoices(project);
   if (choices.length === 0) {
     return choices;
   }
-  const own = chapters.flatMap((chapter) => asArray(chapter.choices).map((choice, index) => `${choiceLabel(project, chapter, index)}${typeof choice?.to === "string" ? ` (to ${choice.to})` : ""}`));
+  const own = choices.filter((choice) => chapters.includes(choice.chapter)).map((choice) => `${choiceLabel(project, choice.chapter, choice.index)}${choice.to === null ? "" : ` (to ${shownText(choice.to)})`}`);
   if (own.length > 0) {
-    throw refusedError(`story ${command} works on a branching book only when ${command === "split" ? "the chapter it splits has" : "the chapters it merges have"} no choices, since a chapter's choices end it and a ${command} would change the passage they end: ${own.join(", ")}. Restructure the book by hand with story add chapter, story move, and story remove`);
+    throw refusedError(`story ${command} works on a branching book only when ${command === "split" ? "the chapter it splits has" : "the chapters it merges have"} no choices, since a chapter's choices end it and a ${command} would change the passage they end: ${listedItems(own)}. Restructure the book by hand with story add chapter, story move, and story remove`);
   }
   const leading = choices.filter((choice) => choice.to === folded?.id).map((choice) => choiceLabel(project, choice.chapter, choice.index));
   if (leading.length > 0) {
     const [it, leads] = leading.length === 1 ? ["it", "leads"] : ["them", "lead"];
-    throw refusedError(`story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of ${chapters[0].id} instead: ${leading.join(", ")} ${leads} to ${folded.id}. Point ${it} at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove`);
+    throw refusedError(`story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of ${chapters[0].id} instead: ${listedItems(leading)} ${leads} to ${folded.id}. Point ${it} at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove`);
   }
   return choices;
 }
@@ -25622,15 +25637,22 @@ function refuseSplitAdoption(project, chapter, run) {
   if (files.length === 0) {
     return;
   }
-  const choices = bookChoices(project).filter((choice) => choice.to === target);
-  const named = files.flatMap((file) => {
-    const leading = choices.filter((choice) => relative(project, choice.chapter.file) === file);
-    return leading.length === 0 ? [file] : leading.map((choice) => choiceLabel(project, choice.chapter, choice.index));
-  });
+  const leading = new Map;
+  for (const choice of bookChoices(project)) {
+    if (choice.to === target) {
+      const file = relative(project, choice.chapter.file);
+      if (!leading.has(file)) {
+        leading.set(file, []);
+      }
+      leading.get(file).push(`${file} choices[${choice.index}]`);
+    }
+  }
+  const elsewhere = new Set(leading.size === 0 ? [] : adoptedReferenceFiles(project.root, "chapter", target, null, renameChapterIdText, withoutChoices));
+  const named = files.flatMap((file) => leading.has(file) ? [...leading.get(file), ...elsewhere.has(file) ? [`other references in ${file}`] : []] : [file]);
   const [it, them, means, belongs] = named.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
   const change = last === undefined ? `this split would give that id to its new chapter, the rest of ${chapter.id}` : `this split would renumber ${last.id} to ${target}`;
   const keep = last === undefined ? `${chapter.id} if ${belongs} in the text that moves (then point ${them} at ${target} after the split)` : `${last.id} if ${belongs} there (the split then carries ${them} to ${target})`;
-  throw refusedError(`${named.join(", ")} ${named.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
+  throw refusedError(`${listedItems(named)} ${named.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
 }
 function shiftChapters(root, run, step, warnings, action) {
   for (const chapter of step > 0 ? [...run].reverse() : run) {
@@ -25734,9 +25756,11 @@ function splitAt(paragraphs, index, marker, chapterId) {
     sections: breaks.length + 1
   };
 }
+function withoutChoices(context) {
+  return { ...context, isReferenceKey: (key, listKey) => key !== "to" && context.isReferenceKey(key, listKey) };
+}
 function chapterReferenceFiles(root, chapterId, excluded) {
-  const named = entityReferenceContext(root, "chapter", chapterId);
-  const context = { ...named, isReferenceKey: (key, listKey) => key !== "to" && named.isReferenceKey(key, listKey) };
+  const context = withoutChoices(entityReferenceContext(root, "chapter", chapterId));
   const probe = `${chapterId}-reference-probe`;
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, renameChapterIdText));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
@@ -25795,7 +25819,7 @@ function splitChapter(root, options) {
   const newId = canonicalChapterId(number);
   const newFile = path13.join(project.root, "chapters", `${newId}.md`);
   const run = followingRun(project, number);
-  const added = choices.length === 0 ? null : { file: relative(project, chapter.file), index: 0, text: CONTINUE_CHOICE, to: newId };
+  const added = project.chapters.some((entry) => chapterChoices(entry, "").choices.length > 0) ? { file: relative(project, chapter.file), index: 0, text: CONTINUE_CHOICE, to: newId } : null;
   const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene);
   const keep = point.atBreak ? point.breaksBefore : point.breaksBefore + 1;
   const moving = scenes.slice(keep);
@@ -26221,8 +26245,8 @@ function mergedChapter(first, second, unit, firstId, secondId) {
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }
 var BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
-function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText) {
-  const context = entityReferenceContext(root, kind, id);
+function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText, narrow = (context) => context) {
+  const context = narrow(entityReferenceContext(root, kind, id));
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
   const plan = planReferenceRewrites(root, context, new Map(excludedFile === null ? [] : [[excludedFile, null]]), idRenamer(id, probe), (body, file) => {

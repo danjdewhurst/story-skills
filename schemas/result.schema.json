@@ -455,7 +455,7 @@
     },
     "data-write": {
       "type": "object",
-      "$comment": "The write commands. The rest of data is the command's result: kind, id, and file (relative to the project root) for add, rename, remove, move, split, and merge, plus oldId for rename and move, and prose for rename --prose ({ edits: [{ file, line, endLine, column, from, to }], aliases, shared }); newId, title, scenesMoved, renumbered, choiceAdded ({ file, index, text, to }, or null in a linear book), and choicesRetargeted ([{ file, index, text, from, to }]) for split, whose file is the new chapter; mergedId, scenesMoved, renumbered, and choicesRetargeted for merge; chapters and total for wordcount.",
+      "$comment": "The write commands. The rest of data is the command's result: kind, id, and file (relative to the project root) for add, rename, remove, move, split, and merge, plus oldId for rename and move, and prose for rename --prose ({ edits: [{ file, line, endLine, column, from, to }], aliases, shared }); newId, title, scenesMoved, renumbered, choiceAdded ({ file, index, text, to }, or null in a linear book), and choicesRetargeted ([{ file, index, text, from, to }], with text null for a choice that has none) for split, whose file is the new chapter; mergedId, scenesMoved, renumbered, and choicesRetargeted for merge; chapters and total for wordcount.",
       "required": ["dryRun", "changes"],
       "properties": {
         "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
