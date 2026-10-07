@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createEntity, createStoryProject, reindexProject, validateProject } from "../src/story.js";
-import { makeTempDir, messages } from "./helpers.js";
+import { runCli } from "../src/cli.js";
+import { createEntity, createStoryProject, reindexProject, renameEntity, validateProject } from "../src/story.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function newProject(title = "Bugs") {
   const cwd = makeTempDir();
@@ -11,6 +12,26 @@ function newProject(title = "Bugs") {
 
 function editFile(file, edit) {
   fs.writeFileSync(file, edit(fs.readFileSync(file, "utf8")), "utf8");
+}
+
+const EXAMPLES = path.join(import.meta.dir, "..", "examples");
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function copyExample(name) {
+  const root = path.join(makeTempDir(), name);
+  fs.cpSync(path.join(EXAMPLES, name), root, { recursive: true });
+  return root;
+}
+
+function initProject() {
+  const cwd = makeTempDir();
+  expect(invoke(cwd, ["init", "Safety", "--dir", "p"]).code).toBe(0);
+  return path.join(cwd, "p");
 }
 
 describe("#65 reindex keeps registry frontmatter it does not own", () => {
@@ -49,5 +70,24 @@ describe("retitled story", () => {
 
     reindexProject(root);
     expect(validateProject(root).ok).toBe(true);
+  });
+});
+
+describe("damaged registries point at reindex (#199)", () => {
+  test("validate and rename name story reindex for an emptied registry", () => {
+    const root = copyExample("harbor-of-second-light");
+    fs.writeFileSync(path.join(root, "characters", "_index.md"), "");
+    expect(messages(validateProject(root).errors)).toContain(`${"characters/_index.md"}: is missing YAML frontmatter (it is a registry: run story reindex to rebuild it)`);
+    expect(() => renameEntity(root, { kind: "character", id: "ilya-venn", name: "Zed Q" }))
+      .toThrow(`${"characters/_index.md"} is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`);
+    expect(invoke(root, ["reindex"]).code).toBe(0);
+    expect(validateProject(root).ok).toBe(true);
+  });
+
+  test("a note outside the registries gets no reindex hint", () => {
+    const root = initProject();
+    createEntity(root, { kind: "character", name: "Bo" });
+    fs.writeFileSync(path.join(root, "characters", "bo.md"), "# Bo\n");
+    expect(() => renameEntity(root, { kind: "character", id: "bo", name: "Bob" })).toThrow(/^(?![\s\S]*reindex)/);
   });
 });

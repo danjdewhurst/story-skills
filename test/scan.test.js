@@ -134,3 +134,14 @@ describe("#205 dot-files in entity folders are skipped", () => {
     expect(invoke(root, ["build", ".", "--format", "markdown", "--out", out]).code).toBe(0);
   });
 });
+
+describe("symlinked entity files (#63)", () => {
+  test("validate warns about a symlinked chapter the scan skips", () => {
+    const root = copyExample("the-last-ember");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.renameSync(chapter, path.join(root, "..", "c1.md"));
+    fs.symlinkSync("../../c1.md", chapter);
+    const result = invoke(root, ["validate"]);
+    expect(result.err).toContain(`warning: ${"chapters/chapter-01.md"} is a symlink and is ignored: replace it with the file itself`);
+  });
+});
