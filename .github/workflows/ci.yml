@@ -16,8 +16,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Each job's timeout is well above its longest recent run, so a hung
+  # step fails in minutes rather than holding a runner for six hours.
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,19 +47,18 @@ jobs:
       - name: Check known-good eval drafts
         run: bun run eval:selftest
 
-      - name: Run tests
-        run: bun run test
+      # The whole suite, once: test:coverage runs it with the same 60s test
+      # timeout as `bun run test`, then the coverage gate and check:fallback.
+      - name: Run tests with coverage and fallback checks
+        run: bun run test:coverage
 
-      # bun run test runs one seed; a few more catch validate and the schema
+      # The suite runs one seed; a few more catch validate and the schema
       # drifting apart on values that seed never draws.
       - name: Check validate and the schema agree on more seeds
         run: |
           for seed in 1 2 3 4 5; do
             STORY_PROPERTY_SEED=$seed bun test test/validate-schema-property.test.js || exit 1
           done
-
-      - name: Run coverage and fallback checks
-        run: bun run test:coverage
 
       - name: Validate examples
         run: bun run test:examples
@@ -69,7 +71,8 @@ jobs:
   test-os:
     name: Tests ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Windows usually takes 10 to 15 minutes, and has taken over 20.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +109,7 @@ jobs:
   node:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

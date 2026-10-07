@@ -40,7 +40,7 @@ bun run check:links
 bun run eval:selftest
 ```
 
-CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test`, `test:coverage` (which also runs `check:fallback`), `test:examples`, and then the fallback's `--help` under Node, in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node, then installs the packed npm tarball and runs it (`bun run check:package`), and `bun run test` and `bun run check:package` on Windows and macOS. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
+CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:coverage` (which runs the suite, then `check:fallback`), `test:examples`, and then the fallback's `--help` under Node, in that order, plus a Node 18/20/22 matrix that runs the examples check and both CLIs directly under Node, then installs the packed npm tarball and runs it (`bun run check:package`), and `bun run test` and `bun run check:package` on Windows and macOS. Use `bun run test` for normal verification. Use `bun run build:fallback` after changing CLI behavior in `src/`, then use `bun run check:fallback` to confirm the generated fallback is current. Use `bun run test:coverage` when changes affect CLI behavior, parsing, project scanning, validation, fallback generation, or release readiness.
 
 ## Implementation Rules
 
@@ -92,7 +92,7 @@ Do not commit:
 
 Before finishing code or skill changes, check:
 
-- The CI checks pass locally: `bun run check:metadata`, `bun run check:evals`, `bun run check:links`, `bun run eval:selftest`, `bun run test`, `bun run test:coverage`, `bun run test:examples`.
+- The CI checks pass locally: `bun run check:metadata`, `bun run check:evals`, `bun run check:links`, `bun run eval:selftest`, `bun run test:coverage` (which runs the whole suite), `bun run test:examples`.
 - CLI help and skill docs still agree on command names and options.
 - The bundled maintenance fallback is current: `bun run check:fallback`.
 - The bundled maintenance fallback still runs with Node: `node skills/story-maintenance/scripts/story.js --help`.
