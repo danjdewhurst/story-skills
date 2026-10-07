@@ -328,6 +328,18 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["build", root, "--format", "scroll"]).err).not.toContain("cli-defaults");
   });
 
+  test("split and merge take no defaults, so split without --at fails rather than splits at one (#566)", () => {
+    const { root, cwd } = noisyProject();
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const before = fs.readFileSync(chapter, "utf8");
+    configure(root, "cli-defaults:\n  - command: split\n    at: 1");
+    const split = invoke(cwd, ["split", "chapter-01", "--path", root]);
+    expect(split.code).toBe(3);
+    expect(split.err).toBe("Fix cli-defaults or severity in story.md before running story split (story validate lists every problem): story.md cli-defaults[0] names split, which acts on named entities and cannot take defaults\n");
+    expect(fs.readFileSync(chapter, "utf8")).toBe(before);
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(false);
+  });
+
   test("commands that make a project, and projects without a readable story.md, read no config", () => {
     const cwd = makeTempDir();
     expect(readCliConfig(cwd)).toEqual({ defaults: {}, severity: {}, exemptions: [], errors: [] });
@@ -369,7 +381,9 @@ describe("config validation", () => {
     ["cli-defaults:\n  - command: build\n    path: ../other", "story.md cli-defaults[0] sets path: the project is the folder story.md is in"],
     ["cli-defaults:\n  - command: prose\n    max-adverb: 3", "story.md cli-defaults[0] sets max-adverb, which story prose does not accept; did you mean max-adverbs?"],
     ["cli-defaults:\n  - command: validate\n    help: true", "story.md cli-defaults[0] sets help, which story validate does not accept"],
-    ["cli-defaults:\n  - command: add\n    status: draft", "story.md cli-defaults[0] names add, which acts on one named entity and cannot take defaults"],
+    ["cli-defaults:\n  - command: add\n    status: draft", "story.md cli-defaults[0] names add, which acts on named entities and cannot take defaults"],
+    ["cli-defaults:\n  - command: split\n    at: 1", "story.md cli-defaults[0] names split, which acts on named entities and cannot take defaults"],
+    ["cli-defaults:\n  - command: merge", "story.md cli-defaults[0] names merge, which acts on named entities and cannot take defaults"],
     ["cli-defaults:\n  - command: passes\n    start: line", "story.md cli-defaults[0] sets start, which names one target and cannot be a default"],
     ["cli-defaults:\n  - command: progress\n    date: 2026-01-01", "story.md cli-defaults[0] sets date, which names one target and cannot be a default"],
     ["cli-defaults:\n  - command: snapshot\n    force: true", "story.md cli-defaults[0] sets force, which belongs to one run: pass --force on the command line"],

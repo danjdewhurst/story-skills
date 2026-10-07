@@ -19291,7 +19291,7 @@ function formatSimilarity(report) {
 
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
-var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove"]);
+var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
 var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"] };
 var LINKED_FLAGS = {
@@ -19337,7 +19337,7 @@ function parseDefaults(raw, errors) {
       continue;
     }
     if (TARGETED_COMMANDS.has(name)) {
-      errors.push(`${label} names ${name}, which acts on one named entity and cannot take defaults`);
+      errors.push(`${label} names ${name}, which acts on named entities and cannot take defaults`);
       continue;
     }
     if (Object.hasOwn(defaults, name)) {
