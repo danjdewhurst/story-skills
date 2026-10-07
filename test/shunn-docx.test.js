@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
 import { shunnHeadParts, shunnHtml } from "../src/packaging.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, readArchiveEntries, writeMarkdown } from "./helpers.js";
 
 function shunnProject() {
   const cwd = makeTempDir();
@@ -31,22 +31,6 @@ word-count: 0
   });
   return { root, cwd };
 }
-
-describe("shunn docx assertions on decoded text", () => {
-  test("docx --shunn embeds Shunn manuscript XML formatting", () => {
-    const { root } = shunnProject();
-    const { outFile } = buildBook(root, { format: "docx", shunn: true });
-    const text = readArchiveText(outFile);
-
-    expect(text).toContain("Courier New");
-    expect(text).toContain(`<w:sz w:val="24"/>`);
-    expect(text).toContain(`<w:spacing w:line="480" w:lineRule="auto"/>`);
-    expect(text).toContain(`<w:br w:type="page"/>`);
-    expect(text).toContain("Approximately 11 words");
-    expect(text).toContain("<w:b/>");
-    expect(text).toContain("<w:i/>");
-  });
-});
 
 const HEADER_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
 const LETTER = `<w:pgSz w:w="12240" w:h="15840"/>`;
