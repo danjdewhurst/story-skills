@@ -10474,6 +10474,15 @@ function autolinkEnd(text, index) {
   return index + match[0].length;
 }
 function withoutLinks(source) {
+  let result = "";
+  let position = 0;
+  for (const [start, end] of linkCuts(source)) {
+    result += source.slice(position, start);
+    position = end;
+  }
+  return result + source.slice(position);
+}
+function linkCuts(source) {
   const cuts = [];
   for (const [start, end] of inlineBlocks(source)) {
     const openers = [];
@@ -10522,15 +10531,15 @@ function withoutLinks(source) {
     }
   }
   cuts.sort((left, right) => left[0] - right[0]);
-  let result = "";
+  const removed = [];
   let position = 0;
   for (const [start, end] of cuts) {
     if (end > position) {
-      result += source.slice(position, Math.max(start, position));
+      removed.push([Math.max(start, position), end]);
       position = end;
     }
   }
-  return result + source.slice(position);
+  return removed;
 }
 function inlineBlocks(source) {
   const blocks = [];
@@ -11124,28 +11133,68 @@ function countedText(markdown) {
 }
 function proseWordSpans(text) {
   const source = String(text);
-  let counted = "";
-  const starts = [];
-  const ends = [];
+  const cuts = source.includes("](") ? linkCuts(source) : [];
+  const links = editedText(source, cuts.map(([start, end]) => [start, end, ""]));
+  const markup = editedText(links.text, markupEdits(links.text));
+  const urls = editedText(markup.text, urlEdits(markup.text));
+  return wordSpans(urls.text, COUNTED_WORD).map(({ word, start, end }) => {
+    const [inMarkup, markupEnd] = urls.back(start, end);
+    const [inLinks, linksEnd] = markup.back(inMarkup, markupEnd);
+    const [from, to] = links.back(inLinks, linksEnd);
+    return { word: word === URL_PLACEHOLDER ? markup.text.slice(inMarkup, markupEnd) : word, start: from, end: to };
+  });
+}
+function editedText(text, edits) {
+  let result = "";
+  const runs = [];
   let position = 0;
   const copy = (end) => {
-    for (let index = position;index < end; index += 1) {
-      starts.push(index);
-      ends.push(index + 1);
+    if (end > position) {
+      runs.push({ out: result.length, from: position, to: end, copied: true });
+      result += text.slice(position, end);
     }
-    counted += source.slice(position, end);
   };
-  for (const [start, end, replacement] of markupEdits(source)) {
+  for (const [start, end, replacement] of edits) {
     copy(start);
-    counted += replacement;
-    for (let index = 0;index < replacement.length; index += 1) {
-      starts.push(start);
-      ends.push(end);
-    }
+    runs.push({ out: result.length, from: start, to: end, copied: false });
+    result += replacement;
     position = end;
   }
-  copy(source.length);
-  return wordSpans(counted, WORD_PATTERN).map(({ word, start, end }) => ({ word, start: starts[start], end: ends[end - 1] }));
+  copy(text.length);
+  const runAt = (index) => {
+    let low = 0;
+    let high = runs.length - 1;
+    while (low < high) {
+      const middle = low + high + 1 >> 1;
+      if (runs[middle].out <= index) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return runs[low];
+  };
+  const startIn = (index) => {
+    const run = runAt(index);
+    return run.copied ? run.from + (index - run.out) : run.from;
+  };
+  const endIn = (index) => {
+    const run = runAt(index);
+    return run.copied ? run.from + (index - run.out) + 1 : run.to;
+  };
+  return { text: result, back: (start, end) => [startIn(start), endIn(end - 1)] };
+}
+function urlEdits(text) {
+  const edits = [];
+  for (const match of text.matchAll(/\uE000/g)) {
+    edits.push([match.index, match.index + 1, " "]);
+  }
+  if (/:\/\/|www\.|@/i.test(text)) {
+    for (const match of text.replace(/\uE000/g, " ").matchAll(URL_OR_EMAIL)) {
+      edits.push([match.index, match.index + match[0].length, ` ${URL_PLACEHOLDER} `]);
+    }
+  }
+  return edits.sort((left, right) => left[0] - right[0]);
 }
 function markupEdits(text, code = literalSpans(text), definitions = [], defined = NO_LABELS) {
   const edits = definitions.map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
@@ -11275,7 +11324,7 @@ function scanMarkup(text) {
     }
     if (position === 0 || text[position - 1] === `
 `) {
-      const marker = /^ {0,3}(`{3,})/.exec(text.slice(position, lineEnd));
+      const marker = /^ {0,3}(`{3,})(?=[^`]*$)/.exec(text.slice(position, lineEnd));
       if (marker) {
         fences ??= fenceCloser(text);
         const end = fences(lineEnd, marker[1].length);
@@ -11295,6 +11344,10 @@ function scanMarkup(text) {
     const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
     const tick = nextTick;
     if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
+      if (escaped(text, tick)) {
+        position = tick + 1;
+        continue;
+      }
       let runEnd = tick;
       while (text[runEnd] === "`") {
         runEnd += 1;
@@ -11394,7 +11447,7 @@ function closedFences(lines) {
   const fences = [];
   let open = null;
   for (const [index, line] of lines.entries()) {
-    const marker = /^ {0,3}(`{3,})/.exec(line);
+    const marker = /^ {0,3}(`{3,})(?=[^`]*$)/.exec(line);
     if (!marker) {
       continue;
     }
@@ -11705,6 +11758,7 @@ var NEVER = "(?!)";
 var CONTEXT_WINDOW = 64;
 var CLOSING_MARKS = ")\\]*_";
 var OPENING_MARKS = "(\\[*_";
+var ABBREVIATION_STOP = new RegExp(`^\\.[${CLOSING_MARKS}]*$`);
 var FULL_WIDTH_CLOSERS = "」』）";
 var SPACED_CLOSERS = "»›";
 var SPACED_OPENERS = "«‹";
@@ -11735,13 +11789,13 @@ function buildRules(pack) {
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
   const nonNames = either(words("candidateStopwords"));
   return {
-    title: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("titleAbbreviations"))})$`),
-    initial: new RegExp(`(?:^|[\\s${openers}(])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
+    title: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${either(words("titleAbbreviations"))})$`),
+    initial: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
     nextInitial: new RegExp(`^${dashed}\\p{Lu}\\.`, "u"),
     nextNonName: new RegExp(`^${dashed}(${nonNames})(?![\\p{L}\\p{N}]|['’]\\p{Lu})( \\p{Lu})?`, "u"),
     particles: checkSet(pack, "titleWords") ?? new Set,
     dash: new RegExp(`^${anyOf(marks.dashes)}`),
-    context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...pack.ordinalStop === true ? ["\\d+"] : []])})$`),
+    context: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${either([...words("contextAbbreviations"), ...pack.ordinalStop === true ? ["\\d+"] : []])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     end: new RegExp(ends.join("|") || NEVER, "g"),
     fullWidth: new RegExp(`^${anyOf(marks.fullWidthEnds)}`),
@@ -11813,7 +11867,7 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) || rules.dash.test(next) : rules.title.test(before) || rules.initial.test(before) && !loneCapitalEnds(before, next, rules, pack));
+    const abbreviation = ABBREVIATION_STOP.test(match[0]) && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) || rules.dash.test(next) : rules.title.test(before) || rules.initial.test(before) && !loneCapitalEnds(before, next, rules, pack));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
