@@ -2,8 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
-import { git, gitEnv, makeTempDir } from "./helpers.js";
+import { SLEEPER_SCRIPT, git, gitEnv, makeTempDir, processRunning } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 
@@ -137,34 +136,34 @@ describe("git for tests (#561)", () => {
 });
 
 describe("otherLivePid", () => {
-  test("its sleeper exits once the process that started it is gone, though no exit handler runs", () => {
-    const helpers = pathToFileURL(path.join(import.meta.dir, "helpers.js")).href;
-    const pidFile = path.join(makeTempDir(), "sleeper.pid");
-    // The parent waits past the sleeper's first check, makes sure it is
-    // still running, and is killed, as bun test ends without running exit
-    // handlers.
-    const parent = spawnSync(process.execPath, ["-e", `Promise.all([import(${JSON.stringify(helpers)}), import("node:fs")]).then(([{ otherLivePid }, fs]) => {
-      const pid = otherLivePid();
-      Bun.sleepSync(1500);
-      process.kill(pid, 0);
-      fs.writeFileSync(${JSON.stringify(pidFile)}, String(pid));
-      process.kill(process.pid, "SIGKILL");
-    })`], { encoding: "utf8" });
-    expect(fs.existsSync(pidFile), parent.stderr).toBe(true);
-    const pid = Number(fs.readFileSync(pidFile, "utf8"));
-    let alive = true;
+  // Whether `pid` is still the sleeper, which only /proc can tell; elsewhere
+  // a pid is never taken for it, so another process that has the pid now is
+  // never ended.
+  function isSleeper(pid) {
     try {
-      for (let tries = 0; tries < 100 && alive; tries += 1) {
-        try {
-          process.kill(pid, 0);
-          Bun.sleepSync(100);
-        } catch {
-          alive = false;
-        }
+      return fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").includes(SLEEPER_SCRIPT);
+    } catch {
+      return false;
+    }
+  }
+
+  test("its sleeper runs while the process that started it does, and exits once it is gone, though no exit handler runs", () => {
+    const out = path.join(makeTempDir(), "sleeper.json");
+    const parent = spawnSync(process.execPath, [path.join(import.meta.dir, "fixtures", "sleeper-parent.js"), out], { encoding: "utf8" });
+    expect(fs.existsSync(out), parent.stderr).toBe(true);
+    const { pid, running } = JSON.parse(fs.readFileSync(out, "utf8"));
+    let gone = !running;
+    try {
+      expect(running).toBe(true);
+      // processRunning counts a zombie as gone, as the orphaned sleeper
+      // stays where bun test is pid 1 and reaps nothing.
+      for (let tries = 0; tries < 100 && !gone; tries += 1) {
+        Bun.sleepSync(100);
+        gone = !processRunning(pid);
       }
-      expect(alive).toBe(false);
+      expect(gone).toBe(true);
     } finally {
-      if (alive) {
+      if (!gone && isSleeper(pid)) {
         process.kill(pid);
       }
     }
