@@ -2,6 +2,7 @@ import path from "node:path";
 import { readTextFile } from "./files.js";
 import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
+import { nearMissKeys } from "./frontmatter-keys.js";
 import { kebabCase } from "./markdown.js";
 import { suggestion } from "./options.js";
 
@@ -56,15 +57,12 @@ export function exemptionProblems(entry, label = "exemption") {
     return [err("entry-not-mapping", `${label} must be a mapping`, EXEMPTIONS_FILE)];
   }
   const problems = [];
-  // A misspelled key (`Code`, `files`) would be ignored, widening the entry
-  // to whatever its other keys match, so it stops the entry.
+  // A misspelled key (`Code`, `files`, `patern`) would be ignored, widening
+  // the entry to whatever its other keys match, so it stops the entry.
   for (const key of Object.keys(entry)) {
-    const intended = [...MATCH_KEYS, "reason"].find((known) => {
-      const normalized = key.trim().toLowerCase().replace(/[\s_]+/g, "-");
-      return key !== known && (normalized === known || normalized === `${known}s`);
-    });
-    if (intended !== undefined) {
-      problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended}?`, EXEMPTIONS_FILE));
+    const intended = nearMissKeys(key, [...MATCH_KEYS, "reason"]);
+    if (intended.length > 0) {
+      problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended.join(" or ")}?`, EXEMPTIONS_FILE));
     }
   }
   if (MATCH_KEYS.every((key) => entry[key] === undefined)) {
