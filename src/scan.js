@@ -33,7 +33,7 @@ import {
 } from "./markdown.js";
 import { COUNT_UNITS, countUnit, formRanges } from "./forms.js";
 import { TWEE_LINK_UNSAFE } from "./twee.js";
-import { PROGRESS_FILE } from "./progress.js";
+import { PROGRESS_FILE } from "./progress-file.js";
 import { languagePack, projectLanguage } from "./languages/index.js";
 import { withStyleLists } from "./languages/style.js";
 import { isBookNumber, readBookFrontmatter } from "./series.js";

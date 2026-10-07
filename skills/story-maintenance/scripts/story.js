@@ -13418,458 +13418,8 @@ function tweeSource(story) {
 `;
 }
 
-// src/release-schedule.js
-var RELEASE_SOON_DAYS = 3;
-var MONTHS_PATTERN = /^(\d+)\s+months?$/i;
-var MAX_RELEASE_MONTHS = 999999;
-var LAST_DAY = parseClockDate("9999-12-31").days;
-function projectRelease(project, today) {
-  return releaseSchedule({
-    data: project.story.data,
-    today,
-    chapters: project.chapters.map((chapter) => ({
-      id: chapter.id,
-      file: projectPath(project.root, chapter.file),
-      releaseDate: chapter.releaseDate,
-      drafted: chapter.wordCount > 0 || chapter.count > 0
-    }))
-  });
-}
-function releaseData(release) {
-  if (release === null) {
-    return null;
-  }
-  const { warnings, ...rest } = release;
-  return rest;
-}
-function releaseEvery(value) {
-  if (Number.isInteger(value)) {
-    return value >= 1 ? { every: value, unit: "day" } : null;
-  }
-  const months = releaseMonths(value);
-  return months !== null && months >= 1 && months <= MAX_RELEASE_MONTHS ? { every: months, unit: "month" } : null;
-}
-function releaseMonths(value) {
-  const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
-  return match ? Number(match[1]) : null;
-}
-function releaseWarnDays(data) {
-  const days = data["release-warn-days"];
-  return Number.isInteger(days) && days >= 0 ? days : RELEASE_SOON_DAYS;
-}
-function releaseCadence(data) {
-  const every = releaseEvery(data["release-every"]);
-  const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
-  if (every === null || !start) {
-    return null;
-  }
-  const date = new Date(start.days * 86400000);
-  return { ...every, start: start.text, startDays: start.days, startMonth: date.getUTCFullYear() * 12 + date.getUTCMonth(), startDay: date.getUTCDate() };
-}
-function cadenceDays(cadence, index) {
-  if (cadence.unit === "day") {
-    return cadence.startDays + index * cadence.every;
-  }
-  const month = cadence.startMonth + index * cadence.every;
-  const year = Math.floor(month / 12);
-  if (year > 9999) {
-    return Infinity;
-  }
-  const lastDay = utcDate(year, month % 12 + 1, 0).getUTCDate();
-  return utcDate(year, month % 12, Math.min(cadence.startDay, lastDay)).getTime() / 86400000;
-}
-function dueBy(cadence, days) {
-  if (days < cadence.startDays) {
-    return 0;
-  }
-  if (cadence.unit === "day") {
-    return Math.floor((days - cadence.startDays) / cadence.every) + 1;
-  }
-  const date = new Date(days * 86400000);
-  const index = Math.floor((date.getUTCFullYear() * 12 + date.getUTCMonth() - cadence.startMonth) / cadence.every);
-  return cadenceDays(cadence, index) <= days ? index + 1 : index;
-}
-function utcDate(year, month, day) {
-  const date = new Date(0);
-  date.setUTCFullYear(year, month, day);
-  return date;
-}
-function releaseSchedule({ data, chapters, today }) {
-  const cadence = releaseCadence(data);
-  const warnDays = releaseWarnDays(data);
-  const complete = data.status === "complete";
-  const todayDays = parseClockDate(today).days;
-  const episodes = [];
-  chapters.forEach((chapter, index) => {
-    let days = cadence ? cadenceDays(cadence, index) : null;
-    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
-      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
-    }
-    if (days !== null && days <= LAST_DAY) {
-      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
-    }
-  });
-  if (cadence === null && episodes.length === 0) {
-    return null;
-  }
-  const projected = (index) => {
-    const days = cadenceDays(cadence, index);
-    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
-  };
-  const candidates = episodes.filter((episode) => episode.days >= todayDays);
-  let unwritten = 0;
-  let firstUnwritten = null;
-  if (cadence !== null && !complete) {
-    const upcoming = projected(Math.max(chapters.length, dueBy(cadence, todayDays - 1)));
-    if (upcoming !== null) {
-      candidates.push(upcoming);
-    }
-    unwritten = dueBy(cadence, Math.min(todayDays + warnDays, LAST_DAY)) - chapters.length;
-    firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
-  }
-  candidates.sort((left, right) => left.days - right.days || left.episode - right.episode);
-  const next = candidates.length === 0 ? null : withDaysUntil(candidates[0], todayDays);
-  const last = complete && episodes.length > 0 && episodes.length === chapters.length ? episodes.reduce((latest, episode) => episode.days >= latest.days ? episode : latest).episode : null;
-  const warnings = [];
-  for (const episode of episodes) {
-    if (!episode.drafted && episode.days <= todayDays + warnDays) {
-      warnings.push(warn("release-undrafted", `${episode.file} (episode ${episode.episode}) ${releaseWhen(episode.date, episode.days - todayDays)} and has no prose yet`, episode.file));
-    }
-  }
-  if (firstUnwritten !== null) {
-    const more = unwritten === 1 ? "" : ` (and ${plural(unwritten - 1, "more scheduled episode")} after it)`;
-    warnings.push(warn("release-undrafted", `episode ${firstUnwritten.episode} ${releaseWhen(firstUnwritten.date, firstUnwritten.days - todayDays)} and has no chapter yet${more}`, "story.md"));
-  }
-  return {
-    every: cadence?.every ?? null,
-    unit: cadence?.unit ?? null,
-    start: cadence?.start ?? null,
-    warnDays,
-    complete,
-    last,
-    next,
-    episodes: episodes.map(({ days, ...episode }) => episode),
-    warnings
-  };
-}
-function withDaysUntil({ days, ...episode }, todayDays) {
-  return { ...episode, daysUntil: days - todayDays };
-}
-function releaseWhen(date, daysUntil) {
-  if (daysUntil === 0) {
-    return `releases today (${date})`;
-  }
-  return daysUntil > 0 ? `releases ${date}, in ${plural(daysUntil, "day")},` : `was due ${date}, ${plural(-daysUntil, "day")} ago,`;
-}
-function formatNextRelease(release) {
-  if (!release) {
-    return null;
-  }
-  if (release.next === null) {
-    const last = release.episodes.find((entry) => entry.episode === release.last);
-    return last === undefined ? "Next release: none scheduled after today" : `Next release: none, the story is complete; episode ${last.episode} (${last.chapter}) on ${last.date} was the last`;
-  }
-  const { episode, chapter, date, daysUntil, drafted } = release.next;
-  const when = daysUntil === 0 ? "today" : `in ${plural(daysUntil, "day")}`;
-  const state = chapter === null ? "no chapter yet" : drafted ? "drafted" : "not drafted";
-  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state}${episode === release.last ? ", the last episode" : ""})`;
-}
-function formatDate(days) {
-  return new Date(days * 86400000).toISOString().slice(0, 10);
-}
-
-// src/progress.js
+// src/progress-file.js
 var PROGRESS_FILE = "progress.md";
-var PACE_SESSIONS = 7;
-var HISTORY_WEEKS = 4;
-var MAX_HISTORY_WEEKS = 52;
-function historyWeeks(options = {}) {
-  const raw = options.weeks;
-  if (raw === undefined) {
-    return HISTORY_WEEKS;
-  }
-  const text = String(raw).trim();
-  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
-    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`, "weeks");
-  }
-  return Number(text);
-}
-var WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-var WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-function weekdayName(value) {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const text = value.trim().toLowerCase();
-  const index = WEEKDAY_NAMES.findIndex((name, position) => text === name || text === WEEKDAYS[position]);
-  return index === -1 ? null : WEEKDAYS[index];
-}
-function writingDays(value) {
-  const days = new Set((Array.isArray(value) ? value : []).map(weekdayName).filter((day) => day !== null));
-  return days.size === 0 ? null : WEEKDAYS.filter((day) => days.has(day));
-}
-function weekdayIndex(days) {
-  return ((days + 3) % 7 + 7) % 7;
-}
-var PROJECTION_HORIZON_DAYS = 100 * 366;
-function withSession(sessions, date, counts) {
-  let found = false;
-  const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
-    if (!found && session && typeof session === "object" && sessionDate(session) === date) {
-      found = true;
-      return { ...session, ...counts };
-    }
-    return session;
-  });
-  if (!found) {
-    kept.push({ date, ...counts });
-  }
-  return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
-}
-function sessionDate(session) {
-  return typeof session?.date === "string" ? session.date.trim() : "";
-}
-function cleanSessions(value) {
-  const sessions = [];
-  const count = (number) => Number.isInteger(number) && number >= 0;
-  for (const entry of Array.isArray(value) ? value : []) {
-    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
-      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
-    }
-  }
-  return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
-}
-function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
-  const characterBook = unit === "characters";
-  const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
-  const length = characterBook ? characters : words;
-  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
-  const todayDays = parseClockDate(today).days;
-  const result = {
-    unit,
-    words,
-    characterCount: characterBook ? characters : null,
-    target: target ?? null,
-    percent: target ? length * 100 / target : null,
-    remaining: target ? Math.max(0, target - length) : null,
-    deadline: null,
-    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({
-      id: chapter.id,
-      words: chapter.words,
-      characterCount: characterBook ? chapter.characters : null,
-      target: chapter.target,
-      percent: inUnit(chapter) * 100 / chapter.target
-    })),
-    sessions: measured.length,
-    lastSession: null,
-    pace: null,
-    projected: null,
-    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled, weeks })
-  };
-  const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
-  if (deadlineDate) {
-    const daysLeft = deadlineDate.days - todayDays;
-    result.deadline = {
-      date: deadlineDate.text,
-      daysLeft,
-      perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
-    };
-  }
-  if (measured.length > 0) {
-    const last = measured[measured.length - 1];
-    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
-    const recent = measured.slice(-PACE_SESSIONS);
-    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
-    if (recent.length > 1 && span > 0) {
-      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
-      const daysNeeded = Math.ceil(result.remaining / result.pace);
-      if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
-        result.projected = formatDate2(todayDays + daysNeeded);
-      }
-    }
-  }
-  return result;
-}
-function computeDaily({ measured, length, todayDays, dailyTarget, scheduled, weeks: historyLength }) {
-  const byDay = new Map;
-  for (const session of measured) {
-    const days = parseClockDate(session.date).days;
-    if (days <= todayDays) {
-      byDay.set(days, session.count);
-    }
-  }
-  const logged = [...byDay.keys()].sort((left, right) => left - right);
-  const gains = new Map;
-  for (let index = 1;index < logged.length; index += 1) {
-    gains.set(logged[index], byDay.get(logged[index]) - byDay.get(logged[index - 1]));
-  }
-  const before = logged.filter((days) => days < todayDays);
-  if (before.length > 0) {
-    gains.set(todayDays, length - byDay.get(before[before.length - 1]));
-  }
-  const scheduledDays = scheduled === null ? null : new Set(scheduled);
-  const isScheduled = (days) => scheduledDays === null || scheduledDays.has(WEEKDAYS[weekdayIndex(days)]);
-  const counts = (days) => gains.has(days) && gains.get(days) > 0 && (dailyTarget === null || gains.get(days) >= dailyTarget);
-  const first = logged.length > 0 ? logged[0] : todayDays;
-  let current = 0;
-  for (let days = counts(todayDays) ? todayDays : todayDays - 1;days >= first; days -= 1) {
-    if (counts(days)) {
-      current += 1;
-    } else if (isScheduled(days)) {
-      break;
-    }
-  }
-  let longest = 0;
-  let run = 0;
-  for (let days = first;days <= todayDays; days += 1) {
-    if (counts(days)) {
-      run += 1;
-      longest = Math.max(longest, run);
-    } else if (isScheduled(days) && days !== todayDays) {
-      run = 0;
-    }
-  }
-  const written = gains.has(todayDays) ? gains.get(todayDays) : null;
-  const monday = todayDays - weekdayIndex(todayDays);
-  const weeks = [];
-  for (let back = historyLength - 1;back >= 0; back -= 1) {
-    const start = monday - back * 7;
-    let total = 0;
-    let days = 0;
-    let planned = 0;
-    for (let day = start;day < start + 7; day += 1) {
-      if (gains.has(day)) {
-        total += gains.get(day);
-        days += gains.get(day) > 0 ? 1 : 0;
-      }
-      planned += isScheduled(day) ? 1 : 0;
-    }
-    weeks.push({ start: formatDate2(start), end: formatDate2(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
-  }
-  return {
-    target: dailyTarget,
-    writingDays: scheduled,
-    today: {
-      date: formatDate2(todayDays),
-      scheduled: isScheduled(todayDays),
-      written,
-      remaining: dailyTarget === null || written === null ? null : Math.max(0, dailyTarget - written),
-      met: dailyTarget === null || written === null ? null : written >= dailyTarget
-    },
-    streak: { current, longest },
-    weeks
-  };
-}
-function formatProgress(progress) {
-  const characters = progress.unit === "characters";
-  const noun = characters ? "character" : "word";
-  const count = (entry) => characters ? entry.characterCount : entry.words;
-  const lines = [];
-  if (progress.target === null) {
-    lines.push(`Progress: ${formatNumber3(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
-  } else {
-    lines.push(`Progress: ${formatNumber3(count(progress))} of ${formatNumber3(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
-    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber3)}`);
-  }
-  if (progress.deadline) {
-    const { date, daysLeft, perDay } = progress.deadline;
-    if (daysLeft < 0) {
-      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
-    } else if (perDay === null) {
-      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
-    } else if (daysLeft === 0) {
-      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber3)} needed`);
-    } else {
-      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber3(perDay)} ${noun}s a day needed`);
-    }
-  }
-  const release = formatNextRelease(progress.release);
-  if (release !== null) {
-    lines.push(release);
-  }
-  if (progress.lastSession) {
-    const { date, since } = progress.lastSession;
-    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber3(since)} ${noun}s since)`);
-  } else {
-    lines.push("Sessions: none logged (run story progress --log after a writing session)");
-  }
-  if (progress.pace !== null) {
-    lines.push(`Pace: ${formatNumber3(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
-  }
-  if (progress.projected) {
-    lines.push(`Projected finish at this pace: ${progress.projected}`);
-  }
-  lines.push(...formatDaily(progress.daily, progress.lastSession !== null, noun));
-  if (progress.chapters.length > 0) {
-    lines.push("", "Chapter targets:");
-    for (const chapter of progress.chapters) {
-      lines.push(`- ${chapter.id}: ${formatNumber3(count(chapter))} of ${formatNumber3(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
-    }
-  }
-  return `${lines.join(`
-`)}
-`;
-}
-function formatDaily(daily, hasSessions, noun) {
-  if (!hasSessions && daily.target === null) {
-    return [];
-  }
-  const lines = [];
-  const { today, target } = daily;
-  const off = today.scheduled ? "" : " (not a writing day)";
-  if (today.written === null) {
-    if (target !== null) {
-      lines.push(`Today: ${formatNumber3(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
-    }
-  } else {
-    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber3(today.written)}`;
-    if (target === null) {
-      lines.push(`Today: ${gained} ${noun}s${off}`);
-    } else {
-      lines.push(`Today: ${gained} of ${formatNumber3(target)} ${noun}s (${today.met ? "target met" : `${formatNumber3(today.remaining)} to go`})${off}`);
-    }
-  }
-  if (!hasSessions) {
-    return lines;
-  }
-  const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
-  lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber3(daily.streak.longest)}${days})`);
-  lines.push("", daily.weeks.length === 1 ? "This week:" : `Last ${daily.weeks.length} weeks:`);
-  for (const week of daily.weeks) {
-    const amount = week.target === null ? formatNumber3(week.written) : `${formatNumber3(week.written)} of ${formatNumber3(week.target)}`;
-    lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural2(week.days, "day")}`);
-  }
-  return lines;
-}
-function todayOption(date, command) {
-  const today = date === undefined ? localDate() : String(date).trim();
-  const dateError = storyDateError(today);
-  if (dateError !== "" || today === "") {
-    throw usageError(`${command} --date ${dateError || "must be a YYYY-MM-DD date"}`);
-  }
-  return today;
-}
-function localDate(now = new Date) {
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-function formatDate2(days) {
-  return new Date(days * 86400000).toISOString().slice(0, 10);
-}
-function plural2(count, noun, format = String) {
-  return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
-}
-function formatPercent(percent, places) {
-  const scale = 10 ** places;
-  let value = Math.round(percent * scale) / scale;
-  if (value >= 100 && percent < 100) {
-    value = Math.floor(percent * scale) / scale;
-  }
-  return value.toFixed(places);
-}
-function formatNumber3(value) {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
 
 // src/languages/style.js
 var STYLE_LISTS = {
@@ -19246,6 +18796,458 @@ function escapeHtml(value) {
 }
 function cssString(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n\f]+/g, " ").replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16).toUpperCase()} `);
+}
+
+// src/release-schedule.js
+var RELEASE_SOON_DAYS = 3;
+var MONTHS_PATTERN = /^(\d+)\s+months?$/i;
+var MAX_RELEASE_MONTHS = 999999;
+var LAST_DAY = parseClockDate("9999-12-31").days;
+function projectRelease(project, today) {
+  return releaseSchedule({
+    data: project.story.data,
+    today,
+    chapters: project.chapters.map((chapter) => ({
+      id: chapter.id,
+      file: projectPath(project.root, chapter.file),
+      releaseDate: chapter.releaseDate,
+      drafted: chapter.wordCount > 0 || chapter.count > 0
+    }))
+  });
+}
+function releaseData(release) {
+  if (release === null) {
+    return null;
+  }
+  const { warnings, ...rest } = release;
+  return rest;
+}
+function releaseEvery(value) {
+  if (Number.isInteger(value)) {
+    return value >= 1 ? { every: value, unit: "day" } : null;
+  }
+  const months = releaseMonths(value);
+  return months !== null && months >= 1 && months <= MAX_RELEASE_MONTHS ? { every: months, unit: "month" } : null;
+}
+function releaseMonths(value) {
+  const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
+  return match ? Number(match[1]) : null;
+}
+function releaseWarnDays(data) {
+  const days = data["release-warn-days"];
+  return Number.isInteger(days) && days >= 0 ? days : RELEASE_SOON_DAYS;
+}
+function releaseCadence(data) {
+  const every = releaseEvery(data["release-every"]);
+  const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
+  if (every === null || !start) {
+    return null;
+  }
+  const date = new Date(start.days * 86400000);
+  return { ...every, start: start.text, startDays: start.days, startMonth: date.getUTCFullYear() * 12 + date.getUTCMonth(), startDay: date.getUTCDate() };
+}
+function cadenceDays(cadence, index) {
+  if (cadence.unit === "day") {
+    return cadence.startDays + index * cadence.every;
+  }
+  const month = cadence.startMonth + index * cadence.every;
+  const year = Math.floor(month / 12);
+  if (year > 9999) {
+    return Infinity;
+  }
+  const lastDay = utcDate(year, month % 12 + 1, 0).getUTCDate();
+  return utcDate(year, month % 12, Math.min(cadence.startDay, lastDay)).getTime() / 86400000;
+}
+function dueBy(cadence, days) {
+  if (days < cadence.startDays) {
+    return 0;
+  }
+  if (cadence.unit === "day") {
+    return Math.floor((days - cadence.startDays) / cadence.every) + 1;
+  }
+  const date = new Date(days * 86400000);
+  const index = Math.floor((date.getUTCFullYear() * 12 + date.getUTCMonth() - cadence.startMonth) / cadence.every);
+  return cadenceDays(cadence, index) <= days ? index + 1 : index;
+}
+function utcDate(year, month, day) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
+}
+function releaseSchedule({ data, chapters, today }) {
+  const cadence = releaseCadence(data);
+  const warnDays = releaseWarnDays(data);
+  const complete = data.status === "complete";
+  const todayDays = parseClockDate(today).days;
+  const episodes = [];
+  chapters.forEach((chapter, index) => {
+    let days = cadence ? cadenceDays(cadence, index) : null;
+    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
+      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
+    }
+    if (days !== null && days <= LAST_DAY) {
+      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
+    }
+  });
+  if (cadence === null && episodes.length === 0) {
+    return null;
+  }
+  const projected = (index) => {
+    const days = cadenceDays(cadence, index);
+    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+  };
+  const candidates = episodes.filter((episode) => episode.days >= todayDays);
+  let unwritten = 0;
+  let firstUnwritten = null;
+  if (cadence !== null && !complete) {
+    const upcoming = projected(Math.max(chapters.length, dueBy(cadence, todayDays - 1)));
+    if (upcoming !== null) {
+      candidates.push(upcoming);
+    }
+    unwritten = dueBy(cadence, Math.min(todayDays + warnDays, LAST_DAY)) - chapters.length;
+    firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
+  }
+  candidates.sort((left, right) => left.days - right.days || left.episode - right.episode);
+  const next = candidates.length === 0 ? null : withDaysUntil(candidates[0], todayDays);
+  const last = complete && episodes.length > 0 && episodes.length === chapters.length ? episodes.reduce((latest, episode) => episode.days >= latest.days ? episode : latest).episode : null;
+  const warnings = [];
+  for (const episode of episodes) {
+    if (!episode.drafted && episode.days <= todayDays + warnDays) {
+      warnings.push(warn("release-undrafted", `${episode.file} (episode ${episode.episode}) ${releaseWhen(episode.date, episode.days - todayDays)} and has no prose yet`, episode.file));
+    }
+  }
+  if (firstUnwritten !== null) {
+    const more = unwritten === 1 ? "" : ` (and ${plural(unwritten - 1, "more scheduled episode")} after it)`;
+    warnings.push(warn("release-undrafted", `episode ${firstUnwritten.episode} ${releaseWhen(firstUnwritten.date, firstUnwritten.days - todayDays)} and has no chapter yet${more}`, "story.md"));
+  }
+  return {
+    every: cadence?.every ?? null,
+    unit: cadence?.unit ?? null,
+    start: cadence?.start ?? null,
+    warnDays,
+    complete,
+    last,
+    next,
+    episodes: episodes.map(({ days, ...episode }) => episode),
+    warnings
+  };
+}
+function withDaysUntil({ days, ...episode }, todayDays) {
+  return { ...episode, daysUntil: days - todayDays };
+}
+function releaseWhen(date, daysUntil) {
+  if (daysUntil === 0) {
+    return `releases today (${date})`;
+  }
+  return daysUntil > 0 ? `releases ${date}, in ${plural(daysUntil, "day")},` : `was due ${date}, ${plural(-daysUntil, "day")} ago,`;
+}
+function formatNextRelease(release) {
+  if (!release) {
+    return null;
+  }
+  if (release.next === null) {
+    const last = release.episodes.find((entry) => entry.episode === release.last);
+    return last === undefined ? "Next release: none scheduled after today" : `Next release: none, the story is complete; episode ${last.episode} (${last.chapter}) on ${last.date} was the last`;
+  }
+  const { episode, chapter, date, daysUntil, drafted } = release.next;
+  const when = daysUntil === 0 ? "today" : `in ${plural(daysUntil, "day")}`;
+  const state = chapter === null ? "no chapter yet" : drafted ? "drafted" : "not drafted";
+  return `Next release: episode ${episode}${chapter === null ? "" : ` (${chapter})`} on ${date}, ${when} (${state}${episode === release.last ? ", the last episode" : ""})`;
+}
+function formatDate(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
+}
+
+// src/progress.js
+var PACE_SESSIONS = 7;
+var HISTORY_WEEKS = 4;
+var MAX_HISTORY_WEEKS = 52;
+function historyWeeks(options = {}) {
+  const raw = options.weeks;
+  if (raw === undefined) {
+    return HISTORY_WEEKS;
+  }
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
+    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`, "weeks");
+  }
+  return Number(text);
+}
+var WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+var WEEKDAY_NAMES = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+function weekdayName(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const text = value.trim().toLowerCase();
+  const index = WEEKDAY_NAMES.findIndex((name, position) => text === name || text === WEEKDAYS[position]);
+  return index === -1 ? null : WEEKDAYS[index];
+}
+function writingDays(value) {
+  const days = new Set((Array.isArray(value) ? value : []).map(weekdayName).filter((day) => day !== null));
+  return days.size === 0 ? null : WEEKDAYS.filter((day) => days.has(day));
+}
+function weekdayIndex(days) {
+  return ((days + 3) % 7 + 7) % 7;
+}
+var PROJECTION_HORIZON_DAYS = 100 * 366;
+function withSession(sessions, date, counts) {
+  let found = false;
+  const kept = (Array.isArray(sessions) ? sessions : []).map((session) => {
+    if (!found && session && typeof session === "object" && sessionDate(session) === date) {
+      found = true;
+      return { ...session, ...counts };
+    }
+    return session;
+  });
+  if (!found) {
+    kept.push({ date, ...counts });
+  }
+  return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
+}
+function sessionDate(session) {
+  return typeof session?.date === "string" ? session.date.trim() : "";
+}
+function cleanSessions(value) {
+  const sessions = [];
+  const count = (number) => Number.isInteger(number) && number >= 0;
+  for (const entry of Array.isArray(value) ? value : []) {
+    if (entry && typeof entry === "object" && parseClockDate(sessionDate(entry)) && count(entry.words)) {
+      sessions.push({ date: sessionDate(entry), words: entry.words, characters: count(entry.characters) ? entry.characters : null });
+    }
+  }
+  return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
+}
+function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
+  const characterBook = unit === "characters";
+  const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
+  const length = characterBook ? characters : words;
+  const measured = (Array.isArray(sessions) ? sessions : []).filter((session) => inUnit(session) !== null);
+  const todayDays = parseClockDate(today).days;
+  const result = {
+    unit,
+    words,
+    characterCount: characterBook ? characters : null,
+    target: target ?? null,
+    percent: target ? length * 100 / target : null,
+    remaining: target ? Math.max(0, target - length) : null,
+    deadline: null,
+    chapters: chapters.filter((chapter) => chapter.target > 0).map((chapter) => ({
+      id: chapter.id,
+      words: chapter.words,
+      characterCount: characterBook ? chapter.characters : null,
+      target: chapter.target,
+      percent: inUnit(chapter) * 100 / chapter.target
+    })),
+    sessions: measured.length,
+    lastSession: null,
+    pace: null,
+    projected: null,
+    daily: computeDaily({ measured: measured.map((session) => ({ date: session.date, count: inUnit(session) })), length, todayDays, dailyTarget, scheduled, weeks })
+  };
+  const deadlineDate = deadline ? parseClockDate(deadline) : undefined;
+  if (deadlineDate) {
+    const daysLeft = deadlineDate.days - todayDays;
+    result.deadline = {
+      date: deadlineDate.text,
+      daysLeft,
+      perDay: result.remaining !== null && daysLeft >= 0 ? Math.ceil(result.remaining / Math.max(daysLeft, 1)) : null
+    };
+  }
+  if (measured.length > 0) {
+    const last = measured[measured.length - 1];
+    result.lastSession = { date: last.date, words: last.words, characterCount: characterBook ? last.characters : null, since: length - inUnit(last) };
+    const recent = measured.slice(-PACE_SESSIONS);
+    const span = parseClockDate(recent[recent.length - 1].date).days - parseClockDate(recent[0].date).days;
+    if (recent.length > 1 && span > 0) {
+      result.pace = (inUnit(recent[recent.length - 1]) - inUnit(recent[0])) / span;
+      const daysNeeded = Math.ceil(result.remaining / result.pace);
+      if (result.remaining > 0 && Math.round(result.pace) > 0 && daysNeeded <= PROJECTION_HORIZON_DAYS) {
+        result.projected = formatDate2(todayDays + daysNeeded);
+      }
+    }
+  }
+  return result;
+}
+function computeDaily({ measured, length, todayDays, dailyTarget, scheduled, weeks: historyLength }) {
+  const byDay = new Map;
+  for (const session of measured) {
+    const days = parseClockDate(session.date).days;
+    if (days <= todayDays) {
+      byDay.set(days, session.count);
+    }
+  }
+  const logged = [...byDay.keys()].sort((left, right) => left - right);
+  const gains = new Map;
+  for (let index = 1;index < logged.length; index += 1) {
+    gains.set(logged[index], byDay.get(logged[index]) - byDay.get(logged[index - 1]));
+  }
+  const before = logged.filter((days) => days < todayDays);
+  if (before.length > 0) {
+    gains.set(todayDays, length - byDay.get(before[before.length - 1]));
+  }
+  const scheduledDays = scheduled === null ? null : new Set(scheduled);
+  const isScheduled = (days) => scheduledDays === null || scheduledDays.has(WEEKDAYS[weekdayIndex(days)]);
+  const counts = (days) => gains.has(days) && gains.get(days) > 0 && (dailyTarget === null || gains.get(days) >= dailyTarget);
+  const first = logged.length > 0 ? logged[0] : todayDays;
+  let current = 0;
+  for (let days = counts(todayDays) ? todayDays : todayDays - 1;days >= first; days -= 1) {
+    if (counts(days)) {
+      current += 1;
+    } else if (isScheduled(days)) {
+      break;
+    }
+  }
+  let longest = 0;
+  let run = 0;
+  for (let days = first;days <= todayDays; days += 1) {
+    if (counts(days)) {
+      run += 1;
+      longest = Math.max(longest, run);
+    } else if (isScheduled(days) && days !== todayDays) {
+      run = 0;
+    }
+  }
+  const written = gains.has(todayDays) ? gains.get(todayDays) : null;
+  const monday = todayDays - weekdayIndex(todayDays);
+  const weeks = [];
+  for (let back = historyLength - 1;back >= 0; back -= 1) {
+    const start = monday - back * 7;
+    let total = 0;
+    let days = 0;
+    let planned = 0;
+    for (let day = start;day < start + 7; day += 1) {
+      if (gains.has(day)) {
+        total += gains.get(day);
+        days += gains.get(day) > 0 ? 1 : 0;
+      }
+      planned += isScheduled(day) ? 1 : 0;
+    }
+    weeks.push({ start: formatDate2(start), end: formatDate2(start + 6), written: total, days, target: dailyTarget === null ? null : dailyTarget * planned });
+  }
+  return {
+    target: dailyTarget,
+    writingDays: scheduled,
+    today: {
+      date: formatDate2(todayDays),
+      scheduled: isScheduled(todayDays),
+      written,
+      remaining: dailyTarget === null || written === null ? null : Math.max(0, dailyTarget - written),
+      met: dailyTarget === null || written === null ? null : written >= dailyTarget
+    },
+    streak: { current, longest },
+    weeks
+  };
+}
+function formatProgress(progress) {
+  const characters = progress.unit === "characters";
+  const noun = characters ? "character" : "word";
+  const count = (entry) => characters ? entry.characterCount : entry.words;
+  const lines = [];
+  if (progress.target === null) {
+    lines.push(`Progress: ${formatNumber3(count(progress))} ${noun}s (no target-${noun}s in story.md)`);
+  } else {
+    lines.push(`Progress: ${formatNumber3(count(progress))} of ${formatNumber3(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
+    lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber3)}`);
+  }
+  if (progress.deadline) {
+    const { date, daysLeft, perDay } = progress.deadline;
+    if (daysLeft < 0) {
+      lines.push(`Deadline: ${date} passed ${plural2(-daysLeft, "day")} ago`);
+    } else if (perDay === null) {
+      lines.push(`Deadline: ${date} (${daysLeft === 0 ? "today" : `${plural2(daysLeft, "day")} left`})`);
+    } else if (daysLeft === 0) {
+      lines.push(`Deadline: ${date} (today): ${plural2(perDay, noun, formatNumber3)} needed`);
+    } else {
+      lines.push(`Deadline: ${date} (${plural2(daysLeft, "day")} left): ${formatNumber3(perDay)} ${noun}s a day needed`);
+    }
+  }
+  const release = formatNextRelease(progress.release);
+  if (release !== null) {
+    lines.push(release);
+  }
+  if (progress.lastSession) {
+    const { date, since } = progress.lastSession;
+    lines.push(`Sessions: ${progress.sessions} logged; last ${date} (${since >= 0 ? "+" : ""}${formatNumber3(since)} ${noun}s since)`);
+  } else {
+    lines.push("Sessions: none logged (run story progress --log after a writing session)");
+  }
+  if (progress.pace !== null) {
+    lines.push(`Pace: ${formatNumber3(Math.round(progress.pace))} ${noun}s a day over the last ${Math.min(progress.sessions, PACE_SESSIONS)} sessions`);
+  }
+  if (progress.projected) {
+    lines.push(`Projected finish at this pace: ${progress.projected}`);
+  }
+  lines.push(...formatDaily(progress.daily, progress.lastSession !== null, noun));
+  if (progress.chapters.length > 0) {
+    lines.push("", "Chapter targets:");
+    for (const chapter of progress.chapters) {
+      lines.push(`- ${chapter.id}: ${formatNumber3(count(chapter))} of ${formatNumber3(chapter.target)} ${noun}s (${formatPercent(chapter.percent, 0)}%)`);
+    }
+  }
+  return `${lines.join(`
+`)}
+`;
+}
+function formatDaily(daily, hasSessions, noun) {
+  if (!hasSessions && daily.target === null) {
+    return [];
+  }
+  const lines = [];
+  const { today, target } = daily;
+  const off = today.scheduled ? "" : " (not a writing day)";
+  if (today.written === null) {
+    if (target !== null) {
+      lines.push(`Today: ${formatNumber3(target)} ${noun}s a day target (no session logged before today to measure from)${off}`);
+    }
+  } else {
+    const gained = `${today.written >= 0 ? "+" : ""}${formatNumber3(today.written)}`;
+    if (target === null) {
+      lines.push(`Today: ${gained} ${noun}s${off}`);
+    } else {
+      lines.push(`Today: ${gained} of ${formatNumber3(target)} ${noun}s (${today.met ? "target met" : `${formatNumber3(today.remaining)} to go`})${off}`);
+    }
+  }
+  if (!hasSessions) {
+    return lines;
+  }
+  const days = daily.writingDays === null ? "" : `; writing days ${daily.writingDays.join(", ")}`;
+  lines.push(`Streak: ${plural2(daily.streak.current, "day")} (longest ${formatNumber3(daily.streak.longest)}${days})`);
+  lines.push("", daily.weeks.length === 1 ? "This week:" : `Last ${daily.weeks.length} weeks:`);
+  for (const week of daily.weeks) {
+    const amount = week.target === null ? formatNumber3(week.written) : `${formatNumber3(week.written)} of ${formatNumber3(week.target)}`;
+    lines.push(`- ${week.start}: ${amount} ${noun}s on ${plural2(week.days, "day")}`);
+  }
+  return lines;
+}
+function todayOption(date, command) {
+  const today = date === undefined ? localDate() : String(date).trim();
+  const dateError = storyDateError(today);
+  if (dateError !== "" || today === "") {
+    throw usageError(`${command} --date ${dateError || "must be a YYYY-MM-DD date"}`);
+  }
+  return today;
+}
+function localDate(now = new Date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+function formatDate2(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
+}
+function plural2(count, noun, format = String) {
+  return `${format(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+function formatPercent(percent, places) {
+  const scale = 10 ** places;
+  let value = Math.round(percent * scale) / scale;
+  if (value >= 100 && percent < 100) {
+    value = Math.floor(percent * scale) / scale;
+  }
+  return value.toFixed(places);
+}
+function formatNumber3(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 // src/compare.js

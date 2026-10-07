@@ -34,6 +34,16 @@ function sweepProject(title = "Sweep") {
   return createStoryProject({ cwd, title }).root;
 }
 
+// progress.js sits in a circular import with scan.js. Each entry point loads in
+// its own process, since a module graph loads once: progress.js first must not
+// read PROGRESS_FILE before its module has run.
+test("progress.js loads first, without a circular-import error (#735)", () => {
+  const url = pathToFileURL(path.join(import.meta.dirname, "..", "src", "progress.js")).href;
+  const result = spawnSync(process.execPath, ["--eval", `await import(${JSON.stringify(url)});`], { encoding: "utf8" });
+  expect(result.stderr).not.toContain("before initialization");
+  expect(result.status).toBe(0);
+});
+
 describe("story progress", () => {
   test("measures words against the target, deadline, and chapter targets", () => {
     const { root } = progressProject();
