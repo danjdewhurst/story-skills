@@ -17,11 +17,14 @@ import { COMMANDS } from "../src/commands.js";
 // `<!-- command-reference -->` line is a command catalogue, not a block an
 // agent runs, and is skipped.
 //
-// Outside fences, an inline maintenance list is two or more inline-code
-// maintenance commands with a path (`story links .`, not a bare
-// `story links` named in passing) joined only by commas, "and", "then", or
-// "and then". Each must be exactly `story reindex P`, `story wordcount P
-// --write`, and `story check P`, in that order.
+// Outside fences, an inline maintenance run is two or more inline-code
+// maintenance commands (`story links .`, `story check`, `story wordcount
+// --write`) with nothing between them but punctuation, line breaks, and the
+// words "and", "or", "nor", or "then" (see isSeparator). Any other word ends
+// the run, so "`story links .` reports unknown ids, and `story validate`
+// warns" is two runs of one command. A run that gives a run order (see
+// runOrder) must be exactly `story reindex P`, `story wordcount P --write`,
+// and `story check P`, in that order, on one path; `check` may take flags.
 //
 // The docs, the README, the contributor guides, the eval reference answers,
 // and the workflow templates describe the same block, but they also show one
@@ -83,8 +86,10 @@ function storyCommands(line) {
     .replace(/^\$\s+/, "");
   return text.split(/\s*(?:&&|\|\||;)\s*/)
     .map((part) => part
-      .replace(/^npx\s+(?:(?:--yes|-y)\s+)?story-skills(?:@\S+)?(?=\s|$)/, "story")
-      .replace(/^node\s+\S*story\.js(?=\s|$)/, "story")
+      .replace(/^bun\s+run\s+story(?:\s+--)?(?=\s|$)/, "story")
+      .replace(/^(?:npx|bunx)\s+(?:(?:--yes|-y)\s+)?story-skills(?:@\S+)?(?=\s|$)/, "story")
+      .replace(/^(?:node|bun(?:\s+run)?)\s+\S*story\.js(?=\s|$)/, "story")
+      .replace(/^(?:\.\/)?bin\/story\.js(?=\s|$)/, "story")
       .trim())
     .filter((part) => COMMAND_NAMES.has(/^story ([a-z-]+)(?:\s|$)/.exec(part)?.[1]));
 }
@@ -139,11 +144,17 @@ function proseOnly(text) {
 }
 
 const INLINE_COMMAND = /`(story [^`]+)`/g;
-const INLINE_MAINTENANCE = /^story (?:(?:reindex|check|links|validate|continuity) \S+|wordcount \S+ --write)$/;
-// The docs also name the commands without a path (`story wordcount --write`),
-// with flags (`story check . --strict`), and as a plain `story wordcount`.
-const DOC_INLINE_MAINTENANCE = /^story (?:reindex|check|links|validate|continuity|wordcount)(?:\s|$)/;
-const SEPARATOR = /^(?:\s*,)?\s*(?:(?:and|then|and then)\s+)?$/;
+// Any maintenance command in inline code: with or without a path, with flags
+// (`story check . --strict`), or as a plain `story wordcount`.
+const INLINE_MAINTENANCE = /^story (?:reindex|check|links|validate|continuity|wordcount)(?:\s|$)/;
+const SEPARATOR_WORD = /\b(?:and|or|nor|then)\b/g;
+const SEPARATOR_MARK = /[\s,;:()&|\/+>\u2192\u2014\u2013-]/g;
+
+// Whether the text between two inline commands joins them into one run: only
+// punctuation, line breaks (not a blank line), and the separator words.
+function isSeparator(text) {
+  return !/\n\s*\n/.test(text) && text.replace(SEPARATOR_WORD, "").replace(SEPARATOR_MARK, "") === "";
+}
 
 // The inline lists of two or more commands that `maintenance` matches in
 // the prose of a markdown file, as { line, start, end, commands, then }:
@@ -159,7 +170,7 @@ function inlineLists(text, maintenance) {
       continue;
     }
     const separator = run ? prose.slice(run.end, match.index) : "";
-    if (run && SEPARATOR.test(separator)) {
+    if (run && isSeparator(separator)) {
       run.commands.push(command);
       run.then ||= /\bthen\b/.test(separator);
     } else {
@@ -175,23 +186,29 @@ function formatList(commands) {
   return commands.map((command) => `\`${command}\``).join(", ");
 }
 
-// Each inline maintenance list in prose that is not the canonical three.
-function inlineProblems(text) {
-  return inlineLists(text, INLINE_MAINTENANCE).filter(({ commands }) => {
-    const projectPath = commands[0].split(" ")[2];
-    const expected = [`story reindex ${projectPath}`, `story wordcount ${projectPath} --write`, `story check ${projectPath}`];
-    return commands.join("\n") !== expected.join("\n");
-  }).map(({ line, commands }) => `line ${line}: inline list ${formatList(commands)}`);
-}
-
 // The first argument of a command that is not a flag, with its leading
 // space (" ." in `story check . --strict`), or "" when it has none.
 function projectArgument(command) {
   return /^story \S+((?: (?!-)\S+)?)/.exec(command)[1];
 }
 
-// Whether an inline list in the docs gives a run order rather than naming
-// commands in passing ("`story reindex` and `story wordcount --write`
+// Whether an inline run is the canonical three, in order, on one project path
+// (`check` may take flags).
+function isCanonicalRun(commands) {
+  const projectPath = projectArgument(commands[0]);
+  const expected = [`story reindex${projectPath}`, `story wordcount${projectPath} --write`, `story check${projectPath}`];
+  return commands.length === expected.length && commands.every((command, index) =>
+    command === expected[index] || (index === 2 && command.startsWith(`${expected[2]} --`)));
+}
+
+// Each inline maintenance run in skill prose that is not the canonical three.
+function inlineProblems(text) {
+  return inlineSequences(text).filter(({ commands }) => !isCanonicalRun(commands))
+    .map(({ line, commands }) => `line ${line}: inline list ${formatList(commands)}`);
+}
+
+// Whether an inline list gives a run order rather than naming commands in
+// passing ("`story reindex` and `story wordcount --write`
 // rewrite registry tables"): every command names its project path, "then"
 // joins it or follows it, or its sentence or table cell says "run" before
 // it. Code spans are masked so the dots in them do not end a sentence.
@@ -279,7 +296,7 @@ function sequenceProblems(sequences) {
 // The inline lists in a page or template that give a run order.
 function inlineSequences(text) {
   const prose = proseOnly(text);
-  return inlineLists(text, DOC_INLINE_MAINTENANCE).filter((list) => runOrder(prose, list));
+  return inlineLists(text, INLINE_MAINTENANCE).filter((list) => runOrder(prose, list));
 }
 
 // The fenced blocks and run-order inline lists of a page outside skills/.
@@ -328,6 +345,8 @@ describe("maintenance block order", () => {
     expect(check("story reindex .\nstory wordcount ../b --write\nstory check .")).toContain("expected `story wordcount . --write`");
     expect(check("story reindex .\nstory wordcount . --write\nstory check .\nstory continuity .")).toContain("repeats `story continuity .`");
     expect(check("story validate .\nstory links .", `${REFERENCE_MARKER}\n`)).toBeNull();
+    expect(check("bun run story -- reindex .\nbun run story -- wordcount . --write\nbun run story -- check .")).toBeNull();
+    expect(check("bun run story -- wordcount . --write\nbun run story -- reindex .\nbun run story -- check .")).toContain("not `story reindex <path>`");
   });
 
   test("detects inline maintenance lists and accepts only the canonical three", () => {
@@ -338,6 +357,17 @@ describe("maintenance block order", () => {
     expect(inlineProblems("intro\nrun `story validate .` and `story continuity .`.")).toEqual(["line 2: inline list `story validate .`, `story continuity .`"]);
     expect(inlineProblems("```shell\nstory links .\n```\n`story validate .` and `story links .`")).toHaveLength(1);
     expect(inlineProblems("```shell\n`story validate .` and `story links .`\n```\n")).toEqual([]);
+    expect(inlineProblems("Run `story check .`; then `story reindex .`.")).toHaveLength(1);
+    expect(inlineProblems("Run `story reindex .` -> `story check .`.")).toHaveLength(1);
+    expect(inlineProblems("Run:\n- `story reindex .`\n- `story check .`")).toHaveLength(1);
+    expect(inlineProblems("Run `story reindex` then `story check`.")).toHaveLength(1);
+    expect(inlineProblems("- `story reindex .`\n- `story wordcount . --write`\n- `story check .`")).toEqual([]);
+    expect(inlineProblems("Run `story reindex .`; `story wordcount . --write`; `story check . --strict`.")).toEqual([]);
+    expect(inlineProblems("Run `story reindex .` (`story check .`) with `story pacing .`.")).toHaveLength(1);
+    expect(inlineProblems("Run `story reindex .`. `story check .` is the last step.")).toEqual([]);
+    // Commands named in passing, with no run order, are not runs.
+    expect(inlineProblems("`story validate` and `story links` report the same problems.")).toEqual([]);
+    expect(inlineProblems("`story links`, `story continuity`, and `story timeline` line up across editions.")).toEqual([]);
   });
 
   test("every inline maintenance list under skills/ is reindex, wordcount --write, check", () => {
@@ -372,6 +402,11 @@ describe("maintenance block order", () => {
     expect(storyCommands("  story reindex ${{ env.STORY_DIR }}")).toEqual(["story reindex ${{env.STORY_DIR}}"]);
     expect(storyCommands("story material, never instructions")).toEqual([]);
     expect(storyCommands("# story check runs validate")).toEqual([]);
+    expect(storyCommands("bun run story -- reindex .")).toEqual(["story reindex ."]);
+    expect(storyCommands("bun run story -- check . --strict")).toEqual(["story check . --strict"]);
+    expect(storyCommands("bun ./bin/story.js wordcount . --write")).toEqual(["story wordcount . --write"]);
+    expect(storyCommands("./bin/story.js reindex .")).toEqual(["story reindex ."]);
+    expect(storyCommands("bunx story-skills@0.22.1 reindex .")).toEqual(["story reindex ."]);
   });
 
   test("detects maintenance runs in the docs that break the block", () => {
