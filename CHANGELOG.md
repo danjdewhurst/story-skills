@@ -194,6 +194,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The docs, the contributor guide, and the `draft-next-chapter.yml` template now run `story reindex`, `story wordcount --write`, then `story check`, and stale commands are corrected. (#563)
   - Comparing with a snapshot takes `story compare --snapshot <name>`, not `--ref`, and the project format page lists the body sections `story context` reads.
   - `test/maintenance-order.test.js` now checks maintenance runs in `docs/`, the README, the contributor guides, the evals, and the templates.
+- The docs' command output samples, the README demo GIF, and the Codex plugin screenshot show what the CLI prints today, and a test now replays the samples it can. (#564)
+  - Refreshed the doctor walkthrough, the `next`, `progress --log`, and `help validate` samples, getting-started's warning count, and the check-schema list; the GIF and screenshot show rule codes such as `[pov-not-in-cast]`.
+  - A `<!-- replay: <example> -->` comment marks a sample for `test/doc-samples.test.js` (see the development guide), and `check:links` no longer reads a `<!--` in a code span as opening a comment.
 
 ### Security
 
