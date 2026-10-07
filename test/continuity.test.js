@@ -1102,6 +1102,17 @@ object-state:
     expect(messages(result.warnings).filter((warning) => warning.includes("object-state"))).toEqual([]);
   });
 
+  test("a destroyed artifact listed in a later chapter's or scene's characters is reported (#702)", () => {
+    const root = baseProject(5);
+    writeState(root, "object-state:\n  - artifact: ring\n    status: destroyed\n    since: chapter-02");
+    writeBaseChapter(root, 3, "characters:\n  - ann\n  - ring");
+    writeBaseScene(root, 4, 1, "characters:\n  - ring");
+    expect(messages(continuity(root).errors)).toEqual([
+      "scenes/chapter-04-scene-01.md lists ring, destroyed/lost since chapter-02",
+      "chapters/chapter-03.md lists ring, destroyed/lost since chapter-02"
+    ]);
+  });
+
   test("consecutive losses form one window, and a same-chapter repeat still warns", () => {
     const root = baseProject(5);
     writeState(root, `

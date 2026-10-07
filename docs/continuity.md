@@ -76,7 +76,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `has no payoff yet`, `payoff chapter … has passed`, `has no resolution yet` | `continuity` | [Unfired setups](#unfired-setups-the-chekhov-warning) |
 | `story.md is complete but` | `continuity` | [Finishing the book](#finishing-the-book) |
 | `current-chapter … is behind`, `current-chapter … is ahead`, `state.md … references missing`, `is missing knows`, `repeats fact`, `must be a kebab-case id`, `conflicts with`, `must be a mapping` | `continuity` | [Continuity state](#continuity-state) |
-| `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
+| `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `lists <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
 | `timestamp runs backward`, `allows only …h for travel` (or `allows at most …h`), `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
 | `puts <character> at <location> …, but the fastest route takes`, `at the same time as` | `continuity` | [Route travel](#route-travel) |
 | `dismissed:` | `continuity`, and any command reporting a warning an exemption names by code | [Exemptions](#exemptions) |
@@ -374,7 +374,7 @@ object-state:
     since: chapter-02
 ```
 
-After that chapter, the checker reports any scene whose `state-changes` target the artifact, and any chapter or scene that lists it in `mentions` (chapter and scene `mentions` accept artifact ids as well as character ids, so `story links` passes while `story continuity` catches the late reference). From a copy of the [repaired unraveled thread](#worked-example-fixing-the-unraveled-thread), where the compass is destroyed `since: chapter-02`, with the compass brought back in chapter 4:
+After that chapter, the checker reports any scene whose `state-changes` target the artifact, and any chapter or scene that lists it in `mentions` or `characters` (chapter and scene `mentions` accept artifact ids as well as character ids, so `story links` passes while `story continuity` catches the late reference). From a copy of the [repaired unraveled thread](#worked-example-fixing-the-unraveled-thread), where the compass is destroyed `since: chapter-02`, with the compass brought back in chapter 4:
 
 ```text
 error: scenes/chapter-04-scene-01.md uses vales-compass, destroyed/lost since chapter-02
@@ -392,7 +392,7 @@ state-changes:
 | Severity | Message | Fix |
 |----------|---------|-----|
 | error | `<scene> uses <artifact>, destroyed/lost since <chapter>` | Remove or retarget the state change, or move `since` if the artifact survives longer. |
-| error | `<chapter or scene> mentions <artifact>, destroyed/lost since <chapter>` | Drop the mention, or exempt it if the chapter only remembers the object. |
+| error | `<chapter or scene> mentions <artifact>, destroyed/lost since <chapter>`, or `lists` in place of `mentions` when it is in `characters` | Drop the mention, or exempt it if the chapter only remembers the object. |
 | error | `<scene> uses <artifact>, destroyed/lost before the story` | The entry has no `since`, so the artifact was gone before chapter 1. Remove or retarget the state change, or add `since` if it is destroyed or lost during this book. |
 | error | `continuity/state.md object-state[<i>] references missing since chapter <chapter>` | Point `since` at an existing chapter. |
 

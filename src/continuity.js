@@ -968,6 +968,15 @@ function checkPropCustody(project, context, errors) {
     const inWindow = (chapterId) => context.chapterNumbers.has(chapterId)
       && (beforeStory || after(chapterId, since))
       && (until === "" || after(until, chapterId));
+    // How a chapter or scene names the artifact: in its mentions, or in its
+    // characters list, which an artifact id can also sit in. Null when it
+    // does not name it.
+    const namedAs = (record) => {
+      if (record.mentions.includes(artifact)) {
+        return "mentions";
+      }
+      return record.characters.includes(artifact) ? "lists" : null;
+    };
     for (const scene of project.scenes) {
       if (!inWindow(scene.chapter)) {
         continue;
@@ -976,16 +985,18 @@ function checkPropCustody(project, context, errors) {
       if (scene.stateChanges.some((change) => stateChangeTargets(change, artifact))) {
         errors.push(err("gone-artifact-used", `${sceneLabel} uses ${artifact}, destroyed/lost ${beforeStory ? "before the story" : `since ${since}`}`, sceneLabel, chapterOf(scene)));
       }
-      if (!beforeStory && scene.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${sceneLabel} mentions ${artifact}, destroyed/lost since ${since}`, sceneLabel, chapterOf(scene)));
+      const named = beforeStory ? null : namedAs(scene);
+      if (named) {
+        errors.push(err("gone-artifact-mentioned", `${sceneLabel} ${named} ${artifact}, destroyed/lost since ${since}`, sceneLabel, chapterOf(scene)));
       }
     }
     for (const chapter of project.chapters) {
       if (beforeStory || !inWindow(chapter.id)) {
         continue;
       }
-      if (chapter.mentions.includes(artifact)) {
-        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} mentions ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file), chapter.id));
+      const named = namedAs(chapter);
+      if (named) {
+        errors.push(err("gone-artifact-mentioned", `${relative(project, chapter.file)} ${named} ${artifact}, destroyed/lost since ${since}`, relative(project, chapter.file), chapter.id));
       }
     }
   }
