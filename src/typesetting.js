@@ -16,7 +16,7 @@ const CASED_SCRIPTS = new Set(["Latn", "Cyrl", "Grek", "Armn", "Copt", "Glag", "
 // Scripts set top to bottom in columns running right to left. Traditional
 // Mongolian runs its columns left to right (vertical-lr), which the builds
 // do not set yet.
-const VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
+export const VERTICAL_SCRIPTS = new Set(["Jpan", "Hani", "Hans", "Hant", "Hira", "Kana", "Bopo", "Kore", "Hang"]);
 
 // Scripts Word treats as East Asian (the eastAsia font and language) and as
 // complex (the cs font, the bidi language, and bCs/iCs for bold and italic).
@@ -27,7 +27,7 @@ const COMPLEX_SCRIPTS = new Set(["Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Deva",
 // language's own pack's `script` wins), so a Russian or Persian book still
 // gets fonts for its script. Chinese languages are not listed: hanScript
 // in ./languages/index.js picks Simplified or Traditional for them.
-const LIKELY_SCRIPTS = {
+export const LIKELY_SCRIPTS = {
   Cyrl: ["ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "tg", "tt", "ba", "cv", "os"],
   Grek: ["el"],
   Armn: ["hy"],
@@ -136,7 +136,9 @@ function fontScript(script, language) {
   return script;
 }
 
-// Whether `language` can be set vertically.
+// Whether `language` can be set vertically. scripts/schema-patterns.js
+// generates the schema's language pattern for writing-mode: vertical from
+// this and the tables it reads, and test/schema.test.js keeps them in step.
 export function supportsVertical(language) {
   return VERTICAL_SCRIPTS.has(languageScript(language));
 }

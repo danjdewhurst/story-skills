@@ -36,7 +36,7 @@ export const DEFAULT_LANGUAGE = "en";
 
 // Every pack, by code. A regional pack (en-GB) is keyed by its tag in lower
 // case and holds only what differs from its language's pack.
-const PACKS = new Map([ar, da, de, deCh, en, es, fa, fi, fr, he, hi, it, ja, ko, nl, pl, pt, ptPt, ru, sv, th, tr, uk, zh, ...zhHant].map((pack) => [pack.code, pack]));
+export const PACKS = new Map([ar, da, de, deCh, en, es, fa, fi, fr, he, hi, it, ja, ko, nl, pl, pt, ptPt, ru, sv, th, tr, uk, zh, ...zhHant].map((pack) => [pack.code, pack]));
 
 // The shape of a language tag, as story.schema.json checks it. Validity
 // depends on this alone, never on the runtime's Intl data, so extlang tags
@@ -49,7 +49,7 @@ export function isLanguageTag(value) {
 
 // Language subtags written another way: deprecated codes (iw, in) and
 // three-letter codes for languages that have a two-letter one (eng).
-const LANGUAGE_ALIASES = {
+export const LANGUAGE_ALIASES = {
   iw: "he", in: "id", ji: "yi", jw: "jv", mo: "ro",
   ara: "ar", chi: "zh", zho: "zh", deu: "de", ger: "de", eng: "en", spa: "es", fra: "fr", fre: "fr",
   fas: "fa", per: "fa", heb: "he", hin: "hi", ita: "it", jpn: "ja", kor: "ko", nld: "nl", dut: "nl", pol: "pl", por: "pt", rus: "ru",
@@ -57,7 +57,7 @@ const LANGUAGE_ALIASES = {
 };
 
 // Grandfathered tags with a modern form, in lower case, as [tag, macrolanguage].
-const GRANDFATHERED = {
+export const GRANDFATHERED = {
   "en-gb-oed": ["en-gb-oxendict", null],
   "i-klingon": ["tlh", null],
   "no-bok": ["nb", "no"],
@@ -110,7 +110,7 @@ export function parseTag(language) {
 // names none: Mandarin (cmn) and the other spoken varieties in Simplified
 // characters, Cantonese (yue) and Classical Chinese (lzh) in Traditional.
 // Any extlang under zh (zh-yue, zh-min-nan) is Chinese too.
-const CHINESE_SCRIPTS = {
+export const CHINESE_SCRIPTS = {
   zh: "Hans", cmn: "Hans", wuu: "Hans", hak: "Hans", nan: "Hans", gan: "Hans", hsn: "Hans", cjy: "Hans",
   cdo: "Hans", cpx: "Hans", czh: "Hans", czo: "Hans", mnp: "Hans",
   yue: "Hant", lzh: "Hant"
