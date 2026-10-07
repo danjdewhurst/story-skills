@@ -281,11 +281,11 @@ describe("check-package entry point", () => {
 
   const failures = [
     ["a wrong version", () => fakeNpm(fakePackage(), { version: "0.0.0" }), `Installed story --version printed "0.0.0", expected ${VERSION}`],
-    ["a README link to an unshipped file", () => fakeNpm(fakePackage({ readme: "[guide](CONTRIBUTING.md)\n" })), "Shipped markdown links to files the package does not ship: README.md -> CONTRIBUTING.md"],
+    ["a README link to an unshipped file", () => fakeNpm(fakePackage({ readme: "[guide](CONTRIBUTING.md)\n" })), "Shipped markdown has links that resolve to nothing in the package: README.md -> CONTRIBUTING.md"],
     [
       "a docs link to an unshipped file (#569)",
-      () => fakeNpm(fakePackage({ docs: "[agents](../AGENTS.md) [evals](../evals/README.md#skill-coverage)\n" })),
-      "Shipped markdown links to files the package does not ship: docs/README.md -> ../AGENTS.md, docs/README.md -> ../evals/README.md"
+      () => fakeNpm(fakePackage({ docs: "[agents](../AGENTS.md) [evals](../evals/README.md#skill-coverage) [root](/AGENTS.md)\n" })),
+      "Shipped markdown has links that resolve to nothing in the package: docs/README.md -> ../AGENTS.md, docs/README.md -> ../evals/README.md, docs/README.md -> /AGENTS.md"
     ],
     ["an exported src/", () => fakeNpm(fakePackage({ exportsField: false })), "story-skills/src/cli.js resolves, but src/ should not be exported"]
   ];

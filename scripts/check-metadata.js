@@ -322,34 +322,36 @@ export function repositoryUrl(repository) {
 // The plugin manifests describe the same plugin, so their descriptions must
 // match, or one falls behind when a skill is added. Claude Code shows the
 // Claude marketplace entry's description, homepage, and repository in place of
-// plugin.json's, so a field the entry sets must match too. The Codex
+// plugin.json's, and before install it shows only the entry's for a plugin
+// fetched by URL, so every entry for this plugin carries all three. The Codex
 // `interface` text is written for the Codex UI and is not compared.
 export function checkPluginManifests(failures, { packageJson, claudePlugin, codexPlugin, claudeMarketplace }) {
+  const expected = { homepage: packageJson.homepage, repository: repositoryUrl(packageJson.repository) };
+  for (const [field, value] of Object.entries(expected)) {
+    if (typeof value !== "string" || value.trim() === "") {
+      failures.push(`package.json is missing ${field}`);
+    }
+  }
   const description = claudePlugin.description;
   if (typeof description !== "string" || description.trim() === "") {
     failures.push(".claude-plugin/plugin.json is missing description");
   }
+
   const plugins = claudeMarketplace && Array.isArray(claudeMarketplace.plugins) ? claudeMarketplace.plugins : [];
-  const entry = plugins.find((plugin) => plugin && plugin.name === packageJson.name) || {};
-  for (const [label, manifest, required] of [
-    [".codex-plugin/plugin.json", codexPlugin, true],
-    [".claude-plugin/marketplace.json plugin", entry, false]
-  ]) {
-    if ((required || manifest.description !== undefined) && manifest.description !== description) {
+  const copies = [
+    [".codex-plugin/plugin.json", codexPlugin],
+    ...plugins.flatMap((plugin, index) =>
+      plugin && plugin.name === packageJson.name ? [[`.claude-plugin/marketplace.json plugins[${index}]`, plugin]] : []
+    )
+  ];
+  for (const [label, manifest] of copies) {
+    if (manifest.description !== description) {
       failures.push(`${label} description differs from .claude-plugin/plugin.json; give both the same text`);
     }
   }
-
-  const expected = { homepage: packageJson.homepage, repository: repositoryUrl(packageJson.repository) };
-  for (const [label, manifest, required] of [
-    [".claude-plugin/plugin.json", claudePlugin, true],
-    [".codex-plugin/plugin.json", codexPlugin, true],
-    [".claude-plugin/marketplace.json plugin", entry, false]
-  ]) {
+  for (const [label, manifest] of [[".claude-plugin/plugin.json", claudePlugin], ...copies]) {
     for (const [field, value] of Object.entries(expected)) {
-      if (required || manifest[field] !== undefined) {
-        expectEqual(failures, `${label} ${field}`, value, manifest[field]);
-      }
+      expectEqual(failures, `${label} ${field}`, value, manifest[field]);
     }
   }
   return failures;

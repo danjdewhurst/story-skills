@@ -14,17 +14,16 @@ import { packageBin, spawnCommand } from "./spawn-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Markdown and HTML link targets that are paths inside the package, without
+// Markdown and HTML link targets that are paths rather than URLs, without
 // their #fragment or ?query, as check:links reads them: inline links (with or
 // without a title or <angle> target), reference definitions, and src, href,
-// and srcset attributes. Code, comments, and frontmatter are skipped, and so
-// are root-relative paths (/docs), which name nothing inside an installed
-// package.
+// and srcset attributes. Code, comments, and frontmatter are skipped.
+// Root-relative paths (/docs) are kept, so unshippedLinks can report them.
 export function relativeLinks(markdown) {
   const links = new Set();
   for (const { target } of extractLinks(markdown)) {
     const file = target.replace(/[?#].*$/, "");
-    if (file && !isSkipped(file) && !file.startsWith("/")) {
+    if (file && !isSkipped(file)) {
       try {
         links.add(decodeURIComponent(file));
       } catch {
@@ -51,13 +50,14 @@ export function packageFiles(dir, prefix = "") {
   return files;
 }
 
-// The relative links in the shipped markdown that name nothing the package
-// ships, as "file -> link". `files` is every shipped file as a /-separated
-// path from the package root, and `read(file)` returns one's text. The
-// package's markdown is read from node_modules too, so a link to anything
-// left out of package.json `files` (AGENTS.md, evals/, scripts/) needs an
-// absolute GitHub URL. Paths are compared exactly, so a link that differs
-// only in case fails here as it would on a case-sensitive disk.
+// The links in the shipped markdown that name nothing the package ships, as
+// "file -> link". `files` is every shipped file as a /-separated path from
+// the package root, and `read(file)` returns one's text. The package's
+// markdown is read from node_modules too, so a link to anything left out of
+// package.json `files` (AGENTS.md, evals/, scripts/) needs an absolute GitHub
+// URL. A root-relative link (/AGENTS.md) resolves from the disk's root there,
+// so it always fails. Paths are compared exactly, so a link that differs only
+// in case fails here as it would on a case-sensitive disk.
 export function unshippedLinks(files, read) {
   const shipped = new Set(files);
   for (const file of files) {
@@ -68,6 +68,10 @@ export function unshippedLinks(files, read) {
   const broken = [];
   for (const file of files.filter((name) => name.endsWith(".md"))) {
     for (const link of relativeLinks(read(file))) {
+      if (link.startsWith("/")) {
+        broken.push(`${file} -> ${link}`);
+        continue;
+      }
       const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), link)).replace(/(.)\/$/, "$1");
       const inside = target !== ".." && !target.startsWith("../");
       if (!inside || (target !== "." && !shipped.has(target))) {
@@ -120,7 +124,7 @@ export function checkPackage({
 
     const broken = unshippedLinks(packageFiles(installed), (file) => fs.readFileSync(path.join(installed, file), "utf8"));
     if (broken.length > 0) {
-      throw new Error(`Shipped markdown links to files the package does not ship: ${broken.join(", ")}`);
+      throw new Error(`Shipped markdown has links that resolve to nothing in the package: ${broken.join(", ")}`);
     }
 
     // `exports` keeps package.json and the schemas resolvable and the source private.
