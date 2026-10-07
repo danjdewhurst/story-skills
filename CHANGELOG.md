@@ -188,6 +188,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Fenced code prints as written, with no emphasis, reference, or autolink read in it.
 - `story validate` now warns with `unsupported-footnote` about a footnote definition in chapter prose, which builds print as written. (#592)
   - Builds have no footnotes, so a note and its `[^1]` markers print as written where a markdown viewer shows a footnote.
+- The docs, the contributor guide, and the `draft-next-chapter.yml` template now run `story reindex`, `story wordcount --write`, then `story check`, and stale commands are corrected. (#563)
+  - Comparing with a snapshot takes `story compare --snapshot <name>`, not `--ref`, and the project format page lists the body sections `story context` reads.
+  - `test/maintenance-order.test.js` now checks the order in `docs/`, the README, the contributor guides, and the templates.
 
 ### Security
 
