@@ -1215,3 +1215,28 @@ describe("CR line endings (#201)", () => {
     expect(chapterFile(result.root, 1)).not.toContain("\r");
   });
 });
+
+describe("#187 import warns about chapter lines it did not split on", () => {
+  test("plain chapter lines in a file with a markdown chapter heading", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "mix.md"), "# Prologue\n\nBefore it all.\n\nChapter 1\n\nFirst text.\n\nChapter 2\n\nSecond text.\n\nChapter 3\n\nThird text.\n");
+    const result = invoke(cwd, ["import", "mix.md", "--title", "Mix"]);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain("warning: mix.md: 3 plain-text chapter lines were not used to split chapters (first \"Chapter 1\" at line 5): the file has markdown chapter headings");
+  });
+
+  test("chapter lines not followed by a blank line, counted from the top of the file", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "t.txt"), "Chapter 1\nIt was dark.\n\nChapter 2\nMorning came.\n");
+    const result = invoke(cwd, ["import", "t.txt", "--title", "Tx"]);
+    expect(result.err).toContain("2 plain-text chapter lines were not used to split chapters (first \"Chapter 1\" at line 1): a chapter line splits only when it stands alone between blank lines");
+  });
+
+  test("a clean split prints no warning", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "ok.txt"), "Chapter 1\n\nIt was dark.\n\nChapter 2\n\nMorning came.\n");
+    const result = invoke(cwd, ["import", "ok.txt", "--title", "Ok"]);
+    expect(result.out).toContain("Imported 2 chapters");
+    expect(result.err).not.toContain("warning:");
+  });
+});

@@ -107,3 +107,10 @@ describe("splitSentences", () => {
     expectLinearTime((text) => split(text, "ja"), (n) => "\"はい。\"と言い".repeat(n / 8));
   });
 });
+
+describe("#208 Chinese and Japanese count per character", () => {
+  test("。！？ end sentences", () => {
+    expect(splitSentences("我是一个学生。他很好！你呢？")).toEqual(["我是一个学生。", "他很好！", "你呢？"]);
+    expect(splitSentences("没有句号")).toEqual(["没有句号."]);
+  });
+});

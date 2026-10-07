@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
-import { createEntity, createStoryProject, validateLinks, validateProject } from "../src/story.js";
+import { buildBook, createEntity, createStoryProject, validateLinks, validateProject } from "../src/story.js";
 import { makeTempDir, messages, writeMarkdown } from "./helpers.js";
 
 function newProject(title = "Gull") {
@@ -32,6 +32,16 @@ function editFile(file, edit) {
 
 function analysisProject(title = "Analysis", cwd = makeTempDir()) {
   return createStoryProject({ cwd, title }).root;
+}
+
+function project(title = "Open Issues") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title, force: false });
+  return { cwd, root };
+}
+
+function writeChapter(root, number, body, extra = "status: draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
 }
 
 describe("#112 scheduled chapters in arc bodies", () => {
@@ -121,5 +131,23 @@ describe("rounding and plurals elsewhere (#216)", () => {
     const root = analysisProject();
     fs.writeFileSync(path.join(root, "chapters", "chapter-01.md"), "---\ntitle: One\nnumber: 1\nstatus: draft\n---\n## Chapter Text\n\nOne two three.\n", "utf8");
     expect(messages(validateProject(root).warnings)).toContain("chapters/chapter-01.md has no word-count (contains 3)");
+  });
+});
+
+describe("#133 [TODO markers in chapter prose", () => {
+  test("validate warns and the metadata checklist names the chapter; comments do not count", () => {
+    const { root } = project("Gull");
+    writeChapter(root, 1, "A boy called Harry Rowe [TODO: check bible] came.\n\n<!-- [TODO: fine here] -->");
+    writeChapter(root, 2, "Clean prose.\n\n<!-- [TODO: only a note] -->");
+    const report = validateProject(root);
+    const todo = messages(report.warnings).filter((warning) => warning.includes("[TODO"));
+    expect(todo).toEqual([`${"chapters/chapter-01.md"} has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`]);
+
+    const { outFile } = buildBook(root, { format: "metadata" });
+    const sheet = fs.readFileSync(outFile, "utf8");
+    expect(sheet).toContain("- [ ] No `[TODO` markers in chapter prose (found in: chapter-01)");
+
+    writeChapter(root, 1, "A boy called Harry Rowe came.");
+    expect(fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8")).toContain("- [x] No `[TODO` markers in chapter prose\n");
   });
 });

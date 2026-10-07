@@ -38,6 +38,10 @@ function gitProject({ subdir = "book" } = {}) {
   return { repo, root };
 }
 
+function chapter(id, title, paragraphs) {
+  return { id, title, words: paragraphs.join(" ").split(/\s+/).filter(Boolean).length, paragraphs };
+}
+
 describe("story compare", () => {
   test("compares with a git ref when the project is in a subdirectory", () => {
     const { root } = gitProject();
@@ -215,5 +219,43 @@ describe("compare (#73, #74, #216, #218)", () => {
   test("#216 one changed paragraph in 200 is not 100% unchanged", () => {
     const text = formatComparison({ chapters: [{ id: "chapter-01", title: "One", status: "changed", before: 10, after: 10, unchanged: 199 / 200 }], beforeChapters: 1, afterChapters: 1, beforeWords: 10, afterWords: 10 }, "x");
     expect(text).toContain("99% of paragraphs unchanged");
+  });
+});
+
+describe("#189 compare pairs chapters renumbered by move", () => {
+  test("moved chapters are reported as moved and the inserted one as added", () => {
+    const before = [
+      chapter("chapter-01", "C1", ["Paragraph one of chapter 1.", "Another paragraph 1."]),
+      chapter("chapter-02", "C2", ["Paragraph one of chapter 2.", "Another paragraph 2."]),
+      chapter("chapter-03", "C3", ["Paragraph one of chapter 3.", "Another paragraph 3."])
+    ];
+    const after = [
+      before[0],
+      chapter("chapter-02", "New", []),
+      { ...before[1], id: "chapter-03" },
+      { ...before[2], id: "chapter-04", paragraphs: [...before[2].paragraphs, "A new closing line."] }
+    ];
+    const comparison = compareChapters(before, after);
+    expect(comparison.chapters.map((entry) => [entry.id, entry.status, entry.movedFrom])).toEqual([
+      ["chapter-01", "unchanged", undefined],
+      ["chapter-02", "added", undefined],
+      ["chapter-03", "unchanged", "chapter-02"],
+      ["chapter-04", "changed", "chapter-03"]
+    ]);
+    const text = formatComparison(comparison, "git ref HEAD");
+    expect(text).toContain("(1 added, 0 removed, 2 moved)");
+    expect(text).toContain("- chapter-03 C2 (moved from chapter-02): unchanged");
+    expect(text).toContain("- chapter-02 New: added");
+  });
+
+  test("a rewritten chapter under the same id still matches by id", () => {
+    const comparison = compareChapters(
+      [chapter("chapter-01", "A", ["Old one.", "Old two."])],
+      [chapter("chapter-01", "A", ["New one.", "New two."])]
+    );
+    expect(comparison.chapters).toHaveLength(1);
+    expect(comparison.chapters[0].status).toBe("changed");
+    expect(comparison.chapters[0].movedFrom).toBeUndefined();
+    expect(formatComparison(comparison, "x")).toContain("(0 added, 0 removed)\n");
   });
 });
