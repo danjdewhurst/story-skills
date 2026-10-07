@@ -110,6 +110,15 @@ function continuity(root) {
   return checkContinuity(scanProject(root));
 }
 
+const EXAMPLES = path.resolve(import.meta.dir, "..", "examples");
+
+// Rewrites a character's status and adds frontmatter lines such as died-in.
+function setCharacter(root, id, status, extra = "") {
+  const file = path.join(root, "characters", `${id}.md`);
+  const text = fs.readFileSync(file, "utf8").replace(/^(died-in|revived-in): .*\n/gm, "").replace(/^status: .*$/m, `status: ${status}${extra ? `\n${extra}` : ""}`);
+  fs.writeFileSync(file, text, "utf8");
+}
+
 describe("story timeline", () => {
   test("orders dated scenes and chapters by story time and marks scenes told late", () => {
     const { root } = timelineProject();
@@ -349,5 +358,30 @@ describe("timeline and the clock", () => {
     expect(text).toContain("Timeline: 2 dated, 5 undated");
     expect(text).toContain("[told in chapter 7, after later events; no chapter file for chapter-07]");
     expect(messages(continuity(root).warnings)).toContain("scenes/chapter-07-scene-02.md timestamp runs backward");
+  });
+});
+
+describe("timeline presence and deaths (#174)", () => {
+  test("a dead character reads died in chapter N, not absent", () => {
+    const root = baseProject(4);
+    setCharacter(root, "bob", "deceased", "died-in: chapter-02");
+    writeBaseChapter(root, 1, "characters:\n  - ann\n  - bob");
+    writeBaseChapter(root, 2, "characters:\n  - ann\n  - bob");
+    writeBaseChapter(root, 3, "characters:\n  - ann");
+    const timeline = storyTimeline(root);
+    const text = formatTimeline(timeline, timeline.totalChapters);
+    expect(text).toContain("- bob: 2 of 4 chapters, chapters 1-2, died in chapter 2\n");
+    expect(text).toContain("- ann: 3 of 4 chapters, chapters 1-3, absent from the last 1 chapter\n");
+
+    // A revived character's absence is reported as usual.
+    setCharacter(root, "bob", "alive", "died-in: chapter-02\nrevived-in: chapter-03");
+    const revived = storyTimeline(root);
+    expect(formatTimeline(revived, revived.totalChapters)).toContain("- bob: 2 of 4 chapters, chapters 1-2, absent from the last 2 chapters\n");
+  });
+
+  test("the CLI shows the unraveled thread's death", () => {
+    const io = memoryIo(EXAMPLES);
+    runCli(["timeline", "the-unraveled-thread"], io);
+    expect(io.output()).toContain("- edran-vale: 3 of 4 chapters, chapters 1-4, longest absence 1 chapter after chapter 2, died in chapter 2");
   });
 });

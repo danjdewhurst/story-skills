@@ -5,10 +5,21 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runCli } from "../src/cli.js";
 import { chapterChronology, orderedChronology, renumberedChronology } from "../src/chronology.js";
+import { checkContinuity } from "../src/continuity.js";
 import { characterLifeline } from "../src/deaths.js";
 import { entityStateAt, happensAfter, sortProgressions, validateProgressions } from "../src/progressions.js";
-import { checkProjectContinuity, createStoryProject, diagramProject, entityStateAtChapter, moveEntity, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import {
+  checkProjectContinuity,
+  createEntity,
+  createStoryProject,
+  diagramProject,
+  entityStateAtChapter,
+  knowledgeAtChapter,
+  moveEntity,
+  scanProject,
+  validateProject
+} from "../src/story.js";
+import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const id = (number) => `chapter-${String(number).padStart(2, "0")}`;
@@ -82,6 +93,58 @@ function plainAfter(chronology, later, earlier) {
 }
 
 const PROGRESSION_RULES = { lists: new Set(), enums: new Map() };
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+// Rewrites a character's status and adds frontmatter lines such as died-in.
+function setCharacter(root, id, status, extra = "") {
+  const file = path.join(root, "characters", `${id}.md`);
+  const text = fs.readFileSync(file, "utf8").replace(/^(died-in|revived-in): .*\n/gm, "").replace(/^status: .*$/m, `status: ${status}${extra ? `\n${extra}` : ""}`);
+  fs.writeFileSync(file, text, "utf8");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
+function continuity(root) {
+  return checkContinuity(scanProject(root));
+}
 
 describe("the story order", () => {
   test("orders a book dated only in places by story date, whatever order it starts in", () => {
@@ -337,5 +400,58 @@ export function results(rounds) {
         expect(node.stdout).toBe(io.output());
       }
     }
+  });
+});
+
+describe("non-linear chronology (#172)", () => {
+  function prologueProject() {
+    const root = baseProject(5);
+    writeBaseChapter(root, 1, "date: 2034-01-01");
+    for (let number = 2; number <= 5; number += 1) {
+      writeBaseChapter(root, number, `date: 2024-05-0${number}`);
+    }
+    return root;
+  }
+
+  test("story knowledge compares dated chapters by date", () => {
+    const root = prologueProject();
+    writeState(root, `
+knowledge-state:
+  - character: bob
+    knows: who the traitor was
+    learned-in: chapter-01
+  - character: bob
+    knows: the ring is fake
+    learned-in: chapter-03
+`);
+    expect(knowledgeAtChapter(root, "bob", "chapter-02")).toEqual([]);
+    expect(knowledgeAtChapter(root, "bob", "chapter-01")).toEqual([
+      { knows: "who the traitor was", learnedIn: "chapter-01", audience: "reader" },
+      { knows: "the ring is fake", learnedIn: "chapter-03", audience: "character" }
+    ]);
+  });
+
+  test("a character who dies in 2024 cannot appear in a 2034 prologue", () => {
+    const root = prologueProject();
+    setCharacter(root, "ann", "deceased", "died-in: chapter-03");
+    writeBaseChapter(root, 1, "date: 2034-01-01\npov: ann\ncharacters:\n  - ann");
+    writeBaseChapter(root, 2, "date: 2024-05-02\ncharacters:\n  - ann");
+    expect(messages(continuity(root).errors)).toEqual(["chapters/chapter-01.md lists ann, who died in chapter-03; move posthumous appearances to mentions"]);
+  });
+
+  test("a dual-timeline book compares deaths by date and keeps a clock per strand", () => {
+    const root = baseProject(4);
+    writeBaseChapter(root, 1, "strand: past\ndate: 1990-01-01");
+    writeBaseChapter(root, 2, "strand: present\ndate: 2020-01-01\ncharacters:\n  - ann");
+    writeBaseChapter(root, 3, "strand: past\ndate: 1990-01-02\ncharacters:\n  - ann");
+    writeBaseChapter(root, 4, "strand: present\ndate: 2020-01-02");
+    setCharacter(root, "ann", "deceased", "died-in: chapter-02");
+    const result = continuity(root);
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings).filter((warning) => warning.includes("earlier than"))).toEqual([]);
+
+    // Within a strand the clock still runs forward only.
+    writeBaseChapter(root, 3, "strand: past\ndate: 1989-12-31");
+    expect(messages(continuity(root).warnings)).toContain("Chapter 3 date 1989-12-31 is earlier than Chapter 1 date 1990-01-01");
   });
 });
