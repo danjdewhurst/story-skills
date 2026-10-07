@@ -3441,7 +3441,7 @@ The aliases (`--locations`, `--characters`, `--mentions`, `--members`, `--arcs`,
 
 ## The bundled fallback
 
-[`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the whole CLI bundled into one file that runs under plain Node 18 or newer, with no install step. It exists for agents that have the skills copied in but not the npm package. The [story-maintenance skill](../skills/story-maintenance/SKILL.md) tells agents to try `story`, then `node <checkout>/bin/story.js` from a Story Skills checkout, then this file, run from the story project folder.
+[`skills/story-maintenance/scripts/story.js`](../skills/story-maintenance/scripts/story.js) is the whole CLI bundled into one file that runs under plain Node 18 or newer, with no install step. It exists for agents that have the skills copied in but not the npm package. The [story-maintenance skill](../skills/story-maintenance/SKILL.md) tells agents to try `story`, then this file, run with Node from the story project folder. A Story Skills checkout's `bin/story.js` comes in only when the user names the checkout or the agent is working in it.
 
 ```shell
 node skills/story-maintenance/scripts/story.js --version

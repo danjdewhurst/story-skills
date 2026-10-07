@@ -377,10 +377,10 @@ Skills look for a CLI in this order:
 
 1. `story <command>`, when the package is installed (`npm install -g story-skills`)
 2. `npx story-skills <command>`, which runs the published package without installing it
-3. `node <checkout>/bin/story.js <command>` (or `bun <checkout>/bin/story.js <command>`), when a checkout of this repository is available
-4. `node ../story-maintenance/scripts/story.js <command>`, resolved relative to the skill's own folder (the `story-maintenance` skill itself uses `node scripts/story.js`)
+3. `node ../story-maintenance/scripts/story.js <command>`, resolved relative to the skill's own folder (the `story-maintenance` skill itself uses `node scripts/story.js`)
+4. `node <checkout>/bin/story.js <command>`, only when the user names a checkout of this repository or the agent is working in one
 
-For the last two, the agent writes the script as an absolute path and runs the command from the folder it would run `story` from, so `.` still means the story project. The skills do not use `bun run story --`: Bun runs a package script from the checkout's root, so `.` would point at the checkout.
+For the last two, the agent writes the script as an absolute path and runs the command with Node from the folder it would run `story` from, so `.` still means the story project. The skills do not use Bun there: Bun loads the `bunfig.toml` (whose `preload` runs code) and `.env` of the folder it starts in, and `bun run story --` runs from the checkout's root, so `.` would point at the checkout.
 
 The agent runs the fallback where it is installed. It never copies it into the story project, which stays markdown only. The fallback is generated with `bun run build:fallback`, and CI checks that it matches the source; see the [Development guide](development.md).
 
