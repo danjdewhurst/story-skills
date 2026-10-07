@@ -132,6 +132,16 @@ describe("check-metadata", () => {
     expect(metadataFailures(root).failures).toEqual([
       `.github/workflows/publish.yml:${line} bun-version mismatch: expected ${pinned}, got 1.0.0`
     ]);
+
+    // #605: an entry whose lead runs past the limit fails too.
+    fs.writeFileSync(publishPath, publish);
+    const changelogPath = path.join(root, "CHANGELOG.md");
+    const changelog = fs.readFileSync(changelogPath, "utf8");
+    const entryLine = changelog.split("\n").indexOf("## [Unreleased]") + 3;
+    fs.writeFileSync(changelogPath, changelog.replace("## [Unreleased]\n", `## [Unreleased]\n\n- ${"x".repeat(201)}\n`));
+    expect(metadataFailures(root).failures).toEqual([
+      `CHANGELOG.md:${entryLine} entry's lead is 201 characters, over 200: lead with one short sentence and move the detail into indented sub-bullets`
+    ]);
   });
 });
 
