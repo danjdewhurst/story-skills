@@ -219,7 +219,10 @@ function readOwner(lockPath) {
 // thread) when it records this process's start time, and stale when it
 // records another: that process had this pid in this namespace, so it has
 // ended, as a container's story command, always the same pid, does when it
-// is killed. Without a record to compare, an own-pid lock goes by age.
+// is killed. Another pid is held only while it runs with the start time the
+// lock records: the system may have given the pid to a new process since,
+// which has a different start time. Without a record to compare, an own-pid
+// lock goes by age, and another pid by whether it runs.
 function sameHostAlive(pid, recorded, written, modified) {
   const own = ownIdentity();
   const comparable = own !== null && IDENTITY_PATTERN.test(recorded ?? "");
@@ -232,7 +235,13 @@ function sameHostAlive(pid, recorded, written, modified) {
     return !foreignLockStale(written, modified);
   }
   if (pid !== process.pid) {
-    return processAlive(pid);
+    if (!processAlive(pid)) {
+      return false;
+    }
+    // Where /proc does not say (no start time to read), the pid's running
+    // is all there is to go by.
+    const current = comparable ? processStartTime(pid) : null;
+    return current === null || current === started;
   }
   return comparable ? started === ownStarted : !foreignLockStale(written, modified);
 }
@@ -245,16 +254,30 @@ const IDENTITY_PATTERN = /^[0-9a-f-]+ pid:\[\d+\] \d+$/;
 
 export function processIdentity(proc = "/proc") {
   try {
-    const stat = readTextFile(path.join(proc, "self", "stat"));
-    // The command name in parentheses may hold spaces; the start time is
-    // the 22nd field, the 20th after it.
-    const started = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    const started = startTimeField(readTextFile(path.join(proc, "self", "stat")));
     const boot = readTextFile(path.join(proc, "sys", "kernel", "random", "boot_id")).trim();
     const identity = `${boot} ${fs.readlinkSync(path.join(proc, "self", "ns", "pid"))} ${started}`;
     return IDENTITY_PATTERN.test(identity) ? identity : null;
   } catch {
     return null;
   }
+}
+
+// The start time of a running process on this host, read as processIdentity
+// reads this process's, or null where /proc does not give it.
+export function processStartTime(pid, proc = "/proc") {
+  try {
+    return startTimeField(readTextFile(path.join(proc, String(pid), "stat"))) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// The start time of a /proc/<pid>/stat line. The command name in
+// parentheses may hold spaces; the start time is the 22nd field, the 20th
+// after it.
+function startTimeField(stat) {
+  return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
 }
 
 let identityRead;

@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { writeFile } from "../src/files.js";
-import { FOREIGN_LOCK_STALE_MS, LOCK_FILE, processIdentity, TAKEOVER_FILE, withProjectLock, withProjectLocks } from "../src/lock.js";
+import { FOREIGN_LOCK_STALE_MS, LOCK_FILE, processIdentity, processStartTime, TAKEOVER_FILE, withProjectLock, withProjectLocks } from "../src/lock.js";
 import { createEntity, renameEntity, validateLinks } from "../src/story.js";
 import { CHMOD_IGNORED, makeTempDir, memoryIo, messages, otherLivePid } from "./helpers.js";
 
@@ -192,6 +192,36 @@ describe("lock edge cases", () => {
     expect(fs.existsSync(lockPath)).toBe(false);
   });
 
+  // The start time (clock ticks since boot) of a running process on Linux,
+  // read as a lock records it.
+  function startTimeOf(pid) {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+  }
+
+  test.skipIf(IDENTITY === null)("a lock whose pid is alive but was reused by another process goes by its start time (#732)", () => {
+    // The sleeper is alive, yet the lock records a start time it did not
+    // have: the pid went to another process after the lock's owner ended.
+    const root = newProject();
+    const live = otherLivePid();
+    const lockPath = path.join(root, LOCK_FILE);
+    const recorded = Number(startTimeOf(live)) + 1000;
+    fs.writeFileSync(lockPath, `${live}\n${os.hostname()}\n${new Date().toISOString()}\n${BOOT} ${NAMESPACE} ${recorded}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(addLocked(root, "Bo").id).toBe("bo");
+    expect(fs.existsSync(lockPath)).toBe(false);
+  });
+
+  test.skipIf(IDENTITY === null)("a lock whose pid is alive with the start time it recorded is still held (#732)", () => {
+    const root = newProject();
+    const live = otherLivePid();
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${live}\n${os.hostname()}\n${new Date().toISOString()}\n${BOOT} ${NAMESPACE} ${startTimeOf(live)}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${live}) is modifying this project`);
+    expect(fs.existsSync(lockPath)).toBe(true);
+  });
+
   test("a lock with this pid and no record of the process goes by age", () => {
     // Written by an older story, or where /proc gives no record.
     const root = newProject();
@@ -222,6 +252,17 @@ describe("lock edge cases", () => {
     fs.writeFileSync(path.join(proc, "self", "stat"), "42 (story) S\n");
     expect(processIdentity(proc)).toBeNull();
     expect(processIdentity(path.join(proc, "missing"))).toBeNull();
+  });
+
+  test.skipIf(process.platform === "win32")("processStartTime reads another process's start time, or null where /proc does not give it", () => {
+    const proc = makeTempDir();
+    fs.mkdirSync(path.join(proc, "4242"));
+    const fields = Array.from({ length: 50 }, (_, index) => String(index + 3));
+    fs.writeFileSync(path.join(proc, "4242", "stat"), `4242 (story (x) y) ${fields.join(" ")}\n`);
+    expect(processStartTime(4242, proc)).toBe("22");
+    expect(processStartTime(4243, proc)).toBeNull();
+    fs.writeFileSync(path.join(proc, "4242", "stat"), "4242 (story) S\n");
+    expect(processStartTime(4242, proc)).toBeNull();
   });
 
   test("locks on several projects are taken in the order of their real paths", () => {
