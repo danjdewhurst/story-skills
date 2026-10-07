@@ -119,7 +119,7 @@ export const CHINESE_SCRIPTS = {
 // Regions that decide the script when the tag names none: Traditional in
 // Taiwan, Hong Kong, and Macau, Simplified in mainland China and Singapore,
 // whatever the language's usual script (yue-CN and lzh-CN are Simplified).
-const REGION_SCRIPTS = { tw: "Hant", hk: "Hant", mo: "Hant", cn: "Hans", sg: "Hans" };
+export const REGION_SCRIPTS = { tw: "Hant", hk: "Hant", mo: "Hant", cn: "Hans", sg: "Hans" };
 
 // Which Chinese characters, Simplified (Hans) or Traditional (Hant), a tag
 // is written in: its script subtag when that is one of the two (Bopomofo,

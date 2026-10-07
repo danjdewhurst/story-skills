@@ -37,7 +37,7 @@ const DIGIT_ZEROS = {
 };
 
 // The digits a script's books print, by ISO 15924 script.
-const SCRIPT_DIGITS = {
+export const SCRIPT_DIGITS = {
   Arab: "arab", Nkoo: "nkoo", Deva: "deva", Beng: "beng", Guru: "guru", Gujr: "gujr", Orya: "orya",
   Taml: "tamldec", Telu: "telu", Knda: "knda", Mlym: "mlym", Thai: "thai", Laoo: "laoo", Tibt: "tibt",
   Mymr: "mymr", Khmr: "khmr", Mong: "mong", Mtei: "mtei"
@@ -48,12 +48,12 @@ const SCRIPT_DIGITS = {
 // in Bengali script, Dari, and Azerbaijani in Iran and Uzbek in
 // Afghanistan, which are written in Arabic script there. Keyed by language
 // and region, then language.
-const NUMERAL_SCRIPTS = { nqo: "Nkoo", mni: "Beng", prs: "Arab", "az-ir": "Arab", "uz-af": "Arab" };
+export const NUMERAL_SCRIPTS = { nqo: "Nkoo", mni: "Beng", prs: "Arab", "az-ir": "Arab", "uz-af": "Arab" };
 
 // Languages in Arabic script that write the Persian forms of 4, 5, and 6
 // (۴ ۵ ۶), as CLDR has them: Persian and Dari, Urdu, Pashto, Kashmiri,
 // Punjabi in Shahmukhi, and Azerbaijani and Uzbek in Arabic script.
-const EXTENDED_ARABIC = new Set(["fa", "prs", "ur", "ps", "ks", "pa", "az", "uz"]);
+export const EXTENDED_ARABIC = new Set(["fa", "prs", "ur", "ps", "ks", "pa", "az", "uz"]);
 
 // Han numerals: Japanese (jpan), Simplified Chinese (hans), and
 // Traditional Chinese (hant), by the script's characters.
@@ -66,7 +66,9 @@ const HAN_GROUPS = { jpan: ["", "万", "億", "兆"], hans: ["", "万", "亿", "
 
 // The native numeral system for `language` (a CLDR name such as arab, deva,
 // or jpan), or null when its script has none the builds print: Latin,
-// Cyrillic, Hebrew, Korean, and the rest keep 0-9.
+// Cyrillic, Hebrew, Korean, and the rest keep 0-9. scripts/schema-patterns.js
+// generates the schema's language pattern for chapter-numerals: native from
+// this and the tables it reads, and test/schema.test.js keeps them in step.
 export function nativeNumerals(language) {
   const { primary, script: subtag, region } = parseTag(language);
   const script = subtag ?? NUMERAL_SCRIPTS[`${primary}-${region}`] ?? NUMERAL_SCRIPTS[primary] ?? languageScript(language);

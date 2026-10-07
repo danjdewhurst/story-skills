@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseClockDate } from "../src/continuity.js";
 import { GRANDFATHERED, PACKS } from "../src/languages/index.js";
+import { validateChapterNumerals } from "../src/numerals.js";
 import { validateWritingMode } from "../src/typesetting.js";
 import { SCHEMA_PATH, buildSchemaDocument, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
 import { calendarDayPattern, generatedPatterns, main as writeSchemaPatterns, tableCodes, withGeneratedPatterns } from "../scripts/schema-patterns.js";
@@ -180,7 +181,7 @@ status: alive
   });
 
   // Without a language the book is English, which validate rejects for
-  // both (#467). Which languages have native numerals is left to validate.
+  // both (#467).
   test("writing-mode vertical and chapter-numerals native need a language", () => {
     const story = schema.properties.story;
     const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past" };
@@ -194,31 +195,68 @@ status: alive
   });
 
   // validate refuses writing-mode vertical for a language set horizontally
-  // (#529), and so does the schema, with a pattern generated from the same
-  // tables.
-  test("writing-mode vertical takes only a language set in vertical columns", () => {
+  // (#529), and chapter-numerals native for one that prints 0-9, and so
+  // does the schema, with patterns generated from the same tables.
+  test("writing-mode vertical and chapter-numerals native take only a language that has them", () => {
     const story = schema.properties.story;
-    const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past", "writing-mode": "vertical" };
-    const accepts = (language) => validateAgainstSchema({ ...base, language }, story, schema).length === 0;
+    const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past" };
+    const accepts = (extra, language) => validateAgainstSchema({ ...base, ...extra, language }, story, schema).length === 0;
+    const vertical = { "writing-mode": "vertical" };
     for (const language of ["ja", " KO ", "zh-Hant-TW", "yue", "zh-yue", "jpn", "en-Hani", "ja-JP-x-latn", "zh-min-nan"]) {
-      expect(accepts(language), language).toBe(true);
+      expect(accepts(vertical, language), language).toBe(true);
     }
     for (const language of ["en", "fr-CA", "ar", "ja-Latn", "zh-Latn-pinyin", "mn-Mong", "ja-kok", "[TODO: pick one]"]) {
-      expect(accepts(language), language).toBe(false);
+      expect(accepts(vertical, language), language).toBe(false);
+    }
+    const native = { "chapter-numerals": "native" };
+    for (const language of ["ar", "fa-IR", "hi", "th", "ja", "zh-TW", "az-IR", "uz-AF", "az-Arab", "prs", "zh-yue", "ko-abc-Hani", "mn-Mong", " NQO "]) {
+      expect(accepts(native, language), language).toBe(true);
+    }
+    for (const language of ["en", "ko", "ko-Hani", "kor-Hani", "he", "ru", "az", "az-Latn-IR", "ar-Latn", "ar-syr", "[TODO]"]) {
+      expect(accepts(native, language), language).toBe(false);
     }
   });
 
-  // Tags built from every code the language tables name, with a region, a
-  // script, an extlang, a variant, private use, and extensions, in any
-  // case and with spaces around them, as validateWritingMode reads them.
-  test("the vertical language pattern accepts exactly the tags validate does", () => {
-    const pattern = new RegExp(schema.properties.story.allOf[0].then.properties.language.pattern, "u");
+  // Each language rule with the check validate runs for it.
+  const LANGUAGE_RULES = [
+    ["writing-mode vertical", 0, (language) => {
+      const errors = [];
+      validateWritingMode({ "writing-mode": "vertical", language }, errors);
+      return errors.length === 0;
+    }],
+    ["chapter-numerals native", 1, (language) => {
+      const errors = [];
+      validateChapterNumerals({ "chapter-numerals": "native", language }, errors);
+      return errors.length === 0;
+    }]
+  ];
+  const isTag = (value) => /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value);
+  // The tags in `tags` (and `forms` of each) where the schema's pattern for
+  // a rule and validate disagree, and how many validate accepts.
+  function compareLanguages(at, validates, tags, forms = (tag) => [tag]) {
+    const pattern = new RegExp(schema.properties.story.allOf[at].then.properties.language.pattern, "u");
+    const disagreements = [];
+    let accepted = 0;
+    for (const language of tags.filter(isTag).flatMap(forms)) {
+      const valid = validates(language);
+      accepted += valid ? 1 : 0;
+      if (pattern.test(language) !== valid) {
+        disagreements.push(language);
+      }
+    }
+    return { disagreements, accepted };
+  }
+
+  // Tags built from every code, script, and region the tables name, with
+  // an extlang, a variant, private use, and extensions, and without an
+  // extlang also in upper case and with spaces around them.
+  test("the language patterns accept exactly the tags validate does", () => {
     const codes = [...tableCodes(), "qaa", "xyz"];
     const extlangs = codes.filter((code) => code.length === 3);
-    const scripts = ["Hans", "hant", "Jpan", "kore", "Hang", "Hira", "Kana", "Bopo", "Hani", "Latn", "Cyrl", "Mong", "Arab", "Abcd"];
+    const scripts = ["Hans", "hant", "Jpan", "kore", "Hang", "Hira", "Kana", "Bopo", "Hani", "Latn", "Cyrl", "Mong", "Arab", "Deva", "Beng", "Thai", "Nkoo", "Hebr", "Abcd"];
     const tags = new Set([...Object.keys(GRANDFATHERED), ...PACKS.keys()]);
     for (const code of codes) {
-      for (const tail of ["", "-JP", "-tw", "-CN", "-419", "-hepburn", "-x-hani", "-u-nu-latn", "-1994"]) {
+      for (const tail of ["", "-JP", "-tw", "-CN", "-IR", "-af", "-419", "-hepburn", "-x-hani", "-u-nu-latn", "-1994"]) {
         tags.add(`${code}${tail}`);
       }
       for (const script of scripts) {
@@ -226,25 +264,30 @@ status: alive
         tags.add(`${code}-${script}-TW`);
       }
       for (const extlang of extlangs) {
-        for (const tail of ["", "-HK", "-Latn", "-Hant", "-hepburn"]) {
+        for (const tail of ["", "-HK", "-IR", "-Latn", "-Hant", "-hepburn"]) {
           tags.add(`${code}-${extlang}${tail}`);
         }
       }
     }
-    const disagreements = [];
-    let vertical = 0;
-    for (const tag of [...tags].filter((value) => /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value))) {
-      for (const language of [tag, tag.toUpperCase(), ` ${tag}\t`]) {
-        const errors = [];
-        validateWritingMode({ "writing-mode": "vertical", language }, errors);
-        vertical += errors.length === 0 ? 1 : 0;
-        if (pattern.test(language) !== (errors.length === 0)) {
-          disagreements.push(language);
-        }
-      }
+    const forms = (tag) => (tag.split("-")[1]?.length === 3 ? [tag] : [tag, tag.toUpperCase(), ` ${tag}\t`]);
+    for (const [name, at, validates] of LANGUAGE_RULES) {
+      const { disagreements, accepted } = compareLanguages(at, validates, [...tags], forms);
+      expect(disagreements, name).toEqual([]);
+      expect(accepted, name).toBeGreaterThan(1000);
     }
-    expect(disagreements).toEqual([]);
-    expect(vertical).toBeGreaterThan(1000);
+  });
+
+  // The same, without the generator's list of codes: every two- and
+  // three-letter code, alone and with a region, an extlang, or a script.
+  test("the language patterns agree with validate on every two- and three-letter code", () => {
+    const letters = [..."abcdefghijklmnopqrstuvwxyz"];
+    const codes = letters.flatMap((first) => letters.flatMap((second) => [`${first}${second}`, ...letters.map((third) => `${first}${second}${third}`)]));
+    const forms = (code) => [code, `${code}-TW`, `${code}-IR`, `${code}-yue`, `${code}-prs-AF`, `${code}-Hani`];
+    for (const [name, at, validates] of LANGUAGE_RULES) {
+      const { disagreements, accepted } = compareLanguages(at, validates, codes, forms);
+      expect(disagreements, name).toEqual([]);
+      expect(accepted, name).toBeGreaterThan(10000);
+    }
   });
 
   // validate checks that a date is a real day (#530); the schema's pattern
