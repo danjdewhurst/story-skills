@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { gitEnv, makeTempDir } from "./helpers.js";
 
 // Replays the command samples in the docs that a `<!-- replay -->` comment
 // marks, so a change to what the CLI prints fails here until the sample is
@@ -101,12 +101,13 @@ function scratchHome(example) {
 }
 
 // Runs one command with stdout and stderr sharing a file, so their lines
-// keep the order the CLI printed them in.
+// keep the order the CLI printed them in. gitEnv() keeps the developer's git
+// setup away from a command that reads git, such as compare --ref.
 function replay(args, cwd, home) {
   const capture = path.join(home, "output.txt");
   const fd = fs.openSync(capture, "w");
   try {
-    spawnSync(process.execPath, [storyBin, ...args], { cwd, stdio: ["ignore", fd, fd] });
+    spawnSync(process.execPath, [storyBin, ...args], { cwd, stdio: ["ignore", fd, fd], env: gitEnv() });
   } finally {
     fs.closeSync(fd);
   }
