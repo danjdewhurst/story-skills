@@ -1209,6 +1209,30 @@ describe("Story Skills chapter files (#185)", () => {
   });
 });
 
+describe("frontmatter without a chapter number (#718)", () => {
+  test("a manuscript with frontmatter and a Chapter Text heading keeps its chapter headings and preface", () => {
+    const { result, chapters } = importText("---\ntitle: The Book\nauthor: Ada\n---\n\nPreface text before the heading.\n\n## Chapter Text\n\n# Chapter 1: Arrival\n\nShip came in.\n\n# Chapter 2: Departure\n\nShip left.\n", { name: "book.md" });
+    expect(chapters.map((chapter) => chapter.title)).toEqual(["Opening", "Arrival", "Departure"]);
+    expect(chapterFile(result.root, 1)).toContain("Preface text before the heading.");
+  });
+
+  test("a chapter file with text above its Chapter Text heading warns about the text it does not use", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\nA note to self.\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["unused-chapter-text"]);
+    expect(result.warnings[0].message).toBe("chapter-01.md: 1 line above ## Chapter Text was not imported (first \"A note to self.\" at line 9): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading");
+    expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
+  });
+
+  test("a chapter file whose only text above the heading is its title prints no warning", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings).toEqual([]);
+  });
+});
+
 describe("CR line endings (#201)", () => {
   test("a CR-only source splits into chapters", () => {
     const { result, chapters } = importText("# Chapter 1: A\r\rShe ran.\r\r# Chapter 2: B\r\rHe hid.\r");

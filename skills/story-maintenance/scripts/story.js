@@ -959,6 +959,7 @@ var FINDING_CODES = {
   "folder-not-removed": "warning",
   "kept-story-options": "warning",
   "unsplit-chapter-lines": "warning",
+  "unused-chapter-text": "warning",
   "usage-error": "error",
   "unusable-project": "error",
   "write-refused": "error",
@@ -967,7 +968,7 @@ var FINDING_CODES = {
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
 }
-var PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines"];
+var PROJECTLESS_CODES = ["kept-story-options", "unsplit-chapter-lines", "unused-chapter-text"];
 function severityCodes() {
   return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
 }
@@ -31042,6 +31043,11 @@ function splitChapters(documents, warnings, rules, bylines) {
 `);
     const own = storySkillsChapter(source);
     if (own) {
+      if (own.skipped.length > 0) {
+        const [first] = own.skipped;
+        const count = own.skipped.length === 1 ? "1 line above ## Chapter Text was" : `${own.skipped.length} lines above ## Chapter Text were`;
+        warnings.push({ ...warn("unused-chapter-text", `${document.name}: ${count} not imported (first "${first.text}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
+      }
       chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
       continue;
     }
@@ -31065,14 +31071,23 @@ function storySkillsChapter(text) {
   if (!heading) {
     return null;
   }
-  let data;
+  let parsed;
   try {
-    data = parseFrontmatter(text).data;
+    parsed = parseFrontmatter(text);
   } catch {
     return null;
   }
+  const { data } = parsed;
+  if (!Object.hasOwn(data, "number")) {
+    return null;
+  }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author) };
+  const bodyStart = text.length - parsed.body.length;
+  const firstLine = text.slice(0, bodyStart).split(`
+`).length;
+  const skipped = text.slice(bodyStart, heading.index).split(`
+`).map((line, index) => ({ text: line.trim(), line: firstLine + index })).filter((line) => line.text !== "" && !/^#[ \t]/.test(line.text));
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
 }
 function importedNames(value) {
   return nameList(value).map((name) => name.replace(/\s+/g, " "));
