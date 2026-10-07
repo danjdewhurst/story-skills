@@ -104,3 +104,15 @@ describe("story clues", () => {
     expect(result.err).toContain("Clue check complete: 0 errors, 0 warnings");
   });
 });
+
+describe("clue matrix columns (#223)", () => {
+  test("#223 clue columns fit three-digit chapters", () => {
+    const text = formatClueMatrix({
+      totals: { clues: 1, redHerrings: 0, planted: 1, revealed: 1 },
+      chapters: [9, 10, 20, 100].map((number) => ({ id: `chapter-${number}`, number })),
+      rows: [{ id: "knife", status: "planted", redHerring: false, significanceDelayed: false, cells: [".", "P", ".", "R"] }]
+    });
+    expect(text).toContain("Clue     9  10  20 100\n");
+    expect(text).toContain("knife    .   P   .   R  planted");
+  });
+});

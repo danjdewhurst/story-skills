@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -134,5 +135,85 @@ describe("compareChapters", () => {
     const result = compareChapters([chapter("chapter-10", "a")], [chapter("chapter-9", "b")]);
     expect(result.chapters.map((entry) => entry.id)).toEqual(["chapter-9", "chapter-10"]);
     expect(formatComparison(compareChapters([], []), "nothing")).toBe("Compared with nothing\nChapters: 0 then, 0 now (0 added, 0 removed)\nWords: 0 then, 0 now (±0)\n\n- No chapters in either version\n");
+  });
+});
+
+function newProject(title = "Analysis", cwd = makeTempDir()) {
+  return createStoryProject({ cwd, title }).root;
+}
+
+function writeChapterWith(root, number, body, extra = "") {
+  const id = `chapter-${String(number).padStart(2, "0")}`;
+  writeMarkdown(path.join(root, "chapters", `${id}.md`), `title: Chapter ${number}\nnumber: ${number}\nstatus: draft${extra ? `\n${extra}` : ""}`, `## Chapter Text\n\n${body}\n`);
+}
+
+describe("compare (#73, #74, #216, #218)", () => {
+  test("#73 a project folder missing at the ref is an error, not all-added", () => {
+    const repo = makeTempDir();
+    const root = path.join(repo, "book");
+    createStoryProject({ cwd: repo, title: "Book", dir: root });
+    writeChapterWith(root, 1, "Some prose.");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "v1");
+    git(repo, "tag", "v1");
+    git(repo, "mv", "book", "renamed book");
+    git(repo, "commit", "-qm", "mv");
+    const result = invoke(repo, ["compare", path.join(repo, "renamed book"), "--ref", "v1"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain("renamed book/ does not exist at git ref v1");
+  });
+
+  test("#73 branch names git accepts are compared, and a missing git is named", () => {
+    const repo = makeTempDir();
+    const root = newProject("Refs", repo);
+    writeChapterWith(root, 1, "Some prose.");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-qm", "v1");
+    git(repo, "branch", "brouillon-é");
+    git(repo, "branch", "feature+x");
+    for (const ref of ["brouillon-é", "feature+x"]) {
+      const result = invoke(repo, ["compare", root, "--ref", ref]);
+      expect(result.err).not.toContain("Unsupported git ref");
+      expect(result.out).toContain(`Compared with git ref ${ref}`);
+    }
+    expect(invoke(repo, ["compare", root, "--ref", "-x"]).err).toContain("Unsupported git ref: -x");
+    const missing = spawnSync(process.execPath, [path.resolve("bin/story.js"), "compare", root, "--ref", "HEAD"], { cwd: repo, encoding: "utf8", env: { ...process.env, PATH: "/nonexistent" } });
+    expect(missing.stderr).toContain("git, which was not found on PATH");
+  });
+
+  test("#74 compare refuses when a current chapter fails to parse", () => {
+    const cwd = makeTempDir();
+    const before = newProject("Before", cwd);
+    const after = newProject("After", cwd);
+    for (const root of [before, after]) {
+      writeChapterWith(root, 1, "One.");
+      writeChapterWith(root, 2, "Two.");
+    }
+    const file = path.join(after, "chapters", "chapter-02.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("---\n", "---\ntitle: dup\ntitle: dup2\n"), "utf8");
+    const result = invoke(cwd, ["compare", after, "--against", before]);
+    expect(result.code).toBe(3);
+    expect(result.out).not.toContain("removed");
+    expect(result.err).toContain("Cannot compare");
+  });
+
+  test("#218 reordered paragraphs are changed and scene breaks never match", () => {
+    const chapter = (paragraphs) => ({ id: "chapter-01", title: "One", words: 6, paragraphs });
+    const reordered = compareChapters([chapter(["First.", "Second."])], [chapter(["Second.", "First."])]);
+    expect(reordered.chapters[0].status).toBe("changed");
+
+    const cwd = makeTempDir();
+    const a = newProject("A", cwd);
+    const b = newProject("B", cwd);
+    writeChapterWith(a, 1, "Alpha one.\n\n* * *\n\nBeta two.\n\n* * *\n\nGamma three.");
+    writeChapterWith(b, 1, "Delta four.\n\n* * *\n\nEpsilon five.\n\n* * *\n\nZeta six.");
+    expect(invoke(cwd, ["compare", b, "--against", a]).out).toContain("0% of paragraphs unchanged");
+  });
+
+  test("#216 one changed paragraph in 200 is not 100% unchanged", () => {
+    const text = formatComparison({ chapters: [{ id: "chapter-01", title: "One", status: "changed", before: 10, after: 10, unchanged: 199 / 200 }], beforeChapters: 1, afterChapters: 1, beforeWords: 10, afterWords: 10 }, "x");
+    expect(text).toContain("99% of paragraphs unchanged");
   });
 });

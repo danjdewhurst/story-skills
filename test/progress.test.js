@@ -386,3 +386,85 @@ describe("daily targets and streaks", () => {
     expect(messages(validateProject(root).warnings).join("\n")).toContain("story.md daily-target-characters is not measured: this book counts words (language en), so set daily-target-words");
   });
 });
+
+function newProject(title = "Analysis", cwd = makeTempDir()) {
+  return createStoryProject({ cwd, title }).root;
+}
+
+function writeChapterWith(root, number, body, extra = "") {
+  const id = `chapter-${String(number).padStart(2, "0")}`;
+  writeMarkdown(path.join(root, "chapters", `${id}.md`), `title: Chapter ${number}\nnumber: ${number}\nstatus: draft${extra ? `\n${extra}` : ""}`, `## Chapter Text\n\n${body}\n`);
+}
+
+function setStoryFields(root, fields) {
+  const file = path.join(root, "story.md");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("tense: past\n", `tense: past\n${fields}\n`), "utf8");
+}
+
+describe("progress (#56, #72, #216, #220)", () => {
+  test("#56 --log keeps extra fields and the text of untouched entries", () => {
+    const root = newProject();
+    writeChapterWith(root, 1, "One two three.");
+    fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: \"2026-09-01\"\n    words: 100\n    note: good day\n---\n\n# Log\n", "utf8");
+    projectProgress(root, { log: true, date: "2026-09-02" });
+    const log = fs.readFileSync(path.join(root, "progress.md"), "utf8");
+    expect(log).toContain("  - date: \"2026-09-01\"\n    words: 100\n    note: good day\n");
+    expect(log).toContain("  - date: 2026-09-02\n    words: 3\n");
+
+    writeChapterWith(root, 1, "One two three four.");
+    projectProgress(root, { log: true, date: "2026-09-01" });
+    const replaced = fs.readFileSync(path.join(root, "progress.md"), "utf8");
+    expect(replaced).toContain("note: good day");
+    expect(replaced).toContain("words: 4");
+    expect(messages(validateProject(root).errors)).toEqual([]);
+  });
+
+  test("#72 a padded --date is trimmed, so a second log replaces the first", () => {
+    const root = newProject();
+    writeChapterWith(root, 1, "One two three.");
+    projectProgress(root, { log: true, date: " 2026-09-25" });
+    projectProgress(root, { log: true, date: "2026-09-25" });
+    const log = fs.readFileSync(path.join(root, "progress.md"), "utf8");
+    expect(log.match(/date:/g)).toHaveLength(1);
+    expect(log).not.toContain("\" 2026");
+  });
+
+  test("#72 validate catches a duplicate date hidden by padding", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: \" 2026-09-25\"\n    words: 1\n  - date: 2026-09-25\n    words: 2\n---\n", "utf8");
+    expect(messages(validateProject(root).errors).join("\n")).toContain("repeats date 2026-09-25");
+  });
+
+  test("#72 progress reports an invalid target-words or deadline", () => {
+    const root = newProject();
+    setStoryFields(root, "target-words: 90k\ndeadline: 2027-02-30");
+    const result = invoke(path.dirname(root), ["progress", root]);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("story.md frontmatter field target-words must be an integer");
+    expect(result.err).toContain("story.md deadline");
+  });
+
+  test("#72 the deadline day asks for everything that is left", () => {
+    const progress = computeProgress({ words: 993, target: 90000, deadline: "2026-09-20", today: "2026-09-20", chapters: [], sessions: [] });
+    expect(formatProgress(progress)).toContain("Deadline: 2026-09-20 (today): 89,007 words needed");
+    const done = computeProgress({ words: 90000, target: 90000, deadline: "2026-09-20", today: "2026-09-20", chapters: [], sessions: [] });
+    expect(formatProgress(done)).toContain("Deadline: 2026-09-20 (today): 0 words needed");
+  });
+
+  test("#216 progress never rounds up to 100% and says 1 word", () => {
+    const progress = computeProgress({ words: 624, target: 625, deadline: null, today: "2026-09-20", chapters: [{ id: "chapter-01", words: 624, target: 625 }], sessions: [] });
+    const text = formatProgress(progress);
+    expect(text).toContain("Remaining: 1 word\n");
+    expect(text).toContain("- chapter-01: 624 of 625 words (99%)");
+  });
+
+  test("#220 a very slow pace projects nothing instead of crashing", () => {
+    const sessions = [{ date: "2000-01-01", words: 0 }, { date: "2026-09-01", words: 976 }];
+    const slow = computeProgress({ words: 976, target: 900000, deadline: null, today: "2026-09-02", chapters: [], sessions });
+    expect(slow.projected).toBeNull();
+    expect(formatProgress(slow)).not.toContain("Projected");
+    const slower = computeProgress({ words: 5, target: 900000, deadline: null, today: "2026-09-02", chapters: [], sessions: [sessions[0], { date: "2026-09-01", words: 5 }] });
+    expect(slower.projected).toBeNull();
+    expect(() => formatProgress(slower)).not.toThrow();
+  });
+});

@@ -207,3 +207,23 @@ describe("story timeline", () => {
     expect(result.err).toContain("chapters/chapter-09.md");
   });
 });
+
+function newProject(title = "Analysis", cwd = makeTempDir()) {
+  return createStoryProject({ cwd, title }).root;
+}
+
+function writeChapterWith(root, number, body, extra = "") {
+  const id = `chapter-${String(number).padStart(2, "0")}`;
+  writeMarkdown(path.join(root, "chapters", `${id}.md`), `title: Chapter ${number}\nnumber: ${number}\nstatus: draft${extra ? `\n${extra}` : ""}`, `## Chapter Text\n\n${body}\n`);
+}
+
+describe("POV shares add up (#216)", () => {
+  test("POV shares add up to 100", () => {
+    const root = newProject();
+    ["a", "b", "c"].forEach((pov, index) => writeChapterWith(root, index + 1, "word ".repeat(100), `pov: ${pov}`));
+    const out = invoke(path.dirname(root), ["timeline", root]).out;
+    const shares = [...out.matchAll(/words \((\d+)%\)/g)].map((match) => Number(match[1]));
+    expect(shares).toHaveLength(3);
+    expect(shares.reduce((sum, value) => sum + value, 0)).toBe(100);
+  });
+});
