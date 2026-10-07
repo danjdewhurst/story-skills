@@ -4,8 +4,19 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { checkProjectSchema } from "./check-schema.js";
+import { applySeverity, findingOverrides, readCliConfig } from "../src/config.js";
 import { characterCount } from "../src/markdown.js";
-import { buildBook, checkProjectContinuity, computeWordCounts, reindexProject, seriesReport, validateLinks, validateProject } from "../src/story.js";
+import {
+  buildBook,
+  checkProjectContinuity,
+  computeWordCounts,
+  mentionsReport,
+  pacingReport,
+  reindexProject,
+  seriesReport,
+  validateLinks,
+  validateProject
+} from "../src/story.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = path.join(repoRoot, "examples");
@@ -25,6 +36,42 @@ export const EXPECTED_CONTINUITY = {
       "continuity/promises/the-sealed-letter.md was planted in chapter-01, 3 chapters ago, and has no payoff yet",
       "continuity/state.md object-state[0] status active conflicts with worldbuilding/artifacts/vales-compass.md status destroyed"
     ]
+  }
+};
+
+// story mentions and story pacing are advisory, so an example may keep a
+// warning on purpose: the docs quote these ones. Each example listed here
+// must produce exactly these warnings from that command, for the reason
+// given. Any other mentions or pacing warning fails the check unless the
+// example dismisses it in continuity/exemptions.md, with its reason there.
+export const EXPECTED_WARNINGS = {
+  "bo-and-the-missing-moon": {
+    pacing: {
+      reason: "A picture book runs on page turns, not scene and sequel, and spread 12 is the reveal the picture carries; story.md's Notes and the picture-book guide keep these warnings.",
+      warnings: [
+        "4 scenes in a row end in an outright yes (chapter-11-scene-01 to chapter-14-scene-01): raise the cost with yes-but or no-and",
+        "14 scene units in a row with no sequel (chapter-01-scene-01 to chapter-14-scene-01): give the POV character room to react and decide",
+        "chapter-12 runs 3 words, under half the median chapter (24): check it earns its place"
+      ]
+    }
+  },
+  "the-left-luggage-office": {
+    mentions: {
+      reason: "docs/continuity.md quotes these to show mention-not-named: the chapters refer to Folake and Raymond without naming them.",
+      warnings: [
+        "chapters/chapter-02.md lists character folake-achebe in mentions but never names it; add the name the chapter uses as an alias, or drop the mention",
+        "chapters/chapter-02.md lists character raymond-sallis in mentions but never names it; add the name the chapter uses as an alias, or drop the mention",
+        "chapters/chapter-03.md lists character folake-achebe in mentions but never names it; add the name the chapter uses as an alias, or drop the mention"
+      ]
+    }
+  },
+  "the-unraveled-thread": {
+    pacing: {
+      reason: "docs/continuity.md and docs/cli-reference.md quote this warning in their story pacing output.",
+      warnings: [
+        "4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-04-scene-01): give the POV character room to react and decide"
+      ]
+    }
   }
 };
 
@@ -57,17 +104,34 @@ export function collectResult(failures, exampleName, command, result) {
   return failures;
 }
 
-export function compareFindings(failures, exampleName, kind, expected, findings) {
+export function compareFindings(failures, exampleName, kind, expected, findings, command = "continuity") {
   const actual = findings.map((finding) => finding.message);
   for (const finding of expected) {
     if (!actual.includes(finding)) {
-      failures.push(`${exampleName} continuity is missing expected ${kind}: ${finding}`);
+      failures.push(`${exampleName} ${command} is missing expected ${kind}: ${finding}`);
     }
   }
 
   for (const finding of actual) {
     if (!expected.includes(finding)) {
-      failures.push(`${exampleName} continuity has unexpected ${kind}: ${finding}`);
+      failures.push(`${exampleName} ${command} has unexpected ${kind}: ${finding}`);
+    }
+  }
+  return failures;
+}
+
+// Runs story mentions and story pacing as the CLI does, with the example's
+// exemptions and severity overrides, and fails on any warning not listed in
+// EXPECTED_WARNINGS for that example.
+export function collectAdvisory(failures, exampleName, root, expected = EXPECTED_WARNINGS[exampleName] ?? {}) {
+  const overrides = findingOverrides(readCliConfig(root));
+  for (const [command, report] of [["mentions", mentionsReport], ["pacing", pacingReport]]) {
+    const result = applySeverity(report(root), overrides);
+    if (expected[command]) {
+      collectResult(failures, exampleName, command, { errors: result.errors, warnings: [] });
+      compareFindings(failures, exampleName, "warning", expected[command].warnings, result.warnings, command);
+    } else {
+      collectResult(failures, exampleName, command, result);
     }
   }
   return failures;
@@ -139,6 +203,7 @@ export function checkExamples(examplesDir = examplesRoot, { log = console.log, e
     }
     // Linked examples (the-last-ember and its prequel) must agree on shared canon.
     collectResult(failures, name, "series", seriesReport(root));
+    collectAdvisory(failures, name, root);
 
     if (expected) {
       compareFindings(failures, name, "error", expected.errors, continuity.errors);

@@ -156,6 +156,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The docs in the npm package no longer link to files the package leaves out, such as `AGENTS.md`, `evals/`, and `scripts/`. (#569)
   - Those links now go to GitHub, and `check:links` checks that each one names a file in the repository.
   - `check:package` now checks the links in every shipped markdown file, not only the README.
+- `bun run test:examples` now runs `story mentions` and `story pacing` on every example and fails on a warning the example does not exempt. The French, Japanese, and Arabic examples now exempt the chapters that refer to a character without naming them, and `the-last-ember` and `the-fall-of-the-citadel` record their chapter `hook`. ([#567](https://github.com/danjdewhurst/story-skills/issues/567))
 
 ### Security
 
