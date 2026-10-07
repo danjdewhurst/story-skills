@@ -29,7 +29,7 @@
     "the smuggler"
   ],
   "banned_regex": [
-    "\\bstory add clue[ \\t]+(?:\"(?![^\"\\n]*\\b(?:key|hour|noon|dusk|petra|thursday|boat|chest)\\b)[^\"\\n]*\"|'(?![^'\\n]*\\b(?:key|hour|noon|dusk|petra|thursday|boat|chest)\\b)[^'\\n]*')",
+    "\\bstory add clue[ \\t]+(?!(?:(?![ \\t]--)[^\\n])*\\b(?:key|hour|noon|dusk|petra|thursday|boat|chest)\\b)",
     "\\bit was\\b.{0,50}\\bwho\\b"
   ],
   "ends_with_question": true,

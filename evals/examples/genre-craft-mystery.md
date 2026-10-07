@@ -1,7 +1,7 @@
 ```shell
-story add clue "The brass key on the lamp-room door" --planted chapter-01 --payoff chapter-12 --character tomas-reyes
-story add clue "Bare at noon, keyed at dusk" --planted chapter-01 --payoff chapter-12 --character tomas-reyes --significance-delayed
-story add clue "Petra's Thursday boat call" --planted chapter-02 --payoff chapter-07 --character tomas-reyes --character petra-lindqvist --red-herring
+story add clue 'The brass key on the lamp-room door' --planted chapter-01 --payoff chapter-12 --character tomas-reyes
+story add clue 'Bare at noon, keyed at dusk' --planted chapter-01 --payoff chapter-12 --character tomas-reyes --significance-delayed
+story add clue 'Petra'\''s Thursday boat call' --planted chapter-02 --payoff chapter-07 --character tomas-reyes --character petra-lindqvist --red-herring
 story reindex .
 story wordcount . --write
 story check .
