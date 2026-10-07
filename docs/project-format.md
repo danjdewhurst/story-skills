@@ -249,14 +249,18 @@ The body is free markdown. Starter files from `story init` and `story add` conta
 
 | File | What the CLI reads |
 |------|--------------------|
-| `chapters/*.md` | The chapter prose, for word counts, export, build, and prose checks (rules below) |
+| `chapters/*.md` | The chapter prose, for word counts, export, build, and prose checks (rules below); also `## Outline`, up to the `---` line above the prose or the next heading, used by `story context` |
 | `matter/*.md` | The page text, found the same way as chapter prose |
-| `story.md` | The first sentence of `## Synopsis`, used as the premise by `story synopsis` |
+| `story.md` | The first sentence of `## Synopsis`, used as the premise by `story synopsis`; also `## Tone & Style`, `## Setting`, and `## Central Conflict`, used by `story context` |
+| `style-sheet.md` | The whole body apart from the `# ` title, used by `story context` |
+| `characters/*.md` | `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns`, used by `story context` for the cast's cards |
+| `scenes/*.md` | `## Purpose`, used by `story context` for the target scene and the scenes before it |
+| `continuity/promises/*.md`, `continuity/clues/*.md`, `continuity/questions/*.md` | `## Setup` in a promise, `## Clue` in a clue, and `## Question` in a question, used by `story context` for open threads |
 | `plot/arcs/*.md` | `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution`, used by `story synopsis`; also every `chapter-NN` token and `.md` link, checked by `story links` |
 | `plot/timeline.md` | Every `chapter-NN` token and `.md` link, checked by `story links` |
 | Registries | The preserved hand-written sections listed under [Registries](#registries) |
 
-Section lookups match a `## Heading` line without regard to case and run to the next `##` heading.
+Section lookups match a `## Heading` line without regard to case and run to the next `##` heading. `story context` skips a section that is empty or still holds the starter text `story init` or `story add` wrote, and gives no warning for a missing one, so a renamed heading drops that section from the drafting context without notice. Keep these headings as they are.
 
 ### Where chapter prose starts
 
