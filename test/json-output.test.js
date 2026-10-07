@@ -121,9 +121,11 @@ describe("--json result envelope", () => {
 
   test("knowledge --json lists the entries, and a missing --at is a JSON usage error", () => {
     const root = path.join(examplesRoot, "the-last-ember");
-    const { envelope } = invokeJson(root, ["knowledge", "sera-voss", "--at", "chapter-01", "--json"]);
-    expect(envelope.data).toMatchObject({ character: "sera-voss", at: "chapter-01" });
-    expect(Array.isArray(envelope.data.entries)).toBe(true);
+    const { envelope } = invokeJson(root, ["knowledge", "kael-voss", "--at", "chapter-01", "--json"]);
+    expect(envelope.data).toMatchObject({ character: "kael-voss", at: "chapter-01" });
+    expect(envelope.data.entries).toEqual([
+      { knows: "The tunnels from the Vale side reach the Whisper Gate into the High Keep", learnedIn: "", audience: "reader" }
+    ]);
 
     const usage = invokeJson(root, ["knowledge", "sera-voss", "--json"]);
     expect(usage.code).toBe(2);
