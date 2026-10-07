@@ -1619,6 +1619,7 @@ The sheet ends in a readiness checklist of every missing field. For *The Gannet 
 - [ ] AI-use statement decided (`ai-disclosure`)
 - [ ] Permissions cleared for quoted matter (`permission`; pending: epigraph)
 - [x] No `[TODO` markers in chapter prose
+- [x] No `[TODO` markers on matter pages
 - [ ] Story status is complete
 ```
 
@@ -1645,7 +1646,7 @@ The copyright page is a matter page ordered first, filled from the [copyright pa
 story add matter "Copyright" --order 0 --heading=false
 ```
 
-Without it, every build except Shunn generates a minimal copyright page from `copyright`. Quoted pages get their permission fields, as in [Editorial review](#editorial-review). The skill rebuilds the metadata sheet until the checklist is clean.
+Without it, every build except Shunn generates a minimal copyright page from `copyright`. A line you have not supplied yet, such as an ISBN you have not bought, stays as `[TODO: author to supply]`. `story validate` and every build that prints the page warn about it (`matter-todo-markers`), and the metadata sheet names the page, so the skill asks you for the line before you upload a file. Quoted pages get their permission fields, as in [Editorial review](#editorial-review). The skill rebuilds the metadata sheet until the checklist is clean.
 
 ### 3. Build the ebook and print interior
 
