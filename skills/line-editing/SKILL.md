@@ -110,13 +110,11 @@ when two voices are near-identical, when a character says a
 2. If a character file has no voice notes, propose `voice-words` and
    `voice-avoid` lists drawn from their best existing lines, and ask
    before adding them to the character file.
-3. A line is attributed only when the narration names the speaker next
-   to a speech verb or, failing that, names exactly one character in the
-   paragraph. Pronoun tags (`she said`) and untagged lines are invisible
-   to the report, so the POV character in close third is often
-   under-counted; read those lines by hand, or name the tags in a sample
-   chapter and rerun. The near-identical warning reads "X and Y may sound
-   alike" and needs five or more lines from each character.
+3. Pronoun tags (`she said`) and untagged lines are invisible to the
+   report, so the POV character in close third is often under-counted;
+   read those lines by hand, or name the tags in a sample chapter and
+   rerun. The attribution rules and thresholds are in the voices section
+   of [`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#voices).
 
 ### 4. Copyedit
 

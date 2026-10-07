@@ -141,10 +141,12 @@ See the `plot-structure` and `scene-craft` skills.
 
 Run `story voices .` when dialogue voices may blur or during a line pass.
 
-- It attributes quoted lines (straight, curly, or British single quotes) to the character the narration names next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`, aliases included; a name before the verb wins), or else to the only character the paragraph names (an action beat).
-- Pronoun tags (`she said`) are never attributed, so a close-third POV character is often under-counted.
-- It reports lines, words, mean sentence length, contraction, question, and exclamation rates, and signature words.
-- It warns when a character says a `voice-avoid` word, when two characters with five or more lines have near-identical fingerprints ("X and Y may sound alike: ..."), and when a `voice-words` entry is never said.
+- It attributes a quoted line (straight `"..."`, curly `“...”`, or British `‘...’`) when the narration names the speaker next to a speech verb (`"...," Mara said`, `said Mara`, `Mara asked`, aliases included). A name before the verb wins over a name after it: in `"...," Sera told Kael` the line is Sera's, and `said Kael` gives it to Kael. With no speech-verb tag, a paragraph whose narration names exactly one character (an action beat) gives the line to that character.
+- Names and aliases match case-sensitively as proper nouns, and titles are skipped for the given name (`Lord Maren` also matches `Maren`).
+- Pronoun tags (`she said`, `said he`) are never attributed, and a paragraph with one is left unattributed even when its narration names another character. Only a pronoun and verb right after a closing quote or right before an opening one count as a tag; `She said nothing more` elsewhere is narration and does not block an action beat.
+- In close third person the POV character is often under-counted; when that matters, name the tags in a sample chapter and rerun. Unattributed dialogue is not counted, so a low line count may mean few named tags rather than few lines.
+- Per character it reports lines, words, mean sentence length, contraction, question, and exclamation rates, and signature words used more by them than by others.
+- It warns when a character says one of their `voice-avoid` words, when two characters with five or more lines each have close fingerprints ("X and Y may sound alike: similar sentence length, contractions, questions, and exclamations"), and when a character with five or more lines never says a `voice-words` entry.
 
 See the `voice-style` and `line-editing` skills.
 
