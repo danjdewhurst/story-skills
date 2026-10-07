@@ -16,6 +16,10 @@ export const RELEASE_SOON_DAYS = 3;
 // A monthly release-every, such as `1 month` or `3 months`.
 const MONTHS_PATTERN = /^(\d+)\s+months?$/i;
 
+// The longest monthly cadence. A longer one could never release a second
+// episode before 9999-12-31, and every count up to it is exact.
+export const MAX_RELEASE_MONTHS = 999999;
+
 // The last day a YYYY-MM-DD date can name: a cadence that runs past it
 // schedules nothing more.
 const LAST_DAY = parseClockDate("9999-12-31").days;
@@ -46,17 +50,17 @@ export function releaseData(release) {
 
 // story.md release-every as { every, unit }: a whole number of days, such
 // as 7, or of months, such as `1 month`. null when it is neither, or is
-// below 1 (validate reports which).
+// below 1, or is over MAX_RELEASE_MONTHS months (validate reports which).
 export function releaseEvery(value) {
   if (Number.isInteger(value)) {
     return value >= 1 ? { every: value, unit: "day" } : null;
   }
   const months = releaseMonths(value);
-  return months !== null && months >= 1 ? { every: months, unit: "month" } : null;
+  return months !== null && months >= 1 && months <= MAX_RELEASE_MONTHS ? { every: months, unit: "month" } : null;
 }
 
 // The number of months a `N months` value names, even 0, or null for any
-// other value.
+// other value. A count too long for a number is Infinity.
 export function releaseMonths(value) {
   const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
   return match ? Number(match[1]) : null;
@@ -102,7 +106,9 @@ function cadenceDays(cadence, index) {
 }
 
 // How many cadence episodes are due by the day `days`: the number of the
-// last one on or before it, or 0 before the first.
+// last one on or before it, or 0 before the first. Returning early there
+// also keeps cadenceDays to episodes from release-start on: before it, the
+// month arithmetic would need a negative index.
 function dueBy(cadence, days) {
   if (days < cadence.startDays) {
     return 0;
