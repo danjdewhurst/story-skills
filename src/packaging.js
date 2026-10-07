@@ -9,7 +9,7 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { breaksParagraph, characterCount, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -668,7 +668,7 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
 // Returns runs of { text, strong, em }.
 function inlineRuns(text) {
   const nodes = [];
-  const unclosedTicks = new Set();
+  const closeSpan = codeSpanCloser(text);
   let buffer = "";
   const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
@@ -685,10 +685,8 @@ function inlineRuns(text) {
       while (text[index + run] === "`") {
         run += 1;
       }
-      // A run length that found no closer once never finds one later.
-      const end = unclosedTicks.has(run) ? -1 : codeSpanEnd(text, index, run);
+      const end = closeSpan(index, run);
       if (end === -1) {
-        unclosedTicks.add(run);
         buffer += "`".repeat(run);
         index += run;
       } else {
@@ -801,23 +799,6 @@ function inlineRuns(text) {
     }
   }
   return runs;
-}
-
-// The end of the code span opened by the backtick run at `start`, closed
-// by a run of the same length, or -1 when none closes it.
-function codeSpanEnd(text, start, length) {
-  let next = text.indexOf("`", start + length);
-  while (next !== -1) {
-    let end = next;
-    while (text[end] === "`") {
-      end += 1;
-    }
-    if (end - next === length) {
-      return end;
-    }
-    next = text.indexOf("`", end);
-  }
-  return -1;
 }
 
 // Openers on the stack can open and have characters left, so only the

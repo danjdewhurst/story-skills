@@ -7,7 +7,7 @@ import { estimatePages, printHtml } from "../src/html.js";
 import { htmlBook } from "../src/packaging.js";
 import { findCommand } from "../src/pdf.js";
 import { buildBook, createEntity, createStoryProject } from "../src/story.js";
-import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { backtickRuns, expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -125,6 +125,13 @@ describe("html and print builds", () => {
     expectLinearTime(paragraphs, (n) => `\` ${"a ".repeat(n / 2)}x\``, { length: 64000 });
     expectLinearTime(paragraphs, (n) => `a${" ".repeat(n)}b\nc`);
     expectLinearTime(paragraphs, (n) => `# a${" ".repeat(n)}b`);
+  });
+
+  test("backtick runs of many lengths build in linear time (#587)", () => {
+    const html = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs.map((paragraph) => paragraph.html);
+    expect(html("```x `y` *z* `` *w*")).toEqual(["```x y <em>z</em> `` <em>w</em>"]);
+    // Each run that nothing closed once read to the end of the paragraph.
+    expectLinearTime(html, backtickRuns, { length: 512000, pieces: 256 });
   });
 });
 
