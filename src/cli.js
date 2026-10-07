@@ -93,10 +93,11 @@ const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"])
 export function runCli(argv, io) {
   let configured = [];
   // A command asked for --json reports a usage error or a failure as a JSON
-  // result too, so a script reading stdout always gets one object.
+  // result too, so a script reading stdout always gets one object. `writes`
+  // lists the files a failed run had already written (init and import).
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv)
-    ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] })
+    ? (message, exitCode, writes = []) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)], writes })
     : null;
   try {
     const named = COMMANDS_BY_NAME.get(argv[0]);
@@ -155,7 +156,7 @@ export function runCli(argv, io) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
-      return failJson(message, exitCode);
+      return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
     io.stderr.write(`${message}\n`);
     return exitCode;

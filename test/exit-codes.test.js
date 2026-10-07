@@ -41,6 +41,15 @@ function newProject() {
   return root;
 }
 
+// A folder without story.md. It sits inside a temp folder of its own, so
+// the files OK_ARGS writes beside the project (a draft, a reference text, a
+// new book) stay in that temp folder too.
+function emptyFolder() {
+  const folder = path.join(makeTempDir(), "empty");
+  fs.mkdirSync(folder);
+  return folder;
+}
+
 // A chapter whose frontmatter fails to parse is an error finding.
 function breakChapter(root) {
   fs.writeFileSync(path.join(root, "chapters", "chapter-01.md"), "---\ntitle: One\ntitle: Again\n---\nText.\n", "utf8");
@@ -223,7 +232,7 @@ describe("exit codes", () => {
 
     if (command.project !== "none") {
       test(`${command.name} exits 3 outside a story project`, () => {
-        const empty = makeTempDir();
+        const empty = emptyFolder();
         const args = OK_ARGS[command.name](empty);
         const result = invoke(empty, [...args, "--path", empty]);
         expect(result.err).toContain("is not a story project: missing story.md");
@@ -422,7 +431,7 @@ describe("exit codes with --json", () => {
       expect(misuse.code).toBe(usage);
 
       // init and import make a project, so --path is a usage error.
-      const empty = makeTempDir();
+      const empty = emptyFolder();
       const missing = invokeJson(empty, [...OK_ARGS[name](empty), "--path", empty]);
       expect(missing.envelope.diagnostics[0].message).toContain(command.project === "none" ? `${name} uses --dir for the target directory` : "is not a story project");
       expect(missing.code).toBe(command.project === "none" ? usage : project);
@@ -432,9 +441,13 @@ describe("exit codes with --json", () => {
   for (const [name, args] of Object.entries(REFUSED).filter(([command]) => JSON_COMMANDS.includes(command))) {
     test(`${name} --json exits 4 on a refused write`, () => {
       const root = newProject();
-      const result = invokeJson(root, args(root));
+      const argv = args(root);
+      const story = fs.readFileSync(path.join(root, "story.md"), "utf8");
+      const result = invokeJson(root, argv);
+      expect(result.envelope).toMatchObject({ ok: false, data: null, writes: [] });
       expect(result.envelope.diagnostics).toEqual([expect.objectContaining({ code: "write-refused" })]);
       expect(result.code).toBe(refused);
+      expect(fs.readFileSync(path.join(root, "story.md"), "utf8")).toBe(story);
     });
   }
 

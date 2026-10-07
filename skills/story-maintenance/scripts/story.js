@@ -271,6 +271,11 @@ function recordChanges(root, run) {
   let result;
   try {
     result = run();
+  } catch (error) {
+    if (error !== null && typeof error === "object") {
+      error.changes = summarizeJournal(root, journal);
+    }
+    throw error;
   } finally {
     journals.splice(journals.indexOf(journal), 1);
   }
@@ -28958,7 +28963,7 @@ function importManuscript(options) {
     const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
     const rules = importRules(pack);
     const warnings = [];
-    const documents = fromStdin ? [{ name: "stdin", text: piped, untitled: true }] : readImportSource(source, rules);
+    const documents = fromStdin ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }] : readImportSource(source, rules);
     const chapters = splitChapters(documents, warnings, rules);
     if (chapters.length === 0) {
       throw usageError("No chapter content found in import source");
@@ -29140,7 +29145,7 @@ function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs12.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [{ name: path16.basename(source), text: readSourceText(source) }];
+    return [{ name: path16.basename(source), path: source, text: readSourceText(source) }];
   }
   const names = [];
   for (const entry of fs12.readdirSync(source, { withFileTypes: true })) {
@@ -29168,7 +29173,7 @@ function readSourceDocuments(source, rules) {
   const documents = names.map((name) => {
     const fullPath = path16.join(source, name);
     assertImportFileSize(fullPath);
-    return { name, text: readSourceText(fullPath) };
+    return { name, path: fullPath, text: readSourceText(fullPath) };
   });
   if (documents.length === 0) {
     throw usageError(`No markdown or text files found in ${source}`);
@@ -29225,7 +29230,7 @@ function splitChapters(documents, warnings, rules) {
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
-      warnings.push(warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`, document.name));
+      warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     if (sections.length > 0) {
       chapters.push(...sections);
@@ -30172,7 +30177,7 @@ var COMMANDS = [
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const title = parsed.positionals.slice(1).join(" ");
       const base = newProjectRoot({ title, cwd, dir: parsed.options.dir }) ?? cwd;
-      const { result, changes } = runOrPlan(dryRun, base, () => createStoryProject({
+      const make = () => createStoryProject({
         title,
         cwd,
         dir: parsed.options.dir,
@@ -30189,7 +30194,8 @@ var COMMANDS = [
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
-      }));
+      });
+      const { result, changes } = dryRun ? planChanges(base, make) : recordNewProject(base, make);
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "init", base, {
           data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
@@ -30242,9 +30248,9 @@ var COMMANDS = [
         force: isTruthy(parsed.options.force)
       };
       const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
-      const { result, changes } = dryRun ? previewImport(options) : recordChanges(base, () => importManuscript(options));
+      const { result, changes } = dryRun ? previewImport(options) : recordNewProject(base, () => importManuscript(options));
       if (wantsJson(parsed)) {
-        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: diagnosticsFrom({ warnings: importWarnings(result) }, "import"), dryRun, changes });
+        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: importDiagnostics(result), dryRun, changes });
       }
       if (dryRun) {
         io.stdout.write(formatPreview("import", changes));
@@ -31293,6 +31299,16 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 `)}
 `;
 }
+function recordNewProject(base, run) {
+  try {
+    return recordChanges(base, run);
+  } catch (error) {
+    if (Array.isArray(error?.changes)) {
+      error.writes = writtenFiles(base, error.changes);
+    }
+    throw error;
+  }
+}
 function writeFilesJson(io, command, base, { ok = true, data, diagnostics, dryRun, changes }) {
   return writeJsonResult(io, { command, ok, data: { ...data, dryRun, changes }, diagnostics, writes: dryRun ? [] : writtenFiles(base, changes) });
 }
@@ -31339,8 +31355,11 @@ function keptStoryWarnings(result, titleLabel) {
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   return [warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md")];
 }
-function importWarnings(result) {
-  return [...keptStoryWarnings(result, "--title"), ...result.warnings];
+function importDiagnostics(result) {
+  return [...keptStoryWarnings(result, "--title"), ...result.warnings].map((finding) => {
+    const entry = diagnostic("warning", finding, "import");
+    return finding.source === undefined ? entry : { ...entry, source: finding.source };
+  });
 }
 function newProjectData(result) {
   return { root: result.root, storyId: result.storyId, keptStory: result.keptStory, ignoredOptions: result.ignoredOptions, gitignore: result.gitignore };
@@ -31529,7 +31548,7 @@ var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
-  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] }) : null;
+  const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode, writes = []) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)], writes }) : null;
   try {
     const named = COMMANDS_BY_NAME.get(argv[0]);
     const parsed = parseArgs(argv, named ? [...named.options ?? [], ...named.project === "none" ? [] : ["path"]] : undefined);
@@ -31582,7 +31601,7 @@ Run story --help to list commands.
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
-      return failJson(message, exitCode);
+      return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
     io.stderr.write(`${message}
 `);

@@ -173,7 +173,7 @@ export function importManuscript(options) {
     const rules = importRules(pack);
     const warnings = [];
     const documents = fromStdin
-      ? [{ name: "stdin", text: piped, untitled: true }]
+      ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }]
       : readImportSource(source, rules);
     const chapters = splitChapters(documents, warnings, rules);
     if (chapters.length === 0) {
@@ -425,7 +425,7 @@ function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [{ name: path.basename(source), text: readSourceText(source) }];
+    return [{ name: path.basename(source), path: source, text: readSourceText(source) }];
   }
 
   const names = [];
@@ -460,7 +460,7 @@ function readSourceDocuments(source, rules) {
   const documents = names.map((name) => {
     const fullPath = path.join(source, name);
     assertImportFileSize(fullPath);
-    return { name, text: readSourceText(fullPath) };
+    return { name, path: fullPath, text: readSourceText(fullPath) };
   });
 
   if (documents.length === 0) {
@@ -528,7 +528,10 @@ function splitChapters(documents, warnings, rules) {
       const why = markdown
         ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)"
         : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
-      warnings.push(warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`, document.name));
+      // The finding is about the manuscript, not a project file, so it
+      // names the manuscript file as its source: its absolute path, or
+      // stdin.
+      warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     if (sections.length > 0) {
       chapters.push(...sections);
