@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { checkContinuity } from "../src/continuity.js";
 import { formatTimeline } from "../src/timeline.js";
-import { createEntity, createStoryProject, storyTimeline } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { createEntity, createStoryProject, diagramProject, scanProject, storyTimeline } from "../src/story.js";
+import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
@@ -52,6 +53,61 @@ function timelineProject() {
   writeScene(root, "chapter-02", 1, "pov: tom-reed\ndate: 2024-03-01\nflashback-to: the storm\ncharacters:\n  - tom-reed");
   writeScene(root, "chapter-04", 1, "pov: mara-quill");
   return { root, cwd };
+}
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeBaseScene(root, chapter, scene, fields = "") {
+  writeMarkdown(path.join(root, "scenes", `chapter-${pad(chapter)}-scene-${pad(scene)}.md`), `
+title: Scene ${chapter}.${scene}
+chapter: chapter-${pad(chapter)}
+scene: ${scene}
+status: draft
+${fields}
+`, "# Scene\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
+function continuity(root) {
+  return checkContinuity(scanProject(root));
 }
 
 describe("story timeline", () => {
@@ -225,5 +281,73 @@ describe("POV shares add up (#216)", () => {
     const shares = [...out.matchAll(/words \((\d+)%\)/g)].map((match) => Number(match[1]));
     expect(shares).toHaveLength(3);
     expect(shares.reduce((sum, value) => sum + value, 0)).toBe(100);
+  });
+});
+
+describe("timeline and the clock", () => {
+  test("an untimed scene is not told out of order against a timed one the same day (#61)", () => {
+    const root = baseProject(2);
+    writeBaseScene(root, 1, 1, "date: 2024-01-01\ntime: \"10:00\"");
+    writeBaseScene(root, 2, 1, "date: 2024-01-01");
+    const timeline = storyTimeline(root);
+    expect(timeline.chronology.map((entry) => [entry.id, entry.toldLate])).toEqual([
+      ["chapter-01-scene-01", false],
+      ["chapter-02-scene-01", false]
+    ]);
+    expect(diagramProject(root, { kind: "timeline" }).text).not.toContain("told in chapter");
+    expect(messages(continuity(root).warnings)).toEqual([]);
+  });
+
+  test("a timed scene read after a later timed scene is still told late (#61)", () => {
+    const root = baseProject(2);
+    writeBaseScene(root, 1, 1, "date: 2024-01-01\ntime: \"10:00\"");
+    writeBaseScene(root, 1, 2, "date: 2024-01-01");
+    writeBaseScene(root, 2, 1, "date: 2024-01-01\ntime: \"08:00\"");
+    const timeline = storyTimeline(root);
+    expect(timeline.chronology.map((entry) => [entry.id, entry.toldLate])).toEqual([
+      ["chapter-02-scene-01", true],
+      ["chapter-01-scene-01", false],
+      ["chapter-01-scene-02", false]
+    ]);
+    expect(messages(continuity(root).warnings)).toEqual(["scenes/chapter-02-scene-01.md timestamp runs backward"]);
+  });
+
+  test("continuity and timeline share one chronology of scenes and scene-less chapters (#155)", () => {
+    const root = baseProject(4);
+    writeBaseChapter(root, 1, "date: 2024-05-01\ntime: \"22:00\"");
+    writeBaseChapter(root, 2, "date: 2024-05-01\ntime: \"08:00\"");
+    writeBaseChapter(root, 3, "date: 2024-06-10");
+    writeBaseScene(root, 4, 1, "date: 2024-06-01\ntime: \"10:00\"");
+    const result = continuity(root);
+    expect(messages(result.warnings)).toEqual([
+      "Chapter 2 date 2024-05-01 08:00 is earlier than Chapter 1 date 2024-05-01 22:00",
+      "scenes/chapter-04-scene-01.md timestamp runs backward"
+    ]);
+    const late = storyTimeline(root).chronology.filter((entry) => entry.toldLate).map((entry) => entry.id);
+    expect(late).toEqual(["chapter-02", "chapter-04-scene-01"]);
+  });
+
+  test("a chapter with scenes is placed by its scenes, not its own date (#155)", () => {
+    const root = baseProject(2);
+    writeBaseChapter(root, 1, "date: 2024-05-10");
+    writeBaseChapter(root, 2, "date: 2024-05-01");
+    writeBaseScene(root, 2, 1, "pov: ann");
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("earlier than");
+  });
+
+  test("timeline lists dated scenes whose chapter file is missing (#170)", () => {
+    const root = baseProject(5);
+    writeBaseScene(root, 7, 1, "date: 2024-05-02\ntime: \"10:00\"");
+    writeBaseScene(root, 7, 2, "date: 2024-05-01\ntime: \"10:00\"");
+    const timeline = storyTimeline(root);
+    expect(timeline.chronology.map((entry) => [entry.id, entry.orphanOf, entry.toldLate])).toEqual([
+      ["chapter-07-scene-02", "chapter-07", true],
+      ["chapter-07-scene-01", "chapter-07", false]
+    ]);
+    expect(timeline.undated).toHaveLength(5);
+    const text = formatTimeline(timeline, timeline.totalChapters);
+    expect(text).toContain("Timeline: 2 dated, 5 undated");
+    expect(text).toContain("[told in chapter 7, after later events; no chapter file for chapter-07]");
+    expect(messages(continuity(root).warnings)).toContain("scenes/chapter-07-scene-02.md timestamp runs backward");
   });
 });
