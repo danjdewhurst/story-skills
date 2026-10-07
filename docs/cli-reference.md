@@ -3534,6 +3534,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `chapter-no-scenes` | warning | A Fountain build has chapters with no scene records. |
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
 | `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`, misspelt, or not a cleared value; `--include-pending` keeps it. |
+| `matter-placement-left-out` | warning | `export` or a build leaves out a written matter page whose `placement` is neither `front` nor `back`, such as `Back`; `validate` reports the value as an error. |
 
 ### Codes: add, rename, move, split, merge, and remove
 

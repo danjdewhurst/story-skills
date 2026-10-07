@@ -817,6 +817,13 @@ export function manuscriptParts(project, action = "build", { includePending = fa
     const label = relative(project, entry.file);
     warnings.push(warn("permission-pending-left-out", `${label} ${unclearedPermission(entry)}, so it is left out; pass --include-pending to include it`, label));
   }
+  // A written page with any other placement is printed nowhere. validate
+  // reports the value, and a build that prints matter names the page it drops.
+  const unplaced = project.matter.filter((entry) => !entry.empty && entry.placement !== "front" && entry.placement !== "back");
+  for (const entry of warnLeftOut ? unplaced : []) {
+    const label = relative(project, entry.file);
+    warnings.push(warn("matter-placement-left-out", `${label} placement is ${entry.placement ?? "missing"}, which is neither front nor back, so it is left out`, label));
+  }
   const matterPages = written.filter((entry) => !leftOutMatter.includes(entry));
   const matter = (placement) => matterPages
     .filter((entry) => entry.placement === placement)
