@@ -96,6 +96,13 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      # npm and the installed story bin are .cmd shims on Windows, which Node
+      # will not spawn without a shell, so pack, install, and run the tarball
+      # here too.
+      - name: Install and run the packed tarball
+        timeout-minutes: 10
+        run: bun run check:package
+
   node:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest

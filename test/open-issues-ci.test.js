@@ -89,6 +89,13 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     expect(publish.indexOf("node scripts/check-package.js")).toBeLessThan(publish.indexOf("npm publish"));
   });
 
+  test("the Windows and macOS job installs and runs the packed tarball too (#573)", () => {
+    const ci = readRepo(".github/workflows/ci.yml");
+    const testOs = ci.slice(ci.indexOf("\n  test-os:"), ci.indexOf("\n  node:"));
+    expect(testOs).toContain("os: [windows-latest, macos-latest]");
+    expect(testOs).toContain("run: bun run check:package");
+  });
+
   test("the check installs the tarball and runs the installed bin", () => {
     const script = readRepo("scripts/check-package.js");
     for (const fragment of ['"pack"', '"install"', '"--version"', '"validate"', "node_modules"]) {
