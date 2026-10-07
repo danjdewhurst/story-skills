@@ -34,6 +34,11 @@ function editFile(file, edit) {
   fs.writeFileSync(file, edit(fs.readFileSync(file, "utf8")), "utf8");
 }
 
+function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("link and URL scans", () => {
   test("text outside link destinations and URLs is mapped, in linear time", () => {
     expect(upper("See [a](chapter-01.md) and https://x.test/chapter-02 or <mailto:chapter-03@x> chapter-04.")).toBe("SEE [A](chapter-01.md) AND https://x.test/chapter-02 OR <mailto:chapter-03@x> CHAPTER-04.");
@@ -143,5 +148,17 @@ describe("symlinked entity files (#63)", () => {
     fs.symlinkSync("../../c1.md", chapter);
     const result = invoke(root, ["validate"]);
     expect(result.err).toContain(`warning: ${"chapters/chapter-01.md"} is a symlink and is ignored: replace it with the file itself`);
+  });
+});
+
+describe("add, rename, and scan limits", () => {
+  test("scanning refuses more markdown files than the limit", () => {
+    const root = gapProject();
+    const nested = path.join(root, "characters", "extra");
+    fs.mkdirSync(nested);
+    for (let index = 0; index <= 5000; index += 1) {
+      fs.writeFileSync(path.join(nested, `note-${index}.md`), "", "utf8");
+    }
+    expect(() => validateProject(root)).toThrow("Too many markdown files in the project: the scan exceeds the 5000 file limit");
   });
 });

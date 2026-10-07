@@ -55,6 +55,16 @@ function reviewProject(fields = "") {
   return { root, cwd };
 }
 
+function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function writeStory(root, update) {
+  const storyPath = path.join(root, "story.md");
+  fs.writeFileSync(storyPath, update(fs.readFileSync(storyPath, "utf8")), "utf8");
+}
+
 describe("#112 scheduled chapters in arc bodies", () => {
   test("a planned plot point may name a chapter not yet written", () => {
     const root = newProject();
@@ -167,5 +177,20 @@ describe("review fixes", () => {
   test("a non-text author is a validation error", () => {
     const { root } = reviewProject("author: 123");
     expect(messages(validateProject(root).errors)).toContain("story.md frontmatter field author must be text");
+  });
+});
+
+describe("story.md validation", () => {
+  test("an older schema-version is reported", () => {
+    const root = gapProject();
+    writeStory(root, (text) => text.replace(/schema-version: \d+/, "schema-version: 1"));
+    expect(messages(validateProject(root).errors)).toContain("story.md schema-version must be 2");
+  });
+
+  test("a cover that is a directory is not a file", () => {
+    const root = gapProject();
+    fs.mkdirSync(path.join(root, "cover.png"));
+    writeStory(root, (text) => text.replace(/^---\n/, "---\ncover: cover.png\n"));
+    expect(messages(validateProject(root).errors)).toContain("story.md cover cover.png is not a file");
   });
 });

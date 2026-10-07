@@ -50,6 +50,11 @@ function initProject() {
   return path.join(cwd, "p");
 }
 
+function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("init", () => {
   test("a title with no kebab-case form takes its story id from --dir", () => {
     const cwd = makeTempDir();
@@ -546,5 +551,32 @@ describe("add warns about references to missing entities (#186)", () => {
     // Existing ids and future chapters are quiet.
     expect(invoke(root, ["add", "character", "Ann", "--location", "gull-harbour"]).err).toBe("");
     expect(invoke(root, ["add", "promise", "Oath", "--planted", "chapter-09"]).err).toBe("");
+  });
+});
+
+describe("init over an unreadable story.md", () => {
+  test("--force keeps a story.md whose frontmatter does not parse", () => {
+    const cwd = makeTempDir();
+    const root = path.join(cwd, "broken");
+    fs.mkdirSync(root);
+    const broken = "---\ntitle: Broken\nnot yaml\n---\n\nNotes.\n";
+    fs.writeFileSync(path.join(root, "story.md"), broken, "utf8");
+    const result = createStoryProject({ cwd, title: "Broken", dir: "broken", force: true });
+    expect(result.keptStory).toBe(true);
+    expect(result.storyId).toBe("broken");
+    expect(fs.readFileSync(path.join(root, "story.md"), "utf8")).toBe(broken);
+    expect(fs.existsSync(path.join(root, "characters", "_index.md"))).toBe(true);
+  });
+});
+
+describe("add, rename, and scan limits", () => {
+  test("add finishes an interrupted add when the registry is missing", () => {
+    const root = gapProject();
+    const first = createEntity(root, { kind: "character", name: "Mara Quill" });
+    fs.rmSync(path.join(root, "characters", "_index.md"));
+    const second = createEntity(root, { kind: "character", name: "Mara Quill" });
+    expect(second.resumed).toBe(true);
+    expect(second.id).toBe(first.id);
+    expect(fs.existsSync(path.join(root, "characters", "_index.md"))).toBe(true);
   });
 });

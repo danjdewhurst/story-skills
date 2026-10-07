@@ -3,7 +3,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
 import { createEntity, createStoryProject, validateProject, voicesReport } from "../src/story.js";
-import { buildVoices, formatVoices, quotedSpans } from "../src/voices.js";
+import { buildVoices, formatVoices, quotedSpans, splitOpenSpeech } from "../src/voices.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -202,5 +202,11 @@ describe("voices (#83, #210, #214, #215, #216, #217)", () => {
     const lines = (name, questions) => Array.from({ length: 10 }, (_, index) => `"${index < questions ? "Where are we going now?" : "We are going home now."}" ${name} said.`);
     const report = buildVoices(project(["Anna", "Bert", "Cara"]), [{ id: "chapter-01", paragraphs: [...lines("Anna", 3), ...lines("Bert", 2), ...lines("Cara", 4)] }]);
     expect(messages(report.warnings).filter((warning) => warning.includes("may sound alike") && warning.includes("anna"))).toEqual([]);
+  });
+});
+
+describe("sentence and speech edge cases", () => {
+  test("a straight single quote opening a paragraph opens speech", () => {
+    expect(splitOpenSpeech("'Come here and wait")).toEqual({ narration: "", open: "Come here and wait" });
   });
 });
