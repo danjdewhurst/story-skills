@@ -39,6 +39,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - It covers escalation, reversals, comic set-ups and payoffs (call-backs, the rule of three, running gags), character-driven humour, tone management, and the romantic comedy, farce, satire, and cosy sub-genres.
   - Sentence-level comic timing goes to the line-editing skill.
   - The skill now triggers on "comedy", "humour", "humor", "romcom", "farce", "satire", and "running gag".
+- `story import` now keeps a Story Skills chapter's `author`, and `--bylines` sets each other chapter's `author` from its by-line or its file's frontmatter. (#519)
+  - A by-line such as `By Ben Other`, or `*by Ada Writer and Ben Other*` as `story export` writes it, is taken out of the prose, and several names become a list.
+  - A line that is not clearly a by-line stays in the prose, and without the flag, prose that opens with "By" is left alone.
 
 ### Changed
 

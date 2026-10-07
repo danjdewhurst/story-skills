@@ -3,13 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { warn } from "./findings.js";
 import { parseFrontmatter, stringifyFrontmatter, withoutLeadingFrontmatter } from "./frontmatter.js";
-import { checkList, checkSet, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
+import { checkList, checkSet, fillLabel, isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
 import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
 import { MAX_READ_BYTES, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
+import { nameList } from "./publishing.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
 import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
 import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
@@ -67,8 +68,19 @@ function buildImportRules(pack) {
     // A speech verb next to a word ("sagte Lena", "Lena fragte") marks a
     // speaker, so a name.
     speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
-    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`),
+    byline: bylinePattern(pack)
   };
+}
+
+// A by-line in the manuscript's language, from the words its `byline`
+// build label puts before the names (by, par, von), so import reads back
+// the line story export writes. A language that writes a byline as the
+// names alone has no by-line to find.
+function bylinePattern(pack) {
+  const [before, after = null] = fillLabel(pack.labels, "byline").split("{names}");
+  const word = before.trim();
+  return word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu");
 }
 
 function speechPattern(pack, shape) {
@@ -175,7 +187,7 @@ export function importManuscript(options) {
     const documents = fromStdin
       ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }]
       : readImportSource(source, rules);
-    const chapters = splitChapters(documents, warnings, rules);
+    const chapters = splitChapters(documents, warnings, rules, Boolean(options.bylines));
     if (chapters.length === 0) {
       throw usageError("No chapter content found in import source");
     }
@@ -202,7 +214,7 @@ export function importManuscript(options) {
       // An untitled numbered heading ("# Chapter 1") takes its new number.
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
-      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
+      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered, chapter.authors);
       const bytes = Buffer.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
@@ -506,7 +518,7 @@ export function compareImportNames(left, right, rules = importRules(languagePack
   return left < right ? -1 : 1;
 }
 
-function splitChapters(documents, warnings, rules) {
+function splitChapters(documents, warnings, rules, bylines) {
   const chapters = [];
 
   for (const document of documents) {
@@ -533,19 +545,16 @@ function splitChapters(documents, warnings, rules) {
       // stdin.
       warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
-    if (sections.length > 0) {
-      chapters.push(...sections);
-    } else {
-      chapters.push(singleChapter(text, document));
-    }
+    const found = sections.length > 0 ? sections : [singleChapter(text, document)];
+    chapters.push(...(bylines ? withBylines(found, frontmatterAuthors(source, body), rules) : found));
   }
 
   return chapters.filter((chapter) => chapter.prose !== "");
 }
 
 // A chapter file in Story Skills' own layout, copied from another project,
-// keeps its title and `numbered: false`, and its prose is the text under `## Chapter Text` (the
-// outline above it is not book text).
+// keeps its title, `numbered: false`, and `author`, and its prose is the
+// text under `## Chapter Text` (the outline above it is not book text).
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
   if (!heading) {
@@ -558,7 +567,48 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: nameList(data.author) };
+}
+
+// --bylines: each chapter's author is its own by-line, taken out of its
+// prose, else its file's frontmatter `author`. A by-line alone before the
+// file's first chapter heading, under the story's title, credits the file.
+function withBylines(sections, authors, rules) {
+  const taken = sections.map((section) => ({ ...section, ...takeByline(section.prose, rules) }));
+  const fallback = taken[0].prose === "" && taken[0].authors.length > 0 ? taken[0].authors : authors;
+  return taken.map((section) => ({ ...section, authors: section.authors.length > 0 ? section.authors : fallback }));
+}
+
+// The names in a source file's frontmatter `author`, or none when it has no
+// frontmatter or frontmatter the CLI's parser rejects.
+function frontmatterAuthors(source, body) {
+  if (body === source) {
+    return [];
+  }
+  try {
+    return nameList(parseFrontmatter(source).data.author);
+  } catch {
+    return [];
+  }
+}
+
+// A by-line opening the prose ("By Ada Writer", or "*by Ada Writer*" as
+// story export writes one): a paragraph of one short line. A name must not
+// start with a lower-case letter or end a sentence, so "By the time she
+// came." and "By Monday it had gone." stay prose.
+function takeByline(prose, rules) {
+  const [first, next = ""] = prose.split("\n", 2);
+  const line = withoutEmphasis(first.trim());
+  const match = rules.byline === null || next.trim() !== "" || line.length > PLAIN_LINE_MAX_LENGTH ? null : rules.byline.exec(line);
+  const name = match === null ? "" : withoutEmphasis(match[1].trim());
+  if (name === "" || /^\p{Ll}/u.test(name) || /(?:[!?…]|\p{L}{4,}\.)$/u.test(name)) {
+    return { prose, authors: [] };
+  }
+  return { prose: prose.slice(first.length).trim(), authors: [name] };
+}
+
+function withoutEmphasis(text) {
+  return text.replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
 }
 
 // Markdown from Pandoc spells an em dash `---` and an en dash `--`, so a
@@ -874,11 +924,13 @@ function stripTitleHeading(text, rules) {
   return text;
 }
 
-function chapterMarkdown(title, number, counts, prose, unnumbered = false) {
+function chapterMarkdown(title, number, counts, prose, unnumbered = false, authors = []) {
   return `${stringifyFrontmatter({
     title,
     number,
     ...(unnumbered ? { numbered: false } : {}),
+    // One name as text, a story written together as a list.
+    ...(authors.length === 0 ? {} : { author: authors.length === 1 ? authors[0] : authors }),
     pov: "",
     locations: [],
     characters: [],

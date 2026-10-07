@@ -190,7 +190,7 @@ export const COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", ...WRITE_OPTIONS],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "bylines", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const options = {
@@ -207,6 +207,7 @@ export const COMMANDS = [
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
         language: parsed.options.language,
+        bylines: isTruthy(parsed.options.bylines),
         force: isTruthy(parsed.options.force)
       };
       // The changes are listed relative to the folder the import fills, as

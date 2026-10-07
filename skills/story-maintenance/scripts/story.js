@@ -12123,6 +12123,7 @@ var OPTIONS = [
   { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
   { name: "language", value: "<tag>", help: ["Manuscript language for import, a BCP 47 tag", "such as fr; defaults to the existing story.md"] },
+  { name: "bylines", help: ["For import, read each chapter's author from a", 'leading by-line ("by Ada Writer", taken out of', "the prose) or its file's frontmatter author"] },
   { name: "series", value: "<id>", help: ["Series id for init"] },
   { name: "book-number", value: "<n>", help: ["Publication order for init"] },
   { name: "follows", value: "<path>", repeatable: true, help: ["Init a sequel set after this story project;", "repeatable"] },
@@ -29132,8 +29133,14 @@ function buildImportRules(pack) {
     nounSuffixes: checkList(pack, "nounSuffixes") ?? [],
     titleWords: checkSet(pack, "titleWords") ?? new Set,
     speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
-    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`),
+    byline: bylinePattern(pack)
   };
+}
+function bylinePattern(pack) {
+  const [before, after = null] = fillLabel(pack.labels, "byline").split("{names}");
+  const word = before.trim();
+  return word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu");
 }
 function speechPattern(pack, shape) {
   const verbs = checkList(pack, "speechVerbs");
@@ -29196,7 +29203,7 @@ function importManuscript(options) {
     const rules = importRules(pack);
     const warnings = [];
     const documents = fromStdin ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }] : readImportSource(source, rules);
-    const chapters = splitChapters(documents, warnings, rules);
+    const chapters = splitChapters(documents, warnings, rules, Boolean(options.bylines));
     if (chapters.length === 0) {
       throw usageError("No chapter content found in import source");
     }
@@ -29213,7 +29220,7 @@ function importManuscript(options) {
       totalCharacters += counts["character-count"] ?? 0;
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
-      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered);
+      const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered, chapter.authors);
       const bytes = Buffer7.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
@@ -29444,7 +29451,7 @@ function compareImportNames(left, right, rules = importRules(languagePack())) {
   }
   return left < right ? -1 : 1;
 }
-function splitChapters(documents, warnings, rules) {
+function splitChapters(documents, warnings, rules, bylines) {
   const chapters = [];
   for (const document of documents) {
     const source = document.text.replace(/\r\n?/g, `
@@ -29464,11 +29471,8 @@ function splitChapters(documents, warnings, rules) {
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
       warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
-    if (sections.length > 0) {
-      chapters.push(...sections);
-    } else {
-      chapters.push(singleChapter(text, document));
-    }
+    const found = sections.length > 0 ? sections : [singleChapter(text, document)];
+    chapters.push(...bylines ? withBylines(found, frontmatterAuthors(source, body), rules) : found);
   }
   return chapters.filter((chapter) => chapter.prose !== "");
 }
@@ -29484,7 +29488,36 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: nameList(data.author) };
+}
+function withBylines(sections, authors, rules) {
+  const taken = sections.map((section) => ({ ...section, ...takeByline(section.prose, rules) }));
+  const fallback = taken[0].prose === "" && taken[0].authors.length > 0 ? taken[0].authors : authors;
+  return taken.map((section) => ({ ...section, authors: section.authors.length > 0 ? section.authors : fallback }));
+}
+function frontmatterAuthors(source, body) {
+  if (body === source) {
+    return [];
+  }
+  try {
+    return nameList(parseFrontmatter(source).data.author);
+  } catch {
+    return [];
+  }
+}
+function takeByline(prose, rules) {
+  const [first, next = ""] = prose.split(`
+`, 2);
+  const line = withoutEmphasis(first.trim());
+  const match = rules.byline === null || next.trim() !== "" || line.length > PLAIN_LINE_MAX_LENGTH ? null : rules.byline.exec(line);
+  const name = match === null ? "" : withoutEmphasis(match[1].trim());
+  if (name === "" || /^\p{Ll}/u.test(name) || /(?:[!?…]|\p{L}{4,}\.)$/u.test(name)) {
+    return { prose, authors: [] };
+  }
+  return { prose: prose.slice(first.length).trim(), authors: [name] };
+}
+function withoutEmphasis(text) {
+  return text.replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
 }
 function normalizeSource(text, name) {
   if (/\.te?xt$/i.test(name)) {
@@ -29730,11 +29763,12 @@ function stripTitleHeading(text, rules) {
   }
   return text;
 }
-function chapterMarkdown(title, number, counts, prose, unnumbered = false) {
+function chapterMarkdown(title, number, counts, prose, unnumbered = false, authors = []) {
   return `${stringifyFrontmatter({
     title,
     number,
     ...unnumbered ? { numbered: false } : {},
+    ...authors.length === 0 ? {} : { author: authors.length === 1 ? authors[0] : authors },
     pov: "",
     locations: [],
     characters: [],
@@ -30460,7 +30494,7 @@ var COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", ...WRITE_OPTIONS],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "bylines", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const options = {
@@ -30477,6 +30511,7 @@ var COMMANDS = [
         tense: parsed.options.tense,
         synopsis: parsed.options.synopsis,
         language: parsed.options.language,
+        bylines: isTruthy(parsed.options.bylines),
         force: isTruthy(parsed.options.force)
       };
       const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
