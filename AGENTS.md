@@ -143,14 +143,16 @@ The worktree goes to `<instance>/workspaces/<agent-id>/worktrees/<repo>-<issue-k
 If the checkout is under no `projects` folder, the script stops and asks for
 `ISSUE_WORKTREE_ROOT`: set it to a folder outside the checkout, and worktrees go to
 `$ISSUE_WORKTREE_ROOT/<agent-id>/<repo>-<issue-key>`. The script refuses any worktree path
-inside the checkout, symlinks included, because a nested worktree dirties the shared tree and
-the release preflight then refuses to run.
+inside the checkout, through symlinks and `..` too, because a nested worktree dirties the shared
+tree and the release preflight then refuses to run. The agent id and `<repo>-<issue-key>` must
+each be one folder name, with no `/`.
 
 Then edit, commit, and push entirely from `$WT`. If you are woken again on the same task,
 re-run the script with the same arguments; it returns the same path. If the task's worktree
 already holds a different branch from the one you ask for (or from `work/<issue-key>` when you
 leave the branch out), the script fails instead of handing back a worktree on the wrong branch.
-A worktree stopped in a rebase still counts as holding the branch being rebased.
+A worktree stopped in a rebase still counts as holding the branch being rebased. It also fails
+if the folder holds a worktree of another checkout with the same name.
 
 ### Rule 3 — tear down when the task is finished
 
