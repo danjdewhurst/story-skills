@@ -29,11 +29,11 @@ export const SEVERITY_LEVELS = ["error", "warning", "off"];
 export { severityCodes };
 
 // Commands that act on named entities: a default would send every run to the
-// same target, so cli-defaults refuses them. Their flags (split --at and
-// --title, move --number, rename --id, knowledge --at) say what one run does,
-// so the whole command is refused rather than flag by flag: a run that leaves
-// one out, such as story split chapter-01 with no --at, gets a usage error
-// instead of acting on a default.
+// same target, so cli-defaults refuses them. Each run is about one entity, so
+// their flags (split --at and --title, move --number, rename --id) are refused
+// with the command rather than one by one: a story-wide default for them
+// makes no sense, and story split chapter-01 with no --at still fails with a
+// usage error instead of splitting where a default says.
 const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 
 // Flags that name one target or one moment rather than a habit.
