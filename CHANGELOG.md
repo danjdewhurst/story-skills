@@ -112,6 +112,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Remove the `id` line. The file name is the entity's id.
 - A list item whose first key line ends in spaces now reads its other keys. ([#727](https://github.com/danjdewhurst/story-skills/issues/727))
   - Before, `  - character: sera-voss ` followed by `    type: sibling` failed with `Unsupported frontmatter line`.
+- A double-quoted value with no closing quote is now a frontmatter error. ([#728](https://github.com/danjdewhurst/story-skills/issues/728))
+  - Before, `title: "The Last Ember` passed validation, and `reindex` wrote the quote mark into the registry.
+  - Add the closing quote to fix the error.
 
 ## [0.23.0] - 2026-10-07
 

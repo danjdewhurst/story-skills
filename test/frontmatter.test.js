@@ -162,6 +162,28 @@ Body`);
       .toEqual({ relationships: [{ character: "sera-voss", type: "sibling" }] });
   });
 
+  // #728: a double-quoted value must close on its own line, or it is not read
+  // as text with the quote marks kept.
+  test("rejects a double-quoted value with no closing quote (#728)", () => {
+    const failure = (yaml) => {
+      try {
+        parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md");
+      } catch (error) {
+        return error.message;
+      }
+      return null;
+    };
+
+    expect(failure('title: "The Last Ember')).toBe('Unclosed quoted value (line 2). Add a closing " at the end of the value, such as title: "The Last Ember"');
+    expect(failure('relationships:\n  - "Sera Voss')).toContain("Unclosed quoted value (line 3)");
+    expect(failure('title: "a\\"')).toContain("Unclosed quoted value (line 2)");
+    // A comment after the closing quote is still a comment, and a lone quote
+    // mark stays text, as the hand-written-value test expects.
+    expect(parseFrontmatter('---\ntitle: "Hello" # draft\n---\nBody').data).toEqual({ title: "Hello" });
+    expect(parseFrontmatter('---\ntitle: "say \\"hi\\""\n---\nBody').data).toEqual({ title: 'say "hi"' });
+    expect(parseFrontmatter('---\ntitle: "\n---\nBody').data).toEqual({ title: '"' });
+  });
+
   test("tolerates trailing spaces and tabs after frontmatter delimiters", () => {
     const parsed = parseFrontmatter("---   \ntitle: Spaced\n---\t \nBody");
 

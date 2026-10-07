@@ -1690,6 +1690,9 @@ function parseYamlBlocks(source, firstLine = 2) {
     if (first === "&" || first === "*" || first === "!") {
       fail(index, `Anchors, aliases, and tags are not supported. Quote the value, such as note: ${JSON.stringify(value)}`);
     }
+    if (first === '"' && value.length >= 2 && quoteEnd(value, 0) < 0) {
+      fail(index, 'Add a closing " at the end of the value, such as title: "The Last Ember"', "Unclosed quoted value");
+    }
     return { value: parseScalar(value), text: value, comment };
   };
   const parseFlowList = (value, index) => {
