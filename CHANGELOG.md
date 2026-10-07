@@ -24,6 +24,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `theme-craft` says to record an antagonist's edge in the body of the character file, since no frontmatter key defines it.
   - `verse-craft` uses the `rhythm` edit-note category in its example.
   - `docs/project-format.md` says `story validate` checks that `mice-threads` is a list, and that `story continuity` does not read it.
+- Craft skills now agree with their own fields, scope, and checks. ([#780](https://github.com/danjdewhurst/story-skills/issues/780), [#781](https://github.com/danjdewhurst/story-skills/issues/781), [#782](https://github.com/danjdewhurst/story-skills/issues/782), [#784](https://github.com/danjdewhurst/story-skills/issues/784), [#789](https://github.com/danjdewhurst/story-skills/issues/789), [#790](https://github.com/danjdewhurst/story-skills/issues/790), [#791](https://github.com/danjdewhurst/story-skills/issues/791), [#792](https://github.com/danjdewhurst/story-skills/issues/792))
+  - `theme-craft` owns the character `lie`, `truth`, `ghost-wound`, and `arc-type` fields, and the character template says so.
+  - The character template comments out its `died-in` placeholder, so a living character's file no longer fails `story check` with "Flow mappings are not supported".
+  - The discovery skill keeps only the reverse outline inside its reconcile loop. The premise workshop runs every logline stress test.
+  - The length pass runs `story reindex .`, `story wordcount . --write`, and `story check .` after each batch.
+  - The plot-structure skill asks for approval before it reorders scenes or chapters.
 
 ## [0.23.0] - 2026-10-07
 
