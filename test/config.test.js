@@ -371,7 +371,8 @@ describe("cli-defaults", () => {
     configure(root, "cli-defaults:\n  - command: build\n    format: html\n    out: story.md/book.html\n  - command: similarity\n    against: drafts/v1\n  - command: compare\n    against: drafts/v1");
     const build = invoke(root, ["build"]);
     expect(build.code).toBe(4);
-    expect(build.err).toBe("Cannot check story.md/book.html: a part of the path is not a folder (story.md cli-defaults set --out story.md/book.html)\n");
+    // POSIX fails checking the path; Windows only when it makes the folder.
+    expect(build.err).toMatch(/^Cannot (check story\.md\/book\.html|create the folder story\.md): a part of the path is not a folder \(story\.md cli-defaults set --out story\.md\/book\.html\)\n$/);
     const similarity = invoke(root, ["similarity"]);
     expect(similarity.code).toBe(2);
     expect(similarity.err).toEndWith("(story.md cli-defaults set --against drafts/v1)\n");
