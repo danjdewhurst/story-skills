@@ -121,6 +121,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Skills no longer edit generated `_index.md` tables by hand, and each setup, payoff, and story-time fact has one record. (#553)
   - Renames use `--prose` where the chapter text should follow, worldbuilding uses `story add system`, and the scene template records character knowledge as `character` + `knowledge`, which `story continuity` checks.
   - Clues, promises, questions, arc hints, scene dates, and `plot/timeline.md` each have one use, and the docs now say `story add clue` or `promise` with `--planted` on a chapter with no file yet records `planned`.
+- The Codex and Claude Code plugin descriptions now cover every skill area and books in any language. (#568)
+  - They now name interactive fiction, series, submission, feedback, theme, and discovery drafting, which they left out.
+  - The Claude Code manifest and marketplace entry now name the homepage and repository, and `check:metadata` fails when the manifests' descriptions, homepages, or repositories differ.
 
 ### Security
 
