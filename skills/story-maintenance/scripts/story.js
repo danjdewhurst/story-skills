@@ -23037,7 +23037,7 @@ function writeRegistry(filePath, build, changed, root) {
   const existing = (raw ?? "").replace(/\r\n/g, `
 `);
   const generated = build(existing);
-  let contents = keepRegistryText(existing, generated);
+  let contents = keepRegistryText(existing, generated, build);
   contents = keepRegistryFrontmatter(existing, contents);
   writeChanged(filePath, raw?.includes(`\r
 `) ? contents.replace(/\n/g, `\r
@@ -23055,48 +23055,59 @@ function keepRegistryFrontmatter(existing, contents) {
   return replaceFrontmatter(existing, { ...current, ...next.data }, next.body);
 }
 var VALUE_HEADING_ALIASES = [["Total Word Count", "Total Character Count"]];
-function keepRegistryText(existing, generated) {
+var CARRIED_SECTIONS = new Set(["relationship map", "family trees", "world overview", "story structure", "theme tracking"]);
+function keepRegistryText(existing, generated, build) {
   const valuePattern = /:\s*\d[\d,]*$/;
   const frontmatter = FRONTMATTER_PATTERN.exec(generated)[0];
   const fresh = registryParts(generated.slice(frontmatter.length));
   const freshTitle = fresh.sections.find((section) => section.title);
   const old = registryParts(existing.replace(FRONTMATTER_PATTERN, ""), freshTitle.text);
+  const defaults = new Map(registryParts(build("").replace(FRONTMATTER_PATTERN, "")).sections.map((section) => [section.text.toLowerCase(), section.body]));
+  const carried = (section) => section.level === 2 && CARRIED_SECTIONS.has(section.text.toLowerCase());
+  const headers = fresh.sections.filter((section) => !carried(section)).map((section) => tableHeader(section.body)).filter((header) => header !== null);
   const valueKeys = new Map;
   const unclaimed = new Map;
-  for (const section of fresh.sections.filter((entry) => entry.level === 2)) {
-    const hasValue = valuePattern.test(section.text);
-    const key = hasValue ? section.text.replace(valuePattern, "") : section.text;
+  const kept = new Map;
+  for (const section of fresh.sections) {
+    kept.set(section, { body: carried(section) ? defaults.get(section.text.toLowerCase()) ?? section.body : section.body, before: [], after: [] });
+    const text = section.text.toLowerCase();
+    const hasValue = valuePattern.test(text);
+    const key = hasValue ? text.replace(valuePattern, "") : text;
     if (hasValue) {
-      (VALUE_HEADING_ALIASES.find((aliases) => aliases.includes(key)) ?? [key]).forEach((alias) => valueKeys.set(alias, section));
+      const aliases = VALUE_HEADING_ALIASES.map((group) => group.map((alias) => alias.toLowerCase())).find((group) => group.includes(key)) ?? [key];
+      aliases.forEach((alias) => valueKeys.set(alias, section));
     }
-    unclaimed.set(key, [...unclaimed.get(key) ?? [], section]);
+    if (section.level === 2) {
+      unclaimed.set(key, [...unclaimed.get(key) ?? [], section]);
+    }
   }
-  const kept = new Map(fresh.sections.map((section) => [section, { before: [], after: [] }]));
   const custom = [];
   for (const section of old.sections) {
-    const stripped = section.text.replace(valuePattern, "");
-    const key = valueKeys.has(stripped) ? stripped : section.text;
+    const text = section.text.toLowerCase();
+    const stripped = text.replace(valuePattern, "");
+    const key = valueKeys.has(stripped) ? stripped : text;
     const target = section.title ? freshTitle : unclaimed.get(key)?.shift();
-    if (target) {
-      const { before, after } = handWrittenText(section.body, target.body);
-      kept.get(target).before.push(before);
-      kept.get(target).after.push(after);
-    } else if (key !== section.text) {
-      kept.get(valueKeys.get(key)).after.push(section.body);
+    if (target && carried(target)) {
+      kept.get(target).body = section.body || kept.get(target).body;
+    } else if (target || key !== text) {
+      const { before, after } = withoutRegistryTables(section, headers);
+      const place = kept.get(target ?? valueKeys.get(key));
+      (target ? place.before : place.after).push(before);
+      place.after.push(after);
     } else {
       custom.push(section.whole);
     }
   }
   const oldTitle = old.sections.find((section) => section.title);
+  const preamble = withoutRegistryTables(old.preamble, headers);
   const blocks = fresh.sections.map((section) => {
-    const { before, after } = kept.get(section);
-    const heading = section.title && oldTitle ? oldTitle.heading : section.heading;
-    return [heading, ...before, section.body, ...after].filter((block) => block !== "").join(`
+    const { body, before, after } = kept.get(section);
+    return [section.title && oldTitle ? oldTitle.heading : section.heading, ...before, body, ...after].filter((block) => block !== "").join(`
 
 `);
   });
   return `${frontmatter}
-${[old.preamble, ...blocks, ...custom].filter((block) => block !== "").join(`
+${[preamble.before, preamble.after, ...blocks, ...custom].filter((block) => block !== "").join(`
 
 `)}
 `;
@@ -23104,20 +23115,24 @@ ${[old.preamble, ...blocks, ...custom].filter((block) => block !== "").join(`
 function registryParts(body, titleText) {
   const lines = body.split(`
 `);
-  const headings = markdownHeadings(body);
-  const title = headings.find((heading) => heading.level === 1 && heading.text === titleText) ?? (headings[0]?.level === 1 ? headings[0] : null);
+  const masked = maskMarkup(body).split(`
+`);
+  const headings = markdownHeadings(masked);
+  const title = headings.find((heading) => heading.level === 1 && heading.text.toLowerCase() === titleText?.toLowerCase()) ?? headings.find((heading) => heading.level === 1);
   const starts = headings.filter((heading) => heading.level === 2 || heading === title);
+  const part = (from, to) => ({ body: linesText(lines, from, to), lines: lines.slice(from, to), masked: masked.slice(from, to) });
   return {
-    preamble: linesText(lines, 0, starts[0]?.line ?? lines.length),
+    preamble: part(0, starts[0]?.line ?? lines.length),
     sections: starts.map((heading, index) => {
       const end = starts[index + 1]?.line ?? lines.length;
       return {
         level: heading.level,
         text: heading.text,
         title: heading === title,
-        heading: lines[heading.line],
-        body: linesText(lines, heading.line + 1, end),
-        whole: linesText(lines, heading.line, end)
+        heading: lines.slice(heading.line, heading.last + 1).join(`
+`),
+        whole: linesText(lines, heading.line, end),
+        ...part(heading.last + 1, end)
       };
     })
   };
@@ -23126,53 +23141,123 @@ function linesText(lines, from, to) {
   return lines.slice(from, to).join(`
 `).replace(/^(?:[ \t]*\n)+/, "").trimEnd();
 }
-function handWrittenText(oldBody, freshBody) {
-  if (oldBody.trim() === freshBody.trim()) {
-    return { before: "", after: "" };
+function withoutRegistryTables(part, headers) {
+  const { lines } = part;
+  const owned = registryTableLines(lines, part.masked, headers);
+  const first = lines.findIndex((line, index) => owned.has(index));
+  if (first === -1) {
+    return { before: "", after: part.body };
   }
-  const lines = oldBody.split(`
-`);
-  const table = registryTable(lines, freshBody);
-  if (!table) {
-    return { before: "", after: oldBody };
+  const gaps = [];
+  for (let line = first;line < lines.length; line += 1) {
+    if (owned.has(line)) {
+      gaps.push([]);
+    } else {
+      gaps[gaps.length - 1].push(lines[line]);
+    }
   }
-  return { before: linesText(lines, 0, table.start), after: linesText(lines, table.end, lines.length) };
+  const after = gaps.map((gap) => linesText(gap, 0, gap.length)).filter((gap) => gap !== "");
+  return { before: linesText(lines, 0, first), after: after.join(`
+
+`) };
 }
-function registryTable(lines, freshBody) {
-  const isRow = (line) => /^ {0,3}\|/.test(line ?? "");
-  const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
-  const header = freshBody.split(`
-`).find(isRow);
-  if (header === undefined) {
-    return null;
-  }
-  const wanted = cells(header);
-  const tables = [];
-  for (let start = 0;start < lines.length; start += 1) {
-    if (isRow(lines[start]) && !isRow(lines[start - 1]) && /^ {0,3}\|[ \t:|-]*-[ \t:|-]*$/.test(lines[start + 1] ?? "")) {
-      let end = start + 2;
-      while (isRow(lines[end])) {
-        end += 1;
+function tableHeader(body) {
+  const lines = body.split(`
+`);
+  return lines.length > 1 && isDelimiterRow(lines[1]) ? tableCells(lines[0]) : null;
+}
+function tableCells(line) {
+  return line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim().toLowerCase());
+}
+function isDelimiterRow(line) {
+  return /^ {0,3}\|?[ \t:|-]*$/.test(line) && line.includes("-") && line.includes("|");
+}
+function registryTableLines(lines, masked, headers) {
+  const blank = (index) => lines[index].trim() === "";
+  const marker = (index) => /^(?:<{7}|={7}|>{7}|\|{7})(?:[ \t]|$)/.test(masked[index]);
+  const piped = (index) => !blank(index) && !marker(index) && masked[index].includes("|");
+  const starts = (index) => piped(index) && index + 1 < lines.length && isDelimiterRow(masked[index + 1]);
+  const registry = (index) => starts(index) && headers.some((header) => sameHeader(tableCells(masked[index]), header));
+  const runEnd = (index) => {
+    let end = index + 1;
+    while (end < lines.length && piped(end)) {
+      end += 1;
+    }
+    return end;
+  };
+  const owned = new Set;
+  let done = 0;
+  for (let index = 0;index < lines.length; index += 1) {
+    if (!starts(index)) {
+      continue;
+    }
+    let end = runEnd(index);
+    if (!registry(index)) {
+      index = end - 1;
+      continue;
+    }
+    let first = index;
+    for (let above = index - 1;above >= done && (blank(above) || marker(above)); above -= 1) {
+      first = marker(above) ? above : first;
+    }
+    for (;; ) {
+      let next = end;
+      while (next < lines.length && (blank(next) || marker(next))) {
+        next += 1;
       }
-      tables.push({ start, end, cells: cells(lines[start]) });
+      if (next === lines.length || !(registry(next) || /^ {0,3}\|/.test(masked[next]) && piped(next) && !starts(next))) {
+        break;
+      }
+      end = runEnd(next);
     }
+    let depth = 0;
+    let balanced = true;
+    for (let line = first;line < lines.length && (line < end || depth > 0 && (blank(line) || marker(line))); line += 1) {
+      if (marker(line)) {
+        depth += { "<": 1, ">": -1 }[masked[line][0]] ?? 0;
+        balanced &&= depth >= 0 && (depth > 0 || masked[line][0] !== "=" && masked[line][0] !== "|");
+        end = Math.max(end, line + 1);
+      }
+    }
+    for (let line = first;line < end; line += 1) {
+      if (!marker(line) || balanced && depth === 0) {
+        owned.add(line);
+      }
+    }
+    done = end;
+    index = end - 1;
   }
-  const differences = (table) => table.cells.length === wanted.length ? table.cells.filter((cell, index) => cell !== wanted[index]).length : Infinity;
-  return tables.find((table) => differences(table) === 0) ?? tables.find((table) => differences(table) === 1) ?? null;
+  return owned;
 }
-function markdownHeadings(markdown) {
-  const lines = markdown.split(`
-`);
-  const masked = maskMarkup(markdown).split(`
-`);
+function sameHeader(cells, header) {
+  return cells.length === header.length && cells.filter((cell, index) => cell !== header[index]).length <= 1;
+}
+function markdownHeadings(lines) {
+  const atx = (line) => /^ {0,3}(#{1,6})(?=[ \t]|$)/.exec(line);
+  let conflict = false;
+  const underline = (line) => /^ {0,3}=+[ \t]*$/.test(line) && !(conflict && /^={7}[ \t]*$/.test(line));
   const headings = [];
-  for (const [line, text] of lines.entries()) {
-    const heading = /^ {0,3}(#{1,2})(?:[ \t]+(.*?))?[ \t]*$/.exec(text);
-    if (heading && masked[line].trimStart().startsWith("#")) {
-      headings.push({ level: heading[1].length, text: (heading[2] ?? "").replace(/(?:^|[ \t]+)#+$/, ""), line });
+  let paragraph = null;
+  for (const [index, line] of lines.entries()) {
+    conflict = /^<{7}(?:[ \t]|$)/.test(line) || conflict && !/^>{7}(?:[ \t]|$)/.test(line);
+    const heading = atx(line);
+    if (heading && heading[1].length <= 2) {
+      headings.push({ level: heading[1].length, text: headingText(line.slice(heading[0].length)), line: index, last: index });
+    } else if (paragraph !== null && underline(line)) {
+      headings.push({ level: 1, text: lines.slice(paragraph, index).map((text) => text.trim()).join(" "), line: paragraph, last: index });
     }
+    const prose = line.trim() !== "" && !heading && !underline(line) && !/^ {0,3}\|/.test(line);
+    paragraph = prose ? paragraph ?? index : null;
   }
   return headings;
+}
+function headingText(rest) {
+  const text = rest.trim();
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "#") {
+    end -= 1;
+  }
+  return end === 0 || text[end - 1] === " " || text[end - 1] === "\t" ? text.slice(0, end).trim() : text;
 }
 function refreshStoryField(filePath, storyId, changed, root) {
   if (!fs8.existsSync(filePath)) {
