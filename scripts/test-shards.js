@@ -68,19 +68,6 @@ export function timingsDocument(files, weights = FILE_WEIGHT_SECONDS, defaultWei
   return { version: 1, files: entries };
 }
 
-// Problems when the timings file would leave a test file out. Empty means
-// every file has both path keys.
-export function timingsCoverage(files, document) {
-  const problems = [];
-  const keys = new Set(Object.keys(document?.files ?? {}));
-  for (const file of files) {
-    if (!keys.has(`test/${file}`) || !keys.has(`test\\${file}`)) {
-      problems.push(`${file} is missing from the timings file`);
-    }
-  }
-  return problems;
-}
-
 // Problems when `shards` is not a partition of `files`.
 export function auditAssignment(files, shards) {
   const problems = [];
@@ -109,13 +96,9 @@ export function auditAssignment(files, shards) {
 }
 
 export function parseShardArgs(argv) {
-  const options = { audit: false, writeTimings: null, dir: null };
+  const options = { writeTimings: null, dir: null };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
-    if (arg === "--audit") {
-      options.audit = true;
-      continue;
-    }
     if (arg !== "--write-timings" && arg !== "--dir") {
       throw new Error(`Unknown argument ${arg}`);
     }
@@ -130,42 +113,27 @@ export function parseShardArgs(argv) {
       options.writeTimings = value;
     }
   }
-  if (!options.audit && options.writeTimings === null) {
-    throw new Error("Pass --write-timings, or --audit");
+  if (options.writeTimings === null) {
+    throw new Error("Pass --write-timings <file>");
   }
   return options;
 }
 
 export function main(argv, { log = console.log, error = console.error, testDir = path.join(repoRoot, "test") } = {}) {
   let options;
-  try {
-    options = parseShardArgs(argv);
-  } catch (problem) {
-    error(problem.message);
-    return 1;
-  }
-  const dir = options.dir ?? testDir;
+  let files;
   let document;
   try {
-    document = timingsDocument(testFiles(dir));
+    options = parseShardArgs(argv);
+    files = testFiles(options.dir ?? testDir);
+    document = timingsDocument(files);
   } catch (problem) {
     error(problem.message);
     return 1;
   }
-  const files = testFiles(dir);
-  const problems = timingsCoverage(files, document);
-  if (problems.length > 0) {
-    error(problems.join("\n"));
-    return 1;
-  }
-  if (options.writeTimings) {
-    fs.mkdirSync(path.dirname(path.resolve(options.writeTimings)), { recursive: true });
-    fs.writeFileSync(options.writeTimings, `${JSON.stringify(document)}\n`);
-    log(`Wrote timings for ${files.length} test files to ${options.writeTimings}`);
-  }
-  if (options.audit) {
-    log(`All ${files.length} test files are in the Windows shard timings.`);
-  }
+  fs.mkdirSync(path.dirname(path.resolve(options.writeTimings)), { recursive: true });
+  fs.writeFileSync(options.writeTimings, `${JSON.stringify(document)}\n`);
+  log(`Wrote timings for ${files.length} test files to ${options.writeTimings}`);
   return 0;
 }
 

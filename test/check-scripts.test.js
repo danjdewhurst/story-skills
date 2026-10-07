@@ -14,7 +14,6 @@ import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.j
 import { PREFLIGHT } from "../scripts/release.js";
 import { CI_WAIT } from "../scripts/publish-gate.js";
 import { packageFiles, relativeLinks, unshippedLinks } from "../scripts/check-package.js";
-import { testFiles, timingsCoverage, timingsDocument } from "../scripts/test-shards.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
 import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
@@ -2120,9 +2119,8 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     expect(runStep).not.toContain("bun test --timeout");
     expect(gate).toMatch(/^ {4}name: Tests windows-latest\n/m);
     expect(gate).toContain("needs: test-windows");
-    expect(gate).toContain("node scripts/test-shards.js --audit");
-    const files = testFiles(path.join(repoRoot, "test"));
-    expect(timingsCoverage(files, timingsDocument(files))).toEqual([]);
+    expect(gate).toContain('"${{ needs.test-windows.result }}" != "success"');
+    // test/test-shards.test.js asks bun for four shards.
     expect(count).toBe(4);
   });
 

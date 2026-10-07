@@ -107,10 +107,12 @@ jobs:
         timeout-minutes: 10
         run: bun run check:package
 
-  # Every test/*.test.js file runs on exactly one shard. scripts/test-shards.js
-  # builds the lists from the directory at start, and test/test-shards.test.js
-  # fails if this matrix drops a shard index or the assignment leaves a file out.
-  # Shard 1 also packs the tarball, once, the way the single Windows job did.
+  # Every test/*.test.js file runs on exactly one shard. `bun test --shard`
+  # builds the lists when the job starts, and scripts/test-shards.js writes the
+  # timings that balance them. test/check-scripts.test.js fails if this matrix
+  # drops a shard index, and test/test-shards.test.js fails if bun's shards
+  # leave a file out or repeat one. Shard 1 also packs the tarball, once, the
+  # way the single Windows job did.
   test-windows:
     name: Tests windows-latest (${{ matrix.shard }}/${{ matrix.shards }})
     runs-on: windows-latest
@@ -216,7 +218,6 @@ jobs:
           shards="${{ matrix.shards }}"
           timings="${RUNNER_TEMP}/windows-timings.json"
           node scripts/test-shards.js --write-timings "$timings"
-          node --input-type=module -e 'import os from "node:os"; console.log("os.tmpdir()", os.tmpdir())'
           bun run test -- --shard="${shard}/${shards}" --timings="$timings"
 
       - name: Install and run the packed tarball
@@ -225,8 +226,7 @@ jobs:
         run: bun run check:package
 
   # Keeps the check name `Tests windows-latest` for branch protection. It
-  # passes only when every shard did, and re-checks that the shard count
-  # still partitions the suite.
+  # passes only when every shard did.
   test-windows-done:
     name: Tests windows-latest
     needs: test-windows
@@ -234,19 +234,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Require every Windows shard and every test file
+      - name: Require every Windows shard
         run: |
-          set -euo pipefail
           if [ "${{ needs.test-windows.result }}" != "success" ]; then
             echo "::error::Windows test shards finished with ${{ needs.test-windows.result }}."
             exit 1
           fi
-          node scripts/test-shards.js --audit
 
   node:
     name: Node ${{ matrix.node }}

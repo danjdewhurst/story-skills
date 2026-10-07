@@ -10,7 +10,6 @@ import {
   main,
   parseShardArgs,
   testFiles,
-  timingsCoverage,
   timingsDocument
 } from "../scripts/test-shards.js";
 
@@ -27,28 +26,32 @@ function capture(argv) {
   return { code, logs, errors };
 }
 
-// Bun's console reporter prints `test/file.test.js:`. GitHub Actions wraps
-// that in `::group::`, and Windows uses a backslash. Carriage returns show
-// up in the captured output there too.
-export function shardFilesFromOutput(text) {
-  return [...text.replaceAll("\r", "").matchAll(/^(?:::group::)?test[/\\](\S+\.test\.js):$/gm)].map((match) => match[1]);
+// `--update-timings` rewrites the timings file with only the files this
+// shard ran. That is a list bun writes on purpose, so it does not change
+// with the reporter or the platform the way console output does. A key may
+// use either slash; a file outside test/ keeps its path, so the audit
+// reports it.
+function shardFilesFromTimings(document) {
+  return Object.keys(document.files).map((key) => {
+    const relative = path.relative(repoRoot, path.resolve(repoRoot, key.replaceAll("\\", "/"))).split(path.sep).join("/");
+    return relative.startsWith("test/") && !relative.slice("test/".length).includes("/") ? relative.slice("test/".length) : relative;
+  });
 }
 
-// Files bun would run for one shard. `--test-name-pattern '^$'` loads each
-// file and runs nothing, which is enough to read the assignment.
+// Files bun runs for one shard. `--test-name-pattern '^$'` loads each file
+// and runs nothing, which is enough to read the assignment. Each shard gets
+// its own copy of the timings, since bun rewrites the file it reads.
 function bunShardFiles(shard, shards, timingsPath) {
+  const shardTimings = path.join(path.dirname(timingsPath), `shard-${shard}.json`);
+  fs.copyFileSync(timingsPath, shardTimings);
   const result = spawnSync(
     "bun",
-    ["run", "test", "--", `--shard=${shard}/${shards}`, `--timings=${timingsPath}`, "--test-name-pattern", "^$", "--pass-with-no-tests"],
+    ["run", "test", "--", `--shard=${shard}/${shards}`, `--timings=${shardTimings}`, "--update-timings", "--test-name-pattern", "^$", "--pass-with-no-tests"],
     { encoding: "utf8", cwd: repoRoot }
   );
   expect(result.status, result.stderr).toBe(0);
-  const text = `${result.stdout}\n${result.stderr}`;
-  const files = shardFilesFromOutput(text);
-  if (files.length === 0) {
-    const sample = text.split(/\r?\n/).filter((line) => line.includes(".test.js")).slice(0, 8).join("\n");
-    throw new Error(`No shard files parsed. Sample lines:\n${sample}`);
-  }
+  const files = shardFilesFromTimings(JSON.parse(fs.readFileSync(shardTimings, "utf8")));
+  expect(files.length).toBeGreaterThan(0);
   expect(new Set(files).size).toBe(files.length);
   return files;
 }
@@ -59,7 +62,10 @@ describe("test shards", () => {
     expect(files.length).toBeGreaterThan(100);
     const document = timingsDocument(files);
     expect(document.version).toBe(1);
-    expect(timingsCoverage(files, document)).toEqual([]);
+    for (const file of files) {
+      expect(document.files[`test/${file}`], file).toBeNumber();
+      expect(document.files[`test\\${file}`], file).toBe(document.files[`test/${file}`]);
+    }
     expect(document.files["test/split-merge.test.js"]).toBe(80500);
     expect(document.files["test\\split-merge.test.js"]).toBe(80500);
     expect(document.files["test/helpers.test.js"]).toBe(DEFAULT_WEIGHT_SECONDS * 1000);
@@ -74,13 +80,9 @@ describe("test shards", () => {
     expect(fresh.files["test/gone.test.js"]).toBeUndefined();
   });
 
-  test("a bad weight is refused and a timings file that drops a file is reported", () => {
+  test("a bad weight is refused", () => {
     expect(() => timingsDocument(["a.test.js"], { "a.test.js": -1 })).toThrow(/Weight for a\.test\.js/);
     expect(() => timingsDocument(["a.test.js"], {}, Number.NaN)).toThrow(/default weight/);
-    expect(timingsCoverage(["a.test.js"], { files: { "test/a.test.js": 1 } })).toEqual([
-      "a.test.js is missing from the timings file"
-    ]);
-    expect(timingsCoverage(["a.test.js"], timingsDocument(["a.test.js"]))).toEqual([]);
   });
 
   test("auditAssignment reports overlap, a missing file, and an extra file", () => {
@@ -95,16 +97,24 @@ describe("test shards", () => {
     ]);
   });
 
-  test("reads file names from the console reporter and the GitHub Actions reporter", () => {
-    const plain = "test/a.test.js:\n\ntest/b.test.js:\n";
-    const actions = "::group::test/a.test.js:\n::endgroup::\n::group::test\\b.test.js:\r\n";
-    expect(shardFilesFromOutput(`${plain}\n${actions}`)).toEqual([
+  test("reads shard files from either slash, and keeps a path outside test/", () => {
+    const document = {
+      version: 1,
+      files: {
+        "test/a.test.js": 1,
+        "test\\b.test.js": 1,
+        "./test/c.test.js": 1,
+        [path.join(repoRoot, "test", "d.test.js")]: 1,
+        "plugins/story-skills/test/e.test.js": 1
+      }
+    };
+    expect(shardFilesFromTimings(document)).toEqual([
       "a.test.js",
       "b.test.js",
-      "a.test.js",
-      "b.test.js"
+      "c.test.js",
+      "d.test.js",
+      "plugins/story-skills/test/e.test.js"
     ]);
-    expect(shardFilesFromOutput("::group::plugins/story-skills/test/a.test.js:\n")).toEqual([]);
   });
 
   test("bun --shard with these timings runs every test file exactly once", () => {
@@ -122,26 +132,20 @@ describe("test shards", () => {
     expect(homes.size).toBeGreaterThan(1);
   });
 
-  test("the CLI writes timings and audits the directory", () => {
-    const timingsPath = path.join(makeTempDir("shards-cli-"), "timings.json");
-    const written = capture(["--write-timings", timingsPath, "--audit"]);
+  test("the CLI writes timings for every test file", () => {
+    const timingsPath = path.join(makeTempDir("shards-cli-"), "nested", "timings.json");
+    const written = capture(["--write-timings", timingsPath]);
     expect(written.code).toBe(0);
-    expect(written.logs[0]).toContain(`${testFiles(testDir).length} test files`);
-    const document = JSON.parse(fs.readFileSync(timingsPath, "utf8"));
-    expect(timingsCoverage(testFiles(testDir), document)).toEqual([]);
-    const audit = capture(["--audit"]);
-    expect(audit.code).toBe(0);
-    expect(audit.logs[0]).toBe(`All ${testFiles(testDir).length} test files are in the Windows shard timings.`);
+    expect(written.logs).toEqual([`Wrote timings for ${testFiles(testDir).length} test files to ${timingsPath}`]);
+    expect(JSON.parse(fs.readFileSync(timingsPath, "utf8"))).toEqual(timingsDocument(testFiles(testDir)));
   });
 
   test("arguments are refused when a value is missing", () => {
-    expect(parseShardArgs(["--audit"]).audit).toBe(true);
     expect(parseShardArgs(["--dir", "test", "--write-timings", "out.json"])).toEqual({
-      audit: false,
       writeTimings: "out.json",
       dir: "test"
     });
-    for (const argv of [["--write-timings"], ["--dir"], ["--nope"], []]) {
+    for (const argv of [["--write-timings"], ["--dir"], ["--nope"], ["--audit"], [], ["--dir", "missing-dir", "--write-timings", "out.json"]]) {
       const result = capture(argv);
       expect(result.code, argv.join(" ")).toBe(1);
       expect(result.errors[0].length).toBeGreaterThan(0);
