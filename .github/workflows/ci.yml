@@ -66,6 +66,40 @@ jobs:
       - name: Check bundled fallback under Node
         run: node skills/story-maintenance/scripts/story.js --help
 
+  # The print contents test renders a book with WeasyPrint and reads it back
+  # with pdftotext. The test skips without both, so this job installs them and
+  # checks they are on PATH first, and the rendering check runs here.
+  print-render:
+    name: Print rendering
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Install WeasyPrint and pdftotext
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y weasyprint poppler-utils
+
+      - name: Check the rendering tools are on PATH
+        run: |
+          command -v weasyprint
+          command -v pdftotext
+
+      - name: Render the print contents
+        run: bun test --timeout 60000 ./test/html-build.test.js
+
   # The full suite on macOS, so path separators, line endings, and
   # file-system differences are caught before a release. Windows is
   # test-windows: the same suite there is dominated by NTFS and Defender, so
