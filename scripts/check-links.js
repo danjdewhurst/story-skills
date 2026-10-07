@@ -92,7 +92,9 @@ function unquote(line) {
 // Replaces YAML frontmatter, fenced code blocks (quoted ones too), and HTML
 // comments with spaces, keeping every newline so offsets map to the same
 // line numbers as the source. A leading --- is frontmatter only when a
-// closing --- or ... follows; otherwise it is a thematic break.
+// closing --- or ... follows; otherwise it is a thematic break. A `<!--`
+// inside a code span is text, so it opens no comment that a later `-->`
+// would close.
 export function maskBlocks(text) {
   const lines = text.split("\n");
   let fence = null;
@@ -120,7 +122,7 @@ export function maskBlocks(text) {
       lines[i] = blank(lines[i]);
     }
   }
-  return lines.join("\n").replace(/<!--[\s\S]*?-->/g, blank);
+  return lines.join("\n").replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)|<!--[\s\S]*?-->/g, (match, ticks) => (ticks ? match : blank(match)));
 }
 
 // maskBlocks, then inline code spans too. A code span closes on a backtick
