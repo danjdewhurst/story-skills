@@ -107,6 +107,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A link or folder named `.story-undo.tmp` refuses nothing, as before. `validate` still reports it.
 - `story wordcount --write` checks every chapter and registry it rewrites before it changes any, so a read-only file no longer leaves earlier chapters rewritten. ([#724](https://github.com/danjdewhurst/story-skills/issues/724))
 - `story doctor --fix` lists the repairs made before a refused write stopped the run, in the text output. ([#725](https://github.com/danjdewhurst/story-skills/issues/725))
+- `story validate` warns when an entity file sets `id` in its frontmatter, which the file name sets instead (`frontmatter-id`). ([#694](https://github.com/danjdewhurst/story-skills/issues/694))
+  - Before, such a value was ignored with no warning.
+  - Remove the `id` line. The file name is the entity's id.
 
 ## [0.23.0] - 2026-10-07
 

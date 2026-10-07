@@ -745,6 +745,7 @@ var FINDING_CODES = {
   "id-not-kebab": "error",
   "shared-id": "warning",
   "near-miss-key": "warning",
+  "frontmatter-id": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
   "substitute-story-id": "warning",
@@ -22904,6 +22905,9 @@ function readValidationData(file, root, label, errors) {
 function readEntityData(file, root, label, errors, warnings, kind) {
   const data = readValidationData(file, root, label, errors);
   if (data) {
+    if (Object.hasOwn(data, "id")) {
+      warnings.push(warn("frontmatter-id", `${label} has an id field, which is ignored: the file name sets the id, so remove the id line`, label));
+    }
     warnNearMissKeys(data, FRONTMATTER_KEYS[kind], label, warnings);
   }
   return data;

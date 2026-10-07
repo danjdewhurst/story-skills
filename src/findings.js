@@ -58,6 +58,7 @@ export const FINDING_CODES = {
   "id-not-kebab": "error",
   "shared-id": "warning",
   "near-miss-key": "warning",
+  "frontmatter-id": "warning",
   "wrong-type": "error",
   "story-id-mismatch": "error",
   "substitute-story-id": "warning",

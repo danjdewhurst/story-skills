@@ -103,6 +103,18 @@ describe("misspelled frontmatter keys (#373)", () => {
     expect(validateProject(root).warnings.find((warning) => warning.code === "near-miss-key")).toMatchObject({ code: "near-miss-key", file: "story.md" });
   });
 
+  // #694: an entity's id comes from its file name, so a frontmatter id is ignored.
+  test("story validate warns that a frontmatter id is ignored (#694)", () => {
+    const root = exampleCopy();
+    edit(root, "characters/nessa-thorn.md", /^name:/m, "id: Wrong_Id\nname:");
+    edit(root, "chapters/chapter-01.md", /^status:/m, "id: chapter-01\nstatus:");
+
+    expect(messages(validateProject(root).warnings.filter((warning) => warning.code === "frontmatter-id"))).toEqual([
+      "characters/nessa-thorn.md has an id field, which is ignored: the file name sets the id, so remove the id line",
+      "chapters/chapter-01.md has an id field, which is ignored: the file name sets the id, so remove the id line"
+    ]);
+  });
+
   test("a near miss is quiet when the intended key is also set", () => {
     const root = exampleCopy();
     edit(root, "chapters/chapter-01.md", /^status:/m, "Status: draft\nstatus:");
