@@ -174,8 +174,18 @@ export function autolinkEnd(text, index) {
 // quote or parenthesis of its kind: a long run of unclosed `[`, `![`, `](`,
 // or backticks stays linear.
 function withoutLinks(source) {
-  // [start, end] of the markup to drop: a link's `[` and its `](...)`, or a
-  // whole image.
+  let result = "";
+  let position = 0;
+  for (const [start, end] of linkCuts(source)) {
+    result += source.slice(position, start);
+    position = end;
+  }
+  return result + source.slice(position);
+}
+
+// The [start, end] of the markup that withoutLinks drops, in order and
+// apart: a link's `[` and its `](...)`, or a whole image.
+function linkCuts(source) {
   const cuts = [];
   for (const [start, end] of inlineBlocks(source)) {
     const openers = [];
@@ -229,15 +239,15 @@ function withoutLinks(source) {
   // Links close in text order, but an image closes after the links in its
   // text, so the cuts are put in order and joined where they overlap.
   cuts.sort((left, right) => left[0] - right[0]);
-  let result = "";
+  const removed = [];
   let position = 0;
   for (const [start, end] of cuts) {
     if (end > position) {
-      result += source.slice(position, Math.max(start, position));
+      removed.push([Math.max(start, position), end]);
       position = end;
     }
   }
-  return result + source.slice(position);
+  return removed;
 }
 
 // The [start, end] of each run of lines in `source` (which holds no closed
@@ -1101,35 +1111,96 @@ export function countedText(markdown) {
   }).join("");
 }
 
-// The words of one paragraph of inline markdown, as WORD_PATTERN splits
-// them once countedText's markup is read out, as { word, start, end } with
-// offsets into `text` as written, so a passage can be quoted as written. A
+// The words of one paragraph of inline markdown, as splitWords counts them
+// (a link keeps its text and loses its target, a URL is one word, and
+// countedText's markup is read out), as { word, start, end } with offsets
+// into `text` as written, so a passage can be quoted as written. A
 // reference definition and its labels need the whole chapter, so here
 // they are read as text.
 export function proseWordSpans(text) {
   const source = String(text);
-  let counted = "";
-  const starts = [];
-  const ends = [];
+  // Each stage edits the text of the one before. Offsets map back through
+  // every stage, so a word's span is its place in `source`.
+  // A link or image needs `](` for its destination, so text without one has
+  // no links to cut.
+  const cuts = source.includes("](") ? linkCuts(source) : [];
+  const links = editedText(source, cuts.map(([start, end]) => [start, end, ""]));
+  const markup = editedText(links.text, markupEdits(links.text));
+  const urls = editedText(markup.text, urlEdits(markup.text));
+  return wordSpans(urls.text, COUNTED_WORD).map(({ word, start, end }) => {
+    const [inMarkup, markupEnd] = urls.back(start, end);
+    const [inLinks, linksEnd] = markup.back(inMarkup, markupEnd);
+    const [from, to] = links.back(inLinks, linksEnd);
+    return { word: word === URL_PLACEHOLDER ? markup.text.slice(inMarkup, markupEnd) : word, start: from, end: to };
+  });
+}
+
+// `text` with each of `edits` ([start, end, replacement], in order and
+// apart) made. The result's `back(start, end)` gives the [start, end) span
+// of `text` that the characters [start, end) of the result came from. The
+// copied runs and the replacements are kept as runs, not a character at a
+// time, so a long paragraph costs no more than its edits.
+function editedText(text, edits) {
+  let result = "";
+  const runs = [];
   let position = 0;
   const copy = (end) => {
-    for (let index = position; index < end; index += 1) {
-      starts.push(index);
-      ends.push(index + 1);
+    if (end > position) {
+      runs.push({ out: result.length, from: position, to: end, copied: true });
+      result += text.slice(position, end);
     }
-    counted += source.slice(position, end);
   };
-  for (const [start, end, replacement] of markupEdits(source)) {
+  for (const [start, end, replacement] of edits) {
     copy(start);
-    counted += replacement;
-    for (let index = 0; index < replacement.length; index += 1) {
-      starts.push(start);
-      ends.push(end);
-    }
+    runs.push({ out: result.length, from: start, to: end, copied: false });
+    result += replacement;
     position = end;
   }
-  copy(source.length);
-  return wordSpans(counted, WORD_PATTERN).map(({ word, start, end }) => ({ word, start: starts[start], end: ends[end - 1] }));
+  copy(text.length);
+  // The run holding the character at `index` of the result: the last run
+  // that starts at or before it.
+  const runAt = (index) => {
+    let low = 0;
+    let high = runs.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (runs[middle].out <= index) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return runs[low];
+  };
+  // Where the character at `index` of the result starts in `text`, and
+  // where it ends: a copied character maps to itself, and a replaced one to
+  // the edit that replaced it.
+  const startIn = (index) => {
+    const run = runAt(index);
+    return run.copied ? run.from + (index - run.out) : run.from;
+  };
+  const endIn = (index) => {
+    const run = runAt(index);
+    return run.copied ? run.from + (index - run.out) + 1 : run.to;
+  };
+  return { text: result, back: (start, end) => [startIn(start), endIn(end - 1)] };
+}
+
+// The URLs and email addresses of `text`, each set aside as one word as
+// splitWords sets them aside, and a stray placeholder character as a space.
+function urlEdits(text) {
+  const edits = [];
+  for (const match of text.matchAll(/\uE000/g)) {
+    edits.push([match.index, match.index + 1, " "]);
+  }
+  // A URL or email address has `://`, `www.`, or `@`, so the pattern runs
+  // only where one of them is.
+  if (/:\/\/|www\.|@/i.test(text)) {
+    for (const match of text.replace(/\uE000/g, " ").matchAll(URL_OR_EMAIL)) {
+      edits.push([match.index, match.index + match[0].length, ` ${URL_PLACEHOLDER} `]);
+    }
+  }
+  return edits.sort((left, right) => left[0] - right[0]);
 }
 
 // The markup edits countedText makes in `text`, which holds no closed

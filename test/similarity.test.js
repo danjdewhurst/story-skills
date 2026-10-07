@@ -59,6 +59,15 @@ describe("similarity matching", () => {
     expect(report.passages.map((passage) => [passage.words, passage.text])).toEqual([[13, "The lamp <em>keeper</em> counted the steps twice before he trusted the rail&nbsp;again"]]);
   });
 
+  test("a link target and a bare URL count as story wordcount counts them: the link text, and one word per URL (#707, #711)", () => {
+    const url = "https://example.com/c-d";
+    const text = `See [the docs](https://example.com/a-b) now, or ${url} today.`;
+    const words = tokenizeDocument([{ label: "p1", text }]);
+    expect(words.map((entry) => entry.word)).toEqual(["see", "the", "docs", "now", "or", url, "today"]);
+    expect(words).toHaveLength(wordCount(text));
+    expect(words[5]).toMatchObject({ start: text.indexOf(url), end: text.indexOf(url) + url.length });
+  });
+
   test("Chinese and Japanese text is compared a character at a time", () => {
     const words = tokenizeDocument([{ label: "p1", text: "灯台守は、階段を数えた。" }]).map((entry) => entry.word);
     expect(words).toEqual(["灯", "台", "守", "は", "階", "段", "を", "数", "え", "た"]);
