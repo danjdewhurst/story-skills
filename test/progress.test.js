@@ -5,7 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
-import { computeProgress, formatProgress, historyWeeks } from "../src/progress.js";
+import { computeProgress, formatPercent, formatProgress, historyWeeks, localDate } from "../src/progress.js";
 import { createStoryProject, formatProjectReport, projectProgress, projectReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
@@ -537,5 +537,18 @@ describe("sweep fixes", () => {
     fs.writeFileSync(path.join(root, "characters", "bad.md"), "---\nname: Bad\n");
     expect(() => projectProgress(root, { log: true, date: "2024-02-01" })).toThrow("Cannot log progress");
     expect(fs.existsSync(path.join(root, "progress.md"))).toBe(false);
+  });
+});
+
+describe("#736 a share above zero never prints as 0%", () => {
+  test("a share that rounds to zero prints the smallest step, and 0 stays 0", () => {
+    expect(formatPercent(0.3, 0)).toBe("1");
+    expect(formatPercent(0.04, 1)).toBe("0.1");
+    expect(formatPercent(0, 0)).toBe("0");
+  });
+
+  test("a share just under the target never prints as 100%", () => {
+    expect(formatPercent(99.8, 0)).toBe("99");
+    expect(formatPercent(100, 0)).toBe("100");
   });
 });
