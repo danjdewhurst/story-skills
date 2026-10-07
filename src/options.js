@@ -53,6 +53,7 @@ export const OPTIONS = [
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "anonymous", help: ["Leave every name out of build --format shunn and", "--format docx --shunn, for a market that reads", "blind: byline, editor, contact lines, running head"] },
   { name: "pdf", help: ["Render build --format print or shunn to PDF with an", "installed engine (Prince, WeasyPrint, pagedjs-cli,", "or Chrome/Chromium, found on PATH in that order)"] },
   { name: "pdf-engine", value: "<name|path>", help: ["PDF engine for build --pdf: prince, weasyprint,", "pagedjs-cli, chrome, or the path to one"] },
   { name: "spoilers", help: ["Include notes, statuses, deaths, knowledge,", "clues, and resolutions in build --format codex"] },

@@ -2852,6 +2852,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 |---|---|---|
 | `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
+| `--anonymous` | With `--format shunn` (and its `--pdf`) or `--format docx --shunn`, leave every name out, for a market that reads blind: the byline, editor credit, contact lines, story bylines, and the running head's surname. An error with any other build, and it cannot be a `cli-defaults` entry. See [Anonymous manuscripts](manuscripts.md#anonymous-manuscripts) | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
 | `--paper <letter\|a4>` | With `--format shunn --pdf` or `--format docx --shunn`, the manuscript's paper: `letter` (US Letter) or `a4` (case-insensitive), with 1 in margins on either. An error with any other build, unless it comes from `cli-defaults`, where builds it does not apply to ignore it. See [Paper size](manuscripts.md#paper-size) | `letter` |
 | `--stamp <label>` | With `--format html`, print this build label (a date, commit, or review round, such as `feedback-round-2`) at the top of the review copy, so readers can say which build a note refers to. An error with any other format or an empty label. Default builds carry no stamp and stay byte-identical | None |
@@ -2869,7 +2870,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `markdown` | `dist/<story-id>.md`, or `dist/manuscript.book.md` when the story id is `manuscript`, so it does not replace `export`'s file | The same manuscript as `export`, with LF line endings |
 | `epub` | `dist/<story-id>.epub` | EPUB 3 with a navigation document, front and back matter, and accessibility metadata. Reads `author` or `authors`, `language`, `isbn`, `publisher`, `publication-date`, `description`, `subjects`, `copyright`, `cover`, and `cover-alt` from `story.md` when set |
 | `docx` | `dist/<story-id>.docx` | Word document with the title and its credits (`author` or `authors`, then `editor`), headings, and paragraphs |
-| `docx` with `--shunn` | `dist/<story-id>.shunn.docx` | Shunn format: Courier New 12pt, double-spaced, title page, and a running head of the author, title, and page number on every later page |
+| `docx` with `--shunn` | `dist/<story-id>.shunn.docx` | Shunn format: Courier New 12pt, double-spaced, title page, and a running head of the surname, short title, and page number on every later page (see [Running head](manuscripts.md#running-head)) |
 | `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count (characters for a book counted in characters), `contact` lines, page breaks between chapters; no matter pages |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
@@ -2973,7 +2974,7 @@ The CLI writes the HTML to a temporary folder, runs the engine on it there with 
 
 `--pdf-engine` names the engine, or the command name or path of its executable, whose file name must say which engine it is (`chromium` runs Chromium, `msedge` runs Edge, `/opt/prince/bin/prince`, `C:\Tools\weasyprint.exe`, `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). A relative path is read from the current directory. Set a default for the project in `story.md` with `cli-defaults` (`- command: build` with `pdf-engine: prince`); a default engine is ignored by builds without `--pdf`. A default may only name one of the four engines, never a path or command, so a project you clone cannot choose a program for `story build` to run; `story validate` reports any other value as `invalid-cli-config`.
 
-The Shunn PDF is US Letter with 1 in margins, Courier New 12 pt, double-spaced, with half-inch paragraph indents. The first page has the contact lines at the top left, the length at the top right, and the title and byline centred below; every later page has a running head of the author, title, and page number at the top right. A novel starts each chapter on a new page, a third of the way down, under a bold centred heading; a [short story or flash piece](#build) runs on after the byline with `#` between sections.
+The Shunn PDF is US Letter with 1 in margins, Courier New 12 pt, double-spaced, with half-inch paragraph indents. The first page has the contact lines at the top left, the length at the top right, and the title and byline centred below; every later page has a running head of the surname, short title, and page number at the top right (the top left in a right-to-left book), as the DOCX has; see [Running head](manuscripts.md#running-head). A novel starts each chapter on a new page, a third of the way down, under a bold centred heading; a [short story or flash piece](#build) runs on after the byline with `#` between sections.
 
 ```text
 $ story build --format print --pdf
@@ -3480,6 +3481,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
+| `--anonymous` | | `build` | Boolean; only with `--format shunn` or `--format docx --shunn`; not a `cli-defaults` entry |
 | `--spoilers` | | `build` | Boolean; only with `--format codex` |
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |

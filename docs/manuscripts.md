@@ -420,7 +420,7 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 |-------|------|---------|
 | `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, the credit under the title in the plain DOCX build, and the byline in both Shunn builds. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
-| `editor` | Text, or a list of text | The editor of a collection or anthology. The EPUB names them as creators with the `edt` role; the HTML, print, codex, and Shunn title pages and the plain DOCX title block credit them under the authors as `Edited by` (the `edited-by` label); the print and Shunn running heads use the editor's name when no author is set; the narration script's opening credits speak them as `Edited by Miriam Hale.` (the `narration-edited-by` label); the metadata sheet lists them. Each story's own writer goes in its chapter's `author` field: see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies). |
+| `editor` | Text, or a list of text | The editor of a collection or anthology. The EPUB names them as creators with the `edt` role; the HTML, print, codex, and Shunn title pages and the plain DOCX title block credit them under the authors as `Edited by` (the `edited-by` label); the print running heads use the editor's name, and the Shunn running heads the editor's surname, when no author is set; the narration script's opening credits speak them as `Edited by Miriam Hale.` (the `narration-edited-by` label); the metadata sheet lists them. Each story's own writer goes in its chapter's `author` field: see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies). |
 | `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet; the language of all generated text (see [Build labels](#build-labels)). Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
@@ -818,8 +818,10 @@ All three read these `story.md` fields for the title page:
 | Field | Type | Used for |
 |-------|------|----------|
 | `author` or `authors` | Text, or a list of text | The byline under `by`. As in every build, `authors` wins when both are set, and its names are joined with "and". Left out when neither is set. |
-| `editor` | Text, or a list of text | An anthology's editor, credited after the byline as `Edited by Miriam Hale`. With no author set, the editor's credit takes the byline's place, and the running head of the DOCX and PDF uses the editor's name. |
+| `editor` | Text, or a list of text | An anthology's editor, credited after the byline as `Edited by Miriam Hale`. With no author set, the editor's credit takes the byline's place, and the running head of the DOCX and PDF uses the editor's surname. |
 | `contact` | List of text lines (a single string also works) | Your name, address, email, and so on, one line each. |
+| `surname` | Text | The name in the running head of the DOCX and PDF, when the one the build works out is wrong: `Le Guin`, `García Márquez`, or `Writer & Other` for co-authors. See [Running head](#running-head). |
+| `short-title` | Text | The title in the running head, when the one the build works out is wrong. See [Running head](#running-head). |
 
 ```yaml
 author: Ada Writer
@@ -851,9 +853,37 @@ The grove was quieter than it should have been.
 
 In the `.shunn.md` file, a form-feed character (`\f`) on its own line before each chapter heading marks the page break, and each prose paragraph is joined onto one line with a blank line after it. Markdown emphasis such as `*italic*` is left as written.
 
-The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It sets the page to US Letter (or A4 with `--paper a4`) with 1 in margins. Every page after the title page has a running head at the top right with the author, the title, and the page number (`Ada Writer / The Last Ember / 2`), as in the PDF. The page number is a Word page field, so it stays correct when you edit the file. Check each market's own guidelines.
+The DOCX version uses Courier New at 12 point and double line spacing throughout, indents each paragraph's first line half an inch, centres the title page and scene breaks, starts each chapter with a page break and a bold chapter heading, and turns `**bold**` and `*italic*` into real bold and italic. It sets the page to US Letter (or A4 with `--paper a4`) with 1 in margins, and every page after the title page has the [running head](#running-head). The page number is a Word page field, so it stays correct when you edit the file. Check each market's own guidelines.
 
-The PDF is laid out as Shunn sets a manuscript page: US Letter (or A4 with `--paper a4`) with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and a running head of the author, title, and page number at the top right of every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
+The PDF is laid out as Shunn sets a manuscript page: US Letter (or A4 with `--paper a4`) with 1 in margins, Courier New 12 pt, double-spaced, with the contact lines at the top left of the first page and the length at the top right, the title and byline centred below them, and the [running head](#running-head) on every later page. Chapters, and the short-story layout, follow the other Shunn builds. See [PDF output](#pdf-output) for the engines it can use.
+
+#### Running head
+
+Every page of the DOCX and PDF after the title page has a running head at the top right (the top left in a right-to-left book): the author's surname, a short title, and the page number, as in `Writer / The Last Ember / 2`. The build works out the two parts:
+
+- **Surname:** the last word of the first author's name (the first editor's in an anthology with no author), passing over a final `Jr.`, `Sr.`, `Jnr`, `Snr`, `II`, `III`, or `IV`. So `Martin Luther King, Jr.` gives `King`. A name written without spaces, as Chinese and Japanese names are, is used whole.
+- **Short title:** the title up to its subtitle, which starts at the first colon followed by a space, full-width colon (`：`), or em dash. So `The Last Ember: Book One` gives `The Last Ember`.
+
+To keep the head on one line, the surname is cut to 20 characters and the short title to 30, at the last space or hyphen that fits, or within a single longer word. A Chinese, Japanese, or Korean character counts as two. A line break or other control character in either part becomes a space.
+
+A surname of more than one word (`Le Guin`), co-authors, or a short title you choose need `surname` and `short-title` in `story.md`, which the build uses in place of its own, cut to the same lengths:
+
+```yaml
+author: Ursula K. Le Guin
+surname: Le Guin
+short-title: Left Hand
+```
+
+#### Anonymous manuscripts
+
+Some magazines and contests read submissions blind, and their guidelines ask for no name anywhere in the manuscript. Add `--anonymous` to a Shunn build to leave out every name: the byline, the editor credit, the contact lines, each story's byline in a collection, and the surname in the running head, which keeps only the short title and page number. The title, length, and text stay.
+
+```shell
+story build . --format docx --shunn --anonymous
+story build . --format shunn --pdf --anonymous
+```
+
+`--anonymous` works with `--format shunn` (with or without `--pdf`) and `--format docx --shunn`, and is an error with any other build. It cannot be a `cli-defaults` entry, because a blind submission is one run, not a habit. Check the built file before sending it, and remove any name that is in the chapter text itself.
 
 #### Paper size
 

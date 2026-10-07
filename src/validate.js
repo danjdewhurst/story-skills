@@ -1012,7 +1012,7 @@ const TEXT_FIELDS = {
   matter: ["title", "rights-holder", "credit"]
 };
 
-const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
+const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "surname", "short-title", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
 
 function validateTextFields(project, errors) {
   const check = (label, data, fields) => {

@@ -54,6 +54,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The page number is a Word page field, so it stays right after edits.
   - The surname is the first author's last name (the first word in a Chinese, Japanese, Korean, or Hungarian book), and the short title is the title before any subtitle; the build cuts them to fit one line.
   - The new `story.md` fields `surname` and `short-title` set them instead, and are used whole.
+- `story build --anonymous` leaves every name out of a Shunn manuscript, for a market that reads blind. (#525)
+  - It works with `--format shunn`, its `--pdf`, and `--format docx --shunn`, and drops the byline, editor credit, contact lines, story bylines, and the running head's surname.
+  - It cannot be a `cli-defaults` entry.
 
 ### Changed
 
@@ -80,6 +83,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A page whose `permission` is `pending`, misspelt, or not `not-needed`, `granted`, or `public-domain` is left out with a `permission-pending-left-out` warning.
   - `--include-pending` keeps it for a proof you read alone; `cli-defaults` cannot set it.
   - The review-copy template also warns about such pages in the job log, whatever `STORY_VERSION` it installs.
+- The Shunn PDF's running head now has the surname and short title, as the DOCX has, in place of the full author line and title. (#525)
+  - The build cuts them to fit one line, and the head sits at the top left in a right-to-left book.
 
 ### Fixed
 

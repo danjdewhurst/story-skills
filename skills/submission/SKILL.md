@@ -198,8 +198,11 @@ story build . --format shunn
 ```
 
 These write `dist/<story-id>.shunn.docx` and `dist/<story-id>.shunn.md`.
-The DOCX has a running head (author, title, page number) on every page
-after the first.
+The DOCX has a running head on every page after the first: the author's
+surname, a short title, and the page number (`Writer / The Last Ember / 2`).
+The build takes the last word of the first author's name and the title
+before any subtitle. When either is wrong, such as `Le Guin` or a long
+title, set `surname` or `short-title` in `story.md`.
 For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
 `dist/<story-id>.shunn.pdf` (US Letter, Courier, double-spaced, running
 head) with a paged-media engine the user has installed, and stops with
@@ -255,8 +258,8 @@ short-fiction tracker columns (submission type, rights offered) and the
 publication history section from that reference, and check the tracker
 before suggesting a market: a story with an open exclusive submission goes
 nowhere else, and an exclusive market needs a story with no open
-submissions. For a market that reads anonymously, tell the user to strip
-the name, contact block, byline, and running head from the Shunn build.
+submissions. For a market that reads anonymously, add `--anonymous` to the Shunn
+build, which leaves out every name, the running head's surname included.
 To assemble a collection, follow its "Assemble a collection" section:
 choose the stories, find the linking threads, propose an order, and draft
 the acknowledgements from the publication history.

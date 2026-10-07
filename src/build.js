@@ -20,7 +20,7 @@ import {
   trimBlankLines,
   wordCount
 } from "./markdown.js";
-import { chapterByline, copyrightPage, copyrightPageTodos, isCopyrightMatter, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
+import { chapterByline, copyrightPage, copyrightPageTodos, isCopyrightMatter, metadataSheet, nameList, publishingMeta } from "./publishing.js";
 import { DEFAULT_TRIM, estimateBookPages, indentsFirstLines, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
@@ -144,6 +144,9 @@ export function buildBook(root, options = {}) {
     throw usageError(`--include-pending applies only to builds that print matter pages; --format ${format}${options.shunn ? " --shunn" : ""} prints none`, ["include-pending", "format", "shunn"]);
   }
   const parts = { includePending: Boolean(options.includePending), warnLeftOut: printsMatter };
+  if (options.anonymous && format !== "shunn" && !(format === "docx" && options.shunn)) {
+    throw usageError("--anonymous applies only to --format shunn and --format docx --shunn", ["anonymous", "format", "shunn"]);
+  }
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
@@ -215,13 +218,13 @@ export function buildBook(root, options = {}) {
     writeFile(output.outFile, text, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: format === "html" }));
   } else if (format === "shunn") {
-    writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
+    writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
-    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
+    writeShunnDocx(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
@@ -243,7 +246,7 @@ function buildPdf(project, format, { trim, paper, parts }, output, options) {
   assertMatterTitles(project, manuscript);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
   const style = projectBuildStyle(project);
-  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
+  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project, options.anonymous), paper);
   // A --dry-run finds the engine but does not run it.
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
   // The Shunn manuscript prints no matter.
@@ -691,19 +694,31 @@ export function truncateWords(text, budget) {
   return `${kept.join("\n")}…\n`;
 }
 
-function shunnMeta(project) {
+// The Shunn builds' title page and running head. `anonymous` (build
+// --anonymous, for a market that reads blind) leaves out every name: the
+// byline, the editor's credit, the contact lines, and the head's surname.
+function shunnMeta(project, anonymous = false) {
   const data = project.story.data;
   const meta = publishingMeta(data);
-  return {
-    title: project.title,
+  const names = anonymous ? {
+    author: "", lead: "", surname: "", editors: "", contact: []
+  } : {
     // Like every other build, `authors` wins over `author`, so a co-written
     // book gets a full byline. An anthology with no author of its own heads
-    // its pages with the editor's name and credits them on the title page.
+    // its pages with the editor's surname and credits them on the title
+    // page. The head takes the first name's surname, or story.md `surname`.
     author: joinNames(meta.authors, meta.labels),
-    lead: leadNames(meta),
+    lead: (meta.authors.length > 0 ? meta.authors : meta.editors)[0] ?? "",
+    surname: meta.surname,
     editors: meta.editors.length === 0 ? "" : fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }),
+    contact: asArray(data.contact)
+  };
+  return {
+    title: project.title,
+    shortTitle: meta.shortTitle,
+    ...names,
+    anonymous,
     labels: meta.labels,
-    contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
     // A book counted in characters gives its length in characters.

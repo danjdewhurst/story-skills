@@ -11,7 +11,7 @@ import { isBookNumber, seriesDisplayName } from "./series.js";
 
 export const MAX_KEYWORDS = 7;
 const BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
-const SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
+const SCALAR_FIELDS = ["author", "surname", "short-title", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
 
 // A `[TODO: author to supply]` marker, which the publishing skill leaves
 // rather than inventing a value. Builds and the readiness checklist treat it
@@ -85,6 +85,10 @@ export function publishingMeta(data) {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     // A collection's or anthology's editors, credited apart from its authors.
     editors: nameList(data.editor),
+    // The Shunn running head's surname and short title, when the ones the
+    // builds derive from the first author and the title are wrong.
+    surname: text("surname"),
+    shortTitle: text("short-title"),
     language: text("language") || "en",
     // "vertical" sets a Japanese or Chinese book in columns; see typesetting.js.
     writingMode: text("writing-mode") || "horizontal",

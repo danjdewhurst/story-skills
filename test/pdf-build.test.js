@@ -109,7 +109,7 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(call.name).toBe("prince");
     expect(call.args[1]).toBe("-o");
     expect(call.html).toContain("@page { size: letter; margin: 1in;");
-    expect(call.html).toContain(`content: "Mara Quill / " "Paper Lanterns / " counter(page)`);
+    expect(call.html).toContain(`content: "Quill / " "Paper Lanterns / " counter(page)`);
     expect(call.html).toContain("Approximately 9 words");
     expect(call.html).toContain("<p>mara@example.com</p>");
     expect(call.html).toContain("<h2>Chapter 1: First Light</h2>");
@@ -129,6 +129,21 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     const shunn = runWith(env, ["build", root, "--format", "shunn", "--pdf"], root);
     expect(shunn.code).toBe(0);
     expect(shunn.err).toBe("");
+  });
+
+  test("--anonymous leaves every name out of the Shunn PDF, the running head included", () => {
+    const root = pdfProject("short-title: Lanterns\n");
+    const bin = makeTempDir();
+    fakeEngine(bin, "prince");
+    const log = path.join(makeTempDir(), "log.jsonl");
+    const result = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: "" }, ["build", root, "--format", "shunn", "--pdf", "--anonymous"], root);
+    expect(result.err).toBe("");
+    expect(result.code).toBe(0);
+    const [call] = readLog(log);
+    expect(call.html).toContain(`@top-right { content: "Lanterns / " counter(page);`);
+    expect(call.html).not.toContain("Mara");
+    expect(call.html).not.toContain("Quill");
+    expect(call.html).toContain("Approximately 9 words");
   });
 
   test("--paper a4 sets the Shunn PDF on A4, from the command line or a story.md default", () => {
@@ -471,12 +486,12 @@ describe("Shunn manuscript HTML", () => {
 
   // CSS reads a form feed as a line break, which ended the author's string
   // in the running head and let the text after it add CSS rules.
-  test("a form feed in the author stays inside the running head's CSS string", () => {
-    const html = shunnHtml(manuscript([{ heading: "Chapter 1", body: "One." }]), { ...meta, author: "Ann\f}} body { display: none } x {", labels: { by: "by", "approximate-words": "Approximately {words} words" } });
+  test("a form feed in the surname stays inside the running head's CSS string", () => {
+    const html = shunnHtml(manuscript([{ heading: "Chapter 1", body: "One." }]), { ...meta, surname: "Ann\f}} body {", labels: { by: "by", "approximate-words": "Approximately {words} words" } });
     // The head's CSS string tokens, each a quote, then anything but a quote,
     // backslash, or line break, or a backslash and the character it escapes.
     const head = /@top-right \{ content: ((?:"(?:[^"\\\n\r\f]|\\[\s\S])*" )*)counter\(page\);/.exec(html);
-    expect(head?.[1]).toBe('"Ann }} body { display: none } x { / " "A \\"Quoted\\" \\3C /style\\3E  Title / " ');
+    expect(head?.[1]).toBe('"Ann }} body { / " "A \\"Quoted\\" \\3C /style\\3E  Title / " ');
   });
 });
 
