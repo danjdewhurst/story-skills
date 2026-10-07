@@ -110,6 +110,13 @@ exemptions:
     expect(validateAgainstSchema([], local)).toEqual(["$: expected object, got array"]);
   });
 
+  test("checks a maximum", () => {
+    const local = { type: "object", properties: { hours: { type: "integer", minimum: 1, maximum: 100 } } };
+    expect(validateAgainstSchema({ hours: 100 }, local)).toEqual([]);
+    expect(validateAgainstSchema({ hours: 101 }, local)).toEqual(["$.hours: 101 is above the maximum 100"]);
+    expect(validateAgainstSchema({ hours: 0 }, local)).toEqual(["$.hours: 0 is below the minimum 1"]);
+  });
+
   test("refuses schema keywords it cannot enforce, even where no data reaches", () => {
     expect(() => validateAgainstSchema({}, { additionalProperties: false })).toThrow("Unsupported schema keyword additionalProperties");
     expect(() => validateAgainstSchema({}, { $ref: "other.json#/x" })).toThrow("Unsupported $ref");
