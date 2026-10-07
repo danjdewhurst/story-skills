@@ -685,7 +685,7 @@ Character presence:
 Timeline built: 0 errors, 0 warnings, 0 dismissed
 ```
 
-Without dates, the chronology reads `- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them` and every scene is listed under `Undated (reading order)`. POV balance and presence still work. The unmodified example, where chapter 4 still lists Edran, shows a longest absence. Chapter 3 omits Nessa from `characters`, but she is its `pov`, so she still counts as present there:
+Without dates, the chronology reads `- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them` and every scene is listed under `Undated (reading order)`. POV balance and presence still work. The unmodified example, where chapter 4 still lists Edran, shows a longest absence. Chapter 3 omits Nessa from `characters`, but she is its `pov`, so she still counts as present there:
 
 ```text
 $ story timeline examples/the-unraveled-thread

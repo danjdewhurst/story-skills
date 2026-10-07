@@ -237,10 +237,24 @@ describe("story timeline", () => {
     const text = formatTimeline(timeline, timeline.totalChapters);
 
     expect(text).toContain("Timeline: 0 dated, 0 undated");
-    expect(text).toContain("- None: add date (YYYY-MM-DD)");
+    expect(text).toContain("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
     expect(text).toContain("POV balance:\n- None");
     expect(text).toContain("Character presence:\n- None");
     expect(text).not.toContain("Undated");
+  });
+
+  test("an empty project with a story calendar says a calendar date works too (#703)", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Calendar Timeline", force: false });
+    const file = path.join(root, "story.md");
+    const storyText = fs.readFileSync(file, "utf8");
+    const end = storyText.indexOf("\n---\n", 4);
+    fs.writeFileSync(file, `${storyText.slice(0, end)}\ncalendar:\n  - month: Frostwane\n    days: 30\n  - month: Thaw\n    days: 30${storyText.slice(end)}`, "utf8");
+    const timeline = storyTimeline(root);
+    const text = formatTimeline(timeline, timeline.totalChapters);
+
+    expect(timeline.chronology).toEqual([]);
+    expect(text).toContain("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
   });
 
   test("a chapter present in one chapter shows a single-chapter span, and big numbers get commas", () => {

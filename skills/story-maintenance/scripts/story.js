@@ -27846,7 +27846,7 @@ function formatTimeline(timeline, totalChapters) {
   const lines = [`Timeline: ${timeline.chronology.length} dated, ${timeline.undated.length} undated`];
   lines.push("", "Chronology (story order):");
   if (timeline.chronology.length === 0) {
-    lines.push("- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them");
+    lines.push("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
   }
   for (const entry of timeline.chronology) {
     const when = [entry.date, entry.time].filter(Boolean).join(" ");
