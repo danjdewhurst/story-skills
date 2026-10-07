@@ -6,7 +6,7 @@ import { formatNextRelease } from "./release-schedule.js";
 // deadline, and the session log in progress.md. Pure functions: story.js
 // reads and writes the files.
 
-export const PROGRESS_FILE = "progress.md";
+export { PROGRESS_FILE } from "./progress-file.js";
 const PACE_SESSIONS = 7;
 const HISTORY_WEEKS = 4;
 const MAX_HISTORY_WEEKS = 52;
