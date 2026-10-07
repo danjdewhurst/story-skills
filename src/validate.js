@@ -1985,6 +1985,10 @@ function validateMatter(project, errors, warnings) {
     if (matter.empty) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
+    if (matter.todoMarkers > 0) {
+      const them = matter.todoMarkers === 1 ? "it" : "them";
+      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: fill ${them} in or move ${them} into an HTML comment`, label));
+    }
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;

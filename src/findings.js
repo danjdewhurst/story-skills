@@ -98,6 +98,7 @@ export const FINDING_CODES = {
   "research-unsettled": "warning",
   "research-unreviewed": "warning",
   "empty-matter": "warning",
+  "matter-todo-markers": "warning",
   "permission-pending": "warning",
   "permission-no-rights-holder": "warning",
   "backslash-path": "warning",

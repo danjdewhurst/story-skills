@@ -633,6 +633,7 @@ var FINDING_CODES = {
   "research-unsettled": "warning",
   "research-unreviewed": "warning",
   "empty-matter": "warning",
+  "matter-todo-markers": "warning",
   "permission-pending": "warning",
   "permission-no-rights-holder": "warning",
   "backslash-path": "warning",
@@ -9174,6 +9175,7 @@ function metadataSheet(input) {
     ["AI-use statement decided (`ai-disclosure`)", meta.aiDisclosure !== ""],
     [`Permissions cleared for quoted matter (\`permission\`${(input.pendingPermissions ?? []).length > 0 ? `; pending: ${input.pendingPermissions.join(", ")}` : ""})`, (input.pendingPermissions ?? []).length === 0],
     [`No \`[TODO\` markers in chapter prose${(input.todoChapters ?? []).length > 0 ? ` (found in: ${input.todoChapters.join(", ")})` : ""}`, (input.todoChapters ?? []).length === 0],
+    [`No \`[TODO\` markers on matter pages${(input.todoMatter ?? []).length > 0 ? ` (found in: ${input.todoMatter.join(", ")})` : ""}`, (input.todoMatter ?? []).length === 0],
     ["Story status is complete", data.status === "complete"]
   ];
   return [
@@ -13318,7 +13320,8 @@ function scanProject(root) {
       order: Number.isInteger(data.order) ? data.order : 0,
       heading: data.heading !== false,
       permission: typeof data.permission === "string" ? data.permission : "",
-      empty: chapterProse(markdown.body).trim() === ""
+      empty: chapterProse(markdown.body).trim() === "",
+      todoMarkers: countTodoMarkers(chapterProse(markdown.body))
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
@@ -22714,6 +22717,10 @@ function validateMatter(project, errors, warnings) {
     if (matter.empty) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
+    if (matter.todoMarkers > 0) {
+      const them = matter.todoMarkers === 1 ? "it" : "them";
+      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: fill ${them} in or move ${them} into an HTML comment`, label));
+    }
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;
@@ -27086,7 +27093,8 @@ var EXPORT_FILE = "dist/manuscript.md";
 var MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
-  const manuscript = manuscriptParts(project, options.generatedBy === undefined ? "export" : "build");
+  const action = options.generatedBy === undefined ? "export" : "build";
+  const manuscript = manuscriptParts(project, action);
   assertMatterTitles(project);
   const output = resolveOutputPath(project, options.out, EXPORT_FILE, options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
@@ -27105,7 +27113,7 @@ function exportManuscript(root, options = {}) {
   writeFile(output.outFile, `${lines.join(`
 `).trimEnd()}
 `, output.writeOptions);
-  return { outFile: output.outFile, chapters: project.chapters.length, warnings: manuscript.warnings };
+  return { outFile: output.outFile, chapters: project.chapters.length, warnings: [...manuscript.warnings, ...matterTodoWarnings(project, manuscript, { action })] };
 }
 function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
@@ -27190,7 +27198,8 @@ function buildBook(root, options = {}) {
       hasCopyrightPage: manuscript.front.concat(manuscript.back).some((entry) => entry.copyright),
       coverReady: coverIsReady(project),
       pendingPermissions: project.matter.filter((entry) => entry.permission === "pending").map((entry) => entry.id),
-      todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id)
+      todoChapters: project.chapters.filter((chapter) => chapter.todoMarkers > 0).map((chapter) => chapter.id),
+      todoMatter: project.matter.filter((entry) => entry.todoMarkers > 0).map((entry) => entry.id)
     }), output.writeOptions);
   } else if (format === "twee" || format === "ink") {
     const { branches, ifid } = interactiveStory(project, manuscript, format);
@@ -27199,20 +27208,24 @@ function buildBook(root, options = {}) {
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true }));
   } else if (format === "html" || format === "print") {
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   }
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
 }
@@ -27224,7 +27237,8 @@ function buildPdf(project, format, { trim, paper }, output, options) {
   const style = projectBuildStyle(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
-  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
+  const warnings = format === "print" ? [...manuscript.warnings, ...matterTodoWarnings(project, manuscript)] : manuscript.warnings;
+  return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings };
 }
 function buildCodex(project, out, spoilers) {
   assertProjectParses(project, "build");
@@ -27687,6 +27701,7 @@ function manuscriptParts(project, action = "build") {
   }
   const matter = (placement) => project.matter.filter((entry) => entry.placement === placement && !entry.empty).map((entry) => ({
     id: entry.id,
+    file: entry.file,
     title: entry.title,
     heading: entry.heading,
     copyright: isCopyrightMatter(entry),
@@ -27709,6 +27724,18 @@ function manuscriptParts(project, action = "build") {
     back,
     warnings
   };
+}
+function matterTodoWarnings(project, manuscript, { action = "build", narration = false } = {}) {
+  const printed = [...manuscript.front.filter((entry) => !(narration && entry.copyright)), ...manuscript.back];
+  return printed.flatMap((entry) => {
+    const markers = entry.file === undefined ? 0 : countTodoMarkers(entry.body);
+    if (markers === 0) {
+      return [];
+    }
+    const file = relative(project, entry.file);
+    const them = markers === 1 ? "it" : "them";
+    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: fill ${them} in before you publish`, file)];
+  });
 }
 function assertMatterTitles(project) {
   for (const entry of project.matter) {

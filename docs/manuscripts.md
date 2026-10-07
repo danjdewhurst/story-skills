@@ -377,6 +377,14 @@ The page text is found with the same rule as chapter prose. For a normal matter 
 warning: matter/acknowledgments.md has no text and is left out of export and build [empty-matter]
 ```
 
+A `[TODO` marker in a page's text, such as the `[TODO: author to supply]` the [`publishing`](../skills/publishing/SKILL.md) skill leaves on the copyright page's ISBN line, prints as written. `story validate` warns about it, and export and every build that includes the page warn again and build anyway:
+
+```text
+warning: matter/copyright.md still has 1 [TODO marker, which this build prints: fill it in before you publish [matter-todo-markers]
+```
+
+Fill the line in, or move it into an HTML comment (`<!-- ... -->`) to keep it as a note. To make a release build fail while a placeholder remains, promote `matter-todo-markers` to `level: error` in `story.md` (see [Failing on warnings](automation.md#failing-on-warnings)).
+
 The [`the-last-ember`](../examples/the-last-ember/matter/epigraph.md) example has an epigraph with `heading: false`.
 
 Write matter text yourself. The `story-maintenance` skill will not invent acknowledgments, biographical facts, or copyright details; it asks you for them.
@@ -1105,6 +1113,7 @@ When a storm exposes an illegal memory archive beneath a floating harbor, salvag
 - [ ] AI-use statement decided (`ai-disclosure`)
 - [x] Permissions cleared for quoted matter (`permission`)
 - [x] No `[TODO` markers in chapter prose
+- [x] No `[TODO` markers on matter pages
 - [ ] Story status is complete
 ```
 
@@ -1117,6 +1126,7 @@ Notes on the fields:
 - **Cover** is the `cover` path as written. The readiness box is ticked only when that file is an image the EPUB build would accept.
 - The copyright item is ticked by either a `copyright` line or a copyright matter page.
 - The permissions item is ticked unless a matter page has `permission: pending`; it then reads ``Permissions cleared for quoted matter (`permission`; pending: <ids>)``, naming each pending page.
+- The two `[TODO` items name each chapter, then each matter page, that still holds a `[TODO` marker outside an HTML comment, such as ``No `[TODO` markers on matter pages (found in: copyright)``.
 
 The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
 

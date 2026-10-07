@@ -636,6 +636,7 @@ Checks that the project is structurally sound:
 - declared chapter `word-count` values match the prose (warning)
 - no chapter opens an HTML comment (`<!--`) without closing it, which would leave the text after it in builds and word counts; a `<!--` inside a closed `` ``` `` code fence or an inline code span does not count (warning)
 - no chapter's prose holds a `[TODO` marker (`[TODO: check bible]`), which every build would print; a marker inside an HTML comment does not count (warning: `chapters/chapter-01.md has 1 [TODO marker in its prose, which every build prints: resolve it or move it into an HTML comment`)
+- no matter page's text holds a `[TODO` marker, such as the `[TODO: author to supply]` the `publishing` skill leaves on a copyright page's ISBN line, which export and the builds would print; a marker inside an HTML comment does not count (warning: `matter/copyright.md has 1 [TODO marker, which export and build print: fill it in or move it into an HTML comment`)
 - each chapter has at least one scene record (warning)
 - chapter `hook` and `choices` (each a `text` with no Twine link syntax and a kebab-case `to`), the `story.md` `ifid` (a version 4 UUID), scene `outcome`, clue `red-herring`, location `routes`, character `voice-words` and `voice-avoid`, `pronunciation` fields, and research `accuracy`, `confidence`, `method`, and `risk` use allowed values and types
 - matter pages have text; research marked `verified` lists sources; research that is still `open` or `disputed` is not relied on by a `final` or `complete` chapter; research with a `risk` and no `reviewed-by` is not relied on by a `final` or `complete` chapter; research with `accuracy: invented` is exempt from the source checks; no stray `.md` files sit at the project root or nested inside entity directories (warnings)
@@ -2814,6 +2815,14 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
 
+`export` and the builds that print matter pages (`markdown`, `epub`, `docx`, `html`, `print`, and `narration`, which skips a front-matter copyright page) also warn about each printed page that still holds a `[TODO` marker, and build anyway: `warning: matter/copyright.md still has 1 [TODO marker, which this build prints: fill it in before you publish [matter-todo-markers]`. A build stays disposable, so a draft or review copy with a placeholder still builds. To stop a release with one, promote the code in `story.md`; `export`, `build`, `validate`, and `check` then exit 1 while a placeholder remains (the build still writes its file):
+
+```yaml
+severity:
+  - warning: matter-todo-markers
+    level: error
+```
+
 With `form: short-story` or `form: flash` in `story.md`, both Shunn builds use the short-story layout: no chapter headings or page breaks, and a centred `#` between chapters and at every scene break.
 
 When `story.md` sets `copyright` and no matter page already covers it, `export` and the `markdown`, `epub`, `docx`, `html`, and `print` builds add a generated copyright page to the front matter. `narration` leaves it out, and Shunn output (`--format shunn` and `docx --shunn`) has no front or back matter at all.
@@ -3064,6 +3073,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `research-unsettled` | warning | A settled chapter relies on open or disputed research. |
 | `research-unreviewed` | warning | A research note carries risk, has no `reviewed-by`, and a settled chapter relies on it. |
 | `empty-matter` | warning | A matter page has no text and is left out of builds. |
+| `matter-todo-markers` | warning | A matter page's text holds `[TODO` markers, such as a `[TODO: author to supply]` ISBN line, which export and every build that includes the page print. |
 | `permission-pending` | warning | A matter page's permission is pending and the story is complete. |
 | `permission-no-rights-holder` | warning | A matter page's permission is granted but names no rights holder. |
 | `backslash-path` | warning | A `story.md` path (`follows`, `precedes`, `cover`) uses a backslash. |
@@ -3295,7 +3305,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 ### Codes: build and export
 
-`build` and `export` also report `empty-chapter`, `build` reports `substitute-story-id`, and a Twee build reports `unreachable-chapter`.
+`build` and `export` also report `empty-chapter` and `matter-todo-markers`, `build` reports `substitute-story-id`, and a Twee build reports `unreachable-chapter`.
 
 | Code | Level | Reported when |
 |---|---|---|

@@ -518,7 +518,10 @@ export function scanProject(root) {
       order: Number.isInteger(data.order) ? data.order : 0,
       heading: data.heading !== false,
       permission: typeof data.permission === "string" ? data.permission : "",
-      empty: chapterProse(markdown.body).trim() === ""
+      empty: chapterProse(markdown.body).trim() === "",
+      // Such as the `[TODO: author to supply]` the publishing skill leaves
+      // on a copyright page's ISBN line, which builds print as written.
+      todoMarkers: countTodoMarkers(chapterProse(markdown.body))
     }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
