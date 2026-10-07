@@ -63,8 +63,11 @@ function buildRules(pack) {
   // closingQuotes.
   const ambiguous = [...marks.closers].filter((mark) => marks.openers.includes(mark)).join("");
   const plainClosers = charClass([...marks.closers].filter((mark) => !ambiguous.includes(mark)).join(""));
+  // A spaced stop's match starts only at the first stop of a run. A run
+  // with no space after it (.....x) otherwise fails again from each stop
+  // in it, which is quadratic in the run's length.
   const ends = [
-    marks.spacedEnds === "" ? null : `${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
+    marks.spacedEnds === "" ? null : `(?<!${anyOf(marks.spacedEnds)})${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
     marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+`
   ].filter(Boolean);
   // A letter of a script without case (Arabic, Hebrew, Devanagari, Chinese,

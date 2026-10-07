@@ -588,7 +588,7 @@ function notesHtml(site, entity) {
         if (/\\$/.test(line)) {
           return `${line.slice(0, -1).trim()}${LINE_BREAK}`;
         }
-        return / {2,}$/.test(line) ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
+        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
       }).join("");
       out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];

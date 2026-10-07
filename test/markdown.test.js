@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -116,6 +117,15 @@ describe("markdown utilities", () => {
     const markdown = "# Index\n\n## Registry\n\nRows\n\n## Family Trees\n\nTrees\n\n## Notes\n\nEnd";
     expect(extractSection(markdown, "Family Trees")).toBe("Trees");
     expect(extractSection(markdown, "Missing")).toBe("");
+  });
+
+  test("heading hashes and markup scans stay linear on long runs (#587)", () => {
+    expect(flattenHeadings("# Title   ##\n## A # B ###  \n#")).toBe("Title\nA # B\n#");
+    expect(maskMarkup("a `<!--` b\n<!-- c -->\nd")).toBe("a `<!--` b\n          \nd");
+    expectLinearTime(flattenHeadings, (n) => `# a${" ".repeat(n)}b`);
+    // Many lines and no backtick: each line once searched the rest of the
+    // text for one. That search is fast, so the text is longer.
+    expectLinearTime(maskMarkup, (n) => "a\n".repeat(n / 2), { length: 512000 });
   });
 });
 

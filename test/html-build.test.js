@@ -4,9 +4,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { estimatePages, printHtml } from "../src/html.js";
+import { htmlBook } from "../src/packaging.js";
 import { findCommand } from "../src/pdf.js";
 import { buildBook, createEntity, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -116,6 +117,14 @@ describe("html and print builds", () => {
     const bad = invoke(cwd, ["build", root, "--format", "pdf"]);
     expect(bad.code).toBe(2);
     expect(bad.err).toContain("Supported formats: markdown, epub, docx, shunn, html, print");
+  });
+
+  test("long runs of spaces in a code span, a hard-broken line, or a heading build in linear time", () => {
+    const paragraphs = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs;
+    expect(paragraphs("Use ` a ` here  \nnext line\n\n# Title   ##").map((paragraph) => paragraph.html)).toEqual(["Use a here<br>next line", "Title"]);
+    expectLinearTime(paragraphs, (n) => `\` ${"a ".repeat(n / 2)}x\``, { length: 64000 });
+    expectLinearTime(paragraphs, (n) => `a${" ".repeat(n)}b\nc`);
+    expectLinearTime(paragraphs, (n) => `# a${" ".repeat(n)}b`);
   });
 });
 

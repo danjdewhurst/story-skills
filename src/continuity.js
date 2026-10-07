@@ -858,7 +858,9 @@ function checkStateAgainstStory(project, context, warnings) {
 // Folds a knowledge text for matching: case, spacing, and a trailing full
 // stop or exclamation mark are ignored. `story context` matches the same way.
 export function normalizeKnowledge(value) {
-  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "") : "";
+  // The stops match only from the start of their run, so a long run inside
+  // the text stays linear.
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/(?<![.!])[.!]+$/, "") : "";
 }
 
 // The object-state entry with the latest `since` in story time for an

@@ -9725,7 +9725,7 @@ function plainLinks(text) {
 }
 function flattenHeadings(text) {
   return String(text).replace(/^(#+)(?:[ \t]+([^\n]*))?$/gm, (line, hashes, content) => {
-    const heading = String(content ?? "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").trim();
+    const heading = String(content ?? "").replace(/(?:^|(?<![ \t])[ \t]+)#+[ \t]*$/, "").trim();
     if (heading !== "") {
       return heading;
     }
@@ -10117,6 +10117,7 @@ function scanMarkup(text) {
   let unclosed = false;
   let fenceLimit = Infinity;
   let nextOpen = -2;
+  let nextTick = -2;
   let position = 0;
   while (position < text.length) {
     const newline = text.indexOf(`
@@ -10139,8 +10140,11 @@ function scanMarkup(text) {
     if (nextOpen !== -1 && nextOpen < position) {
       nextOpen = text.indexOf("<!--", position);
     }
+    if (nextTick !== -1 && nextTick < position) {
+      nextTick = text.indexOf("`", position);
+    }
     const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
-    const tick = text.indexOf("`", position);
+    const tick = nextTick;
     if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
       position = codeSpanEnd(text, tick, lineEnd);
       continue;
@@ -10512,7 +10516,7 @@ function buildRules(pack) {
   const ambiguous = [...marks.closers].filter((mark) => marks.openers.includes(mark)).join("");
   const plainClosers = charClass([...marks.closers].filter((mark) => !ambiguous.includes(mark)).join(""));
   const ends = [
-    marks.spacedEnds === "" ? null : `${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
+    marks.spacedEnds === "" ? null : `(?<!${anyOf(marks.spacedEnds)})${anyOf(marks.spacedEnds)}+(?: ${anyOf(spacedClosers)})?[${closers}${CLOSING_MARKS}]*(?= |$)`,
     marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+`
   ].filter(Boolean);
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
@@ -11521,7 +11525,7 @@ function tagWord(word, rules) {
   return word;
 }
 function tagKind(quoted, nextWord, rules) {
-  const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
+  const end = quoted.trim().replace(/(?<!["'”’)\]*_])["'”’)\]*_]+$/, "").slice(-1);
   if (end === ".") {
     return "none";
   }
@@ -13045,7 +13049,7 @@ function newerSchemaMessage(version) {
 function canonicalChapterId(number) {
   return `chapter-${String(number).padStart(2, "0")}`;
 }
-var LINK_OR_URL_PATTERN = /(\]\([^)\n]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/[^\s<>)\]]*)/gi;
+var LINK_OR_URL_PATTERN = /(\]\([^)\n]{0,1000}\)|<[a-z][a-z0-9+.-]*:[^>\s]{0,1000}>|\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>)\]]*)/gi;
 function mapOutsideLinks(body, transform) {
   return body.split(LINK_OR_URL_PATTERN).map((part, index) => index % 2 === 1 ? part : transform(part)).join("");
 }
@@ -13104,7 +13108,7 @@ Add notes on the story's voice, texture, and emotional register.
 `;
 }
 function cell2(value) {
-  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
+  return String(value ?? "").replace(/(?:(?<![ \t])[ \t]+)?(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(?<!\\)(\\*)\|/g, "$1$1\\|");
 }
 function characterIndex(storyId, characters, relationshipMap, familyTrees) {
   const rows = characters.length === 0 ? ["| *No characters yet* | | | |"] : characters.map((character) => `| ${cell2(character.name)} | ${cell2(character.role)} | ${cell2(character.status)} | [${character.id}](${character.id}.md) |`);
@@ -14022,15 +14026,23 @@ function nextSceneNumber(project, chapter) {
 var LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>|[^\s]+)/gm;
 function extractMarkdownLinkTargets(body) {
   const targets = [];
-  const pattern = /\]\(([^)]+)\)/g;
-  let match;
-  while ((match = pattern.exec(body)) !== null) {
-    const inner = match[1].trim();
+  let open = body.indexOf("](");
+  while (open !== -1) {
+    const close = body.indexOf(")", open + 2);
+    if (close === -1) {
+      break;
+    }
+    if (close === open + 2) {
+      open = body.indexOf("](", open + 1);
+      continue;
+    }
+    const inner = body.slice(open + 2, close).trim();
     const bracketed = /^<([^>]*)>/.exec(inner);
-    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
+    const target = (bracketed ? bracketed[1] : inner.replace(/(?<!\s)\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
     if (target && !/^(https?:|mailto:|#)/i.test(target)) {
       targets.push(target.split("#")[0].split("?")[0]);
     }
+    open = body.indexOf("](", close + 1);
   }
   for (const definition of body.matchAll(LINK_DEFINITION_PATTERN)) {
     const target = definition[3].replace(/^<|>$/g, "").trim();
@@ -15460,7 +15472,7 @@ function checkStateAgainstStory(project, context, warnings) {
   }
 }
 function normalizeKnowledge(value) {
-  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.!]+$/, "") : "";
+  return typeof value === "string" ? value.trim().toLowerCase().replace(/\s+/g, " ").replace(/(?<![.!])[.!]+$/, "") : "";
 }
 function latestObjectEntry(data, artifactId, context) {
   let latest = null;
@@ -17327,7 +17339,7 @@ function paragraphLabels(book) {
 }
 function openingWords(text, count = 6) {
   const source = String(text);
-  const words = wordSpans(source, /\S*[\p{L}\p{N}]\S*/gu);
+  const words = wordSpans(source, /(?<!\S)\S*[\p{L}\p{N}]\S*/gu);
   const opening = words.length > count ? source.slice(0, words[count].start) : source;
   const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
   return words.length > count ? `${collapsed}…` : collapsed;
@@ -19038,7 +19050,7 @@ function inlineRuns(text) {
         index += run;
       } else {
         const code = text.slice(index + run, end - run);
-        buffer += /^ .*[^ ].* $/.test(code) ? code.slice(1, -1) : code;
+        buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
         index = end;
       }
       continue;
@@ -19182,7 +19194,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
       if (index === texts.length - 1) {
         return text;
       }
-      if (/\\$| {2,}$/.test(lines[index].line)) {
+      if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
         return `${text}${LINE_BREAK}`;
       }
       return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
@@ -26303,7 +26315,7 @@ function notesHtml(site, entity) {
         if (/\\$/.test(line)) {
           return `${line.slice(0, -1).trim()}${LINE_BREAK}`;
         }
-        return / {2,}$/.test(line) ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
+        return line.endsWith("  ") ? `${line.trim()}${LINE_BREAK}` : `${line.trim()} `;
       }).join("");
       out.push(`<p>${inlineHtml(plainLinks(text))}</p>`);
       paragraph = [];
@@ -26572,7 +26584,7 @@ function inkLine(line) {
   const text = inkInline(line.trim());
   return /^[*+\-=]|^(?:INCLUDE|VAR|CONST|LIST|EXTERNAL|TODO)\b/.test(text) ? `\\${text}` : text;
 }
-var HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
+var HARD_BREAK = /(?:(?<! ) {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 function inkProse(body) {
   const out = [];
   for (const paragraph of separateSceneBreaks(body).split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {

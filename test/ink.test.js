@@ -6,7 +6,7 @@ import { runCli } from "../src/cli.js";
 import { inkKnotName, inkSource } from "../src/ink.js";
 import { buildBook, createStoryProject } from "../src/story.js";
 import { derivedIfid } from "../src/twee.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function project(title = "Gull Rock") {
   const cwd = makeTempDir();
@@ -173,6 +173,12 @@ describe("ink build", () => {
     const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
     expect(performance.now() - started).toBeLessThan(2000);
     expect(text).toContain(`=== a ===\n${"一行目の文。".repeat(200000)}\n`);
+  });
+
+  test("a long run of spaces inside a line is read in linear time", () => {
+    const source = (body) => inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
+    expect(source("One  \ntwo   three\nfour")).toContain("=== a ===\nOne\ntwo   three four\n");
+    expectLinearTime(source, (n) => `a${" ".repeat(n)}b\nc`);
   });
 
   test("escapes the title and author tags onto one line each", () => {

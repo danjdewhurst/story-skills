@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { checkContinuity } from "../src/continuity.js";
+import { checkContinuity, normalizeKnowledge } from "../src/continuity.js";
 import {
   checkProjectContinuity,
   createStoryProject,
@@ -12,7 +12,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearTime, makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function writeChapter(root, number, frontmatter) {
   writeMarkdown(path.join(root, "chapters", `chapter-${String(number).padStart(2, "0")}.md`), `
@@ -431,5 +431,11 @@ knowledge-state:
       "continuity/state.md knowledge-state[3] fact Not Kebab must be a kebab-case id",
       "continuity/state.md knowledge-state[4] fact (empty) must be a kebab-case id"
     ]);
+  });
+
+  test("knowledge text drops its closing stops in linear time", () => {
+    expect(normalizeKnowledge("  The Key  Is Lost...!! ")).toBe("the key is lost");
+    expect(normalizeKnowledge("Wait... the key is lost")).toBe("wait... the key is lost");
+    expectLinearTime(normalizeKnowledge, (n) => `${".".repeat(n)}x`);
   });
 });

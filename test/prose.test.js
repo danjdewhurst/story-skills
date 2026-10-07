@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function proseProject(title = "Prose Story") {
   const cwd = makeTempDir();
@@ -122,6 +122,13 @@ describe("prose analysis", () => {
 
     expect(analysis.bookisms).toEqual([{ word: "hissed", count: 1 }, { word: "snapped", count: 1 }]);
     expect(analysis.plainTags).toEqual([{ word: "asked", count: 1 }]);
+  });
+
+  test("long runs of stops or closing marks lint in linear time (#587)", () => {
+    const rules = proseRules({}, []);
+    expect(analyzeChapter("\"Go!**\" she hissed.", rules).bookisms).toEqual([{ word: "hissed", count: 1 }]);
+    expectLinearTime((prose) => analyzeChapter(prose, rules), (n) => `${".".repeat(n)}x`);
+    expectLinearTime((prose) => analyzeChapter(prose, rules), (n) => `"${"*".repeat(n)}x" she said.`);
   });
 
   test("counts echoes inside the window but not across it", () => {

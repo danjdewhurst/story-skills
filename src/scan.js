@@ -582,7 +582,9 @@ export function canonicalChapterId(number) {
 
 // Markdown link destinations, autolinks, and bare URLs: text where a bare id
 // token is part of a path or address, not a reference to this book's record.
-const LINK_OR_URL_PATTERN = /(\]\([^)\n]*\)|<[a-z][a-z0-9+.-]*:[^>\s]*>|\b[a-z][a-z0-9+.-]*:\/\/[^\s<>)\]]*)/gi;
+// Bounded, as plainLinks is, so a long line of unclosed `](` or `<a:`, or of
+// letters and dots that never reach `://`, stays linear.
+const LINK_OR_URL_PATTERN = /(\]\([^)\n]{0,1000}\)|<[a-z][a-z0-9+.-]*:[^>\s]{0,1000}>|\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>)\]]*)/gi;
 
 // Applies `transform` to the parts of `body` outside link destinations and
 // URLs, leaving those untouched.
@@ -651,9 +653,10 @@ Add notes on the story's voice, texture, and emotional register.
 // before a `|` are doubled too, or `\|` in a name would leave the pipe
 // unescaped (or lose the backslash); other markdown escapes are kept. A
 // block scalar's closing newline would leave a trailing space, so the cell
-// is trimmed.
+// is trimmed. Each run of spaces or backslashes matches only from its
+// start, so a long run with no newline or `|` after it stays linear.
 function cell(value) {
-  return String(value ?? "").replace(/[ \t]*(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(\\*)\|/g, "$1$1\\|");
+  return String(value ?? "").replace(/(?:(?<![ \t])[ \t]+)?(?:\r?\n|\r)[ \t]*/g, " ").trim().replace(/(?<!\\)(\\*)\|/g, "$1$1\\|");
 }
 
 export function characterIndex(storyId, characters, relationshipMap, familyTrees) {
@@ -1693,17 +1696,30 @@ export const LINK_DEFINITION_PATTERN = /^( {0,3}\[)([^\]\n]+)\]:[ \t]*(<[^>\n]*>
 // they point at outside the project.
 export function extractMarkdownLinkTargets(body) {
   const targets = [];
-  const pattern = /\]\(([^)]+)\)/g;
-  let match;
-  while ((match = pattern.exec(body)) !== null) {
+  // Each `](` up to the next `)`, as /\]\(([^)]+)\)/g would match, but
+  // found with indexOf: when no `)` follows, that regex scans to the end
+  // again from every `](`, which is quadratic.
+  let open = body.indexOf("](");
+  while (open !== -1) {
+    const close = body.indexOf(")", open + 2);
+    if (close === -1) {
+      break;
+    }
+    if (close === open + 2) {
+      open = body.indexOf("](", open + 1);
+      continue;
+    }
     // `[x](<a.md>)` and `[x](a.md "Title")` both link to a.md. An unquoted
-    // space stays in the target so `(Bad Name.md)` is still reported.
-    const inner = match[1].trim();
+    // space stays in the target so `(Bad Name.md)` is still reported. The
+    // space before a title matches only from the start of its run, so a
+    // long run of spaces stays linear.
+    const inner = body.slice(open + 2, close).trim();
     const bracketed = /^<([^>]*)>/.exec(inner);
-    const target = (bracketed ? bracketed[1] : inner.replace(/\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
+    const target = (bracketed ? bracketed[1] : inner.replace(/(?<!\s)\s+(?:"[^"]*"|'[^']*')$/, "")).trim();
     if (target && !/^(https?:|mailto:|#)/i.test(target)) {
       targets.push(target.split("#")[0].split("?")[0]);
     }
+    open = body.indexOf("](", close + 1);
   }
   // Reference-style definitions: `[label]: ../characters/bo.md`.
   for (const definition of body.matchAll(LINK_DEFINITION_PATTERN)) {

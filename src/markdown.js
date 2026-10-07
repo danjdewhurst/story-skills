@@ -144,7 +144,9 @@ export function plainLinks(text) {
 // spaces), which stays a scene break. Closing hashes go with the markers.
 export function flattenHeadings(text) {
   return String(text).replace(/^(#+)(?:[ \t]+([^\n]*))?$/gm, (line, hashes, content) => {
-    const heading = String(content ?? "").replace(/(?:^|[ \t]+)#+[ \t]*$/, "").trim();
+    // The spaces before closing hashes match only from the start of their
+    // run, so a long run of spaces inside a heading stays linear.
+    const heading = String(content ?? "").replace(/(?:^|(?<![ \t])[ \t]+)#+[ \t]*$/, "").trim();
     if (heading !== "") {
       return heading;
     }
@@ -731,6 +733,7 @@ function scanMarkup(text) {
   // A fence opener this long or longer has no closing line left.
   let fenceLimit = Infinity;
   let nextOpen = -2;
+  let nextTick = -2;
   let position = 0;
   while (position < text.length) {
     const newline = text.indexOf("\n", position);
@@ -751,8 +754,13 @@ function scanMarkup(text) {
     if (nextOpen !== -1 && nextOpen < position) {
       nextOpen = text.indexOf("<!--", position);
     }
+    // Likewise the next backtick is found again only once passed, so many
+    // lines without one stay linear.
+    if (nextTick !== -1 && nextTick < position) {
+      nextTick = text.indexOf("`", position);
+    }
     const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
-    const tick = text.indexOf("`", position);
+    const tick = nextTick;
     if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
       position = codeSpanEnd(text, tick, lineEnd);
       continue;
