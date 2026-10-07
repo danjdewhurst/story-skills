@@ -188,6 +188,12 @@ the back-cover copy (150-200 words), and, for self-publishing, a retailer
 description with the same copy plus a comp line if the user wants one. The
 blurb never reveals the ending.
 
+This skill owns the retailer description: `submission/blurb.md` is its
+only draft, and the `publishing` skill reads it from there rather than
+writing its own. Keep the retailer description in `submission/blurb.md`
+and the `description` field in `story.md` in step when the user
+self-publishes.
+
 ### 7. Build the manuscript
 
 For agents and short-fiction markets, build Shunn manuscript format:
@@ -235,8 +241,6 @@ keywords, BISAC subjects, and missing fields), run:
 story build . --format metadata
 ```
 
-Keep the retailer description in `submission/blurb.md` and the
-`description` field in `story.md` in step when the user self-publishes.
 If `story.md` has an `ai-disclosure`, check each agent's or market's
 policy on AI-assisted work and disclose as they require; see the
 `editorial-review` skill.
