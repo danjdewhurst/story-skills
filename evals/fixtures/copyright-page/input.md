@@ -12,6 +12,7 @@ matter/epigraph.md quotes two lines of a folk song. Its frontmatter has `permiss
 
 What the author has told you:
 - She is publishing under her own name and has not chosen an imprint.
+- This is the first edition, as an ebook and a paperback.
 - She has not bought ISBNs yet and has not decided the release month.
 - The cover is by Jo Arden, who wants the credit "Cover design by Jo Arden".
 - There is no editor to credit.

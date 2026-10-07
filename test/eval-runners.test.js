@@ -54,6 +54,10 @@ describe("run-skill with a stubbed model", () => {
     const [draftCall, judgeCall] = stub.calls;
     expect(draftCall.command).toBe("claude");
     expect(draftCall.args).toContain("claude-opus-5");
+    // Safe mode keeps the caller's CLAUDE.md files, skills, and MCP servers
+    // out of both calls, so the skill is the whole system prompt.
+    expect(draftCall.args).toContain("--safe-mode");
+    expect(judgeCall.args).toContain("--safe-mode");
     expect(draftCall.system).toContain("You are running a story-skills chapter-writing workflow.");
     expect(draftCall.system).toContain("<!-- references/writing-guidelines.md -->");
     // SKILL.md's links to other skills resolve from its folder.
@@ -62,6 +66,8 @@ describe("run-skill with a stubbed model", () => {
     expect(output()).toContain("references: references/writing-guidelines.md, ../line-editing/references/language-conventions.md,");
     expect(promptOf(draftCall.args)).toContain("Petra's supply boat calls.");
     expect(promptOf(judgeCall.args)).toContain(goodDraft.trim());
+    // A plan's commands and file targets are workflow, not invented canon.
+    expect(promptOf(judgeCall.args)).toContain("workflow the draft describes rather than story it tells, such as commands to run");
     // The system prompt file is removed once each call is done.
     expect(fs.existsSync(draftCall.systemFile)).toBe(false);
 
@@ -431,7 +437,7 @@ describe("a fixture's keep option", () => {
   test("branch-choices passes quoted YAML and fails lazy or malformed chapter files", () => {
     const { checks, inputText } = loadFixture(path.join(repoRoot, "evals", "fixtures", "branch-choices"));
     const failed = (draft) => checkDraft(checks, inputText, draft).filter(([ok]) => !ok).map(([, desc]) => desc);
-    const [titleRe, toFiveRe, toSixRe] = checks.required_regex.map((pattern) => `canon kept: /${pattern}/`);
+    const [titleRe, toFiveRe, toSixRe, endsOnChoiceRe] = checks.required_regex.map((pattern) => `canon kept: /${pattern}/`);
     expect(failed(goodChapterFile)).toEqual([]);
     expect(failed(goodChapterFile.replace("title: The Storm", "title: 'The Storm'").replace("to: chapter-05", 'to: "chapter-05"'))).toEqual([]);
 
@@ -456,7 +462,10 @@ describe("a fixture's keep option", () => {
     expect(failed(outside)).toEqual([toSixRe]);
     // The 150-word cap counts the prose under ## Chapter Text, not the frontmatter.
     const padded = `${goodChapterFile}\n${"The wind keeps on at the glass. ".repeat(10)}\n`;
-    expect(failed(padded)).toEqual([expect.stringMatching(/^length of the chapter text 1\d\d words <= 150/)]);
+    expect(failed(padded)).toEqual([endsOnChoiceRe, expect.stringMatching(/^length of the chapter text 1\d\d words <= 150/)]);
+    // The prose ends on the choice: "choose" in its last line, or a question.
+    expect(failed(goodChapterFile.replace("You have to choose.", "Do you ring the bell, or keep the lamp burning?"))).toEqual([]);
+    expect(failed(goodChapterFile.replace("You have to choose.", "You stand at the glass."))).toEqual([endsOnChoiceRe]);
     expect(padded.split(/\s+/).filter(Boolean).length).toBeLessThan(230);
 
     expect(failed(stripPreamble(goodChapterFile))).toEqual(expect.arrayContaining([titleRe, toFiveRe, toSixRe, 'canon kept: "Chapter Text"']));
@@ -490,6 +499,7 @@ describe("compare-outputs with a stubbed judge", () => {
     expect(compareMain(["--model", "judge-m", dirA, dirB, "canon-keeping", "anti-slop"], { spawn: judge("Draft A", calls) })).toBe(0);
     expect(calls).toHaveLength(4);
     expect(calls[0]).toContain("judge-m");
+    expect(calls[0]).toContain("--safe-mode");
     expect(calls.some((args) => promptOf(args).includes("Brief: Draft the Thursday scene"))).toBe(true);
     expect(output()).toContain("canon-keeping: A wins both orders");
     expect(output()).toContain("A: 2  B: 0  ties: 0");
@@ -533,6 +543,19 @@ describe("compare-outputs with a stubbed judge", () => {
     expect(compareMain([dirA, dirB, "canon-keeping"], { spawn: missing })).toBe(1);
     expect(calls).toBe(2);
     expect(output()).toContain("FAIL judge: `claude` not found on PATH.");
+  });
+});
+
+describe("the checker's prose checks", () => {
+  test("read an inline code span as one word, so a command's own spacing is not the draft's", () => {
+    const badlyFormed = (draft) =>
+      checkDraft({}, "", draft)
+        .filter(([ok, desc]) => !ok && desc.startsWith("well formed"))
+        .map(([, desc]) => desc);
+    expect(badlyFormed("Then run `story reindex .`, `story wordcount . --write`, and `story check .`.\n")).toEqual([]);
+    expect(badlyFormed("Then run story reindex . and rest.\n")).toEqual(["well formed: no space before punctuation"]);
+    // Phrase checks still read the code.
+    expect(checkDraft({ required: ["story reindex"] }, "", "Run `story reindex .` now.\n")[0]).toEqual([true, 'canon kept: "story reindex"']);
   });
 });
 

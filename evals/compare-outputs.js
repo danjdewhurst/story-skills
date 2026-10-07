@@ -30,7 +30,9 @@
  * time, so a loss here is a flag to read the two drafts, not a verdict.
  *
  * Requires the Claude Code CLI (`claude`) on PATH with working credentials,
- * unless --no-judge is passed.
+ * unless --no-judge is passed. It runs with --safe-mode, so the caller's
+ * CLAUDE.md files, skills, plugins, hooks, and MCP servers stay out of the
+ * judge's context.
  */
 
 import { spawnSync } from "node:child_process";
@@ -64,7 +66,7 @@ Draft 2:
 Reply with exactly one character: 1 or 2.`;
 
 function ask(spawn, model, prompt) {
-  const args = ["-p", prompt, "--model", model, "--tools", "", "--output-format", "text"];
+  const args = ["-p", prompt, "--model", model, "--tools", "", "--safe-mode", "--output-format", "text"];
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = spawn("claude", args, {
       encoding: "utf8",

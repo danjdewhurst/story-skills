@@ -33,7 +33,10 @@
  * evals/compare-outputs.js.
  *
  * Requires the Claude Code CLI (`claude`) on PATH with working
- * credentials. The model is claude-opus-5 unless --model says otherwise;
+ * credentials. Every call runs with --safe-mode, so the caller's CLAUDE.md
+ * files, skills, plugins, hooks, and MCP servers stay out of the model's
+ * context and the system prompt is the skill alone. The model is
+ * claude-opus-5 unless --model says otherwise;
  * --judge-model picks a different model for the canon check (default stays
  * claude-opus-5 regardless of --model, since a smaller judge over-flags).
  */
@@ -95,7 +98,7 @@ Draft:
 
 List every canon claim the draft makes that a reader of the context could not have taken from it: a new named character, place, or object; a new rule of the world; a resolved mystery or answered open question; a changed established fact (a name, age, date, cause of death, or an object behaving differently than stated); an event the context never mentions.
 
-Do not list: rewording, reordering, or cuts; showing rather than telling; ordinary sensory detail consistent with the location (smells, weather, textures); a character's plausible thoughts or feelings; bracketed gap markers such as [name needed]; a heading that names the scene.
+Do not list: rewording, reordering, or cuts; showing rather than telling; ordinary sensory detail consistent with the location (smells, weather, textures); a character's plausible thoughts or feelings; bracketed gap markers such as [name needed]; a heading that names the scene; workflow the draft describes rather than story it tells, such as commands to run, project files to check or update, and skills, templates, or rules to follow.
 
 Reply with a JSON array of short strings, one per invented canon claim, and nothing else. Reply with [] if there are none.`;
 
@@ -248,6 +251,7 @@ function claudeCall(spawn, model, prompt, systemText, sysFile) {
     "-p", prompt,
     "--model", model,
     "--tools", "",
+    "--safe-mode",
     "--output-format", "text",
     "--system-prompt-file", sysFile,
   ];
