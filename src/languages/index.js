@@ -53,7 +53,8 @@ export const LANGUAGE_ALIASES = {
   iw: "he", in: "id", ji: "yi", jw: "jv", mo: "ro",
   ara: "ar", chi: "zh", zho: "zh", deu: "de", ger: "de", eng: "en", spa: "es", fra: "fr", fre: "fr",
   fas: "fa", per: "fa", heb: "he", hin: "hi", ita: "it", jpn: "ja", kor: "ko", nld: "nl", dut: "nl", pol: "pl", por: "pt", rus: "ru",
-  swe: "sv", tha: "th", tur: "tr", ukr: "uk"
+  swe: "sv", tha: "th", tur: "tr", ukr: "uk",
+  dan: "da", fin: "fi", div: "dv", kur: "ku", pus: "ps", snd: "sd", uig: "ug", urd: "ur", yid: "yi"
 };
 
 // Grandfathered tags with a modern form, in lower case, as [tag, macrolanguage].
