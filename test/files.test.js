@@ -1026,11 +1026,24 @@ describe("sweep fixes", () => {
     fs.symlinkSync(outside, path.join(root, "continuity", "exemptions.md"));
     fs.rmSync(path.join(root, "plot", "timeline.md"));
     fs.symlinkSync("/dev/zero", path.join(root, "plot", "timeline.md"));
-    const started = performance.now();
-    expect(computeWordCounts(root).total).toBe(0);
-    expect(validateLinks(root).ok).toBe(false);
-    expect(messages(validateProject(root).errors).join("\n")).toContain("through symlink");
-    expect(performance.now() - started).toBeLessThan(5000);
+    // In a child, so a read that never ends fails the test rather than
+    // stalling the suite. The timeout is the bound the test relies on.
+    const script = `
+      const story = await import(${JSON.stringify(pathToFileURL(path.join(SRC, "story.js")).href)});
+      const root = process.argv[1];
+      console.log(JSON.stringify({
+        total: story.computeWordCounts(root).total,
+        linksOk: story.validateLinks(root).ok,
+        errors: story.validateProject(root).errors.map((finding) => finding.message)
+      }));
+    `;
+    const result = spawnSync(process.execPath, ["-e", script, root], { encoding: "utf8", timeout: 20000 });
+    expect(result.signal).toBeNull();
+    expect(result.status, result.stderr).toBe(0);
+    const outcome = JSON.parse(result.stdout);
+    expect(outcome.total).toBe(0);
+    expect(outcome.linksOk).toBe(false);
+    expect(outcome.errors.join("\n")).toContain("through symlink");
   });
 
   test.skipIf(!fs.existsSync("/dev/null"))("a device file is refused rather than read", async () => {
