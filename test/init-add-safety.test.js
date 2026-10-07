@@ -233,9 +233,13 @@ describe("add", () => {
     expect(frontmatter(path.join(root, "continuity", "clues", "the-torn-page.md")).status).toBe("planted");
     expect(frontmatter(path.join(root, "continuity", "promises", "unplanted.md")).status).toBe("planned");
     expect(frontmatter(path.join(root, "continuity", "clues", "overridden.md")).status).toBe("planned");
-    // Planted in a chapter not written yet is still a plan.
+    // Planted in a chapter with no file yet is still a plan; a chapter that
+    // has a file counts as written, even an outline, as chapter-01 is here.
+    expect(frontmatter(path.join(root, "chapters", "chapter-01.md")).status).toBe("outline");
     expect(invoke(cwd, ["add", "promise", "Later", "--planted", "chapter-05", "--path", root]).code).toBe(0);
+    expect(invoke(cwd, ["add", "clue", "Later clue", "--planted", "chapter-05", "--payoff", "chapter-06", "--path", root]).code).toBe(0);
     expect(frontmatter(path.join(root, "continuity", "promises", "later.md")).status).toBe("planned");
+    expect(frontmatter(path.join(root, "continuity", "clues", "later-clue.md")).status).toBe("planned");
   });
 
   test("refuses a name with a line or paragraph separator and writes nothing", () => {
