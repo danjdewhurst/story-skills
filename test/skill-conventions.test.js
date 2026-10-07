@@ -881,3 +881,82 @@ test("the scene template records character knowledge as character + knowledge", 
     }
   }
 });
+
+// Skills name each other's reference files in inline code
+// (`scene-craft/references/try-fail.md`), which check:links skips, so a
+// renamed or mistyped reference would go unnoticed. And each skill's
+// reference files are listed in its SKILL.md and in the skills catalogue, so
+// a new reference, such as a genre-craft pack, is not left out of either.
+
+const REFERENCE_PATH = /`((?:\.\.\/)*([a-z0-9-]+)\/references\/([A-Za-z0-9._-]+\.md))`/g;
+
+// The text with every fenced block blanked, so only prose is scanned.
+function outsideFences(text) {
+  let fence = null;
+  return text.split("\n").map((line) => {
+    if (fence) {
+      if (line.trim().startsWith(fence)) {
+        fence = null;
+      }
+      return "";
+    }
+    const open = line.match(FENCE);
+    if (open) {
+      fence = open[1];
+      return "";
+    }
+    return line;
+  }).join("\n");
+}
+
+// Each inline-code `<skill>/references/<file>.md` path in prose that names
+// no file under skills/.
+function referencePathProblems(text) {
+  return [...outsideFences(text).matchAll(REFERENCE_PATH)]
+    .filter(([, , skill, file]) => !fs.existsSync(path.join(skillsDir, skill, "references", file)))
+    .map(([, code]) => code);
+}
+
+describe("skill references", () => {
+  test("detects an inline reference path that names no file", () => {
+    expect(referencePathProblems("see `scene-craft/references/try-fail.md` and `../line-editing/references/read-aloud-guide.md`")).toEqual([]);
+    expect(referencePathProblems("see `scene-craft/references/no-such.md` or `../nowhere/references/a.md`")).toEqual([
+      "scene-craft/references/no-such.md",
+      "../nowhere/references/a.md"
+    ]);
+    expect(referencePathProblems("```text\n`scene-craft/references/no-such.md`\n```")).toEqual([]);
+  });
+
+  test("every inline reference path under skills/ names a file", () => {
+    let paths = 0;
+    const problems = markdownFiles(skillsDir).flatMap((file) => {
+      const text = fs.readFileSync(file, "utf8");
+      paths += [...outsideFences(text).matchAll(REFERENCE_PATH)].length;
+      return referencePathProblems(text).map((problem) => `${path.relative(skillsDir, file)}: ${problem}`);
+    });
+    // Guard against a matcher that silently stops finding paths.
+    expect(paths).toBeGreaterThan(50);
+    expect(problems).toEqual([]);
+  });
+
+  test("every reference file is listed in its SKILL.md and in docs/skills.md", () => {
+    const catalogue = fs.readFileSync(path.join(repoRoot, "docs", "skills.md"), "utf8");
+    const missing = [];
+    for (const name of skills) {
+      const dir = path.join(skillsDir, name, "references");
+      if (!fs.existsSync(dir)) {
+        continue;
+      }
+      const skill = fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8");
+      for (const file of fs.readdirSync(dir).filter((entry) => entry.endsWith(".md")).sort()) {
+        if (!skill.includes(`\`references/${file}\``) && !skill.includes(`](references/${file})`)) {
+          missing.push(`skills/${name}/SKILL.md does not list references/${file}`);
+        }
+        if (!catalogue.includes(`](../skills/${name}/references/${file})`)) {
+          missing.push(`docs/skills.md does not list skills/${name}/references/${file}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+});
