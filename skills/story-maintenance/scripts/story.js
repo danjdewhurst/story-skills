@@ -30311,7 +30311,7 @@ function formatCommandsHelp() {
   }
   return lines;
 }
-var CONFIG_REPAIR_COMMANDS = new Set(["validate", "check", "report", "next", "doctor"]);
+var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
