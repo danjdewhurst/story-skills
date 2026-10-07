@@ -153,6 +153,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Prose checks no longer fail under Node with `Maximum call stack size exceeded` on a chapter of about 200,000 sentences. ([#708](https://github.com/danjdewhurst/story-skills/issues/708))
 - The draft-next-chapter workflow accepts a drafted story file whose name has non-ASCII letters, a double quote, or a tab, such as `characters/José.md`.
   - Before, the publish job refused the whole draft, because git quotes such a name in its log and the check then found no `.md` ending.
+- A line that starts with three backticks and closes them on the same line is prose, not a code fence, so its words count. ([#704](https://github.com/danjdewhurst/story-skills/issues/704))
+  - Before, the line started a fence, so its words left the counts and the next line of backticks closed it.
+- A backslash-escaped backtick no longer opens a code span, so an HTML comment after it is removed from builds and counts. ([#706](https://github.com/danjdewhurst/story-skills/issues/706))
+  - The rest of an escaped run still opens a span, as CommonMark reads it.
 
 ## [0.23.0] - 2026-10-07
 

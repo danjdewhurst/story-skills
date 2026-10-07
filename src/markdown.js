@@ -1300,7 +1300,9 @@ function scanMarkup(text) {
       closeSpan = null;
     }
     if (position === 0 || text[position - 1] === "\n") {
-      const marker = /^ {0,3}(`{3,})/.exec(text.slice(position, lineEnd));
+      // A backtick opener has no backtick after its run, as CommonMark reads
+      // one, so ```x``` is a code span and not a fence.
+      const marker = /^ {0,3}(`{3,})(?=[^`]*$)/.exec(text.slice(position, lineEnd));
       if (marker) {
         fences ??= fenceCloser(text);
         const end = fences(lineEnd, marker[1].length);
@@ -1322,6 +1324,12 @@ function scanMarkup(text) {
     const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
     const tick = nextTick;
     if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
+      // A backslash escapes the first backtick of a run, and the rest of the
+      // run is read on its own, as codeSpans reads it.
+      if (escaped(text, tick)) {
+        position = tick + 1;
+        continue;
+      }
       // A code span closes on its own line; an unmatched run is plain text.
       let runEnd = tick;
       while (text[runEnd] === "`") {
@@ -1447,7 +1455,8 @@ function closedFences(lines) {
   const fences = [];
   let open = null;
   for (const [index, line] of lines.entries()) {
-    const marker = /^ {0,3}(`{3,})/.exec(line);
+    // As in scanMarkup, a line with a backtick after its run opens no fence.
+    const marker = /^ {0,3}(`{3,})(?=[^`]*$)/.exec(line);
     if (!marker) {
       continue;
     }
