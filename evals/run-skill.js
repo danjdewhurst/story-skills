@@ -8,13 +8,15 @@
  *                           [fixture-name ...]
  *
  * Each fixture's input.md is sent to `claude -p` with the skill's SKILL.md
- * and references as the system prompt and the fixture's brief as the
- * instruction. Each fixture runs under the skill named by its checks.json
+ * and the reference files it names (see skillReferences) as the system
+ * prompt and the fixture's brief as the instruction. Each fixture runs under
+ * the skill named by its checks.json
  * (`skill`); pass --skill to override every fixture at once (useful for
  * cross-skill experiments). Drafts land in DIR (default evals/outputs/) as
  * <fixture-name>.md, then run-evals.js checks them. A chapter draft keeps
  * only the text under `## Chapter Text` unless the fixture's checks.json sets
- * `"keep": "file"`, which scores the whole file, frontmatter included. Run
+ * `"keep": "file"`, which asks for and scores the whole file, frontmatter
+ * included. Run
  * provenance lands next to each draft: <fixture-name>.prompt.md (the exact prompt sent),
  * <fixture-name>.system.sha256 (hash of the system prompt), and
  * <fixture-name>.judge-raw.txt (the judge's raw reply). Model, temperature,
@@ -22,7 +24,9 @@
  * flags, so sampling always uses the CLI defaults. A second model call
  * then lists any canon claim the draft makes that the context does not
  * state or imply; one invented claim fails the fixture. Pass --no-judge to
- * skip that call. Exits non-zero if any fixture fails.
+ * skip that call. A draft or judge call that fails after its retries fails
+ * the fixture too, and the summary counts it. Exits non-zero if any fixture
+ * fails.
  *
  * Pass --no-skill to produce a baseline with the same briefs and no skill
  * loaded, into a different --out directory, then compare the two with
@@ -44,18 +48,24 @@ import { FIXTURES_DIR, fillTemplate, loadFixture, checkDraft } from "./run-evals
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(here, "..");
+const SKILLS_DIR = path.join(ROOT, "skills");
 
 const DEFAULT_MODEL = "claude-opus-5";
 const DEFAULT_JUDGE_MODEL = "claude-opus-5";
 const CLAUDE_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
 
+// Files a reference names only load while the reference text stays within
+// this many characters. Files SKILL.md names itself always load.
+export const MAX_REFERENCE_CHARS = 48_000;
+
 // A fixture's `keep` (checks.json) says what of the reply is scored:
 // "chapter-text" (the default) keeps only the prose under `## Chapter Text`,
-// "file" keeps the whole chapter file, frontmatter included, for fixtures
-// that check fields such as `choices`.
+// "file" keeps the whole reply, frontmatter included, for fixtures whose
+// brief asks for a file (a chapter's `choices`, a feedback file, a style
+// sheet, an entity's frontmatter).
 const PROSE_RULE = "Output rules for this run: return only the final draft prose. No preamble, no outline, no change note, no diagnostic audit, no closing remark.";
-const FILE_RULE = "Output rules for this run: return only the complete file the brief asks for, frontmatter included. No preamble, no change note, no diagnostic audit, no closing remark.";
+const FILE_RULE = "Output rules for this run: return only the file content the brief asks for, frontmatter included. No preamble, no change note, no diagnostic audit, no closing remark.";
 
 function outputRule(keep) {
   return keep === "file" ? FILE_RULE : PROSE_RULE;
@@ -88,25 +98,81 @@ Do not list: rewording, reordering, or cuts; showing rather than telling; ordina
 
 Reply with a JSON array of short strings, one per invented canon claim, and nothing else. Reply with [] if there are none.`;
 
+// A path a skill file names: a link target or a code span ending in `.md`,
+// with any `#anchor` dropped.
+const PATH_MENTION_RE = /(?:\]\(|`)([^\s`()<>]+?\.md)(?:#[^\s`()]*)?(?=[`)])/g;
+
+// The skill files `file` names, resolved from its folder as a link would be,
+// in the order it names them. Only existing files inside `skillsDir` count,
+// and never a SKILL.md: a project path such as `chapters/chapter-{NN}.md`, a
+// path that leaves the skills folder, or another skill's instructions is
+// not reference material.
+function namedFiles(file, text, skillsDir) {
+  const files = [];
+  for (const m of text.matchAll(PATH_MENTION_RE)) {
+    const target = path.resolve(path.dirname(file), m[1]);
+    const rel = path.relative(skillsDir, target);
+    if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) continue;
+    if (path.basename(target) === "SKILL.md") continue;
+    if (!fs.statSync(target, { throwIfNoEntry: false })?.isFile()) continue;
+    files.push(target);
+  }
+  return files;
+}
+
+/**
+ * The reference files an agent running the skill would read: the files
+ * SKILL.md names (`references/x.md`, or another skill's
+ * `../feedback-triage/references/feedback-template.md`), then the files
+ * those name, breadth-first. Every file SKILL.md names loads. A file only a
+ * reference names loads while the total reference text stays within `cap`
+ * characters; past that it is left out, and so are the files only it names.
+ * Each file has a label: its path from the skill folder, as SKILL.md would
+ * write it.
+ */
+export function skillReferences(skillDir, { skillsDir = SKILLS_DIR, cap = MAX_REFERENCE_CHARS } = {}) {
+  const skillFile = path.join(skillDir, "SKILL.md");
+  const label = (file) => path.relative(skillDir, file).split(path.sep).join("/");
+  const seen = new Set([skillFile]);
+  const loaded = [];
+  const leftOut = [];
+  let chars = 0;
+  let level = namedFiles(skillFile, fs.readFileSync(skillFile, "utf8"), skillsDir);
+  for (let depth = 1; level.length > 0; depth++) {
+    const next = [];
+    for (const file of level) {
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const text = fs.readFileSync(file, "utf8");
+      if (depth > 1 && chars + text.length > cap) {
+        leftOut.push(label(file));
+        continue;
+      }
+      chars += text.length;
+      loaded.push({ label: label(file), text });
+      next.push(...namedFiles(file, text, skillsDir));
+    }
+    level = next;
+  }
+  return { loaded, leftOut, chars };
+}
+
 function buildSystemPrompt(skillName, withSkill, keep) {
-  if (!withSkill) return baselineHeader(keep);
-  const skillDir = path.join(ROOT, "skills", skillName);
+  if (!withSkill) return { text: baselineHeader(keep), references: null };
+  const skillDir = path.join(SKILLS_DIR, skillName);
   if (!fs.existsSync(path.join(skillDir, "SKILL.md"))) {
     throw new Error(`unknown skill "${skillName}": no ${path.join("skills", skillName, "SKILL.md")}`);
   }
-  const header = `You are running a story-skills ${skillName} workflow. The skill instructions and reference material follow. Apply them to the user's request.
+  const header = `You are running a story-skills ${skillName} workflow. The skill's SKILL.md follows, then the reference files it names, each under a comment with its path from the skill folder. Apply them to the user's request.
 
 ${outputRule(keep)}
 `;
+  const references = skillReferences(skillDir);
   const parts = [header, fs.readFileSync(path.join(skillDir, "SKILL.md"), "utf8")];
-  const refsDir = path.join(skillDir, "references");
-  if (fs.existsSync(refsDir)) {
-    for (const name of fs.readdirSync(refsDir).sort()) {
-      if (!name.endsWith(".md")) continue;
-      parts.push(`\n\n<!-- references/${name} -->\n\n` + fs.readFileSync(path.join(refsDir, name), "utf8"));
-    }
+  for (const ref of references.loaded) {
+    parts.push(`\n\n<!-- ${ref.label} -->\n\n` + ref.text);
   }
-  return parts.join("\n");
+  return { text: parts.join("\n"), references };
 }
 
 function sha256(text) {
@@ -237,14 +303,48 @@ export function stripPreamble(text, keep = "chapter-text") {
   return body.join("\n").trim() + "\n";
 }
 
-function parseJudgeJson(raw) {
-  const m = raw.match(/\[[\s\S]*\]/);
-  if (!m) throw new Error(`judge did not return a JSON array: ${raw.slice(0, 200)}`);
-  const parsed = JSON.parse(m[0]);
-  if (!Array.isArray(parsed) || !parsed.every((s) => typeof s === "string")) {
-    throw new Error(`judge returned a non-string array: ${m[0].slice(0, 200)}`);
+// The end (exclusive) of the bracketed span that opens at `start`, skipping
+// brackets inside JSON strings, or -1 if it never closes.
+function closingBracket(text, start) {
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "[") depth++;
+    else if (ch === "]" && --depth === 0) return i + 1;
   }
-  return parsed;
+  return -1;
+}
+
+// The judge is told to reply with the array alone, but a reply can carry
+// prose around it, and that prose can hold brackets ("[name needed]"). Take
+// the last span that parses as JSON; a nested array is part of its parent.
+function lastJsonArray(raw) {
+  let found = null;
+  for (let i = raw.indexOf("["); i >= 0; i = raw.indexOf("[", i + 1)) {
+    const end = closingBracket(raw, i);
+    if (end < 0) continue;
+    try {
+      found = { value: JSON.parse(raw.slice(i, end)), text: raw.slice(i, end) };
+      i = end - 1;
+    } catch {
+      // A bracket in the judge's prose, not JSON.
+    }
+  }
+  return found;
+}
+
+export function parseJudgeJson(raw) {
+  const found = lastJsonArray(raw);
+  if (!found) throw new Error(`judge did not return a JSON array: ${raw.slice(0, 200)}`);
+  if (!found.value.every((s) => typeof s === "string")) {
+    throw new Error(`judge returned a non-string array: ${found.text.slice(0, 200)}`);
+  }
+  return found.value;
 }
 
 export function programArgs(argv = process.argv) {
@@ -317,7 +417,6 @@ export function main(argv, { spawn = spawnSync } = {}) {
   // future reader knows sampling was not pinned.
   console.log(`temperature: default (not settable via claude -p)`);
   console.log(`seed: default (not settable via claude -p)`);
-  let allOk = true;
   const report = [];
   for (const name of names) {
     const fixtureDir = path.join(FIXTURES_DIR, name);
@@ -325,7 +424,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
     // Each fixture runs under the skill it declares; an explicit --skill
     // overrides every fixture (useful for cross-skill experiments).
     const skillName = opts.withSkill ? (opts.skillOverridden ? opts.skill : checks.skill || opts.skill) : opts.skill;
-    const systemPrompt = buildSystemPrompt(skillName, opts.withSkill, checks.keep);
+    const { text: systemPrompt, references } = buildSystemPrompt(skillName, opts.withSkill, checks.keep);
     // Clear stale outputs first so a failed run never presents a previous
     // run's draft, claims, or judge reply as current results.
     for (const ext of [".md", ".claims.json", ".judge-raw.txt"]) {
@@ -338,6 +437,10 @@ export function main(argv, { spawn = spawnSync } = {}) {
     const prompt = `${checks.brief}\n\nText:\n\n${inputText}`;
     console.log(`\n${name}: drafting...`);
     console.log(`  model: ${opts.model}, skill: ${opts.withSkill ? skillName : "(none)"}, temperature: default, seed: default`);
+    if (references) {
+      const leftOut = references.leftOut.length > 0 ? `; left out over the ${MAX_REFERENCE_CHARS}-character cap: ${references.leftOut.join(", ")}` : "";
+      console.log(`  references: ${references.loaded.map((r) => r.label).join(", ") || "(none)"} (${references.chars} characters)${leftOut}`);
+    }
     console.log(`  system sha256: ${sha256(systemPrompt)}`);
     // Provenance saved next to the draft so a run can be audited later.
     fs.writeFileSync(path.join(opts.out, `${name}.prompt.md`), prompt, "utf8");
@@ -347,7 +450,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
       draft = stripPreamble(claudeText(spawn, opts.model, prompt, systemPrompt), checks.keep);
     } catch (err) {
       console.log(`  FAIL draft call: ${err.message}`);
-      allOk = false;
+      report.push({ fixture: name, ok: false, detail: "draft call failed" });
       continue;
     }
     const draftPath = path.join(opts.out, `${name}.md`);
@@ -355,6 +458,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
 
     const results = checkDraft(checks, inputText, draft);
     const failures = results.filter(([ok]) => !ok).map(([, desc]) => desc);
+    const checker = `checker ${results.length - failures.length}/${results.length}`;
     console.log(`  checker: ${results.length - failures.length}/${results.length} passed`);
     for (const desc of failures) console.log(`  FAIL ${desc}`);
 
@@ -368,7 +472,7 @@ export function main(argv, { spawn = spawnSync } = {}) {
         fs.writeFileSync(path.join(opts.out, `${name}.claims.json`), JSON.stringify(claims, null, 2) + "\n", "utf8");
       } catch (err) {
         console.log(`  FAIL judge: ${err.message}`);
-        allOk = false;
+        report.push({ fixture: name, ok: false, detail: `${checker}, judge failed` });
         continue;
       }
       if (claims.length > 0) {
@@ -379,15 +483,18 @@ export function main(argv, { spawn = spawnSync } = {}) {
       }
     }
     const ok = failures.length === 0 && claims.length === 0;
-    if (!ok) allOk = false;
-    report.push({ fixture: name, ok, checks: `${results.length - failures.length}/${results.length}`, claims: claims.length });
+    report.push({ fixture: name, ok, detail: `${checker}, invented claims ${claims.length}` });
   }
 
+  // Every selected fixture has a line here, including one whose draft or
+  // judge call failed, so a failed call cannot drop out of the count.
+  const passed = report.filter((r) => r.ok).length;
   console.log(`\nmodel: ${opts.model}`);
   for (const r of report) {
-    console.log(`  ${r.ok ? "PASS" : "FAIL"} ${r.fixture} (checker ${r.checks}, invented claims ${r.claims})`);
+    console.log(`  ${r.ok ? "PASS" : "FAIL"} ${r.fixture} (${r.detail})`);
   }
-  return allOk ? 0 : 1;
+  console.log(`${passed} of ${report.length} fixtures passed`);
+  return passed === report.length ? 0 : 1;
 }
 
 const invoked =

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { main as compareMain } from "../evals/compare-outputs.js";
-import { main as runSkillMain, stripPreamble, unwrapFence } from "../evals/run-skill.js";
+import { MAX_REFERENCE_CHARS, main as runSkillMain, skillReferences, stripPreamble, unwrapFence } from "../evals/run-skill.js";
 import { checkDraft, loadFixture } from "../evals/run-evals.js";
 
 // Both runners call `claude -p` through an injected spawn, so these tests
@@ -56,6 +56,10 @@ describe("run-skill with a stubbed model", () => {
     expect(draftCall.args).toContain("claude-opus-5");
     expect(draftCall.system).toContain("You are running a story-skills chapter-writing workflow.");
     expect(draftCall.system).toContain("<!-- references/writing-guidelines.md -->");
+    // SKILL.md's links to other skills resolve from its folder.
+    expect(draftCall.system).toContain("<!-- ../line-editing/references/language-conventions.md -->\n\n# Dialogue And Punctuation By Language");
+    expect(draftCall.system).toContain("<!-- ../story-maintenance/references/conventions.md -->");
+    expect(output()).toContain("references: references/writing-guidelines.md, ../line-editing/references/language-conventions.md,");
     expect(promptOf(draftCall.args)).toContain("Petra's supply boat calls.");
     expect(promptOf(judgeCall.args)).toContain(goodDraft.trim());
     // The system prompt file is removed once each call is done.
@@ -87,6 +91,48 @@ describe("run-skill with a stubbed model", () => {
       expect(output()).toMatch(/FAIL judge: judge (did not return a JSON array|returned a non-string array)/);
       expect(fs.existsSync(path.join(out, "canon-keeping.claims.json"))).toBe(false);
     }
+  });
+
+  test("the judge's last JSON array counts, past brackets in its prose", () => {
+    const cases = [
+      ['The draft keeps [name needed] as a gap.\n["Petra owns a radio"]', 1],
+      ['["the [name needed] marker names Ana", "a \\"quoted\\" ] bracket"]', 2],
+      ["Gap markers such as [name needed] are fine.\n\n[]", 0],
+      ['First pass: ["Petra owns a radio"]\nOn reflection the context says so. Final: []', 0],
+      ['[["nested"]] is not a flat list.\n["Petra owns a radio"]', 1],
+    ];
+    for (const [judge, count] of cases) {
+      logs.length = 0;
+      const out = makeTempDir("story-run-skill-");
+      expect(runSkillMain(["--out", out, "canon-keeping"], { spawn: modelStub({ judge }).spawn })).toBe(count === 0 ? 0 : 1);
+      expect(JSON.parse(fs.readFileSync(path.join(out, "canon-keeping.claims.json"), "utf8"))).toHaveLength(count);
+      expect(output()).not.toContain("FAIL judge");
+    }
+    logs.length = 0;
+    expect(runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge: "Claims: [" }).spawn })).toBe(1);
+    expect(output()).toContain("FAIL judge: judge did not return a JSON array: Claims: [");
+  });
+
+  test("a failed draft or judge call stays in the summary and fails the run", () => {
+    const out = makeTempDir("story-run-skill-");
+    const goodLamp = fs.readFileSync(path.join(repoRoot, "evals", "examples", "no-invention.md"), "utf8");
+    const failed = { status: 1, stdout: "", stderr: "overloaded" };
+    const { spawn } = modelStub({
+      // anti-slop's draft call fails; canon-keeping and no-invention draft.
+      draft: (call) => {
+        const brief = promptOf(call.args);
+        if (brief.startsWith("Rewrite this draft")) return failed;
+        return ok(brief.startsWith("Describe the lamp room") ? goodLamp : goodDraft);
+      },
+      // The judge fails on no-invention's draft only.
+      judge: (call) => (promptOf(call.args).includes(`<draft>\n${goodLamp.trim()}`) ? failed : ok("[]")),
+    });
+    expect(runSkillMain(["--out", out, "anti-slop", "canon-keeping", "no-invention"], { spawn })).toBe(1);
+    const summary = output().slice(output().lastIndexOf("model: claude-opus-5\n"));
+    expect(summary).toContain("  FAIL anti-slop (draft call failed)");
+    expect(summary).toMatch(/ {2}PASS canon-keeping \(checker (\d+)\/\1, invented claims 0\)/);
+    expect(summary).toMatch(/ {2}FAIL no-invention \(checker (\d+)\/\1, judge failed\)/);
+    expect(summary).toEndWith("1 of 3 fixtures passed");
   });
 
   test("a baseline run uses no skill, skips the judge, and fails checker misses", () => {
@@ -134,6 +180,81 @@ describe("run-skill with a stubbed model", () => {
     expect(runSkillMain(["--out", out, "canon-keeping"], { spawn: missing.spawn })).toBe(1);
     expect(missing.calls).toHaveLength(1);
     expect(output()).toContain("FAIL draft call: Claude Code CLI (`claude`) not found on PATH.");
+  });
+});
+
+describe("the reference files a skill loads", () => {
+  // Writes `files` (path from the skills folder -> text) into a skills
+  // folder inside a fresh temp folder, and returns the skills folder.
+  function skillsTree(files) {
+    const dir = path.join(makeTempDir("story-skills-tree-"), "skills");
+    for (const [rel, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), text);
+    }
+    return dir;
+  }
+
+  test("follows the links SKILL.md names, then theirs, breadth-first, under the cap", () => {
+    const skillsDir = skillsTree({
+      "a/SKILL.md": [
+        "Read `references/big.md` first, then [the template](../b/references/template.md#fields).",
+        "Write `chapters/chapter-{NN}.md`, never `../b/SKILL.md`, `../../outside.md`, or `references/missing.md`.",
+        "See `references/big.md` again and `references/small.md`.",
+      ].join("\n"),
+      "a/references/big.md": `${"x".repeat(80)} names \`deep.md\` and \`../../c/references/far.md\``,
+      "a/references/small.md": "small, names `../../b/references/template.md` and `huge.md`",
+      "a/references/deep.md": "deep",
+      "a/references/huge.md": "h".repeat(200),
+      "a/references/unnamed.md": "never named",
+      "b/SKILL.md": "another skill",
+      "b/references/template.md": "**Where:** {label}",
+      "c/references/far.md": "far, names `../../a/references/huge.md`",
+    });
+    fs.writeFileSync(path.join(skillsDir, "..", "outside.md"), "outside");
+    const skillDir = path.join(skillsDir, "a");
+    const size = (rel) => fs.readFileSync(path.join(skillsDir, rel), "utf8").length;
+    const direct = size("a/references/big.md") + size("b/references/template.md") + size("a/references/small.md");
+
+    // Room for deep.md and far.md but not huge.md, which small.md names first.
+    const refs = skillReferences(skillDir, { skillsDir, cap: direct + size("a/references/deep.md") + size("c/references/far.md") });
+    expect(refs.loaded.map((r) => r.label)).toEqual([
+      "references/big.md",
+      "../b/references/template.md",
+      "references/small.md",
+      "references/deep.md",
+      "../c/references/far.md",
+    ]);
+    expect(refs.loaded[1].text).toBe("**Where:** {label}");
+    expect(refs.leftOut).toEqual(["references/huge.md"]);
+    expect(refs.chars).toBe(refs.loaded.reduce((n, r) => n + r.text.length, 0));
+
+    // The files SKILL.md names load whatever their size; the rest wait for room.
+    const tight = skillReferences(skillDir, { skillsDir, cap: 10 });
+    expect(tight.loaded.map((r) => r.label)).toEqual(["references/big.md", "../b/references/template.md", "references/small.md"]);
+    expect(tight.leftOut).toEqual(["references/deep.md", "../c/references/far.md", "references/huge.md"]);
+    expect(skillReferences(skillDir, { skillsDir }).leftOut).toEqual([]);
+    expect(MAX_REFERENCE_CHARS).toBe(48_000);
+  });
+
+  test("the reader-panel fixture sees the feedback template its banned_regex checks", () => {
+    const out = makeTempDir("story-run-skill-");
+    const example = fs.readFileSync(path.join(repoRoot, "evals", "examples", "reader-panel.md"), "utf8");
+    const stub = modelStub({ draft: example });
+    expect(runSkillMain(["--out", out, "reader-panel"], { spawn: stub.spawn })).toBe(0);
+    const system = stub.calls[0].system;
+    expect(system).toContain("<!-- references/line-editor.md -->");
+    expect(system).toContain("<!-- ../feedback-triage/references/feedback-template.md -->");
+    expect(system).toContain("- **Where:** {paragraph label in the current build");
+    // A file SKILL.md never names is not loaded, and no SKILL.md but its own.
+    expect(system.match(/^name: /gm)).toHaveLength(1);
+  });
+
+  test("premise-workshop loads the other skills' references it links to", () => {
+    const stub = modelStub({ draft: fs.readFileSync(path.join(repoRoot, "evals", "examples", "premise-logline.md"), "utf8") });
+    runSkillMain(["--no-judge", "--out", makeTempDir("story-run-skill-"), "premise-logline"], { spawn: stub.spawn });
+    expect(stub.calls[0].system).toContain("<!-- ../story-init/references/title-logline.md -->\n\n# Title & Logline");
+    expect(stub.calls[0].system).toContain("<!-- ../theme-craft/references/controlling-idea.md -->\n\n# The Controlling Idea");
   });
 });
 
@@ -206,7 +327,7 @@ describe("a fixture's keep option", () => {
     const stub = modelStub({ draft: goodChapterFile });
     expect(runSkillMain(["--out", out, "branch-choices"], { spawn: stub.spawn })).toBe(0);
     expect(stub.calls[0].system).toContain("story-skills interactive-fiction workflow");
-    expect(stub.calls[0].system).toContain("return only the complete file the brief asks for, frontmatter included");
+    expect(stub.calls[0].system).toContain("return only the file content the brief asks for, frontmatter included");
     expect(stub.calls[0].system).not.toContain("return only the final draft prose");
     // The judge keeps the prose rule: it is not drafting a file.
     expect(stub.calls[1].system).toContain("return only the final draft prose");
@@ -217,6 +338,19 @@ describe("a fixture's keep option", () => {
     const baseline = modelStub({ draft: goodChapterFile });
     expect(runSkillMain(["--no-skill", "--no-judge", "--out", out, "branch-choices"], { spawn: baseline.spawn })).toBe(0);
     expect(baseline.calls[0].system).toContain("frontmatter included");
+  });
+
+  test("every fixture whose brief asks for a file gets the file rule and passes its example", () => {
+    const fileFixtures = ["character-progression", "copyright-page", "location-routes", "reader-panel", "research-note", "style-sheet", "triage-synthesis"];
+    for (const name of fileFixtures) {
+      logs.length = 0;
+      const example = fs.readFileSync(path.join(repoRoot, "evals", "examples", `${name}.md`), "utf8");
+      const stub = modelStub({ draft: `Here is the file:\n\`\`\`markdown\n${example}\`\`\`\n` });
+      expect(runSkillMain(["--no-judge", "--out", makeTempDir("story-run-skill-"), name], { spawn: stub.spawn })).toBe(0);
+      expect(stub.calls[0].system).toContain("return only the file content the brief asks for, frontmatter included");
+      expect(stub.calls[0].system).not.toContain("return only the final draft prose");
+      expect(output()).toContain(`PASS ${name}`);
+    }
   });
 
   test("branch-choices passes quoted YAML and fails lazy or malformed chapter files", () => {

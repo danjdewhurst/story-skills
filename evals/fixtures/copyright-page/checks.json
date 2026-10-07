@@ -22,6 +22,7 @@
     "\\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+2027\\b"
   ],
   "brief": "Write matter/copyright.md from the copyright page template, frontmatter included, so it sits first among the front pages with no heading. Fill only what the author has given you and mark anything she has not supplied for her to fill in. Return only the file.",
+  "keep": "file",
   "max_words": 220,
   "min_words_ratio": 0.6,
   "name": "copyright-page",
