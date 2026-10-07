@@ -174,7 +174,7 @@ The main handoffs:
 
 1. **Capture the spark** in your words, sort it (image, what-if, character, setting, feeling), and ask what drew you to it. That answer is kept as the check on later drift. It also asks which language the book will be written in when that is not clear, and workshops in it.
 2. **Generate 8 to 12 what-ifs** from different angles (invert it, raise the cost, move it in time or place, give it to the wrong person). You pick one to three; it doesn't rank them unless asked.
-3. **Workshop the logline** for each pick with the recipe in `story-init`'s `title-logline.md`, then run the stress tests (active protagonist, opposition that can win, a choice at the end, personal stakes, enough situation for the length), reporting each as pass, weak, or fail with one revision per weak test.
+3. **Workshop the logline** for each pick with the recipe in `story-init`'s `title-logline.md`, then run every logline stress test in `premise-tests.md`, reporting each as pass, weak, or fail with one revision per weak or failed test.
 4. **Draft `premise` and `counter-premise`** as value-plus-cause hypotheses, or record `premise: tbd-discovery`. The logline goes in the Synopsis section, not `premise`.
 5. **Name the stakes** on three levels: external, relational, and internal. At least two must be concrete and personal.
 6. **Choose the form** by counting the idea's moving parts (POV characters, threads, locations, time span): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, or `chapter-book`.
