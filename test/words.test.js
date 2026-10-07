@@ -112,9 +112,10 @@ describe("#307 scripts written without spaces", () => {
     }
     const markdown = pathToFileURL(path.join(import.meta.dirname, "..", "src", "markdown.js")).href;
     // The long run is timed against one a quarter of its length, each the
-    // fastest of three runs taken in turn, with no wall-clock limit. Windowed,
-    // it takes about four times as long; unwindowed, Node 18 and 20 take about
-    // fifty times as long.
+    // fastest of three runs taken in turn. Windowed, it takes about four
+    // times as long; unwindowed, Node 18 and 20 take about fifty times as
+    // long. The long run must also finish in 5 seconds, far above its usual
+    // time, as a regex that backtracks without end shows in no ratio.
     const script = `import(${JSON.stringify(markdown)}).then(({ splitWords }) => {
       const time = (run) => {
         const started = performance.now();
@@ -135,6 +136,7 @@ describe("#307 scripts written without spaces", () => {
     const output = JSON.parse(result.stdout);
     expect(output.words).toEqual([THAI, LAO, KHMER, BURMESE].map(splitWords));
     expect(output.long).toBe(33000);
+    expect(output.ms.long).toBeLessThan(5000);
     expect(output.ms.long).toBeLessThan(8 * output.ms.short + 25);
   });
 });

@@ -976,8 +976,16 @@ describe("import --force on an existing project (#153)", () => {
 
 describe("import performance (#92)", () => {
   test("a long line of spaced hyphens imports in linear time", () => {
-    const chapters = expectLinearGrowth((text) => importText(text).chapters, (n) => `# Chapter 1\n\nHello.\n\n${" -".repeat(n / 2)}x\n`, 64000);
-    expect(chapters).toHaveLength(1);
+    // Only the import is timed: each source is written beforehand, and each
+    // run imports it into a new folder.
+    let runs = 0;
+    const source = (n) => {
+      const cwd = makeTempDir();
+      fs.writeFileSync(path.join(cwd, "m.md"), `# Chapter 1\n\nHello.\n\n${" -".repeat(n / 2)}x\n`);
+      return cwd;
+    };
+    const result = expectLinearGrowth((cwd) => importManuscript({ source: "m.md", title: "Imported", cwd, dir: `book-${runs += 1}` }), source, 96000);
+    expect(scanProject(result.root).chapters).toHaveLength(1);
   });
 });
 

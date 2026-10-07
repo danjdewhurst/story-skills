@@ -247,7 +247,7 @@ describe("prose analysis", () => {
   test("matches unspaced watch words in long chapters quickly", () => {
     const rules = proseRules({ "watch-words": ["とても", "รัก", "แม", "静か"] }, [], languagePack("ja"));
     const chapter = (count) => "彼女はとても静かだった。ฉันรักแมว ".repeat(count);
-    expect(expectLinearGrowth((prose) => analyzeChapter(prose, rules), chapter, 4000).watch)
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, rules), chapter, 4000, { limit: 10000 }).watch)
       .toEqual([{ word: "とても", count: 4000 }, { word: "รัก", count: 4000 }, { word: "静か", count: 4000 }]);
   });
 
@@ -264,10 +264,10 @@ describe("prose analysis", () => {
   test("matches watch words in long chapters quickly, with or without dotted capitals", () => {
     const russian = proseRules({ "watch-words": ["вдруг"] }, [], languagePack("ru"));
     const cyrillic = (count) => "Ирина шла к морю, и вдруг ветер стих. İ ".repeat(count);
-    expect(expectLinearGrowth((prose) => analyzeChapter(prose, russian), cyrillic, 4000).watch).toEqual([{ word: "вдруг", count: 4000 }]);
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, russian), cyrillic, 4000, { limit: 10000 }).watch).toEqual([{ word: "вдруг", count: 4000 }]);
     const turkish = proseRules({ "watch-words": ["ince", "ılık"] }, [], languagePack("tr"));
     const dotted = (count) => "Ilık rüzgâr birden durdu, I\u0307nce bir ses geldi. ".repeat(count);
-    expect(expectLinearGrowth((prose) => analyzeChapter(prose, turkish), dotted, 4000).watch)
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, turkish), dotted, 4000, { limit: 10000 }).watch)
       .toEqual([{ word: "ince", count: 4000 }, { word: "ılık", count: 4000 }]);
   });
 
