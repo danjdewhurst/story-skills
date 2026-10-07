@@ -128,9 +128,11 @@ const FIELD_TABLES = {
 
 // The checks that report unsupported-value without a list .has() on the
 // line before, by function: writing-days reads its weekdays through
-// weekdayName.
+// weekdayName, and release-every is a number of days or months, not a
+// value from a list (null).
 const OTHER_CHECKS = {
-  validateDailyTarget: { field: "writing-days", list: "WEEKDAYS" }
+  validateDailyTarget: { field: "writing-days", list: "WEEKDAYS" },
+  validateReleaseCadence: null
 };
 
 // Every value check in validate.js, as { kind, field, list }: each
@@ -157,7 +159,11 @@ function enumChecks() {
       const has = lines[index - 1].match(/!([A-Z][A-Z_]+)\.has\(([\w.]+)\)/);
       const other = OTHER_CHECKS[fn];
       expect({ ...where, recognised: has !== null || other !== undefined }).toEqual({ ...where, recognised: true });
-      checks.push(has === null ? { ...where, kind: KINDS[fn], ...other } : { ...where, kind: KINDS[fn], field: has[2].split(".").pop(), list: has[1] });
+      if (has !== null) {
+        checks.push({ ...where, kind: KINDS[fn], field: has[2].split(".").pop(), list: has[1] });
+      } else if (other !== null) {
+        checks.push({ ...where, kind: KINDS[fn], ...other });
+      }
     }
   });
   return checks;

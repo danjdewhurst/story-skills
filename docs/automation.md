@@ -63,7 +63,7 @@ Every command exits `0` on success. A failure exits with a code that says what k
 | `0` | Success. For checks, no errors. | `Project is valid`, or only warnings. |
 | `1` | Findings: a check reported at least one `error:` line. | `check`, `validate`, `links`, or `continuity` found an error; `names` found a clash. |
 | `2` | Usage error: the command line was wrong. | An unknown command or option, a missing option value, an unexpected argument, an unsupported `--format`, or an id that does not exist (`Unknown character nobody`). |
-| `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `check`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
+| `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
 | `4` | Refused or failed write. The message says what, if anything, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, inside a `.git` folder, outside the project, or through a symlink, another story command holds the project lock or the lock cannot be created, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
 
 Because findings keep `1`, `story validate "$STORY_DIR" || exit 1` and the GitHub Actions templates fail a job exactly as before. Scripts that test for `1` specifically to mean "any failure" need to accept `2`, `3`, and `4` too; `[ $? -ne 0 ]` or `|| exit` works for every code.
@@ -82,8 +82,8 @@ Which commands can report findings (exit `1`):
 | `names` | A candidate name clashes with an existing one, or a project file cannot be parsed and is reported as an `error:` line. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
-| `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
-| `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. |
+| `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
+| `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. `snapshot --restore` is the exception above. |
 
 `report --actionable`, `next`, and `doctor` are for reading, not gating. Use `check`, which runs `validate`, `links`, and `continuity`, when a job must fail, as the [story checks workflow](#story-checks-workflow) does.
 

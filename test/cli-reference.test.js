@@ -76,13 +76,14 @@ function lineStarting(text, start) {
 // What an Option index row's "Used by" cell names: each command, with the
 // entity kinds for a command that has them (`add chapter`, `scene` is add
 // with two kinds; a bare `add` is every kind, less any named after "every
-// kind except"). "Every command except ..." names the rest.
+// kind except"). "Every command", or "Every command except ...", names all
+// or the rest.
 function usedBy(cell) {
   const users = {};
   const kindsOf = (command, kinds) => (command.kinds === undefined ? null : kinds);
-  const every = cell.match(/^Every command except (.+)$/);
+  const every = cell.match(/^Every command(?: except (.+))?$/);
   if (every !== null) {
-    const except = codeWords(every[1]);
+    const except = codeWords(every[1] ?? "");
     for (const command of COMMANDS.filter((entry) => !except.includes(entry.name))) {
       users[command.name] = kindsOf(command, Object.keys(command.kinds ?? {}));
     }
