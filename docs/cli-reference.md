@@ -664,12 +664,12 @@ Project already uses the current schema
 Run these after any change to story files. The usual sequence after an editing session is:
 
 ```shell
-story wordcount . --write
 story reindex .
+story wordcount . --write
 story check .
 ```
 
-`wordcount --write` comes first because it rewrites chapter frontmatter and then reindexes, so the registries reflect the new counts before the checks run. `story check` runs `validate`, `links`, and `continuity` in one go; run them one at a time to see one check's findings.
+`reindex` rebuilds the registries from the files on disk. `wordcount --write` then rewrites the chapter counts and reindexes again, so the registries reflect the new counts before the checks run. `story check` runs `validate`, `links`, and `continuity` in one go; run them one at a time to see one check's findings.
 
 ### validate
 

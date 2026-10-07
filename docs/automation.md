@@ -241,11 +241,11 @@ fi
 
 `set -o pipefail` needs bash, which GitHub's Linux runners use for `run:` steps. It keeps the command's own exit code when its output is piped through `tee`.
 
-Another approach is to check that the generated data is current. `story wordcount --write` and `story reindex` rewrite word counts and registry tables from the markdown, so if they change anything, someone forgot to run them:
+Another approach is to check that the generated data is current. `story reindex` and `story wordcount --write` rewrite registry tables and word counts from the markdown, so if they change anything, someone forgot to run them:
 
 ```shell
-story wordcount . --write
 story reindex .
+story wordcount . --write
 git diff --exit-code
 ```
 
@@ -360,7 +360,7 @@ The **draft job**:
    2. if `story next` reports a P0 maintenance issue, fix it on a `draft/maintenance-<YYYY-MM-DD>` branch, commit, and stop. A [`matter-todo-markers`](cli-reference.md#finding-codes) finding, even one promoted to an error, marks text only you can supply, such as an ISBN, so the agent never edits `matter/` or `story.md` to clear it: it leaves the finding, names it in its commit message, and goes on to draft when it is the only P0 issue;
    3. if `story next` suggests no "Draft chapter" (the story is revising or complete, or every arc is resolved), stop without committing;
    4. otherwise draft the next chapter on a branch named `draft/chapter-<number>`, following the `chapter-writing` skill: run `story context chapter-<number>` once the chapter file exists with its POV and cast, and draft from the packed context it prints. Later chapters are left out. A line marked `character-knowledge` and `do not reveal` is known to the POV and must not be stated. Then it outlines first, with prose under `## Chapter Text` within the word range, accurate frontmatter, matching scene records, and updates to continuity state, promises, questions, and the timeline;
-   5. run `story wordcount --write`, `story reindex`, and `story check` (which runs `validate`, `links`, and `continuity`), and make them pass, apart from any `matter-todo-markers` finding;
+   5. run `story reindex`, `story wordcount --write`, and `story check` (which runs `validate`, `links`, and `continuity`), and make them pass, apart from any `matter-todo-markers` finding;
    6. commit, with `Draft chapter <number>: <title>` as the message's first line and a summary of the beats, arcs advanced, and promises planted or paid off as its body.
 5. **Bundles the commits.** If the agent committed nothing, the run ends here, successfully. Otherwise the new commits must be on a branch named `draft/chapter-<number>` or `draft/maintenance-<date>`. They are written to a git bundle and uploaded as a workflow artifact, kept for a day. The bundle is the only thing that leaves this job.
 
@@ -584,7 +584,7 @@ Useful steps to add to `story-checks.yml`:
 |---|---|---|
 | Prose lint in the log | `story prose "$STORY_DIR"` | Prints per-chapter prose statistics. Exits 0 on a readable project unless `severity` in `story.md` promotes a prose warning. |
 | Timeline in the log | `story timeline "$STORY_DIR"` | Prints scene chronology, POV balance, and character presence. |
-| Fail on stale generated data | `story wordcount "$STORY_DIR" --write`, `story reindex "$STORY_DIR"`, then `git diff --exit-code` | See [Failing on warnings](#failing-on-warnings). |
+| Fail on stale generated data | `story reindex "$STORY_DIR"`, `story wordcount "$STORY_DIR" --write`, then `git diff --exit-code` | See [Failing on warnings](#failing-on-warnings). |
 | Build a reading copy | `story build "$STORY_DIR" --format epub` | Writes `dist/<story-id>.epub`, which you can upload with `actions/upload-artifact`. |
 
 For example, to attach an EPUB to every run:
@@ -713,7 +713,7 @@ story continuity "$STORY_DIR" || exit 1
 
 The hook assumes `story` is on your `PATH`, for example after `npm install -g story-skills`. If it is not, replace `story` with `npx --yes story-skills@0.22.1` or with `node <skills-dir>/story-maintenance/scripts/story.js`. Warnings do not block the commit.
 
-The hook only checks. It does not run `story wordcount --write` or `story reindex`, because a hook that rewrites files leaves those changes unstaged. Run those yourself, or ask your agent to, after changing chapters or entities; the skills already direct agents to do this. See [Writing workflows](writing-workflows.md).
+The hook only checks. It does not run `story reindex` or `story wordcount --write`, because a hook that rewrites files leaves those changes unstaged. Run those yourself, or ask your agent to, after changing chapters or entities; the skills already direct agents to do this. See [Writing workflows](writing-workflows.md).
 
 To skip the hook for one commit, for example to save a half-finished chapter, use `git commit --no-verify`.
 
