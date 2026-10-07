@@ -1922,20 +1922,28 @@ function moveChapter(project, oldId, options, action = "move") {
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
 }
 
-// The chapter body with its heading renumbered: the body's first ATX
-// heading, when it reads `# Chapter N` with or without a title after a
-// colon. A heading in a comment or code fence never counts, and the
-// frontmatter is never touched, so a `# Chapter 1: ...` comment line there
-// stays as it is.
+// A level-1 ATX heading line, found in masked text.
+const LEVEL_ONE_HEADING = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/gm;
+// A heading line that reads `# Chapter N`, with or without a title after a
+// colon; the number is the second group.
+const CHAPTER_NUMBER_HEADING = /^([ \t]{0,3}#[ \t]+Chapter[ \t]+)(\d+)(?=[ \t]*(?::|\r?\n|$))/;
+
+// The level-1 headings of a body that a comment or code fence does not
+// hide, each with its line as written.
+function levelOneHeadings(body, masked, limit = masked.length) {
+  return [...masked.slice(0, limit).matchAll(LEVEL_ONE_HEADING)].map((match) => ({ index: match.index, end: match.index + match[0].length, line: body.slice(match.index, match.index + match[0].length) }));
+}
+
+// The chapter body with its heading renumbered: the body's first level-1
+// heading that reads `# Chapter N`. One in a comment or code fence never
+// counts, and the frontmatter is never touched, so a `# Chapter 1: ...`
+// comment line there keeps its number, as does a later heading in the text.
 function renumberedHeading(body, number) {
-  const heading = /^ {0,3}#{1,6}(?:[ \t]|\r?$)/m.exec(maskMarkup(body));
-  if (!heading) {
+  const heading = levelOneHeadings(body, maskMarkup(body)).find((entry) => CHAPTER_NUMBER_HEADING.test(entry.line));
+  if (heading === undefined) {
     return body;
   }
-  const lineEnd = body.indexOf("\n", heading.index);
-  const end = lineEnd === -1 ? body.length : lineEnd;
-  const line = body.slice(heading.index, end).replace(/^( {0,3}#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|\r?$))/, `$1${number}`);
-  return `${body.slice(0, heading.index)}${line}${body.slice(end)}`;
+  return `${body.slice(0, heading.index)}${body.slice(heading.index).replace(CHAPTER_NUMBER_HEADING, `$1${number}`)}`;
 }
 
 // A renumbered chapter can move past another progression's chapter, so the
@@ -2086,26 +2094,38 @@ function followingRun(project, number) {
   return run;
 }
 
-// The last chapter of the run a split renumbers moves onto a number no
-// chapter has, whose id may already be named: a payoff scheduled for a
-// chapter not written yet, say. Those references were planned for another
-// chapter, not this one, and once they named it a later merge would carry
-// them back with it. A split cannot tell what they mean, so it refuses and
-// the writer points them at the chapter they mean first. Split's own new
-// chapter, which takes a number no chapter had when nothing follows it,
-// warns instead, as add chapter does.
-function refuseRenumberedAdoption(project, run) {
+// A split gives one chapter a number no chapter has: the last chapter of
+// the run it renumbers moves to the number after the run, or, when no
+// chapter follows, the new chapter takes the next number. A file may
+// already name that id: a payoff scheduled for a chapter not written yet,
+// say. Those references were planned for another chapter, and once they
+// named this one a later merge would carry them back with it. A split
+// cannot tell what they mean, so it refuses, and the writer points them at
+// the chapter they mean first. Every file counts, the renumbered chapter's
+// own included, but only the chapter id: a scene id under it is left to the
+// adopted-references warning of the move. An abandoned thread may keep the
+// id a new chapter takes, as add chapter allows, so it only warns
+// (abandonedThreadWarnings).
+function refuseSplitAdoption(project, chapter, run) {
   const last = run.at(-1);
-  if (last === undefined) {
+  const number = (last ?? chapter).number + 1;
+  const target = canonicalChapterId(number);
+  const abandoned = new Set(last === undefined ? abandonedThreadFiles(project, target) : []);
+  // Registries are left out, since reindex rewrites them, but not the ids
+  // written in the timeline and the plot registry's tables.
+  const files = adoptedReferenceFiles(project.root, "chapter", target, null, renameChapterIdText)
+    .filter((file) => (!REGISTRY_FILES.has(file) || ID_TOKEN_REGISTRIES.has(file)) && !abandoned.has(file));
+  if (files.length === 0) {
     return;
   }
-  const target = canonicalChapterId(last.number + 1);
-  // Registries are left out, since reindex rewrites them.
-  const files = adoptedReferenceFiles(project.root, "chapter", target, last.file).filter((file) => !REGISTRY_FILES.has(file));
-  if (files.length > 0) {
-    const one = files.length === 1;
-    throw refusedError(`${files.join(", ")} ${one ? "names" : "name"} ${target}, which has no file yet, and this split would renumber ${last.id} to ${target}, so ${one ? "it" : "they"} would point at that chapter. Point ${one ? "it" : "them"} at the chapter ${one ? "it means" : "they mean"} first: ${last.id} if ${one ? "it belongs" : "they belong"} there (the split then carries ${one ? "it" : "them"} to ${target}), or ${canonicalChapterId(last.number + 2)} for the chapter after it; nothing was changed`);
-  }
+  const [it, them, means, belongs] = files.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
+  const change = last === undefined
+    ? `this split would give that id to its new chapter, the rest of ${chapter.id}`
+    : `this split would renumber ${last.id} to ${target}`;
+  const keep = last === undefined
+    ? `${chapter.id} if ${belongs} in the text that moves (then point ${them} at ${target} after the split)`
+    : `${last.id} if ${belongs} there (the split then carries ${them} to ${target})`;
+  throw refusedError(`${files.join(", ")} ${files.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
 }
 
 // Renumbers each chapter of `run` by `step` with move chapter: from the
@@ -2244,9 +2264,8 @@ function chapterReferenceFiles(root, chapterId, excluded) {
   const context = entityReferenceContext(root, "chapter", chapterId);
   const probe = `${chapterId}-reference-probe`;
   // Only the chapter id itself: its scene ids follow their scenes.
-  const chapterOnly = (text, oldId, newId) => text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe),
-    (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
+    (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, renameChapterIdText));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
 }
 
@@ -2354,7 +2373,7 @@ export function splitChapter(root, options) {
     created: [...chapterTargets, ...moving.map((scene, index) => path.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
     chapterTargets
   });
-  refuseRenumberedAdoption(project, run);
+  refuseSplitAdoption(project, chapter, run);
   // A character who dies in the chapter cannot be in the cast of a later
   // one, so the new chapter only mentions them; split-references lists the
   // death to check.
@@ -2620,14 +2639,27 @@ function closesNotes(line) {
   return text === "---" || CHAPTER_TEXT_HEADING.test(text);
 }
 
+// The chapter's own `# heading` before `limit`: its first level-1 heading
+// when no `##` section comes before it, else its first `# Chapter N`. So a
+// level-1 heading among the notes (`# Ideas` under `## Outline`) is not
+// taken for it.
+function ownHeading(body, masked, limit) {
+  const headings = levelOneHeadings(body, masked, limit);
+  const section = /^ {0,3}#{2,6}(?:[ \t]|\r?$)/m.exec(masked.slice(0, limit));
+  if (headings.length > 0 && (section === null || headings[0].index < section.index)) {
+    return headings[0];
+  }
+  return headings.find((entry) => CHAPTER_NUMBER_HEADING.test(entry.line)) ?? null;
+}
+
 // The planning notes of a chapter body: what lies between its `# heading`
 // and its prose (the outline and any other `##` sections), as offsets in the
 // body, without the blank lines, comments, outline divider, and `## Chapter
 // Text` heading that close them. `lead` is where the heading starts.
 function chapterNotesRange(body, masked, proseOffset) {
-  const heading = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/m.exec(masked.slice(0, proseOffset));
+  const heading = ownHeading(body, masked, proseOffset);
   const lead = heading ? heading.index : 0;
-  const start = heading ? heading.index + heading[0].length : 0;
+  const start = heading ? heading.end : 0;
   const lines = masked.slice(start, proseOffset).split("\n");
   let offset = start;
   const starts = lines.map((line) => {
@@ -2642,8 +2674,23 @@ function chapterNotesRange(body, masked, proseOffset) {
     }
     end = starts[index];
   }
-  // A comment at the end of the last line stays on it.
-  return { lead, start, end: start + body.slice(start, end).trimEnd().length };
+  // The notes end after the last text masked text shows, and after any
+  // comment that opens on that line, so the comment stays on its line and
+  // the notes never end inside it.
+  let cut = start + masked.slice(start, end).trimEnd().length;
+  for (let open = cut > start ? commentOnLine(body, cut) : -1; open !== -1; open = commentOnLine(body, cut)) {
+    cut = body.indexOf("-->", open + 4) + 3;
+  }
+  return { lead, start, end: cut };
+}
+
+// Where a comment opens on the rest of the line at `offset`, if only blanks
+// come before it, or -1.
+function commentOnLine(body, offset) {
+  const lineEnd = body.indexOf("\n", offset);
+  const rest = body.slice(offset, lineEnd === -1 ? body.length : lineEnd);
+  const open = offset + rest.search(/\S|$/);
+  return body.startsWith("<!--", open) ? open : -1;
 }
 
 // The notes of the chapter a merge folds in, as its text and masked text:
@@ -2697,11 +2744,11 @@ function joinNotes(first, second) {
 // scene break is the first one either chapter already uses, else `* * *`.
 // Of the second chapter's text, only its heading, outline divider, and
 // `## Chapter Text` heading are dropped.
-function mergedChapterBody(firstBody, secondBody) {
+function mergedChapterBody(firstBody, secondBody, firstNumber, secondNumber) {
   const firstMasked = maskMarkup(firstBody);
   const secondMasked = maskMarkup(secondBody);
-  const firstStart = proseStart(firstBody, firstMasked);
-  const secondStart = proseStart(secondBody, secondMasked);
+  const firstStart = mergedProseStart(firstBody, firstMasked, firstNumber);
+  const secondStart = mergedProseStart(secondBody, secondMasked, secondNumber);
   let head = firstBody.slice(0, firstStart);
   let firstProse = firstBody.slice(firstStart);
   const secondNotes = foldedNotes(secondBody, secondMasked, secondStart);
@@ -2740,6 +2787,18 @@ function mergedChapterBody(firstBody, secondBody) {
   return `${head}${lead}${parts.filter((part) => part !== "").join("\n\n")}\n`;
 }
 
+// Where a merge takes a chapter's prose to start. A chapter with no
+// `## Chapter Text` or outline and text above its heading reads as prose
+// from the top, heading and all; a merge still ends the part above the
+// prose at its heading, when that is its first level-1 heading and reads
+// `# Chapter N` with its own number.
+function mergedProseStart(body, masked, number) {
+  const start = proseStart(body, masked);
+  const heading = start === 0 ? levelOneHeadings(body, masked)[0] : undefined;
+  const match = heading === undefined ? null : CHAPTER_NUMBER_HEADING.exec(heading.line);
+  return match !== null && Number(match[2]) === number ? heading.end : start;
+}
+
 // The first scene break line a chapter body's prose uses, or null.
 function sceneBreakLine(body) {
   const paragraph = proseParagraphs(body).find((entry) => entry.sceneBreak);
@@ -2749,7 +2808,7 @@ function sceneBreakLine(body) {
 // The merged chapter file, from the first chapter's markdown, with the
 // warnings for fields the second set differently.
 function mergedChapter(first, second, unit, firstId, secondId) {
-  const body = withLineEndings(mergedChapterBody(first.body, second.body), first.rawMarkdown);
+  const body = withLineEndings(mergedChapterBody(first.body, second.body, first.data.number, second.data.number), first.rawMarkdown);
   const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
   const label = `chapters/${firstId}.md`;
   const warnings = [];
@@ -2773,16 +2832,16 @@ function mergedChapter(first, second, unit, firstId, secondId) {
 
 const BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 
-// The files besides `excludedFile` that already reference `id` (a scheduled
-// chapter, a planned character, a link left by remove): an entity given that
-// id takes them over.
-function adoptedReferenceFiles(root, kind, id, excludedFile) {
+// The files besides `excludedFile` (when not null) that already reference
+// `id` (a scheduled chapter, a planned character, a link left by remove): an
+// entity given that id takes them over. `rename` finds bare ids.
+function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText) {
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
-  const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), idRenamer(id, probe), (body, file) => {
+  const plan = planReferenceRewrites(root, context, new Map(excludedFile === null ? [] : [[excludedFile, null]]), idRenamer(id, probe), (body, file) => {
     const relinked = renameLinkTargets(root, file, body, context, probe);
-    return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
+    return numbered ? renameIdTokens(root, file, relinked, id, probe, rename) : relinked;
   });
   return [...plan.keys()].map((file) => projectPath(root, file)).sort();
 }
@@ -2802,12 +2861,16 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
 // links lets an abandoned promise, clue, or question keep the chapter-NN it
 // was planned for, so a new chapter with that id adopts the cut thread. move
 // and rename report every adopted reference; add chapter and split's new
-// chapter report these (split refuses to renumber a chapter onto a named id).
-function abandonedThreadWarnings(project, chapterId) {
-  const files = [...project.promises, ...project.clues, ...project.questions]
+// chapter report these (split refuses any other reference to the id).
+function abandonedThreadFiles(project, chapterId) {
+  return [...project.promises, ...project.clues, ...project.questions]
     .filter((entry) => entry.status === "abandoned" && [entry.planted, entry.payoff, entry.introduced].includes(chapterId))
     .map((entry) => projectPath(project.root, entry.file))
     .sort();
+}
+
+function abandonedThreadWarnings(project, chapterId) {
+  const files = abandonedThreadFiles(project, chapterId);
   if (files.length === 0) {
     return [];
   }
@@ -2822,14 +2885,23 @@ function idRenamer(oldId, newId) {
 // checks, and in the plot/_index.md theme tracking table follow the move. `chapter-03` never matches inside `chapter-03-scene-01`
 // unless the whole scene id is the one moving, and scene ids of a moved chapter
 // (`chapter-03-scene-02`) follow it too.
+// The registries whose bodies hold bare ids that people write.
+const ID_TOKEN_REGISTRIES = new Set(["plot/timeline.md", "plot/_index.md"]);
+
 function renameIdTokens(root, file, body, oldId, newId, rename = renameIdText) {
   const relativePath = projectPath(root, file);
-  if (relativePath !== "plot/timeline.md" && relativePath !== "plot/_index.md" && path.posix.dirname(relativePath) !== "plot/arcs") {
+  if (!ID_TOKEN_REGISTRIES.has(relativePath) && path.posix.dirname(relativePath) !== "plot/arcs") {
     return body;
   }
   // Link destinations were already handled by renameLinkTargets, and a URL
   // or a path into another book is not this book's id.
   return mapOutsideLinks(body, (text) => rename(text, oldId, newId));
+}
+
+// Replaces whole-token chapter id `oldId` in text, but not the scene ids
+// that start with it.
+function renameChapterIdText(text, oldId, newId) {
+  return text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
 }
 
 // Replaces whole-token `oldId` in text, and the scene ids of a chapter id.

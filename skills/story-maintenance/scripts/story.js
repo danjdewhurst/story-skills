@@ -24369,16 +24369,17 @@ function moveChapter(project, oldId, options, action = "move") {
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
 }
+var LEVEL_ONE_HEADING = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/gm;
+var CHAPTER_NUMBER_HEADING = /^([ \t]{0,3}#[ \t]+Chapter[ \t]+)(\d+)(?=[ \t]*(?::|\r?\n|$))/;
+function levelOneHeadings(body, masked, limit = masked.length) {
+  return [...masked.slice(0, limit).matchAll(LEVEL_ONE_HEADING)].map((match) => ({ index: match.index, end: match.index + match[0].length, line: body.slice(match.index, match.index + match[0].length) }));
+}
 function renumberedHeading(body, number) {
-  const heading = /^ {0,3}#{1,6}(?:[ \t]|\r?$)/m.exec(maskMarkup(body));
-  if (!heading) {
+  const heading = levelOneHeadings(body, maskMarkup(body)).find((entry) => CHAPTER_NUMBER_HEADING.test(entry.line));
+  if (heading === undefined) {
     return body;
   }
-  const lineEnd = body.indexOf(`
-`, heading.index);
-  const end = lineEnd === -1 ? body.length : lineEnd;
-  const line = body.slice(heading.index, end).replace(/^( {0,3}#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|\r?$))/, `$1${number}`);
-  return `${body.slice(0, heading.index)}${line}${body.slice(end)}`;
+  return `${body.slice(0, heading.index)}${body.slice(heading.index).replace(CHAPTER_NUMBER_HEADING, `$1${number}`)}`;
 }
 function reorderProgressions(project, plan, chronology) {
   const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
@@ -24484,17 +24485,19 @@ function followingRun(project, number) {
   }
   return run;
 }
-function refuseRenumberedAdoption(project, run) {
+function refuseSplitAdoption(project, chapter, run) {
   const last = run.at(-1);
-  if (last === undefined) {
+  const number = (last ?? chapter).number + 1;
+  const target = canonicalChapterId(number);
+  const abandoned = new Set(last === undefined ? abandonedThreadFiles(project, target) : []);
+  const files = adoptedReferenceFiles(project.root, "chapter", target, null, renameChapterIdText).filter((file) => (!REGISTRY_FILES.has(file) || ID_TOKEN_REGISTRIES.has(file)) && !abandoned.has(file));
+  if (files.length === 0) {
     return;
   }
-  const target = canonicalChapterId(last.number + 1);
-  const files = adoptedReferenceFiles(project.root, "chapter", target, last.file).filter((file) => !REGISTRY_FILES.has(file));
-  if (files.length > 0) {
-    const one = files.length === 1;
-    throw refusedError(`${files.join(", ")} ${one ? "names" : "name"} ${target}, which has no file yet, and this split would renumber ${last.id} to ${target}, so ${one ? "it" : "they"} would point at that chapter. Point ${one ? "it" : "them"} at the chapter ${one ? "it means" : "they mean"} first: ${last.id} if ${one ? "it belongs" : "they belong"} there (the split then carries ${one ? "it" : "them"} to ${target}), or ${canonicalChapterId(last.number + 2)} for the chapter after it; nothing was changed`);
-  }
+  const [it, them, means, belongs] = files.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
+  const change = last === undefined ? `this split would give that id to its new chapter, the rest of ${chapter.id}` : `this split would renumber ${last.id} to ${target}`;
+  const keep = last === undefined ? `${chapter.id} if ${belongs} in the text that moves (then point ${them} at ${target} after the split)` : `${last.id} if ${belongs} there (the split then carries ${them} to ${target})`;
+  throw refusedError(`${files.join(", ")} ${files.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
 }
 function shiftChapters(root, run, step, warnings, action) {
   for (const chapter of step > 0 ? [...run].reverse() : run) {
@@ -24601,8 +24604,7 @@ function splitAt(paragraphs, index, marker, chapterId) {
 function chapterReferenceFiles(root, chapterId, excluded) {
   const context = entityReferenceContext(root, "chapter", chapterId);
   const probe = `${chapterId}-reference-probe`;
-  const chapterOnly = (text, oldId, newId) => text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
-  const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, chapterOnly));
+  const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, renameChapterIdText));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
 }
 var SPLIT_COPIED_FIELDS = ["numbered", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
@@ -24685,7 +24687,7 @@ function splitChapter(root, options) {
     created: [...chapterTargets, ...moving.map((scene, index) => path12.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
     chapterTargets
   });
-  refuseRenumberedAdoption(project, run);
+  refuseSplitAdoption(project, chapter, run);
   const dead = new Set(project.characters.filter((character) => character.diedIn === chapter.id).map((character) => character.id));
   restructureWrites(project.root, () => {
     shiftChapters(project.root, run, 1, warnings, "split");
@@ -24912,10 +24914,18 @@ function closesNotes(line) {
   const text = line.trim();
   return text === "---" || CHAPTER_TEXT_HEADING.test(text);
 }
+function ownHeading(body, masked, limit) {
+  const headings = levelOneHeadings(body, masked, limit);
+  const section = /^ {0,3}#{2,6}(?:[ \t]|\r?$)/m.exec(masked.slice(0, limit));
+  if (headings.length > 0 && (section === null || headings[0].index < section.index)) {
+    return headings[0];
+  }
+  return headings.find((entry) => CHAPTER_NUMBER_HEADING.test(entry.line)) ?? null;
+}
 function chapterNotesRange(body, masked, proseOffset) {
-  const heading = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/m.exec(masked.slice(0, proseOffset));
+  const heading = ownHeading(body, masked, proseOffset);
   const lead = heading ? heading.index : 0;
-  const start = heading ? heading.index + heading[0].length : 0;
+  const start = heading ? heading.end : 0;
   const lines = masked.slice(start, proseOffset).split(`
 `);
   let offset = start;
@@ -24931,7 +24941,18 @@ function chapterNotesRange(body, masked, proseOffset) {
     }
     end = starts[index];
   }
-  return { lead, start, end: start + body.slice(start, end).trimEnd().length };
+  let cut = start + masked.slice(start, end).trimEnd().length;
+  for (let open = cut > start ? commentOnLine(body, cut) : -1;open !== -1; open = commentOnLine(body, cut)) {
+    cut = body.indexOf("-->", open + 4) + 3;
+  }
+  return { lead, start, end: cut };
+}
+function commentOnLine(body, offset) {
+  const lineEnd = body.indexOf(`
+`, offset);
+  const rest = body.slice(offset, lineEnd === -1 ? body.length : lineEnd);
+  const open = offset + rest.search(/\S|$/);
+  return body.startsWith("<!--", open) ? open : -1;
 }
 function foldedNotes(body, masked, proseOffset) {
   const range = chapterNotesRange(body, masked, proseOffset);
@@ -24977,11 +24998,11 @@ function joinNotes(first, second) {
 
 `}${right}`;
 }
-function mergedChapterBody(firstBody, secondBody) {
+function mergedChapterBody(firstBody, secondBody, firstNumber, secondNumber) {
   const firstMasked = maskMarkup(firstBody);
   const secondMasked = maskMarkup(secondBody);
-  const firstStart = proseStart(firstBody, firstMasked);
-  const secondStart = proseStart(secondBody, secondMasked);
+  const firstStart = mergedProseStart(firstBody, firstMasked, firstNumber);
+  const secondStart = mergedProseStart(secondBody, secondMasked, secondNumber);
   let head = firstBody.slice(0, firstStart);
   let firstProse = firstBody.slice(firstStart);
   const secondNotes = foldedNotes(secondBody, secondMasked, secondStart);
@@ -25032,12 +25053,18 @@ ${text}${firstRange.end === firstRange.start ? `
 `)}
 `;
 }
+function mergedProseStart(body, masked, number) {
+  const start = proseStart(body, masked);
+  const heading = start === 0 ? levelOneHeadings(body, masked)[0] : undefined;
+  const match = heading === undefined ? null : CHAPTER_NUMBER_HEADING.exec(heading.line);
+  return match !== null && Number(match[2]) === number ? heading.end : start;
+}
 function sceneBreakLine(body) {
   const paragraph = proseParagraphs3(body).find((entry) => entry.sceneBreak);
   return paragraph ? body.slice(paragraph.start, paragraph.end).trim() : null;
 }
 function mergedChapter(first, second, unit, firstId, secondId) {
-  const body = withLineEndings(mergedChapterBody(first.body, second.body), first.rawMarkdown);
+  const body = withLineEndings(mergedChapterBody(first.body, second.body, first.data.number, second.data.number), first.rawMarkdown);
   const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
   const label = `chapters/${firstId}.md`;
   const warnings = [];
@@ -25054,13 +25081,13 @@ function mergedChapter(first, second, unit, firstId, secondId) {
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }
 var BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
-function adoptedReferenceFiles(root, kind, id, excludedFile) {
+function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText) {
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
-  const plan = planReferenceRewrites(root, context, new Map([[excludedFile, null]]), idRenamer(id, probe), (body, file) => {
+  const plan = planReferenceRewrites(root, context, new Map(excludedFile === null ? [] : [[excludedFile, null]]), idRenamer(id, probe), (body, file) => {
     const relinked = renameLinkTargets(root, file, body, context, probe);
-    return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
+    return numbered ? renameIdTokens(root, file, relinked, id, probe, rename) : relinked;
   });
   return [...plan.keys()].map((file) => projectPath(root, file)).sort();
 }
@@ -25071,8 +25098,11 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   }
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "rename" ? "renamed" : "moved"} ${kind}: ${files.join(", ")}. Check them`)];
 }
+function abandonedThreadFiles(project, chapterId) {
+  return [...project.promises, ...project.clues, ...project.questions].filter((entry) => entry.status === "abandoned" && [entry.planted, entry.payoff, entry.introduced].includes(chapterId)).map((entry) => projectPath(project.root, entry.file)).sort();
+}
 function abandonedThreadWarnings(project, chapterId) {
-  const files = [...project.promises, ...project.clues, ...project.questions].filter((entry) => entry.status === "abandoned" && [entry.planted, entry.payoff, entry.introduced].includes(chapterId)).map((entry) => projectPath(project.root, entry.file)).sort();
+  const files = abandonedThreadFiles(project, chapterId);
   if (files.length === 0) {
     return [];
   }
@@ -25081,12 +25111,16 @@ function abandonedThreadWarnings(project, chapterId) {
 function idRenamer(oldId, newId) {
   return (value) => value === oldId ? newId : value;
 }
+var ID_TOKEN_REGISTRIES = new Set(["plot/timeline.md", "plot/_index.md"]);
 function renameIdTokens(root, file, body, oldId, newId, rename = renameIdText) {
   const relativePath = projectPath(root, file);
-  if (relativePath !== "plot/timeline.md" && relativePath !== "plot/_index.md" && path12.posix.dirname(relativePath) !== "plot/arcs") {
+  if (!ID_TOKEN_REGISTRIES.has(relativePath) && path12.posix.dirname(relativePath) !== "plot/arcs") {
     return body;
   }
   return mapOutsideLinks(body, (text) => rename(text, oldId, newId));
+}
+function renameChapterIdText(text, oldId, newId) {
+  return text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
 }
 function renameIdText(text, oldId, newId) {
   return text.replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}-scene-(\\d+)(?![\\w-])`, "g"), `${newId}-scene-$1`).replace(new RegExp(`(?<![\\w-])${escapeRegExp(oldId)}(?![\\w-])`, "g"), newId);
