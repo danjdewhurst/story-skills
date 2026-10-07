@@ -370,3 +370,52 @@ word-count: -4
     expect(errors).toContain("word-count must be at least 0");
   });
 });
+
+describe("init and import --force on an existing project (#125, #153)", () => {
+  test("new registries take the story id from the kept story.md", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "The Lamp at Gull Rock" });
+    fs.rmSync(path.join(root, "style-sheet.md"));
+    fs.rmSync(path.join(root, "continuity", "clues", "_index.md"));
+
+    const again = createStoryProject({ cwd, title: "Lamp", dir: "the-lamp-at-gull-rock", force: true });
+
+    expect(again.storyId).toBe("the-lamp-at-gull-rock");
+    expect(fs.readFileSync(path.join(root, "continuity", "clues", "_index.md"), "utf8")).toContain("story: the-lamp-at-gull-rock");
+    expect(messages(validateProject(root).errors)).toEqual([]);
+  });
+
+  test("init --force names the options a kept story.md did not take", () => {
+    const cwd = makeTempDir();
+    invoke(cwd, ["init", "Alpha"]);
+
+    const run = invoke(cwd, ["init", "New Name", "--dir", "alpha", "--force", "--genre", "horror", "--form", "novel"]);
+
+    expect(run.code).toBe(0);
+    expect(run.out).toContain("Updated story project:");
+    expect(run.out).not.toContain("Created");
+    expect(run.err).toContain("story.md already exists and was kept, so the title, --genre and --form were not applied");
+    expect(run.err).toContain("Edit story.md to change them. [kept-story-options]\n");
+    expect(fs.readFileSync(path.join(cwd, "alpha", "story.md"), "utf8")).toContain("title: Alpha");
+  });
+
+  test("init --force with matching options stays quiet", () => {
+    const cwd = makeTempDir();
+    invoke(cwd, ["init", "Alpha"]);
+    const run = invoke(cwd, ["init", "Alpha", "--force"]);
+    expect(run.err).toBe("");
+  });
+});
+
+describe("portable folder names (#204)", () => {
+  test.each(["con.txt", "COM1.book", "book.", "book ", "bo:ok", "a<b", "q?", "star*"])("refuses --dir %p", (dir) => {
+    const cwd = makeTempDir();
+    expect(() => createStoryProject({ cwd, title: "Book", dir })).toThrow("Windows");
+    expect(fs.existsSync(path.join(cwd, dir))).toBe(false);
+  });
+
+  test("accepts an ordinary dotted folder name", () => {
+    const cwd = makeTempDir();
+    expect(createStoryProject({ cwd, title: "Book", dir: "book.v2" }).storyId).toBe("book");
+  });
+});

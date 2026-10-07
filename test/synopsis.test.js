@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { wordCount } from "../src/markdown.js";
 import { truncateWords } from "../src/build.js";
 import { createStoryProject, synopsisBook } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearGrowth, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function synopsisProject(title = "The Long Valley") {
   const cwd = makeTempDir();
@@ -289,5 +289,19 @@ describe("#438 truncation drops trailing headings and blank lines quickly", () =
     const started = performance.now();
     expect(truncateWords(text, 2)).toBe(`a\n${"#\t\n".repeat(5000)}b…\n`);
     expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
+describe("synopsis performance (#92)", () => {
+  test("a synopsis made of initials splits in linear time", () => {
+    const project = (n) => {
+      const cwd = makeTempDir();
+      const { root } = createStoryProject({ cwd, title: "Initials" });
+      const storyPath = path.join(root, "story.md");
+      const raw = fs.readFileSync(storyPath, "utf8");
+      fs.writeFileSync(storyPath, raw.replace("# Synopsis", `# Synopsis\n\n${"A. ".repeat(n / 3)}\n\nThe end came.`), "utf8");
+      return root;
+    };
+    expectLinearGrowth(synopsisBook, project, 24000);
   });
 });
