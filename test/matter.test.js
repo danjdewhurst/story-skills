@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { checkProjectSchema } from "../scripts/check-schema.js";
@@ -372,6 +372,34 @@ describe("matter in export and build", () => {
       return; // Creating symlinks needs a privilege some Windows runners lack.
     }
     expect(() => buildBook(root, { format: "html", out: "images/cover.png" })).toThrow("story.md names it as the cover");
+  });
+
+  test("the --out guard never resolves the cover itself, and works without its folder's real path", () => {
+    const { root, cwd } = matterProject();
+    fs.mkdirSync(path.join(root, "art"));
+    fs.writeFileSync(path.join(root, "art", "cover.png"), PNG_BYTES);
+    setStoryFields(root, "cover: art/cover.png");
+    // macOS resolves a path by opening it, so its realpath fails on a cover
+    // this user cannot read; the guard must not stop the build there.
+    const realpath = fs.realpathSync.native;
+    let refused = (target) => path.basename(String(target)) === "cover.png";
+    const resolve = spyOn(fs.realpathSync, "native").mockImplementation((target, ...rest) => {
+      if (refused(target)) {
+        throw Object.assign(new Error(`EACCES: permission denied, realpath '${target}'`), { code: "EACCES" });
+      }
+      return realpath(target, ...rest);
+    });
+    try {
+      expect(invoke(cwd, ["build", root, "--format", "epub"]).code).toBe(0);
+      expect(resolve.mock.calls.filter(([target]) => refused(target))).toEqual([]);
+      // A folder that cannot be resolved leaves the path as written.
+      refused = (target) => path.basename(String(target)) === "art";
+      expect(invoke(cwd, ["build", root, "--format", "epub"]).code).toBe(0);
+      expect(invoke(cwd, ["build", root, "--format", "html", "--out", "art/cover.png"]).code).toBe(4);
+      expect(fs.readFileSync(path.join(root, "art", "cover.png")).equals(PNG_BYTES)).toBe(true);
+    } finally {
+      resolve.mockRestore();
+    }
   });
 
   test("an epub build fails when the cover is missing", () => {
