@@ -30,6 +30,13 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The discovery skill keeps only the reverse outline inside its reconcile loop. The premise workshop runs every logline stress test.
   - The length pass runs `story reindex .`, `story wordcount . --write`, and `story check .` after each batch.
   - The plot-structure skill asks for approval before it reorders scenes or chapters.
+- The review, prose, compare, and query-letter skill instructions now match the CLI and each other. ([#783](https://github.com/danjdewhurst/story-skills/issues/783), [#786](https://github.com/danjdewhurst/story-skills/issues/786), [#787](https://github.com/danjdewhurst/story-skills/issues/787), [#793](https://github.com/danjdewhurst/story-skills/issues/793), [#806](https://github.com/danjdewhurst/story-skills/issues/806), [#807](https://github.com/danjdewhurst/story-skills/issues/807), [#808](https://github.com/danjdewhurst/story-skills/issues/808))
+  - `feedback-triage` says a blank severity answer on a manuscript note is `minor`.
+  - `reader-panel` takes `language` only from `story context`, and gives the line editor `style-sheet.md` and the prose findings for its chapters.
+  - The `reader-panel` sensitivity persona records the Canon check as `not checked (simulated read)`.
+  - `voice-style` says a `story.md` `severity` entry can make `story prose` exit 1.
+  - The `story-maintenance` compare reference names `--ref`, `--against`, and `--snapshot`.
+  - `query-letter` rounds the word count in "complete at" to the nearest thousand.
 
 ## [0.23.0] - 2026-10-07
 
