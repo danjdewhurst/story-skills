@@ -89,13 +89,11 @@ function unquote(line) {
   return line.replace(/^(?: {0,3}> ?)+/, "");
 }
 
-// Replaces YAML frontmatter, fenced code blocks (quoted ones too), and HTML
-// comments with spaces, keeping every newline so offsets map to the same
-// line numbers as the source. A leading --- is frontmatter only when a
-// closing --- or ... follows; otherwise it is a thematic break. A `<!--`
-// inside a code span is text, so it opens no comment that a later `-->`
-// would close.
-export function maskBlocks(text) {
+// Replaces YAML frontmatter and fenced code blocks (quoted ones too) with
+// spaces, keeping every newline so offsets map to the same line numbers as
+// the source. A leading --- is frontmatter only when a closing --- or ...
+// follows; otherwise it is a thematic break.
+function maskFences(text) {
   const lines = text.split("\n");
   let fence = null;
   let frontmatter = lines[0]?.trimEnd() === "---" && lines.some((line, i) => i > 0 && /^(---|\.\.\.)\s*$/.test(line));
@@ -122,13 +120,61 @@ export function maskBlocks(text) {
       lines[i] = blank(lines[i]);
     }
   }
-  return lines.join("\n").replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)|<!--[\s\S]*?-->/g, (match, ticks) => (ticks ? match : blank(match)));
+  return lines.join("\n");
 }
 
-// maskBlocks, then inline code spans too. A code span closes on a backtick
-// run of the same length.
+// Blanks HTML comments, and code spans too when `code` is set, pairing them
+// as CommonMark does. A backtick run opens a code span only when a run of
+// the same length closes it in the same paragraph: before a blank line or a
+// line that opens a comment, which starts a block of its own. A run with no
+// partner is text, so a lone backtick never reaches into a later paragraph
+// and unmasks a comment there. A `<!--` inside a code span opens nothing; any
+// other runs to the next `-->`, and one that never closes is left as it is.
+function maskInline(text, code) {
+  const token = /`+|<!--/g;
+  const paragraphEnd = /\n(?:[ \t]*\n| {0,3}<!--)/g;
+  const runs = /`+/g;
+  let masked = "";
+  let done = 0;
+  let match;
+  while ((match = token.exec(text)) !== null) {
+    if (match[0] === "<!--") {
+      const close = text.indexOf("-->", token.lastIndex);
+      if (close !== -1) {
+        masked += text.slice(done, match.index) + blank(text.slice(match.index, close + 3));
+        done = close + 3;
+        token.lastIndex = done;
+      }
+      continue;
+    }
+    paragraphEnd.lastIndex = token.lastIndex;
+    const limit = paragraphEnd.exec(text)?.index ?? text.length;
+    runs.lastIndex = token.lastIndex;
+    let closing = runs.exec(text);
+    while (closing !== null && closing.index < limit && closing[0].length !== match[0].length) {
+      closing = runs.exec(text);
+    }
+    if (closing !== null && closing.index < limit) {
+      const end = closing.index + closing[0].length;
+      if (code) {
+        masked += text.slice(done, match.index) + blank(text.slice(match.index, end));
+        done = end;
+      }
+      token.lastIndex = end;
+    }
+  }
+  return masked + text.slice(done);
+}
+
+// Frontmatter, fenced code, and HTML comments blanked (see maskFences and
+// maskInline).
+export function maskBlocks(text) {
+  return maskInline(maskFences(text), false);
+}
+
+// maskBlocks, then inline code spans too.
 export function maskCode(text) {
-  return maskBlocks(text).replace(/(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, blank);
+  return maskInline(maskFences(text), true);
 }
 
 // GitHub's heading anchors: lowercase, drop everything but letters, marks,

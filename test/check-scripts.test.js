@@ -970,6 +970,18 @@ describe("check-links", () => {
     expect(extractLinks(text)).toEqual([{ target: "seen.md", line: 5 }]);
   });
 
+  test("a lone backtick pairs with none in a later paragraph, so a comment between them stays hidden", () => {
+    const text = "A lone ` here.\n\n<!--\n## Draft heading\n[gone](gone.md)\n-->\n\nSee [real](real.md) and a lone ` there.\n\n## Kept\n";
+    expect([...anchorsFor(text)]).toEqual(["kept"]);
+    expect(extractLinks(text)).toEqual([{ target: "real.md", line: 8 }]);
+  });
+
+  test("a comment that starts a line hides its content, whatever backticks the paragraph around it holds", () => {
+    const text = "Text with a ` tick\n<!--\n## Hidden\n[gone](gone.md) `\n-->\nand `code` then [real](real.md).\n";
+    expect([...anchorsFor(text)]).toEqual([]);
+    expect(extractLinks(text)).toEqual([{ target: "real.md", line: 6 }]);
+  });
+
   test("extracts titled links, images, angle links, references, and html", () => {
     const text = "[a](a.md \"Title\") ![img](pic.png 'Alt')\n[b](<with space.md>) [c](has(paren).md)\n[ref]: ref.md \"t\"\n<img src=\"logo.svg\"> <a href=\"page.md#x\">x</a>\n";
     expect(extractLinks(text).map((link) => link.target)).toEqual(["a.md", "pic.png", "with space.md", "has(paren).md", "ref.md", "logo.svg", "page.md#x"]);
