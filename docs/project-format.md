@@ -365,8 +365,8 @@ tense: past
 | `counter-premise` | string | no | The antagonist's counter-argument to the premise. |
 | `author` | string | no | Author name, used on the Shunn title page and as the EPUB creator. |
 | `contact` | list of strings | no | Contact block lines for the Shunn title page. |
-| `surname` | string | no | The name in the Shunn running head, in place of the last word of the first author's name, such as `Le Guin`. See [Running head](manuscripts.md#running-head). |
-| `short-title` | string | no | The title in the Shunn running head, in place of the title before its subtitle. See [Running head](manuscripts.md#running-head). |
+| `surname` | string | no | The name in the Shunn running head, used whole in place of the surname the build takes from the first author's name, such as `Le Guin`. See [Running head](manuscripts.md#running-head). |
+| `short-title` | string | no | The title in the Shunn running head, used whole in place of the title before its subtitle. See [Running head](manuscripts.md#running-head). |
 | `season-goal` | string | no | One-sentence goal for a season or volume of serial fiction. |
 | `form` | enum | no | The story's form: `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, or `chapter-book`. `story init --form` sets it with a default `target-words`. See [Story form](#story-form). `story report` shows it. |
 | `target-words` | integer ≥ 1 | no | Word-count target for the book, used by `story progress` and `story report`. |

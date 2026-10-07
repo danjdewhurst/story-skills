@@ -8100,6 +8100,7 @@ function projectLanguage(storyData) {
   return String(value).trim();
 }
 var RESOLVED = new Map;
+var FAMILY_NAME_FIRST = new Set(["zh", "ja", "ko", "hu"]);
 function languagePack(tag = DEFAULT_LANGUAGE) {
   const language = String(tag ?? "").trim() || DEFAULT_LANGUAGE;
   if (!RESOLVED.has(language)) {
@@ -8126,6 +8127,7 @@ function resolvePack(language) {
   }
   pack.tag = language;
   pack.locale = canonicalTag(lookup) ?? canonicalTag(subtags[0]) ?? "und";
+  pack.familyNameFirst = [...keys].some((key) => FAMILY_NAME_FIRST.has(key));
   return deepFreeze(pack);
 }
 function deepFreeze(value) {
@@ -19661,22 +19663,25 @@ function shunnRunXml(script, text, decoration) {
   return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
 }
 function shunnHeadParts(meta) {
-  const name = oneLine2(meta.surname || headSurname(meta.lead ?? meta.author ?? ""));
-  const title = oneLine2(meta.shortTitle || headTitle(meta.title));
-  return [headFit(name, HEAD_NAME_COLUMNS), headFit(title, HEAD_TITLE_COLUMNS)].filter((part) => part !== "");
+  const name = meta.surname ? oneLine2(meta.surname) : headFit(headSurname(meta.lead ?? meta.author ?? "", meta.pack?.familyNameFirst), HEAD_NAME_COLUMNS, meta.labels);
+  const title = meta.shortTitle ? oneLine2(meta.shortTitle) : headFit(headTitle(meta.title), HEAD_TITLE_COLUMNS, meta.labels);
+  return [name, title].filter((part) => part !== "");
 }
 var HEAD_NAME_COLUMNS = 20;
 var HEAD_TITLE_COLUMNS = 30;
 function oneLine2(text) {
-  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\uE001]+/g, " ").replace(/^ | $/g, "");
+  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\ue001]+/g, " ").replace(/^ | $/g, "");
 }
-var NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv)\.?$/i;
-function headSurname(name) {
-  const words = oneLine2(name).split(" ").map((word) => word.replace(/,+$/, "")).filter((word) => word !== "");
+var NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv|phd|ph\.d|md|m\.d|esq)\.?$/i;
+function headSurname(name, familyFirst = false) {
+  const words = (oneLine2(name).split(",").find((part) => part.trim() !== "") ?? "").split(" ").filter((word) => word !== "");
+  if (familyFirst) {
+    return words[0] ?? "";
+  }
   while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
     words.pop();
   }
-  return words.length === 0 ? "" : words[words.length - 1];
+  return words[words.length - 1] ?? "";
 }
 function headTitle(title) {
   const text = oneLine2(title);
@@ -19687,18 +19692,29 @@ var WIDE_CHARACTER = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e0
 function headColumns(char) {
   return /\p{M}/u.test(char) ? 0 : WIDE_CHARACTER.test(char) ? 2 : 1;
 }
-function headFit(text, limit) {
+function headFit(text, limit, labels) {
   let kept = "";
   let width = 0;
   for (const char of text) {
     width += headColumns(char);
     if (width > limit) {
       const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
-      return (cut > 0 ? kept.slice(0, cut) : kept).replace(/[\s,;:\u2013\u2014-]+$/u, "");
+      return withoutDangling(cut > 0 ? kept.slice(0, cut) : kept, labels);
     }
     kept += char;
   }
   return text;
+}
+function withoutDangling(text, labels) {
+  const joiners = new Set(["and", String(labels?.and ?? "").replace(/\{[ab]\}/g, "").trim().toLowerCase()]);
+  const dangling = /[\s,;:/&\u2013\u2014\u3001\uff0c-]+$/u;
+  let rest = text.replace(dangling, "");
+  let space = rest.lastIndexOf(" ");
+  while (space > 0 && joiners.has(rest.slice(space + 1).toLowerCase())) {
+    rest = rest.slice(0, space).replace(dangling, "");
+    space = rest.lastIndexOf(" ");
+  }
+  return rest;
 }
 function shunnHeaders(script, meta) {
   const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;

@@ -200,9 +200,11 @@ story build . --format shunn
 These write `dist/<story-id>.shunn.docx` and `dist/<story-id>.shunn.md`.
 The DOCX has a running head on every page after the first: the author's
 surname, a short title, and the page number (`Writer / The Last Ember / 2`).
-The build takes the last word of the first author's name and the title
-before any subtitle. When either is wrong, such as `Le Guin` or a long
-title, set `surname` or `short-title` in `story.md`.
+The build takes the last word of the first author's name (the first word
+in a Chinese, Japanese, Korean, or Hungarian book) and the title before
+any subtitle, and cuts a long one to fit. When either is wrong, such as
+`Le Guin`, set `surname` or `short-title` in `story.md`; the build uses
+them whole.
 For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
 `dist/<story-id>.shunn.pdf` (US Letter, Courier, double-spaced, running
 head) with a paged-media engine the user has installed, and stops with
