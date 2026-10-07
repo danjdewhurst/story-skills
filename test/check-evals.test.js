@@ -169,6 +169,14 @@ describe("check-evals", () => {
     }
   });
 
+  test("accepts a fixture whose only structural check is lines", () => {
+    const root = evalsRoot();
+    addFixture(root, "verse", { brief: "Write five lines.", skill: "chapter-writing", lines: 5 });
+    const result = run(root);
+    expect(result.out).not.toContain("defines no checks");
+    expect(result.status).toBe(0);
+  });
+
   test("rejects a misspelled top-level field", () => {
     const root = evalsRoot();
     addFixture(root, "typo", { ...good, banned_regx: ["Thursday"] });
