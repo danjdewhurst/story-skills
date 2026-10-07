@@ -39,7 +39,7 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
 // from the check validate runs, so they refuse 2024-13-45 and 2023-02-29
 // too (#530). Nor do writing-mode: vertical and chapter-numerals: native:
 // the base project sets no language, and the schema requires one for them.
-// test/schema.test.js checks the generated vertical language pattern
+// test/schema.test.js checks the generated language patterns for them
 // against validate (#529); the test never sets language with those fields.
 const EXCEPTIONS = [
   { kind: "chapter", field: "number", side: "validate", match: /^filename-number-mismatch/, reason: "the number must match the chapter's file name, which the schema never sees" },
