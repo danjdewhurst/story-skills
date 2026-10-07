@@ -437,7 +437,10 @@ function docxStyles(script) {
 
 // Shunn manuscript format: Courier New 12pt, double spacing, page break
 // before each chapter heading, a title page with contact and word count, and
-// a running head on every later page.
+// a running head on every later page. An anonymous build (`meta.anonymous`,
+// for a market that reads blind) has no names in it: shunnMeta leaves out
+// the author, editor, contact lines, and surname, and the chapter bylines
+// go too.
 const SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
 const SHUNN_SIZE = `<w:sz w:val="24"/>`;
 const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
@@ -454,22 +457,87 @@ function shunnRunXml(script, text, decoration) {
 }
 
 // The running head's parts, as the PDF and DOCX print them before the page
-// number: the author (or, with no author, the editor) and the title, each
-// left out when empty.
-function shunnHeadParts(meta) {
-  return [meta.lead ?? meta.author, meta.title].filter((part) => part !== "");
+// number: Shunn's surname and short title, each left out when empty.
+// story.md `surname` and `short-title` set them; otherwise the surname is
+// the last word of the first author's name (`meta.lead`, an editor's in an
+// anthology with no author), and the short title is the title before any
+// subtitle. Each part is one line, and is cut to fit (see headFit), so the
+// head never wraps.
+export function shunnHeadParts(meta) {
+  const name = oneLine(meta.surname || headSurname(meta.lead ?? meta.author ?? ""));
+  const title = oneLine(meta.shortTitle || headTitle(meta.title));
+  return [headFit(name, HEAD_NAME_COLUMNS), headFit(title, HEAD_TITLE_COLUMNS)].filter((part) => part !== "");
+}
+
+// Courier sets 65 characters across a Letter page's text and 62 across
+// A4's. A head of a 20-column name, a 30-column title, two " / ", and a
+// four-digit page number takes 60.
+const HEAD_NAME_COLUMNS = 20;
+const HEAD_TITLE_COLUMNS = 30;
+
+// Text on one line: each run of line breaks, other control characters,
+// and spaces is one space (LINE_BREAK too, which would split a DOCX run),
+// and none is left at the ends. Typed no-break and ideographic spaces stay.
+function oneLine(text) {
+  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\uE001]+/g, " ").replace(/^ | $/g, "");
+}
+
+// The surname in a name: its last word, past a generational suffix (Jr.,
+// Sr., III) and a comma before it. A name with no spaces, as Chinese and
+// Japanese names are written, is used whole.
+const NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv)\.?$/i;
+
+function headSurname(name) {
+  const words = oneLine(name).split(" ").map((word) => word.replace(/,+$/, "")).filter((word) => word !== "");
+  while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.length === 0 ? "" : words[words.length - 1];
+}
+
+// The title before a subtitle: up to a colon and a space, a full-width
+// colon, or an em dash, unless nothing comes before it.
+function headTitle(title) {
+  const text = oneLine(title);
+  const main = text.split(/:\s|\uff1a|\u2014/u)[0].replace(/\s+$/u, "");
+  return main === "" ? text : main;
+}
+
+// Characters a fallback font sets twice as wide as Courier's: Chinese,
+// Japanese, and Korean, and full-width forms.
+const WIDE_CHARACTER = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
+
+function headColumns(char) {
+  return /\p{M}/u.test(char) ? 0 : WIDE_CHARACTER.test(char) ? 2 : 1;
+}
+
+// `text` cut to `limit` columns: at the last space or hyphen that fits, or
+// in the middle of a word longer than the limit, without the punctuation
+// or spaces the cut leaves at the end.
+function headFit(text, limit) {
+  let kept = "";
+  let width = 0;
+  for (const char of text) {
+    width += headColumns(char);
+    if (width > limit) {
+      const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
+      return (cut > 0 ? kept.slice(0, cut) : kept).replace(/[\s,;:\u2013\u2014-]+$/u, "");
+    }
+    kept += char;
+  }
+  return text;
 }
 
 // The DOCX headers, as the PDF sets them: every page but the first carries
 // the running head, its parts and then a PAGE field that Word and
-// LibreOffice fill in with the page's number, single-spaced at the end of
-// the line (the right, or the left in a right-to-left book). The first page
-// gets an empty header of its own (titlePg sets it apart), as Shunn leaves
-// the title page without a head. A line break in a part would break the
-// head's one line, so each run of them is a space, as in the PDF.
+// LibreOffice fill in with the page's number, single-spaced at the top
+// right, or the top left in a right-to-left book (in a bidi paragraph,
+// Word and LibreOffice read jc="right" as the end of the line). The first
+// page gets an empty header of its own (titlePg sets it apart), as Shunn
+// leaves the title page without a head.
 function shunnHeaders(script, meta) {
   const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
-  const text = shunnHeadParts(meta).map((part) => `${part.replace(/[\r\n\f]+/g, " ")} / `).join("");
+  const text = shunnHeadParts(meta).map((part) => `${part} / `).join("");
   const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`]
     .map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
   return [
@@ -526,9 +594,9 @@ function shunnByline(meta) {
 
 // A story's byline under its heading in a collection or anthology manuscript.
 // A short story or flash piece runs its chapters together as one story, so
-// it prints none.
+// it prints none, and an anonymous build names no one.
 function shunnChapterByline(chapter, meta) {
-  return meta.shortForm ? "" : chapter.byline ?? "";
+  return meta.shortForm || meta.anonymous ? "" : chapter.byline ?? "";
 }
 
 function shunnTitlePageXml(script, meta) {
@@ -624,8 +692,8 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
 
 // The Shunn manuscript as HTML with CSS paged media, the source `build
 // --format shunn --pdf` renders: US Letter (or A4, `paperName`) with 1in margins, Courier New 12pt
-// double-spaced, half-inch paragraph indents, and a running head of author,
-// title, and page number on every page after the first. The first page sets
+// double-spaced, half-inch paragraph indents, and a running head of surname,
+// short title, and page number on every page after the first. The first page sets
 // the contact lines top left and the length top right, then the title and
 // byline. A novel starts each chapter on a new page under its heading, a
 // third of the way down; a short story or flash piece runs on after the
@@ -636,6 +704,9 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
   const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
+  // The head sits at the top right, or the top left in a right-to-left
+  // book, as the DOCX sets it.
+  const headBox = type.rtl ? "@top-left" : "@top-right";
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
@@ -668,8 +739,8 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
 <title>${escapeHtml(meta.title)}</title>
 <style>
 @page { size: ${paper.css}; margin: 1in;
-  @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
-@page :first { @top-right { content: none; } }
+  ${headBox} { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
+@page :first { ${headBox} { content: none; } }
 html { font: 12pt/2 ${fonts}; }
 body { margin: 0; }
 p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }

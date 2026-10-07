@@ -43,9 +43,10 @@ const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["
 // --force would replace every snapshot whose name is taken, a default
 // --list or --restore would stop snapshot taking one, a default
 // --include-pending would put uncleared matter in every build, the
-// published review copy too, and a default --query would refuse every
-// story list of another kind.
-const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"], list: ["query"] };
+// published review copy too, a default --query would refuse every
+// story list of another kind, and an anonymous manuscript is for one
+// blind market, not every submission.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"] };
 
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format

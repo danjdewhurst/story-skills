@@ -9097,7 +9097,7 @@ function bookFile(book, file) {
 // src/publishing.js
 var MAX_KEYWORDS = 7;
 var BISAC_PATTERN = /^[A-Z]{3}\d{6}$/;
-var SCALAR_FIELDS = ["author", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
+var SCALAR_FIELDS = ["author", "surname", "short-title", "language", "isbn", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "chapter-label", "contents-label"];
 function isPlaceholder(value) {
   return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
 }
@@ -9143,6 +9143,8 @@ function publishingMeta(data) {
   return {
     authors: authors.length > 0 ? authors : author === "" ? [] : [author],
     editors: nameList(data.editor),
+    surname: text("surname"),
+    shortTitle: text("short-title"),
     language: text("language") || "en",
     writingMode: text("writing-mode") || "horizontal",
     chapterNumerals: chapterNumerals(data),
@@ -12185,6 +12187,7 @@ var OPTIONS = [
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
   { name: "note-url", value: "<url>", help: ["Note form linked, prefilled, from every label in", "build --format html (a GitHub new-issue link)"] },
   { name: "shunn", help: ["Apply Shunn manuscript formatting (with --format", "docx)"] },
+  { name: "anonymous", help: ["Leave every name out of build --format shunn and", "--format docx --shunn, for a market that reads", "blind: byline, editor, contact lines, running head"] },
   { name: "pdf", help: ["Render build --format print or shunn to PDF with an", "installed engine (Prince, WeasyPrint, pagedjs-cli,", "or Chrome/Chromium, found on PATH in that order)"] },
   { name: "pdf-engine", value: "<name|path>", help: ["PDF engine for build --pdf: prince, weasyprint,", "pagedjs-cli, chrome, or the path to one"] },
   { name: "spoilers", help: ["Include notes, statuses, deaths, knowledge,", "clues, and resolutions in build --format codex"] },
@@ -17603,7 +17606,7 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity", "queries"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "surname", "short-title", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity", "queries"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
@@ -19658,11 +19661,48 @@ function shunnRunXml(script, text, decoration) {
   return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
 }
 function shunnHeadParts(meta) {
-  return [meta.lead ?? meta.author, meta.title].filter((part) => part !== "");
+  const name = oneLine2(meta.surname || headSurname(meta.lead ?? meta.author ?? ""));
+  const title = oneLine2(meta.shortTitle || headTitle(meta.title));
+  return [headFit(name, HEAD_NAME_COLUMNS), headFit(title, HEAD_TITLE_COLUMNS)].filter((part) => part !== "");
+}
+var HEAD_NAME_COLUMNS = 20;
+var HEAD_TITLE_COLUMNS = 30;
+function oneLine2(text) {
+  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\uE001]+/g, " ").replace(/^ | $/g, "");
+}
+var NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv)\.?$/i;
+function headSurname(name) {
+  const words = oneLine2(name).split(" ").map((word) => word.replace(/,+$/, "")).filter((word) => word !== "");
+  while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.length === 0 ? "" : words[words.length - 1];
+}
+function headTitle(title) {
+  const text = oneLine2(title);
+  const main = text.split(/:\s|\uff1a|\u2014/u)[0].replace(/\s+$/u, "");
+  return main === "" ? text : main;
+}
+var WIDE_CHARACTER = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
+function headColumns(char) {
+  return /\p{M}/u.test(char) ? 0 : WIDE_CHARACTER.test(char) ? 2 : 1;
+}
+function headFit(text, limit) {
+  let kept = "";
+  let width = 0;
+  for (const char of text) {
+    width += headColumns(char);
+    if (width > limit) {
+      const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
+      return (cut > 0 ? kept.slice(0, cut) : kept).replace(/[\s,;:\u2013\u2014-]+$/u, "");
+    }
+    kept += char;
+  }
+  return text;
 }
 function shunnHeaders(script, meta) {
   const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
-  const text = shunnHeadParts(meta).map((part) => `${part.replace(/[\r\n\f]+/g, " ")} / `).join("");
+  const text = shunnHeadParts(meta).map((part) => `${part} / `).join("");
   const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`].map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
   return [
     { type: "default", content: paragraph(`${shunnRunXml(script, text)}${field}`) },
@@ -19696,7 +19736,7 @@ function shunnByline(meta) {
   return lines;
 }
 function shunnChapterByline(chapter, meta) {
-  return meta.shortForm ? "" : chapter.byline ?? "";
+  return meta.shortForm || meta.anonymous ? "" : chapter.byline ?? "";
 }
 function shunnTitlePageXml(script, meta) {
   const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
@@ -19782,6 +19822,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
   const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
+  const headBox = type.rtl ? "@top-left" : "@top-right";
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
@@ -19817,8 +19858,8 @@ ${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
 <title>${escapeHtml(meta.title)}</title>
 <style>
 @page { size: ${paper.css}; margin: 1in;
-  @top-right { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
-@page :first { @top-right { content: none; } }
+  ${headBox} { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
+@page :first { ${headBox} { content: none; } }
 html { font: 12pt/2 ${fonts}; }
 body { margin: 0; }
 p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
@@ -20354,7 +20395,7 @@ function formatSimilarity(report) {
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
-var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"], list: ["query"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]],
@@ -22073,7 +22114,7 @@ var TEXT_FIELDS = {
   research: ["title"],
   matter: ["title", "rights-holder", "credit"]
 };
-var STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
+var STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "surname", "short-title", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
 function validateTextFields(project, errors) {
   const check = (label, data, fields) => {
     for (const field of fields) {
@@ -27847,15 +27888,15 @@ function narrationScript(manuscript, guide) {
   const unit = narrationUnit(manuscript);
   const rate = narrationRate(manuscript.meta, unit);
   const count = unit === "characters" ? characterCount : wordCount;
-  const title = oneLine2(manuscript.title);
-  const authors = joinNames(manuscript.meta.authors.map(oneLine2), labels);
+  const title = oneLine3(manuscript.title);
+  const authors = joinNames(manuscript.meta.authors.map(oneLine3), labels);
   const narrator = "[narrator]";
   const collection = collectionCredits(manuscript.meta, manuscript.chapters);
   const sections = [
     ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body, credits: [] })),
     ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body, credits: collection.story(chapter) })),
     ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body, credits: [] }))
-  ].map((section) => ({ ...section, title: oneLine2(section.title), words: count(section.body) }));
+  ].map((section) => ({ ...section, title: oneLine3(section.title), words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
   const lines = [
     `# ${title}: Narration Script`,
@@ -27888,9 +27929,9 @@ function narrationScript(manuscript, guide) {
 }
 function collectionCredits(meta, chapters) {
   const labels = meta.labels;
-  const authors = meta.authors.map(oneLine2);
-  const editors = (meta.editors ?? []).map(oneLine2);
-  const storyAuthors = (chapter) => (chapter.authors ?? []).map(oneLine2);
+  const authors = meta.authors.map(oneLine3);
+  const editors = (meta.editors ?? []).map(oneLine3);
+  const storyAuthors = (chapter) => (chapter.authors ?? []).map(oneLine3);
   const own = new Set(authors);
   const credited = new Set([...authors, ...editors]);
   const named = chapters.map(storyAuthors).filter((names) => names.length > 0);
@@ -27908,7 +27949,7 @@ function spokenLabel(labels, key, values) {
   const template = fillLabel(labels, key).replace(/\{([a-z]+)\}[.。।]/gu, (match, name) => ending.test(String(values[name] ?? "")) ? `{${name}}` : match);
   return fillLabel({ [key]: template }, key, values);
 }
-function oneLine2(text) {
+function oneLine3(text) {
   return trimSourceSpace(collapseSourceSpace(text));
 }
 function pronunciationGuide(project) {
@@ -28089,6 +28130,9 @@ function buildBook(root, options = {}) {
     throw usageError(`--include-pending applies only to builds that print matter pages; --format ${format}${options.shunn ? " --shunn" : ""} prints none`, ["include-pending", "format", "shunn"]);
   }
   const parts = { includePending: Boolean(options.includePending), warnLeftOut: printsMatter };
+  if (options.anonymous && format !== "shunn" && !(format === "docx" && options.shunn)) {
+    throw usageError("--anonymous applies only to --format shunn and --format docx --shunn", ["anonymous", "format", "shunn"]);
+  }
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
@@ -28148,13 +28192,13 @@ function buildBook(root, options = {}) {
     writeFile(output.outFile, text, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: format === "html" }));
   } else if (format === "shunn") {
-    writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
+    writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
-    writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
+    writeShunnDocx(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions, paper);
   } else {
     writeDocx(output.outFile, manuscript, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
@@ -28167,7 +28211,7 @@ function buildPdf(project, format, { trim, paper, parts }, output, options) {
   const manuscript = manuscriptParts(project, "build", parts);
   assertMatterTitles(project, manuscript);
   const style = projectBuildStyle(project);
-  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
+  const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project, options.anonymous), paper);
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
   const warnings = format === "print" ? [...manuscript.warnings, ...matterTodoWarnings(project, manuscript)] : manuscript.warnings;
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings };
@@ -28558,16 +28602,28 @@ function truncateWords(text, budget) {
 `)}…
 `;
 }
-function shunnMeta(project) {
+function shunnMeta(project, anonymous = false) {
   const data = project.story.data;
   const meta = publishingMeta(data);
+  const names = anonymous ? {
+    author: "",
+    lead: "",
+    surname: "",
+    editors: "",
+    contact: []
+  } : {
+    author: joinNames(meta.authors, meta.labels),
+    lead: (meta.authors.length > 0 ? meta.authors : meta.editors)[0] ?? "",
+    surname: meta.surname,
+    editors: meta.editors.length === 0 ? "" : fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }),
+    contact: asArray(data.contact)
+  };
   return {
     title: project.title,
-    author: joinNames(meta.authors, meta.labels),
-    lead: leadNames(meta),
-    editors: meta.editors.length === 0 ? "" : fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }),
+    shortTitle: meta.shortTitle,
+    ...names,
+    anonymous,
     labels: meta.labels,
-    contact: asArray(data.contact),
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     pack: project.pack,
     ...project.unit.name === "characters" ? { characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {},
@@ -31546,7 +31602,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
+    options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -31555,6 +31611,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
         out: parsed.options.out,
         format: parsed.options.format,
         shunn: isTruthy(parsed.options.shunn),
+        anonymous: isTruthy(parsed.options.anonymous),
         trim: parsed.options.trim,
         paper: parsed.options.paper,
         paperDefaulted: defaulted.has("paper"),

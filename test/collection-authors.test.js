@@ -218,7 +218,7 @@ describe("collection and anthology authors (#473)", () => {
     });
     expect(html).toContain(`<h1>Salt Roads</h1>\n<p>Edited by Cara Editor</p>`);
     expect(html).toContain(`<h2>Low Tide</h2>\n<p class="byline">by Ben Other</p>`);
-    expect(html).toContain(`"Cara Editor / " "Salt Roads / " counter(page)`);
+    expect(html).toContain(`"Editor / " "Salt Roads / " counter(page)`);
   });
 
   test("a short story's Shunn manuscript runs on without chapter bylines", () => {
