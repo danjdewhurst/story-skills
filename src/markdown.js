@@ -139,14 +139,12 @@ export function plainLinks(text) {
 
 // ASCII punctuation, which a backslash escapes.
 const ESCAPABLE = /[!-/:-@[-`{-~]/;
-// A line of nothing but spaces, tabs, and block quote markers, which ends a
-// paragraph. Each try reads one line, so a search stays linear.
-const BLANK_LINE = /\n[ \t\r>]*(?:\n|$)/g;
 // An autolink: a scheme of 2 to 32 characters, `:`, and no space, control
 // character, `<`, or `>`; or an email address, as CommonMark reads them,
 // with the labels of its domain (group 1) checked apart (see autolinkEnd).
+// U+E000 and U+E001, the markers word counts and builds use, end one too.
 // No try reads past the next `<`, so the tries at each `<` stay linear.
-const AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
+const AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f\ue000\ue001]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
 const DOMAIN_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 // How deep parentheses nest in a link destination, as in cmark, markdown-it,
 // and Pandoc: a deeper one is not a link.
@@ -168,73 +166,64 @@ export function autolinkEnd(text, index) {
 // one pass as CommonMark's "look for link or image" reads them: a `]` closes
 // the nearest open `[` or `![`, and makes a link when an inline destination
 // follows it; a link's text cannot hold another link, so the `[` before it
-// can no longer open one. Each paragraph is read apart. Code spans and
-// autolinks are skipped whole, and a backslash-escaped character is text.
-// A destination steps over each parenthesised group in it at once (see
-// parenGroups), so one that fails is never read again by the `](` of a
-// link nested in it, and a title is read only up to the next quote or
-// parenthesis of its kind: a long run of unclosed `[`, `![`, `](`, or
-// backticks stays linear.
+// can no longer open one. Each paragraph is read apart (see inlineBlocks).
+// Code spans and autolinks are skipped whole, and a backslash-escaped
+// character is text. A destination steps over each parenthesised group in
+// it at once (see parenGroups), so one that fails is never read again by
+// the `](` of a link nested in it, and a title is read only up to the next
+// quote or parenthesis of its kind: a long run of unclosed `[`, `![`, `](`,
+// or backticks stays linear.
 function withoutLinks(source) {
   // [start, end] of the markup to drop: a link's `[` and its `](...)`, or a
   // whole image.
   const cuts = [];
-  const openers = [];
-  // A `[` below this index in `openers` holds a link that has closed, so
-  // it opens nothing (a link's text cannot hold a link); a `![` still
-  // opens an image.
-  let inactive = 0;
-  let paragraphStart = 0;
-  let paragraphEnd = -1;
-  let closeSpan = null;
-  let groups = null;
-  for (let index = 0; index < source.length;) {
-    if (index > paragraphEnd) {
-      BLANK_LINE.lastIndex = index;
-      paragraphStart = index;
-      paragraphEnd = BLANK_LINE.exec(source)?.index ?? source.length;
-      openers.length = 0;
-      inactive = 0;
-      closeSpan = codeSpanCloser(source, paragraphEnd);
-      groups = null;
-    }
-    const character = source[index];
-    const autolink = character === "<" ? autolinkEnd(source, index) : -1;
-    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
-      index += 2;
-    } else if (character === "`") {
-      let run = index;
-      while (source[run] === "`") {
-        run += 1;
-      }
-      const end = closeSpan(index, run - index);
-      index = end === -1 ? run : end;
-    } else if (autolink !== -1) {
-      index = autolink;
-    } else if (character === "[" || (character === "!" && source[index + 1] === "[")) {
-      inactive = Math.min(inactive, openers.length);
-      openers.push({ start: index, image: character === "!" });
-      index += character === "!" ? 2 : 1;
-    } else if (character === "]" && openers.length > 0) {
-      const opener = openers.pop();
-      let end = -1;
-      if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
-        groups ??= parenGroups(source, paragraphStart, paragraphEnd);
-        end = inlineLinkEnd(source, index + 1, paragraphEnd, groups);
-      }
-      if (end === -1) {
-        index += 1;
-        continue;
-      }
-      if (opener.image) {
-        cuts.push([opener.start, end]);
+  for (const [start, end] of inlineBlocks(source)) {
+    const openers = [];
+    // A `[` below this index in `openers` holds a link that has closed, so
+    // it opens nothing (a link's text cannot hold a link); a `![` still
+    // opens an image.
+    let inactive = 0;
+    const closeSpan = codeSpanCloser(source, end);
+    let groups = null;
+    for (let index = start; index < end;) {
+      const character = source[index];
+      const autolink = character === "<" ? autolinkEnd(source, index) : -1;
+      if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+        index += 2;
+      } else if (character === "`") {
+        let run = index;
+        while (source[run] === "`") {
+          run += 1;
+        }
+        const close = closeSpan(index, run - index);
+        index = close === -1 ? run : close;
+      } else if (autolink !== -1) {
+        index = autolink;
+      } else if (character === "[" || (character === "!" && source[index + 1] === "[")) {
+        inactive = Math.min(inactive, openers.length);
+        openers.push({ start: index, image: character === "!" });
+        index += character === "!" ? 2 : 1;
+      } else if (character === "]" && openers.length > 0) {
+        const opener = openers.pop();
+        let linkEnd = -1;
+        if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
+          groups ??= parenGroups(source, start, end);
+          linkEnd = inlineLinkEnd(source, index + 1, end, groups);
+        }
+        if (linkEnd === -1) {
+          index += 1;
+          continue;
+        }
+        if (opener.image) {
+          cuts.push([opener.start, linkEnd]);
+        } else {
+          cuts.push([opener.start, opener.start + 1], [index, linkEnd]);
+          inactive = openers.length;
+        }
+        index = linkEnd;
       } else {
-        cuts.push([opener.start, opener.start + 1], [index, end]);
-        inactive = openers.length;
+        index += 1;
       }
-      index = end;
-    } else {
-      index += 1;
     }
   }
   // Links close in text order, but an image closes after the links in its
@@ -249,6 +238,44 @@ function withoutLinks(source) {
     }
   }
   return result + source.slice(position);
+}
+
+// The [start, end] of each run of lines in `source` (which holds no closed
+// fence) that CommonMark reads as one block of inline text, so a link or
+// code span never pairs across two: the builds' paragraphs (see
+// markdownParagraphs), which a blank line ends, a scene-break line ends
+// and stands apart from (see breaksParagraph), and a block quote ends when
+// it opens below lines that are not quoted; and an ATX heading line, which
+// is a block of its own, though builds run its text into the paragraph
+// around it. A blank line may hold block quote markers. Each line is read
+// once.
+function inlineBlocks(source) {
+  const blocks = [];
+  let open = null;
+  for (let lineStart = 0; lineStart <= source.length;) {
+    const newline = source.indexOf("\n", lineStart);
+    const lineEnd = newline === -1 ? source.length : newline;
+    const line = source.slice(lineStart, lineEnd).replace(/\r$/, "");
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(line);
+    const content = marker ? line.slice(marker[0].length) : line;
+    const blank = content.trim() === "";
+    const alone = !blank && (breaksParagraph(content) || ATX_HEADING.test(content));
+    if (blank || alone || (marker && open !== null && !open.quote)) {
+      open = null;
+    }
+    if (!blank) {
+      if (open === null) {
+        open = { quote: Boolean(marker), block: [lineStart, lineEnd] };
+        blocks.push(open.block);
+      }
+      open.block[1] = lineEnd;
+      if (alone) {
+        open = null;
+      }
+    }
+    lineStart = lineEnd + 1;
+  }
+  return blocks;
 }
 
 // Where each parenthesised group of a paragraph ends, for the link
@@ -630,21 +657,47 @@ export function setextSceneBreakLines(markdownBody) {
   return found;
 }
 
-// A footnote definition (`[^1]: The note.`) as GitHub and Pandoc read one:
-// at the start of a line, in a block quote too. Its label runs to the
-// first `]`, so a test reads the line once.
-const FOOTNOTE_DEFINITION = /^[ \t>]*\[\^[^\]\n]+\]:/;
+// A footnote definition (`[^1]: The note.`) as GitHub and Pandoc read one,
+// after its indent (footnoteLines allows three spaces at most). Its label
+// runs to the first `]`, so a test reads the line once.
+const FOOTNOTE_DEFINITION = /^ *\[\^[^\]\n]+\]:/;
 
 // Body line indexes (counted from 0) of the footnote definitions in the
-// prose. Builds have no footnotes, so they print a definition and its
-// `[^1]` markers as written, where a markdown viewer shows a footnote.
-// Nothing in an HTML comment or a closed backtick fence counts.
+// prose, in a block quote too. Builds have no footnotes, so they print a
+// definition and its `[^1]` markers as written, where a markdown viewer
+// shows a footnote. A line in an HTML comment, a closed backtick fence, an
+// HTML block, or indented code is not one.
 export function footnoteLines(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, "\n");
   const masked = maskMarkup(body);
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split("\n").length - 1;
-  return masked.slice(start).split("\n").flatMap((line, index) => (FOOTNOTE_DEFINITION.test(line) ? [first + index] : []));
+  const found = [];
+  // The HTML block the line before opened or continued, and whether a
+  // paragraph is open, which the last kind of HTML block cannot interrupt.
+  let html = null;
+  let paragraph = false;
+  for (const [index, line] of masked.slice(start).split("\n").entries()) {
+    const content = expandTabs(line.slice(/^(?: {0,3}>[ \t]?)*/.exec(line)[0].length));
+    if (html !== null) {
+      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
+    } else if (content.trim() === "") {
+      paragraph = false;
+    } else if (indentOf(content) <= 3) {
+      // A line indented further is indented code, or the open paragraph's
+      // text, and changes nothing.
+      const block = htmlBlock(content, paragraph);
+      const footnote = block === null && FOOTNOTE_DEFINITION.test(content);
+      if (block !== null) {
+        html = block.end !== null && block.end.test(content) ? null : block;
+      }
+      if (footnote) {
+        found.push(first + index);
+      }
+      paragraph = block === null && !footnote;
+    }
+  }
+  return found;
 }
 
 // Chinese and Japanese characters, as fixed ranges so that every runtime
@@ -759,10 +812,9 @@ let graphemes;
 // characters, every underscore among them, are not book text, so they are
 // left out; a full-width space indent is whitespace.
 export function characterCount(markdown) {
-  const text = countedText(plainLinks(String(markdown).replace(/\uE000/g, " ")))
-    .split("\n")
-    .filter((line) => !isSceneBreak(line))
-    .join("\n")
+  // A line is a scene break as written: `&#45;&#45;&#45;` prints as text.
+  const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split("\n");
+  const text = countedText(lines.map((line) => (isSceneBreak(line) ? "" : line)).join("\n"))
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
     .replace(/[#>*_~|`\s]+/gu, "");
   graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -1019,7 +1071,7 @@ const NO_LABELS = new Set();
 // plainLinks, so an entity in a link (`&#41;`) cannot end it early.
 export function countedText(markdown) {
   const parts = splitFences(String(markdown));
-  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: codeSpans(part.text) }));
+  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: literalSpans(part.text) }));
   // A line shaped like a definition is one only when a reference uses its
   // label, so a chat log's `[Mira]: Hello?` stays prose. A label in code
   // or in such a line is not a use.
@@ -1084,7 +1136,7 @@ export function proseWordSpans(text) {
 // fence, as [start, end, replacement] in order, none overlapping another
 // or a code span. `definitions` are the reference definitions to drop and
 // `defined` the labels a full reference may name.
-function markupEdits(text, code = codeSpans(text), definitions = [], defined = NO_LABELS) {
+function markupEdits(text, code = literalSpans(text), definitions = [], defined = NO_LABELS) {
   const edits = definitions.map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
   for (const match of defined.size === 0 ? [] : text.matchAll(FULL_REFERENCE_LABELS)) {
     if (defined.has(referenceLabel(match[0].slice(1, -1)))) {
@@ -1103,13 +1155,17 @@ function markupEdits(text, code = codeSpans(text), definitions = [], defined = N
   edits.sort((left, right) => left[0] - right[0]);
   const outsideCode = missesAll(code);
   let position = 0;
-  return edits.filter(([start, end]) => {
+  const kept = edits.filter(([start, end]) => {
     if (start < position || !outsideCode(start, end)) {
       return false;
     }
     position = end;
     return true;
   });
+  // An autolink is its address, as builds print it, and nothing in it is
+  // read as markup.
+  const autolinks = code.filter((span) => span[2] === "autolink").map(([start, end]) => [start, end, text.slice(start + 1, end - 1)]);
+  return [...kept, ...autolinks].sort((left, right) => left[0] - right[0]);
 }
 
 function applyEdits(text, edits) {
@@ -1163,6 +1219,28 @@ function missesAll(ranges) {
     }
     return next === ranges.length || ranges[next][0] >= end;
   };
+}
+
+// The code spans and autolinks in `text`, as [start, end] in order and
+// apart, with "autolink" third for an autolink: builds print the markup in
+// them as written. An autolink that a code span overlaps is left to the
+// code span.
+function literalSpans(text) {
+  const code = codeSpans(text);
+  const spans = [];
+  let next = 0;
+  for (let index = text.indexOf("<"); index !== -1; index = text.indexOf("<", index + 1)) {
+    while (next < code.length && code[next][1] <= index) {
+      spans.push(code[next]);
+      next += 1;
+    }
+    const end = escaped(text, index) ? -1 : autolinkEnd(text, index);
+    if (end !== -1 && (next === code.length || end <= code[next][0])) {
+      spans.push([index, end, "autolink"]);
+      index = end - 1;
+    }
+  }
+  return [...spans, ...code.slice(next)];
 }
 
 // The code spans in `text`, as [start, end] in order, read as CommonMark

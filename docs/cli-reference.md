@@ -3093,7 +3093,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `todo-markers` | warning | Chapter prose has `[TODO` markers, which every build prints. |
 | `unclosed-comment` | warning | Chapter prose opens an HTML comment that never closes. |
 | `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text, in the same block quote or list item. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
-| `unsupported-footnote` | warning | Chapter prose has a footnote definition (`[^1]: The note.`). Builds have no footnotes, so they print the note and its `[^1]` markers as written, where a markdown viewer shows a footnote. Work the note into the prose or a back-matter page. |
+| `unsupported-footnote` | warning | Chapter prose has a footnote definition (`[^1]: The note.`) indented three spaces or less, outside an HTML block or code. Builds have no footnotes, so they print the note and its `[^1]` markers as written, where a markdown viewer shows a footnote. Work the note into the prose or a back-matter page. |
 | `no-scene-records` | warning | A chapter has no scene records. |
 | `empty-chapter` | warning | A chapter has no prose yet, and the book is complete or the chapter claims to be written. |
 | `beat-too-long` | warning | A chapter `beat` is longer than 60 characters, counted as a reader sees them (grapheme clusters). Keep it a short label, such as `Midpoint`, and put the detail in the outline. |

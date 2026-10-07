@@ -143,8 +143,27 @@ describe("html and print builds", () => {
     // Not autolinks: a space inside, no scheme, a bad email domain, or a
     // one-letter scheme. An autolink holds no emphasis.
     expect(inlineHtml("<https://a b> <a.b> <a@b..c> <a:b> *<ab:c*d>*")).toBe("&lt;https://a b&gt; &lt;a.b&gt; &lt;a@b..c&gt; &lt;a:b&gt; <em>ab:c*d</em>");
+    // An email domain's labels have 1 to 63 letters, digits, or hyphens, and
+    // neither start nor end with a hyphen.
+    expect(inlineHtml(`<a@b-.c> <a@-b.c> <a@b.c-d> <a@${"b".repeat(63)}.c> <a@${"b".repeat(64)}.c>`))
+      .toBe(`&lt;a@b-.c&gt; &lt;a@-b.c&gt; a@b.c-d a@${"b".repeat(63)}.c &lt;a@${"b".repeat(64)}.c&gt;`);
+    // A hard break ends an autolink, and a reference never stands for the
+    // builds' line break marker.
+    expect(paragraphs("<https://x.com/a\\\nb> &#xE001;")[0].html).toBe("&lt;https://x.com/a<br>b&gt; \ufffd");
+    // Nor for a control character, which `story compare` would print to the
+    // terminal from the paragraph's plain text.
+    expect(paragraphs("&#27;]0;title&#7; next")[0].text).toBe("\ufffd]0;title\ufffd next");
     expectLinearTime(inlineHtml, (n) => `<a@${"b.".repeat(n / 2)}`);
     expectLinearTime(inlineHtml, (n) => "&#1".repeat(n / 3));
+  }, 15000);
+
+  test("fenced code prints as written, in paragraphs of its own (#592)", () => {
+    const html = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs.map((paragraph) => paragraph?.html ?? null);
+    // No emphasis, code span, escape, reference, autolink, or link is read
+    // in a fence, a blank line inside one included, and a lone break line
+    // there is text.
+    expect(html("Before.\n```\n*a* `b` \\*c &amp; <https://x>\n\n&mdash; [c](d)\n```\n[e](f) &mdash;\n\n```\n***\n```\n* * *"))
+      .toEqual(["Before.", "*a* `b` \\*c &amp;amp; &lt;https://x&gt;", "&amp;mdash; [c](d)", "e \u2014", "***", null]);
   });
 
   test("backtick runs of many lengths build in linear time (#587)", () => {

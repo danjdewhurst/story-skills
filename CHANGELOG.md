@@ -166,8 +166,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Sentence splitting now ends a sentence at a lone capital before a word that is never a name, opens one at a dialogue dash, and keeps a quotative と with its quote. (#586)
   - `story prose`, `story voices`, and the synopsis split `So do I. She left.` and `plan B. Nobody agreed.` in two, while initials such as `J. R. Tolkien`, `Anna K. Smith`, and `I. Asimov` still run on.
   - A dialogue dash before a capital opens a new sentence (`—Vete. —Ella se giró.`), and `「はい。」と言った。` is one sentence.
-- Builds and word counts now read links as CommonMark does: `[Foo](https://en.wikipedia.org/wiki/Foo_(bar))` and a link with a title such as `"Title (x)"` print `Foo`, while `[Aside](not a link)` and a link inside code print as written. Builds also print a character reference such as `&mdash;`, `&nbsp;`, or `&#8212;` as its character and an autolink such as `<https://example.com>` as its address. ([#592](https://github.com/danjdewhurst/story-skills/issues/592))
-- `story validate` now warns about a footnote definition (`[^1]: The note.`) in chapter prose with `unsupported-footnote`. Builds have no footnotes and print the note and its `[^1]` markers as written, where a markdown viewer shows a footnote. ([#592](https://github.com/danjdewhurst/story-skills/issues/592))
+- Builds and word counts now read inline links as CommonMark does, and builds print character references and autolinks as the text they stand for. (#592)
+  - `[Foo](https://en.wikipedia.org/wiki/Foo_(bar))` and a link with a title such as `"Title (x)"` print `Foo`, while `[Aside](not a link)`, a link inside code, and one across a scene break print as written.
+  - Builds print a reference such as `&mdash;` or `&#8212;` as its character and `<https://example.com>` as its address, and word counts now know every HTML5 name and count an autolink as its address.
+  - Fenced code prints as written, with no emphasis, reference, or autolink read in it.
+- `story validate` now warns with `unsupported-footnote` about a footnote definition in chapter prose, which builds print as written. (#592)
+  - Builds have no footnotes, so a note and its `[^1]` markers print as written where a markdown viewer shows a footnote.
 
 ### Security
 

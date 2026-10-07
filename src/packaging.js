@@ -223,7 +223,7 @@ function xhtmlParagraphs(body, markup) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
   return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
+    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
 }
 
@@ -257,7 +257,7 @@ export function htmlBook(manuscript, ownIndent = false) {
     if (paragraph.sceneBreak) {
       return null;
     }
-    const runs = inlineRuns(paragraph.text);
+    const runs = inlineRuns(paragraph.text, paragraph.code);
     return {
       html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
       // Plain text, one line, for matching labels and quoting in note links.
@@ -324,7 +324,7 @@ export function writeDocx(outFile, manuscript, writeOptions = {}) {
     for (const paragraph of markdownParagraphs(body, true)) {
       bodyParts.push(paragraph.sceneBreak
         ? paragraphXml(script, "* * *", "SceneBreak")
-        : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
+        : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
     }
   };
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
@@ -663,7 +663,7 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, pap
     for (const paragraph of body) {
       paragraphs.push(paragraph.sceneBreak
         ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true)
-        : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+        : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
     }
   }
 
@@ -734,7 +734,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak
       ? `<p class="break">${escapeHtml(sceneBreak)}</p>`
-      : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+      : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
   });
   const body = [];
   let sections = 0;
@@ -816,8 +816,12 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
 // underscore inside a word is literal, and a backslash escapes punctuation.
 // A character reference (`&mdash;`, `&#8212;`) is the character it names,
 // and an autolink (`<https://example.com>`) its address, both as plain text,
-// so `&#42;` is never emphasis. Returns runs of { text, strong, em }.
-function inlineRuns(text) {
+// so `&#42;` is never emphasis. Code from a fence (`code`) is printed as
+// written, with none of this read in it. Returns runs of { text, strong, em }.
+function inlineRuns(text, code = false) {
+  if (code) {
+    return [{ text, strong: false, em: false }];
+  }
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
@@ -999,15 +1003,18 @@ function runMarkup(run, escape, lineBreak) {
 export const LINE_BREAK = "\uE001";
 
 // The body as paragraphs: { sceneBreak: true } for a thematic break (three
-// or more of the same marker, optionally spaced), otherwise { text, quote }
-// where `text` is inline markdown on one line, with LINE_BREAK for each hard
-// break, and `quote` marks a blockquote paragraph (an epigraph, a letter).
+// or more of the same marker, optionally spaced), otherwise
+// { text, quote, code } where `text` is inline markdown on one line, with
+// LINE_BREAK for each hard break, `quote` marks a blockquote paragraph (an
+// epigraph, a letter), and `code` one from a code fence, which inlineRuns
+// prints as written.
 // Whitespace-only lines are blank, as in CommonMark, and a scene-break line
 // ends a paragraph even with no blank line around it, as a thematic break
 // does (see breaksParagraph); a `---` right under a line of text is a break
 // too, not the setext heading CommonMark reads (story validate warns, see
 // setextSceneBreakLines). Fence lines go and the code stays, with no breaks
-// in it; outside code, links print as their text and images are left out,
+// in it, and a fence's paragraphs stand apart from the prose around them;
+// outside code, links print as their text and images are left out,
 // as word counts treat them (see plainLinks). Footnotes stay as written
 // (story validate warns, see footnoteLines). A build that indents first
 // lines itself passes `ownIndent`, and a paragraph's typed indent (the
@@ -1049,8 +1056,10 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
     // A break spaced with typed spaces (`*\u00a0*\u00a0*`) is still a break,
     // and so is one wrapped over lines (`* *` then `*`).
+    // Fence lines are blank lines here, so a paragraph is all code or none.
+    const { code } = lines[0];
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!code && !text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote, code });
   };
   // Each line, and whether it is code: closed backtick fences lose their
   // fence lines, and the code between them has no breaks.
@@ -1081,7 +1090,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       quote = Boolean(marker);
     }
-    lines.push({ line, heading });
+    lines.push({ line, heading, code });
   }
   flush();
   return paragraphs;
