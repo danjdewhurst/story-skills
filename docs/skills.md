@@ -316,7 +316,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Triggers.** "Create a plot arc", "story structure", "add a plot point", "story timeline", "track foreshadowing", "pacing", "sagging middle", "act structure", "story arc", "plot outline", "snowflake method".
 
-**Not for.** Scene outcomes or writing a chapter hook ([scene-craft](#scene-craft)), or a pacing check as a revision pass ([revision-continuity](#revision-continuity)). This skill owns pacing at book level.
+**Not for.** The craft of scene outcomes and chapter hooks, which this skill only plans in the outline ([scene-craft](#scene-craft)), or a pacing check as a revision pass ([revision-continuity](#revision-continuity)). This skill owns pacing at book level.
 
 **Workflow.**
 
