@@ -285,6 +285,32 @@ export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}
   expect(longTime).toBeLessThan(4 * shortTime + 25);
 }
 
+// Asserts that `run` takes about linear time in the size of its input when
+// each run also has a fixed cost, such as making or reading a project,
+// which expectLinearTime would pay once for each of its short inputs: the
+// run on make(size) is timed against the run on make(size / 4), each the
+// fastest of a few runs taken in turn, so a busy spell slows both. A linear
+// scan takes at most four times as long, and less with the fixed cost; a
+// quadratic one takes sixteen times as long once the scan outweighs that
+// cost. Returns what `run` gave on the larger input.
+export function expectLinearGrowth(run, make, size) {
+  const small = make(size / 4);
+  const large = make(size);
+  let smallTime = Infinity;
+  let largeTime = Infinity;
+  let result;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let started = performance.now();
+    run(small);
+    smallTime = Math.min(smallTime, performance.now() - started);
+    started = performance.now();
+    result = run(large);
+    largeTime = Math.min(largeTime, performance.now() - started);
+  }
+  expect(largeTime).toBeLessThan(8 * smallTime + 25);
+  return result;
+}
+
 // Asserts that `run` takes about as long on `input` as on `control`, an
 // input of the same length that it passes over at once, again with no
 // wall-clock limit. A scan that is linear but does up to a thousand steps

@@ -111,17 +111,30 @@ describe("#307 scripts written without spaces", () => {
       return;
     }
     const markdown = pathToFileURL(path.join(import.meta.dirname, "..", "src", "markdown.js")).href;
-    // Unwindowed, Node 18 and 20 take over ten seconds on this run.
+    // The long run is timed against one a quarter of its length, each the
+    // fastest of three runs taken in turn, with no wall-clock limit. Windowed,
+    // it takes about four times as long; unwindowed, Node 18 and 20 take about
+    // fifty times as long.
     const script = `import(${JSON.stringify(markdown)}).then(({ splitWords }) => {
-      const started = Date.now();
-      const long = splitWords(${JSON.stringify(THAI)}.repeat(22000)).length;
-      console.log(JSON.stringify({ words: ${JSON.stringify([THAI, LAO, KHMER, BURMESE])}.map(splitWords), long, ms: Date.now() - started }));
+      const time = (run) => {
+        const started = performance.now();
+        run();
+        return performance.now() - started;
+      };
+      let short = Infinity;
+      let long = Infinity;
+      let words = 0;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        short = Math.min(short, time(() => splitWords(${JSON.stringify(THAI)}.repeat(2750))));
+        long = Math.min(long, time(() => { words = splitWords(${JSON.stringify(THAI)}.repeat(11000)).length; }));
+      }
+      console.log(JSON.stringify({ words: ${JSON.stringify([THAI, LAO, KHMER, BURMESE])}.map(splitWords), long: words, ms: { short, long } }));
     })`;
     const result = spawnSync("node", ["-e", script], { encoding: "utf8" });
     expect(result.stderr).toBe("");
     const output = JSON.parse(result.stdout);
     expect(output.words).toEqual([THAI, LAO, KHMER, BURMESE].map(splitWords));
-    expect(output.long).toBe(66000);
-    expect(output.ms).toBeLessThan(5000);
+    expect(output.long).toBe(33000);
+    expect(output.ms.long).toBeLessThan(8 * output.ms.short + 25);
   });
 });

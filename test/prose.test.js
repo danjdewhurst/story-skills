@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
-import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearGrowth, expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function proseProject(title = "Prose Story") {
   const cwd = makeTempDir();
@@ -244,11 +244,10 @@ describe("prose analysis", () => {
   });
 
   test("matches unspaced watch words in long chapters quickly", () => {
-    const chapter = "彼女はとても静かだった。ฉันรักแมว ".repeat(20000);
-    const started = Date.now();
-    expect(analyzeChapter(chapter, proseRules({ "watch-words": ["とても", "รัก", "แม", "静か"] }, [], languagePack("ja"))).watch)
-      .toEqual([{ word: "とても", count: 20000 }, { word: "รัก", count: 20000 }, { word: "静か", count: 20000 }]);
-    expect(Date.now() - started).toBeLessThan(10000);
+    const rules = proseRules({ "watch-words": ["とても", "รัก", "แม", "静か"] }, [], languagePack("ja"));
+    const chapter = (count) => "彼女はとても静かだった。ฉันรักแมว ".repeat(count);
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, rules), chapter, 4000).watch)
+      .toEqual([{ word: "とても", count: 4000 }, { word: "รัก", count: 4000 }, { word: "静か", count: 4000 }]);
   });
 
   test("matches other languages' watch words as the case-insensitive regex always has", () => {
@@ -262,13 +261,13 @@ describe("prose analysis", () => {
   });
 
   test("matches watch words in long chapters quickly, with or without dotted capitals", () => {
-    const cyrillic = "Ирина шла к морю, и вдруг ветер стих. İ ".repeat(25000);
-    const turkish = "Ilık rüzgâr birden durdu, I\u0307nce bir ses geldi. ".repeat(20000);
-    const started = Date.now();
-    expect(analyzeChapter(cyrillic, proseRules({ "watch-words": ["вдруг"] }, [], languagePack("ru"))).watch).toEqual([{ word: "вдруг", count: 25000 }]);
-    expect(analyzeChapter(turkish, proseRules({ "watch-words": ["ince", "ılık"] }, [], languagePack("tr"))).watch)
-      .toEqual([{ word: "ince", count: 20000 }, { word: "ılık", count: 20000 }]);
-    expect(Date.now() - started).toBeLessThan(10000);
+    const russian = proseRules({ "watch-words": ["вдруг"] }, [], languagePack("ru"));
+    const cyrillic = (count) => "Ирина шла к морю, и вдруг ветер стих. İ ".repeat(count);
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, russian), cyrillic, 4000).watch).toEqual([{ word: "вдруг", count: 4000 }]);
+    const turkish = proseRules({ "watch-words": ["ince", "ılık"] }, [], languagePack("tr"));
+    const dotted = (count) => "Ilık rüzgâr birden durdu, I\u0307nce bir ses geldi. ".repeat(count);
+    expect(expectLinearGrowth((prose) => analyzeChapter(prose, turkish), dotted, 4000).watch)
+      .toEqual([{ word: "ince", count: 4000 }, { word: "ılık", count: 4000 }]);
   });
 
   test("finds repeated phrases that are not all stopwords", () => {

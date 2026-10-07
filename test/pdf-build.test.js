@@ -298,21 +298,23 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
   test("the engine's output is kept when it times out, and helpers it left running are ended", () => {
     const dir = makeTempDir();
     const pidFile = path.join(dir, "helper.pid");
+    const doneFile = path.join(dir, "helper.done");
     const file = path.join(dir, "chromium");
-    // Starts a helper that would outlive it by 20 seconds, holding the log
-    // open, then exits after writing a PDF.
+    // Starts a helper that would outlive it by 30 seconds, holding the log
+    // open, then exits after writing a PDF. The helper writes doneFile if it
+    // lives to the end, so renderPdf returned without waiting for it only
+    // if that file is never written: no wall-clock limit decides.
+    const helperScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(doneFile)}, "done"), 30000)`;
     fs.writeFileSync(file, `#!${process.execPath}
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
-const helper = spawn(${JSON.stringify(process.execPath)}, ["-e", "setTimeout(() => {}, 20000)"], { stdio: "inherit" });
+const helper = spawn(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(helperScript)}], { stdio: "inherit" });
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(helper.pid));
 helper.unref();
 const out = process.argv.find((arg) => arg.startsWith("--print-to-pdf=")).slice("--print-to-pdf=".length);
 fs.writeFileSync(out, "%PDF-1.7\\n");
 `, { mode: 0o755 });
-    const started = Date.now();
     expect(renderPdf("<p>x</p>", { name: "chrome", file }).subarray(0, 5).toString()).toBe("%PDF-");
-    expect(Date.now() - started).toBeLessThan(15000);
     const pid = Number(fs.readFileSync(pidFile, "utf8"));
     let alive = true;
     for (let tries = 0; tries < 50 && alive; tries += 1) {
@@ -324,6 +326,7 @@ fs.writeFileSync(out, "%PDF-1.7\\n");
       }
     }
     expect(alive).toBe(false);
+    expect(fs.existsSync(doneFile)).toBe(false);
 
     const slow = path.join(dir, "weasyprint");
     fs.writeFileSync(slow, `#!${process.execPath}\nprocess.stderr.write("loading fonts\\n");\nsetTimeout(() => {}, 10000);\n`, { mode: 0o755 });
