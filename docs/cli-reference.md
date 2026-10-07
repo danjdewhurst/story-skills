@@ -89,6 +89,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 
 `story --help`, `story -h`, `story help`, and `story` with no command all print the usage summary, with every command and option, to stdout and exit 0. `story help <command>` and `story <command> --help` print that command's usage line, summary, and only the options it reads, plus `--path` (for commands that take a project), `-h`, and `-v`. `story help add` also lists the options each entity kind reads:
 
+<!-- replay -->
 ```shell
 story help validate
 ```
@@ -101,6 +102,9 @@ Check project structure, frontmatter, and registries
 Options:
   --path <path>             Project root for every command except init and
                             import
+  --json                    Print one JSON result object (apiVersion,
+                            command, ok, data, diagnostics, writes) instead
+                            of text
   -h, --help                Show this help
   -v, --version             Show the story CLI version
 ```
@@ -445,7 +449,7 @@ Commands that rewrite registries or assemble chapters stop when an entity file, 
 ```text
 $ story reindex
 Cannot reindex: fix this file first (story validate reports it):
-- characters/old-bram.md: Duplicate frontmatter key: name
+- characters/old-bram.md: Duplicate frontmatter key: name (line 3). Remove or rename one of the two entries
 ```
 
 The other commands name themselves: `Cannot count words`, `Cannot export`, `Cannot build`, `Cannot build a synopsis`, `Cannot add`, `Cannot migrate`, `Cannot rename`, `Cannot move`, `Cannot split`, `Cannot merge`, `Cannot remove`, and `Cannot log progress`. With several files the line reads `fix these files first (story validate reports them)`. `rename`, `move`, and `remove` also read every other markdown file before writing, and stop with `<file>: <error>; nothing was changed` when one of those fails to parse. A `style-sheet.md` or `progress.md` that fails to parse does not block them; `story validate` reports it.
@@ -530,6 +534,7 @@ Created story project: ~/stories/the-salt-road
 
 `--follows` and `--precedes` start a linked sequel or prequel. The new book inherits the linked book's series id, genre, sub-genre, POV, and tense unless you override them, and `init` writes the matching backlink into the other book's `story.md`:
 
+<!-- replay: . -->
 ```shell
 story init "Embers Rekindled" --follows the-last-ember
 ```
@@ -610,7 +615,7 @@ Before it deletes a chapter, `import --force` saves the project as a [snapshot](
 
 ```text
 Saved the project in snapshot before-import-1 (.snapshots/before-import-1/) before replacing its chapters
-Imported 12 chapters (84210 words) into /home/me/stories/the-lost-coast
+Imported 12 chapters (84210 words) into ~/stories/the-lost-coast
 Undo it: story snapshot --restore before-import-1 --path the-lost-coast
 ```
 
@@ -1690,6 +1695,7 @@ On a book with `status: revising`, `next` points at the revision pass in progres
 Checks: validate ok (0 errors, 1 warnings), links ok (0 errors, 0 warnings), continuity ok (0 errors, 0 warnings)
 
 Actions:
+- [P1] Review validation warnings: Run story validate . and review 1 warning.
 - [P1] Revision pass: character: Wants, arcs, motivation, and who knows what when. Run story voices, story knowledge <id> --at <chapter>, story diagram relationships. Mark it with story passes --done character.
 - [P2] Review open clues: 2 clues are still planned or planted.
 ```
@@ -1761,13 +1767,13 @@ Root: ~/stories/the-unraveled-thread
 Checks:
 - Validate: failed (1 errors, 1 warnings)
 - Links: failed (1 errors, 0 warnings)
-- Continuity: failed (4 errors, 4 warnings)
+- Continuity: failed (4 errors, 5 warnings)
 
 Actions:
 - [P0] Fix validation errors: Run story validate . and repair 1 schema or registry errors.
 - [P0] Fix broken references: Run story links . and repair 1 missing references or backlinks.
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
-- [P1] Review continuity warnings: Run story continuity . and review 4 continuity warnings.
+- [P1] Review continuity warnings: Run story continuity . and review 5 continuity warnings.
 - [P1] Refresh word counts: Run story wordcount . --write for 1 chapter with stale counts.
 - [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
@@ -1792,12 +1798,12 @@ Root: ~/stories/the-unraveled-thread
 Checks:
 - Validate: ok (0 errors, 0 warnings)
 - Links: failed (1 errors, 0 warnings)
-- Continuity: failed (4 errors, 4 warnings)
+- Continuity: failed (4 errors, 5 warnings)
 
 Actions:
 - [P0] Fix broken references: Run story links . and repair 1 missing references or backlinks.
 - [P0] Fix continuity contradictions: Run story continuity . and repair 4 deterministic continuity errors.
-- [P1] Review continuity warnings: Run story continuity . and review 4 continuity warnings.
+- [P1] Review continuity warnings: Run story continuity . and review 5 continuity warnings.
 - [P2] Review promises and payoffs: 1 setup/payoff promise needs planting or a payoff decision.
 - [P2] Review open clues: 1 clues are still planned or planted.
 - [P2] Draft chapter 5: Use story add chapter "Chapter 5" --number 5, then outline scenes to advance The Ledger Trail.
@@ -2079,13 +2085,14 @@ With `--json`, `data.mode` is `entity` or, with no kind and id, `audit`. An enti
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
 
+<!-- replay -->
 ```shell
 story mentions character lord-maren --path examples/the-last-ember
 ```
 
 ```text
-chapters/chapter-01.md:57:37: Maren: "Double patrols on the outer walls. Maren's brought in soldiers from the southern garrisons — not loc…
-chapters/chapter-01.md:61:138: Maren: …in the lower warrens has been talking about the Lost Heir. Maren's people are jumpy."
+chapters/chapter-01.md:58:37: Maren: "Double patrols on the outer walls. Maren's brought in soldiers from the southern garrisons — not loc…
+chapters/chapter-01.md:62:138: Maren: …in the lower warrens has been talking about the Lost Heir. Maren's people are jumpy."
 2 mentions of character lord-maren (Lord Maren, Maren, The Iron Lord, Iron Lord, The Usurper, Usurper) in 1 chapter
 Mentions checked: 0 errors, 0 warnings, 0 dismissed
 ```

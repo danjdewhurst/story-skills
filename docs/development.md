@@ -439,7 +439,7 @@ node scripts/check-schema.js
 ```
 
 ```text
-Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-the-citadel, the-last-ember, the-unraveled-thread
+Examples match schemas/story.schema.json: bo-and-the-missing-moon, harbor-of-second-light, kirimi-eki-no-wasuremono, laysat-lil-bay, quatre-heures-dix-sept, salt-and-lantern, the-fall-of-the-citadel, the-gull-rock-light, the-last-ember, the-left-luggage-office, the-unraveled-thread
 ```
 
 `story validate` checks the same frontmatter with hand-written rules, so the two can drift. [`test/validate-schema-property.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/validate-schema-property.test.js) keeps them in step. It writes a valid project with one of every entity, then over and over rewrites one field of one file with a generated value. The values cover:

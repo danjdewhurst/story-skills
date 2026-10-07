@@ -598,7 +598,7 @@ Checks:
 
 Actions:
 - [P0] Fix broken references: Run story links . and repair 1 missing references or backlinks.
-- [P1] Review continuity warnings: Run story continuity . and review 1 continuity warnings.
+- [P1] Review continuity warnings: Run story continuity . and review 1 continuity warning.
 - [P2] Draft chapter 2: Use story add chapter "Chapter 2" --number 2, then outline scenes to establish the next story beat.
 ```
 

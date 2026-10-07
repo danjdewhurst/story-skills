@@ -1207,9 +1207,10 @@ Node ids replace hyphens with underscores, because Mermaid cannot always parse h
 
 To paste a diagram into a markdown file, wrap it in a fenced block with the language `mermaid`. To save it instead, pass `--out`:
 
+<!-- replay: the-unraveled-thread -->
 ```text
 $ story diagram timeline --out dist/timeline.mmd
-Wrote timeline diagram to /home/you/books/the-unraveled-thread/dist/timeline.mmd
+Wrote timeline diagram to ~/stories/the-unraveled-thread/dist/timeline.mmd
 ```
 
 A relative `--out` path is resolved against the project root and must stay inside it; `dist/` keeps diagrams with the other disposable build output. Nothing is written if any project file fails to parse, because a diagram drawn from a partial scan would silently drop entities. A missing or unknown kind exits 2 with `Unknown diagram kind: <kind>. Supported kinds: relationships, locations, timeline, clues, arcs`.
@@ -1340,7 +1341,7 @@ From a revised copy of the unraveled thread, with one paragraph added to chapter
 
 ```text
 $ story compare . --against ../draft-1
-Compared with /home/you/books/draft-1
+Compared with ~/stories/draft-1
 Chapters: 4 then, 5 now (1 added, 0 removed)
 Words: 111 then, 143 now (+32)
 
@@ -1561,11 +1562,12 @@ A revising book gets no "Draft chapter" action. Before any passes are recorded, 
 
 `story doctor` prints the same actions with the project root and one line per check, for when something is broken:
 
+<!-- replay -->
 ```text
 $ story doctor examples/the-unraveled-thread
 # Story Doctor: The Unraveled Thread
 
-Root: /home/you/story-skills/examples/the-unraveled-thread
+Root: ~/story-skills/examples/the-unraveled-thread
 
 Checks:
 - Validate: ok (0 errors, 0 warnings)
