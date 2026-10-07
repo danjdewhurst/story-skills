@@ -44,6 +44,12 @@ function editFile(file, from, to) {
   fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(from, to), "utf8");
 }
 
+function initProject() {
+  const cwd = makeTempDir();
+  expect(invoke(cwd, ["init", "Safety", "--dir", "p"]).code).toBe(0);
+  return path.join(cwd, "p");
+}
+
 describe("init", () => {
   test("a title with no kebab-case form takes its story id from --dir", () => {
     const cwd = makeTempDir();
@@ -524,5 +530,21 @@ describe("#113 init never nests a project inside another", () => {
     const before = fs.readFileSync(tom, "utf8");
     renameEntity(one, { kind: "character", id: "ellen-trewin", name: "Ellen Hale" });
     expect(fs.readFileSync(tom, "utf8")).toBe(before);
+  });
+});
+
+describe("add warns about references to missing entities (#186)", () => {
+  test("each unknown id is named, with the skipped backlink", () => {
+    const root = initProject();
+    createEntity(root, { kind: "location", name: "Gull Harbour" });
+    const character = invoke(root, ["add", "character", "Ilse", "--location", "gul-harbour", "--arc", "redemption"]);
+    expect(character.code).toBe(0);
+    expect(character.err).toBe("warning: location gul-harbour (locations) does not exist, so no backlink was written; story links reports it until you add it [unknown-reference]\n");
+    expect(invoke(root, ["add", "location", "X", "--character", "ghost-id"]).err).toContain("character ghost-id (notable-characters) does not exist, so no backlink was written");
+    expect(invoke(root, ["add", "faction", "F", "--member", "ghost"]).err).toContain("character ghost (members) does not exist; story links reports it");
+    expect(invoke(root, ["add", "artifact", "A", "--owner", "ghost"]).err).toContain("character or faction ghost (owner) does not exist");
+    // Existing ids and future chapters are quiet.
+    expect(invoke(root, ["add", "character", "Ann", "--location", "gull-harbour"]).err).toBe("");
+    expect(invoke(root, ["add", "promise", "Oath", "--planted", "chapter-09"]).err).toBe("");
   });
 });

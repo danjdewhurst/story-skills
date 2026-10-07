@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
-import { checkProjectContinuity, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
+import { checkProjectContinuity, createEntity, createStoryProject, moveEntity, renameEntity, scanProject, validateProject } from "../src/story.js";
 import { runCli } from "../src/cli.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -81,6 +81,12 @@ function posthumousProject() {
 
 function writeExemptionLog(root, entries) {
   writeMarkdown(path.join(root, "continuity", "exemptions.md"), `type: exemption-log\nexemptions:\n${entries}`);
+}
+
+function initProject() {
+  const cwd = makeTempDir();
+  expect(invoke(cwd, ["init", "Safety", "--dir", "p"]).code).toBe(0);
+  return path.join(cwd, "p");
 }
 
 describe("continuity exemptions", () => {
@@ -332,5 +338,69 @@ describe("#162 exemptions", () => {
     const errors = messages(validateProject(root).errors).join("\n");
     expect(errors).toContain("continuity/state.md");
     expect(errors).not.toContain(root);
+  });
+});
+
+describe("exemption patterns follow rename and move (#104)", () => {
+  test("a renumbered chapter keeps its dismissal, and a renamed character's id follows", () => {
+    const root = initProject();
+    createEntity(root, { kind: "character", name: "Ann" });
+    createEntity(root, { kind: "character", name: "Bo" });
+    createEntity(root, { kind: "chapter", name: "One", pov: "ann" });
+    createEntity(root, { kind: "scene", name: "S", pov: "bo" });
+    createEntity(root, { kind: "chapter", name: "Two", pov: "ann", mention: "bo" });
+    createEntity(root, { kind: "scene", name: "T", chapter: "chapter-02", character: "bo" });
+    const exemptions = path.join(root, "continuity", "exemptions.md");
+    fs.writeFileSync(exemptions, "---\ntype: exemption-log\nstory: safety\nexemptions:\n  - pattern: \"chapters/chapter-01.md has POV ann\"\n    reason: \"Bo narrates the prologue on purpose\"\n---\n");
+    expect(invoke(root, ["continuity"]).err).toContain("dismissed: chapters/chapter-01.md has POV ann");
+
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
+    moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 });
+    moveEntity(root, { kind: "chapter", id: "chapter-03", number: 1 });
+    let continuity = invoke(root, ["continuity"]);
+    expect(continuity.err).toContain("dismissed: chapters/chapter-02.md has POV ann");
+    expect(continuity.err).not.toContain("warning:");
+
+    renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
+    expect(fs.readFileSync(exemptions, "utf8")).toContain("chapters/chapter-02.md has POV anna");
+    expect(fs.readFileSync(exemptions, "utf8")).toContain("Bo narrates the prologue on purpose");
+    continuity = invoke(root, ["continuity"]);
+    expect(continuity.err).toContain("dismissed: chapters/chapter-02.md has POV anna");
+    expect(continuity.err).not.toContain("warning:");
+  });
+
+  test("a moved scene's id follows in patterns", () => {
+    const root = initProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "chapter", name: "Two" });
+    createEntity(root, { kind: "scene", name: "S", chapter: "chapter-01" });
+    const exemptions = path.join(root, "continuity", "exemptions.md");
+    fs.writeFileSync(exemptions, "---\ntype: exemption-log\nstory: safety\nexemptions:\n  - pattern: \"scenes/chapter-01-scene-01.md is fine\"\n    reason: \"Checked\"\n---\n");
+    moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-02" });
+    expect(fs.readFileSync(exemptions, "utf8")).toContain("scenes/chapter-02-scene-01.md is fine");
+  });
+});
+
+describe("exemption files rename cannot follow", () => {
+  function projectWithExemptions(text) {
+    const root = initProject();
+    createEntity(root, { kind: "character", name: "Ann" });
+    fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), text);
+    return root;
+  }
+
+  test("an exemptions file without a list is left alone", () => {
+    const text = "---\ntype: exemption-log\nexemptions: none\n---\n";
+    const root = projectWithExemptions(text);
+    renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
+    expect(fs.readFileSync(path.join(root, "continuity", "exemptions.md"), "utf8")).toBe(text);
+  });
+
+  test("entries that are not mappings are kept as they are", () => {
+    const root = projectWithExemptions("---\ntype: exemption-log\nstory: safety\nexemptions:\n  - loose note\n  - pattern: \"POV ann here\"\n    reason: \"Fine\"\n---\n");
+    renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
+    const text = fs.readFileSync(path.join(root, "continuity", "exemptions.md"), "utf8");
+    expect(text).toContain("loose note");
+    expect(text).toContain("POV anna here");
   });
 });
