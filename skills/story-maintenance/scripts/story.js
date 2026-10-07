@@ -796,6 +796,7 @@ var FINDING_CODES = {
   "scene-unknown-location": "warning",
   "chapter-no-scenes": "warning",
   "scene-no-setting": "warning",
+  "permission-pending-left-out": "warning",
   "unknown-reference": "warning",
   "adopted-references": "warning",
   "prose-name-shared": "warning",
@@ -12037,6 +12038,7 @@ var OPTIONS = [
   { name: "pdf", help: ["Render build --format print or shunn to PDF with an", "installed engine (Prince, WeasyPrint, pagedjs-cli,", "or Chrome/Chromium, found on PATH in that order)"] },
   { name: "pdf-engine", value: "<name|path>", help: ["PDF engine for build --pdf: prince, weasyprint,", "pagedjs-cli, chrome, or the path to one"] },
   { name: "spoilers", help: ["Include notes, statuses, deaths, knowledge,", "clues, and resolutions in build --format codex"] },
+  { name: "include-pending", help: ["Keep matter pages whose permission is pending in", "export and build (left out by default)"] },
   { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
   { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },
@@ -19897,7 +19899,7 @@ function formatSimilarity(report) {
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
-var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]],
@@ -27114,7 +27116,7 @@ var MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 function exportManuscript(root, options = {}) {
   const project = scanProject(root);
   const action = options.generatedBy === undefined ? "export" : "build";
-  const manuscript = manuscriptParts(project, action);
+  const manuscript = manuscriptParts(project, action, { includePending: Boolean(options.includePending) });
   assertMatterTitles(project);
   const output = resolveOutputPath(project, options.out, EXPORT_FILE, options.enforceRoot);
   const generatedBy = options.generatedBy ?? "story export";
@@ -27179,6 +27181,11 @@ function buildBook(root, options = {}) {
   if (options.spoilers && format !== "codex") {
     throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
+  const printsMatter = MATTER_FORMATS.has(format) && !options.shunn;
+  if (options.includePending && !printsMatter) {
+    throw usageError("--include-pending applies only to builds that print matter pages: --format markdown, epub, docx (without --shunn), html, print, and narration");
+  }
+  const includePending = Boolean(options.includePending) || !printsMatter;
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
@@ -27188,13 +27195,14 @@ function buildBook(root, options = {}) {
   const output = resolveOutputPath(project, options.out, defaultOut === EXPORT_FILE ? MANUSCRIPT_BUILD_FILE : defaultOut);
   const withIdWarnings = (result) => ({ ...result, warnings: [...substituteStoryIdWarnings(project), ...result.warnings] });
   if (options.pdf) {
-    return withIdWarnings(buildPdf(project, format, { trim, paper }, output, options));
+    return withIdWarnings(buildPdf(project, format, { trim, paper, includePending }, output, options));
   }
   if (format === "markdown") {
     const result = exportManuscript(project.root, {
       out: output.outFile,
       generatedBy: "story build",
-      enforceRoot: output.enforceRoot
+      enforceRoot: output.enforceRoot,
+      includePending
     });
     return withIdWarnings({ ...result, format });
   }
@@ -27203,7 +27211,7 @@ function buildBook(root, options = {}) {
     writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
     return withIdWarnings({ outFile: output.outFile, chapters: project.chapters.length, format, warnings: screenplay.warnings });
   }
-  const manuscript = manuscriptParts(project);
+  const manuscript = manuscriptParts(project, "build", { includePending });
   assertMatterTitles(project);
   if (format === "metadata") {
     const book = htmlBook(manuscript);
@@ -27249,10 +27257,10 @@ function buildBook(root, options = {}) {
   }
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
 }
-function buildPdf(project, format, { trim, paper }, output, options) {
+function buildPdf(project, format, { trim, paper, includePending }, output, options) {
   const engineFlag = options.pdfEngine === undefined ? "pdf" : "pdf-engine";
   const engine = withFlags(engineFlag, () => resolvePdfEngine(options.pdfEngine, { cwd: options.cwd }));
-  const manuscript = manuscriptParts(project);
+  const manuscript = manuscriptParts(project, "build", { includePending });
   assertMatterTitles(project);
   const style = projectBuildStyle(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
@@ -27712,14 +27720,20 @@ function bookChapters(project, action = "build") {
   }
   return { meta, chapters, warnings };
 }
-function manuscriptParts(project, action = "build") {
+function manuscriptParts(project, action = "build", { includePending = false } = {}) {
   const { meta, chapters, warnings } = bookChapters(project, action);
   for (const entry of project.matter) {
     if (!isKebabId(entry.id)) {
       throw projectError(`${relative(project, entry.file)}: matter file names must be kebab-case to build`);
     }
   }
-  const matter = (placement) => project.matter.filter((entry) => entry.placement === placement && !entry.empty).map((entry) => ({
+  const written = project.matter.filter((entry) => (entry.placement === "front" || entry.placement === "back") && !entry.empty);
+  const pending = includePending ? [] : written.filter((entry) => entry.permission === "pending");
+  for (const entry of pending) {
+    const label = relative(project, entry.file);
+    warnings.push(warn("permission-pending-left-out", `${label} permission is still pending, so it is left out; pass --include-pending to include it`, label));
+  }
+  const matter = (placement) => written.filter((entry) => entry.placement === placement && !pending.includes(entry)).map((entry) => ({
     id: entry.id,
     file: entry.file,
     title: entry.title,
@@ -27872,6 +27886,7 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
     writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
+var MATTER_FORMATS = new Set(["markdown", "epub", "docx", "html", "print", "narration"]);
 var BUILD_EXTENSIONS = {
   markdown: "md",
   epub: "epub",
@@ -28024,7 +28039,7 @@ function normaliseAnchor(value) {
 }
 function mapProjectLabels(project, anchors, options) {
   const labels = anchors.map(normaliseAnchor);
-  const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels")));
+  const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels", { includePending: true })));
   let previous;
   let label;
   if (options.other === null) {
@@ -28041,7 +28056,7 @@ function labelsIn(root, label) {
     throw projectError(`No story project (story.md) in ${label}`);
   }
   const project = scanProject(root);
-  return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`)));
+  return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`, { includePending: true })));
 }
 function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
   const { git } = gitAtRef(root, ref, flag);
@@ -30753,11 +30768,11 @@ ${formatProseRenames(result)}`, formatProseRenames);
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out", "dry-run"],
+    options: ["out", "include-pending", "dry-run"],
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
-      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out }));
+      const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
       io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}
 `);
       return writeFindings(io, checkedWarnings(result.warnings, overrides));
@@ -30778,7 +30793,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "dry-run"],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -30795,7 +30810,8 @@ ${formatProseRenames(result)}`, formatProseRenames);
         pdf,
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
-        spoilers: isTruthy(parsed.options.spoilers)
+        spoilers: isTruthy(parsed.options.spoilers),
+        includePending: isTruthy(parsed.options["include-pending"])
       }));
       if (dryRun) {
         io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)

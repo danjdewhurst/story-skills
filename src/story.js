@@ -307,9 +307,11 @@ function normaliseAnchor(value) {
   return anchor;
 }
 
+// Labels are mapped across every matter page, pending permission or not, so
+// a label quoted from a copy built with --include-pending still maps.
 function mapProjectLabels(project, anchors, options) {
   const labels = anchors.map(normaliseAnchor);
-  const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels")));
+  const current = paragraphLabels(htmlBook(manuscriptParts(project, "map labels", { includePending: true })));
   let previous;
   let label;
   if (options.other === null) {
@@ -329,7 +331,7 @@ function labelsIn(root, label) {
     throw projectError(`No story project (story.md) in ${label}`);
   }
   const project = scanProject(root);
-  return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`)));
+  return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`, { includePending: true })));
 }
 
 // Runs `read` on the project's markdown as it was at `ref`, copied into a

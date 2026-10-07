@@ -275,6 +275,7 @@ export const FINDING_CODES = {
   "scene-unknown-location": "warning",
   "chapter-no-scenes": "warning",
   "scene-no-setting": "warning",
+  "permission-pending-left-out": "warning",
   // story add, rename, move, and remove
   "unknown-reference": "warning",
   "adopted-references": "warning",

@@ -25,6 +25,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - voice-style records and checks character voices, and line-editing rewrites dialogue to make them distinct.
   - Only feedback-triage explains the GitHub review-copy setup; editorial-review points there and keeps its public-Pages warning.
 - A series pitch now loads series-continuity, which sends a query, pitch, or synopsis for a single book to submission. (#538)
+- `story export` and the builds that print matter now leave out pages whose `permission` is pending or unclear, so the review copy no longer publishes them. (#558)
+  - A page whose `permission` is `pending`, misspelt, or not `not-needed`, `granted`, or `public-domain` is left out with a `permission-pending-left-out` warning.
+  - `--include-pending` keeps it for a proof you read alone; `cli-defaults` cannot set it.
+  - The review-copy template also warns about such pages in the job log, whatever `STORY_VERSION` it installs.
 
 ### Fixed
 
