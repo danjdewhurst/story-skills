@@ -27,6 +27,12 @@ function capture(argv) {
   return { code, logs, errors };
 }
 
+// Bun's console reporter prints `test/file.test.js:`. On GitHub Actions it
+// wraps that in `::group::`, which is what CI's log looks like.
+export function shardFilesFromOutput(text) {
+  return [...text.matchAll(/^(?:::group::)?test\/(\S+\.test\.js):$/gm)].map((match) => match[1]);
+}
+
 // Files bun would run for one shard. `--test-name-pattern '^$'` loads each
 // file and runs nothing, which is enough to read the assignment.
 function bunShardFiles(shard, shards, timingsPath) {
@@ -36,7 +42,9 @@ function bunShardFiles(shard, shards, timingsPath) {
     { encoding: "utf8", cwd: repoRoot }
   );
   expect(result.status, result.stderr).toBe(0);
-  return [...`${result.stdout}\n${result.stderr}`.matchAll(/^test\/(\S+\.test\.js):$/gm)].map((match) => match[1]);
+  const files = shardFilesFromOutput(`${result.stdout}\n${result.stderr}`);
+  expect(new Set(files).size).toBe(files.length);
+  return files;
 }
 
 describe("test shards", () => {
@@ -79,6 +87,18 @@ describe("test shards", () => {
     expect(auditAssignment(["a.test.js"], [["a.test.js", "c.test.js"]])).toEqual([
       "c.test.js is assigned but is not a test file"
     ]);
+  });
+
+  test("reads file names from the console reporter and the GitHub Actions reporter", () => {
+    const plain = "test/a.test.js:\n\ntest/b.test.js:\n";
+    const actions = "::group::test/a.test.js:\n::endgroup::\n::group::test/b.test.js:\n";
+    expect(shardFilesFromOutput(`${plain}\n${actions}`)).toEqual([
+      "a.test.js",
+      "b.test.js",
+      "a.test.js",
+      "b.test.js"
+    ]);
+    expect(shardFilesFromOutput("::group::plugins/story-skills/test/a.test.js:\n")).toEqual([]);
   });
 
   test("bun --shard with these timings runs every test file exactly once", () => {
