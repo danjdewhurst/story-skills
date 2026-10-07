@@ -27,10 +27,11 @@ function capture(argv) {
   return { code, logs, errors };
 }
 
-// Bun's console reporter prints `test/file.test.js:`. On GitHub Actions it
-// wraps that in `::group::`, which is what CI's log looks like.
+// Bun's console reporter prints `test/file.test.js:`. GitHub Actions wraps
+// that in `::group::`, and Windows uses a backslash. Carriage returns show
+// up in the captured output there too.
 export function shardFilesFromOutput(text) {
-  return [...text.matchAll(/^(?:::group::)?test\/(\S+\.test\.js):$/gm)].map((match) => match[1]);
+  return [...text.replaceAll("\r", "").matchAll(/^(?:::group::)?test[/\\](\S+\.test\.js):$/gm)].map((match) => match[1]);
 }
 
 // Files bun would run for one shard. `--test-name-pattern '^$'` loads each
@@ -42,7 +43,12 @@ function bunShardFiles(shard, shards, timingsPath) {
     { encoding: "utf8", cwd: repoRoot }
   );
   expect(result.status, result.stderr).toBe(0);
-  const files = shardFilesFromOutput(`${result.stdout}\n${result.stderr}`);
+  const text = `${result.stdout}\n${result.stderr}`;
+  const files = shardFilesFromOutput(text);
+  if (files.length === 0) {
+    const sample = text.split(/\r?\n/).filter((line) => line.includes(".test.js")).slice(0, 8).join("\n");
+    throw new Error(`No shard files parsed. Sample lines:\n${sample}`);
+  }
   expect(new Set(files).size).toBe(files.length);
   return files;
 }
@@ -91,7 +97,7 @@ describe("test shards", () => {
 
   test("reads file names from the console reporter and the GitHub Actions reporter", () => {
     const plain = "test/a.test.js:\n\ntest/b.test.js:\n";
-    const actions = "::group::test/a.test.js:\n::endgroup::\n::group::test/b.test.js:\n";
+    const actions = "::group::test/a.test.js:\n::endgroup::\n::group::test\\b.test.js:\r\n";
     expect(shardFilesFromOutput(`${plain}\n${actions}`)).toEqual([
       "a.test.js",
       "b.test.js",
