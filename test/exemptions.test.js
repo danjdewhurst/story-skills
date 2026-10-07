@@ -89,6 +89,11 @@ function initProject() {
   return path.join(cwd, "p");
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("continuity exemptions", () => {
   test("dismisses matching errors and keeps ok true when nothing remains", () => {
     const { root } = exemptionProject();
@@ -402,5 +407,34 @@ describe("exemption files rename cannot follow", () => {
     const text = fs.readFileSync(path.join(root, "continuity", "exemptions.md"), "utf8");
     expect(text).toContain("loose note");
     expect(text).toContain("POV anna here");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("exemption patterns match paths written with either separator", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
+    createEntity(root, { kind: "promise", name: "Oath", planted: "chapter-01", status: "planned" });
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), "type: exemption-log\nexemptions:\n  - pattern: \"continuity\\\\promises\\\\oath.md records planted\"\n    reason: written on Windows");
+    const result = checkProjectContinuity(root);
+    expect(result.dismissed.map((entry) => entry.reason)).toEqual(["written on Windows"]);
+  });
+
+  test("continuity reports a refused exemptions file instead of dropping it", () => {
+    const root = sweepProject();
+    const outside = path.join(makeTempDir(), "exemptions.md");
+    fs.writeFileSync(outside, "---\ntype: exemption-log\nexemptions: []\n---\n");
+    fs.symlinkSync(outside, path.join(root, "continuity", "exemptions.md"));
+    const result = checkProjectContinuity(root);
+    expect(result.ok).toBe(false);
+    expect(messages(result.errors).join("\n")).toContain("continuity/exemptions.md: Refusing to read through symlink");
+  });
+
+  test("malformed exemption entries give one error each and never crash", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), "type: exemption-log\nexemptions:\n  - just-a-string\n  - ~");
+    const errors = messages(validateProject(root).errors).filter((error) => error.includes("exemptions"));
+    expect(errors.filter((error) => error.includes("must be a mapping"))).toHaveLength(2);
+    expect(errors.join("\n")).not.toContain("non-empty pattern");
   });
 });

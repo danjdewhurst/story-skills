@@ -46,6 +46,11 @@ function findingLines(text) {
   return text.split("\n").filter((line) => /^(error|warning|dismissed): /.test(line));
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story check", () => {
   test("passes a clean project and reports a warning without failing", () => {
     const root = project();
@@ -217,5 +222,16 @@ describe("uniqueCheckFindings", () => {
     expect(checks.links).toEqual({ ok: false, errors: [], warnings: [], dismissed: [], extra: 1 });
     expect(checks.continuity.warnings.map((finding) => finding.file)).toEqual(["c.md"]);
     expect(checks.continuity.dismissed).toEqual([]);
+  });
+});
+
+describe("reports and views", () => {
+  test("report shows unset instead of undefined", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "story.md"), "---\nschema-version: 2\n---\n# Story\n");
+    const result = invoke(path.dirname(root), ["report", root]);
+    expect(result.out).not.toContain("undefined");
+    expect(result.out).toContain(`# ${path.basename(root)}`);
+    expect(result.out).toContain("Status: unset");
   });
 });

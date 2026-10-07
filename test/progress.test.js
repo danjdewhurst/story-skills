@@ -27,6 +27,11 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story progress", () => {
   test("measures words against the target, deadline, and chapter targets", () => {
     const { root } = progressProject();
@@ -466,5 +471,14 @@ describe("progress (#56, #72, #216, #220)", () => {
     const slower = computeProgress({ words: 5, target: 900000, deadline: null, today: "2026-09-02", chapters: [], sessions: [sessions[0], { date: "2026-09-01", words: 5 }] });
     expect(slower.projected).toBeNull();
     expect(() => formatProgress(slower)).not.toThrow();
+  });
+});
+
+describe("sweep fixes", () => {
+  test("progress --log refuses while a chapter cannot be read", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "characters", "bad.md"), "---\nname: Bad\n");
+    expect(() => projectProgress(root, { log: true, date: "2024-02-01" })).toThrow("Cannot log progress");
+    expect(fs.existsSync(path.join(root, "progress.md"))).toBe(false);
   });
 });

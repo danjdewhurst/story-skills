@@ -7,7 +7,7 @@ import { handleOutputError, isTruthy, parseArgs, runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { KIND_ALIASES, buildEntity, scanProject } from "../src/scan.js";
-import { createStoryProject } from "../src/story.js";
+import { createEntity, createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -55,6 +55,11 @@ function fakeProcess(exitCode) {
     },
     written
   };
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("cli", () => {
@@ -872,5 +877,64 @@ describe("#87 positive integer options", () => {
     expect(invoke(root, ["synopsis", "--pages", "0x3"]).err).toContain("Unsupported synopsis length: 0x3");
     expect(invoke(root, ["add", "matter", "Dedication", "--order", "1e1"]).err).toContain("matter order must be a non-negative integer");
     expect(invoke(makeTempDir(), ["init", "N", "--book-number", "1e3"]).err).toContain("Book number must be 0 or a positive number");
+  });
+});
+
+describe("argument checking", () => {
+  test("extra positional arguments are an error", () => {
+    const root = sweepProject();
+    const cwd = path.dirname(root);
+    const result = invoke(cwd, ["continuity", root, root]);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("Unexpected argument for story continuity [path]");
+    expect(invoke(cwd, ["remove", "character", "x", "extra", "--path", root]).err).toContain("Unexpected argument");
+    expect(invoke(cwd, ["diagram", "locations", "extra", "--path", root]).err).toContain("Unexpected argument");
+  });
+
+  test("flags a command does not read are an error", () => {
+    const root = sweepProject();
+    const result = invoke(path.dirname(root), ["timeline", root, "--at", "chapter-01"]);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("--at does not apply to story timeline");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("file-system errors are described in plain words", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const outside = makeTempDir();
+    fs.writeFileSync(path.join(outside, "afile"), "x");
+    const result = invoke(outside, ["export", root, "--out", path.join(outside, "afile", "x.md")]);
+    expect(result.code).toBe(4);
+    expect(result.err).toMatch(/^Cannot \w+( the folder)? afile(\/x\.md)?: a part of the path is not a folder\n$/);
+  });
+
+  test("the CLI suggests near misses and treats -x as an option", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["valdate"]).err).toContain("Unknown command: valdate; did you mean validate?");
+    // Only build's own options are suggested.
+    expect(invoke(cwd, ["build", "--formt", "x"]).err).toContain("Unknown option --formt; did you mean --format?");
+    expect(invoke(cwd, ["init", "--formt", "x"]).err).toContain("Unknown option --formt; did you mean --form?");
+    expect(invoke(cwd, ["help", "nosuch"]).code).toBe(2);
+    expect(invoke(cwd, ["validate", "-x"]).err).toContain("-x is not a story project: missing story.md; -x is not an option (run story help)");
+    expect(invoke(cwd, ["build", "--format="]).err).toContain("Unsupported build format: (empty)");
+  });
+
+  test("help for one command lists only its options", () => {
+    const cwd = makeTempDir();
+    const help = invoke(cwd, ["help", "wordcount"]).out;
+    expect(help).toContain("Usage: story wordcount [path] [options]");
+    expect(help).toContain("--write");
+    expect(help).not.toContain("--format");
+    expect(invoke(cwd, ["wordcount", "--help"]).out).toBe(help);
+  });
+
+  test("names may start with a dash, and -- ends the options", () => {
+    const root = sweepProject();
+    expect(invoke(path.dirname(root), ["add", "term", "-ism", "--path", root]).code).toBe(0);
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "--", "--Untitled"]).code).toBe(0);
+    expect(fs.existsSync(path.join(cwd, "untitled"))).toBe(true);
   });
 });

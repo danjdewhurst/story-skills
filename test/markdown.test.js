@@ -44,6 +44,11 @@ function build(root, format) {
   return fs.readFileSync(buildBook(root, { format, out: `dist/book.${format}` }).outFile, "utf8");
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
     expect(kebabCase(" Sera's Last Ember! ")).toBe("seras-last-ember");
@@ -706,5 +711,54 @@ describe("#228 heading variants", () => {
     const root = newProject();
     writeChapter(root, "\nChapter 1: Arrival\n==================\n\nShe came home.\n");
     expect(computeWordCounts(root).total).toBe(3);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("comments in code spans stay, and an unclosed comment is flagged", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Type `<!-- x -->` here.\n\nZeta <!-- unterminated");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("Type &lt;!-- x --&gt; here.");
+    expect(messages(validateProject(root).warnings)).toContain("chapters/chapter-01.md opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts");
+  });
+
+  test("comment stripping respects code fences and stays linear", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
+    expect(computeWordCounts(root).total).toBe(5);
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("never closes");
+    const started = performance.now();
+    appendProse(root, "chapters/chapter-01.md", `${"[a](b ".repeat(20000)}${"<!--".repeat(20000)}`);
+    computeWordCounts(root);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test("~~~ separators and unclosed fences never hide text from counts", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "First part has five words.\n\n~~~\n\nSecond part has five words.\n\n\\~\\~\\~\n\nThird part has five words.\n\n```\nUnclosed fence still counts.");
+    expect(computeWordCounts(root).total).toBe(19);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html.match(/class="scene-break"/g)).toHaveLength(2);
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    appendProse(root, "chapters/chapter-02.md", "Words outside.\n\n```\nclosed code here\n```");
+    expect(computeWordCounts(root).chapters[1].wordCount).toBe(5);
+  });
+
+  // Gaps found by mutation testing.
+  test("the character right after a comment survives", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "The tide<!-- note -->came in slowly.");
+    expect(computeWordCounts(root).total).toBe(4);
+    expect(fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8")).toContain("The tidecame in slowly.");
+  });
+
+  test("a code span on the last line keeps its comment", async () => {
+    const { chapterProse } = await import("../src/markdown.js");
+    expect(chapterProse("Type `<!-- x -->`")).toBe("Type `<!-- x -->`");
   });
 });

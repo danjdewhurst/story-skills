@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -6,7 +7,7 @@ import { estimateBookPages, printHtml } from "../src/html.js";
 import { importManuscript } from "../src/import.js";
 import { shunnWordCount } from "../src/packaging.js";
 import { textDirection } from "../src/publishing.js";
-import { buildBook, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
+import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveEntries, writeMarkdown, messages, readArchiveText, memoryIo } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
@@ -72,6 +73,11 @@ function invoke(cwd, argv) {
   const io = memoryIo(cwd);
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("build and export bug fixes", () => {
@@ -419,5 +425,133 @@ describe("skill-owned folders under --out (#188)", () => {
     expect(fs.existsSync(result.outFile)).toBe(true);
     expect(() => synopsisBook(root, { out: "submission/synopsis-1-page.md" })).toThrow("Refusing to overwrite submission/synopsis-1-page.md");
     expect(buildBook(root, { format: "narration", out: "adaptations/audiobook/narration-script.md" }).outFile).toContain("adaptations");
+  });
+});
+
+describe("argument checking", () => {
+  test("build rejects --trim and --shunn for other formats", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => buildBook(root, { format: "epub", trim: "6x9" })).toThrow("--trim applies only to --format print");
+    expect(() => buildBook(root, { format: "html", shunn: true })).toThrow("--shunn applies only to --format docx");
+  });
+});
+
+describe("builds", () => {
+  function bookProject(prose) {
+    const root = sweepProject("Book");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", prose);
+    return root;
+  }
+
+  test("--out refuses project source and directories", () => {
+    const root = bookProject("Text.");
+    const chapter = fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8");
+    expect(() => buildBook(root, { out: "chapters/chapter-01.md" })).toThrow("Refusing to write generated output to chapters/chapter-01.md");
+    expect(() => exportManuscript(root, { out: "story.md" })).toThrow("it is project source");
+    expect(() => synopsisBook(root, { out: path.join(root, "plot", "s.md") })).toThrow("it is project source");
+    fs.mkdirSync(path.join(root, "dist"));
+    expect(() => buildBook(root, { out: "dist" })).toThrow("--out dist is a directory");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toBe(chapter);
+  });
+
+  test("export defaults to dist/manuscript.md", () => {
+    const root = bookProject("Text.");
+    expect(exportManuscript(root).outFile).toBe(path.join(root, "dist", "manuscript.md"));
+    expect(messages(validateProject(root).warnings).join("\n")).not.toContain("manuscript.md");
+  });
+
+  test("HTML comments stay out of word counts and builds", () => {
+    const root = bookProject("Visible words here.\n\n<!-- TODO: fix this scene -->");
+    expect(computeWordCounts(root).total).toBe(3);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).not.toContain("TODO");
+  });
+
+  test("emphasis follows CommonMark", () => {
+    const root = bookProject("***both*** and *a **b** c* and \\*literal\\* and snake_case_word and ** spaced ** and *foo**bar* and *a _b* c_");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("<strong><em>both</em></strong>");
+    expect(html).toContain("<em>a </em><strong><em>b</em></strong><em> c</em>");
+    expect(html).toContain("*literal*");
+    expect(html).toContain("snake_case_word");
+    expect(html).toContain("** spaced **");
+    // The rule of three: ** cannot close a single *.
+    expect(html).toContain("<em>foo**bar</em>");
+    expect(html).toContain("<em>a _b</em> c_");
+  });
+
+  test("XML-invalid characters are dropped from EPUB and DOCX", () => {
+    const root = bookProject("Bell\u0001 rang￾.");
+    for (const format of ["epub", "docx"]) {
+      const outFile = buildBook(root, { format }).outFile;
+      const listing = execFileSync("unzip", ["-p", outFile], { encoding: "utf8" });
+      expect(listing).toContain("Bell rang.");
+      expect(listing).not.toContain("\u0001");
+    }
+  });
+
+  test("zip entries carry a valid date", () => {
+    const root = bookProject("Text.");
+    const outFile = buildBook(root, { format: "epub" }).outFile;
+    const buffer = fs.readFileSync(outFile);
+    expect(buffer.readUInt16LE(12)).toBe(33);
+  });
+
+  test("a long title keeps the default file name within limits", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "word ".repeat(80), dir: "long" }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(path.basename(buildBook(root, { format: "html" }).outFile).length).toBeLessThanOrEqual(110);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("--out through a symlinked folder or a case variant cannot reach source", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const before = fs.readFileSync(chapter, "utf8");
+    fs.symlinkSync(path.join(root, "chapters"), path.join(root, "lnk"));
+    expect(() => exportManuscript(root, { out: "lnk/chapter-01.md" })).toThrow("it is project source");
+    const outside = makeTempDir();
+    fs.symlinkSync(path.join(root, "chapters"), path.join(outside, "x"));
+    expect(() => exportManuscript(root, { out: path.join(outside, "x", "chapter-01.md") })).toThrow("it is project source");
+    expect(() => exportManuscript(root, { out: "Chapters/chapter-01.md" })).toThrow("it is project source");
+    expect(fs.readFileSync(chapter, "utf8")).toBe(before);
+  });
+
+  test("--out dist is refused before the dist folder exists", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => buildBook(root, { format: "epub", out: "dist" })).toThrow("--out dist is a directory");
+    expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
+  });
+
+  test("emphasis stays fast on pathological paragraphs", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", `${"rate 5* and 4* and ".repeat(25000)}\n\n${"*a ".repeat(10000)}b${" c*".repeat(10000)}`);
+    const started = performance.now();
+    buildBook(root, { format: "html" });
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  test("export of a CRLF project uses LF only", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, `${fs.readFileSync(chapter, "utf8")}\nOne line.\n\nTwo line.\n`.replace(/\n/g, "\r\n"));
+    expect(fs.readFileSync(exportManuscript(root).outFile, "utf8")).not.toContain("\r");
+  });
+
+  test("an oversized cover is refused", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.writeFileSync(path.join(root, "cover.png"), "");
+    fs.truncateSync(path.join(root, "cover.png"), 51 * 1024 * 1024);
+    fs.writeFileSync(path.join(root, "story.md"), fs.readFileSync(path.join(root, "story.md"), "utf8").replace("---\ntitle:", "---\ncover: cover.png\ntitle:"));
+    expect(() => buildBook(root, { format: "epub" })).toThrow("Refusing to read oversized file");
   });
 });

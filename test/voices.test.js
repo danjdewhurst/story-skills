@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { analyzeChapter, proseRules } from "../src/prose.js";
@@ -36,6 +37,15 @@ function voiceProject() {
   writeCharacter(root, "tom-reed", "Tom Reed");
   writeCharacter(root, "old-cut", "Oldcut", "", "cut");
   return { root, cwd };
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
 }
 
 describe("story voices", () => {
@@ -208,5 +218,58 @@ describe("voices (#83, #210, #214, #215, #216, #217)", () => {
 describe("sentence and speech edge cases", () => {
   test("a straight single quote opening a paragraph opens speech", () => {
     expect(splitOpenSpeech("'Come here and wait")).toEqual({ narration: "", open: "Come here and wait" });
+  });
+});
+
+describe("sweep fixes", () => {
+  test("voices says a voice word is missing only from attributed lines", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\nvoice-words:\n  - reckon");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", Array.from({ length: 5 }, () => "\"Fine,\" Mara said.").join("\n\n"));
+    const result = invoke(path.dirname(root), ["voices", root]);
+    expect(result.err).toContain("mara does not say \"reckon\" from their voice-words list in 5 attributed lines of dialogue");
+  });
+
+  test("voices leaves a pronoun-tagged line unattributed", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "characters", "tam.md"), "name: Tam\nrole: minor\nstatus: alive");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "\u2018It\u2019s nothing,\u2019 she said, holding it the way Tam used to hold shells.");
+    const report = invoke(path.dirname(root), ["voices", root]);
+    expect(report.out).toContain("Voices: 0 speaking characters, 1 unattributed line\n");
+  });
+
+  test("voices only treats a pronoun as a tag next to a quote", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", [
+      "\"Not yet.\" Mara shook her head. She said nothing more for a while.",
+      "\"The tide.\" Mara pointed. What she said next was lost to the wind.",
+      "\"It is nothing,\" she said, and Mara looked away."
+    ].join("\n\n"));
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("Voices: 1 speaking character, 1 unattributed line\n");
+  });
+
+  test("voices sees a pronoun tag across an ellipsis or bracket", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "\"Hold on\"\u2026 she said, and Mara looked away.\n\n\"Wait\" (she said) and Mara nodded.");
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("Voices: 0 speaking characters, 2 unattributed lines");
+  });
+
+  test("British single quotes pair exactly, apostrophes included", async () => {
+    const { quotedSpans } = await import("../src/voices.js");
+    expect(quotedSpans("\u2018Don\u2019t,\u2019 she said. Tam\u2019s boat.")).toEqual(["Don\u2019t,"]);
+  });
+
+  test("two-letter given names are matched in attributions", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Al Reed" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "\"Hi,\" Al said.");
+    expect(invoke(path.dirname(root), ["voices", root]).out).toContain("al-reed: 1 line,");
   });
 });

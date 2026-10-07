@@ -136,6 +136,11 @@ function reviewProject(fields = "") {
   return { root, cwd };
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story diagram", () => {
   test("relationships draws one edge per pair, family edges heavy, and marks the dead", () => {
     const { root } = diagramFixture();
@@ -400,5 +405,15 @@ describe("review fixes", () => {
     const text = diagramProject(root, { kind: "arcs" }).text;
     expect(text).toContain('  arc__chapter_01(["Chapter 01"])');
     expect(text).toContain('  chapter_01["1. One"]');
+  });
+});
+
+describe("reports and views", () => {
+  test("diagram ids never collide with Mermaid keywords", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "End" });
+    const text = diagramProject(root, { kind: "relationships" }).text;
+    expect(text).toContain('end_node["End"]');
+    expect(text).not.toMatch(/^\s+end\[/m);
   });
 });

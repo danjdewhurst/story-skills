@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { BUILD_EXTENSIONS } from "../src/build.js";
-import { buildBook, compareProject, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
+import { buildBook, compareProject, createEntity, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages } from "./helpers.js";
 
 function project(status = "drafting", { cwd = makeTempDir(), dir } = {}) {
@@ -19,6 +19,11 @@ function writeEpigraph(root, fields) {
 
 function matterFindings(result) {
   return result.filter((finding) => finding.startsWith("matter/epigraph.md"));
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("matter permissions", () => {
@@ -301,5 +306,17 @@ describe("pending permissions in export and build (#558)", () => {
       { label: "front-epigraph-p1", status: "unchanged", to: "front-epigraph-p1", similarity: 1 },
       { label: "back-lyrics-p1", status: "unchanged", to: "back-lyrics-p1", similarity: 1 }
     ]);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("the metadata checklist lists pending permissions", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "matter", name: "Epigraph" });
+    const epigraph = path.join(root, "matter", "epigraph.md");
+    fs.writeFileSync(epigraph, fs.readFileSync(epigraph, "utf8").replace("heading: true", "heading: true\npermission: pending") + "A quoted line.\n");
+    const sheet = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
+    expect(sheet).toContain("Permissions cleared for quoted matter (`permission`; pending: epigraph)");
   });
 });

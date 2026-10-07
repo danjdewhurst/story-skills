@@ -35,6 +35,11 @@ function reviewProject(fields = "") {
   return { root, cwd };
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story passes", () => {
   test("keeps story.md when it is saved after it was read (#547)", () => {
     const { root } = project();
@@ -181,5 +186,25 @@ describe("review fixes", () => {
 
     const broken = reviewProject("revision-passes:\n  - pass: Bad Name");
     expect(() => projectPasses(broken.root, { init: true })).toThrow("Fix revision-passes in story.md before changing it");
+  });
+});
+
+describe("reports and views", () => {
+  test("passes notes a custom pass that looks like a typo", () => {
+    const root = sweepProject();
+    const result = projectPasses(root, { done: "strucutre" });
+    expect(result.notes).toEqual(["Added custom pass strucutre, which is not in the default ladder; did you mean structure?"]);
+    expect(projectPasses(root, { done: "structure" }).notes).toEqual([]);
+    const cli = invoke(path.dirname(root), ["passes", root, "--start", "sensitivity-read"]);
+    expect(cli.err).toContain("note: Added custom pass sensitivity-read, which is not in the default ladder\n");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("passes hints use the path the user typed", () => {
+    const root = sweepProject();
+    const typed = path.basename(root);
+    expect(invoke(path.dirname(root), ["passes", typed]).out).toContain(`Run story passes ${typed} --init`);
+    expect(invoke(path.dirname(root), ["passes", typed, "--start", "structure"]).out).toContain(`mark it with story passes ${typed} --done structure`);
   });
 });

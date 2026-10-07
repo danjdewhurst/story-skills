@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { shunnHtml } from "../src/packaging.js";
-import { buildBook, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
+import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
@@ -60,6 +60,15 @@ ${frontmatter}
 }
 
 const SONG = "The old song went:\n\n*Ember given, fire kept,\\\nEmber taken, mountain wept,  \nWhat the Vale has lent.*\n\n> Dear Mara,\n>\n> Come home.\\\n> Your father\n\nShe hummed it anyway.";
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
+}
 
 describe("scene-break lines in builds (#551)", () => {
   // The same scenes with and without blank lines around each break.
@@ -303,5 +312,19 @@ describe("hard breaks and blockquotes (#245)", () => {
     writeChapterFile(root, 1, "title: Soft", "One line\nand the next.\\");
     const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
     expect(html).toContain("One line and the next.\\</p>");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("builds read escaped and # scene breaks, hard breaks, and escapes", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Mara didn\\'t look.\n\n\\* \\* \\*\n\nShe said, \"It's nothing.\"\\\nThe gate was open.\n\n#\n\nEnd.");
+    expect(computeWordCounts(root).total).toBe(12);
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html.match(/class="scene-break"/g)).toHaveLength(2);
+    expect(html).toContain("nothing.&quot;<br>The gate");
+    const narration = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+    expect(narration.match(/\[pause\]/g)).toHaveLength(2);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { buildBook, createStoryProject } from "../src/story.js";
+import { buildBook, createEntity, createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, readArchiveText, writeMarkdown } from "./helpers.js";
 
 function shunnProject() {
@@ -52,6 +52,11 @@ number: ${number}
 ${/^status:/m.test(frontmatter) ? "" : "status: draft"}
 ${frontmatter}
 `, `## Chapter Text\n\n${body}\n`);
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("shunn manuscript format", () => {
@@ -189,5 +194,16 @@ describe("Shunn short-story layout (#135)", () => {
     writeChapterFile(root, 1, "title: Part 1", "Text one.");
     const shunn = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
     expect(shunn).toContain("\f\n# Chapter 1: Part 1");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("Shunn title pages name every co-author", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("---\ntitle:", "---\nauthors:\n  - Ann Lee\n  - Bo Chen\ntitle:"));
+    const text = fs.readFileSync(buildBook(root, { format: "shunn" }).outFile, "utf8");
+    expect(text).toContain("Ann Lee and Bo Chen");
   });
 });

@@ -4,7 +4,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runCli } from "../src/cli.js";
 import { characterIndex, extractMarkdownLinkTargets, mapOutsideLinks } from "../src/scan.js";
-import { createEntity, createStoryProject, reindexProject, renameEntity, scanProject, validateProject } from "../src/story.js";
+import {
+  buildBook,
+  computeWordCounts,
+  createEntity,
+  createStoryProject,
+  exportManuscript,
+  pacingReport,
+  reindexProject,
+  renameEntity,
+  scanProject,
+  synopsisBook,
+  validateProject
+} from "../src/story.js";
 import { expectComparableTime, expectLinearTime, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const upper = (text) => mapOutsideLinks(text, (part) => part.toUpperCase());
@@ -35,6 +47,11 @@ function editFile(file, edit) {
 }
 
 function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function sweepProject(title = "Sweep") {
   const cwd = makeTempDir();
   return createStoryProject({ cwd, title }).root;
 }
@@ -160,5 +177,62 @@ describe("add, rename, and scan limits", () => {
       fs.writeFileSync(path.join(nested, `note-${index}.md`), "", "utf8");
     }
     expect(() => validateProject(root)).toThrow("Too many markdown files in the project: the scan exceeds the 5000 file limit");
+  });
+});
+
+describe("files that fail to parse", () => {
+  test("wordcount, reindex, export, and build refuse instead of dropping the file", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const registry = fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("---\n", "---\n  bad-indent: x\n"));
+    expect(() => computeWordCounts(root)).toThrow("Cannot count words: fix this file first");
+    expect(() => reindexProject(root)).toThrow("Cannot reindex");
+    expect(() => exportManuscript(root)).toThrow("Cannot export");
+    expect(() => buildBook(root, { format: "epub" })).toThrow("Cannot build");
+    expect(fs.readFileSync(path.join(root, "chapters", "_index.md"), "utf8")).toBe(registry);
+    expect(invoke(path.dirname(root), ["wordcount", root]).code).toBe(3);
+  });
+
+  test("add and synopsis refuse before writing anything", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "characters", "broken.md"), "# No frontmatter\n");
+    expect(() => createEntity(root, { kind: "character", name: "Mara" })).toThrow("Cannot add: fix this file first (story validate reports it):\n- characters/broken.md: is missing YAML frontmatter");
+    expect(fs.existsSync(path.join(root, "characters", "mara.md"))).toBe(false);
+    expect(() => synopsisBook(root)).toThrow("Cannot build a synopsis");
+    expect(() => exportManuscript(root)).toThrow("Cannot export");
+  });
+
+  test("a broken style sheet does not block reindex", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "style-sheet.md"), "---\n: bad\n---\n");
+    expect(() => reindexProject(root)).not.toThrow();
+  });
+
+  test("rename aborts when an entity file or registry has no frontmatter", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "location", name: "Port", "notable-characters": "mara-quill" });
+    const location = path.join(root, "worldbuilding", "locations", "port.md");
+    const locationText = fs.readFileSync(location, "utf8");
+    fs.writeFileSync(location, locationText.replace(/^---\n/, ""));
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("Cannot rename: fix this file first");
+    fs.writeFileSync(location, locationText);
+    const registry = path.join(root, "worldbuilding", "_index.md");
+    fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""));
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Q" })).toThrow("worldbuilding/_index.md is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed");
+    expect(fs.existsSync(path.join(root, "characters", "mara-quill.md"))).toBe(true);
+  });
+});
+
+describe("reports and views", () => {
+  test("a non-integer chapter number falls back to the file name in views and blocks builds", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 3 });
+    const chapter = path.join(root, "chapters", "chapter-03.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("number: 3", 'number: "3a"'));
+    expect(pacingReport(root).rows?.[0]?.number ?? scanProject(root).chapters[0].number).toBe(3);
+    expect(() => buildBook(root, { format: "html" })).toThrow("chapters/chapter-03.md: chapter number must be a positive integer to build");
   });
 });

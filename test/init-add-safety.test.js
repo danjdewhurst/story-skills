@@ -7,7 +7,16 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
-import { buildBook, createEntity, createStoryProject, renameEntity, scanProject, validateLinks, validateProject } from "../src/story.js";
+import {
+  buildBook,
+  checkProjectContinuity,
+  createEntity,
+  createStoryProject,
+  renameEntity,
+  scanProject,
+  validateLinks,
+  validateProject
+} from "../src/story.js";
 import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting, CHMOD_IGNORED } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -70,6 +79,11 @@ function readOnly(file, run) {
   } finally {
     fs.chmodSync(file, 0o644);
   }
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("init", () => {
@@ -629,5 +643,94 @@ describe("interrupted add (#202)", () => {
     expect(scanProject(root).chapters[0].characters).toContain("nessa");
     // Once finished, the same add is a new scene again.
     expect(createEntity(root, { kind: "scene", name: "Extra Beat", chapter: "chapter-01", character: "nessa" }).id).toBe("chapter-01-scene-03");
+  });
+});
+
+describe("argument checking", () => {
+  test("add names a missing or unknown kind", () => {
+    const root = sweepProject();
+    expect(invoke(path.dirname(root), ["add", "--path", root]).err).toContain("An entity kind is required: expected one of character");
+    expect(invoke(path.dirname(root), ["add", "character=Foo", "--path", root]).err).toContain("Unsupported entity kind: character=Foo");
+  });
+});
+
+describe("entity commands", () => {
+  test("add question --resolved records an answered question", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Three", number: 3 });
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-03" });
+    expect(scanProject(root).questions[0].status).toBe("answered");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+    expect(() => createEntity(root, { kind: "question", name: "Why", resolved: "chapter-03", status: "open" })).toThrow("cannot have status open");
+  });
+
+  test("add chapter and scene --pov put the POV character in the cast", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "mara" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", pov: "mara" });
+    const project = scanProject(root);
+    expect(project.chapters[0].characters).toEqual(["mara"]);
+    expect(project.scenes[0].characters).toEqual(["mara"]);
+    expect(messages(checkProjectContinuity(root).warnings).join("\n")).not.toContain("is not listed in characters");
+  });
+
+  test("init takes the story id from --dir when the title has no ASCII letters", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Война и мир", dir: "war-and-peace" });
+    expect(created.storyId).toBe("war-and-peace");
+    createEntity(created.root, { kind: "chapter", name: "One", number: 1 });
+    const built = buildBook(created.root, { format: "epub" });
+    expect(path.basename(built.outFile)).toBe("war-and-peace.epub");
+    expect(messages(validateProject(created.root).errors)).toEqual([]);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("init refuses a story id Windows reserves", () => {
+    const cwd = makeTempDir();
+    expect(() => createStoryProject({ cwd, title: "Con" })).toThrow("Windows reserves the file name con");
+    expect(() => createStoryProject({ cwd, title: "Fine Title", dir: "AUX" })).toThrow("Cannot use folder AUX: Windows reserves that name");
+    expect(fs.readdirSync(cwd)).toEqual([]);
+  });
+
+  test("add scene lists its location and cast on the chapter", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "character", name: "Theo" });
+    createEntity(root, { kind: "location", name: "Harbor" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, mention: "theo" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", location: "harbor", character: ["mara", "theo"] });
+    const chapter = scanProject(root).chapters[0];
+    expect(chapter.locations).toEqual(["harbor"]);
+    expect(chapter.characters).toEqual(["mara"]);
+    expect(messages(checkProjectContinuity(root).warnings).join("\n")).not.toContain("does not list");
+  });
+
+  test("add scene copies only existing characters and locations onto the chapter", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", character: "nobody", location: "nowhere" });
+    const chapter = scanProject(root).chapters[0];
+    expect(chapter.characters).toEqual([]);
+    expect(chapter.locations).toEqual([]);
+  });
+
+  test("add scene refuses a chapter that does not exist", () => {
+    const root = sweepProject();
+    expect(() => createEntity(root, { kind: "scene", name: "Dock" })).toThrow("No chapters yet");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-99" })).toThrow("chapter chapter-99 does not exist");
+  });
+
+  test("add rejects reference ids that can never resolve", () => {
+    const root = sweepProject();
+    expect(() => createEntity(root, { kind: "clue", name: "C", planted: "Chapter 1" })).toThrow('--planted "Chapter 1" must be a kebab-case id (such as chapter-01)');
+    expect(() => createEntity(root, { kind: "character", name: "Mara", location: "Port Town" })).toThrow('--location "Port Town" must be a kebab-case id');
+    expect(() => createEntity(root, { kind: "chapter", name: "One", pov: "Mara Quill" })).toThrow('--pov "Mara Quill" must be a character id');
+    expect(() => createEntity(root, { kind: "chapter", name: "One", arc: "Main Arc" })).toThrow('--arc "Main Arc" must be a kebab-case id (such as the-long-road)');
+    // A character's --arc is a free-text arc theme.
+    expect(createEntity(root, { kind: "character", name: "Old Bram", arc: "Found Family" }).id).toBe("old-bram");
   });
 });

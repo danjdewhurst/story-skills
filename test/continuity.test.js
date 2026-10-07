@@ -139,6 +139,11 @@ function sighting(location, time = "\"10:00\"") {
   return `date: 2024-05-01\ntime: ${time}\nlocation: ${location}\ncharacters:\n  - ann`;
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("continuity checks", () => {
   test("flags dead characters, cast mismatches, and numbering gaps", () => {
     const cwd = makeTempDir();
@@ -1489,5 +1494,66 @@ describe("continuity help lists every check (#168)", () => {
     for (const phrase of ["clues", "prop custody", "clock and travel time", "routes"]) {
       expect(help).toContain(phrase);
     }
+  });
+});
+
+describe("continuity ledger", () => {
+  test("planned status with a drafted planted chapter warns for clues and promises alike", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", status: "planned" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-01", status: "planned" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-03", status: "planned" });
+    const warnings = messages(checkProjectContinuity(root).warnings);
+    expect(warnings).toContain("continuity/clues/locket.md records planted chapter chapter-01 but status is still planned");
+    expect(warnings).toContain("continuity/promises/duel.md records planted chapter chapter-01 but status is still planned");
+    expect(warnings.join("\n")).not.toContain("ring.md");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("a character who died before the story is flagged in a cast", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "characters", "tam.md"), "name: Tam\nrole: minor\nstatus: deceased");
+    createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "tam" });
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("chapters/chapter-01.md lists tam, who died before the story (deceased with no died-in); move appearances to mentions");
+  });
+
+  test("a chapter pov that none of its scenes share is flagged", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "character", name: "Tam" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, pov: "mara", character: "tam" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", pov: "tam" });
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("chapters/chapter-01.md has POV mara but its scenes are told by tam");
+  });
+
+  test("a payoff chapter that has passed warns at once", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, status: "draft" });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2, status: "draft" });
+    createEntity(root, { kind: "clue", name: "Herring", planted: "chapter-01", payoff: "chapter-02", "red-herring": true });
+    expect(messages(checkProjectContinuity(root).warnings)).toContain("continuity/clues/herring.md payoff chapter chapter-02 has passed and status is still planted");
+  });
+
+  test("artifact mentions at or before since, and mentions of pre-story losses, are fine", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "artifact", name: "Blade" });
+    createEntity(root, { kind: "artifact", name: "Crown" });
+    for (const number of [1, 2, 3]) {
+      createEntity(root, { kind: "chapter", name: `C${number}`, number, mention: ["blade", "crown"] });
+    }
+    const state = path.join(root, "continuity", "state.md");
+    fs.writeFileSync(state, fs.readFileSync(state, "utf8").replace("object-state: []", "object-state:\n  - artifact: blade\n    status: destroyed\n    since: chapter-02\n  - artifact: crown\n    status: lost"));
+    expect(messages(checkProjectContinuity(root).errors)).toEqual(["chapters/chapter-03.md mentions blade, destroyed/lost since chapter-02"]);
+  });
+
+  test("correctly ordered promises and clues give no errors", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    createEntity(root, { kind: "promise", name: "Oath", planted: "chapter-01", payoff: "chapter-02" });
+    createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-01", payoff: "chapter-02" });
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 });
