@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { dayHours, parseCalendar, parseCalendarDate } from "../src/calendar.js";
+import { dayHours, dayLengthKnown, parseCalendar, parseCalendarDate } from "../src/calendar.js";
 import { chapterChronology } from "../src/chronology.js";
 import { runCli } from "../src/cli.js";
 import { parseClockTime, parseStoryDate, storyDateError, storyTimeError } from "../src/continuity.js";
@@ -257,6 +257,16 @@ ${frontmatter.trim()}
 `, "## Scene Text\n\nWords here.\n");
 }
 
+function writeChapterTime(root, number, time) {
+  writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `
+title: Chapter ${number}
+number: ${number}
+status: draft
+word-count: 0
+time: "${time}"
+`, "## Chapter Text\n\nWords here.\n");
+}
+
 function codes(findings) {
   return findings.map((finding) => finding.code);
 }
@@ -361,6 +371,21 @@ describe("calendar hours per day (#533)", () => {
     expect(dayHours(parseCalendar("Thaw").calendar)).toBe(24);
   });
 
+  test("an hours-per-day that cannot be read leaves the day's length unknown", () => {
+    const known = (value) => dayLengthKnown(parseCalendar(value).calendar);
+    expect(dayLengthKnown(null)).toBe(true);
+    expect(known(MONTHS)).toBe(true);
+    expect(known([...MONTHS, { "hours-per-day": 30 }])).toBe(true);
+    // Invalid elsewhere, but its one hours-per-day is clean.
+    expect(known([{ month: "Thaw" }, { "hours-per-day": 30 }])).toBe(true);
+    expect(known("Thaw")).toBe(true);
+    expect(known([...MONTHS, { "hours-per-day": "30" }])).toBe(false);
+    expect(known([...MONTHS, { "hours-per-day": 101 }])).toBe(false);
+    expect(known([...MONTHS, { "hours-per-day": 30 }, { "hours-per-day": 26 }])).toBe(false);
+    expect(known([{ month: "Thaw", days: 30, "hours-per-day": 30 }])).toBe(false);
+    expect(known({ "hours-per-day": 30 })).toBe(false);
+  });
+
   test("hours-per-day problems are listed", () => {
     const problems = (...entries) => parseCalendar([...MONTHS, ...entries]).problems;
     for (const bad of [0, -3, 101, 2.5, "30", true]) {
@@ -385,6 +410,9 @@ describe("calendar hours per day (#533)", () => {
     expect(parseClockTime("dawn")).toBe(300);
     expect(parseClockTime("dawn", 30)).toBe(375);
     expect(parseClockTime("night", 12)).toBe(690);
+    // 300 * 25 / 24 is 312.5 minutes, which rounds to 05:13.
+    expect(parseClockTime("dawn", 25)).toBe(313);
+    expect(parseClockTime("morning", 25)).toBe(438);
 
     const thirty = parseCalendar([...MONTHS, { "hours-per-day": 30 }]).calendar;
     expect(storyTimeError("27:15", { calendar: thirty })).toBe("");
@@ -417,6 +445,7 @@ describe("calendar hours per day (#533)", () => {
     writeScene(root, 1, "date: 1 Thaw 1 AE\ntime: \"08:00\"\nlocation: the-vale");
     writeScene(root, 2, "date: 2 Thaw 1 AE\ntime: \"09:00\"\nlocation: the-citadel\ntravel-hours: 30");
     writeScene(root, 3, "date: 2 Thaw 1 AE\ntime: \"27:00\"\nlocation: the-citadel");
+    writeChapterTime(root, 1, "26:30");
     expect(validateProject(root).errors).toEqual([]);
     // A 30-hour day leaves 31 hours for the journey.
     let result = checkProjectContinuity(root);
@@ -432,8 +461,56 @@ describe("calendar hours per day (#533)", () => {
       "scenes/chapter-02-scene-01.md puts sera at the-citadel 27h after scenes/chapter-01-scene-01.md at the-vale, but the fastest route takes 30h"
     ]);
     expect(messages(result.warnings.filter((warning) => warning.code === "malformed-time"))).toEqual([
-      "scenes/chapter-03-scene-01.md has malformed time \"27:00\" (the story calendar's 26-hour day runs 00:00 to 25:59)"
+      "scenes/chapter-03-scene-01.md has malformed time \"27:00\" (the story calendar's 26-hour day runs 00:00 to 25:59)",
+      "Chapter 1 has malformed time \"26:30\" (the story calendar's 26-hour day runs 00:00 to 25:59)"
     ]);
+  });
+
+  test("travel-hours reads exact times past 23:59", () => {
+    // 25:00 on day 1 to 12:00 on day 3 of a 30-hour day is 5 + 30 + 12 hours.
+    const root = dayProject(30);
+    writeScene(root, 1, "date: 1 Thaw 1 AE\ntime: \"25:00\"\nlocation: the-vale");
+    writeScene(root, 2, "date: 3 Thaw 1 AE\ntime: \"12:00\"\nlocation: the-citadel\ntravel-hours: 50");
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([
+      "scenes/chapter-02-scene-01.md allows only 47h for travel of 50h"
+    ]);
+  });
+
+  test("an untimed scene and a named time end on the day's last minute", () => {
+    const backward = (root) => messages(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "clock-backward"));
+    // An untimed scene could be at 29:59, so it does not run backward
+    // after 28:00 the same day.
+    const thirty = dayProject(30);
+    writeScene(thirty, 1, "date: 1 Thaw 1 AE\ntime: \"28:00\"");
+    writeScene(thirty, 2, "date: 1 Thaw 1 AE");
+    expect(backward(thirty)).toEqual([]);
+    // night starts at 25:00 of 30 hours, so 24:00 cannot follow it.
+    writeScene(thirty, 1, "date: 1 Thaw 1 AE\ntime: night");
+    writeScene(thirty, 2, "date: 1 Thaw 1 AE\ntime: \"24:00\"");
+    expect(backward(thirty)).toEqual(["scenes/chapter-02-scene-01.md timestamp runs backward"]);
+    // night ends at 11:59 of 12 hours, before 00:00 the next day.
+    const twelve = dayProject(12);
+    writeScene(twelve, 1, "date: 2 Thaw 1 AE\ntime: \"00:00\"");
+    writeScene(twelve, 2, "date: 1 Thaw 1 AE\ntime: night");
+    expect(backward(twelve)).toEqual(["scenes/chapter-02-scene-01.md timestamp runs backward"]);
+  });
+
+  test("an unreadable hours-per-day is one error, not a warning per time", () => {
+    const root = dayProject("\"30\"");
+    writeScene(root, 1, "date: 1 Thaw 1 AE\ntime: \"27:00\"");
+    writeScene(root, 2, "date: 1 Thaw 1 AE\ntime: noonish");
+    expect(messages(validateProject(root).errors)).toEqual(["story.md calendar entry 10 hours-per-day must be a whole number from 1 to 100, got 30"]);
+    // Any HH:MM could be on the day the writer meant; other text is not.
+    expect(messages(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "malformed-time"))).toEqual([
+      "scenes/chapter-02-scene-01.md has malformed time \"noonish\""
+    ]);
+    const io = memoryIo(root);
+    expect(runCli(["add", "chapter", "Late", "--time", "27:00"], io)).not.toBe(0);
+    expect(io.error()).toContain("time cannot be read until the story.md calendar's hours-per-day is fixed (see story validate)");
+    const noon = memoryIo(root);
+    expect(runCli(["add", "chapter", "Noon", "--time", "noonish"], noon)).not.toBe(0);
+    expect(noon.error()).toContain("time must be HH:MM or a named part of day");
+    expect(runCli(["add", "chapter", "Dawn", "--time", "dawn"], memoryIo(root))).toBe(0);
   });
 
   test("named times keep their share of a longer day", () => {

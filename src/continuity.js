@@ -1,5 +1,5 @@
 import path from "node:path";
-import { DEFAULT_HOURS_PER_DAY, calendarShaped, dayHours, parseCalendarDate } from "./calendar.js";
+import { DEFAULT_HOURS_PER_DAY, MAX_HOURS_PER_DAY, calendarShaped, dayHours, dayLengthKnown, parseCalendarDate } from "./calendar.js";
 import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
 import { projectPath } from "./files.js";
@@ -1048,17 +1048,19 @@ const TIME_RANKS = new Map([
 ]);
 
 function checkClock(project, errors, warnings) {
-  // A broken calendar is a validate error; every date it cannot read is
-  // not reported again here.
+  // A broken calendar is a validate error; every date it cannot read, and
+  // every time a day of unknown length might hold, is not reported again
+  // here.
   const calendarInvalid = project.calendar?.invalid === true;
   const hours = dayHours(project.calendar);
+  const timeHours = dayLengthKnown(project.calendar) ? hours : MAX_HOURS_PER_DAY;
   const clock = hours === DEFAULT_HOURS_PER_DAY ? "" : ` (the story calendar's ${hours}-hour day runs 00:00 to ${lastClockTime(hours)})`;
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
-    if (scene.time !== "" && parseClockTime(scene.time, hours) === undefined) {
+    if (scene.time !== "" && parseClockTime(scene.time, timeHours) === undefined) {
       warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"${clock}`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
@@ -1072,7 +1074,7 @@ function checkClock(project, errors, warnings) {
     if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file), chapter.id));
     }
-    if (chapter.time !== "" && parseClockTime(chapter.time, hours) === undefined) {
+    if (chapter.time !== "" && parseClockTime(chapter.time, timeHours) === undefined) {
       warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"${clock}`, relative(project, chapter.file), chapter.id));
     }
   }
@@ -1529,13 +1531,18 @@ export function parseStoryDate(value, calendar = null) {
 }
 
 // A chapter or scene `time`, read on the story.md calendar's day when the
-// book has one.
+// book has one. While its `hours-per-day` cannot be read, an `HH:MM` time
+// cannot be checked, so only a named time passes.
 export function storyTimeError(value, { calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
   }
+  const text = String(value);
+  if (!dayLengthKnown(calendar) && parseClockTime(text, MAX_HOURS_PER_DAY) !== undefined && !TIME_RANKS.has(text.trim().toLowerCase())) {
+    return "time cannot be read until the story.md calendar's hours-per-day is fixed (see story validate)";
+  }
   const hours = dayHours(calendar);
-  if (parseClockTime(String(value), hours) === undefined) {
+  if (parseClockTime(text, hours) === undefined) {
     const clock = hours === DEFAULT_HOURS_PER_DAY ? "HH:MM" : `HH:MM from 00:00 to ${lastClockTime(hours)} (the story calendar's ${hours}-hour day)`;
     return `time must be ${clock} or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
   }
