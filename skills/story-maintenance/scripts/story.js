@@ -2514,7 +2514,6 @@ var ar_default = {
   name: "Arabic",
   cased: false,
   script: "Arab",
-  segmentation: "space",
   narrationRate: 95,
   labels: {
     chapter: "الفصل {n}",
@@ -2663,7 +2662,6 @@ var base_default = {
   name: "Generic",
   cased: true,
   script: null,
-  segmentation: "space",
   countUnit: "words",
   sentenceEnd: [".", "!", "?", "…", "。", "！", "？", "؟", "۔", "।", "॥", "።"],
   quotes: [
@@ -5037,7 +5035,6 @@ var fa_default = {
   code: "fa",
   name: "Persian",
   cased: false,
-  segmentation: "space",
   labels: {
     chapter: "فصل {n}",
     "chapter-heading": "{chapter}: {title}",
@@ -6390,7 +6387,6 @@ var he_default = {
   name: "Hebrew",
   cased: false,
   script: "Hebr",
-  segmentation: "space",
   narrationRate: 125,
   labels: {
     chapter: "פרק {n}",
@@ -6539,7 +6535,6 @@ var hi_default = {
   name: "Hindi",
   cased: false,
   script: "Deva",
-  segmentation: "space",
   labels: {
     chapter: "अध्याय {n}",
     "chapter-heading": "{chapter}: {title}",
@@ -6833,7 +6828,6 @@ var ja_default = {
   name: "Japanese",
   cased: false,
   script: "Jpan",
-  segmentation: "character",
   quotes: [["「", "」"], ["『", "』"], ["“", "”"], ["〝", "〟"], ['"', '"']],
   dialogueDash: null,
   countUnit: "characters",
@@ -6991,7 +6985,6 @@ var ko_default = {
   name: "Korean",
   cased: false,
   script: "Kore",
-  segmentation: "space",
   narrationRate: 100,
   labels: {
     chapter: "제{n}장",
@@ -7914,8 +7907,7 @@ var th_default = {
   code: "th",
   name: "Thai",
   cased: false,
-  script: "Thai",
-  segmentation: "dictionary"
+  script: "Thai"
 };
 
 // src/languages/tr.js
@@ -8220,7 +8212,6 @@ var zh_default = {
   name: "Chinese",
   cased: false,
   script: "Hans",
-  segmentation: "character",
   dialogueDash: null,
   countUnit: "characters",
   characterForms: {

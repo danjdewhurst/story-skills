@@ -60,7 +60,6 @@ describe("language packs", () => {
     expect(english.code).toBe("en");
     expect(english.tag).toBe("en");
     expect(english.cased).toBe(true);
-    expect(english.segmentation).toBe("space");
     expect(english.checks.filterWords).toContain("felt");
     expect(Object.isFrozen(english)).toBe(true);
     expect(Object.isFrozen(english.checks.filterWords)).toBe(true);
@@ -114,7 +113,7 @@ describe("language packs", () => {
     }
     // An extlang tag drops its macrolanguage for the locale and keeps it for the pack:
     // zh-yue layers the zh pack, then yue (Traditional labels).
-    expect(languagePack("zh-yue")).toMatchObject({ tag: "zh-yue", locale: "yue", code: "yue", segmentation: "character" });
+    expect(languagePack("zh-yue")).toMatchObject({ tag: "zh-yue", locale: "yue", code: "yue" });
     expect(languagePack("zh-cmn-Hans")).toMatchObject({ locale: "cmn-Hans", code: "zh" });
     expect(languagePack("zh-min-nan")).toMatchObject({ locale: "nan", code: "zh" });
     expect(languagePack("en-GB-oed")).toMatchObject({ tag: "en-GB-oed", locale: "en-GB-oxendict", code: "en" });
@@ -159,16 +158,16 @@ describe("language packs", () => {
     expect(languagePack("english").checks).toEqual({});
   });
 
-  test("script packs set case and word segmentation", () => {
-    expect(languagePack("ja")).toMatchObject({ cased: false, segmentation: "character" });
-    expect(languagePack("zh-Hans")).toMatchObject({ code: "zh", cased: false, segmentation: "character" });
-    expect(languagePack("ko")).toMatchObject({ cased: false, segmentation: "space" });
-    expect(languagePack("th")).toMatchObject({ cased: false, segmentation: "dictionary" });
+  test("script packs set case", () => {
+    expect(languagePack("ja")).toMatchObject({ cased: false });
+    expect(languagePack("zh-Hans")).toMatchObject({ code: "zh", cased: false });
+    expect(languagePack("ko")).toMatchObject({ cased: false });
+    expect(languagePack("th")).toMatchObject({ cased: false });
     for (const tag of ["ar", "he", "hi"]) {
-      expect(languagePack(tag)).toMatchObject({ code: tag, cased: false, segmentation: "space" });
+      expect(languagePack(tag)).toMatchObject({ code: tag, cased: false });
     }
     expect(languagePack("ja").checks).toEqual({});
-    expect(languagePack("fr")).toMatchObject({ cased: true, segmentation: "space" });
+    expect(languagePack("fr")).toMatchObject({ cased: true });
   });
 
   test("projectLanguage uses English only when language is unset", () => {

@@ -14,10 +14,6 @@ export default {
   // without a pack: builds then take it from the tag's script subtag or a
   // table of common languages; see ../typesetting.js.
   script: null,
-  // How words are found: "space" (between spaces and punctuation),
-  // "character" (each character is a word), or "dictionary" (a word
-  // segmenter is needed).
-  segmentation: "space",
   // The unit a manuscript's length is counted in, unless story.md sets
   // `count-unit`: "words" or "characters".
   countUnit: "words",

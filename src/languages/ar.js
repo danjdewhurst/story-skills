@@ -8,7 +8,6 @@ export default {
   name: "Arabic",
   cased: false,
   script: "Arab",
-  segmentation: "space",
   narrationRate: 95,
   labels: {
     chapter: "الفصل {n}",

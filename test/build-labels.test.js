@@ -255,7 +255,7 @@ describe("build labels", () => {
       expect(publishingMeta({ language: tag }).labels.contents).toBe("目錄");
     }
     expect(publishingMeta({ language: "zh-CN" }).labels.contents).toBe("目录");
-    expect(languagePack("yue")).toMatchObject({ cased: false, segmentation: "character", script: "Hant" });
+    expect(languagePack("yue")).toMatchObject({ cased: false, script: "Hant" });
   });
 
   test("Chinese labels follow the script subtag, then the region, then the language", () => {
@@ -272,7 +272,7 @@ describe("build labels", () => {
       const type = typesetting(tag);
       expect({ tag, script: pack.script, contents: publishingMeta({ language: tag }).labels.contents }).toEqual({ tag, script, contents: script === "Hant" ? "目錄" : "目录" });
       expect({ tag, type: type.script }).toEqual({ tag, type: tag === "zh-Bopo" ? "Bopo" : script });
-      expect({ tag, countUnit: pack.countUnit, segmentation: pack.segmentation, cased: pack.cased, quotes: pack.quotes }).toEqual({ tag, countUnit: "characters", segmentation: "character", cased: false, quotes: languagePack("zh").quotes });
+      expect({ tag, countUnit: pack.countUnit, cased: pack.cased, quotes: pack.quotes }).toEqual({ tag, countUnit: "characters", cased: false, quotes: languagePack("zh").quotes });
       expect(type.fonts.body).toBe(typesetting(script === "Hant" ? "zh-Hant" : "zh").fonts.body);
     }
     expect(languagePack("yue-Hans")).toMatchObject({ code: "yue", name: "Cantonese" });

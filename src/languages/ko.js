@@ -8,7 +8,6 @@ export default {
   name: "Korean",
   cased: false,
   script: "Kore",
-  segmentation: "space",
   narrationRate: 100,
   labels: {
     chapter: "제{n}장",

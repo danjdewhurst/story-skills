@@ -11,7 +11,6 @@ export default {
   name: "Japanese",
   cased: false,
   script: "Jpan",
-  segmentation: "character",
   quotes: [["「", "」"], ["『", "』"], ["“", "”"], ["〝", "〟"], ["\"", "\""]],
   dialogueDash: null,
   countUnit: "characters",

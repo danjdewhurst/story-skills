@@ -5,7 +5,6 @@ export default {
   code: "fa",
   name: "Persian",
   cased: false,
-  segmentation: "space",
   labels: {
     chapter: "فصل {n}",
     "chapter-heading": "{chapter}: {title}",
