@@ -103,7 +103,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A test fails if a job in this repository's workflows or the workflow templates has none.
 - Each `CHANGELOG.md` entry now leads with one short sentence of what changed for users, with the detail in indented sub-bullets. ([#605](https://github.com/danjdewhurst/story-skills/issues/605))
   - Every released entry is rewritten this way, with no fact dropped.
-  - `check:metadata` fails when an entry's first line is over 200 characters, not counting link targets.
+  - `check:metadata` fails when an entry's lead, the text before its first sub-bullet or blank line, is over 200 characters, not counting link targets.
 - Each skill request now has one owning skill, and skill descriptions route overlapping requests with NOT clauses. (#554)
   - "Choose your own adventure", "interactive fiction", "Ink", and "Twine" load interactive-fiction, and "reverse outline" and "cut a subplot" load revision-continuity.
   - worldbuilding owns glossary terms and now covers `story add term`.
@@ -226,8 +226,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story mentions` and `rename --prose` find a name at the right place in text where a CJK compatibility ideograph changes length when composed to NFC. ([#588](https://github.com/danjdewhurst/story-skills/issues/588))
   - Before, such a name could get the wrong column and excerpt, and `rename --prose` skipped it as an alias.
 - `story prose` analyses a line of prose that opens with `#`, such as `#1 on the list was Mara`; only a heading (one to six `#` and a space) is dropped. ([#588](https://github.com/danjdewhurst/story-skills/issues/588))
-- `story links` and `story check` accept an abandoned promise, clue, or question whose chapter was never written, as `story continuity` already did. ([#582](https://github.com/danjdewhurst/story-skills/issues/582))
-  - That is an abandoned promise or clue whose `planted` or `payoff` chapter, or an abandoned question whose `introduced` chapter, was never written.
+- `story links` and `story check` accept an abandoned promise or clue whose `planted` or `payoff` chapter, or an abandoned question whose `introduced` chapter, was never written. ([#582](https://github.com/danjdewhurst/story-skills/issues/582))
+  - `story continuity` already accepted them.
   - A question's `resolved` chapter must still exist.
   - `story add` follows the same rules, and now also refuses a dropped thread's unwritten `--planted` chapter and a chapter id that is neither written nor `chapter-NN`, which `story links` rejects.
   - `story add chapter` and `story split` warn (`adopted-references`) when an abandoned thread already names the new chapter.
@@ -1059,8 +1059,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - They print a note when a kept `.gitignore` does not ignore `dist/`.
 - `story prose -` and `story voices -` check a passage piped to stdin against the project's style sheet and characters. ([#270](https://github.com/danjdewhurst/story-skills/pull/270))
   - `story import -` splits a manuscript piped to stdin; import also refuses a chapter that would come out over the 5 MiB read limit.
-- `--json` prints one versioned result object described by `schemas/result.schema.json`. ([#269](https://github.com/danjdewhurst/story-skills/pull/269))
-  - It works on `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`.
+- `--json` on 14 commands prints one versioned result object described by `schemas/result.schema.json`. ([#269](https://github.com/danjdewhurst/story-skills/pull/269))
+  - The commands are `validate`, `links`, `continuity`, `series`, `report`, `next`, `doctor`, `knowledge`, `progress`, `timeline`, `prose`, `pacing`, `clues`, and `voices`.
   - The object has `apiVersion`, `command`, `ok`, `data`, `diagnostics`, and `writes`.
 - Optional `cli-defaults` and `severity` fields in `story.md`, checked by `story validate`. ([#273](https://github.com/danjdewhurst/story-skills/pull/273))
   - `cli-defaults` holds default flags per command (a command-line flag always wins); `severity` holds named warnings promoted to errors or turned off.
