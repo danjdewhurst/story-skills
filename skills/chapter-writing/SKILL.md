@@ -27,7 +27,7 @@ ls -d ~/.claude/skills/better-writing .claude/skills/better-writing ~/.agents/sk
 ```
 
 - If a `better-writing` directory exists (containing `SKILL.md`), use it for prose quality, voice calibration, anti-generic writing checks, and the final pre-flight pass before saving the chapter.
-- If `better-writing` is not installed, point the user at [forjd/better-writing](https://github.com/forjd/better-writing) and ask whether they want to install it; do not run any installer without explicit approval. Then continue with this skill's built-in writing guidelines (`references/writing-guidelines.md`) if the user does not install it.
+- If `better-writing` is not installed, continue with this skill's built-in writing guidelines (`references/writing-guidelines.md`). Do not ask about it every session: offer it once, when you draft the project's first chapter, by pointing the user at [forjd/better-writing](https://github.com/forjd/better-writing) and asking whether they want to install it. After that, mention it only if the user asks about prose-quality tools, and never again once they decline. Do not run any installer without explicit approval.
 
 ## Outline-First Workflow
 
@@ -129,14 +129,14 @@ story wordcount . --write
 story check .
 story next .
 story pacing .
-story progress . --log
+story progress .
 ```
 
 `story check .` runs `validate`, `links`, and `continuity` (the continuity check) over one scan, as every skill's maintenance block does. It prints each finding and exits non-zero when there are errors; warnings print but do not fail it. Repair those errors before treating the chapter as done. `story next .` can name the same errors as a P0 line and still exit 0, without printing the findings, so its exit code is not a continuity result.
 
 `story pacing .` shows the new chapter's words, scene outcomes, and hook alongside the rest of the book, and warns about runs of `yes` outcomes, missing sequels, length outliers, or a missing `hook`.
 
-`story progress . --log` records the session in `progress.md` and reports words against `target-words`, the `deadline`, and chapter `target-words`, plus today's words against `daily-target-words`, the writing streak (which skips days not in `writing-days`), and the last four weeks; report the streak from it rather than counting by hand. Skip the `--log` flag when the user does not keep a log.
+`story progress .` reports words against `target-words`, the `deadline`, and chapter `target-words`. Only when the project already has a `progress.md` (the user keeps a session log) or the user asks to log the session, run `story progress . --log` instead: it records today's total there, so the report also gives today's words against `daily-target-words`, the writing streak (which skips days not in `writing-days`), and the last four weeks; report the streak from it rather than counting by hand.
 
 Present a summary of all updates made.
 

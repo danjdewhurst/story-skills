@@ -114,7 +114,8 @@ readers have read. Verify `story.md` exists in the project root.
 2. **Map old labels to the current text.** When a note's build is older
    than the manuscript, its label may point at a different paragraph now.
    Resolve every label from the round in one run against the tag (or the
-   short commit in the note's build stamp):
+   short commit in the note's build stamp). A `reader-panel` round is
+   tagged `panel-round-{N}` instead of `feedback-round-{N}`:
 
    ```shell
    story compare . --ref feedback-round-{N} --anchor ch03-p12 --anchor ch07-p4
