@@ -25,6 +25,7 @@ import {
   countTodoMarkers,
   hasUnclosedComment,
   kebabCase,
+  setextSceneBreakLines,
   titleCaseSlug,
   wordCount
 } from "./markdown.js";
@@ -420,6 +421,7 @@ export function scanProject(root) {
       ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
+      setextBreaks: setextBreaks(markdown),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       // Raw: a real-world YYYY-MM-DD day, or undefined; validate reports
@@ -1886,6 +1888,15 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     }
   }
   return entities;
+}
+
+// File line numbers of the `---` scene breaks right under a line of text,
+// which markdown viewers read as heading underlines (see
+// setextSceneBreakLines). The body is the end of the raw file, so the lines
+// above it are the frontmatter's.
+function setextBreaks(markdown) {
+  const frontmatterLines = markdown.rawMarkdown.slice(0, markdown.rawMarkdown.length - markdown.body.length).split("\n").length - 1;
+  return setextSceneBreakLines(markdown.body).map((index) => frontmatterLines + index + 1);
 }
 
 // Commands never search parent folders for story.md (see

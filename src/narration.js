@@ -1,6 +1,6 @@
 import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { characterCount, flattenHeadings, isSceneBreak, plainLinks, plainSpaces, trimSourceSpace, wordCount } from "./markdown.js";
+import { characterCount, flattenHeadings, isSceneBreakLine, plainLinks, splitAtSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -108,12 +108,15 @@ function narrationBody(body) {
     // in the other builds.
     .replace(/^[^\S\n]+$/gm, "")
     .split(/\n{2,}/)
+    // A scene-break line ends a paragraph even with no blank line around
+    // it, as in the other builds.
+    .flatMap(splitAtSceneBreaks)
     // Typed spaces stay, so a paragraph keeps its ideographic-space indent
     // (see trimSourceSpace): a script has no indent of its own.
     .map(trimSourceSpace)
     .filter((paragraph) => paragraph !== "")
     // A break spaced with typed spaces is still a break.
-    .map((paragraph) => (isSceneBreak(plainSpaces(paragraph)) ? "[pause]" : paragraph))
+    .map((paragraph) => (isSceneBreakLine(paragraph) ? "[pause]" : paragraph))
     .join("\n\n");
 }
 

@@ -38,6 +38,7 @@ export const FINDING_CODES = {
   "stale-word-count": "warning",
   "todo-markers": "warning",
   "unclosed-comment": "warning",
+  "ambiguous-scene-break": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
   "missing-field": "error",

@@ -161,6 +161,12 @@ describe("ink build", () => {
     expect(text).toContain("=== a ===\nThe lamp is dark, and the sun is down.\n\nRoses are red,\nviolets\nblue.\\\\\\\\ Done \\\\\n\n-> END\n");
   });
 
+  test("ends a paragraph at a scene-break line", () => {
+    const body = "He left.\n* * *\nShe came\nback.";
+    const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
+    expect(text).toContain("=== a ===\nHe left.\n\n\\* * *\n\nShe came back.\n\n-> END\n");
+  });
+
   test("escapes the title and author tags onto one line each", () => {
     const text = inkSource({ title: "Hash # and // slash", author: "Jo {Ann}\nSmith", ifid: IFID.toLowerCase(), branching: false, passages: [{ name: "a", body: "", links: [] }] });
     expect(text).toBe(`# title: Hash \\# and /\\/ slash\n# author: Jo \\{Ann\\} Smith\n# ifid: ${IFID}\n\n-> a\n\n=== a ===\n-> END\n`);

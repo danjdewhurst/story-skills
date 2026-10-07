@@ -9,7 +9,7 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreak, plainLinks, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -855,12 +855,16 @@ export const LINE_BREAK = "\uE001";
 // or more of the same marker, optionally spaced), otherwise { text, quote }
 // where `text` is inline markdown on one line, with LINE_BREAK for each hard
 // break, and `quote` marks a blockquote paragraph (an epigraph, a letter).
-// Whitespace-only lines are blank, as in CommonMark. Fence lines go and the
-// code stays; links print as their text and images are left out, as word
-// counts treat them. A build that indents first lines itself passes
-// `ownIndent`, and a paragraph's typed indent (the ideographic space a
-// Japanese paragraph opens with) goes, so the two never add up; the other
-// builds keep it as the paragraph's only indent.
+// Whitespace-only lines are blank, as in CommonMark, and a scene-break line
+// ends a paragraph even with no blank line around it, as a thematic break
+// does; a `---` right under a line of text is a break too, not the setext
+// heading CommonMark reads (story validate warns, see
+// setextSceneBreakLines). Fence lines go and the code stays; links print as
+// their text and images are left out, as word counts treat them. A build
+// that indents first lines itself passes `ownIndent`, and a paragraph's
+// typed indent (the ideographic space a Japanese paragraph opens with) goes,
+// so the two never add up; the other builds keep it as the paragraph's only
+// indent.
 function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
@@ -886,9 +890,10 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
     const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
-    // A break spaced with typed spaces (`*\u00a0*\u00a0*`) is still a break.
+    // A break spaced with typed spaces (`*\u00a0*\u00a0*`) is still a break,
+    // and so is one wrapped over lines (`* *` then `*`).
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
   const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, "\n"))));
   for (const rawLine of source.split("\n")) {
@@ -898,6 +903,11 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const line = marker ? rawLine.slice(marker[0].length) : rawLine;
     if (line.trim() === "") {
       flush();
+      continue;
+    }
+    if (isSceneBreakLine(line)) {
+      flush();
+      paragraphs.push({ sceneBreak: true });
       continue;
     }
     // A quote interrupts a plain paragraph; an unmarked line after a quoted
