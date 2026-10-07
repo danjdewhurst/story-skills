@@ -96,6 +96,15 @@ describe("manuscript import", () => {
     expect(extractNameCandidates(repeated)).toEqual([{ name: "Vex Marrow", count: 3 }]);
   });
 
+  test("offers the name next to a word that is never a name, but not the word (#586)", () => {
+    const prose = [
+      "Nobody saw Mara. Nobody heard Mara. Nobody told Mara.",
+      "Everything changed. Everything broke. Everything burned.",
+      "What Harrow wanted. What Harrow feared. What Harrow knew."
+    ].join(" ");
+    expect(extractNameCandidates(prose)).toEqual([{ name: "Harrow", count: 3 }, { name: "Mara", count: 3 }]);
+  });
+
   test("breaks candidate count ties by name", () => {
     const tied = [
       "He saw Zephyr, then Anvil, then Marrow.",

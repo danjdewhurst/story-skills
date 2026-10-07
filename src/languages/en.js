@@ -172,7 +172,7 @@ export default {
 
     // Capitalised words that are not names, for import's entity candidates
     // and for sentence splitting, where a capital alone before one ends the
-    // sentence (plan B. Nobody agreed.). The calendar words are added to
+    // sentence (plan B. Nobody agreed.). Import adds the calendar words to
     // these.
     candidateStopwords: [
       "A", "An", "And", "Anybody", "Anyone", "Anything", "As", "At", "But", "By", "Dr", "Everybody",
