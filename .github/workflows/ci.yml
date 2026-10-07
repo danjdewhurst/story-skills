@@ -66,17 +66,20 @@ jobs:
       - name: Check bundled fallback under Node
         run: node skills/story-maintenance/scripts/story.js --help
 
-  # The full suite on Windows and macOS, so path separators, line endings,
-  # and file-system differences are caught before a release.
+  # The full suite on macOS, so path separators, line endings, and
+  # file-system differences are caught before a release. Windows is
+  # test-windows: the same suite there is dominated by NTFS and Defender, so
+  # it runs in parallel shards instead of one long job.
   test-os:
     name: Tests ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # Windows usually takes 10 to 15 minutes, and has taken over 20.
+    # macOS usually finishes in a few minutes. The timeout stays at the
+    # previous shared job's limit, well above a slow run.
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [macos-latest]
     defaults:
       run:
         shell: bash
@@ -99,12 +102,158 @@ jobs:
       - name: Run tests
         run: bun run test
 
-      # npm and the installed story bin are .cmd shims on Windows, which Node
-      # will not spawn without a shell, so pack, install, and run the tarball
-      # here too.
+      # Pack, install, and run the tarball here too, as the node job does.
       - name: Install and run the packed tarball
         timeout-minutes: 10
         run: bun run check:package
+
+  # Every test/*.test.js file runs on exactly one shard. scripts/test-shards.js
+  # builds the lists from the directory at start, and test/test-shards.test.js
+  # fails if this matrix drops a shard index or the assignment leaves a file out.
+  # Shard 1 also packs the tarball, once, the way the single Windows job did.
+  test-windows:
+    name: Tests windows-latest (${{ matrix.shard }}/${{ matrix.shards }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        shards: [4]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install
+
+      # Temporary story projects are the slow part on NTFS with Defender
+      # scanning each new file. A ReFS Dev Drive skips that scanning; if the
+      # runner cannot create one, the normal temp folder is used and Defender
+      # is asked to ignore the workspace and temp paths anyway.
+      - name: Use a Dev Drive for temporary files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $devTmp = $null
+          # Cap the setup. A Dev Drive that hangs would spend the shard's
+          # timeout before any test ran; the suite still runs on the normal temp folder.
+          $setup = {
+            $ErrorActionPreference = 'Stop'
+            Import-Module Hyper-V
+            $vhd = Join-Path $env:RUNNER_TEMP 'story-devdrive.vhdx'
+            $volume = New-VHD -Path $vhd -SizeBytes 50GB -Dynamic |
+              Mount-VHD -Passthru |
+              Initialize-Disk -Passthru |
+              New-Partition -AssignDriveLetter -UseMaximumSize |
+              Format-Volume -FileSystem ReFS -DevDrive -Force -Confirm:$false
+            if (-not $volume.DriveLetter) { throw 'Format-Volume did not return a drive letter' }
+            $tmp = "$($volume.DriveLetter):\story-tmp"
+            $null = New-Item -ItemType Directory -Force -Path $tmp
+            $tmp
+          }
+          $job = Start-Job -ScriptBlock $setup
+          if (-not (Wait-Job $job -Timeout 90)) {
+            Stop-Job $job
+            Write-Host "::warning::Dev Drive setup exceeded 90 seconds. Tests will use the normal temp folder."
+          } elseif ($job.State -eq 'Completed') {
+            $devTmp = "$(Receive-Job $job | Select-Object -Last 1)"
+            if ($devTmp -match '^[A-Z]:\\story-tmp$') {
+              Write-Host "Dev Drive temp is $devTmp"
+            } else {
+              Write-Host "::warning::Dev Drive setup returned '$devTmp'. Tests will use the normal temp folder."
+              $devTmp = $null
+            }
+          } else {
+            Receive-Job $job -ErrorAction Continue | Out-Host
+            Write-Host "::warning::Dev Drive was not created. Tests will use the normal temp folder."
+            $devTmp = $null
+          }
+          Remove-Job $job -Force -ErrorAction SilentlyContinue
+          if ($devTmp) {
+            Add-Content -Path $env:GITHUB_ENV -Value "TEMP=$devTmp"
+            Add-Content -Path $env:GITHUB_ENV -Value "TMP=$devTmp"
+            Add-Content -Path $env:GITHUB_ENV -Value "TMPDIR=$devTmp"
+          }
+          $exclude = @($env:GITHUB_WORKSPACE, $env:RUNNER_TEMP, $env:TEMP)
+          if ($devTmp) { $exclude += $devTmp }
+          foreach ($path in ($exclude | Where-Object { $_ } | Select-Object -Unique)) {
+            Add-MpPreference -ExclusionPath $path -ErrorAction SilentlyContinue
+            Write-Host "Defender exclusion: $path"
+          }
+          foreach ($processName in @('bun.exe', 'node.exe')) {
+            Add-MpPreference -ExclusionProcess $processName -ErrorAction SilentlyContinue
+          }
+          try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction Stop
+            Write-Host "Defender real-time monitoring is off"
+          } catch {
+            Write-Host "::warning::Defender real-time monitoring stayed on: $($_.Exception.Message)"
+          }
+          $pref = Get-MpPreference -ErrorAction SilentlyContinue
+          if ($pref) {
+            Write-Host "DisableRealtimeMonitoring=$($pref.DisableRealtimeMonitoring)"
+          }
+
+      # The same 60s per-test timeout as `bun run test`. The file list is this
+      # shard only; the script exits non-zero if any test file is unassigned.
+      - name: Run tests
+        run: |
+          set -euo pipefail
+          shard="${{ matrix.shard }}"
+          shards="${{ matrix.shards }}"
+          if ! list=$(node scripts/test-shards.js --shard "$shard" --shards "$shards"); then
+            echo "::error::Could not list test files for Windows shard ${shard}/${shards}."
+            exit 1
+          fi
+          if [ -z "$list" ]; then
+            echo "::error::Windows shard ${shard}/${shards} was assigned no test files."
+            exit 1
+          fi
+          mapfile -t files <<< "$list"
+          echo "Shard ${shard}/${shards} runs ${#files[@]} files"
+          printf '  %s\n' "${files[@]}"
+          node --input-type=module -e 'import os from "node:os"; console.log("os.tmpdir()", os.tmpdir())'
+          bun test --timeout 60000 "${files[@]}"
+
+      - name: Install and run the packed tarball
+        if: matrix.shard == 1
+        timeout-minutes: 10
+        run: bun run check:package
+
+  # Keeps the check name `Tests windows-latest` for branch protection. It
+  # passes only when every shard did, and re-checks that the shard count
+  # still partitions the suite.
+  test-windows-done:
+    name: Tests windows-latest
+    needs: test-windows
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require every Windows shard and every test file
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.test-windows.result }}" != "success" ]; then
+            echo "::error::Windows test shards finished with ${{ needs.test-windows.result }}."
+            exit 1
+          fi
+          node scripts/test-shards.js --audit --shards 4
 
   node:
     name: Node ${{ matrix.node }}
