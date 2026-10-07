@@ -205,26 +205,19 @@ jobs:
             Write-Host "DisableRealtimeMonitoring=$($pref.DisableRealtimeMonitoring)"
           }
 
-      # The same 60s per-test timeout as `bun run test`. The file list is this
-      # shard only; the script exits non-zero if any test file is unassigned.
+      # The same 60s per-test timeout as `bun run test`. `--shard` is bun's own
+      # split of that glob, so every test file is in one shard. Passing the
+      # paths ourselves makes bun follow plugins/story-skills and exit ELOOP
+      # on Windows. Timings only balance the shards.
       - name: Run tests
         run: |
           set -euo pipefail
           shard="${{ matrix.shard }}"
           shards="${{ matrix.shards }}"
-          if ! list=$(node scripts/test-shards.js --shard "$shard" --shards "$shards"); then
-            echo "::error::Could not list test files for Windows shard ${shard}/${shards}."
-            exit 1
-          fi
-          if [ -z "$list" ]; then
-            echo "::error::Windows shard ${shard}/${shards} was assigned no test files."
-            exit 1
-          fi
-          mapfile -t files <<< "$list"
-          echo "Shard ${shard}/${shards} runs ${#files[@]} files"
-          printf '  %s\n' "${files[@]}"
+          timings="${RUNNER_TEMP}/windows-timings.json"
+          node scripts/test-shards.js --write-timings "$timings"
           node --input-type=module -e 'import os from "node:os"; console.log("os.tmpdir()", os.tmpdir())'
-          bun test --timeout 60000 "${files[@]}"
+          bun run test -- --shard="${shard}/${shards}" --timings="$timings"
 
       - name: Install and run the packed tarball
         if: matrix.shard == 1
@@ -253,7 +246,7 @@ jobs:
             echo "::error::Windows test shards finished with ${{ needs.test-windows.result }}."
             exit 1
           fi
-          node scripts/test-shards.js --audit --shards 4
+          node scripts/test-shards.js --audit
 
   node:
     name: Node ${{ matrix.node }}

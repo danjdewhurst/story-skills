@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import {
+  DEFAULT_WEIGHT_SECONDS,
+  FILE_WEIGHT_SECONDS,
   auditAssignment,
-  filesForShard,
   main,
   parseShardArgs,
-  shardPlan,
-  testFiles
+  testFiles,
+  timingsCoverage,
+  timingsDocument
 } from "../scripts/test-shards.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -24,61 +27,46 @@ function capture(argv) {
   return { code, logs, errors };
 }
 
+// Files bun would run for one shard. `--test-name-pattern '^$'` loads each
+// file and runs nothing, which is enough to read the assignment.
+function bunShardFiles(shard, shards, timingsPath) {
+  const result = spawnSync(
+    "bun",
+    ["run", "test", "--", `--shard=${shard}/${shards}`, `--timings=${timingsPath}`, "--test-name-pattern", "^$", "--pass-with-no-tests"],
+    { encoding: "utf8", cwd: repoRoot }
+  );
+  expect(result.status, result.stderr).toBe(0);
+  return [...`${result.stdout}\n${result.stderr}`.matchAll(/^test\/(\S+\.test\.js):$/gm)].map((match) => match[1]);
+}
+
 describe("test shards", () => {
-  test("the real suite is a partition, and the slowest files take different shards", () => {
+  test("timings name every test file, and a new file is included", () => {
     const files = testFiles(testDir);
     expect(files.length).toBeGreaterThan(100);
-    expect(files).toEqual([...files].sort());
-    const plan = shardPlan(files, 4);
-    expect(auditAssignment(files, plan.map((shard) => shard.files))).toEqual([]);
-    expect(plan.flatMap((shard) => shard.files).sort()).toEqual(files);
-    const slowest = [
-      "split-merge.test.js",
-      "rename-remove.test.js",
-      "undo.test.js",
-      "validate-schema-property.test.js"
-    ];
-    const homes = slowest.map((file) => plan.findIndex((shard) => shard.files.includes(file)));
-    expect(new Set(homes).size).toBe(slowest.length);
-    const counts = plan.map((shard) => shard.files.length);
-    expect(Math.max(...counts)).toBeLessThanOrEqual(Math.min(...counts) * 2);
-    expect(shardPlan(files, 4)).toEqual(plan);
-  });
+    const document = timingsDocument(files);
+    expect(document.version).toBe(1);
+    expect(timingsCoverage(files, document)).toEqual([]);
+    expect(document.files["test/split-merge.test.js"]).toBe(80500);
+    expect(document.files["test\\split-merge.test.js"]).toBe(80500);
+    expect(document.files["test/helpers.test.js"]).toBe(DEFAULT_WEIGHT_SECONDS * 1000);
 
-  test("a file that is not in the weight table is still assigned", () => {
     const dir = makeTempDir("shards-");
     fs.writeFileSync(path.join(dir, "brand-new.test.js"), "");
     fs.writeFileSync(path.join(dir, "notes.txt"), "");
     fs.mkdirSync(path.join(dir, "nested.test.js"));
-    const files = testFiles(dir);
-    expect(files).toEqual(["brand-new.test.js"]);
-    const plan = shardPlan(files, 4, { "gone.test.js": 100 });
-    expect(plan.some((shard) => shard.files.includes("brand-new.test.js"))).toBe(true);
-    expect(plan.some((shard) => shard.files.includes("gone.test.js"))).toBe(false);
-    expect(auditAssignment(files, plan.map((shard) => shard.files))).toEqual([]);
+    expect(testFiles(dir)).toEqual(["brand-new.test.js"]);
+    const fresh = timingsDocument(testFiles(dir), { "gone.test.js": 100 });
+    expect(fresh.files["test/brand-new.test.js"]).toBe(DEFAULT_WEIGHT_SECONDS * 1000);
+    expect(fresh.files["test/gone.test.js"]).toBeUndefined();
   });
 
-  test("heavier files spread across shards, and equal weights follow file name", () => {
-    const plan = shardPlan(
-      ["heavy.test.js", "light.test.js", "other.test.js"],
-      2,
-      { "heavy.test.js": 100 },
-      1
-    );
-    expect(plan[0].files).toEqual(["heavy.test.js"]);
-    expect(plan[1].files).toEqual(["light.test.js", "other.test.js"]);
-    const tied = shardPlan(["b.test.js", "a.test.js"], 2, {}, 1);
-    expect(tied[0].files).toEqual(["a.test.js"]);
-    expect(tied[1].files).toEqual(["b.test.js"]);
-  });
-
-  test("a bad weight or shard count is refused", () => {
-    expect(() => shardPlan(["a.test.js"], 0)).toThrow(/shard count/);
-    expect(() => shardPlan(["a.test.js"], 1.5)).toThrow(/shard count/);
-    expect(() => shardPlan(["a.test.js"], 1, { "a.test.js": -1 })).toThrow(/Weight for a\.test\.js/);
-    expect(() => shardPlan(["a.test.js"], 1, {}, Number.NaN)).toThrow(/default weight/);
-    expect(() => filesForShard(shardPlan(["a.test.js"], 1), 0)).toThrow(/shard must be an integer/);
-    expect(() => filesForShard(shardPlan(["a.test.js"], 1), 2)).toThrow(/shard must be an integer/);
+  test("a bad weight is refused and a timings file that drops a file is reported", () => {
+    expect(() => timingsDocument(["a.test.js"], { "a.test.js": -1 })).toThrow(/Weight for a\.test\.js/);
+    expect(() => timingsDocument(["a.test.js"], {}, Number.NaN)).toThrow(/default weight/);
+    expect(timingsCoverage(["a.test.js"], { files: { "test/a.test.js": 1 } })).toEqual([
+      "a.test.js is missing from the timings file"
+    ]);
+    expect(timingsCoverage(["a.test.js"], timingsDocument(["a.test.js"]))).toEqual([]);
   });
 
   test("auditAssignment reports overlap, a missing file, and an extra file", () => {
@@ -93,44 +81,41 @@ describe("test shards", () => {
     ]);
   });
 
-  test("the CLI prints one shard as repo-relative paths", () => {
-    const { code, logs, errors } = capture(["--shards", "4", "--shard", "1"]);
-    expect(code).toBe(0);
-    expect(errors).toEqual([]);
-    const printed = logs[0].split("\n");
-    const expected = filesForShard(shardPlan(testFiles(testDir), 4), 1);
-    expect(printed).toEqual(expected.map((file) => `test/${file}`));
-    expect(printed.every((file) => file.startsWith("test/") && file.endsWith(".test.js"))).toBe(true);
+  test("bun --shard with these timings runs every test file exactly once", () => {
+    const timingsPath = path.join(makeTempDir("shards-timings-"), "timings.json");
+    const written = capture(["--write-timings", timingsPath]);
+    expect(written.code).toBe(0);
+    const files = testFiles(testDir);
+    const shards = [1, 2, 3, 4].map((shard) => bunShardFiles(shard, 4, timingsPath));
+    expect(auditAssignment(files, shards)).toEqual([]);
+    const loads = shards.map((shard) => shard.reduce((sum, file) => sum + (FILE_WEIGHT_SECONDS[file] ?? DEFAULT_WEIGHT_SECONDS), 0));
+    const total = loads.reduce((sum, load) => sum + load, 0);
+    expect(Math.max(...loads)).toBeLessThan(total * 0.4);
+    const slowest = ["split-merge.test.js", "rename-remove.test.js", "undo.test.js", "validate-schema-property.test.js"];
+    const homes = new Set(slowest.map((file) => shards.findIndex((shard) => shard.includes(file))));
+    expect(homes.size).toBeGreaterThan(1);
   });
 
-  test("--audit reports the whole directory, and an empty shard fails", () => {
-    const audit = capture(["--audit", "--shards", "4"]);
+  test("the CLI writes timings and audits the directory", () => {
+    const timingsPath = path.join(makeTempDir("shards-cli-"), "timings.json");
+    const written = capture(["--write-timings", timingsPath, "--audit"]);
+    expect(written.code).toBe(0);
+    expect(written.logs[0]).toContain(`${testFiles(testDir).length} test files`);
+    const document = JSON.parse(fs.readFileSync(timingsPath, "utf8"));
+    expect(timingsCoverage(testFiles(testDir), document)).toEqual([]);
+    const audit = capture(["--audit"]);
     expect(audit.code).toBe(0);
-    expect(audit.logs[0]).toBe(`All ${testFiles(testDir).length} test files are assigned across 4 shards.`);
-    const dir = makeTempDir("shards-empty-");
-    fs.writeFileSync(path.join(dir, "only.test.js"), "");
-    const empty = capture(["--shard", "4", "--shards", "4", "--dir", dir]);
-    expect(empty.code).toBe(1);
-    expect(empty.errors[0]).toContain("has no test files");
+    expect(audit.logs[0]).toBe(`All ${testFiles(testDir).length} test files are in the Windows shard timings.`);
   });
 
-  test("arguments are refused when a shard or a value is missing", () => {
-    expect(parseShardArgs(["--audit", "--shards", "4"]).audit).toBe(true);
-    expect(parseShardArgs(["--dir", "test", "--shard", "2", "--shards", "4"])).toEqual({
-      shard: 2,
-      shards: 4,
+  test("arguments are refused when a value is missing", () => {
+    expect(parseShardArgs(["--audit"]).audit).toBe(true);
+    expect(parseShardArgs(["--dir", "test", "--write-timings", "out.json"])).toEqual({
       audit: false,
+      writeTimings: "out.json",
       dir: "test"
     });
-    for (const argv of [
-      ["--shards", "4"],
-      ["--shard", "1"],
-      ["--shard", "1", "--shards", "4.5"],
-      ["--shard"],
-      ["--dir"],
-      ["--nope"],
-      ["--audit", "--shards", "0"]
-    ]) {
+    for (const argv of [["--write-timings"], ["--dir"], ["--nope"], []]) {
       const result = capture(argv);
       expect(result.code, argv.join(" ")).toBe(1);
       expect(result.errors[0].length).toBeGreaterThan(0);

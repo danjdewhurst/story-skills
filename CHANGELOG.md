@@ -74,7 +74,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Changed
 
 - CI runs the full Windows test suite as four parallel shards. ([#672](https://github.com/danjdewhurst/story-skills/issues/672))
-  - Every `test/*.test.js` file still runs on Windows. The shard list is computed when the job starts, and CI fails if a file is left out of the matrix.
+  - Every `test/*.test.js` file still runs on Windows. `bun test --shard` splits the suite when the job starts, and CI fails if a file is left out of the four shards.
   - Temporary projects go on a Dev Drive when the runner can make one, and Defender is asked to skip the workspace and temp folders.
   - The check name stays `Tests windows-latest`: it passes only after every shard does. macOS is unchanged.
 - `snapshot.json` and `story snapshot --list` now count the files that did not parse when the snapshot was taken, as `unparsed`. (#600)
