@@ -4,9 +4,11 @@ story: laysat-lil-bay
 exemptions:
   - code: mention-not-named
     file: chapters/chapter-02.md
+    pattern: "lists character yusuf-haddad in mentions"
     reason: "Nader calls Yusuf عمّكِ (your uncle) when he speaks to Salma, so chapter 2 is about Yusuf without naming him."
   - code: mention-not-named
     file: chapters/chapter-03.md
+    pattern: "lists character nader-shami in mentions"
     reason: "Salma tears up Nader's offer (ورقة العرض) without his name on the page."
 ---
 

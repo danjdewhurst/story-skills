@@ -396,7 +396,7 @@ the-left-luggage-office: 3 chapters, 1158 words, 0 expected continuity findings
 the-unraveled-thread: 4 chapters, 111 words, 7 expected continuity findings
 ```
 
-A book [counted in characters](project-format.md#counting-in-characters), such as the Japanese example, reports its total in characters. The French, Japanese, and Arabic examples keep the checks honest for books not in English: each must pass every check with no warnings, as an English example must.
+A book [counted in characters](project-format.md#counting-in-characters), such as the Japanese example, reports its total in characters. The French, Japanese, and Arabic examples keep the checks honest for books not in English: none is in `EXPECTED_WARNINGS`, so each must pass every check with no warnings. A warning one of them keeps on purpose is dismissed in its `continuity/exemptions.md`, with the reason there.
 
 `the-last-ember` and `the-fall-of-the-citadel` are linked books in the same series, so the series check also confirms they agree on shared canon.
 
