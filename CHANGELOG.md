@@ -124,6 +124,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `series-continuity` gives the companion `init` form, and says what `init` does not inherit from an unlinked book.
   - `adaptation` drops the `translation-notes` planning type, which had no template.
   - Motif rows live only in `continuity/motifs.md`, which no CLI check reads for status. A motif row in an arc's `## Foreshadowing` table is no longer advised.
+- The README and `SECURITY.md` now match the story-checks template, the release script, and the Windows archives. ([#678](https://github.com/danjdewhurst/story-skills/issues/678), [#679](https://github.com/danjdewhurst/story-skills/issues/679), [#680](https://github.com/danjdewhurst/story-skills/issues/680))
+  - The README says `story-checks.yml` runs on every push to `main` and every pull request, not on every push.
+  - The README says the release script sets the version at each release, not on every change.
+  - The `SECURITY.md` verification example uses `<archive>`, and names the `.zip` that Windows downloads use.
 
 ## [0.23.0] - 2026-10-07
 
