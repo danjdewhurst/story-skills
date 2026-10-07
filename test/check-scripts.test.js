@@ -14,6 +14,7 @@ import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.j
 import { PREFLIGHT } from "../scripts/release.js";
 import { CI_WAIT } from "../scripts/publish-gate.js";
 import { packageFiles, relativeLinks, unshippedLinks } from "../scripts/check-package.js";
+import { auditAssignment, shardPlan, testFiles } from "../scripts/test-shards.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
 import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
@@ -2083,16 +2084,45 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     expect(publish.indexOf("node scripts/check-package.js")).toBeLessThan(publish.indexOf("npm publish"));
   });
 
-  test("the Windows and macOS job installs and runs the packed tarball too (#573)", () => {
-    const ci = readRepo(".github/workflows/ci.yml");
-    const testOs = ci.slice(ci.indexOf("\n  test-os:"), ci.indexOf("\n  node:"));
-    expect(testOs).toContain("os: [windows-latest, macos-latest]");
-    // Neither the job nor the step has an `if:` that could skip Windows.
-    expect(testOs).not.toMatch(/^ {4}if:/m);
-    const steps = testOs.split(/\n(?= {6}- )/);
-    const step = steps.find((text) => text.includes("run: bun run check:package"));
-    expect(step).toBeDefined();
-    expect(step).not.toMatch(/^\s*if:/m);
+  test("the Windows and macOS jobs install and run the packed tarball too (#573)", () => {
+    const jobs = workflowJobs(readRepo(".github/workflows/ci.yml"));
+    const macos = jobs["test-os"];
+    expect(macos).toContain("os: [macos-latest]");
+    expect(macos).not.toContain("windows-latest");
+    expect(macos).not.toMatch(/^ {4}if:/m);
+    const macosStep = macos.split(/\n(?= {6}- )/).find((text) => text.includes("run: bun run check:package"));
+    expect(macosStep).toBeDefined();
+    expect(macosStep).not.toMatch(/^\s*if:/m);
+
+    // Shard 1 always exists, so the step if selects that shard and does not skip Windows.
+    const windows = jobs["test-windows"];
+    expect(windows).toContain("runs-on: windows-latest");
+    expect(windows).toContain("shard: [1, 2, 3, 4]");
+    expect(windows).not.toMatch(/^ {4}if:/m);
+    const windowsStep = windows.split(/\n(?= {6}- )/).find((text) => text.includes("run: bun run check:package"));
+    expect(windowsStep).toBeDefined();
+    expect(windowsStep).toContain("if: matrix.shard == 1");
+  });
+
+  test("Windows shards run every test file exactly once (#672)", () => {
+    const jobs = workflowJobs(readRepo(".github/workflows/ci.yml"));
+    const windows = jobs["test-windows"];
+    const gate = jobs["test-windows-done"];
+    const count = Number(/shards: \[(\d+)\]/.exec(windows)[1]);
+    const listed = /shard: \[([^\]]+)\]/.exec(windows)[1].split(",").map((value) => Number(value.trim()));
+    expect(listed).toEqual(Array.from({ length: count }, (_, index) => index + 1));
+    expect(windows).toContain('node scripts/test-shards.js --shard "$shard" --shards "$shards"');
+    const runStep = windows.split(/\n(?= {6}- )/).find((text) => text.includes("name: Run tests"));
+    expect(runStep).toBeDefined();
+    expect(runStep).toContain("bun test --timeout 60000");
+    expect(runStep).not.toContain("bun run test");
+    expect(gate).toMatch(/^ {4}name: Tests windows-latest\n/m);
+    expect(gate).toContain("needs: test-windows");
+    expect(gate).toContain(`node scripts/test-shards.js --audit --shards ${count}`);
+    const files = testFiles(path.join(repoRoot, "test"));
+    const plan = shardPlan(files, count);
+    expect(auditAssignment(files, plan.map((shard) => shard.files))).toEqual([]);
+    expect(plan.every((shard) => shard.files.length > 0)).toBe(true);
   });
 
   test("the check installs the tarball and runs the installed bin", () => {
