@@ -2,13 +2,16 @@
 import fs from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseClockDate } from "../src/continuity.js";
+import { CHINESE_SCRIPTS, GRANDFATHERED, LANGUAGE_ALIASES, PACKS } from "../src/languages/index.js";
+import { LIKELY_SCRIPTS, VERTICAL_SCRIPTS, supportsVertical } from "../src/typesetting.js";
 import { SCHEMA_PATH } from "./check-schema.js";
 
 // Some patterns in schemas/story.schema.json are generated from the code
 // story validate runs rather than written by hand: a real YYYY-MM-DD day
-// (from parseClockDate). Running this script writes them into the schema;
-// test/schema.test.js fails when one is out of date or disagrees with
-// validate.
+// (from parseClockDate), and the language tags writing-mode: vertical
+// allows (from supportsVertical and the language tables). Running this
+// script writes them into the schema; test/schema.test.js fails when one
+// is out of date or disagrees with validate.
 
 const pad = (number, width) => String(number).padStart(width, "0");
 const isDay = (year, month, day) => parseClockDate(`${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`) !== undefined;
@@ -65,13 +68,98 @@ export function calendarDayPattern() {
   return `(?:\\d{4}-(?:${months.join("|")})|${leapYears}-${group(leapDays.join("|"))})`;
 }
 
+const LETTER = "[A-Za-z]";
+const ALNUM = "[A-Za-z0-9]";
+// The end of a subtag, and any subtags after it.
+const END = `(?!${ALNUM})`;
+const MORE = `(?:-${ALNUM}{1,8})*`;
+// A code no table names: qaa to qtz are reserved for private use.
+const UNKNOWN = "qaa";
+
+// A code in any case, as story validate reads tags: ja is [Jj][Aa].
+const caseless = (code) => [...code].map((char) => (/[a-z]/.test(char) ? `[${char.toUpperCase()}${char}]` : char)).join("");
+const anyOf = (codes) => `(?:${codes.map(caseless).join("|")})`;
+const sameSet = (left, right) => left.length === right.length && left.every((item) => right.includes(item));
+
+// Every language code the language and script tables name, in lower case.
+export function tableCodes() {
+  const codes = new Set();
+  const add = (tag) => {
+    if (tag) {
+      codes.add(tag.toLowerCase().split("-")[0]);
+    }
+  };
+  [...PACKS.keys()].forEach(add);
+  Object.entries(LANGUAGE_ALIASES).flat().forEach(add);
+  Object.keys(CHINESE_SCRIPTS).forEach(add);
+  Object.values(LIKELY_SCRIPTS).flat().forEach(add);
+  Object.values(GRANDFATHERED).flat().forEach(add);
+  return [...codes].sort();
+}
+
+// The language tags supportsVertical accepts, as a regular expression
+// without anchors, read the way parseTag reads a tag: a script subtag (the
+// one after the language, or after an extlang) decides; without one, the
+// language does, which for an extlang tag such as zh-yue or ja-xyz is the
+// extlang under its macrolanguage. Every code the tables name is tried,
+// and a code they do not name behaves like qaa.
+export function verticalLanguagePattern() {
+  const codes = tableCodes();
+  const extlangs = [...codes.filter((code) => code.length === 3), UNKNOWN];
+  const scripts = [...VERTICAL_SCRIPTS].map((script) => script.toLowerCase()).sort();
+  const branches = [`${LETTER}{2,3}(?:-${LETTER}{3})?-${anyOf(scripts)}${END}${MORE}`];
+
+  // A language alone, or with subtags after it that are neither an extlang
+  // (three letters) nor a script (four).
+  branches.push(`${anyOf(codes.filter((code) => supportsVertical(code)))}(?:-(?!${LETTER}{3,4}${END})${ALNUM}{1,8}${MORE})?`);
+
+  // An extlang, then subtags that are not a script. Macrolanguages whose
+  // extlangs differ from an unknown one's get their own branch.
+  const verticalUnder = (macrolanguage) => extlangs.filter((extlang) => supportsVertical(`${macrolanguage}-${extlang}`));
+  const extlangPattern = (allowed) => {
+    if (!allowed.includes(UNKNOWN)) {
+      return anyOf(allowed);
+    }
+    const refused = extlangs.filter((extlang) => !allowed.includes(extlang));
+    return `${refused.length > 0 ? `(?!${anyOf(refused)}${END})` : ""}${LETTER}{3}`;
+  };
+  const rest = `(?:-(?!${LETTER}{4}${END})${ALNUM}{1,8}${MORE})?`;
+  const anyMacrolanguage = verticalUnder(UNKNOWN);
+  const groups = new Map();
+  for (const code of codes) {
+    const allowed = verticalUnder(code);
+    if (!sameSet(allowed, anyMacrolanguage)) {
+      const key = allowed.join(",");
+      groups.set(key, { allowed, macrolanguages: [...(groups.get(key)?.macrolanguages ?? []), code] });
+    }
+  }
+  for (const { allowed, macrolanguages } of [...groups.values()].filter((group) => group.allowed.length > 0)) {
+    branches.push(`${anyOf(macrolanguages)}-${extlangPattern(allowed)}${rest}`);
+  }
+  // The extlangs set vertically under any macrolanguage (Chinese ones),
+  // except under one that refuses some of them.
+  const refuseAny = [...groups.values()].filter(({ allowed }) => anyMacrolanguage.some((extlang) => !allowed.includes(extlang))).flatMap(({ macrolanguages }) => macrolanguages);
+  if (anyMacrolanguage.length > 0) {
+    branches.push(`${refuseAny.length > 0 ? `(?!${anyOf(refuseAny)}-)` : ""}${LETTER}{2,3}-${extlangPattern(anyMacrolanguage)}${rest}`);
+  }
+
+  // Grandfathered tags (zh-min-nan) skip the rules above, so any the
+  // branches read wrongly are listed or refused by name.
+  const tags = Object.keys(GRANDFATHERED).filter((tag) => /^[a-z]{2,3}(?:-[a-z0-9]{1,8})*$/.test(tag));
+  const generic = new RegExp(`^(?:${branches.join("|")})$`, "u");
+  const include = tags.filter((tag) => supportsVertical(tag) && !generic.test(tag));
+  const refuse = tags.filter((tag) => !supportsVertical(tag) && generic.test(tag));
+  return `${refuse.length > 0 ? `(?!${anyOf(refuse)}\\s*$)` : ""}(?:${[...branches, ...include.map(caseless)].join("|")})`;
+}
+
 // The generated patterns, by JSON pointer into the schema.
 export function generatedPatterns() {
   const day = calendarDayPattern();
   return {
     "/$defs/realDate/pattern": `^\\s*${day}\\s*$`,
     "/$defs/realDateOrText/pattern": `^(?:(?!\\s*\\d{4}-\\d{2}-\\d{2}\\s*$)|\\s*${day}\\s*$)`,
-    "/properties/story/properties/publication-date/pattern": `^(?:\\s*${day}?\\s*$|\\s*\\[[Tt][Oo][Dd][Oo]\\b)`
+    "/properties/story/properties/publication-date/pattern": `^(?:\\s*${day}?\\s*$|\\s*\\[[Tt][Oo][Dd][Oo]\\b)`,
+    "/properties/story/allOf/0/then/properties/language/pattern": `^\\s*${verticalLanguagePattern()}\\s*$`
   };
 }
 

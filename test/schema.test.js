@@ -3,8 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseClockDate } from "../src/continuity.js";
+import { GRANDFATHERED, PACKS } from "../src/languages/index.js";
+import { validateWritingMode } from "../src/typesetting.js";
 import { SCHEMA_PATH, buildSchemaDocument, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
-import { calendarDayPattern, generatedPatterns, main as writeSchemaPatterns, withGeneratedPatterns } from "../scripts/schema-patterns.js";
+import { calendarDayPattern, generatedPatterns, main as writeSchemaPatterns, tableCodes, withGeneratedPatterns } from "../scripts/schema-patterns.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf8"));
@@ -178,7 +180,7 @@ status: alive
   });
 
   // Without a language the book is English, which validate rejects for
-  // both (#467). Which set languages qualify is left to validate.
+  // both (#467). Which languages have native numerals is left to validate.
   test("writing-mode vertical and chapter-numerals native need a language", () => {
     const story = schema.properties.story;
     const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past" };
@@ -189,6 +191,60 @@ status: alive
     expect(errors({ "writing-mode": "vertical", language: "ja" })).toEqual([]);
     expect(errors({ "chapter-numerals": "native", language: "ar" })).toEqual([]);
     expect(errors({ "writing-mode": "horizontal", "chapter-numerals": "western" })).toEqual([]);
+  });
+
+  // validate refuses writing-mode vertical for a language set horizontally
+  // (#529), and so does the schema, with a pattern generated from the same
+  // tables.
+  test("writing-mode vertical takes only a language set in vertical columns", () => {
+    const story = schema.properties.story;
+    const base = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past", "writing-mode": "vertical" };
+    const accepts = (language) => validateAgainstSchema({ ...base, language }, story, schema).length === 0;
+    for (const language of ["ja", " KO ", "zh-Hant-TW", "yue", "zh-yue", "jpn", "en-Hani", "ja-JP-x-latn", "zh-min-nan"]) {
+      expect(accepts(language), language).toBe(true);
+    }
+    for (const language of ["en", "fr-CA", "ar", "ja-Latn", "zh-Latn-pinyin", "mn-Mong", "ja-kok", "[TODO: pick one]"]) {
+      expect(accepts(language), language).toBe(false);
+    }
+  });
+
+  // Tags built from every code the language tables name, with a region, a
+  // script, an extlang, a variant, private use, and extensions, in any
+  // case and with spaces around them, as validateWritingMode reads them.
+  test("the vertical language pattern accepts exactly the tags validate does", () => {
+    const pattern = new RegExp(schema.properties.story.allOf[0].then.properties.language.pattern, "u");
+    const codes = [...tableCodes(), "qaa", "xyz"];
+    const extlangs = codes.filter((code) => code.length === 3);
+    const scripts = ["Hans", "hant", "Jpan", "kore", "Hang", "Hira", "Kana", "Bopo", "Hani", "Latn", "Cyrl", "Mong", "Arab", "Abcd"];
+    const tags = new Set([...Object.keys(GRANDFATHERED), ...PACKS.keys()]);
+    for (const code of codes) {
+      for (const tail of ["", "-JP", "-tw", "-CN", "-419", "-hepburn", "-x-hani", "-u-nu-latn", "-1994"]) {
+        tags.add(`${code}${tail}`);
+      }
+      for (const script of scripts) {
+        tags.add(`${code}-${script}`);
+        tags.add(`${code}-${script}-TW`);
+      }
+      for (const extlang of extlangs) {
+        for (const tail of ["", "-HK", "-Latn", "-Hant", "-hepburn"]) {
+          tags.add(`${code}-${extlang}${tail}`);
+        }
+      }
+    }
+    const disagreements = [];
+    let vertical = 0;
+    for (const tag of [...tags].filter((value) => /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(value))) {
+      for (const language of [tag, tag.toUpperCase(), ` ${tag}\t`]) {
+        const errors = [];
+        validateWritingMode({ "writing-mode": "vertical", language }, errors);
+        vertical += errors.length === 0 ? 1 : 0;
+        if (pattern.test(language) !== (errors.length === 0)) {
+          disagreements.push(language);
+        }
+      }
+    }
+    expect(disagreements).toEqual([]);
+    expect(vertical).toBeGreaterThan(1000);
   });
 
   // validate checks that a date is a real day (#530); the schema's pattern
