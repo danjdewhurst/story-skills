@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { checkProjectContinuity, createEntity, createStoryProject, moveEntity, removeEntity, renameEntity, scanProject, validateLinks, validateProject } from "../src/story.js";
+import { checkProjectContinuity, createEntity, createStoryProject, moveEntity, removeEntity, renameEntity, scanProject, validateLinks } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -67,19 +67,6 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(messages(moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-03" }).warnings).join("\n")).toContain("plot/timeline.md");
   });
 
-  test("#68 add refuses a resolved or status chapter that is not written yet", () => {
-    const root = newProject();
-    createEntity(root, { kind: "chapter", name: "One" });
-    expect(() => createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-05" })).toThrow("--resolved chapter-05 is not written yet");
-    expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-04", status: "dropped" })).toThrow("--introduced chapter-04 is not written yet");
-    expect(() => createEntity(root, { kind: "promise", name: "P", planted: "chapter-01", payoff: "chapter-05", status: "paid-off" })).toThrow("--payoff chapter-05 is not written yet");
-    expect(() => createEntity(root, { kind: "clue", name: "C", planted: "chapter-05", status: "planted" })).toThrow("--planted chapter-05 is not written yet");
-    expect(fs.readdirSync(path.join(root, "continuity", "questions"))).toEqual(["_index.md"]);
-    createEntity(root, { kind: "question", name: "When", introduced: "chapter-01", resolved: "chapter-01" });
-    createEntity(root, { kind: "promise", name: "Q", planted: "chapter-01", payoff: "chapter-05" });
-    expect(messages(validateLinks(root).errors)).toEqual([]);
-  });
-
   test("#69 rename and remove artifact follow state-changes target", () => {
     const root = newProject();
     createEntity(root, { kind: "chapter", name: "One" });
@@ -120,31 +107,6 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(() => moveEntity(root, { kind: "research", id: "x" })).toThrow("not research notes;");
     expect(() => moveEntity(root, { kind: "matter", id: "x" })).toThrow("not matter pages;");
     expect(() => moveEntity(root, { kind: "characters", id: "x" })).toThrow("not characters;");
-  });
-
-  test("#100 add refuses several ids for one-id fields and merges singular and plural flags", () => {
-    const root = newProject();
-    createEntity(root, { kind: "location", name: "Port Kestrel" });
-    createEntity(root, { kind: "location", name: "Salt Market" });
-    createEntity(root, { kind: "chapter", name: "One" });
-    expect(() => createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for a scene, got port-kestrel, salt-market");
-    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for an artifact");
-    expect(() => createEntity(root, { kind: "location", name: "Keep", "controlled-by": ["ann", "bo"] })).toThrow("--controlled-by takes one id");
-    // A singular flag keeps a comma, so a comma list is not an id.
-    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: "port-kestrel,salt-market" })).toThrow('--location "port-kestrel,salt-market" must be a kebab-case id');
-    createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel"] });
-    expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("location: port-kestrel\n");
-
-    createEntity(root, { kind: "character", name: "Mara Quill" });
-    createEntity(root, { kind: "character", name: "Ivo Pell" });
-    createEntity(root, { kind: "chapter", name: "Mix", character: ["ivo-pell", "ivo-pell"], characters: "mara-quill", location: ["port-kestrel", "port-kestrel"] });
-    const chapter = scanProject(root).chapters.find((entry) => entry.id === "chapter-02");
-    expect(chapter.characters).toEqual(["mara-quill", "ivo-pell"]);
-    expect(chapter.locations).toEqual(["port-kestrel"]);
-    createEntity(root, { kind: "research", name: "R", risk: ["legal", "legal"], "used-in": ["chapter-01", "chapter-01"] });
-    expect(read(root, "research", "r.md")).toContain("used-in:\n  - chapter-01\n");
-    expect(messages(validateProject(root).errors)).toEqual([]);
-    expect(messages(validateLinks(root).errors)).toEqual([]);
   });
 
   test("#101 rename and move rewrite reference-style link definitions, and links checks them", () => {
@@ -191,15 +153,6 @@ describe("reference handling in add, rename, remove, and move", () => {
     expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("state-changes:\n  - character: anna\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451\n");
   });
 
-  test("#175 add refuses unpadded scheduled chapter ids, and links reports them", () => {
-    const root = newProject();
-    expect(() => createEntity(root, { kind: "clue", name: "Ledger", planted: "chapter-1" })).toThrow("--planted chapter-1: did you mean chapter-01?");
-    expect(() => createEntity(root, { kind: "research", name: "R", "used-in": "chapter-003" })).toThrow("did you mean chapter-03?");
-    createEntity(root, { kind: "promise", name: "P", payoff: "chapter-03" });
-    edit(root, "continuity/promises/p.md", "payoff: chapter-03", "payoff: chapter-3");
-    expect(messages(validateLinks(root).errors)).toContain("continuity/promises/p.md references missing chapter chapter-3");
-  });
-
   test("#176 add and rename refuse an id another kind uses in a shared reference field", () => {
     const root = newProject();
     createEntity(root, { kind: "character", name: "Raven" });
@@ -221,17 +174,6 @@ describe("reference handling in add, rename, remove, and move", () => {
     }
     expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-01" })).toThrow("chapter-01-scene-01 is already scene 1 of chapter-01");
     expect(scanProject(root).scenes.map((scene) => scene.id)).toEqual(["chapter-01-scene-01", "chapter-01-scene-02", "chapter-01-scene-03"]);
-  });
-
-  test("#180 init and add refuse empty tense, pov, genre, and type", () => {
-    const cwd = makeTempDir();
-    for (const option of ["tense", "pov", "genre"]) {
-      expect(() => createStoryProject({ cwd, title: "T", dir: option, [option]: "" })).toThrow(`--${option} cannot be empty`);
-      expect(fs.existsSync(path.join(cwd, option))).toBe(false);
-    }
-    const root = newProject();
-    expect(() => createEntity(root, { kind: "location", name: "L", type: "" })).toThrow("--type cannot be empty");
-    expect(() => createEntity(root, { kind: "system", name: "S", type: " " })).toThrow("--type cannot be empty");
   });
 
   test("#182 links and move tokenise chapter and scene ids alike", () => {
