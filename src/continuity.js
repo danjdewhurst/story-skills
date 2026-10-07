@@ -310,7 +310,7 @@ function checkPromises(project, context, errors, warnings) {
       continue;
     }
     const label = relative(project, promise.file);
-    const plantedNumber = context.chapterNumbers.get(promise.planted);
+    const plantedNumber = referencedChapterNumber(context.chapterNumbers, promise.planted);
 
     if (scheduledOutOfOrder(context, promise.planted, promise.payoff)) {
       errors.push(err("promise-payoff-before-plant", `${label} pays off in ${promise.payoff} before it is planted in ${promise.planted}`, label));
@@ -397,7 +397,7 @@ function checkClues(project, context, errors, warnings) {
       continue;
     }
     const label = relative(project, clue.file);
-    const plantedNumber = context.chapterNumbers.get(clue.planted);
+    const plantedNumber = referencedChapterNumber(context.chapterNumbers, clue.planted);
 
     if (scheduledOutOfOrder(context, clue.planted, clue.payoff)) {
       errors.push(err("clue-payoff-before-plant", `${label} pays off in ${clue.payoff} before it is planted in ${clue.planted}`, label));

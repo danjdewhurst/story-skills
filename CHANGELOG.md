@@ -53,6 +53,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story continuity` no longer reports a clue, promise, or question as out of order when its payoff is on a sibling branch with a lower chapter number. ([#700](https://github.com/danjdewhurst/story-skills/issues/700))
   - In a branching book, a setup and its payoff are ordered along the choices. Only a path that reads the payoff before the setup is an error, so `story check` passes on a valid book.
 
+- `story continuity` checks a promise or clue planted in a chapter that has no file for the payoff gap, as it checks one with a file. ([#701](https://github.com/danjdewhurst/story-skills/issues/701))
+  - The warning says how many chapters ago the setup was planted, so a scheduled `chapter-NN` that is not written yet counts too.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
