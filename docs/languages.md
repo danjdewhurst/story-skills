@@ -95,8 +95,8 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 | English (`en`) | words | curly and straight quotes only | English | Latin, as before | ASCII slug |
 | French (`fr`), Spanish (`es`) | words | the common marks, with French tags inside guillemets or dash dialogue | translated | Latin, as English | accents dropped (`Émile` is `emile`) |
 | Italian, Portuguese (`pt`, `pt-PT`), Dutch, Polish, Turkish | words | the common marks | translated | Latin, as English | accents dropped |
-| German (`de`), Danish (`da`), Swiss German (`de-CH`) | words | `„…“` and `»…«` (German and Danish), `«…»` (Swiss), with curly and straight quotes | translated for German | Latin | accents dropped |
-| Swedish (`sv`), Finnish (`fi`) | words | `”…”`, `»…»`, and a leading en or em dash, where a dash after a finished line starts a new speaker | translated for Swedish | Latin | accents dropped |
+| German (`de`), Danish (`da`), Swiss German (`de-CH`) | words | `„…“` and `»…«` (German and Danish), `«…»` (Swiss), with curly and straight quotes | translated for German and Swiss German; English for Danish | Latin | accents dropped |
+| Swedish (`sv`), Finnish (`fi`) | words | `”…”`, `»…»`, and a leading en or em dash, where a dash after a finished line starts a new speaker | translated for Swedish; English for Finnish | Latin | accents dropped |
 | Russian, Ukrainian, other Cyrillic; Greek | words | the common marks | translated for Russian and Ukrainian | Cyrillic and Greek font stacks | transliterated (`Пётр` is `petr`); a letter outside the tables (Kazakh `қ`) needs `--id` |
 | Japanese (`ja`) | characters | `「…」`, `『…』`, `〝…〟`, curly and straight quotes | translated | Japanese fonts; vertical text with `writing-mode: vertical` | `--id` needed |
 | Chinese (`zh`, `zh-Hans`, `zh-Hant`, `zh-TW`, `cmn`, `yue`, `lzh`) | characters | the common marks, with no dialogue dash | translated, in Simplified or Traditional characters as the script subtag, then the region, says | Simplified or Traditional fonts; vertical text | `--id` needed |
