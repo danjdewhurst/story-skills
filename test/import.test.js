@@ -570,16 +570,38 @@ describe("import chapter authors", () => {
   }
 
   const prose = (root, number) => fs.readFileSync(path.join(root, "chapters", `chapter-0${number}.md`), "utf8").split("## Chapter Text\n")[1].trim();
+  const authors = (chapters) => chapters.map((entry) => entry.frontmatter.author);
+  const storySkillsChapter = (title, author, text = "The tide went out.") => `---\ntitle: ${title}\nnumber: 1\n${author}\nstatus: draft\n---\n\n# Chapter 1: ${title}\n\n## Chapter Text\n\n${text}\n`;
 
   test("a Story Skills chapter file keeps its author without --bylines", () => {
-    const chapter = (title, author) => `---\ntitle: ${title}\nnumber: 1\n${author}\nstatus: draft\n---\n\n# Chapter 1: ${title}\n\n## Chapter Text\n\nThe tide went out.\n`;
     const { root, chapters } = importFolder({
-      "01-low-tide.md": chapter("Low Tide", "author: Ben Other"),
-      "02-salt.md": chapter("Salt", "author:\n  - Ada Writer\n  - Cara Third"),
-      "03-lantern.md": chapter("Lantern", "pov: \"\"")
+      "01-low-tide.md": storySkillsChapter("Low Tide", "author: Ben Other"),
+      "02-salt.md": storySkillsChapter("Salt", "author:\n  - Ada Writer\n  - Cara Third"),
+      "03-lantern.md": storySkillsChapter("Lantern", "pov: \"\"", "By Ben Other\n\nThe lamp was lit.")
     });
-    expect(chapters.map((entry) => entry.frontmatter.author)).toEqual(["Ben Other", ["Ada Writer", "Cara Third"], undefined]);
+    expect(authors(chapters)).toEqual(["Ben Other", ["Ada Writer", "Cara Third"], undefined]);
+    expect(prose(root, 3)).toBe("By Ben Other\n\nThe lamp was lit.");
     expect(messages(validateProject(root).errors)).toEqual([]);
+  });
+
+  test("with --bylines, a Story Skills chapter without an author reads its by-line", () => {
+    const { root, chapters } = importFolder({
+      "01-low-tide.md": storySkillsChapter("Low Tide", "author: Ben Other", "By Ada Writer\n\nThe tide went out."),
+      "02-lantern.md": storySkillsChapter("Lantern", "pov: \"\"", "By Ben Other\n\nThe lamp was lit.")
+    }, ["--bylines"]);
+    expect(authors(chapters)).toEqual(["Ben Other", "Ben Other"]);
+    expect(prose(root, 1)).toBe("By Ada Writer\n\nThe tide went out.");
+    expect(prose(root, 2)).toBe("The lamp was lit.");
+  });
+
+  test("an imported author is kept on one line, so it cannot add a heading to an export", () => {
+    const injected = "author: \"Ada\\n\\n## Chapter 9\\n\\nInjected\"";
+    const { cwd, root, chapters } = importFolder({ "01-low-tide.md": storySkillsChapter("Low Tide", injected) });
+    expect(chapters[0].frontmatter.author).toBe("Ada ## Chapter 9 Injected");
+    const again = importManuscript({ source: exportManuscript(root).outFile, title: "Again", cwd, dir: "again", bylines: true });
+    expect(again.chapters).toBe(1);
+    const plain = importFolder({ "01-low-tide.md": `---\n${injected}\n---\n# Low Tide\n\nThe tide went out.\n` }, ["--bylines"]);
+    expect(plain.chapters[0].frontmatter.author).toBe("Ada ## Chapter 9 Injected");
   });
 
   test("without --bylines, a by-line and frontmatter author stay as they were", () => {
@@ -587,7 +609,7 @@ describe("import chapter authors", () => {
       "01-low-tide.md": "# Low Tide\n\nBy Ben Other\n\nThe tide went out.\n",
       "02-salt.md": "---\nauthor: Ada Writer\n---\n# Salt\n\nSalt dried on the rail.\n"
     });
-    expect(chapters.map((entry) => entry.frontmatter.author)).toEqual([undefined, undefined]);
+    expect(authors(chapters)).toEqual([undefined, undefined]);
     expect(prose(root, 1)).toBe("By Ben Other\n\nThe tide went out.");
   });
 
@@ -598,38 +620,105 @@ describe("import chapter authors", () => {
       "03-smoke.txt": "    BY: Cara Third\n\nSmoke rose.\n",
       "04-wake.md": "---\nauthor: Dev Fourth\n---\n# Wake\n\nThe wake spread.\n",
       "05-gull.md": "---\nauthor: Dev Fourth\n---\n# Gull\n\nby _Eli Fifth_\n\nA gull cried.\n",
-      "06-lantern.md": "# Lantern\n\nBy the time she came, the lantern was out.\n",
-      "07-monday.md": "# Monday\n\nBy Monday it had gone.\n\nNobody missed it.\n",
-      "08-close.md": "# Close\n\nBy Ben Other\nThe line runs on.\n",
-      "09-pandoc.md": "---\ntitle: Pandoc\nauthor:\n  name: Someone\n  - odd: shape\n---\n# Pandoc\n\nProse after metadata.\n"
+      "06-close.md": "# Close\n\nBy Ben Other\nThe line runs on.\n",
+      "07-pandoc.md": "---\ntitle: Pandoc\nauthor:\n  name: Someone\n  - odd: shape\n---\n# Pandoc\n\nProse after metadata.\n"
     }, ["--bylines"]);
-    expect(chapters.map((entry) => entry.frontmatter.author)).toEqual(["Ben Other", "Ada Writer", "Cara Third", "Dev Fourth", "Eli Fifth", undefined, undefined, undefined, undefined]);
-    expect([1, 2, 3, 5].map((number) => prose(root, number).split("\n")[0])).toEqual(["The tide went out.", "Salt dried on the rail.", "Smoke rose.", "A gull cried."]);
-    expect(prose(root, 6)).toBe("By the time she came, the lantern was out.");
-    expect(prose(root, 7)).toStartWith("By Monday it had gone.");
-    expect(prose(root, 8)).toBe("By Ben Other\nThe line runs on.");
+    expect(authors(chapters)).toEqual(["Ben Other", "Ada Writer", "Cara Third", "Dev Fourth", "Eli Fifth", undefined, undefined]);
+    expect([1, 2, 3, 5].map((number) => prose(root, number))).toEqual(["The tide went out.", "Salt dried on the rail.", "Smoke rose.", "A gull cried."]);
+    expect(prose(root, 6)).toBe("By Ben Other\nThe line runs on.");
     // The by-line is not prose, so it does not count toward the length.
     expect(chapters[0].frontmatter["word-count"]).toBe(4);
     expect(messages(validateProject(root).errors)).toEqual([]);
   });
 
-  test("--bylines credits a file's chapters from a by-line under its title, and reads back an export", () => {
-    const { cwd, root, chapters } = importFolder({
-      "lighthouse.md": "# The Lighthouse\n\nBy Ben Other\n\n## Chapter 1: Dusk\n\nThe lamp was lit.\n\n## Chapter 2: Dawn\n\nBy Ada Writer\n\nThe lamp went out.\n"
-    }, ["--bylines"]);
-    expect(chapters.map((entry) => [entry.title, entry.frontmatter.author])).toEqual([["Dusk", "Ben Other"], ["Dawn", "Ada Writer"]]);
+  test("--bylines reads names with initials, particles, apostrophes, and hyphens", () => {
+    const names = ["J. R. R. Tolkien", "Martin Luther King Jr.", "Ludwig van Beethoven", "Ursula K. Le Guin", "Anna-Maria O’Brien", "Gabriel García Márquez"];
+    const files = Object.fromEntries(names.map((name, index) => [`0${index + 1}.md`, `# Story ${index + 1}\n\nBy ${name}\n\nIt began.\n`]));
+    expect(authors(importFolder(files, ["--bylines"]).chapters)).toEqual(names);
+  });
 
-    // story export writes each byline under its chapter's heading.
-    const exported = exportManuscript(root);
-    expect(fs.readFileSync(exported.outFile, "utf8")).toContain("# Chapter 2: Dawn\n\n*by Ada Writer*\n\nThe lamp went out.");
+  // When unsure, a line stays prose: a missed by-line is set by hand, but
+  // deleted prose is lost.
+  test.each([
+    ["By Christmas he was at sea."],
+    ["By God, it was me."],
+    ["By Monday the toll had reached 40."],
+    ["By Friday, Ma said, \"we leave.\""],
+    ["By Monday he was out."],
+    ["By God"],
+    ["By Monday Morning"],
+    ["By Ada Writer."],
+    ["*by [TODO x]*"],
+    ["By [TODO: author to supply]"],
+    ["Von Osten her.", "de"],
+    ["Von Weitem", "de"]
+  ])("--bylines leaves %p in the prose", (line, language = "en") => {
+    const { root, chapters } = importFolder({ "01-sea.md": `# Sea\n\n${line}\n\nThe sea was calm.\n` }, ["--bylines", "--language", language]);
+    expect(chapters[0].frontmatter.author).toBeUndefined();
+    expect(prose(root, 1)).toBe(`${line}\n\nThe sea was calm.`);
+  });
+
+  test("--bylines credits a file's chapters from the by-line under its title, and only from there", () => {
+    const { chapters } = importFolder({
+      "lighthouse.md": "# The Lighthouse\n\nBy Ben Other\n\n## Chapter 1: Dusk\n\nThe lamp was lit.\n\n## Chapter 2: Dawn\n\nBy Ada Writer\n\nThe lamp went out.\n",
+      "tide.md": "# Chapter 1: Ebb\n\nBy Ben Other\n\n# Chapter 2: Flow\n\nThe tide came in.\n"
+    }, ["--bylines"]);
+    // A chapter whose prose is only its by-line is kept, and credits no other.
+    expect(chapters.map((entry) => [entry.title, entry.frontmatter.author])).toEqual([["Dusk", "Ben Other"], ["Dawn", "Ada Writer"], ["Ebb", "Ben Other"], ["Flow", undefined]]);
+  });
+
+  test("--bylines reads a by-line under a plain-text title", () => {
+    const { root, chapters } = importFolder({
+      "01-lighthouse.txt": "THE LIGHTHOUSE\n\nBy Ben Other\n\nChapter 1\n\nThe lamp was lit.\n\nChapter 2\n\nThe lamp went out.\n",
+      "02-tide.txt": "By Ada Writer\n\nChapter 1\n\nThe tide turned.\n",
+      "03-smoke.txt": "SMOKE\n\nBy Cara Third\n\nSmoke rose.\n"
+    }, ["--bylines"]);
+    expect(chapters.map((entry) => [entry.title, entry.frontmatter.author])).toEqual([["Chapter 1", "Ben Other"], ["Chapter 2", "Ben Other"], ["Chapter 3", "Ada Writer"], ["03 Smoke", "Cara Third"]]);
+    expect(prose(root, 1)).toBe("The lamp was lit.");
+    expect(prose(root, 4)).toBe("SMOKE\n\nSmoke rose.");
+  });
+
+  test("--bylines reads back an export: several authors, and a story with no text yet", () => {
+    const cwd = makeTempDir();
+    const io = memoryIo(cwd);
+    expect(runCli(["init", "Lamps", "--dir", "lamps"], io)).toBe(0);
+    for (const title of ["Salt", "Lamp", "Wake"]) {
+      expect(runCli(["add", "chapter", title, "--path", "lamps"], io)).toBe(0);
+    }
+    const chapterPath = (number) => path.join(cwd, "lamps", "chapters", `chapter-0${number}.md`);
+    const edit = (number, change) => fs.writeFileSync(chapterPath(number), change(fs.readFileSync(chapterPath(number), "utf8")));
+    edit(1, (text) => text.replace("title: Salt\n", "title: Salt\nauthor: Ben Other\n"));
+    edit(2, (text) => `${text.replace("title: Lamp\n", "title: Lamp\nauthor:\n  - Ada Writer\n  - Ben Other\n")}The lamp was lit.\n`);
+    edit(3, (text) => `${text}The wake spread.\n`);
+
+    const exported = exportManuscript(path.join(cwd, "lamps"));
+    expect(fs.readFileSync(exported.outFile, "utf8")).toContain("*by Ada Writer and Ben Other*\n\nThe lamp was lit.");
     const again = importManuscript({ source: exported.outFile, title: "Again", cwd, dir: "again", bylines: true });
-    expect(scanProject(again.root).chapters.map((entry) => entry.frontmatter.author)).toEqual(["Ben Other", "Ada Writer"]);
-    expect(prose(again.root, 2)).toBe("The lamp went out.");
+    const chapters = scanProject(again.root).chapters;
+    expect(chapters.map((entry) => [entry.title, entry.frontmatter.author])).toEqual([["Salt", "Ben Other"], ["Lamp", ["Ada Writer", "Ben Other"]], ["Wake", undefined]]);
+    expect(prose(again.root, 1)).toBe("");
+    expect(prose(again.root, 2)).toBe("The lamp was lit.");
+    expect(messages(validateProject(again.root).errors)).toEqual([]);
+  });
+
+  test("--bylines reads the byline label of the project it imports into", () => {
+    const cwd = makeTempDir();
+    const io = memoryIo(cwd);
+    expect(runCli(["init", "Lamps", "--dir", "lamps"], io)).toBe(0);
+    const story = path.join(cwd, "lamps", "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("---\n", "---\nlabels:\n  - byline: \"a story by {names}\"\n  - and: \"{a} & {b}\"\n"));
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: Salt\n\n*a story by Ada Writer & Ben Other*\n\nSalt dried.\n");
+    expect(runCli(["import", "draft.md", "--title", "Lamps", "--dir", "lamps", "--force", "--bylines"], io)).toBe(0);
+    expect(scanProject(path.join(cwd, "lamps")).chapters[0].frontmatter.author).toEqual(["Ada Writer", "Ben Other"]);
+    expect(prose(path.join(cwd, "lamps"), 1)).toBe("Salt dried.");
+    // A new project has the language's own labels, so the line is prose.
+    const fresh = importManuscript({ source: "draft.md", title: "Fresh", cwd, dir: "fresh", bylines: true });
+    expect(prose(fresh.root, 1)).toStartWith("*a story by Ada Writer & Ben Other*");
   });
 
   test("--bylines reads the by-word of the manuscript's language, and none where a byline is the name alone", () => {
-    const french = importFolder({ "01-sel.md": "# Sel\n\npar Ada Writer\n\nLe sel séchait.\n", "02-nuit.md": "# Nuit\n\nPar la fenêtre, la nuit.\n" }, ["--bylines", "--language", "fr"]);
-    expect(french.chapters.map((entry) => entry.frontmatter.author)).toEqual(["Ada Writer", undefined]);
+    const french = importFolder({ "01-sel.md": "# Sel\n\npar Ada Writer et Ben Other\n\nLe sel séchait.\n", "02-nuit.md": "# Nuit\n\nPar la fenêtre, la nuit.\n" }, ["--bylines", "--language", "fr"]);
+    expect(authors(french.chapters)).toEqual([["Ada Writer", "Ben Other"], undefined]);
     const japanese = importFolder({ "01-umi.md": "# 海\n\nby Ada Writer\n\n海は静かだった。\n" }, ["--bylines", "--language", "ja"]);
     expect(japanese.chapters[0].frontmatter.author).toBeUndefined();
     expect(prose(japanese.root, 1)).toStartWith("by Ada Writer");

@@ -29133,14 +29133,8 @@ function buildImportRules(pack) {
     nounSuffixes: checkList(pack, "nounSuffixes") ?? [],
     titleWords: checkSet(pack, "titleWords") ?? new Set,
     speechBefore: speechPattern(pack, (verbs) => `(?<![\\p{L}\\p{N}])(?:${verbs})\\s+$`),
-    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`),
-    byline: bylinePattern(pack)
+    speechAfter: speechPattern(pack, (verbs) => `^\\s+(?:${verbs})(?![\\p{L}\\p{N}])`)
   };
-}
-function bylinePattern(pack) {
-  const [before, after = null] = fillLabel(pack.labels, "byline").split("{names}");
-  const word = before.trim();
-  return word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu");
 }
 function speechPattern(pack, shape) {
   const verbs = checkList(pack, "speechVerbs");
@@ -29203,11 +29197,12 @@ function importManuscript(options) {
     const rules = importRules(pack);
     const warnings = [];
     const documents = fromStdin ? [{ name: "stdin", path: "stdin", text: piped, untitled: true }] : readImportSource(source, rules);
-    const chapters = splitChapters(documents, warnings, rules, Boolean(options.bylines));
+    const existing = target === null ? null : existingStoryData(target);
+    const bylines = options.bylines ? bylineReader(buildLabels(existing ?? {}, pack), rules) : null;
+    const chapters = splitChapters(documents, warnings, rules, bylines);
     if (chapters.length === 0) {
       throw usageError("No chapter content found in import source");
     }
-    const existing = target === null ? null : existingStoryData(target);
     const characters = (existing === null ? countUnit(null, pack) : countUnit(existing, languagePack(projectLanguage(existing)))).name === "characters";
     let totalWords = 0;
     let totalCharacters = 0;
@@ -29458,23 +29453,23 @@ function splitChapters(documents, warnings, rules, bylines) {
 `);
     const own = storySkillsChapter(source);
     if (own) {
-      chapters.push(own);
+      chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
       continue;
     }
     const body = withoutLeadingFrontmatter(source);
     const offset = source.slice(0, source.length - body.length).split(`
 `).length - 1;
     const text = normalizeSource(body, document.name);
-    const { sections, unused, markdown } = splitByChapterHeadings(text, rules);
+    const { sections, unused, markdown, authors } = splitByChapterHeadings(text, rules, bylines);
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
       warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     const found = sections.length > 0 ? sections : [singleChapter(text, document)];
-    chapters.push(...bylines ? withBylines(found, frontmatterAuthors(source, body), rules) : found);
+    chapters.push(...bylines === null ? found : withBylines(found, authors.length > 0 ? authors : frontmatterAuthors(source, body), bylines));
   }
-  return chapters.filter((chapter) => chapter.prose !== "");
+  return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
 }
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
@@ -29488,36 +29483,73 @@ function storySkillsChapter(text) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: nameList(data.author) };
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author) };
 }
-function withBylines(sections, authors, rules) {
-  const taken = sections.map((section) => ({ ...section, ...takeByline(section.prose, rules) }));
-  const fallback = taken[0].prose === "" && taken[0].authors.length > 0 ? taken[0].authors : authors;
-  return taken.map((section) => ({ ...section, authors: section.authors.length > 0 ? section.authors : fallback }));
+function importedNames(value) {
+  return nameList(value).map((name) => name.replace(/\s+/g, " "));
+}
+function withBylines(sections, authors, bylines) {
+  return sections.map((section) => {
+    const read = leadingByline(section.prose, section.titleLine === true, bylines);
+    return read === null ? { ...section, authors } : { ...section, prose: read.text, authors: read.authors, bylined: true };
+  });
 }
 function frontmatterAuthors(source, body) {
   if (body === source) {
     return [];
   }
   try {
-    return nameList(parseFrontmatter(source).data.author);
+    return importedNames(parseFrontmatter(source).data.author);
   } catch {
     return [];
   }
 }
-function takeByline(prose, rules) {
-  const [first, next = ""] = prose.split(`
-`, 2);
-  const line = withoutEmphasis(first.trim());
-  const match = rules.byline === null || next.trim() !== "" || line.length > PLAIN_LINE_MAX_LENGTH ? null : rules.byline.exec(line);
-  const name = match === null ? "" : withoutEmphasis(match[1].trim());
-  if (name === "" || /^\p{Ll}/u.test(name) || /(?:[!?…]|\p{L}{4,}\.)$/u.test(name)) {
-    return { prose, authors: [] };
+function bylineReader(labels, rules) {
+  const [before, after = null] = labels.byline.split("{names}");
+  const word = before.trim();
+  const and = labels.and.includes("{a}") && labels.and.includes("{b}") ? labels.and : "{a}, {b}";
+  const joiner = /^\{a\}(.*\S.*)\{b\}$/su.exec(and)?.[1];
+  const space = (text) => /\s/.test(text) ? "\\s+" : "\\s*";
+  return {
+    pattern: word === "" || after === null || after.trim() !== "" ? null : new RegExp(`^${escapeRegExp(word)}[\\s:]+(.+)$`, "iu"),
+    joiner: joiner === undefined ? null : new RegExp(`${space(joiner[0])}${escapeRegExp(joiner.trim())}${space(joiner.at(-1))}`, "iu"),
+    stopwords: rules.candidateStopwords
+  };
+}
+function leadingByline(text, titleLine, bylines) {
+  const parts = text.split(/(\n[ \t]*\n)/);
+  const tries = titleLine && parts.length > 2 && isTitleLine(parts[0]) ? [0, 1] : [0];
+  for (const index of tries) {
+    const authors = bylineAuthors(parts[index * 2].trim(), bylines);
+    if (authors.length > 0) {
+      parts.splice(index * 2, 2);
+      return { text: parts.join("").trim(), authors };
+    }
   }
-  return { prose: prose.slice(first.length).trim(), authors: [name] };
+  return null;
+}
+function isTitleLine(text) {
+  return !text.trim().includes(`
+`) && text.trim().length <= PLAIN_LINE_MAX_LENGTH;
+}
+function bylineAuthors(paragraph, bylines) {
+  const line = withoutEmphasis(paragraph);
+  const match = bylines.pattern === null || line.includes(`
+`) || line.length > PLAIN_LINE_MAX_LENGTH ? null : bylines.pattern.exec(line);
+  if (match === null) {
+    return [];
+  }
+  const names = (bylines.joiner === null ? [match[1]] : match[1].split(bylines.joiner)).map((name) => withoutEmphasis(name).replace(/\s+/g, " "));
+  return names.every((name) => isBylineName(name, bylines.stopwords)) ? names : [];
+}
+var BYLINE_WORD = /^(?:(?:\p{Lu}\.)+|\p{Lu}\p{Ll}\.|(?!\p{Ll})\p{L}[\p{L}\p{M}]*(?:['’-][\p{L}\p{M}]+)*)$/u;
+var NAME_PARTICLES = new Set(["al", "bin", "da", "das", "de", "del", "della", "den", "der", "des", "di", "do", "dos", "du", "ibn", "la", "le", "ten", "ter", "van", "von", "y", "zu"]);
+function isBylineName(name, stopwords) {
+  const words = name.split(" ");
+  return words.length >= 2 && words.length <= 6 && words.every((word, index) => !stopwords.has(straight(word)) && (BYLINE_WORD.test(word) || index > 0 && index < words.length - 1 && NAME_PARTICLES.has(word)));
 }
 function withoutEmphasis(text) {
-  return text.replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
+  return text.trim().replace(/^([*_]{1,2})(.+)\1$/, "$2").trim();
 }
 function normalizeSource(text, name) {
   if (/\.te?xt$/i.test(name)) {
@@ -29569,7 +29601,7 @@ function protectComments(text, change) {
   }
   return result;
 }
-function splitByChapterHeadings(text, rules) {
+function splitByChapterHeadings(text, rules, bylines) {
   const lines = text.split(`
 `);
   const hidden = hiddenLineIndexes(lines);
@@ -29609,11 +29641,15 @@ function splitByChapterHeadings(text, rules) {
     }
   }
   if (!current) {
-    return { sections: [], unused, markdown };
+    return { sections: [], unused, markdown, authors: [] };
   }
   sections.push(finishChapter(current));
-  const opening = stripTitleHeading(preamble.join(`
+  let opening = stripTitleHeading(preamble.join(`
 `), rules).trim();
+  const credit = bylines === null ? null : leadingByline(opening, !markdown, bylines);
+  if (credit !== null) {
+    opening = credit.text;
+  }
   const plainTitleOnly = markdown ? false : !opening.includes(`
 `) && opening.length <= PLAIN_LINE_MAX_LENGTH;
   if (opening !== "" && scanComments(opening).text.trim() === "") {
@@ -29626,7 +29662,7 @@ ${sections[0].prose}`.trim();
   } else if (opening !== "" && !plainTitleOnly) {
     sections.unshift({ title: "Opening", prose: opening });
   }
-  return { sections, unused, markdown };
+  return { sections, unused, markdown, authors: credit?.authors ?? [] };
 }
 function unusedChapterLines(lines, hidden, titles, underlines, rules) {
   const unused = [];
@@ -29742,7 +29778,8 @@ function singleChapter(text, document) {
   }
   return {
     title: document.untitled ? "" : titleCaseSlug(path16.basename(document.name, path16.extname(document.name))),
-    prose: text.trim()
+    prose: text.trim(),
+    titleLine: true
   };
 }
 function stripTitleHeading(text, rules) {
