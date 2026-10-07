@@ -402,6 +402,19 @@ describe("undo logs (#604)", () => {
     expect(invoke(root, ["reindex"]).code).toBe(0);
   });
 
+  test("export, build, and synopsis are refused while the log is there, a --dry-run too, and write nothing (#723)", () => {
+    const root = book();
+    stoppedAt(root, 4, () => COMMANDS.merge.run(root));
+    const stopped = snapshot(root);
+    const refusal = (command) => `${COMMANDS.merge.name} stopped part way, and ${UNDO_LOG} holds what it changed, so story ${command} would build on a change made only in part; nothing was changed. Run story doctor --fix to put those files back first, or run ${COMMANDS.merge.name} again to finish it\n`;
+    expect(invoke(root, ["export"])).toEqual({ code: 4, out: "", err: refusal("export") });
+    expect(invoke(root, ["export", "--dry-run"])).toEqual({ code: 4, out: "", err: refusal("export") });
+    expect(invoke(root, ["build"])).toEqual({ code: 4, out: "", err: refusal("build") });
+    expect(invoke(root, ["build", "--dry-run"])).toEqual({ code: 4, out: "", err: refusal("build") });
+    expect(invoke(root, ["synopsis"])).toEqual({ code: 4, out: "", err: refusal("synopsis") });
+    expect(snapshot(root)).toEqual(stopped);
+  });
+
   test("the log of a command still running is its own: it is not reported, refused, or put back", () => {
     const root = book();
     stoppedAt(root, 4, () => COMMANDS.merge.run(root));

@@ -15,6 +15,7 @@ import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
 import { isTruthy, optionValues } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
+import { assertNoInterruptedChange } from "./undo.js";
 import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
@@ -1029,6 +1030,7 @@ export const COMMANDS = [
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story export");
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
       const findings = checkedWarnings(result.warnings, overrides);
       if (wantsJson(parsed)) {
@@ -1064,6 +1066,7 @@ export const COMMANDS = [
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story build");
       // A build only writes its output, so a --dry-run plans the writes
       // without making them, and finds the PDF engine without running it.
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => buildBook(projectRoot, {
@@ -1107,6 +1110,7 @@ export const COMMANDS = [
     run({ parsed, io, root }) {
       const dryRun = outputDryRun(parsed, "synopsis");
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story synopsis");
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => synopsisBook(projectRoot, { pages: parsed.options.pages, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
