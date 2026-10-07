@@ -24239,8 +24239,9 @@ function migrateProject(root) {
     throw projectError(newerSchemaMessage(newerVersion));
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
+  const upgrading = story.data["schema-version"] !== STORY_SCHEMA_VERSION;
   const changed = [];
-  for (const directory of PROJECT_DIRECTORIES) {
+  for (const directory of upgrading ? PROJECT_DIRECTORIES : []) {
     ensureDirectory(path13.join(projectRoot, directory), changed, projectRoot);
   }
   ensureFile(path13.join(projectRoot, "plot", "timeline.md"), timeline(storyId), changed, projectRoot);
@@ -24250,7 +24251,7 @@ function migrateProject(root) {
   ensureFile(path13.join(projectRoot, "continuity", "promises", "_index.md"), promiseIndex(storyId, []), changed, projectRoot);
   ensureFile(path13.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
   ensureFile(path13.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
-  if (story.data["schema-version"] !== STORY_SCHEMA_VERSION) {
+  if (upgrading) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
       "schema-version": STORY_SCHEMA_VERSION

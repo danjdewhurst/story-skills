@@ -1007,9 +1007,13 @@ export function migrateProject(root) {
     throw projectError(newerSchemaMessage(newerVersion));
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
+  const upgrading = story.data["schema-version"] !== STORY_SCHEMA_VERSION;
   const changed = [];
 
-  for (const directory of PROJECT_DIRECTORIES) {
+  // Entity folders start empty and git does not keep empty folders, so a
+  // clone of a current project lacks some. validate does not require them
+  // and add makes the one it writes into, so only an upgrade restores them.
+  for (const directory of upgrading ? PROJECT_DIRECTORIES : []) {
     ensureDirectory(path.join(projectRoot, directory), changed, projectRoot);
   }
 
@@ -1021,7 +1025,7 @@ export function migrateProject(root) {
   ensureFile(path.join(projectRoot, "continuity", "clues", "_index.md"), clueIndex(storyId, []), changed, projectRoot);
   ensureFile(path.join(projectRoot, "glossary", "_index.md"), glossaryIndex(storyId, []), changed, projectRoot);
 
-  if (story.data["schema-version"] !== STORY_SCHEMA_VERSION) {
+  if (upgrading) {
     writeFile(storyPath, replaceFrontmatter(story.rawMarkdown, {
       ...story.data,
       "schema-version": STORY_SCHEMA_VERSION

@@ -321,6 +321,9 @@ describe("exit codes", () => {
 
   test.skipIf(CHMOD_IGNORED)("a folder migrate cannot create exits 4", () => {
     const root = newProject();
+    // Only an upgrade from an older schema restores a missing folder.
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2", "schema-version: 1"));
     const parent = path.join(root, "worldbuilding");
     fs.rmSync(path.join(parent, "factions"), { recursive: true, force: true });
     fs.chmodSync(parent, 0o555);

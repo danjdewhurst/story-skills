@@ -61,7 +61,8 @@ export const REQUIRED_PATHS = [
   "glossary/_index.md"
 ];
 
-// Every folder init creates; migrate restores any that are missing.
+// Every folder init creates; migrate restores any that are missing when it
+// upgrades an older schema-version.
 export const PROJECT_DIRECTORIES = [
   "characters",
   "worldbuilding/locations",

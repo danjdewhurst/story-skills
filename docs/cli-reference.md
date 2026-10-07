@@ -619,7 +619,7 @@ See [Import, export, and builds](manuscripts.md) for the full import workflow.
 story migrate [path] [--dry-run] [--json]
 ```
 
-Upgrades a project to the current schema (version 2). It creates every folder `story init` creates when it is missing, and any missing v2 starter files (`plot/timeline.md`, `scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change. The count it prints is the number of lines `--dry-run` lists: each file it creates or updates once, and each folder it makes. A `story.md` that fails to parse stops it with `Cannot migrate: fix this file first`, and a `schema-version` newer than 2 is refused rather than downgraded: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`.
+Upgrades a project to the current schema (version 2). It creates any missing v2 starter files (`plot/timeline.md`, `scenes/_index.md`, `continuity/state.md` and the question, promise, and clue ledgers, and `glossary/_index.md`), sets `schema-version: 2` in `story.md`, and runs `reindex`. When it upgrades an older `schema-version`, it also creates every folder `story init` creates that is missing. On a project already at version 2 it leaves a missing empty folder alone, as `doctor --fix` does: git does not keep empty folders, so a clone has none of them, and `story add` makes the folder it writes into. Existing files are never overwritten. On a project that is already current it still runs `reindex`, so a stale registry is rebuilt and counted as a change. The count it prints is the number of lines `--dry-run` lists: each file it creates or updates once, and each folder it makes. A `story.md` that fails to parse stops it with `Cannot migrate: fix this file first`, and a `schema-version` newer than 2 is refused rather than downgraded: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`.
 
 On a copy of a project with `schema-version: 1` and no clue ledger or glossary:
 
@@ -1699,7 +1699,7 @@ Actions:
 
 | Repair | Runs on | What it changes |
 |---|---|---|
-| `story migrate` | `schema-version-mismatch`, `missing-required-path` | Adds missing folders and starter registries, sets `schema-version`, and reindexes. Never overwrites a file. |
+| `story migrate` | `schema-version-mismatch`, `missing-required-path` | Adds missing starter registries, and the missing folders of an older schema, sets `schema-version`, and reindexes. Never overwrites a file. |
 | `story wordcount --write` | `stale-word-count` | Rewrites `word-count` (and `character-count`) in chapter frontmatter, then reindexes. |
 | `story reindex` | `stale-registry`, `story-id-mismatch` | Rebuilds the registry tables. Skipped when `migrate` or `wordcount --write` already reindexed. |
 
