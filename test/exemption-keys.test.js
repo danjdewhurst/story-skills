@@ -220,6 +220,23 @@ describe("exemption keys (#284)", () => {
     ]);
   });
 
+  test("a key one typo away from a known key stops the entry, so it cannot widen it", () => {
+    const { root } = povProject();
+    writeLog(root, [
+      "  - code: pov-not-in-cast\n    file: chapters/chapter-01.md\n    patern: ann\n    reason: typo in pattern",
+      "  - code: pov-not-in-cast\n    chapterr: chapter-02\n    reason: typo in chapter"
+    ].join("\n"));
+    const label = "continuity/exemptions.md exemptions";
+    expect(validateProject(root).errors.map((error) => [error.code, error.message])).toEqual([
+      ["exemption-misspelled-key", `${label}[0] has patern; did you mean pattern?`],
+      ["exemption-misspelled-key", `${label}[1] has chapterr; did you mean chapter?`],
+      ["exemption-too-broad", `${label}[1] sets only code, which would dismiss every pov-not-in-cast finding: add file, chapter, or pattern to narrow it, or set severity pov-not-in-cast to off in story.md`]
+    ]);
+    const result = checkContinuity(scanProject(root));
+    expect(result.dismissed).toEqual([]);
+    expect(result.warnings.map((finding) => finding.file)).toEqual([CH1, CH2]);
+  });
+
   test("validate warns about a file or chapter that names nothing", () => {
     const { root } = povProject();
     writeLog(root, "  - code: pov-not-in-cast\n    file: chapters/chapter-09.md\n    reason: gone\n  - code: pov-not-in-cast\n    chapter: chapter-09\n    reason: gone\n  - code: pov-not-in-cast\n    file: chapters/\n    reason: a folder");
