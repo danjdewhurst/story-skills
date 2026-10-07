@@ -94,8 +94,8 @@ describe("release script", () => {
     }
   });
 
-  test("pushes main and the tag atomically", () => {
-    expect(releasePushArgs("v1.2.3")).toEqual(["push", "--atomic", "origin", "main", "v1.2.3"]);
+  test("pushes main and the tag atomically, by their full names", () => {
+    expect(releasePushArgs("v1.2.3")).toEqual(["push", "--atomic", "origin", "refs/heads/main:refs/heads/main", "refs/tags/v1.2.3:refs/tags/v1.2.3"]);
   });
 
   test("a rejected main push leaves no tag on the remote", () => {

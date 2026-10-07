@@ -45,21 +45,31 @@ const throws = (error) => () => {
   throw error;
 };
 
-const GIT_REPLIES = {
-  "git rev-parse --abbrev-ref HEAD": "main\n",
-  "git status --porcelain": "",
-  "git fetch origin main --tags": "",
-  "git rev-parse HEAD": "abc123\n",
-  "git rev-parse origin/main": "abc123\n"
-};
+const PUSH = "git push --atomic origin refs/heads/main:refs/heads/main refs/tags/v0.5.1:refs/tags/v0.5.1";
+const PUSH_TARGETS = "git ls-remote origin refs/heads/main refs/tags/v0.5.1 refs/heads/main/HEAD refs/tags/v0.5.1/HEAD";
+const REMOTE_TAG = "git ls-remote --tags origin refs/tags/v0.5.1";
+const GH_RELEASE = "gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag";
 
 // Replies keyed by the command and its arguments joined by spaces; a function
 // reply may throw. Given `git`, unscripted git commands run through it for
-// real; anything else unscripted fails the test.
+// real; anything else unscripted fails the test. The stubbed git starts at
+// abc123 and moves to rel456 once the release commits.
 function stubRun(overrides = {}, git = null) {
   const calls = [];
+  let committed = false;
+  const stubGit = {
+    "git rev-parse --abbrev-ref HEAD": "main\n",
+    "git symbolic-ref -q HEAD": "refs/heads/main\n",
+    "git status --porcelain": "",
+    "git fetch origin main --tags": "",
+    "git rev-parse HEAD": () => (committed ? "rel456\n" : "abc123\n"),
+    "git rev-parse origin/main": "abc123\n",
+    "git rev-parse refs/tags/v0.5.1": "tag789\n",
+    [PUSH_TARGETS]: "abc123\trefs/heads/main\n",
+    [REMOTE_TAG]: ""
+  };
   const replies = {
-    ...(git ? {} : GIT_REPLIES),
+    ...(git ? {} : stubGit),
     "gh auth status": "",
     "gh release view v0.5.1": throws(commandError("release not found")),
     "npm view story-skills@0.5.1 version": throws(commandError("npm error code E404")),
@@ -77,26 +87,45 @@ function stubRun(overrides = {}, git = null) {
     if (command === "bun" && args[0] === "run") return "";
     if (git && command === "git") return git(...args);
     if (key.startsWith("git tag --list ")) return "";
-    if (/^git (add|commit|tag -a|tag -d|push|reset --hard) /.test(key)) return "";
+    if (key.startsWith("git commit ")) committed = true;
+    if (/^git (add|commit|tag -a|tag -d|push|update-ref|checkout) /.test(key)) return "";
     if (key.startsWith("gh release create ")) return "https://github.com/danjdewhurst/story-skills/releases/tag/v0.5.1\n";
     throw new Error(`unexpected command in test: ${key}`);
   };
   return { run, calls, keys: () => calls.map((call) => call.key) };
 }
 
-function releaseWith(argv, { root = releaseFixture(), replies, git } = {}) {
+function releaseWith(argv, { root = releaseFixture(), replies, git, deps = {} } = {}) {
   const stub = stubRun(replies, git);
   const logs = [];
   const errors = [];
+  const sleeps = [];
   const status = runRelease(argv, {
     root,
     run: stub.run,
     log: (line) => logs.push(line),
     error: (line) => errors.push(line),
-    today: () => "2026-10-06"
+    today: () => "2026-10-06",
+    sleep: (ms) => sleeps.push(ms),
+    ...deps
   });
-  return { status, root, stub, out: logs.join("\n"), err: errors.join("\n") };
+  return { status, root, stub, sleeps, out: logs.join("\n"), err: errors.join("\n") };
 }
+
+const failedBuild = () => Object.assign(new Error("Command failed: bun run build:fallback"), { status: 1, stderr: null });
+// Every file the fixture's release writes, in the order it writes them.
+const WRITTEN = [
+  "CHANGELOG.md",
+  "package.json",
+  ".codex-plugin/plugin.json",
+  ".claude-plugin/plugin.json",
+  "src/version.js",
+  "templates/github/story-checks.yml",
+  "templates/github/draft-next-chapter.yml",
+  "templates/github/review-copy.yml",
+  "docs/install.md",
+  FALLBACK
+].join(" ");
 
 const PUBLISHING = /^(git (add|commit|tag -a|push)|gh release create)/;
 const read = (root, relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -167,16 +196,15 @@ describe("release run with stubbed commands", () => {
     expect(keys.slice(keys.indexOf(`bun run ${PREFLIGHT.at(-1)}`) + 1)).toEqual([
       "bun run build:fallback",
       "bun run check:metadata",
-      [
-        "git add package.json .codex-plugin/plugin.json .claude-plugin/plugin.json src/version.js",
-        "templates/github/story-checks.yml templates/github/draft-next-chapter.yml templates/github/review-copy.yml",
-        "docs/install.md CHANGELOG.md skills/story-maintenance/scripts/story.js"
-      ].join(" "),
+      `git add ${WRITTEN}`,
       "git commit -m chore: release 0.5.1",
+      "git rev-parse HEAD",
       "git tag -a v0.5.1 -m v0.5.1",
-      "git push --atomic origin main v0.5.1",
-      "gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag"
+      PUSH_TARGETS,
+      PUSH,
+      GH_RELEASE
     ]);
+    expect(result.sleeps).toEqual([]);
     expect(result.out).toContain("Created GitHub release: https://github.com/danjdewhurst/story-skills/releases/tag/v0.5.1");
     expect(result.out).toContain("publishes story-skills@0.5.1 to npm once CI passes on main for the release commit");
   });
@@ -258,9 +286,7 @@ describe("release run with stubbed commands", () => {
   }
 
   test("a failed `gh release create` after the push says how to finish, and undoes nothing", () => {
-    const result = releaseWith(["patch"], {
-      replies: { "gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag": throws(commandError("HTTP 502: Bad Gateway")) }
-    });
+    const result = releaseWith(["patch"], { replies: { [GH_RELEASE]: throws(commandError("HTTP 502: Bad Gateway")) } });
     expect(result.status).toBe(1);
     expect(result.err).toBe(
       [
@@ -272,56 +298,61 @@ describe("release run with stubbed commands", () => {
     );
     expect(result.out).toContain("Pushed main and v0.5.1");
     // The tag is on origin and tag rules forbid moving or deleting it.
-    expect(result.stub.keys().filter((key) => /^git (reset|tag -d|push .*(--delete|--force|-f\b|:refs))/.test(key))).toEqual([]);
+    expect(result.stub.keys().filter((key) => /^git (reset|update-ref|checkout|tag -d|push .*(--delete|--force|-f\b| :refs))/.test(key))).toEqual([]);
   });
 
-  test("a push whose outcome origin cannot confirm is left for the maintainer to check", () => {
-    const result = releaseWith(["patch"], {
-      replies: {
-        "git push --atomic origin main v0.5.1": throws(commandError("fatal: unable to access origin: Could not resolve host")),
-        "git ls-remote origin refs/tags/v0.5.1": throws(commandError("fatal: unable to access origin: Could not resolve host"))
-      }
+  const unreachable = commandError("fatal: unable to access origin: Could not resolve host");
+  for (const [name, replies, cause] of [
+    ["origin cannot be reached", { [REMOTE_TAG]: throws(unreachable) }, unreachable.stderr],
+    ["the local tag cannot be read", { "git rev-parse refs/tags/v0.5.1": throws(commandError("fatal: bad object")) }, "fatal: bad object"]
+  ]) {
+    test(`a failed push is left for the maintainer to check when ${name}`, () => {
+      const result = releaseWith(["patch"], { replies: { [PUSH]: throws(unreachable), ...replies } });
+      expect(result.status).toBe(1);
+      expect(result.err).toBe(
+        [
+          `Release aborted: \`git push\` failed: ${unreachable.stderr}`,
+          `Could not check whether the push reached origin: ${cause}`,
+          "Run `git ls-remote --tags origin refs/tags/v0.5.1` and compare the SHA it prints with `git rev-parse refs/tags/v0.5.1`. " +
+            `If origin lists no v0.5.1, the push did not land: undo the release with \`git tag -d v0.5.1\`, then \`git update-ref refs/heads/main abc123 rel456\`, then \`git checkout abc123 -- ${WRITTEN}\`, then run it again. ` +
+            "If the SHAs match, the push landed: create the GitHub release with `gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag`. " +
+            "If they differ, another release of 0.5.1 reached origin first: undo this one the same way, then fetch main and the tags and check that release."
+        ].join("\n")
+      );
+      expect(result.stub.keys().filter((key) => /^(git (update-ref|checkout|tag -d)|gh release create)/.test(key))).toEqual([]);
     });
-    expect(result.status).toBe(1);
-    expect(result.err).toBe(
-      [
-        "Release aborted: `git push` failed: fatal: unable to access origin: Could not resolve host",
-        "Could not ask origin whether the push landed: fatal: unable to access origin: Could not resolve host",
-        "Run `git ls-remote origin refs/tags/v0.5.1`. If it prints nothing, the push did not land: run `git tag -d v0.5.1` and `git reset --hard abc123`, then run the release again. If it prints the tag, the push landed: create the GitHub release with `gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag`."
-      ].join("\n")
-    );
-    expect(result.stub.keys().filter((key) => /^(git (reset|tag -d)|gh release create)/.test(key))).toEqual([]);
-  });
+  }
 
-  test("a rollback that fails too names the commands that finish it", () => {
-    const result = releaseWith(["patch"], {
-      replies: {
-        "bun run build:fallback": throws(Object.assign(new Error("Command failed: bun run build:fallback"), { status: 1, stderr: null })),
-        "git reset --hard abc123": throws(commandError("fatal: Unable to create '.git/index.lock': File exists."))
-      }
-    });
-    expect(result.status).toBe(1);
-    expect(result.err).toBe(
-      [
-        "Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback",
-        "The rollback failed too: fatal: Unable to create '.git/index.lock': File exists.",
-        "Undo the release by hand with `git reset --hard abc123`, then run the release again."
-      ].join("\n")
-    );
-    expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
-  });
-
-  test("a missing bun after the bump rolls the bump back", () => {
+  test("a missing bun after the bump restores the files the release wrote", () => {
     const result = releaseWith(["patch"], {
       replies: { "bun run build:fallback": throws(Object.assign(new Error("spawnSync bun ENOENT"), { code: "ENOENT" })) }
     });
     expect(result.status).toBe(1);
     expect(result.err).toBe(
       `Release aborted: the release failed before anything was pushed: ${MISSING_BUN_MESSAGE}\n` +
-        "Rolled back: main is at abc123 again and the bumped files are restored. Fix the problem, then run the release again."
+        "Rolled back: main is at abc123 again and the files the release wrote are restored. Fix the problem, then run the release again."
     );
     const keys = result.stub.keys();
-    expect(keys.slice(keys.indexOf("bun run build:fallback") + 1)).toEqual(["git reset --hard abc123"]);
+    expect(keys.slice(keys.indexOf("bun run build:fallback") + 1)).toEqual([
+      "git symbolic-ref -q HEAD",
+      "git rev-parse HEAD",
+      `git checkout abc123 -- ${WRITTEN}`
+    ]);
+  });
+
+  test("a failure before the release writes anything has nothing to roll back", () => {
+    const result = releaseWith(["patch"], {
+      deps: {
+        today: () => {
+          throw new Error("no clock");
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      "Release aborted: the release failed before anything was pushed: no clock\nNothing had changed yet. Fix the problem, then run the release again."
+    );
+    expect(result.stub.keys().filter((key) => /^git (update-ref|checkout|tag -d|symbolic-ref)/.test(key))).toEqual([]);
   });
 
   test("the default runner executes commands in the release root", () => {
@@ -330,24 +361,47 @@ describe("release run with stubbed commands", () => {
     expect(deps.root).toBe(root);
     expect(deps.run(process.execPath, ["-e", "process.stdout.write(process.cwd())"])).toBe(fs.realpathSync(root));
     expect(deps.today()).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const started = Date.now();
+    deps.sleep(20);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(15);
   });
 });
 
-// git config for the throwaway repositories: a fixed identity, no signing,
-// and no line-ending conversion, so a reset restores files byte for byte.
-const GIT_CONFIG = ["-c", "user.name=Release Test", "-c", "user.email=release@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "core.autocrlf=false"];
+// git for the throwaway repositories reads nothing from this machine: no
+// global or system config, and no inherited GIT_* variable (a GIT_DIR from a
+// hook would point every command, the release's own included, at another
+// repository). It has a fixed identity, no signing, and no line-ending
+// conversion, so a restore puts files back byte for byte.
+const GIT_SETTINGS = [
+  ["user.name", "Release Test"],
+  ["user.email", "release@example.com"],
+  ["init.defaultBranch", "main"],
+  ["commit.gpgsign", "false"],
+  ["tag.gpgsign", "false"],
+  ["core.autocrlf", "false"]
+];
 
-function gitIn(cwd, ...args) {
-  return execFileSync("git", [...GIT_CONFIG, ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+function gitEnv() {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)));
+  GIT_SETTINGS.forEach(([key, value], index) => {
+    env[`GIT_CONFIG_KEY_${index}`] = key;
+    env[`GIT_CONFIG_VALUE_${index}`] = value;
+  });
+  return { ...env, GIT_CONFIG_COUNT: String(GIT_SETTINGS.length), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
 }
 
-// The release fixture committed on main in a real repository, with a bare
-// origin that already has that commit.
+function gitIn(cwd, ...args) {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
+}
+
+// The release fixture, plus a file the release never writes, committed on
+// main in a real repository with a bare origin that already has the commit.
 function gitFixture() {
   const root = releaseFixture();
+  fs.writeFileSync(path.join(root, "docs", "notes.md"), "Notes.\n");
   const origin = path.join(makeTempDir("story-release-origin-"), "origin.git");
-  gitIn(path.dirname(origin), "init", "-q", "--bare", "-b", "main", origin);
-  gitIn(root, "init", "-q", "-b", "main");
+  gitIn(path.dirname(origin), "init", "-q", "--bare", origin);
+  gitIn(root, "init", "-q");
   gitIn(root, "add", "-A");
   gitIn(root, "commit", "-q", "-m", "initial");
   gitIn(root, "remote", "add", "origin", origin);
@@ -369,42 +423,100 @@ function gitFixture() {
   };
 }
 
+// Runs the release in a git fixture. `fail` names git commands (their first
+// arguments, such as "commit" or "tag -a") that throw instead of running.
+function gitRelease(repo, { replies, fail = [] } = {}) {
+  const git = (...args) => {
+    const command = args.join(" ");
+    const failing = fail.find((prefix) => command.startsWith(prefix));
+    if (failing) {
+      throw commandError(`fatal: ${failing} failed in test`);
+    }
+    return repo.git(...args);
+  };
+  return releaseWith(["patch"], { root: repo.root, git, replies });
+}
+
 function expectUntouched(repo) {
   expect(repo.git("rev-parse", "HEAD").trim()).toBe(repo.head);
+  expect(repo.git("symbolic-ref", "HEAD").trim()).toBe("refs/heads/main");
   expect(repo.git("status", "--porcelain")).toBe("");
   expect(repo.git("tag", "--list")).toBe("");
   for (const [file, text] of Object.entries(repo.files)) {
     expect(read(repo.root, file)).toBe(text);
   }
+  expect(gitIn(repo.origin, "for-each-ref", "--format=%(refname)").trim()).toBe("refs/heads/main");
 }
 
+const rolledBack = (repo, tag = false) =>
+  `Rolled back: main is at ${repo.head} again${tag ? ", the local v0.5.1 tag is deleted," : ""} and the files the release wrote are restored. Fix the problem, then run the release again.`;
+
 describe("release run against a throwaway git origin", () => {
-  test("a failed step before the push restores every file and leaves main where it was", () => {
+  test("a failed step before the commit restores only the files the release wrote", () => {
     const repo = gitFixture();
-    const result = releaseWith(["patch"], {
-      root: repo.root,
-      git: repo.git,
+    const result = gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           fs.writeFileSync(path.join(repo.root, FALLBACK), "half built\n");
-          throw Object.assign(new Error("Command failed: bun run build:fallback"), { status: 1, stderr: null });
+          // The maintainer edits a file the release never writes.
+          fs.writeFileSync(path.join(repo.root, "docs", "notes.md"), "Notes, edited during the checks.\n");
+          throw failedBuild();
         }
       }
     });
     expect(result.status).toBe(1);
-    expect(result.err).toBe(
-      "Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback\n" +
-        `Rolled back: main is at ${repo.head} again and the bumped files are restored. Fix the problem, then run the release again.`
-    );
+    expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback\n${rolledBack(repo)}`);
+    expect(repo.git("status", "--porcelain")).toBe(" M docs/notes.md\n");
+    expect(read(repo.root, "docs/notes.md")).toBe("Notes, edited during the checks.\n");
+    fs.writeFileSync(path.join(repo.root, "docs", "notes.md"), repo.files["docs/notes.md"]);
     expectUntouched(repo);
     expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
   });
 
+  test("a failed commit unstages and restores the files the release wrote", () => {
+    const repo = gitFixture();
+    const result = gitRelease(repo, { fail: ["commit"] });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: fatal: commit failed in test\n${rolledBack(repo)}`);
+    expectUntouched(repo);
+  });
+
+  test("a failed tag after the commit moves main back off the release commit", () => {
+    const repo = gitFixture();
+    const result = gitRelease(repo, { fail: ["tag -a"] });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: fatal: tag -a failed in test\n${rolledBack(repo)}`);
+    expect(result.stub.keys()).toContain(`git update-ref refs/heads/main ${repo.head} ${repo.git("rev-parse", "HEAD@{1}").trim()}`);
+    expectUntouched(repo);
+  });
+
+  test("a rollback changes nothing once something else has moved HEAD", () => {
+    const repo = gitFixture();
+    const result = gitRelease(repo, {
+      replies: {
+        "bun run build:fallback": () => {
+          repo.git("checkout", "-q", "-b", "other");
+          repo.git("commit", "-q", "--allow-empty", "-m", "work on another branch");
+          throw failedBuild();
+        }
+      }
+    });
+    const other = repo.git("rev-parse", "other").trim();
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      "Release aborted: the release failed before anything was pushed: Command failed: bun run build:fallback\n" +
+        `Nothing was rolled back: HEAD is no longer main at ${repo.head}, so something else changed the repository while the release ran. ` +
+        `Check \`git status\` and \`git log\`, then, with main checked out, undo the release by hand with \`git checkout ${repo.head} -- ${WRITTEN}\`.`
+    );
+    expect(repo.git("symbolic-ref", "HEAD").trim()).toBe("refs/heads/other");
+    expect(repo.git("rev-parse", "HEAD").trim()).toBe(other);
+    expect(repo.git("rev-parse", "main").trim()).toBe(repo.head);
+    expect(JSON.parse(read(repo.root, "package.json")).version).toBe("0.5.1");
+  });
+
   test("a push origin refuses rolls back the release commit and the local tag", () => {
     const repo = gitFixture();
-    const result = releaseWith(["patch"], {
-      root: repo.root,
-      git: repo.git,
+    const result = gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           repo.advanceOrigin();
@@ -413,25 +525,93 @@ describe("release run against a throwaway git origin", () => {
       }
     });
     expect(result.status).toBe(1);
-    expect(result.err).toStartWith("Release aborted: `git push` failed and origin does not have this release's v0.5.1, so the atomic push changed nothing there: ");
+    expect(result.err).toStartWith("Release aborted: `git push` failed and origin does not have v0.5.1, so the atomic push probably did not land: ");
     expect(result.err).toContain("[rejected]");
     expect(result.err).toEndWith(
-      "If origin/main has moved on, pull it first. Only a repository admin can push a v* tag.\n" +
-        `Rolled back: main is at ${repo.head} again, the local v0.5.1 tag is deleted, and the bumped files are restored. Fix the problem, then run the release again.`
+      "If origin/main has moved on, pull it first. Only a repository admin can push a v* tag. " +
+        "If `git ls-remote --tags origin refs/tags/v0.5.1` lists v0.5.1 later after all, the push landed: pull main, then create the GitHub release with `gh release create v0.5.1 --title v0.5.1 --generate-notes --verify-tag`.\n" +
+        rolledBack(repo, true)
     );
-    expectUntouched(repo);
+    // Origin was asked three times, five seconds apart, before the rollback.
+    expect(result.stub.keys().filter((key) => key === REMOTE_TAG)).toHaveLength(3);
+    expect(result.sleeps).toEqual([5000, 5000]);
+    expect(repo.git("rev-parse", "HEAD").trim()).toBe(repo.head);
+    expect(repo.git("status", "--porcelain")).toBe("");
+    expect(repo.git("tag", "--list")).toBe("");
     expect(gitIn(repo.origin, "tag", "--list")).toBe("");
-    expect(result.stub.keys().some((key) => key.startsWith("gh release create "))).toBe(false);
+    expect(result.stub.keys()).not.toContain(GH_RELEASE);
+  });
+
+  test("another release's tag on origin is reported as such, and this release is rolled back", () => {
+    const repo = gitFixture();
+    let theirs;
+    const result = gitRelease(repo, {
+      replies: {
+        "bun run build:fallback": () => {
+          gitIn(repo.origin, "tag", "-a", "v0.5.1", "-m", "another releaser", repo.head);
+          theirs = gitIn(repo.origin, "rev-parse", "refs/tags/v0.5.1").trim();
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toMatch(
+      new RegExp(`^Release aborted: origin already has a different v0\\.5\\.1 \\(${theirs}; this run made [0-9a-f]{40}\\), so another release of 0\\.5\\.1 reached origin first, and the atomic push changed nothing there: `)
+    );
+    expect(result.err).toEndWith(`Fetch main and the tags, and check that release before you release again.\n${rolledBack(repo, true)}`);
+    expect(result.sleeps).toEqual([]);
+    expect(repo.git("rev-parse", "HEAD").trim()).toBe(repo.head);
+    expect(repo.git("status", "--porcelain")).toBe("");
+    expect(repo.git("tag", "--list")).toBe("");
+    expect(gitIn(repo.origin, "rev-parse", "main", "refs/tags/v0.5.1").trim().split("\n")).toEqual([repo.head, theirs]);
+  });
+
+  for (const [failing, remaining] of [
+    ["tag -d", (repo, release) => `\`git tag -d v0.5.1\`, then \`git update-ref refs/heads/main ${repo.head} ${release}\`, then \`git checkout ${repo.head} -- ${WRITTEN}\``],
+    ["update-ref", (repo, release) => `\`git update-ref refs/heads/main ${repo.head} ${release}\`, then \`git checkout ${repo.head} -- ${WRITTEN}\``]
+  ]) {
+    test(`a rollback whose ${failing} fails lists only the steps still to do`, () => {
+      const repo = gitFixture();
+      const result = gitRelease(repo, {
+        fail: [failing],
+        replies: {
+          "bun run build:fallback": () => {
+            repo.advanceOrigin();
+            return "";
+          }
+        }
+      });
+      const release = repo.git("rev-parse", "main").trim();
+      expect(result.status).toBe(1);
+      expect(result.err).toEndWith(
+        `\nThe rollback failed too: fatal: ${failing} failed in test\nFinish it by hand with ${remaining(repo, release)}, then run the release again.`
+      );
+      expect(repo.git("tag", "--list")).toBe(failing === "tag -d" ? "v0.5.1\n" : "");
+    });
+  }
+
+  test("a ref on origin that git push would take for main or the tag stops the release before the push", () => {
+    const repo = gitFixture();
+    gitIn(repo.origin, "update-ref", "refs/heads/refs/tags/v0.5.1", repo.head);
+    const result = gitRelease(repo);
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(
+      "Release aborted: the release failed before anything was pushed: origin has refs/heads/refs/tags/v0.5.1, which `git push` would update in place of refs/heads/main or refs/tags/v0.5.1. Ask a repository admin to delete it.\n" +
+        rolledBack(repo, true)
+    );
+    expect(result.stub.keys()).not.toContain(PUSH);
+    expect(gitIn(repo.origin, "for-each-ref", "--format=%(refname) %(objectname)").trim().split("\n")).toEqual([
+      `refs/heads/main ${repo.head}`,
+      `refs/heads/refs/tags/v0.5.1 ${repo.head}`
+    ]);
   });
 
   test("a push that lands but reports an error goes on to the GitHub release", () => {
     const repo = gitFixture();
-    const result = releaseWith(["patch"], {
-      root: repo.root,
-      git: repo.git,
+    const result = gitRelease(repo, {
       replies: {
-        "git push --atomic origin main v0.5.1": () => {
-          repo.git("push", "-q", "--atomic", "origin", "main", "v0.5.1");
+        [PUSH]: () => {
+          repo.git("push", "-q", "--atomic", "origin", "refs/heads/main:refs/heads/main", "refs/tags/v0.5.1:refs/tags/v0.5.1");
           throw commandError("fatal: the remote end hung up unexpectedly");
         }
       }
@@ -442,6 +622,17 @@ describe("release run against a throwaway git origin", () => {
     expect(result.out).toContain("Created GitHub release:");
     const release = repo.git("rev-parse", "HEAD").trim();
     expect(release).not.toBe(repo.head);
+    expect(gitIn(repo.origin, "rev-parse", "main", "v0.5.1^{commit}").trim().split("\n")).toEqual([release, release]);
+  });
+
+  test("a full release pushes main and the tag to origin", () => {
+    const repo = gitFixture();
+    const result = gitRelease(repo);
+    expect(result.err).toBe("");
+    expect(result.status).toBe(0);
+    const release = repo.git("rev-parse", "HEAD").trim();
+    expect(repo.git("log", "-1", "--format=%s").trim()).toBe("chore: release 0.5.1");
+    expect(repo.git("status", "--porcelain")).toBe("");
     expect(gitIn(repo.origin, "rev-parse", "main", "v0.5.1^{commit}").trim().split("\n")).toEqual([release, release]);
   });
 });
