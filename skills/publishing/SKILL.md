@@ -104,7 +104,8 @@ before production starts.
 
 `story export` and every build that prints matter pages (markdown, EPUB,
 DOCX, HTML, print, narration) leave out a page whose `permission` is
-`pending` and warn `permission-pending-left-out` for it, so a file built
+`pending`, misspelt, or any value but `not-needed`, `granted`, or
+`public-domain`, and warn `permission-pending-left-out` for it, so a file built
 for upload, a printer, or readers never carries the uncleared quote.
 Report each such warning: the book builds without that page until the
 author confirms the permission. Add `--include-pending` only when the

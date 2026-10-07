@@ -2750,7 +2750,7 @@ These commands produce files for reading or submission. The source of truth stay
 story export [path] [--out <file>] [--include-pending] [--dry-run]
 ```
 
-Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out, and so are matter pages with `permission: pending` (see [Pending permissions](#pending-permissions)). The file uses LF line endings, even from a CRLF checkout.
+Writes one markdown manuscript: the story title, front matter pages, every chapter as `# Chapter N: Title` (the title alone for a `numbered: false` chapter; in the book's `language`, or as `story.md` `labels` sets it, such as `# Kapitel N: Title`) followed by its prose, then back matter pages. Only chapter prose is included, not outlines or notes. Matter pages with no text are left out, and so are matter pages with `permission: pending` or a permission that cannot be read (see [Pending permissions](#pending-permissions)). The file uses LF line endings, even from a CRLF checkout.
 
 | Option | Effect | Default |
 |---|---|---|
@@ -2829,18 +2829,6 @@ With `form: short-story` or `form: flash` in `story.md`, both Shunn builds use t
 
 When `story.md` sets `copyright` and no matter page already covers it, `export` and the `markdown`, `epub`, `docx`, `html`, and `print` builds add a generated copyright page to the front matter. `narration` leaves it out, and Shunn output (`--format shunn` and `docx --shunn`) has no front or back matter at all.
 
-#### Pending permissions
-
-A matter page with `permission: pending`, such as an epigraph whose rights holder has not answered yet, is left out of `export` and of every build that prints matter pages, and each one left out prints a warning. The book builds without it, so no copy you send, upload, or publish carries quoted material that is not cleared. The [review copy workflow](automation.md#review-copy-workflow) therefore never puts such a page on GitHub Pages:
-
-```text
-$ story build --format html
-Built 1 chapters as html to ~/stories/the-last-ember/dist/the-last-ember.html
-warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
-```
-
-Set `permission: granted` (with `rights-holder`), `not-needed`, or `public-domain` once the page is cleared, and the next build includes it. To see the page in a proof you read alone, such as a print PDF to check the layout, add `--include-pending` to that one run; do not share that file. `cli-defaults` in `story.md` cannot set `include-pending`, so no build includes a pending page unless its command line asks. To stop a build instead of leaving the page out, promote the warning with `severity` (`- warning: permission-pending-left-out` with `level: error`): the build still writes its file, then exits 1. `story validate` reports a pending permission itself only once `story.md` has `status: complete` ([`permission-pending`](#codes-validate)).
-
 ```text
 $ story build
 Built 1 chapters as markdown to ~/stories/the-last-ember/dist/the-last-ember.md
@@ -2890,6 +2878,18 @@ Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, h
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
+
+#### Pending permissions
+
+A matter page with `permission: pending`, such as an epigraph whose rights holder has not answered yet, is left out of `export` and of every build that prints matter pages, and each one left out prints a warning. So is a page whose permission cannot be read: one with a key that misspells `permission` (`permissions`, `Permission`, `permisson`), or with a value other than `not-needed`, `granted`, or `public-domain` (`Pending`, `[pending]`, a blank). The book builds without it, so no copy you send, upload, or publish carries quoted material that is not cleared. The [review copy workflow](automation.md#review-copy-workflow) therefore never puts such a page on GitHub Pages:
+
+```text
+$ story build --format html
+Built 1 chapters as html to ~/stories/the-last-ember/dist/the-last-ember.html
+warning: matter/epigraph.md permission is still pending, so it is left out; pass --include-pending to include it [permission-pending-left-out]
+```
+
+Set `permission: granted` (with `rights-holder`), `not-needed`, or `public-domain` once the page is cleared, and the next build includes it. To see the page in a proof you read alone, such as a print PDF to check the layout, add `--include-pending` to that one run; do not share that file. `cli-defaults` in `story.md` cannot set `include-pending`, so no build includes a pending page unless its command line asks. The metadata sheet, the Shunn manuscripts, and the screenplay, Twine, and ink builds print no matter, so they say nothing; the metadata sheet's checklist names each page left out, and counts pages and the copyright page as the other builds print them. To stop a build instead of leaving the page out, promote the warning with `severity` (`- warning: permission-pending-left-out` with `level: error`): the build still writes its file, then exits 1. `story validate` reports a pending permission itself only once `story.md` has `status: complete` ([`permission-pending`](#codes-validate)).
 
 #### PDF output
 
@@ -3329,7 +3329,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `scene-unknown-location` | warning | A Fountain scene names a location with no record. |
 | `chapter-no-scenes` | warning | A Fountain build has chapters with no scene records. |
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
-| `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`; `--include-pending` keeps it. |
+| `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`, misspelt, or not a cleared value; `--include-pending` keeps it. |
 
 ### Codes: add, rename, move, split, merge, and remove
 

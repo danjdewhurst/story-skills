@@ -1436,6 +1436,31 @@ describe("github workflows", () => {
     expect(site).not.toContain("A line of a song.");
   });
 
+  test("the review copy names matter waiting for permission whatever STORY_VERSION installs (#558)", () => {
+    const template = readRepo("templates/github/review-copy.yml");
+    const match = /- name: Look for matter waiting for permission\n(?:(?! {6}- name:).*\n)*? {8}run: \|\n((?: {10}.*\n)+)/.exec(template);
+    expect(match).not.toBeNull();
+    const script = match[1].replace(/^ {10}/gm, "");
+    // It runs before the build, so it warns even when the build fails.
+    expect(template.indexOf("- name: Look for matter waiting for permission")).toBeLessThan(template.indexOf("- name: Build the review copy"));
+    const run = (cwd) => spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], { cwd, encoding: "utf8", env: { ...process.env, STORY_DIR: "." } });
+
+    const workspace = makeTempDir("review-copy-");
+    writeMarkdown(path.join(workspace, "matter", "epigraph.md"), "title: Epigraph\nplacement: front\npermission: pending", "\nA line of a song.\n");
+    writeMarkdown(path.join(workspace, "matter", "lyrics.md"), "title: Lyrics\nplacement: back\nPermissions: \"Pending\"", "\nA chorus.\n");
+    writeMarkdown(path.join(workspace, "matter", "poem.md"), "title: Poem\nplacement: back\npermission: granted\nrights-holder: Estate", "\nA poem.\n");
+    writeMarkdown(path.join(workspace, "matter", "dedication.md"), "title: Dedication\nplacement: front", "\nFor the pending ones.\n");
+    const warned = run(workspace);
+    expect(warned.status, warned.stderr).toBe(0);
+    const note = "has permission pending. Story Skills releases after 0.22.1 leave the page out of the review copy; 0.22.1 and earlier publish it.";
+    expect(warned.stdout).toBe(`::warning::./matter/epigraph.md ${note}\n::warning::./matter/lyrics.md ${note}\n`);
+
+    // A project with no matter folder passes quietly.
+    const bare = run(makeTempDir("review-copy-"));
+    expect(bare.status, bare.stderr).toBe(0);
+    expect(bare.stdout).toBe("");
+  });
+
   test("story templates pin STORY_VERSION to the package version", () => {
     const packageJson = JSON.parse(readRepo("package.json"));
     const failures = checkTemplateStoryVersion([], packageJson.version, path.join(repoRoot, "templates", "github"), (filePath) =>
