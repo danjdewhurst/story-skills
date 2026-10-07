@@ -410,7 +410,8 @@ describe("exit codes with --json", () => {
     }
   });
 
-  for (const name of JSON_COMMANDS) {
+  for (const command of COMMANDS.filter((entry) => JSON_COMMANDS.includes(entry.name))) {
+    const { name } = command;
     test(`${name} --json exits as the text run does: 0, 2, and 3`, () => {
       const root = newProject();
       const success = invokeJson(root, OK_ARGS[name](root));
@@ -420,10 +421,20 @@ describe("exit codes with --json", () => {
       expect(misuse.envelope.diagnostics[0].message).toContain("Unknown option --no-such-flag");
       expect(misuse.code).toBe(usage);
 
+      // init and import make a project, so --path is a usage error.
       const empty = makeTempDir();
       const missing = invokeJson(empty, [...OK_ARGS[name](empty), "--path", empty]);
-      expect(missing.envelope.diagnostics[0].message).toContain("is not a story project");
-      expect(missing.code).toBe(project);
+      expect(missing.envelope.diagnostics[0].message).toContain(command.project === "none" ? `${name} uses --dir for the target directory` : "is not a story project");
+      expect(missing.code).toBe(command.project === "none" ? usage : project);
+    });
+  }
+
+  for (const [name, args] of Object.entries(REFUSED).filter(([command]) => JSON_COMMANDS.includes(command))) {
+    test(`${name} --json exits 4 on a refused write`, () => {
+      const root = newProject();
+      const result = invokeJson(root, args(root));
+      expect(result.envelope.diagnostics).toEqual([expect.objectContaining({ code: "write-refused" })]);
+      expect(result.code).toBe(refused);
     });
   }
 

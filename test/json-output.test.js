@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { COMMANDS } from "../src/commands.js";
 import { err, warn } from "../src/findings.js";
 import { API_VERSION, diagnostic, diagnosticsFrom, failureDiagnostic, resultData, writeJsonResult } from "../src/json.js";
 import { createStoryProject } from "../src/story.js";
@@ -198,13 +199,6 @@ describe("--json result envelope", () => {
     expect(afterDashes.err).toContain("is not a story project");
   });
 
-  test("--json on a command without JSON output is refused", () => {
-    const result = invoke(makeTempDir(), ["export", "--json"]);
-    expect(result.code).toBe(2);
-    expect(result.out).toBe("");
-    expect(result.err).toBe("--json does not apply to story export\n");
-  });
-
   test("progress --log --json reports the file it wrote", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Logged Json", force: false });
@@ -295,10 +289,12 @@ describe("--json result envelope", () => {
     expect(envelope.data.chapters[0].analysis.phraseSentences).toBeUndefined();
   });
 
-  test("help lists --json for the commands that take it", () => {
+  test("every command takes --json, and its help lists it", () => {
     expect(invoke(makeTempDir(), ["--help"]).out).toContain("--json");
-    expect(invoke(makeTempDir(), ["validate", "--help"]).out).toContain("--json");
-    expect(invoke(makeTempDir(), ["init", "--help"]).out).not.toContain("--json");
+    for (const command of COMMANDS) {
+      expect(command.options).toContain("json");
+      expect(invoke(makeTempDir(), [command.name, "--help"]).out).toContain("--json");
+    }
   });
 });
 

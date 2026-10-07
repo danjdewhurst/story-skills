@@ -12166,7 +12166,7 @@ var OPTIONS = [
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
   { name: "strict", help: ["Fail check on warnings as well as errors"] },
-  { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text, for the check, analysis, and write", "commands"] },
+  { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text"] },
   { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, snapshot, passes, progress --log,", "diagram or synopsis --out, export, build, init,", "or import would create, update, or delete, and", "change nothing"] },
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "prose", help: ["For rename: also replace the entity's name and", "given name in drafted chapter prose (not its", "aliases)"] },
@@ -30167,7 +30167,7 @@ var COMMANDS = [
     summary: ["Scaffold a story project"],
     project: "none",
     args: Infinity,
-    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", "dry-run"],
+    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const title = parsed.positionals.slice(1).join(" ");
@@ -30190,6 +30190,14 @@ var COMMANDS = [
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
       }));
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "init", base, {
+          data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
+          diagnostics: diagnosticsFrom({ warnings: keptStoryWarnings(result, "the title") }, "init"),
+          dryRun,
+          changes
+        });
+      }
       if (dryRun) {
         io.stdout.write(formatPreview("init", changes));
       } else {
@@ -30214,7 +30222,7 @@ var COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", "dry-run"],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const options = {
@@ -30233,10 +30241,16 @@ var COMMANDS = [
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
       };
-      if (dryRun) {
-        return previewImport(io, options);
+      const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
+      const { result, changes } = dryRun ? previewImport(options) : recordChanges(base, () => importManuscript(options));
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: diagnosticsFrom({ warnings: importWarnings(result) }, "import"), dryRun, changes });
       }
-      const result = importManuscript(options);
+      if (dryRun) {
+        io.stdout.write(formatPreview("import", changes));
+        reportImportNotes(io, result);
+        return 0;
+      }
       const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}
 `);
@@ -31000,14 +31014,24 @@ ${formatProseRenames(result)}`, formatProseRenames);
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out", "include-pending", "dry-run"],
+    options: ["out", "include-pending", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
+      const findings = checkedWarnings(result.warnings, overrides);
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "export", projectRoot, {
+          ok: findings.ok,
+          data: { outFile: result.outFile, chapters: result.chapters },
+          diagnostics: diagnosticsFrom(findings, "export"),
+          dryRun,
+          changes
+        });
+      }
       io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      return writeFindings(io, findings);
     }
   },
   {
@@ -31025,7 +31049,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -31045,16 +31069,20 @@ ${formatProseRenames(result)}`, formatProseRenames);
         spoilers: isTruthy(parsed.options.spoilers),
         includePending: isTruthy(parsed.options["include-pending"])
       }));
+      const findings = checkedWarnings(result.warnings, overrides);
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "build", projectRoot, { ok: findings.ok, data: buildData(result), diagnostics: diagnosticsFrom(findings, "build"), dryRun, changes });
+      }
       if (dryRun) {
         io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)
 ` : ""}${formatPreview("build", changes)}`);
-        return writeFindings(io, checkedWarnings(result.warnings, overrides));
+        return writeFindings(io, findings);
       }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex" ? `Built a codex of ${result.pages} pages to ${result.outFile}
 ` : `Built ${result.chapters} chapters as ${as} to ${result.outFile}
 `);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      return writeFindings(io, findings);
     }
   },
   {
@@ -31176,15 +31204,12 @@ function outputDryRun(parsed, command) {
   }
   return dryRun;
 }
-function previewImport(io, options) {
+function previewImport(options) {
   const { cwd } = options;
   const source = String(options.source ?? "").trim();
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
   const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path19.resolve(cwd, source), dir });
-  const { result, changes } = target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
-  io.stdout.write(formatPreview("import", changes));
-  reportImportNotes(io, result);
-  return 0;
+  return target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
 }
 function reportImportNotes(io, result) {
   reportKeptStory(io, result, "--title");
@@ -31268,6 +31293,9 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 `)}
 `;
 }
+function writeFilesJson(io, command, base, { ok = true, data, diagnostics, dryRun, changes }) {
+  return writeJsonResult(io, { command, ok, data: { ...data, dryRun, changes }, diagnostics, writes: dryRun ? [] : writtenFiles(base, changes) });
+}
 function writtenFiles(projectRoot, changes) {
   return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path19.resolve(projectRoot, change.path));
 }
@@ -31298,13 +31326,45 @@ function displayPath2(parsed) {
   return parsed.positionals[1] ?? (Array.isArray(flag) ? flag[flag.length - 1] : flag) ?? ".";
 }
 function reportKeptStory(io, result, titleLabel) {
+  for (const warning of keptStoryWarnings(result, titleLabel)) {
+    io.stderr.write(`warning: ${findingLine(warning)}
+`);
+  }
+}
+function keptStoryWarnings(result, titleLabel) {
   if (!result.keptStory || result.ignoredOptions.length === 0) {
-    return;
+    return [];
   }
   const names = result.ignoredOptions.map((name) => name === "title" ? titleLabel : name);
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  io.stderr.write(`warning: ${findingLine(warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md"))}
-`);
+  return [warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md")];
+}
+function importWarnings(result) {
+  return [...keptStoryWarnings(result, "--title"), ...result.warnings];
+}
+function newProjectData(result) {
+  return { root: result.root, storyId: result.storyId, keptStory: result.keptStory, ignoredOptions: result.ignoredOptions, gitignore: result.gitignore };
+}
+function importData(result) {
+  const characters = result.characters !== undefined;
+  return {
+    ...newProjectData(result),
+    chapters: result.chapters,
+    unit: characters ? "characters" : "words",
+    words: result.words,
+    characterCount: characters ? result.characters : null,
+    candidates: result.candidates
+  };
+}
+function buildData(result) {
+  return {
+    format: result.format,
+    outFile: result.outFile,
+    chapters: result.chapters,
+    pages: result.pages ?? null,
+    pdf: result.pdf === true,
+    engine: result.engine ?? null
+  };
 }
 function reportGitignore(io, result) {
   if (result.gitignore === "missing-dist") {
@@ -31503,11 +31563,6 @@ Run story --help to list commands.
 `);
       return EXIT_CODES.usage;
     }
-    if (command.project === "none" && parsed.options.path !== undefined) {
-      io.stderr.write(`${name} uses --dir for the target directory. --path is the project root for other commands.
-`);
-      return EXIT_CODES.usage;
-    }
     const misuse = commandUsageError(command, parsed);
     if (misuse) {
       if (failJson) {
@@ -31609,6 +31664,9 @@ function describeError(error, cwd) {
   return `Cannot ${FILE_ERROR_ACTIONS[error.syscall] ?? "use"} ${shown}: ${reason}${hint}`;
 }
 function commandUsageError(command, parsed) {
+  if (command.project === "none" && parsed.options.path !== undefined) {
+    return `${command.name} uses --dir for the target directory. --path is the project root for other commands.`;
+  }
   const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
   const extra = parsed.positionals.slice(1 + maxArgs);
   if (extra.length > 0) {

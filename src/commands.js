@@ -102,8 +102,8 @@ const ADD_KIND_OPTIONS = {
   research: ["id", "status", "source", "sources", "used-in", "accuracy", "confidence", "method", "risk"]
 };
 
-// The flags of every command that writes the project in place: --dry-run
-// previews the changes and --json reports them (see runWrite).
+// The flags of every command that writes files: --dry-run previews the
+// changes and --json reports them (see runWrite and writeFilesJson).
 const WRITE_OPTIONS = ["dry-run", "json"];
 
 // Every CLI command, in help order. `project` says how the command finds its
@@ -133,7 +133,7 @@ export const COMMANDS = [
     summary: ["Scaffold a story project"],
     project: "none",
     args: Infinity,
-    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", "dry-run"],
+    options: ["dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "form", "synopsis", "series", "book-number", "follows", "precedes", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const title = parsed.positionals.slice(1).join(" ");
@@ -159,6 +159,14 @@ export const COMMANDS = [
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
       }));
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "init", base, {
+          data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
+          diagnostics: diagnosticsFrom({ warnings: keptStoryWarnings(result, "the title") }, "init"),
+          dryRun,
+          changes
+        });
+      }
       if (dryRun) {
         io.stdout.write(formatPreview("init", changes));
       } else {
@@ -181,7 +189,7 @@ export const COMMANDS = [
     summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
-    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", "dry-run"],
+    options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "force", ...WRITE_OPTIONS],
     run({ parsed, io, cwd }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const options = {
@@ -200,10 +208,18 @@ export const COMMANDS = [
         language: parsed.options.language,
         force: isTruthy(parsed.options.force)
       };
-      if (dryRun) {
-        return previewImport(io, options);
+      // The changes are listed relative to the folder the import fills, as
+      // for init.
+      const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
+      const { result, changes } = dryRun ? previewImport(options) : recordChanges(base, () => importManuscript(options));
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: diagnosticsFrom({ warnings: importWarnings(result) }, "import"), dryRun, changes });
       }
-      const result = importManuscript(options);
+      if (dryRun) {
+        io.stdout.write(formatPreview("import", changes));
+        reportImportNotes(io, result);
+        return 0;
+      }
       const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}\n`);
       reportImportNotes(io, result);
@@ -982,13 +998,23 @@ export const COMMANDS = [
     usage: "export [path]",
     summary: ["Combine front matter, chapters, and back matter into a", "manuscript markdown file"],
     project: "positional",
-    options: ["out", "include-pending", "dry-run"],
+    options: ["out", "include-pending", ...WRITE_OPTIONS],
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
+      const findings = checkedWarnings(result.warnings, overrides);
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "export", projectRoot, {
+          ok: findings.ok,
+          data: { outFile: result.outFile, chapters: result.chapters },
+          diagnostics: diagnosticsFrom(findings, "export"),
+          dryRun,
+          changes
+        });
+      }
       io.stdout.write(dryRun ? formatPreview("export", changes) : `Exported ${result.chapters} chapters to ${result.outFile}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      return writeFindings(io, findings);
     }
   },
   {
@@ -1006,7 +1032,7 @@ export const COMMANDS = [
       "bible as linked HTML pages in dist/codex/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "dry-run"],
+    options: ["out", "format", "shunn", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -1029,15 +1055,19 @@ export const COMMANDS = [
         spoilers: isTruthy(parsed.options.spoilers),
         includePending: isTruthy(parsed.options["include-pending"])
       }));
+      const findings = checkedWarnings(result.warnings, overrides);
+      if (wantsJson(parsed)) {
+        return writeFilesJson(io, "build", projectRoot, { ok: findings.ok, data: buildData(result), diagnostics: diagnosticsFrom(findings, "build"), dryRun, changes });
+      }
       if (dryRun) {
         io.stdout.write(`${result.pdf ? `PDF engine: ${result.engine} (not run)\n` : ""}${formatPreview("build", changes)}`);
-        return writeFindings(io, checkedWarnings(result.warnings, overrides));
+        return writeFindings(io, findings);
       }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex"
         ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
         : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
-      return writeFindings(io, checkedWarnings(result.warnings, overrides));
+      return writeFindings(io, findings);
     }
   },
   {
@@ -1210,17 +1240,14 @@ function outputDryRun(parsed, command) {
 
 // story import --dry-run: the import runs on a copy of the folder it would
 // fill (previewNewProject), since it reindexes the chapters it writes. The
-// source is read where it is.
-function previewImport(io, options) {
+// source is read where it is. Returns { result, changes }.
+function previewImport(options) {
   const { cwd } = options;
   const source = String(options.source ?? "").trim();
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
   const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path.resolve(cwd, source), dir });
   // Without a folder the import is refused before it writes anything.
-  const { result, changes } = target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
-  io.stdout.write(formatPreview("import", changes));
-  reportImportNotes(io, result);
-  return 0;
+  return target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
 }
 
 // The options a kept story.md did not take, a kept .gitignore that misses
@@ -1320,6 +1347,13 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
   return `${lines.join("\n")}\n`;
 }
 
+// --json for export, build, init, and import: their data with dryRun and
+// changes (relative to `base`, the project or the folder a new one fills),
+// and the files the run created or updated in writes, none for a --dry-run.
+function writeFilesJson(io, command, base, { ok = true, data, diagnostics, dryRun, changes }) {
+  return writeJsonResult(io, { command, ok, data: { ...data, dryRun, changes }, diagnostics, writes: dryRun ? [] : writtenFiles(base, changes) });
+}
+
 // The absolute paths of the files a run created or updated, for --json writes.
 function writtenFiles(projectRoot, changes) {
   return changes.filter((change) => change.action === "create" || change.action === "update").map((change) => path.resolve(projectRoot, change.path));
@@ -1368,12 +1402,63 @@ function displayPath(parsed) {
 // init and import --force keep an existing story.md, so name the options it
 // did not take rather than report them applied.
 function reportKeptStory(io, result, titleLabel) {
+  for (const warning of keptStoryWarnings(result, titleLabel)) {
+    io.stderr.write(`warning: ${findingLine(warning)}\n`);
+  }
+}
+
+// The kept-story-options warning for the options a kept story.md did not
+// take, in a list, or no warning when it took them all.
+function keptStoryWarnings(result, titleLabel) {
   if (!result.keptStory || result.ignoredOptions.length === 0) {
-    return;
+    return [];
   }
   const names = result.ignoredOptions.map((name) => (name === "title" ? titleLabel : name));
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
-  io.stderr.write(`warning: ${findingLine(warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md"))}\n`);
+  return [warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md")];
+}
+
+// The warnings import prints: the options a kept story.md did not take,
+// then those it found in the manuscript.
+function importWarnings(result) {
+  return [...keptStoryWarnings(result, "--title"), ...result.warnings];
+}
+
+// init and import --json: the project made or filled (its absolute root and
+// story id), whether --force kept an existing story.md and the options that
+// one did not take, and the .gitignore: created, kept, or missing-dist for a
+// kept one that does not ignore dist/.
+function newProjectData(result) {
+  return { root: result.root, storyId: result.storyId, keptStory: result.keptStory, ignoredOptions: result.ignoredOptions, gitignore: result.gitignore };
+}
+
+// story import --json: newProjectData, then the chapters written, their
+// length in the book's count unit (characterCount is null for a book
+// counted in words), and the entity candidates.
+function importData(result) {
+  const characters = result.characters !== undefined;
+  return {
+    ...newProjectData(result),
+    chapters: result.chapters,
+    unit: characters ? "characters" : "words",
+    words: result.words,
+    characterCount: characters ? result.characters : null,
+    candidates: result.candidates
+  };
+}
+
+// story build --json: the format, the file (the folder for a codex) written,
+// the chapters in it, the codex's page count (null for other formats), and,
+// for --pdf, the engine that rendered it, or with --dry-run would have.
+function buildData(result) {
+  return {
+    format: result.format,
+    outFile: result.outFile,
+    chapters: result.chapters,
+    pages: result.pages ?? null,
+    pdf: result.pdf === true,
+    engine: result.engine ?? null
+  };
 }
 
 // An existing .gitignore is never edited, so say when builds would be

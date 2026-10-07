@@ -27,6 +27,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A monthly episode goes out on `release-start`'s day of the month, or on the month's last day when the month is shorter, so a serial that starts on the 31st releases on 28 or 29 February.
   - `release-every` takes from `1 month` to `999999 months`. `release-warn-days` defaults to 3, and `0` warns only from the release day.
   - `--json` adds `data.release.unit` (`day` or `month`) and `data.release.warnDays`.
+- `story export`, `build`, `init`, and `import` now take `--json`, so every command can report a JSON result. (#521)
+  - The result lists the files they wrote, or with `--dry-run` would write, and gives their warnings as diagnostics.
+  - A build adds its output path and, with `--pdf`, the PDF engine; `import` adds the project, chapters, and entity candidates.
+  - A failure is the JSON error result, which lists any files a failed `init` or `import` had already written.
 
 ### Changed
 
