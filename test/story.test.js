@@ -1911,14 +1911,20 @@ members:
     fs.writeFileSync(plotIndex, "---\ntitle: Tough\ntitle: Twice\n---\n# Plot\n", "utf8");
     expect(() => reindexProject(created.root)).toThrow("Duplicate frontmatter key: title");
     fs.writeFileSync(plotIndex, "---\nstory: tough-reindex\nstructure: three-act\n---\n# Plot\n", "utf8");
-    expect(reindexProject(created.root).changed).toBeDefined();
+    expect(reindexProject(created.root).changed).toEqual([plotIndex]);
+    expect(fs.readFileSync(plotIndex, "utf8")).toContain("type: plot-registry\n");
+    // A missing timeline is not made, and a timeline that is a folder or has a duplicate key is left as it is.
     fs.rmSync(timeline);
-    expect(reindexProject(created.root).changed).toBeDefined();
+    expect(reindexProject(created.root).changed).toEqual([]);
+    expect(fs.existsSync(timeline)).toBe(false);
     fs.mkdirSync(timeline);
-    expect(reindexProject(created.root).changed).toBeDefined();
+    expect(reindexProject(created.root).changed).toEqual([]);
+    expect(fs.statSync(timeline).isDirectory()).toBe(true);
     fs.rmSync(timeline, { recursive: true });
-    fs.writeFileSync(timeline, "---\nstory: tough\nstory: twice\n---\n# Timeline\n", "utf8");
-    expect(reindexProject(created.root).changed).toBeDefined();
+    const brokenTimeline = "---\nstory: tough\nstory: twice\n---\n# Timeline\n";
+    fs.writeFileSync(timeline, brokenTimeline, "utf8");
+    expect(reindexProject(created.root).changed).toEqual([]);
+    expect(fs.readFileSync(timeline, "utf8")).toBe(brokenTimeline);
   });
 
   test("flags scene frontmatter that disagrees with the filename", () => {
