@@ -7,7 +7,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
-import { buildBook, createEntity, createStoryProject, scanProject, validateLinks, validateProject } from "../src/story.js";
+import { buildBook, createEntity, createStoryProject, renameEntity, scanProject, validateLinks, validateProject } from "../src/story.js";
 import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -38,6 +38,10 @@ function edit(root, relativePath, from, to) {
   const text = fs.readFileSync(file, "utf8");
   expect(text).toContain(from);
   fs.writeFileSync(file, text.replace(from, to));
+}
+
+function editFile(file, from, to) {
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(from, to), "utf8");
 }
 
 describe("init", () => {
@@ -492,5 +496,33 @@ describe("reference handling in add and init", () => {
     const root = newProject();
     expect(() => createEntity(root, { kind: "location", name: "L", type: "" })).toThrow("--type cannot be empty");
     expect(() => createEntity(root, { kind: "system", name: "S", type: " " })).toThrow("--type cannot be empty");
+  });
+});
+
+describe("#113 init never nests a project inside another", () => {
+  test("init --follows . from inside a book is refused", () => {
+    const cwd = makeTempDir();
+    const one = createStoryProject({ cwd, title: "Book One" }).root;
+    const before = fs.readFileSync(path.join(one, "story.md"), "utf8");
+    expect(() => createStoryProject({ cwd: one, title: "Book Two", follows: ["."] }))
+      .toThrow("Cannot create a story project inside another story project");
+    expect(fs.existsSync(path.join(one, "book-two"))).toBe(false);
+    expect(fs.readFileSync(path.join(one, "story.md"), "utf8")).toBe(before);
+  });
+
+  test("rename in one project leaves a project nested inside it alone", () => {
+    const cwd = makeTempDir();
+    const one = createStoryProject({ cwd, title: "Book One" }).root;
+    // A nested project made by hand, as an older init allowed.
+    const two = createStoryProject({ cwd: makeTempDir(), title: "Book Two" }).root;
+    fs.cpSync(two, path.join(one, "book-two"), { recursive: true });
+    createEntity(one, { kind: "character", name: "Ellen Trewin" });
+    const nested = path.join(one, "book-two");
+    createEntity(nested, { kind: "character", name: "Tom Hocking" });
+    const tom = path.join(nested, "characters", "tom-hocking.md");
+    editFile(tom, "relationships: []", "relationships:\n  - character: ellen-trewin\n    type: friend");
+    const before = fs.readFileSync(tom, "utf8");
+    renameEntity(one, { kind: "character", id: "ellen-trewin", name: "Ellen Hale" });
+    expect(fs.readFileSync(tom, "utf8")).toBe(before);
   });
 });
