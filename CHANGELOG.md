@@ -110,6 +110,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story validate` warns when an entity file sets `id` in its frontmatter, which the file name sets instead (`frontmatter-id`). ([#694](https://github.com/danjdewhurst/story-skills/issues/694))
   - Before, such a value was ignored with no warning.
   - Remove the `id` line. The file name is the entity's id.
+- A list item whose first key line ends in spaces now reads its other keys. ([#727](https://github.com/danjdewhurst/story-skills/issues/727))
+  - Before, `  - character: sera-voss ` followed by `    type: sibling` failed with `Unsupported frontmatter line`.
 
 ## [0.23.0] - 2026-10-07
 
