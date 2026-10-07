@@ -71,6 +71,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A line with no blank line under the last list item stays in the outline, as markdown reads it. Indented prose under a heading is prose.
   - `story validate` warns with `outline-without-chapter-text` when such a chapter has prose after its outline and no `## Chapter Text` heading.
   - Word counts can fall for chapters that have no `---` line and no `## Chapter Text` heading.
+- `story rename --prose` keeps the CRLF line break inside a name wrapped across two lines. ([#731](https://github.com/danjdewhurst/story-skills/issues/731))
+  - Before, a chapter with CRLF line endings got a lone carriage return in the wrapped name, such as `Mara\rHolt`.
 - `story rename` to the name an entity already has no longer rewrites its file. ([#726](https://github.com/danjdewhurst/story-skills/issues/726))
   - Before, the file was written although its text did not change.
 

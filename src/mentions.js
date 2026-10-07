@@ -364,7 +364,8 @@ const RENAME_COLLECTIONS = {
 };
 
 // The spaces, or the one line break, between two words of a name in prose.
-const NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
+// The line break comes first, so a CRLF break is taken whole, with its \r.
+const NAME_GAP = /([^\S\n]*\n[^\S\n]*|[^\S\n]+)/u;
 
 // story rename --prose: the forms of entity `kind` `id`'s name that prose
 // may use, each with the form of `newName` it becomes, the longest first.

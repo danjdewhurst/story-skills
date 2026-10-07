@@ -16044,7 +16044,7 @@ var RENAME_COLLECTIONS = {
   system: ["systems", "name"],
   term: ["glossaryTerms", "term"]
 };
-var NAME_GAP = /([^\S\n]+|[^\S\n]*\n[^\S\n]*)/u;
+var NAME_GAP = /([^\S\n]*\n[^\S\n]*|[^\S\n]+)/u;
 function renameForms(project, kind, id, newName, pack, titles) {
   const [collection, field] = RENAME_COLLECTIONS[kind];
   const entity = project[collection].find((entry) => entry.id === id);
