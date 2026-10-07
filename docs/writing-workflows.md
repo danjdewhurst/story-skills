@@ -72,7 +72,7 @@ The prompts on this page are examples. Rephrase them freely; the skill asks for 
 
 ### How the agent runs the CLI
 
-Every skill uses the first CLI it finds: the installed `story` command, then the bundled fallback that ships inside the `story-maintenance` skill, run with Node from the project folder. It uses a Story Skills checkout's `bin/story.js` instead only when you name the checkout or the agent is working in it. If none is available, the skill does the registry, backlink, and word-count work by hand. [Core concepts](concepts.md#the-bundled-fallback-cli) explains the lookup, and [Getting started](getting-started.md#install-the-story-cli) covers installation.
+Every skill uses the first CLI it finds: the installed `story` command, then the bundled fallback that ships inside the `story-maintenance` skill, run with Node from the project folder (for `init` and `import`, from the folder that will hold the new project). It uses a Story Skills checkout's `bin/story.js` instead only when you name the checkout or the agent is working in it. If none is available, the skill does the registry, backlink, and word-count work by hand. [Core concepts](concepts.md#the-bundled-fallback-cli) explains the lookup, and [Getting started](getting-started.md#install-the-story-cli) covers installation.
 
 The commands on this page use `story` and assume you are in the project root, so the path argument is `.`.
 
