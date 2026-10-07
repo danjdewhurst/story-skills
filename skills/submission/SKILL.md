@@ -198,6 +198,8 @@ story build . --format shunn
 ```
 
 These write `dist/<story-id>.shunn.docx` and `dist/<story-id>.shunn.md`.
+The DOCX has a running head (author, title, page number) on every page
+after the first.
 For a market that takes PDF, add `--pdf` to the `shunn` build: it renders
 `dist/<story-id>.shunn.pdf` (US Letter, Courier, double-spaced, running
 head) with a paged-media engine the user has installed, and stops with
@@ -254,7 +256,7 @@ publication history section from that reference, and check the tracker
 before suggesting a market: a story with an open exclusive submission goes
 nowhere else, and an exclusive market needs a story with no open
 submissions. For a market that reads anonymously, tell the user to strip
-the name, contact block, and byline from the Shunn build.
+the name, contact block, byline, and running head from the Shunn build.
 To assemble a collection, follow its "Assemble a collection" section:
 choose the stories, find the linking threads, propose an order, and draft
 the acknowledgements from the publication history.
