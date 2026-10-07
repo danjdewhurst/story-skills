@@ -140,6 +140,17 @@ describe("language packs", () => {
     expect(languagePack("fin")).toMatchObject({ code: "fi", locale: "fi" });
   });
 
+  // A tag that names an inherited property of an object is an unknown tag:
+  // the lookup tables must not answer for it with the property.
+  test("a tag named like an inherited property is unknown, not a crash", () => {
+    for (const tag of ["constructor", "__proto__"]) {
+      expect({ tag, lookup: lookupTag(tag) }).toEqual({ tag, lookup: ["und", null] });
+      expect(languagePack(tag)).toMatchObject({ code: "und", locale: "und" });
+    }
+    const { root } = languageProject("constructor");
+    expect(validateProject(root).errors.map((error) => error.code)).toContain("invalid-language");
+  });
+
   test("a set but invalid language resolves from its first subtag or the base pack, never English", () => {
     expect(languagePack("cs_CZ")).toMatchObject({ tag: "cs_CZ", locale: "cs", code: "und" });
     expect(languagePack("en_GB")).toMatchObject({ tag: "en_GB", locale: "en", code: "en" });

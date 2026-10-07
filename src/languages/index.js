@@ -79,7 +79,7 @@ export const GRANDFATHERED = {
 // only a first subtag that is a language (fr_FR is fr), else it is und.
 export function lookupTag(language) {
   const lower = language.toLowerCase();
-  if (GRANDFATHERED[lower] !== undefined) {
+  if (Object.hasOwn(GRANDFATHERED, lower)) {
     return GRANDFATHERED[lower];
   }
   const subtags = TAG_PATTERN.test(language) ? lower.split("-") : [lower.split(/[-_]/)[0]].filter((subtag) => /^[a-z]{2,3}$/.test(subtag));
