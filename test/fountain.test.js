@@ -221,6 +221,23 @@ describe("fountain text", () => {
     expect(timeOfDay("")).toBe("");
   });
 
+  test("time of day on a story calendar's longer day (#533)", () => {
+    // DAY is the middle half of the day: 07:30 to 22:29 of 30 hours.
+    expect(timeOfDay("07:29", undefined, 30)).toBe("NIGHT");
+    expect(timeOfDay("07:30", undefined, 30)).toBe("DAY");
+    expect(timeOfDay("22:29", undefined, 30)).toBe("DAY");
+    expect(timeOfDay("22:30", undefined, 30)).toBe("NIGHT");
+    expect(timeOfDay("27:00", undefined, 30)).toBe("NIGHT");
+    expect(timeOfDay("dawn", undefined, 30)).toBe("DAWN");
+    // 27:00 is not a time on a 24-hour day, so it is printed as written.
+    expect(timeOfDay("27:00")).toBe("27:00");
+
+    const root = lighthouse("calendar:\n  - month: Long Year\n    days: 400\n  - hours-per-day: 30\n");
+    const text = fs.readFileSync(buildBook(root, { format: "fountain" }).outFile, "utf8");
+    // 21:40 is NIGHT on a 24-hour day.
+    expect(text).toContain(".GALLERY - DAY\n\n= On the Gallery\n");
+  });
+
   test("sections, synopses, and notes stay single elements", () => {
     const text = fountainScript({
       title: "*Glass* [[Plates]]",

@@ -1436,14 +1436,14 @@ Chapters and scenes can carry a story `date` and `time`; `story continuity` and 
 | Field | Format |
 |-------|--------|
 | `date` | `YYYY-MM-DD`, and it must be a real calendar day (`2026-02-30` is rejected). A book with a [custom calendar](#custom-calendars) writes dates in that calendar instead. |
-| `time` | `HH:MM` on a 24-hour clock, or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
+| `time` | `HH:MM` on a 24-hour clock (or the day of a [custom calendar](#custom-calendars) with `hours-per-day`), or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`. |
 | `travel-hours` | A number of hours, zero or more. Scenes only. |
 
 `story timeline` sorts named times as 05:00 (`dawn`), 07:00 (`morning`), 12:00 (`midday`), 15:00 (`afternoon`), 19:00 (`evening`), and 23:00 (`night`). `story continuity` reads each as the span listed under [Route travel](#route-travel), for clock order and `travel-hours` as well as routes, so it reports only what is impossible on every reading. `story add chapter` and `story add scene` reject a malformed `--date` or `--time`. In hand-edited files, `story validate` errors (`invalid-date`) on a `YYYY-MM-DD` date that is not a real calendar day, such as `2024-13-45` or `2023-02-29`, and `story continuity` reports any malformed value as a warning. The same date format applies to `deadline` and `publication-date` in `story.md` and to `sessions[].date` in `progress.md`.
 
 ### Custom calendars
 
-A secondary world can keep its own calendar. Add a `calendar` list to `story.md`: one entry per month in order, an optional `weekdays` entry, and optional `era` entries in order. Chapter and scene `date` values are then read in that calendar, and `story timeline`, the clock and `travel-hours` checks, route travel, `story knowledge`, and progression and death order compare them as they compare `YYYY-MM-DD` dates. Without `calendar`, nothing changes.
+A secondary world can keep its own calendar. Add a `calendar` list to `story.md`: one entry per month in order, an optional `weekdays` entry, optional `era` entries in order, and an optional `hours-per-day` entry. Chapter and scene `date` values are then read in that calendar, and `story timeline`, the clock and `travel-hours` checks, route travel, `story knowledge`, and progression and death order compare them as they compare `YYYY-MM-DD` dates. Without `calendar`, nothing changes.
 
 ```yaml
 calendar:
@@ -1467,8 +1467,9 @@ calendar:
 | month | `month` (name), `days` (integer ≥ 1) | A month, in calendar order. At least one is required. A festival or other days outside the months can be a short month of their own. |
 | weekdays | `weekdays` (list of names), `first-weekday` (optional) | The days of the week, in order, once. `first-weekday` is the weekday of the first day of year 1 of the first forward era; it defaults to the first weekday listed. |
 | era | `era` (name), `abbrev`, `direction`, `years` (all optional) | An era, in order. `direction: backward` counts years down toward the next era, as BC does, and only the first era may. Every forward era except the last needs `years`, how long it lasted, so the next era knows where it starts; on the last, `years` caps the dates. |
+| hours-per-day | `hours-per-day` (integer from 1 to 100) | The hours in a day, once. Without it a day has 24. |
 
-Names start with something other than a digit and have no commas, and the months, the weekdays, and the era names and abbreviations must each be unique, ignoring case. Every year has the same length, the sum of the months, so there are no leap days. `time` keeps its 24-hour clock.
+Names start with something other than a digit and have no commas, and the months, the weekdays, and the era names and abbreviations must each be unique, ignoring case. Every year has the same length, the sum of the months, so there are no leap days.
 
 Dates take a day, a month name, and a year, then an era name or abbreviation, in any letter case. These all name the same day:
 
@@ -1480,7 +1481,21 @@ Dates take a day, a month name, and a year, then an era name or abbreviation, in
 
 Year 1 of a backward era is the year just before year 1 of the era after it, so the day after `6 Embertide 1 BW` is `1 Frostwane 1 AE`.
 
-`story validate` errors (`invalid-calendar`) on a calendar it cannot read, and then reads no dates against it. Under a valid calendar, a chapter or scene `date` that starts with a digit or a weekday must be a day of the calendar: `31 Thaw 302 AE` in a 30-day month, an unknown month or era, a year past an era's `years`, a wrong ordinal (`3nd`), or the wrong weekday is an `invalid-date` error that says why. Other text, such as `the night of the fire`, is free text, which `story continuity` warns about (`malformed-date`) as before. `story add chapter` and `story add scene` take `--date` in the calendar. A `YYYY-MM-DD` value is read as year, month number, and day of the calendar. `deadline`, `publication-date`, progress sessions, and the [release schedule](#release-schedule) are real-world dates, and stay `YYYY-MM-DD`.
+`story validate` errors (`invalid-calendar`) on a calendar it cannot read, including an `hours-per-day` that is not a whole number from 1 to 100 or is given twice, and then reads no dates against it. Under a valid calendar, a chapter or scene `date` that starts with a digit or a weekday must be a day of the calendar: `31 Thaw 302 AE` in a 30-day month, an unknown month or era, a year past an era's `years`, a wrong ordinal (`3nd`), or the wrong weekday is an `invalid-date` error that says why. Other text, such as `the night of the fire`, is free text, which `story continuity` warns about (`malformed-date`) as before. `story add chapter` and `story add scene` take `--date` in the calendar. A `YYYY-MM-DD` value is read as year, month number, and day of the calendar. `deadline`, `publication-date`, progress sessions, and the [release schedule](#release-schedule) are real-world dates, and stay `YYYY-MM-DD`.
+
+#### Hours per day
+
+A world whose day is not 24 hours long can say so with an `hours-per-day` entry:
+
+```yaml
+calendar:
+  - month: Thaw
+    days: 30
+  # ...the other months
+  - hours-per-day: 30
+```
+
+Chapter and scene `time` values then run from `00:00` to the last minute of that day (`29:59` for 30 hours), and an hour still has 60 minutes. `HH:MM` has two hour digits, so the limit is 100 hours. The clock order, `travel-hours`, and route checks count a day as that many hours, so the hours from `08:00` one day to `09:00` the next are 31 on a 30-hour day. The named times keep their share of the day: on a 30-hour day `dawn` covers 05:00 to 08:44 and `night` 25:00 to 29:59, and `story timeline` sorts `night` at 28:45. A `--time` past the end of the day is refused by `story add`, and `story continuity` reports one in a file as `malformed-time`, saying how long the story calendar's day is. A `story build --format fountain` heading reads an `HH:MM` time as `DAY` in the middle half of the day. Without `hours-per-day`, every time reads as before.
 
 ### Route travel
 
@@ -1492,7 +1507,7 @@ error: scenes/chapter-01-scene-02.md puts mara-quill at town-b 2h after scenes/c
 
 A sighting in another strand is not the other end of a journey, and a crossing between strands is not inferred.
 
-Only scene `date`, `time`, and `location` count; chapter dates and undated scenes are not used. The gap is always read as generously as the times allow, so only journeys impossible on any reading are reported. An exact `HH:MM` is a single moment. A named time covers a span: `dawn` 04:00 to 06:59, `morning` 05:00 to 11:59, `midday` 11:00 to 13:59, `afternoon` 12:00 to 17:59, `evening` 17:00 to 21:59, and `night` 20:00 to 23:59. A scene with no time covers the whole day.
+Only scene `date`, `time`, and `location` count; chapter dates and undated scenes are not used. The gap is always read as generously as the times allow, so only journeys impossible on any reading are reported. An exact `HH:MM` is a single moment. A named time covers a span: `dawn` 04:00 to 06:59, `morning` 05:00 to 11:59, `midday` 11:00 to 13:59, `afternoon` 12:00 to 17:59, `evening` 17:00 to 21:59, and `night` 20:00 to 23:59, each the same share of a longer or shorter day under a calendar's [`hours-per-day`](#hours-per-day). A scene with no time covers the whole day.
 
 A character in two scenes of the same strand at different places at the same exact `HH:MM` on the same day is an error even without a route between the places:
 

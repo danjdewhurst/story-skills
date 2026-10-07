@@ -1,5 +1,5 @@
 import path from "node:path";
-import { calendarShaped, parseCalendarDate } from "./calendar.js";
+import { DEFAULT_HOURS_PER_DAY, calendarShaped, dayHours, parseCalendarDate } from "./calendar.js";
 import { dismissByExemptions } from "./exemptions.js";
 import { err, warn } from "./findings.js";
 import { projectPath } from "./files.js";
@@ -1035,6 +1035,9 @@ function stateChangeTargets(change, artifact) {
 // moment the story has reached, and scene travel-hours asserts a minimum
 // time since that moment. Named times are windows (see sceneWindow), as in
 // the route check, so only what is impossible on every reading is reported.
+// The minutes below are for a 24-hour day; a story calendar's longer or
+// shorter day (its `hours-per-day`) scales them, so each named time keeps
+// its share of the day.
 const TIME_RANKS = new Map([
   ["dawn", 300],
   ["morning", 420],
@@ -1048,13 +1051,15 @@ function checkClock(project, errors, warnings) {
   // A broken calendar is a validate error; every date it cannot read is
   // not reported again here.
   const calendarInvalid = project.calendar?.invalid === true;
+  const hours = dayHours(project.calendar);
+  const clock = hours === DEFAULT_HOURS_PER_DAY ? "" : ` (the story calendar's ${hours}-hour day runs 00:00 to ${lastClockTime(hours)})`;
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
     if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
-    if (scene.time !== "" && parseClockTime(scene.time) === undefined) {
-      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"`, label, chapterOf(scene)));
+    if (scene.time !== "" && parseClockTime(scene.time, hours) === undefined) {
+      warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"${clock}`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
       warnings.push(warn("negative-travel-hours", `${label} has negative travel-hours ${scene.travelHours}`, label, chapterOf(scene)));
@@ -1067,8 +1072,8 @@ function checkClock(project, errors, warnings) {
     if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative(project, chapter.file), chapter.id));
     }
-    if (chapter.time !== "" && parseClockTime(chapter.time) === undefined) {
-      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"`, relative(project, chapter.file), chapter.id));
+    if (chapter.time !== "" && parseClockTime(chapter.time, hours) === undefined) {
+      warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"${clock}`, relative(project, chapter.file), chapter.id));
     }
   }
 
@@ -1085,7 +1090,7 @@ function checkClock(project, errors, warnings) {
     if (!parsed) {
       continue;
     }
-    const minutes = parseClockTime(unit.time);
+    const minutes = parseClockTime(unit.time, hours);
     stamps.push({
       label: isChapter ? `Chapter ${unit.number}` : relative(project, unit.file),
       file: relative(project, unit.file),
@@ -1095,7 +1100,7 @@ function checkClock(project, errors, warnings) {
       time: minutes === undefined ? "" : unit.time.trim(),
       days: parsed.days,
       minutes,
-      ...sceneWindow(parsed.days, unit.time),
+      ...sceneWindow(parsed.days, unit.time, hours),
       travelHours: isChapter ? 0 : unit.travelHours,
       flashback: !isChapter && unit.flashbackTo !== ""
     });
@@ -1103,7 +1108,7 @@ function checkClock(project, errors, warnings) {
   for (const stamps of strands.values()) {
     checkClockOrder(stamps, errors, warnings);
   }
-  checkRouteTravel(project, errors);
+  checkRouteTravel(project, hours, errors);
 }
 
 // Story-order units shared by story timeline and the continuity clock: each
@@ -1234,13 +1239,28 @@ const TIME_RANGES = new Map([
 ]);
 
 // The earliest and latest minute a dated scene can happen: an exact time is
-// a point, a named time its span, and no time the whole day.
-function sceneWindow(days, time) {
+// a point, a named time its span, and no time the whole day. A day holds
+// `hours` hours, so a later day starts that many hours after this one.
+function sceneWindow(days, time, hours = DEFAULT_HOURS_PER_DAY) {
   const text = String(time ?? "").trim().toLowerCase();
   const named = TIME_RANGES.get(text);
-  const exact = named === undefined ? parseClockTime(text) : undefined;
-  const [from, to] = named ?? (exact === undefined ? [0, 1439] : [exact, exact]);
-  return { earliest: days * 1440 + from, latest: days * 1440 + to, exact: exact !== undefined };
+  const exact = named === undefined ? parseClockTime(text, hours) : undefined;
+  const dayMinutes = hours * 60;
+  // A span runs to the minute before the next one starts, so scaled spans
+  // still meet and the last one still ends at the day's last minute.
+  const span = named && [dayMinute(named[0], hours), dayMinute(named[1] + 1, hours) - 1];
+  const [from, to] = span ?? (exact === undefined ? [0, dayMinutes - 1] : [exact, exact]);
+  return { earliest: days * dayMinutes + from, latest: days * dayMinutes + to, exact: exact !== undefined };
+}
+
+// A minute of a 24-hour day, moved to the same share of an `hours`-hour day.
+function dayMinute(minute, hours) {
+  return Math.round(minute * hours / DEFAULT_HOURS_PER_DAY);
+}
+
+// The last minute of an `hours`-hour day: 23:59 for 24.
+function lastClockTime(hours) {
+  return `${String(hours - 1).padStart(2, "0")}:59`;
 }
 
 // Location routes give the fastest journey between places. A character seen
@@ -1256,7 +1276,7 @@ function sceneWindow(days, time) {
 // scene times, so only journeys impossible on any reading are reported,
 // once per scene. Two different places at the same exact minute are
 // reported whatever the routes say, since no journey takes no time.
-function checkRouteTravel(project, errors) {
+function checkRouteTravel(project, hours, errors) {
   const graph = routeGraph(project.locations);
   // A scene with no pov of its own is told by its chapter's POV, as story
   // timeline shows it. Strand is the chapter's, as the clock reads it.
@@ -1268,7 +1288,7 @@ function checkRouteTravel(project, errors) {
     if (!parsed || scene.location === "") {
       continue;
     }
-    const window = sceneWindow(parsed.days, scene.time);
+    const window = sceneWindow(parsed.days, scene.time, hours);
     const present = new Set(scene.characters.map(idText).filter((id) => id !== ""));
     const pov = idText(scene.pov) || chapterPov.get(scene.chapter) || "";
     if (pov !== "") {
@@ -1508,12 +1528,16 @@ export function parseStoryDate(value, calendar = null) {
   return parsed.problem ? undefined : parsed;
 }
 
-export function storyTimeError(value) {
+// A chapter or scene `time`, read on the story.md calendar's day when the
+// book has one.
+export function storyTimeError(value, { calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
   }
-  if (parseClockTime(String(value)) === undefined) {
-    return `time must be HH:MM or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
+  const hours = dayHours(calendar);
+  if (parseClockTime(String(value), hours) === undefined) {
+    const clock = hours === DEFAULT_HOURS_PER_DAY ? "HH:MM" : `HH:MM from 00:00 to ${lastClockTime(hours)} (the story calendar's ${hours}-hour day)`;
+    return `time must be ${clock} or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
   }
   return "";
 }
@@ -1537,14 +1561,16 @@ export function parseClockDate(value) {
   return { text: value.trim(), days };
 }
 
-export function parseClockTime(value) {
+// The minute of the day a `time` names, on a day of `dayLength` hours (the
+// story calendar's `hours-per-day`), or undefined when it names none.
+export function parseClockTime(value, dayLength = DEFAULT_HOURS_PER_DAY) {
   const text = value.trim().toLowerCase();
   if (text === "") {
     return undefined;
   }
   const named = TIME_RANKS.get(text);
   if (named !== undefined) {
-    return named;
+    return dayMinute(named, dayLength);
   }
   const match = /^(\d{2}):(\d{2})$/.exec(text);
   if (!match) {
@@ -1552,7 +1578,7 @@ export function parseClockTime(value) {
   }
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) {
+  if (hours >= dayLength || minutes > 59) {
     return undefined;
   }
   return hours * 60 + minutes;

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { parseCalendar, parseCalendarDate } from "../src/calendar.js";
+import { dayHours, parseCalendar, parseCalendarDate } from "../src/calendar.js";
 import { chapterChronology } from "../src/chronology.js";
 import { runCli } from "../src/cli.js";
-import { parseStoryDate, storyDateError } from "../src/continuity.js";
+import { parseClockTime, parseStoryDate, storyDateError, storyTimeError } from "../src/continuity.js";
 import { checkProjectContinuity, createStoryProject, scanProject, storyTimeline, validateProject } from "../src/story.js";
+import { checkProjectSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
@@ -170,14 +171,14 @@ describe("custom calendar dates (#407)", () => {
   test("calendar problems are listed", () => {
     const problems = (value) => parseCalendar(value).problems;
     expect(problems(undefined)).toEqual([]);
-    expect(problems("Thaw")).toEqual(["must be a list of month, era, and weekdays entries"]);
+    expect(problems("Thaw")).toEqual(["must be a list of month, era, weekdays, and hours-per-day entries"]);
     expect(problems([])).toEqual(["needs at least one month entry, such as - month: Thaw then days: 30"]);
     expect(problems([{ month: "Thaw" }])).toEqual(["entry 1 month Thaw needs days, such as days: 30"]);
     expect(problems([{ month: "Thaw", days: 0 }])).toEqual(["entry 1 days must be a whole number 1 or more, got 0"]);
     expect(problems([{ month: "3rd", days: 3 }])).toEqual(["entry 1 month must be a name that does not start with a digit and has no comma, got 3rd"]);
     expect(problems([{ month: "Thaw", days: 3 }, { month: "thaw", days: 3 }])).toEqual(["month thaw appears more than once"]);
-    expect(problems([{ month: "Thaw", days: 3, era: "Old" }])).toEqual(["entry 1 must name exactly one of month, era, or weekdays, not month and era"]);
-    expect(problems([{ month: "Thaw", days: 3 }, { days: 3 }])).toEqual(["entry 2 must name exactly one of month, era, or weekdays"]);
+    expect(problems([{ month: "Thaw", days: 3, era: "Old" }])).toEqual(["entry 1 must name exactly one of month, era, weekdays, or hours-per-day, not month and era"]);
+    expect(problems([{ month: "Thaw", days: 3 }, { days: 3 }])).toEqual(["entry 2 must name exactly one of month, era, weekdays, or hours-per-day"]);
     expect(problems([{ month: "Thaw", days: 3 }, { era: "Old", direction: "sideways" }])).toEqual(["entry 2 direction must be forward or backward, got sideways"]);
     expect(problems([{ month: "Thaw", days: 3 }, { era: "Old" }, { era: "New" }])).toEqual(["era Old needs years, the number of years it lasts, since another era follows it"]);
     expect(problems([{ month: "Thaw", days: 3 }, { era: "Old", years: 9 }, { era: "Back", direction: "backward" }])).toEqual(["era Back counts backward, but only the first era may"]);
@@ -187,7 +188,7 @@ describe("custom calendar dates (#407)", () => {
     expect(problems([{ month: "Thaw", days: 3 }, { weekdays: [] }])).toEqual(["entry 2 weekdays needs at least one name"]);
     expect(problems([{ month: "Thaw", days: 3 }, { weekdays: "One" }])).toEqual(["entry 2 weekdays must be a list of names that do not start with a digit and have no comma, such as [Hearthday, Stoneday]"]);
     expect(problems([{ month: "Thaw", days: 3 }, { weekdays: ["One"], "first-weekday": 1 }])).toEqual(["entry 2 first-weekday must be text, got 1"]);
-    expect(problems([{ month: "Thaw", days: 3 }, "Bloom"])).toEqual(["entry 2 must be a month, era, or weekdays entry, such as - month: Thaw then days: 30"]);
+    expect(problems([{ month: "Thaw", days: 3 }, "Bloom"])).toEqual(["entry 2 must be a month, era, weekdays, or hours-per-day entry, such as - month: Thaw then days: 30"]);
   });
 
   test("without a calendar, dates read as before", () => {
@@ -329,5 +330,134 @@ describe("calendar dates in a project (#407)", () => {
     const project = scanProject(path.join(repoRoot, "examples", "the-last-ember"));
     expect(project.calendar.months).toHaveLength(13);
     expect(parseStoryDate("3 Thaw 302 AE", project.calendar).days).toBe(301 * 366 + 30 + 2);
+  });
+});
+
+describe("calendar hours per day (#533)", () => {
+  const MONTHS = [{ month: "Thaw", days: 30 }, { month: "Bloom", days: 30 }];
+
+  // The test calendar with an hours-per-day entry after the eras.
+  function dayProject(hours) {
+    const root = calendarProject();
+    setDayHours(root, hours);
+    return root;
+  }
+
+  function setDayHours(root, hours) {
+    const storyPath = path.join(root, "story.md");
+    const story = fs.readFileSync(storyPath, "utf8").replace(/ {2}- hours-per-day: .*\n/, "");
+    fs.writeFileSync(storyPath, story.replace("    abbrev: AE\n", `    abbrev: AE\n  - hours-per-day: ${hours}\n`), "utf8");
+  }
+
+  test("hours-per-day sets the length of the day, 24 when unset", () => {
+    expect(dayHours(null)).toBe(24);
+    expect(dayHours(parseCalendar(MONTHS).calendar)).toBe(24);
+    expect(dayHours(parseCalendar([...MONTHS, { "hours-per-day": 30 }]).calendar)).toBe(30);
+    expect(dayHours(parseCalendar([{ "hours-per-day": 1 }, ...MONTHS]).calendar)).toBe(1);
+    expect(dayHours(parseCalendar([...MONTHS, { "hours-per-day": 100 }]).calendar)).toBe(100);
+    // An invalid calendar keeps a valid hours-per-day, so its times still read.
+    expect(dayHours(parseCalendar([{ month: "Thaw" }, { "hours-per-day": 30 }]).calendar)).toBe(30);
+    expect(dayHours(parseCalendar([{ month: "Thaw" }, { "hours-per-day": 0 }]).calendar)).toBe(24);
+    expect(dayHours(parseCalendar("Thaw").calendar)).toBe(24);
+  });
+
+  test("hours-per-day problems are listed", () => {
+    const problems = (...entries) => parseCalendar([...MONTHS, ...entries]).problems;
+    for (const bad of [0, -3, 101, 2.5, "30", true]) {
+      expect(problems({ "hours-per-day": bad })).toEqual([`entry 3 hours-per-day must be a whole number from 1 to 100, got ${bad}`]);
+    }
+    expect(problems({ "hours-per-day": 30 }, { "hours-per-day": 30 })).toEqual(["entry 4 repeats hours-per-day; give it once"]);
+    expect(problems({ month: "Ash", days: 3, "hours-per-day": 30 })).toEqual(["entry 3 must name exactly one of month, era, weekdays, or hours-per-day, not month and hours-per-day"]);
+    // The day's length alone is not a calendar.
+    expect(parseCalendar([{ "hours-per-day": 30 }]).problems).toEqual(["needs at least one month entry, such as - month: Thaw then days: 30"]);
+  });
+
+  test("a time's hour must be below hours-per-day", () => {
+    expect(parseClockTime("23:59")).toBe(1439);
+    expect(parseClockTime("24:00")).toBeUndefined();
+    expect(parseClockTime("25:30", 30)).toBe(1530);
+    expect(parseClockTime("29:59", 30)).toBe(1799);
+    expect(parseClockTime("30:00", 30)).toBeUndefined();
+    expect(parseClockTime("11:59", 12)).toBe(719);
+    expect(parseClockTime("12:00", 12)).toBeUndefined();
+    expect(parseClockTime("99:59", 100)).toBe(5999);
+    // Named times keep their share of the day: dawn is 05:00 of 24 hours.
+    expect(parseClockTime("dawn")).toBe(300);
+    expect(parseClockTime("dawn", 30)).toBe(375);
+    expect(parseClockTime("night", 12)).toBe(690);
+
+    const thirty = parseCalendar([...MONTHS, { "hours-per-day": 30 }]).calendar;
+    expect(storyTimeError("27:15", { calendar: thirty })).toBe("");
+    expect(storyTimeError("30:00", { calendar: thirty })).toBe("time must be HH:MM from 00:00 to 29:59 (the story calendar's 30-hour day) or a named part of day (dawn, morning, midday, afternoon, evening, night), got 30:00");
+    expect(storyTimeError("24:00", { calendar: calendar() })).toBe("time must be HH:MM or a named part of day (dawn, morning, midday, afternoon, evening, night), got 24:00");
+    expect(storyTimeError("24:00")).toBe(storyTimeError("24:00", { calendar: calendar() }));
+  });
+
+  test("validate and the schema agree on hours-per-day", () => {
+    const root = calendarProject();
+    for (const [hours, schemaError] of [
+      [30, null],
+      [1, null],
+      [100, null],
+      [0, "$.story.calendar[9].hours-per-day: 0 is below the minimum 1"],
+      [101, "$.story.calendar[9].hours-per-day: 101 is above the maximum 100"],
+      [2.5, "$.story.calendar[9].hours-per-day: expected integer, got number"]
+    ]) {
+      setDayHours(root, hours);
+      const errors = validateProject(root).errors.filter((error) => error.code === "invalid-calendar");
+      expect(messages(errors)).toEqual(schemaError === null ? [] : [`story.md calendar entry 10 hours-per-day must be a whole number from 1 to 100, got ${hours}`]);
+      expect(checkProjectSchema(root)).toEqual(schemaError === null ? [] : [schemaError]);
+    }
+  });
+
+  test("clock, travel, and route checks roll over on the calendar's day", () => {
+    // Chapter 1 sets out at 08:00; chapter 2 arrives after a 30-hour route
+    // at 09:00 the next day, and chapter 3 is later that day.
+    const root = dayProject(30);
+    writeScene(root, 1, "date: 1 Thaw 1 AE\ntime: \"08:00\"\nlocation: the-vale");
+    writeScene(root, 2, "date: 2 Thaw 1 AE\ntime: \"09:00\"\nlocation: the-citadel\ntravel-hours: 30");
+    writeScene(root, 3, "date: 2 Thaw 1 AE\ntime: \"27:00\"\nlocation: the-citadel");
+    expect(validateProject(root).errors).toEqual([]);
+    // A 30-hour day leaves 31 hours for the journey.
+    let result = checkProjectContinuity(root);
+    expect(result.errors).toEqual([]);
+    expect(codes(result.warnings)).not.toContain("malformed-time");
+    expect(codes(result.warnings)).not.toContain("clock-backward");
+
+    // A 26-hour day leaves 27, and has no 27:00.
+    setDayHours(root, 26);
+    result = checkProjectContinuity(root);
+    expect(messages(result.errors)).toEqual([
+      "scenes/chapter-02-scene-01.md allows only 27h for travel of 30h",
+      "scenes/chapter-02-scene-01.md puts sera at the-citadel 27h after scenes/chapter-01-scene-01.md at the-vale, but the fastest route takes 30h"
+    ]);
+    expect(messages(result.warnings.filter((warning) => warning.code === "malformed-time"))).toEqual([
+      "scenes/chapter-03-scene-01.md has malformed time \"27:00\" (the story calendar's 26-hour day runs 00:00 to 25:59)"
+    ]);
+  });
+
+  test("named times keep their share of a longer day", () => {
+    const root = dayProject(30);
+    writeScene(root, 1, "date: 1 Thaw 1 AE\ntime: night");
+    writeScene(root, 2, "date: 1 Thaw 1 AE\ntime: \"27:00\"");
+    writeScene(root, 3, "date: 1 Thaw 1 AE\ntime: evening");
+    // evening sorts at 19:00 of 24 hours, 23:45 of 30; night at 23:00, 28:45.
+    expect(storyTimeline(root).chronology.map((entry) => entry.time)).toEqual(["evening", "27:00", "night"]);
+    // night spans 25:00 to 29:59 and evening 21:15 to 27:29, so neither
+    // 27:00 after night nor evening after 27:00 runs backward; dawn, 05:00
+    // to 08:44, does.
+    const backward = () => messages(checkProjectContinuity(root).warnings.filter((warning) => warning.code === "clock-backward"));
+    expect(backward()).toEqual([]);
+    writeScene(root, 3, "date: 1 Thaw 1 AE\ntime: dawn");
+    expect(backward()).toEqual(["scenes/chapter-03-scene-01.md timestamp runs backward"]);
+  });
+
+  test("story add reads --time on the calendar's day", () => {
+    const root = dayProject(30);
+    expect(runCli(["add", "scene", "Late Watch", "--chapter", "chapter-01", "--time", "29:30"], memoryIo(root))).toBe(0);
+    expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8")).toContain("time: \"29:30\"");
+    const bad = memoryIo(root);
+    expect(runCli(["add", "chapter", "Too Late", "--time", "30:00"], bad)).not.toBe(0);
+    expect(bad.error()).toContain("time must be HH:MM from 00:00 to 29:59 (the story calendar's 30-hour day)");
   });
 });

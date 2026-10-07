@@ -1510,7 +1510,7 @@ export function chapterFile(title, number, options, unit, calendar = null) {
   if (dateError) {
     throw usageError(dateError);
   }
-  const timeError = storyTimeError(options.time);
+  const timeError = storyTimeError(options.time, { calendar });
   if (timeError) {
     throw usageError(timeError);
   }
@@ -1553,7 +1553,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
   if (dateError) {
     throw usageError(dateError);
   }
-  const timeError = storyTimeError(options.time);
+  const timeError = storyTimeError(options.time, { calendar });
   if (timeError) {
     throw usageError(timeError);
   }

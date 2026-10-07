@@ -1,6 +1,7 @@
 // Manuscript assembly, export, synopsis, and build formats.
 import fs from "node:fs";
 import path from "node:path";
+import { dayHours } from "./calendar.js";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
 import { fileSystemName, isInsideGitDirectory, isPlanning, isShortNameOf, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
@@ -471,6 +472,7 @@ function screenplayOutline(project, book) {
     labels: book.meta.labels,
     form: typeof project.story.data.form === "string" ? project.story.data.form : "",
     pack: project.pack,
+    hoursPerDay: dayHours(project.calendar),
     chapters,
     warnings
   };

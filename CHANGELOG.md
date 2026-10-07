@@ -42,6 +42,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story import` now keeps a Story Skills chapter's `author`, and `--bylines` sets each other chapter's `author` from its by-line or its file's frontmatter. (#519)
   - A by-line such as `By Ben Other`, or `*by Ada Writer and Ben Other*` as `story export` writes it, is taken out of the prose, and several names become a list.
   - A line that is not clearly a by-line stays in the prose, and without the flag, prose that opens with "By" is left alone.
+- A custom `calendar` can set the length of the day with an optional `hours-per-day` entry, from 1 to 100 hours, 24 when unset. (#533)
+  - Scene and chapter times run to the last minute of that day, and the clock, `travel-hours`, and route checks count that many hours per day.
+  - Named times such as `night` cover the same share of a longer or shorter day, and a screenplay heading reads `HH:MM` as `DAY` over the middle half of it.
+  - `story validate` and the schema check the value, and `story add --time` and `story continuity` check times against it; while it cannot be read, `HH:MM` times are not reported as malformed.
 
 ### Changed
 
