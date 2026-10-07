@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
-import { EXPECTED_WARNINGS, checkExamples, collectAdvisory } from "../scripts/check-examples.js";
+import { EXPECTED_WARNINGS, checkExamples, collectAdvisory, staleRegistries } from "../scripts/check-examples.js";
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
@@ -89,6 +89,17 @@ describe("check-examples", () => {
     // Every example that keeps a warning says why.
     for (const entry of Object.values(EXPECTED_WARNINGS).flatMap(Object.values)) {
       expect(entry.reason.trim()).not.toBe("");
+    }
+  });
+});
+
+describe("#99 shipped examples have current registries", () => {
+  test("reindex is a no-op on every example", () => {
+    for (const name of fs.readdirSync(examplesRoot).sort()) {
+      if (!fs.existsSync(path.join(examplesRoot, name, "story.md"))) {
+        continue;
+      }
+      expect({ name, stale: staleRegistries(path.join(examplesRoot, name)) }).toEqual({ name, stale: [] });
     }
   });
 });

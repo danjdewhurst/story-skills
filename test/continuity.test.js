@@ -88,6 +88,11 @@ function continuity(root) {
   return checkContinuity(scanProject(root));
 }
 
+function newProject(title = "Bugs") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title, force: false }).root;
+}
+
 describe("continuity checks", () => {
   test("flags dead characters, cast mismatches, and numbering gaps", () => {
     const cwd = makeTempDir();
@@ -895,5 +900,23 @@ knowledge-state:
     const state = fs.readFileSync(path.join(root, "continuity", "state.md"), "utf8");
     expect(state).toContain("owner: agent-forty");
     expect(state).toContain("character: agent-forty");
+  });
+});
+
+describe("#224 chapter numbering that starts after 1", () => {
+  test("continuity warns when chapters before the first are missing", () => {
+    const root = newProject();
+    for (const number of [3, 4, 6]) {
+      createEntity(root, { kind: "chapter", name: `C${number}`, number });
+    }
+    const warnings = messages(checkProjectContinuity(root).warnings);
+    expect(warnings).toContain("Chapter numbering starts at 3, not 1");
+    expect(warnings).toContain("Chapter numbering skips from 4 to 6");
+  });
+
+  test("a book starting at chapter 1 gets no start warning", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    expect(messages(checkProjectContinuity(root).warnings).filter((warning) => warning.includes("starts at"))).toEqual([]);
   });
 });

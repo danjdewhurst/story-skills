@@ -3,15 +3,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
+import { kebabCase } from "../src/markdown.js";
 import {
   createEntity,
   createStoryProject,
+  namesReport,
   renameEntity,
   scanProject,
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function project(title) {
   return createStoryProject({ cwd: makeTempDir(), title, force: false }).root;
@@ -26,6 +28,11 @@ function invoke(cwd, argv) {
 function frontmatter(root, ...parts) {
   const file = path.join(root, ...parts);
   return parseFrontmatter(fs.readFileSync(file, "utf8"), file).data;
+}
+
+function newProject(title = "Bugs") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title, force: false }).root;
 }
 
 describe("--id for names outside ASCII", () => {
@@ -131,5 +138,29 @@ describe("--id for names outside ASCII", () => {
     const wrongCommand = invoke(root, ["remove", "character", "petr-ilyich", "--id", "petr"]);
     expect(wrongCommand.code).toBe(2);
     expect(wrongCommand.err).toBe("--id does not apply to story remove\n");
+  });
+});
+
+describe("#71 ids and names fold Latin letters without decompositions", () => {
+  test("kebabCase transliterates special Latin letters", () => {
+    expect(["Æthelred", "Łukasz Nowak", "Søren", "Straße", "Đorđe", "Þórr", "Œuvre", "Zoë"].map(kebabCase))
+      .toEqual(["aethelred", "lukasz-nowak", "soren", "strasse", "dorde", "thorr", "oeuvre", "zoe"]);
+  });
+
+  test("story add derives the folded id", () => {
+    const root = newProject();
+    expect(createEntity(root, { kind: "character", name: "Łukasz Nowak" }).id).toBe("lukasz-nowak");
+    expect(createEntity(root, { kind: "character", name: "Søren" }).id).toBe("soren");
+  });
+
+  test("story names treats Lukasz and Łukasz as the same name", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Łukasz Nowak" });
+    createEntity(root, { kind: "character", name: "Søren" });
+    const report = namesReport(root, ["Lukasz", "Soren"]);
+    expect(messages(report.errors)).toEqual([
+      "\"Lukasz\" clashes with character lukasz-nowak (Łukasz)",
+      "\"Soren\" clashes with character soren (Søren)"
+    ]);
   });
 });

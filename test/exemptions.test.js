@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { checkContinuity } from "../src/continuity.js";
-import { createStoryProject, scanProject, validateProject } from "../src/story.js";
+import { checkProjectContinuity, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
 import { runCli } from "../src/cli.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -51,6 +51,36 @@ function invoke(cwd, argv) {
   const io = memoryIo(cwd);
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
+}
+
+function newProject(title = "Bugs") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title, force: false }).root;
+}
+
+function editFile(file, edit) {
+  fs.writeFileSync(file, edit(fs.readFileSync(file, "utf8")), "utf8");
+}
+
+function posthumousProject() {
+  const root = newProject();
+  for (const name of ["Ann", "Joann"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  // An outline died-in is planned, not in force, so the death chapter is drafted
+  // before a later cast can be posthumous.
+  for (const number of [1, 2, 3]) {
+    createEntity(root, { kind: "chapter", name: `C${number}`, number, status: "draft" });
+  }
+  for (const id of ["ann", "joann"]) {
+    editFile(path.join(root, "characters", `${id}.md`), (text) => text.replace("status: alive", "status: deceased\ndied-in: chapter-01"));
+  }
+  editFile(path.join(root, "chapters", "chapter-03.md"), (text) => text.replace("characters: []", "characters:\n  - ann\n  - joann"));
+  return root;
+}
+
+function writeExemptionLog(root, entries) {
+  writeMarkdown(path.join(root, "continuity", "exemptions.md"), `type: exemption-log\nexemptions:\n${entries}`);
 }
 
 describe("continuity exemptions", () => {
@@ -269,5 +299,38 @@ exemptions:
     const result = validateProject(root);
     expect(result.errors.length).toBeGreaterThan(0);
     expect(messages(result.errors)[0]).toContain("continuity/exemptions.md");
+  });
+});
+
+describe("#162 exemptions", () => {
+  test("a leading space in a pattern is kept as a word boundary", () => {
+    const root = posthumousProject();
+    writeExemptionLog(root, '  - pattern: " ann, who died in chapter-01"\n    reason: "Ann is a ghost"');
+    const result = checkProjectContinuity(root);
+    expect(result.dismissed.map((entry) => entry.finding.message)).toEqual([expect.stringContaining("lists ann, who died")]);
+    expect(messages(result.errors)).toContain("chapters/chapter-03.md lists joann, who died in chapter-01; move posthumous appearances to mentions");
+  });
+
+  test("an entry without a reason dismisses nothing", () => {
+    const root = posthumousProject();
+    writeExemptionLog(root, '  - pattern: "chapter-03.md lists ann"');
+    expect(checkProjectContinuity(root).dismissed).toEqual([]);
+    expect(messages(validateProject(root).errors)).toContain("continuity/exemptions.md exemptions[0] is missing a non-empty reason");
+  });
+
+  test("a refused exemptions file or state file is named by its project path", () => {
+    const root = posthumousProject();
+    fs.mkdirSync(path.join(root, "continuity", "exemptions.md"));
+    const result = checkProjectContinuity(root);
+    const refusal = messages(result.errors).find((error) => error.startsWith("continuity/exemptions.md:"));
+    expect(refusal).toBe("continuity/exemptions.md: Refusing to read: not a regular file");
+
+    const statePath = path.join(root, "continuity", "state.md");
+    const outside = path.join(makeTempDir(), "state.md");
+    fs.renameSync(statePath, outside);
+    fs.symlinkSync(outside, statePath);
+    const errors = messages(validateProject(root).errors).join("\n");
+    expect(errors).toContain("continuity/state.md");
+    expect(errors).not.toContain(root);
   });
 });
