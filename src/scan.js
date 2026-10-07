@@ -510,19 +510,26 @@ export function scanProject(root) {
       risk: asArray(data.risk),
       reviewedBy: asArray(data["reviewed-by"])
     }), scanErrors),
-    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
-      id,
-      file,
-      title: String(data.title ?? titleCaseSlug(id)),
-      placement: String(data.placement ?? ""),
-      order: Number.isInteger(data.order) ? data.order : 0,
-      heading: data.heading !== false,
-      permission: typeof data.permission === "string" ? data.permission : "",
-      empty: chapterProse(markdown.body).trim() === "",
-      // Such as the `[TODO: author to supply]` the publishing skill leaves
-      // on a copyright page's ISBN line, which builds print as written.
-      todoMarkers: countTodoMarkers(chapterProse(markdown.body))
-    }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
+    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => {
+      const title = String(data.title ?? titleCaseSlug(id));
+      const prose = chapterProse(markdown.body);
+      const empty = prose.trim() === "";
+      return {
+        id,
+        file,
+        title,
+        placement: String(data.placement ?? ""),
+        order: Number.isInteger(data.order) ? data.order : 0,
+        heading: data.heading !== false,
+        permission: typeof data.permission === "string" ? data.permission : "",
+        empty,
+        // Such as the `[TODO: author to supply]` the publishing skill leaves
+        // on a copyright page's ISBN line, which builds print as written. The
+        // title counts too: the EPUB contents name a page without a heading.
+        // Builds leave out an empty page, markers and all.
+        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title)
+      };
+    }, scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
     progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),

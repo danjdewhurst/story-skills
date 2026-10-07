@@ -1,6 +1,7 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
 import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, joinNames, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { countTodoMarkers } from "./markdown.js";
 import { chapterNumerals } from "./numerals.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
 
@@ -233,6 +234,26 @@ export function normalizeIsbn(value) {
     return sum % 11 === 0 ? compact : "";
   }
   return "";
+}
+
+// A copyright page is found by its id or its title, once, and every build
+// format reads the flag.
+export function isCopyrightMatter(entry) {
+  return entry.id === "copyright" || /copyright/i.test(entry.title);
+}
+
+// The story.md fields the generated copyright page prints, with the
+// publishingMeta key that holds each. The ISBN prints as digits only.
+const COPYRIGHT_PAGE_FIELDS = [["copyright", "copyright"], ["publisher", "publisher"], ["ai-disclosure", "aiDisclosure"]];
+
+// Each of those fields with `[TODO` markers inside it, as { field, markers }.
+// A value that is only a placeholder is left out of the page, but one that
+// holds a marker after other text (`© 2026 [TODO: author to supply]`)
+// prints as written.
+export function copyrightPageTodos(meta) {
+  return COPYRIGHT_PAGE_FIELDS
+    .map(([field, key]) => ({ field, markers: countTodoMarkers(meta[key]) }))
+    .filter((entry) => entry.markers > 0);
 }
 
 // The generated copyright page, used when story.md sets `copyright` and no

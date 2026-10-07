@@ -11,7 +11,7 @@ import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { isPathInside, lstatIfExists, portablePath, projectPath, readTextFile, TEMPORARY_FILE_PATTERN } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { COUNT_UNITS, STORY_FORMS, formRangeWarning, formRanges } from "./forms.js";
-import { isPlaceholder, validateNames, validatePublishing } from "./publishing.js";
+import { copyrightPageTodos, isCopyrightMatter, isPlaceholder, publishingMeta, validateNames, validatePublishing } from "./publishing.js";
 import { SCENE_SETTINGS } from "./fountain.js";
 import { isIfid } from "./twee.js";
 import { CHAPTER_NUMERALS, validateChapterNumerals } from "./numerals.js";
@@ -1985,9 +1985,10 @@ function validateMatter(project, errors, warnings) {
     if (matter.empty) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
+    // A placeholder stands for text only the author can supply, such as an
+    // ISBN, so the fix is to ask them, never to invent or hide it.
     if (matter.todoMarkers > 0) {
-      const them = matter.todoMarkers === 1 ? "it" : "them";
-      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: fill ${them} in or move ${them} into an HTML comment`, label));
+      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: ask the author to supply the text`, label));
     }
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
@@ -2013,6 +2014,14 @@ function validateMatter(project, errors, warnings) {
     }
     if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
       warnings.push(warn("permission-no-rights-holder", `${label} permission is granted but no rights-holder is recorded`, label));
+    }
+  }
+  // Without a written copyright page, builds generate one from story.md,
+  // which prints a marker inside these fields as written.
+  const meta = publishingMeta(project.story.data);
+  if (meta.copyright !== "" && !project.matter.some((matter) => !matter.empty && MATTER_PLACEMENTS.has(matter.placement) && isCopyrightMatter(matter))) {
+    for (const { field, markers } of copyrightPageTodos(meta)) {
+      warnings.push(warn("matter-todo-markers", `story.md ${field} has ${plural(markers, "[TODO marker")}, which export and build print on the generated copyright page: ask the author to supply the text`, "story.md"));
     }
   }
 }
