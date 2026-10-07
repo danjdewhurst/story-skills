@@ -42,7 +42,7 @@ The agent gives the script in forms 2 and 3 as an absolute path and runs it with
 
 ```shell
 $ node skills/story-maintenance/scripts/story.js --version
-0.22.1
+0.23.0
 ```
 
 If none of the three is available, skills fall back to doing the registry, backlink, and word-count checks by hand. Agents run the CLI where it is installed and never copy `story.js` into your story project.

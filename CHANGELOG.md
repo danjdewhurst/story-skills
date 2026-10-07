@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-07
+
 ### Added
 
 - `story doctor` adds one `[P3] Update local CLI version` action when copied workflows pin a `STORY_VERSION` newer than the CLI you run. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
@@ -1246,7 +1248,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/danjdewhurst/story-skills/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/danjdewhurst/story-skills/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/danjdewhurst/story-skills/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/danjdewhurst/story-skills/compare/v0.20.0...v0.21.0
