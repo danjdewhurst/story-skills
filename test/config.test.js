@@ -535,7 +535,7 @@ describe("config validation", () => {
     });
   }
 
-  test("a valid config passes validate and the schema's shape", () => {
+  test("a valid config passes validate with no findings", () => {
     const { root } = project();
     configure(root, "cli-defaults:\n  - command: build\n    format: html\n    shunn: false\n  - command: synopsis\n    pages: 3\n  - command: validate\nseverity:\n  - warning: todo-markers\n    level: error");
     expect(messages(validateProject(root).errors)).toEqual([]);
