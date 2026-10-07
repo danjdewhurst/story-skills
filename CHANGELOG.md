@@ -75,6 +75,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Before, a chapter with CRLF line endings got a lone carriage return in the wrapped name, such as `Mara\rHolt`.
 - `story rename` to the name an entity already has no longer rewrites its file. ([#726](https://github.com/danjdewhurst/story-skills/issues/726))
   - Before, the file was written although its text did not change.
+- A project lock whose pid another process has since taken no longer blocks writes. ([#732](https://github.com/danjdewhurst/story-skills/issues/732))
+  - Before, every write refused until `.story.lock` was deleted by hand.
+  - The lock records the start time of its process, so a different start time means the pid was reused.
 
 ## [0.23.0] - 2026-10-07
 

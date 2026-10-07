@@ -21459,21 +21459,34 @@ function sameHostAlive(pid, recorded, written, modified) {
     return !foreignLockStale(written, modified);
   }
   if (pid !== process.pid) {
-    return processAlive(pid);
+    if (!processAlive(pid)) {
+      return false;
+    }
+    const current = comparable ? processStartTime(pid) : null;
+    return current === null || current === started;
   }
   return comparable ? started === ownStarted : !foreignLockStale(written, modified);
 }
 var IDENTITY_PATTERN = /^[0-9a-f-]+ pid:\[\d+\] \d+$/;
 function processIdentity(proc = "/proc") {
   try {
-    const stat = readTextFile(path10.join(proc, "self", "stat"));
-    const started = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
+    const started = startTimeField(readTextFile(path10.join(proc, "self", "stat")));
     const boot = readTextFile(path10.join(proc, "sys", "kernel", "random", "boot_id")).trim();
     const identity = `${boot} ${fs5.readlinkSync(path10.join(proc, "self", "ns", "pid"))} ${started}`;
     return IDENTITY_PATTERN.test(identity) ? identity : null;
   } catch {
     return null;
   }
+}
+function processStartTime(pid, proc = "/proc") {
+  try {
+    return startTimeField(readTextFile(path10.join(proc, String(pid), "stat"))) ?? null;
+  } catch {
+    return null;
+  }
+}
+function startTimeField(stat) {
+  return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19];
 }
 var identityRead;
 function ownIdentity() {
