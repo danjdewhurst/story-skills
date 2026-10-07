@@ -59,7 +59,7 @@ node skills/story-maintenance/scripts/story.js --help
 
 ## Changelog
 
-Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for any change a user would notice, using the Keep a Changelog headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`). Always add one for a change to the project format or to CLI behaviour: people who copy the skills run the bundled fallback CLI and need to know what changed. Internal refactors, tests, and CI changes need no entry.
+Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for any change a user would notice, using the Keep a Changelog headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`). Always add one for a change to the project format or to CLI behaviour: people who copy the skills run the bundled fallback CLI and need to know what changed. Internal refactors and tests need no entry. A CI change that a contributor sees, such as a check's name or how the suite runs, may get one.
 
 Write each entry so a reader can scan the list:
 
