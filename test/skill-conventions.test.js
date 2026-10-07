@@ -676,3 +676,86 @@ describe("skill triggers", () => {
     }
   });
 });
+
+// Registries are generated (#553): `story reindex` rebuilds every `_index.md`
+// table from the entity files, and `story add`, `rename`, `move`, and
+// `remove` reindex for you, so a row added by hand is thrown away. No skill
+// may tell an agent to add or edit one. A sentence that names an `_index.md`
+// file and gives an edit instruction outside its code spans is one, unless
+// it says not to, or it is about a hand-written section reindex keeps.
+
+// "add" before an option (`add --region`) or "add up" is no edit.
+const EDIT_VERB = /\b(?:update|edit|keep|maintain|add(?! up\b)(?!\s+`))\b/i;
+const NOT_AN_EDIT = /\b(?:do not|don't|never|leave)\b/i;
+const HAND_WRITTEN_SECTION = /relationship map|family trees|world overview|story structure|theme tracking|`structure`/i;
+
+// The sentences of a markdown text outside code blocks, each with the first
+// line of its block. A blank line, heading, list item, or table row starts a
+// new block, wrapped lines join with a space, and list markers are dropped.
+function sentences(text) {
+  const blocks = [];
+  let fence = null;
+  let block = null;
+  text.split("\n").forEach((line, index) => {
+    const open = line.match(FENCE);
+    if (fence || open) {
+      if (fence && line.trim().startsWith(fence)) {
+        fence = null;
+      } else if (!fence) {
+        fence = open[1];
+      }
+      block = null;
+      return;
+    }
+    if (line.trim() === "" || /^\s*(?:#|\||[-*+] |\d+\. )/.test(line) || block === null) {
+      block = { line: index + 1, text: "" };
+      blocks.push(block);
+    }
+    block.text += ` ${line.trim().replace(/^(?:[-*+]|\d+\.)\s+/, "")}`;
+  });
+  return blocks.flatMap((entry) => entry.text.trim().split(/(?<=[.!?])\s+(?=[A-Z*`])/).map((sentence) => ({ line: entry.line, sentence })));
+}
+
+function registryEditProblems(text) {
+  return sentences(text)
+    .filter(({ sentence }) => /_index\.md/.test(sentence))
+    .filter(({ sentence }) => {
+      const prose = sentence.replace(/`[^`]*`/g, (span) => (HAND_WRITTEN_SECTION.test(span) ? span : "`…`"));
+      return EDIT_VERB.test(prose) && !NOT_AN_EDIT.test(prose) && !HAND_WRITTEN_SECTION.test(prose);
+    })
+    .map(({ line, sentence }) => `line ${line}: ${sentence}`);
+}
+
+describe("generated registries", () => {
+  test("flags an instruction to edit a registry table", () => {
+    const flagged = (text) => registryEditProblems(text).length;
+    for (const text of [
+      "7. Update `characters/_index.md` registry table",
+      "8. Without the CLI, update the `worldbuilding/_index.md` locations table",
+      "Otherwise create the file, and add a row to the Registry table in `glossary/_index.md`",
+      "If no CLI is\navailable, keep `research/_index.md` and the `used-in` lists current by\nhand.",
+      "- **Update:** `plot/timeline.md`, arc plot-point tables, and\n  `chapters/_index.md` when chapters move, merge, or split."
+    ]) {
+      expect(flagged(text), text).toBe(1);
+    }
+    for (const text of [
+      "2. Read `characters/_index.md` for existing characters",
+      "- Update the Relationship Map section in `characters/_index.md`",
+      "4. Update `plot/_index.md` frontmatter `structure` field",
+      "Leave the `characters/_index.md` table to the CLI: `story add` and `story reindex .` rebuild it.",
+      "Scaffold it with `story add arc 'A'`, which lists the arc in `plot/_index.md`, then fill in the sections.",
+      "Create it with `story add location 'L'` (add `--region` as known); it lists it in `worldbuilding/_index.md`.",
+      "Add up the chapters' counts and compare the arc's share with its weight in `plot/_index.md`.",
+      "Do not add or edit rows in `chapters/_index.md` by hand.",
+      "```markdown\nUpdate `characters/_index.md`\n```"
+    ]) {
+      expect(flagged(text), text).toBe(0);
+    }
+    expect(registryEditProblems("Intro.\n\n1. Read it.\n2. Update `plot/_index.md` arcs table")).toEqual(["line 4: Update `plot/_index.md` arcs table"]);
+  });
+
+  test("no skill tells an agent to edit a generated registry table", () => {
+    const problems = markdownFiles(skillsDir).flatMap((file) => registryEditProblems(fs.readFileSync(file, "utf8")).map((problem) => `${path.relative(skillsDir, file)} ${problem}`));
+    expect(problems).toEqual([]);
+  });
+});

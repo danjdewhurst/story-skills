@@ -29,7 +29,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Key life events for the timeline
 5. Write the character file using the template in `references/character-template.md`
 6. Save to `characters/{name-kebab}.md`, or use `story add character '{Name}' --role '{role}'` when the CLI is available. Cyrillic and Greek names are transliterated (`Пётр` gives `characters/petr.md`). When the name is in a script with no transliteration table (`李明`), or the user wants a different spelling, choose the ASCII id yourself and pass it: `story add character '李明' --id li-ming --role supporting` keeps `name: 李明` in the file
-7. Update `characters/_index.md` registry table
+7. Leave the `characters/_index.md` table to the CLI: `story add` and `story reindex .` rebuild it from the character files, so never add a row by hand
 8. If relationships reference existing characters, update those character files too
 9. When CLI access is available, run the maintenance pass in the story root:
 
@@ -45,7 +45,7 @@ story check .
 2. Read `characters/_index.md` for context on other characters
 3. Make the requested changes. If the change happens partway through the story (a scar, a new title, a turn to the other side), add a progression instead of editing the opening value (see Changes Over the Story)
 4. If relationships changed, update the other character's file (bidirectional)
-5. Update `characters/_index.md` if role or status changed
+5. Change a role or status in the character file only. The `characters/_index.md` table picks it up at the next `story reindex .`, so never edit its rows
 6. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Changes Over the Story
@@ -175,4 +175,4 @@ Use the Story CLI when it is available. If `story` is not installed, use the bun
 
 ## Shared Conventions
 
-Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` registry tables that `story reindex` rebuilds (never edit them by hand), bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

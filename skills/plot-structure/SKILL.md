@@ -34,12 +34,11 @@ A story project must already exist (created via the story-init skill). Verify by
    - Which themes it serves
    - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, or as a `[event, character]` flow list; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
-6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc '{Name}' --type main --character {id} --theme {theme}`, then fill in the sections)
-7. Save to `plot/arcs/{arc-name-kebab}.md`
-8. Update `plot/_index.md` arcs table
-9. Update theme tracking in `plot/_index.md`
-10. If characters are referenced, verify they exist in `characters/`
-11. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
+6. Scaffold the file with `story add arc '{Name}' --type main --character {id} --theme {theme}`, which writes `plot/arcs/{arc-name-kebab}.md` with the sections of `references/arc-template.md` and lists the arc in `plot/_index.md`, then fill in the sections. Without the CLI, write the file from `references/arc-template.md` to `plot/arcs/{arc-name-kebab}.md`
+7. Leave the arcs table in `plot/_index.md` to `story reindex .`, which rebuilds it from the arc files; never add a row by hand
+8. Update the hand-written `## Theme Tracking` section in `plot/_index.md`
+9. If characters are referenced, verify they exist in `characters/`
+10. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Managing Plot Points
 
@@ -132,4 +131,4 @@ Use the Story CLI when it is available. If `story` is not installed, use the bun
 
 ## Shared Conventions
 
-Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` registry tables that `story reindex` rebuilds (never edit them by hand), bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).
