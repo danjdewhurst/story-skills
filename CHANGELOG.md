@@ -63,6 +63,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `export` and builds that print matter warn about a matter page whose `placement` is not `front` or `back`. ([#715](https://github.com/danjdewhurst/story-skills/issues/715))
   - The page is still left out, as before. The warning is `matter-placement-left-out`, and `build --format markdown` now reports it instead of exiting with no note.
 - `build --format codex --dry-run` no longer previews deleting an entity folder that the real build keeps. ([#714](https://github.com/danjdewhurst/story-skills/issues/714))
+- `build --format codex` labels a chapter with the number the book prints, so a chapter after a prologue no longer shows its file number. ([#712](https://github.com/danjdewhurst/story-skills/issues/712))
+  - An unnumbered chapter, such as a prologue, shows its title alone, as the book does.
 
 ## [0.23.0] - 2026-10-07
 

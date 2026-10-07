@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dayHours } from "./calendar.js";
+import { printedChapterNumbers } from "./chapter-numbers.js";
 import { chapterChronology } from "./chronology.js";
 import { entityStateAt } from "./progressions.js";
 import { fileSystemName, isInsideGitDirectory, isPlanning, isShortNameOf, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
@@ -759,8 +760,8 @@ export function bookChapters(project, action = "build") {
   const warnings = [];
   // An unnumbered chapter (a Prologue, `numbered: false`) prints its title
   // alone and takes no number, so the chapters after it keep the author's
-  // numbering: Prologue, Chapter 1, Chapter 2.
-  let unnumberedSoFar = 0;
+  // numbering: Prologue, Chapter 1, Chapter 2 (see printedChapterNumbers).
+  const printed = printedChapterNumbers(project);
   const keys = new Set();
   for (const chapter of project.chapters) {
     const markdown = readMarkdown(chapter.file, project.root);
@@ -772,8 +773,7 @@ export function bookChapters(project, action = "build") {
     if (!numbered && title === "") {
       throw projectError(`${relative(project, chapter.file)}: an unnumbered chapter needs a title to build`);
     }
-    unnumberedSoFar += numbered ? 0 : 1;
-    const displayNumber = numbered ? chapter.number - unnumberedSoFar : null;
+    const displayNumber = printed.get(chapter.id);
     // A story's own author in a collection or anthology: printed under the
     // heading, kept out of the prose, so it never counts toward its length.
     const authors = nameList(markdown.data.author);

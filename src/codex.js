@@ -9,6 +9,7 @@
 // `spoilers`, it leaves out what gives the story away: entity notes,
 // statuses, deaths, progressions, knowledge, arc outcomes, clues, and how
 // threads resolve. With it, the codex is the author's whole bible.
+import { printedChapterNumbers } from "./chapter-numbers.js";
 import { buildClueMatrix } from "./clues.js";
 import { buildGrid } from "./grid.js";
 import { buildTimeline, povLength } from "./timeline.js";
@@ -62,6 +63,8 @@ export function codexPages(project, { spoilers = false } = {}) {
     labels: meta.labels,
     type: typesetting(meta.language),
     chapters: [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en")),
+    // The number each chapter prints in the book, for its label (see chapterLabel).
+    printedNumbers: printedChapterNumbers(project),
     entities: new Map(CODEX_KINDS.map((entry) => [entry.kind, new Map(entry.list(project).map((entity) => [entity.id, entity]))])),
     grid: buildGrid(project)
   };
@@ -552,9 +555,10 @@ function entityLink(site, kind, id, depth) {
   return `<a href="${"../".repeat(depth)}${dir}/${encodeURIComponent(id)}.html">${escapeHtml(displayName(entity))}</a>`;
 }
 
-// A chapter by number and title, or by the book's chapter label when it has
-// no title, or the id as written when no chapter has it (a planned
-// chapter-NN).
+// A chapter by the number the book prints and its title, or by the book's
+// chapter label when it has no title, or the id as written when no chapter
+// has it (a planned chapter-NN). An unnumbered chapter prints its title
+// alone, as the book does.
 function chapterLabel(site, id) {
   const text = idText(id);
   if (text === "") {
@@ -565,7 +569,11 @@ function chapterLabel(site, id) {
     return escapeHtml(text);
   }
   const title = String(chapter.title ?? "").trim();
-  return escapeHtml(title === "" ? fillLabel(site.labels, "chapter", { n: chapter.number }) : `${chapter.number}. ${title}`);
+  const printed = site.printedNumbers.get(chapter.id);
+  if (title === "") {
+    return escapeHtml(fillLabel(site.labels, "chapter", { n: printed ?? chapter.number }));
+  }
+  return escapeHtml(printed === null ? title : `${printed}. ${title}`);
 }
 
 // The timeline names a chapter by number (or its id when it has none).

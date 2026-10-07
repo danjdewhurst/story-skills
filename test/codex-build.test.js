@@ -338,3 +338,19 @@ describe("build --format codex", () => {
     expect(result.out).toBe(`Built a codex of 9 pages to ${path.join(root, "dist", "codex")}\n`);
   });
 });
+
+describe("codex chapter labels (#712)", () => {
+  test("a chapter after an unnumbered one is labelled with the number the book prints", () => {
+    const { root } = project();
+    // Chapter 2 is a prologue with no number, so chapter 3 prints as 2.
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Low Water\nnumber: 2\nnumbered: false\nstatus: draft\npov: mara\ncharacters: [mara]", "## Chapter Text\n\nThe tide went out without Tobias.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: The Lantern Room\nnumber: 3\nstatus: draft\npov: mara\ncharacters: [mara]", "## Chapter Text\n\nMara lit the lamp.\n");
+    const { outFile } = buildBook(root, { format: "codex" });
+    const site = readSite(outFile);
+    expect(site["timeline.html"]).toContain("2. The Lantern Room");
+    expect(site["timeline.html"]).not.toContain("3. The Lantern Room");
+    expect(site["progress.html"]).toContain("2. The Lantern Room");
+    expect(site["progress.html"]).not.toContain("3. The Lantern Room");
+    expect(site["timeline.html"]).not.toContain("2. Low Water");
+  });
+});
