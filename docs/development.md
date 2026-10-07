@@ -20,7 +20,7 @@ If you want to use Story Skills rather than change it, start with [Getting start
 
 ## Setting up
 
-You need [Bun](https://bun.sh) for development and Node 18 or later, because the CLI and the check scripts must run under plain Node. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
+You need [Bun](https://bun.sh) for development and Node 18 or later, because the CLI and the check scripts must run under plain Node. The tests also need git 2.32 or later: they keep your own git config out with `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_COUNT`, which older git ignores, so `test/setup.js` stops the run with a message on an older git. The package has no runtime or development dependencies, so `bun install` has nothing to download; run it anyway so your setup matches CI.
 
 Install the exact Bun the repository pins in `package.json`, currently `bun@1.4.2`:
 
@@ -341,7 +341,7 @@ bun test ./test/cli.test.js -t "repeated" # tests whose names match a pattern
 - `makeTempDir(prefix)` creates a fresh directory under the OS temp directory (`story-skills-*` by default). `test/setup.js`, preloaded through `bunfig.toml`, removes them after each test, so create test directories with it rather than `fs.mkdtempSync`, and inside the test rather than in a `describe` body.
 - `memoryIo(cwd)` is an in-memory `io` object for `runCli`, with `output()` and `error()` accessors.
 - `writeMarkdown(filePath, frontmatter, body)` writes a markdown file with frontmatter, creating parent directories.
-- `git(cwd, ...args)` runs git and returns its stdout. `gitEnv(overrides)` is the environment it runs with: no global or system config and no `GIT_*` variable from your shell, plus the test identity, `main` as the default branch, and signing turned off, so commit signing, hooks, or a pinentry prompt in your own git config cannot fail or stall a test. Run every git a test starts with it, and pass `env: gitEnv()` to a script or process that runs git itself; `test/helpers.test.js` fails on a `spawnSync("git", …)` or `execFileSync("git", …)` call without it.
+- `git(cwd, ...args)` runs git and returns its stdout. `gitEnv(overrides)` is the environment it runs with: no global or system config, an empty file in place of `~/.config/git/ignore` and `attributes`, and no `GIT_*` variable from your shell, plus the test identity, `main` as the default branch, and signing turned off. So commit signing, hooks, ignores, or a pinentry prompt in your own git setup cannot fail or stall a test. Run every git a test starts with it, and pass `env: gitEnv()` to a process that runs git itself. `test/helpers.test.js` fails on a call that starts git (`spawnSync`, `execFileSync`, `execSync`, `Bun.spawn`, or a `run()` wrapper) without it. `test/setup.js` also removes `GIT_*` variables from `process.env`, so the git that `src/` runs in-process is not pointed elsewhere by a `GIT_DIR` from a hook. `test/draft-workflow.test.js` runs workflow steps with a runner's git instead (a fresh `HOME` and an empty system config), so a step that relies on more fails there.
 
 Most CLI tests call `runCli` directly with `memoryIo` rather than spawning a process, so they are fast and count toward coverage. Build a project in a temp directory, run commands against it, and assert on the exit code, stdout, stderr, and resulting files. Never point a test that writes files at `examples/`.
 

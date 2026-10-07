@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { git, gitEnv, makeTempDir } from "./helpers.js";
+import { git, makeTempDir } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const WORKFLOW = fs.readFileSync(path.join(repoRoot, "templates", "github", "draft-next-chapter.yml"), "utf8");
@@ -32,16 +32,21 @@ function fakeTools() {
   return `${bin}${path.delimiter}${process.env.PATH}`;
 }
 
-function run(script, cwd, env) {
+function runStep(script, cwd, env) {
   const runnerTemp = env.RUNNER_TEMP ?? makeTempDir("runner-");
   const output = path.join(runnerTemp, "github-output");
   fs.writeFileSync(output, "", { flag: "a" });
-  // The shell GitHub Actions runs `run:` steps with. The steps' git commands
-  // get gitEnv() too.
+  // A runner's git has no identity, hooks, or signing set up. The step's git
+  // gets the same: a HOME of its own and an empty system config, not the
+  // developer's and not gitEnv(), so a step that needs more fails here too.
+  const home = makeTempDir("runner-home-");
+  const systemConfig = path.join(home, "system-gitconfig");
+  fs.writeFileSync(systemConfig, "");
+  // The shell GitHub Actions runs `run:` steps with.
   const result = spawnSync("bash", ["--noprofile", "--norc", "-eo", "pipefail", "-c", script], {
     cwd,
     encoding: "utf8",
-    env: { ...gitEnv(), STORY_DIR: ".", STORY_VERSION: "0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
+    env: { ...process.env, HOME: home, XDG_CONFIG_HOME: path.join(home, ".config"), GIT_CONFIG_SYSTEM: systemConfig, STORY_DIR: ".", STORY_VERSION: "0.0.0", MIN_WORDS: "1", MAX_WORDS: "5000", MAX_TURNS: "80", MAX_BUDGET_USD: "5", RUNNER_TEMP: runnerTemp, GITHUB_OUTPUT: output, ...env }
   });
   return { ...result, output: fs.readFileSync(output, "utf8"), runnerTemp };
 }
@@ -146,38 +151,44 @@ describe("draft-next-chapter guardrails (#294)", () => {
   test("budgets must be plain numbers before they reach the agent's command line", () => {
     const script = stepScript("Check the budgets");
     const cwd = makeTempDir();
-    expect(run(script, cwd, {}).status).toBe(0);
+    expect(runStep(script, cwd, {}).status).toBe(0);
     for (const [name, value] of [["MAX_TURNS", "5 --dangerously-skip-permissions"], ["MIN_WORDS", "lots"], ["MAX_BUDGET_USD", "5; rm -rf /"]]) {
-      const result = run(script, cwd, { [name]: value });
+      const result = runStep(script, cwd, { [name]: value });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain(`::error::${name} must be`);
     }
-    expect(run(script, cwd, { MIN_WORDS: "6000" }).stdout).toContain("MIN_WORDS (6000) is more than MAX_WORDS (5000)");
+    expect(runStep(script, cwd, { MIN_WORDS: "6000" }).stdout).toContain("MIN_WORDS (6000) is more than MAX_WORDS (5000)");
   });
 
   test("the draft job bundles a commit on a draft branch and nothing else", () => {
     const script = stepScript("Bundle the agent's commits");
     const { repo, base } = storyRepo();
-    expect(run(script, repo, { BASE: base }).output).toBe("drafted=false\n");
+    expect(runStep(script, repo, { BASE: base }).output).toBe("drafted=false\n");
 
     git(repo, "checkout", "-q", "-b", "draft/chapter-1");
     writeChapterProse(repo, 20);
     git(repo, "commit", "-qam", "Draft chapter 1: Opening");
-    const bundled = run(script, repo, { BASE: base });
+    const bundled = runStep(script, repo, { BASE: base });
     expect(bundled.status).toBe(0);
     expect(bundled.output).toContain("drafted=true\nbranch=draft/chapter-1\n");
     expect(fs.existsSync(path.join(bundled.runnerTemp, "draft", "draft.bundle"))).toBe(true);
 
     // A global or system config the agent wrote (through an absolute --out)
-    // is not read. GIT_CONFIG_GLOBAL is left unset, so git would read it.
+    // is not read, though plain git in the same step stops on either.
     const home = makeTempDir("home-");
-    fs.writeFileSync(path.join(home, ".gitconfig"), "# Chapter 1\nnot a config line\n");
-    const agentHome = { HOME: home, XDG_CONFIG_HOME: home, GIT_CONFIG_GLOBAL: undefined };
-    expect(spawnSync("git", ["status"], { cwd: repo, env: gitEnv(agentHome) }).status).not.toBe(0);
-    expect(run(script, repo, { BASE: base, ...agentHome }).output).toContain("drafted=true\n");
+    const written = "# Chapter 1\nnot a config line\n";
+    fs.writeFileSync(path.join(home, ".gitconfig"), written);
+    fs.writeFileSync(path.join(home, "system-gitconfig"), written);
+    const agentHome = { HOME: home, XDG_CONFIG_HOME: home };
+    const agentSystem = { GIT_CONFIG_SYSTEM: path.join(home, "system-gitconfig") };
+    expect(runStep("git status", repo, agentHome).status).not.toBe(0);
+    expect(runStep("git status", repo, agentSystem).status).not.toBe(0);
+    const guarded = runStep(script, repo, { BASE: base, ...agentHome, ...agentSystem });
+    expect(guarded.status, guarded.stderr).toBe(0);
+    expect(guarded.output).toContain("drafted=true\n");
 
     git(repo, "checkout", "-q", "-b", "main-ish");
-    const wrong = run(script, repo, { BASE: base });
+    const wrong = runStep(script, repo, { BASE: base });
     expect(wrong.status).toBe(1);
     expect(wrong.stdout).toContain("The agent committed on 'main-ish'");
   });
@@ -188,7 +199,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     test("accepts markdown changes inside the story project and checks out the branch", () => {
       const { repo, base } = storyRepo();
       const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => writeChapterProse(dir, 20));
-      const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
       expect(result.status).toBe(0);
       expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("draft/chapter-1\n");
     });
@@ -213,7 +224,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       test(`refuses ${label}`, () => {
         const { repo, base } = storyRepo();
         const temp = agentCommit(repo, base, "draft/chapter-1", change);
-        const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+        const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
         expect(result.status).toBe(1);
         expect(result.stdout).toContain("The agent changed files a draft may not touch");
         expect(result.stdout).toContain(reason);
@@ -248,7 +259,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
 
     test("refuses a merge commit, whose own changes a plain git log leaves out", () => {
       const { repo, base, temp } = evilMerge();
-      const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("draft/chapter-1 contains a merge commit");
       expect(result.stdout).toContain("Nothing was pushed");
@@ -261,7 +272,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const refusal = /\n# A merge commit can carry[\s\S]*?\nfi\n/;
       expect(script).toMatch(refusal);
       const { repo, base, temp } = evilMerge();
-      const result = run(script.replace(refusal, "\n"), repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      const result = runStep(script.replace(refusal, "\n"), repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("The agent changed files a draft may not touch");
       expect(result.stdout).toContain("package.json (not a markdown file)");
@@ -271,7 +282,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     test("refuses a change outside STORY_DIR when the project is in a subfolder", () => {
       const { repo, base } = storyRepo();
       const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => fs.writeFileSync(path.join(dir, "story.md"), "hi"));
-      const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp, STORY_DIR: "./book" });
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp, STORY_DIR: "./book" });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("story.md (outside book)");
     });
@@ -279,7 +290,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     test("refuses a branch name the draft job would not produce", () => {
       const { repo, base } = storyRepo();
       const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => writeChapterProse(dir, 20));
-      const result = run(script, repo, { BASE: base, BRANCH: "draft/chapter-1:main", RUNNER_TEMP: temp });
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1:main", RUNNER_TEMP: temp });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("Unexpected branch name");
     });
@@ -296,10 +307,10 @@ describe("draft-next-chapter guardrails (#294)", () => {
     // Removed again in a later commit: still in the history that would be pushed.
     fs.writeFileSync(chapter, original);
     git(repo, "commit", "-qam", "Tidy");
-    expect(run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-other" }).status).toBe(0);
+    expect(runStep(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-other" }).status).toBe(0);
     // An unset secret matches nothing, rather than everything.
-    expect(run(script, repo, { BASE: base, SECRET_API_KEY: "" }).status).toBe(0);
-    const leaked = run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-secret-value" });
+    expect(runStep(script, repo, { BASE: base, SECRET_API_KEY: "" }).status).toBe(0);
+    const leaked = runStep(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-secret-value" });
     expect(leaked.status).toBe(1);
     expect(leaked.stdout).toContain("contain the value of ANTHROPIC_API_KEY");
   });
@@ -311,7 +322,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     fs.appendFileSync(path.join(repo, "chapters", "chapter-01.md"), "\nThe tide\u0000 sk-ant-binary-value\n");
     git(repo, "commit", "-qam", "Draft chapter 1: Opening");
     expect(git(repo, "log", "-p", "--format=", `${base}..HEAD`)).toContain("Binary files");
-    const leaked = run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-binary-value" });
+    const leaked = runStep(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-binary-value" });
     expect(leaked.status).toBe(1);
     expect(leaked.stdout).toContain("contain the value of ANTHROPIC_API_KEY");
   });
@@ -329,7 +340,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     fs.appendFileSync(path.join(repo, "story.md"), "\nsk-ant-merge-only\n");
     git(repo, "add", "-A");
     git(repo, "commit", "-qm", "Merge side");
-    const leaked = run(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-merge-only" });
+    const leaked = runStep(script, repo, { BASE: base, SECRET_API_KEY: "sk-ant-merge-only" });
     expect(leaked.status).toBe(1);
     expect(leaked.stdout).toContain("contain the value of ANTHROPIC_API_KEY");
   });
@@ -342,7 +353,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const { repo } = storyRepo();
       writeChapterProse(repo, 30);
       execFileSync(process.execPath, [path.join(repoRoot, "bin", "story.js"), "wordcount", repo, "--write"]);
-      const result = run(script, repo, { PATH, BRANCH: "draft/chapter-1", MIN_WORDS: "10", MAX_WORDS: "100" });
+      const result = runStep(script, repo, { PATH, BRANCH: "draft/chapter-1", MIN_WORDS: "10", MAX_WORDS: "100" });
       expect(result.status).toBe(0);
       expect(result.output).toBe("passed=true\n");
       const report = fs.readFileSync(path.join(result.runnerTemp, "checks.md"), "utf8");
@@ -354,14 +365,14 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const PATH = fakeTools();
       const { repo } = storyRepo();
       writeChapterProse(repo, 30);
-      const short = run(script, repo, { PATH, BRANCH: "draft/chapter-1", MIN_WORDS: "500", MAX_WORDS: "900" });
+      const short = runStep(script, repo, { PATH, BRANCH: "draft/chapter-1", MIN_WORDS: "500", MAX_WORDS: "900" });
       expect(short.status).toBe(0);
       expect(short.output).toBe("passed=false\n");
       expect(fs.readFileSync(path.join(short.runnerTemp, "checks.md"), "utf8")).toContain("has 30 words, outside 500-900");
 
       const chapter = path.join(repo, "chapters", "chapter-01.md");
       fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("characters: []", "characters:\n  - nobody-here"));
-      const broken = run(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
+      const broken = runStep(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
       expect(broken.output).toBe("passed=false\n");
       const report = fs.readFileSync(path.join(broken.runnerTemp, "checks.md"), "utf8");
       expect(report).toContain("- story links: failed\n  - chapters/chapter-01.md:");
@@ -371,7 +382,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
     test("a project the CLI cannot use stops the job", () => {
       const PATH = fakeTools();
       const cwd = makeTempDir();
-      const result = run(script, cwd, { PATH, BRANCH: "draft/chapter-1" });
+      const result = runStep(script, cwd, { PATH, BRANCH: "draft/chapter-1" });
       expect(result.status).toBe(1);
       expect(result.stdout).toContain("::error::story validate exited 3");
     });
@@ -386,10 +397,10 @@ describe("draft-next-chapter guardrails (#294)", () => {
     git(repo, "remote", "add", "origin", remote);
     git(repo, "checkout", "-q", "-b", "draft/chapter-1");
     const env = { PATH, BRANCH: "draft/chapter-1", GITHUB_RUN_NUMBER: "57", GH_LOG: path.join(makeTempDir(), "gh.log") };
-    const first = run(script, repo, env);
+    const first = runStep(script, repo, env);
     expect(first.status).toBe(0);
     expect(first.output).toContain("branch=draft/chapter-1\n");
-    const second = run(script, repo, env);
+    const second = runStep(script, repo, env);
     expect(second.status).toBe(0);
     expect(second.output).toContain("branch=draft/chapter-1-run-57\n");
     expect(second.stdout).toContain("draft/chapter-1 already exists on the remote");
@@ -408,7 +419,7 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const log = path.join(makeTempDir(), "gh.log");
       const temp = makeTempDir("runner-");
       fs.writeFileSync(path.join(temp, "checks.md"), "- story validate: passed\n");
-      const result = run(script, repo, { PATH, BASE: base, BRANCH: "draft/chapter-1", HEAD_BRANCH: "draft/chapter-1", PASSED: passed, GITHUB_REF_NAME: "trunk", GH_LOG: log, RUNNER_TEMP: temp });
+      const result = runStep(script, repo, { PATH, BASE: base, BRANCH: "draft/chapter-1", HEAD_BRANCH: "draft/chapter-1", PASSED: passed, GITHUB_REF_NAME: "trunk", GH_LOG: log, RUNNER_TEMP: temp });
       expect(result.status).toBe(0);
       const args = fs.readFileSync(log, "utf8").split("\n");
       const body = fs.readFileSync(path.join(temp, "pr-body.md"), "utf8");
