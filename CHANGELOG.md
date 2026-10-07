@@ -197,6 +197,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The docs' command output samples, the README demo GIF, and the Codex plugin screenshot show what the CLI prints today, and a test now replays the samples it can. (#564)
   - Refreshed the doctor walkthrough, the `next`, `progress --log`, and `help validate` samples, getting-started's warning count, and the check-schema list; the GIF and screenshot show rule codes such as `[pov-not-in-cast]`.
   - A `<!-- replay: <example> -->` comment marks a sample for `test/doc-samples.test.js` (see the development guide), and `check:links` no longer reads a `<!--` in a code span as opening a comment.
+- The CLI reference, automation guide, and project format reference now list every option, command, output, and allowed value the CLI has, and tests keep them in step. (#562, #527)
+  - The option index has a row for every option, with the commands that read it, and the build formats table lists the `--pdf` outputs.
+  - The automation guide covers `story check` in its exit code and output stream lists, and the Allowed values table lists every value `story validate` checks.
+  - The docs now say to run `npx story-skills` or `bunx story-skills` only in projects you trust.
 
 ### Security
 

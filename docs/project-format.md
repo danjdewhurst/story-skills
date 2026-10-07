@@ -383,7 +383,7 @@ tense: past
 | `release-start` | `YYYY-MM-DD` | no | The real-world day episode 1 releases. Needs `release-every`. Always a Gregorian date, even with a `calendar`. |
 | `release-warn-days` | integer ≥ 0 | no | How many days before its release an episode with no prose is warned about. Default `3`. See [Release schedule](#release-schedule). |
 | `calendar` | list of mappings | no | A secondary world's months, weekdays, and eras. Chapter and scene dates are then written in it, such as `3 Thaw 302 AE`. See [Custom calendars](#custom-calendars). |
-| `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
+| `draft-mode` | enum | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
@@ -705,7 +705,7 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `name` | string | yes | Display name. |
 | `type` | string | yes | Free text, for example `city` or `forest` (default `other`). |
 | `region` | string | no | Larger region the place belongs to. |
-| `population` | string | no | Free text. |
+| `population` | string or whole number | no | Free text, such as `about 300`, or a whole number, such as `300`. |
 | `controlled-by` | string | no | Faction or character id in control. Not checked by `story links`, but `story rename` and `story remove` keep it current. |
 | `notable-characters` | list of character ids | no | Characters tied to the place. Each character must list the location in `locations`. |
 | `tags` | list of strings | no | Free labels. |
@@ -883,7 +883,7 @@ word-count: 1489
 | `character-count` | integer ≥ 0 | no | Prose character count, maintained by `story wordcount --write` in a book [counted in characters](#counting-in-characters). |
 | `target-words` | integer ≥ 1 | no | Word target for the chapter; `story progress` reports against it. |
 | `target-characters` | integer ≥ 1 | no | Character target for the chapter, in a book counted in characters. |
-| `mode` | string | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
+| `mode` | enum | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
 | `strand` | string | no | Timeline strand, such as `1990` and `2020` in a dual-timeline book. `story continuity` checks clock order and route travel within each strand, so switching strands never runs backward and is not a journey. Chapters without it share one strand. A crossing between strands is not inferred. |
@@ -1593,23 +1593,37 @@ warning: "Kaela" looks like character kael-voss (Kael Voss) [name-look-alike]
 
 ## Allowed values
 
-These enumerations are shared by `story validate` and by the flags that set them: `--role`, `--type`, `--status`, `--category`, `--placement`, `--hook`, `--outcome`, `--accuracy`, `--confidence`, `--method`, and `--risk` on `story add`, and `--tense` and `--form` on `story init`. A flag refuses any other value, with the accepted list, before writing a file.
+These enumerations are shared by `story validate` and by the flags that set them: `--role`, `--type`, `--status`, `--category`, `--placement`, `--hook`, `--outcome`, `--mode`, `--accuracy`, `--confidence`, `--method`, and `--risk` on `story add`, `--tense` on `story init` and `story import`, and `--form` on `story init`. A flag refuses any other value, with the accepted list, before writing a file.
 
 | Field | Values |
 |-------|--------|
 | Story `status` | `planning`, `drafting`, `in-progress`, `revising`, `complete`, `abandoned` |
 | Story `tense` | `past`, `present`, `future`, `mixed` |
 | Story `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, `chapter-book` |
+| Story `count-unit` | `words`, `characters` |
+| Story `draft-mode` | `discovered`, `outlined` |
+| Story `writing-mode` | `horizontal`, `vertical` |
+| Story `chapter-numerals` | `western`, `native` |
+| Story `writing-days` (list) | `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, or the full names, in any letter case |
+| Story `build-style` `preset` | `classic`, `modern`, `elegant` |
+| Story `build-style` `heading-style` | `centered`, `small-caps`, `left` |
+| Story `build-style` `paragraphs` | `indented`, `block` |
+| Story `severity` `level` | `error`, `warning`, `off` |
+| Story `calendar` era `direction` | `forward`, `backward` |
 | Revision pass `status` | `pending`, `in-progress`, `done` |
 | Character `role` | `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, `deuteragonist` |
 | Character `status` | `alive`, `deceased`, `unknown`, `missing`, `cut` |
+| Character `arc-type` | `change-positive`, `change-negative`, `flat` |
+| Location and scene `setting` | `interior`, `exterior`, `both` |
 | Faction `type` | `family`, `guild`, `government`, `military`, `religion`, `company`, `community`, `criminal`, `other` |
 | Faction `status` | `active`, `hidden`, `declining`, `defeated`, `disbanded`, `unknown` |
 | Artifact `type` | `object`, `weapon`, `document`, `technology`, `relic`, `symbol`, `resource`, `other` |
 | Artifact `status` | `active`, `lost`, `destroyed`, `hidden`, `transferred`, `unknown` |
+| State file `object-state` `status` | `active`, `lost`, `destroyed`, `hidden`, `transferred`, `unknown` |
 | Arc `type` | `main`, `subplot`, `character`, `thematic` |
 | Arc `status` | `planned`, `in-progress`, `resolved` |
 | Chapter and scene `status` | `outline`, `draft`, `revised`, `final`, `complete` |
+| Chapter `mode` | `discovered`, `outlined` |
 | Chapter `hook` | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` |
 | Scene `outcome` | `yes`, `no`, `yes-but`, `no-and` |
 | Question `status` | `open`, `answered`, `resolved`, `dropped`, `abandoned` |
@@ -1624,14 +1638,14 @@ These enumerations are shared by `story validate` and by the flags that set them
 | Research `risk` (list) | `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical` |
 | Style sheet `dialect` | `british`, `american`, `unspecified` |
 
-Location and system `type` are free text. `language` in `story.md` has no fixed list, but must be a BCP 47 tag, and `subjects` must be BISAC codes (see [Publishing metadata](#publishing-metadata)). The print build's `--trim` takes `5x8`, `5.25x8`, `5.5x8.5` (the default), `6x9`, or `a5`. An unsupported value fails validation with the file and field:
+Location and system `type`, a location's `status`, and a system's `prevalence` are free text, and so is a location's `population`, which may also be a whole number. `language` in `story.md` has no fixed list, but must be a BCP 47 tag, and `subjects` must be BISAC codes (see [Publishing metadata](#publishing-metadata)). The print build's `--trim` takes `5x8`, `5.25x8`, `5.5x8.5` (the default), `6x9`, or `a5`. An unsupported value fails validation with the file and field:
 
 ```text
 Project validation failed: 1 errors, 0 warnings, 0 dismissed
 error: characters/kael-voss.md frontmatter field status has unsupported value dead
 ```
 
-A YAML list where a single value belongs reads `<file> frontmatter field <field> must be a single value, not a list`, for example `status:` followed by `- alive` and `- missing`.
+A YAML list where a single value belongs reads `<file> frontmatter field <field> must be a single value, not a list`, for example `status:` followed by `- alive` and `- missing`. A value outside the list inside `build-style`, `severity`, or `calendar` is reported as `invalid-build-style`, `invalid-cli-config`, or `invalid-calendar` instead.
 
 ### What the status values mean
 

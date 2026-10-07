@@ -1145,7 +1145,7 @@ function formatClueMatrix(matrix) {
 // src/calendar.js
 var CALENDAR_NAME = /^\s*[^\s\d,][^,]*$/u;
 var KINDS = ["month", "era", "weekdays", "hours-per-day"];
-var DIRECTIONS = ["forward", "backward"];
+var ERA_DIRECTIONS = ["forward", "backward"];
 var DEFAULT_HOURS_PER_DAY = 24;
 var MAX_HOURS_PER_DAY = 100;
 function isName(value) {
@@ -1219,7 +1219,7 @@ function parseCalendar(value) {
     if (entry["hours-per-day"] !== undefined && !isDayLength(entry["hours-per-day"])) {
       problems.push(`${at} hours-per-day must be a whole number from 1 to ${MAX_HOURS_PER_DAY}, got ${entry["hours-per-day"]}`);
     }
-    if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
+    if (entry.direction !== undefined && !ERA_DIRECTIONS.includes(entry.direction)) {
       problems.push(`${at} direction must be forward or backward, got ${entry.direction}`);
     }
     if (entry.weekdays !== undefined && (!Array.isArray(entry.weekdays) || !entry.weekdays.every(isName))) {
