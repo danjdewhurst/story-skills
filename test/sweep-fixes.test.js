@@ -55,8 +55,10 @@ describe("project structure", () => {
     expect(fs.existsSync(path.join(root, "worldbuilding", "locations", "port.md"))).toBe(true);
   });
 
-  test("migrate restores every folder init creates", () => {
+  test("migrate restores every folder init creates when it upgrades an older schema", () => {
     const root = newProject();
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2", "schema-version: 1"));
     for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs"]) {
       fs.rmSync(path.join(root, dir), { recursive: true });
     }
@@ -64,6 +66,18 @@ describe("project structure", () => {
     for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs"]) {
       expect(fs.existsSync(path.join(root, dir))).toBe(true);
     }
+  });
+
+  test("migrate leaves a current project's missing empty folders alone, as doctor --fix does", () => {
+    // A git clone of a project has none of the empty folders init made.
+    const root = newProject();
+    for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs", "glossary/terms"]) {
+      fs.rmSync(path.join(root, dir), { recursive: true });
+    }
+    expect(invoke(root, ["migrate", "--dry-run"]).out).toBe("Dry run: story migrate would make no changes; nothing was written\n");
+    expect(invoke(root, ["doctor", "--fix", "--dry-run"]).out).toContain("- No safe repairs needed\n");
+    expect(invoke(root, ["migrate"]).out).toBe("Project already uses the current schema\n");
+    expect(fs.existsSync(path.join(root, "plot", "arcs"))).toBe(false);
   });
 
   test("validate outside a project says so instead of listing every path", () => {

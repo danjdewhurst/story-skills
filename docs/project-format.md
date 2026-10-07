@@ -1717,7 +1717,7 @@ Migration:
 3. sets `schema-version: 2` in `story.md` when it is missing or has an older or unrecognised value, leaving the rest of the file as it was, and
 4. runs `story reindex`, which also rebuilds (or creates) the character, world, plot, and chapter registries.
 
-Apart from that `schema-version` edit and the reindex, it leaves existing files alone, and it never invents creative content. It reports the number of files and directories it created or changed. Running it again is safe:
+Step 1 runs only when step 3 has a `schema-version` to set. On a project already at version 2, migrate leaves a missing empty folder alone: git does not keep empty folders, so a clone of a current project has none of them, and `story add` makes the folder it writes into. Apart from that `schema-version` edit and the reindex, it leaves existing files alone, and it never invents creative content. It reports the number of files and directories it created or changed. Running it again is safe:
 
 ```text
 $ story migrate .
