@@ -2253,6 +2253,21 @@ describe("registry text kept by reindex", () => {
     return filePath;
   }
 
+  const HEADER = "| Name | Role | Status | File |\n|------|------|--------|------|\n";
+  const MARA = "| Mara | supporting | alive | [mara](mara.md) |\n";
+  const REBUILT = `${HEADER}| Bo | supporting | alive | [bo](bo.md) |\n${MARA}`;
+
+  // Adds Mara, applies `edit` to the character registry, adds Bo, and
+  // returns the registry body once a second reindex changes nothing.
+  function addedAround(edit) {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Kept Tables", force: false }).root;
+    createEntity(root, { kind: "character", name: "Mara" });
+    const index = registry(root, "characters/_index.md", edit);
+    createEntity(root, { kind: "character", name: "Bo" });
+    expect(reindexProject(root).changed).toEqual([]);
+    return fs.readFileSync(index, "utf8").replace(/^---\n[\s\S]*?\n---\n\n/, "");
+  }
+
   test("notes under the title, around a generated table, and in ### subsections survive add and rename", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ cwd, title: "Kept Notes", force: false }).root;
@@ -2296,5 +2311,88 @@ describe("registry text kept by reindex", () => {
     expect(text).toContain("## Relationship Map\n\n<!--\n## Old map\n-->\nMara owes Bo.\n\n## Family Trees");
     expect(text).toContain("| *No characters yet* | | | |\n\n| Group | Members |\n|-------|---------|\n| Crew | Mara, Bo |\n\n## Relationship Map");
     expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("a registry table in a comment or a code fence stays as written, and the live table is rebuilt", () => {
+    const commented = "<!--\n| Name | Role | Status | File |\n|---|---|---|---|\n| Old | x | y | z |\n-->\n\n";
+    const fenced = "```\n| Name | Role | Status | File |\n|---|---|---|---|\n```\n\n";
+    for (const hidden of [commented, fenced]) {
+      const text = addedAround((registryText) => registryText.replace("## Registry\n\n", `## Registry\n\n${hidden}`));
+      expect(text).toContain(`## Registry\n\n${hidden}${REBUILT}\n## Relationship Map`);
+    }
+  });
+
+  test("every table with the generated header row is rebuilt as one, wherever reindex writes", () => {
+    const outerPipes = (line) => line.replace(/^\| | \|$/gm, "");
+    const cases = [
+      // Under the title, with no ## Registry.
+      [(text) => text.replace(/## Registry\n\n[\s\S]*?\n\n## Relationship Map/, "## Relationship Map").replace("# Characters\n", `# Characters\n\nIntro.\n\n${HEADER}${MARA}\nOutro.\n`),
+        `# Characters\n\nIntro.\n\nOutro.\n\n## Registry\n\n${REBUILT}\n## Relationship Map`],
+      // A same-header table of your own above it; the text between stays.
+      [(text) => text.replace("## Registry\n\n", `## Registry\n\nPlanned:\n\n${HEADER}| Zed | villain | planned | TBD |\n\nLive:\n\n`),
+        `## Registry\n\nPlanned:\n\n${REBUILT}\nLive:\n\n## Relationship Map`],
+      // A header and rows without outer pipes.
+      [(text) => text.replace(`${HEADER}${MARA}`, `${outerPipes(HEADER)}${outerPipes(MARA)}`), `## Registry\n\n${REBUILT}\n## Relationship Map`],
+      // Rows a blank line cut off, then a note.
+      [(text) => text.replace(MARA, `${MARA}\n| Old | x | y | z |\n\nAfter.\n`), `## Registry\n\n${REBUILT}\nAfter.\n\n## Relationship Map`],
+      // Another table above it and a pipe line just above its header.
+      [(text) => text.replace(HEADER, `| Group | Members |\n|-------|---------|\n| Crew | Mara |\n\n| note |\n${HEADER}`),
+        `## Registry\n\n| Group | Members |\n|-------|---------|\n| Crew | Mara |\n\n| note |\n\n${REBUILT}\n## Relationship Map`]
+    ];
+    for (const [edit, expected] of cases) {
+      const text = addedAround(edit);
+      expect(text).toContain(expected);
+      expect(text).not.toContain("Old");
+      expect(text).not.toContain("Zed");
+    }
+  });
+
+  test("a git conflict inside the registry table is rebuilt away; one that reaches a note keeps its markers", () => {
+    const resolved = addedAround((text) => text
+      .replace(HEADER, `<<<<<<< HEAD\n${HEADER}`)
+      .replace(MARA, `| Cy | supporting | alive | [cy](cy.md) |\n\n=======\n\n${HEADER}| Di | supporting | alive | [di](di.md) |\n${MARA}\n>>>>>>> other\n`));
+    expect(resolved).toContain(`## Registry\n\n${REBUILT}\n## Relationship Map`);
+    const noted = addedAround((text) => text.replace(MARA, `${MARA}<<<<<<< HEAD\nNote A\n=======\nNote B\n>>>>>>> other\n`));
+    expect(noted).toContain(`## Registry\n\n${REBUILT}\n<<<<<<< HEAD\nNote A\n=======\nNote B\n>>>>>>> other\n\n## Relationship Map`);
+  });
+
+  test("a registry table with a column added by hand is kept beside the rebuilt one", () => {
+    const own = "| Name | Role | Notes | Status | File |\n|---|---|---|---|---|\n| Mara | supporting | brave | alive | [mara](mara.md) |\n";
+    const text = addedAround((registryText) => registryText.replace(`${HEADER}${MARA}`, own));
+    expect(text).toContain(`## Registry\n\n${REBUILT}\n${own}\n## Relationship Map`);
+  });
+
+  test("the title is the first level 1 heading, # or underlined, and a carried section above it keeps only its own text", () => {
+    const renamed = addedAround((text) => text.replace("# Characters\n", "## Notes\n\nN.\n\n# Dramatis Personae\n\nUnder.\n"));
+    expect(renamed).toStartWith(`# Dramatis Personae\n\nUnder.\n\n## Registry\n\n${REBUILT}`);
+    expect(renamed).toEndWith("## Notes\n\nN.\n");
+    expect(renamed.match(/^# /gm)).toHaveLength(1);
+    const underlined = addedAround((text) => text.replace("# Characters\n", "Characters\n==========\n\nUnder.\n"));
+    expect(underlined).toStartWith(`Characters\n==========\n\nUnder.\n\n## Registry\n\n${REBUILT}`);
+    expect(underlined).not.toContain("# Characters");
+    const carried = addedAround((text) => text
+      .replace("\n## Family Trees\n\n*No family trees defined yet.*\n", "")
+      .replace("# Characters\n", "## Family Trees\n\nTree text.\n\n# Characters\n\nUnder title.\n"));
+    expect(carried).toStartWith("# Characters\n\nUnder title.\n\n## Registry\n");
+    expect(carried).toEndWith("## Family Trees\n\nTree text.\n");
+    expect(carried.match(/Under title\./g)).toHaveLength(1);
+  });
+
+  test("headings match without regard to case, with up to three spaces of indent", () => {
+    const text = addedAround((registryText) => registryText
+      .replace("## Relationship Map\n\n*No relationships defined yet.*", "## relationship map\n\nMara owes Bo.")
+      .replace(MARA, `${MARA}\n    ## Not a heading\n\n   ## Three\n\nthree\n`));
+    expect(text).toContain(`## Registry\n\n${REBUILT}\n    ## Not a heading\n\n## Relationship Map\n\nMara owes Bo.\n\n## Family Trees`);
+    expect(text).toEndWith("*No family trees defined yet.*\n\n   ## Three\n\nthree\n");
+    expect(text.match(/Mara owes Bo\./g)).toHaveLength(1);
+  });
+
+  test("long heading, table delimiter, and closing-hash lines reindex in linear time", () => {
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Long Lines", force: false }).root;
+    const lines = [`##${" ".repeat(100000)}\r`, `## a${" ".repeat(100000)}\u2028`, `|${"-".repeat(200000)}x`, `| a |\n|${"-".repeat(200000)}x`, `## ${"#".repeat(200000)}x`, `## a${" #".repeat(100000)}x`];
+    registry(root, "characters/_index.md", (text) => `${text}\n${lines.join("\n\n")}\n`);
+    const started = performance.now();
+    reindexProject(root);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 });
