@@ -303,18 +303,20 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     // Starts a helper that would outlive it by 30 seconds, holding the log
     // open, then exits after writing a PDF. The helper writes doneFile if it
     // lives to the end, so renderPdf returned without waiting for it only
-    // if that file is never written: no wall-clock limit decides.
-    const helperScript = `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(doneFile)}, "done"), 30000)`;
+    // if that file is never written: no wall-clock limit decides. The paths
+    // reach the engine in its environment and the helper as its argument,
+    // so neither script has a path written into it.
     fs.writeFileSync(file, `#!${process.execPath}
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
-const helper = spawn(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(helperScript)}], { stdio: "inherit" });
-fs.writeFileSync(${JSON.stringify(pidFile)}, String(helper.pid));
+const helper = spawn(process.execPath, ["-e", "setTimeout(() => require('node:fs').writeFileSync(process.argv[1], 'done', { flag: 'wx' }), 30000)", process.env.HELPER_DONE], { stdio: "inherit" });
+fs.writeFileSync(process.env.HELPER_PID, String(helper.pid), { flag: "wx" });
 helper.unref();
 const out = process.argv.find((arg) => arg.startsWith("--print-to-pdf=")).slice("--print-to-pdf=".length);
 fs.writeFileSync(out, "%PDF-1.7\\n");
 `, { mode: 0o755 });
-    expect(renderPdf("<p>x</p>", { name: "chrome", file }).subarray(0, 5).toString()).toBe("%PDF-");
+    const env = { ...process.env, HELPER_PID: pidFile, HELPER_DONE: doneFile };
+    expect(renderPdf("<p>x</p>", { name: "chrome", file }, { env }).subarray(0, 5).toString()).toBe("%PDF-");
     const pid = Number(fs.readFileSync(pidFile, "utf8"));
     let alive = true;
     for (let tries = 0; tries < 50 && alive; tries += 1) {
