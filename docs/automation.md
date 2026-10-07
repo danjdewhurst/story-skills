@@ -61,9 +61,9 @@ Every command exits `0` on success. A failure exits with a code that says what k
 | Code | Meaning | Examples |
 |---|---|---|
 | `0` | Success. For checks, no errors. | `Project is valid`, or only warnings. |
-| `1` | Findings: a check reported at least one `error:` line. | `validate`, `links`, or `continuity` found an error; `names` found a clash. |
+| `1` | Findings: a check reported at least one `error:` line. | `check`, `validate`, `links`, or `continuity` found an error; `names` found a clash. |
 | `2` | Usage error: the command line was wrong. | An unknown command or option, a missing option value, an unexpected argument, an unsupported `--format`, or an id that does not exist (`Unknown character nobody`). |
-| `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
+| `3` | Not a usable story project. | No `story.md` at the path, invalid `cli-defaults` or `severity` in `story.md` (every command except `validate`, `check`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed (`Cannot export: fix this file first`) or is a symlink, a project with a newer schema, or nothing to build (`No chapters found to export`). |
 | `4` | Refused or failed write. The message says what, if anything, was changed. | The target already exists (`init` without `--force`, `add` of an existing id), `--out` points at project source, inside a `.git` folder, outside the project, or through a symlink, another story command holds the project lock or the lock cannot be created, a file changed on disk meanwhile, or the file system refused the write (`permission denied`, a full disk). |
 
 Because findings keep `1`, `story validate "$STORY_DIR" || exit 1` and the GitHub Actions templates fail a job exactly as before. Scripts that test for `1` specifically to mean "any failure" need to accept `2`, `3`, and `4` too; `[ $? -ne 0 ]` or `|| exit` works for every code.
@@ -72,18 +72,19 @@ Which commands can report findings (exit `1`):
 
 | Command | Exits 1 when |
 |---|---|
+| `check` | `validate`, `links`, or `continuity` finds an error. With `--strict`, a warning fails it too. |
 | `validate` | The project has a structural, frontmatter, or registry error. |
 | `links` | A cross-reference points at a missing file, or a required backlink is missing. |
 | `continuity` | A continuity contract is broken, such as a dead character listed in a later chapter or a payoff before its setup. Findings matched by `continuity/exemptions.md` are dismissed and do not count. |
 | `series` | A linked path is not a story project, the chronology has a cycle, two books share a `book-number`, linked books declare different series, or shared canon contradicts itself, such as a character who died in an earlier book appearing later. A missing series backlink is caught by `links`, not `series`. |
-| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `diagram` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
+| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `mentions`, `diagram`, `grid`, `list` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
 | `names` | A candidate name clashes with an existing one. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
-| `build`, `export`, `context`, `add`, `rename`, `move`, `remove` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
-| All other commands | Never: they succeed, or stop with `2`, `3`, or `4`. |
+| `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
+| `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. |
 
-`report --actionable`, `next`, and `doctor` are for reading, not gating. Use `validate`, `links`, and `continuity` when a job must fail.
+`report --actionable`, `next`, and `doctor` are for reading, not gating. Use `check`, which runs `validate`, `links`, and `continuity`, when a job must fail, as the [story checks workflow](#story-checks-workflow) does.
 
 Before this split, every failure exited `1`. If a script relied on `1` for a usage error, a missing project, or a refused write, update it to the new code.
 
@@ -118,8 +119,8 @@ exit=1
 
 By default, output is plain text with stable line prefixes, so you can filter it with standard tools. For a machine-readable result, see [JSON output](#json-output).
 
-- `validate`, `links`, and `continuity` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
-- `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout and the same summary and finding lines to stderr.
+- `validate`, `links`, `continuity`, and `check` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
+- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr and exits 2. An unknown command also prints the full help text after the error.
 - Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 3. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.
@@ -134,7 +135,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-Every command takes `--json`: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `grid`, `synopsis`, `passes`, the commands that change the project, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {

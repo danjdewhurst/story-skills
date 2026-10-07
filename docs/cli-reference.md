@@ -21,17 +21,20 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 
 ## Running the CLI
 
-The CLI needs Node 18 or newer and has no runtime dependencies. Pick whichever of these fits how you installed Story Skills:
+The CLI has no runtime dependencies. It needs Node 18 or newer, except as a standalone binary (Homebrew installs one). Pick whichever of these fits how you installed Story Skills:
 
 | How you have it | Command |
 |---|---|
 | Installed globally with `npm install -g story-skills` | `story <command>` |
-| Not installed | `npx story-skills <command>` |
+| Not installed, with npm | `npx story-skills <command>` |
+| Not installed, with Bun | `bunx story-skills <command>` |
+| Installed with Homebrew (`brew install danjdewhurst/tap/story-skills`), macOS or Linux | `story <command>` |
+| A standalone binary from the [releases page](https://github.com/danjdewhurst/story-skills/releases), on your `PATH` | `story <command>` |
 | Unreleased changes from GitHub | `npx --yes --package github:danjdewhurst/story-skills story <command>` |
 | A clone of this repository | `node <clone>/bin/story.js <command>` or `bun <clone>/bin/story.js <command>` |
 | Skills copied into an agent, no package | `node <skills-dir>/story-maintenance/scripts/story.js <command>` |
 
-All five run the same code. Run them from the story project folder, so `.` is the project. [`init`](#init) and [`import`](#import) create a project, so run them from the folder that should hold it, or pass `--dir`; inside an existing project they refuse. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
+All of them run the same code. Run them from the story project folder, so `.` is the project. [`init`](#init) and [`import`](#import) create a project, so run them from the folder that should hold it, or pass `--dir`; inside an existing project they refuse. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
 
 ### Example projects used on this page
 
@@ -214,7 +217,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--shunn`, `--init`, `--actionable`, `--json`, `--dry-run`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
+- Boolean flags (`--force`, `--write`, `--log`, `--list`, `--shunn`, `--pdf`, `--spoilers`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
 - Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -286,7 +289,7 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code, unless `severity` in `story.md` promotes a warning to an error. |
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
-| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
+| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for every command except `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source, inside a `.git` folder, or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it, or the project lock could not be created; or `build --pdf` found no PDF engine, or the engine failed. |
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
@@ -689,7 +692,7 @@ story check .
 ### validate
 
 ```text
-story validate [path]
+story validate [path] [--json]
 ```
 
 Checks that the project is structurally sound:
@@ -812,7 +815,7 @@ Total: 5995 characters
 ### links
 
 ```text
-story links [path]
+story links [path] [--json]
 ```
 
 Checks that references between entities point at entities that exist and that two-way links are mirrored. It covers:
@@ -861,7 +864,7 @@ The linking rules are in [Core concepts](concepts.md#links-and-backlinks) and th
 ### check
 
 ```text
-story check [path] [--strict]
+story check [path] [--strict] [--json]
 ```
 
 Runs [`validate`](#validate), [`links`](#links), and [`continuity`](#continuity) over one scan of the project and exits once, with the same [exit codes](#output-streams-and-exit-codes): `1` when any of them reports an error. Each check alone misses problems the others catch: `validate` passes a chapter with `pov: nobody-here`, which only `links` reports.
@@ -959,7 +962,7 @@ These commands read the project and never change story files. The one exception 
 ### continuity
 
 ```text
-story continuity [path]
+story continuity [path] [--json]
 ```
 
 Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, open questions left unanswered for twelve or more drafted chapters, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
@@ -1007,7 +1010,7 @@ Every rule, and how to write exemptions, is in [Continuity and analysis](continu
 ### knowledge
 
 ```text
-story knowledge <character-id> --at <chapter-id> [--path <project>]
+story knowledge <character-id> --at <chapter-id> [--json] [--path <project>]
 ```
 
 Lists the `knowledge-state` entries in `continuity/state.md` that a character knew by a given chapter, using the same rule as [`context`](#context). An entry counts when its `learned-in` chapter is not after `--at` in story time (by story date when both chapters are dated, else by chapter number); an entry with no `learned-in` is pre-existing knowledge and always counts. Each line is marked `reader-knowledge` when the learning chapter's number is at or before `--at` (the reader has been shown it, or it is pre-existing) and `character-knowledge` with `do not reveal` when the character learned it in a later chapter that is earlier in story time (a flashback the reader has not reached). A fact learned later in story time is left out, including one the reader already read in a flash-forward. It exits 3 with the parse error when a chapter file, the character file, or `continuity/state.md` fails to parse, and when one of the character's entries has no `knows`.
@@ -1408,7 +1411,7 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 ### timeline
 
 ```text
-story timeline [path]
+story timeline [path] [--json]
 ```
 
 Shows three read-only views:
@@ -1445,7 +1448,7 @@ Timeline built: 0 errors, 0 warnings, 0 dismissed
 ### prose
 
 ```text
-story prose [path|-]
+story prose [path|-] [--max-filter-words <n>] [--max-adverbs <n>] [--max-bookisms <n>] [--baseline] [--json]
 ```
 
 An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names. Like `wordcount`, it ignores code between closed `` ``` `` fences.
@@ -1544,7 +1547,7 @@ See [Continuity and analysis](continuity.md#story-prose) for the rules and the [
 ### series
 
 ```text
-story series [path]
+story series [path] [--json]
 ```
 
 Follows the `follows` and `precedes` links in `story.md` to every connected book, orders them by story chronology, and checks canon shared between them: characters who died in an earlier book but are alive or cast in a later one, facts a character relearns after knowing them in an earlier book, and (as warnings) name drift and artifacts destroyed in an earlier book. It also reports link problems: a linked folder without `story.md`, books in different series, a chronology cycle, or two books with the same `book-number`. Any error exits 1. Missing backlinks are reported by `story links`, not `story series`.
@@ -1596,7 +1599,7 @@ See [Series](series.md).
 ### report
 
 ```text
-story report [path] [--actionable]
+story report [path] [--actionable] [--json]
 ```
 
 Prints a project summary: metadata (with a `Form:` line when `story.md` sets `form`), entity counts, total words (and percentage of `target-words`, when set), a line per chapter and arc, and the result of `validate`, `links`, and `continuity`. A book [counted in characters](project-format.md#counting-in-characters) gives total characters against `target-characters` and each chapter's characters; In `--json`, `data.unit` is the count unit, and `targetCharacters`, `counts.characterCount` (the prose, not `counts.characters`, the cast), and each chapter's `characterCount` sit beside the word counts, null in a book counted in words. A metadata field that `story.md` does not set, such as `status` or `pov`, prints as `unset`, and a missing `title` shows the project folder name.
@@ -1852,7 +1855,7 @@ The rules behind each report, and how to act on them, are in [Continuity and ana
 ### pacing
 
 ```text
-story pacing [path]
+story pacing [path] [--json]
 ```
 
 A pacing dashboard built from frontmatter. For each chapter it shows the prose word count (characters in a book [counted in characters](project-format.md#counting-in-characters), which the long and short chapter findings then measure; in `--json`, `data.unit` is the count unit, and each row's `characterCount` and `medianCharacterCount` sit beside `words` and `medianWords`, null in a book counted in words), the number of scenes and sequels (scene records with `sequel: true`), the tally of scene `outcome` values, and the chapter-ending `hook`. Record outcomes with `story add scene --outcome` and hooks with `story add chapter --hook` (see [add](#add)), or edit the fields by hand.
@@ -1896,7 +1899,7 @@ warning: 4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-0
 ### clues
 
 ```text
-story clues [path]
+story clues [path] [--json]
 ```
 
 Shows every clue as a row in a grid of chapters, marking where it is planted (`P`), revealed (`R`), or both (`x`). Red herrings are marked `~`, and each row ends with the clue's status and `delayed` when `significance-delayed` is true.
@@ -1985,7 +1988,7 @@ After adding `beat: Inciting Incident` to chapter 1 and `beat: First Plot Point`
 ### voices
 
 ```text
-story voices [path|-]
+story voices [path|-] [--json]
 ```
 
 Builds a dialogue fingerprint for each character who speaks: lines and words of dialogue, average sentence length, contractions per 100 words, the share of questions and exclamations, and up to five signature words (words the character uses at least twice, at more than twice the rate of the other speakers; common words are ignored). A line is attributed only when its paragraph names the speaker next to a speech verb (`"...," Mara said` or `said Mara`) or, failing that, when the narration names exactly one character and has no pronoun tag (`she said`, `said he`) right after a closing quote or right before an opening one. A pronoun and speech verb elsewhere in the paragraph (`She said nothing more`) is narration and does not block the action beat. Other quoted lines are counted as unattributed, never guessed. Names match a character's full name, given name, and `aliases`.
@@ -2993,8 +2996,10 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `docx` | `dist/<story-id>.docx` | Word document with the title and its credits (`author` or `authors`, then `editor`), headings, and paragraphs |
 | `docx` with `--shunn` | `dist/<story-id>.shunn.docx` | Shunn format: Courier New 12pt, double-spaced, title page, and a running head of the surname, short title, and page number on every later page (see [Running head](manuscripts.md#running-head)) |
 | `shunn` | `dist/<story-id>.shunn.md` | Shunn manuscript markdown: title, byline, approximate word count (characters for a book counted in characters), `contact` lines, page breaks between chapters; no matter pages |
+| `shunn` with `--pdf` | `dist/<story-id>.shunn.pdf` | The Shunn manuscript as a PDF, rendered by an installed engine: US Letter (or `--paper a4`), Courier New 12 pt, double-spaced, with a running head. See [PDF output](#pdf-output) |
 | `html` | `dist/<story-id>.html` | A single-file review copy for readers: contents list, and a label on every paragraph (`ch03-p12` is chapter 3, paragraph 12) that readers quote with their notes. A label is the paragraph's chapter and position in this build, so an earlier edit in the chapter renumbers it and `move` changes its chapter part; readers should quote the `--stamp` build label and the paragraph's first few words too |
 | `print` | `dist/<story-id>.print.html` | A print interior as HTML with CSS paged media, sized to `--trim`, with a title page, contents, and page numbers. Render it to PDF with a paged-media engine such as Paged.js, WeasyPrint, or Prince |
+| `print` with `--pdf` | `dist/<story-id>.pdf` | The print interior as a PDF, rendered by an installed engine; no `.print.html` file is left in `dist/`. See [PDF output](#pdf-output) |
 | `narration` | `dist/<story-id>.narration.md` | An audiobook script: estimated runtime at the language's narration pace (155 words a minute in English; 300 characters a minute for a book [counted in characters](project-format.md#counting-in-characters)), a pronunciation guide from `pronunciation` fields in the bible, opening and closing credits, and each section with its estimated minutes |
 | `metadata` | `dist/<story-id>.metadata.md` | A retailer metadata sheet from `story.md`: title, authors, ISBN, language, word count (character count for a book counted in characters, with pages estimated from characters a page), estimated print pages, description, keywords, BISAC subjects, and a readiness checklist of what is missing |
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
@@ -3192,8 +3197,9 @@ An error means the project is broken or a check failed, so it cannot be turned d
 **Codes by command**
 
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
-- [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [names](#codes-names)
-- [context](#codes-context) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export) · [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+- [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [mentions](#codes-mentions) · [names](#codes-names)
+- [context](#codes-context) · [progress and next](#codes-progress-and-next) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
+- [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
 
@@ -3571,7 +3577,7 @@ With `--json`, a command that stops before producing a result reports one error 
 
 ## Option index
 
-Every option the CLI accepts, in the order `story --help` lists them. "Repeatable" options collect every value; for the rest, the last value wins. Passing an option to a command outside its "Used by" list, such as `--trim` to `timeline`, is an error; the one exception is `add`, which ignores an option that belongs to another entity kind.
+Every option the CLI accepts, in the order `story --help` lists them. "Repeatable" options collect every value; for the rest, the last value wins. Passing an option to a command outside its "Used by" list, such as `--trim` to `timeline`, is an error, and so is passing `add` an option of another entity kind, such as `--role` to `add system`.
 
 | Option | Value | Used by | Notes |
 |---|---|---|---|
@@ -3595,18 +3601,24 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--force` | | `init`, `import`, `snapshot` | Boolean; for `import`, replaces the chapters after saving the project as snapshot `before-import-<n>`; for `snapshot`, replaces a snapshot of the same name |
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
+| `--weeks` | `<n>` | `progress` | Whole number 1 to 52; default `4` |
 | `--ref` | `<git-ref>` | `compare` | Exclusive with `--against` and `--snapshot` |
 | `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, a file, folder, or git ref; exclusive with `--snapshot` |
 | `--snapshot` | `<name>` | `compare`, `similarity` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
+| `--anchor` | `<label>` | `compare` | Repeatable; a paragraph label from a review copy of the earlier draft, such as `ch03-p12`, to find in the current text instead of comparing chapters |
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
 | `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks, and the folders that leaves empty |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
 | `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
+| `--paper` | `<letter\|a4>` | `build` | Only with `--format shunn --pdf` or `--format docx --shunn`: `letter` (default) or `a4` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
+| `--note-url` | `<url>` | `build` | Only with `--format html`: an http or https note form, such as a GitHub new-issue link, that every paragraph label links to, prefilled |
 | `--shunn` | | `build` | Boolean; only with `--format docx` |
 | `--anonymous` | | `build` | Boolean; only with `--format shunn` or `--format docx --shunn`; not a `cli-defaults` entry |
+| `--pdf` | | `build` | Boolean; only with `--format print` or `--format shunn`: renders the build to PDF with an installed engine (see [PDF output](#pdf-output)) |
+| `--pdf-engine` | `<name\|path>` | `build` | Only with `--pdf`: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one; default the first found on `PATH` |
 | `--spoilers` | | `build` | Boolean; only with `--format codex` |
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
@@ -3620,21 +3632,25 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |
 | `--max-filter-words` | `<n>` | `prose` | Number 0 or more; default 10 per 1,000 narration words |
 | `--max-adverbs` | `<n>` | `prose` | Number 0 or more; default 12 per 1,000 narration words |
-| `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
 | `--baseline` | | `prose` | Boolean; on by default when `style-sheet.md` lists `samples` |
+| `--max-bookisms` | `<n>` | `prose` | Whole number 0 or more; default 2 per chapter |
 | `--min-words` | `<n>` | `similarity` | Whole number 5 or more; default `8` |
-| `--weeks` | `<n>` | `progress` | Whole number 1 to 52; default `4` |
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
+| `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
+| `--strict` | | `check` | Boolean; fails on warnings as well as errors |
+| `--json` | | Every command except `init`, `import`, `export`, and `build` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
+| `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
+| `--prose` | | `rename` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
 | `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
 | `--chapter` | `<id>` | `add scene`, `move scene` | |
 | `--scene` | `<n>` | `add scene`, `move scene` | |
 | `--type` | `<name>` | `add location`, `system`, `faction`, `artifact`, `arc` | |
 | `--role` | `<name>` | `add character` | |
-| `--status` | `<name>` | `add` (most kinds) | |
-| `--mode` | `<name>` | `add chapter` | For example `discovered` |
-| `--date` | `<date>` | `add chapter`, `add scene`, `progress` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add` |
+| `--status` | `<name>` | `add` (every kind except `system`, `term`, and `matter`) | |
+| `--mode` | `<name>` | `add chapter` | `discovered` or `outlined` |
+| `--date` | `<date>` | `add chapter`, `add scene`, `progress`, `next` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add`; for `progress` the session date, and for `progress` and `next` the day release dates are measured from (default today) |
 | `--time` | `<time>` | `add chapter`, `add scene` | `HH:MM` or a named time of day |
 | `--travel-hours` | `<n>` | `add scene` | |
 | `--dilemma` | `<text>` | `add scene` | |

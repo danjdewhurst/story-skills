@@ -56,8 +56,8 @@ import {
 // story export's file. A markdown build of a book whose id is manuscript
 // would default to the same name, so it takes MANUSCRIPT_BUILD_FILE
 // instead, and neither command replaces the other's file.
-const EXPORT_FILE = "dist/manuscript.md";
-const MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
+export const EXPORT_FILE = "dist/manuscript.md";
+export const MANUSCRIPT_BUILD_FILE = "dist/manuscript.book.md";
 
 export function exportManuscript(root, options = {}) {
   const project = scanProject(root);
