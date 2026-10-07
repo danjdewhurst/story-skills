@@ -469,3 +469,17 @@ describe("prose (#81, #126, #210, #211, #212, #213, #216)", () => {
     expect(messages(rate)[0]).toContain("has 10.04 filter words");
   });
 });
+
+describe("prose findings", () => {
+  test("a spread too close to the threshold to round below it prints in full", () => {
+    const findings = chapterFindings("Chapter 1", {
+      variants: [],
+      narrationWords: 0,
+      filterWords: [],
+      adverbs: [],
+      bookisms: [],
+      sentences: { count: 50, spread: 4.9999999 }
+    });
+    expect(messages(findings)).toEqual(["Chapter 1 sentence lengths are uniform (spread 4.9999999 words over 50 sentences); vary the rhythm"]);
+  });
+});

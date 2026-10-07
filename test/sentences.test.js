@@ -114,3 +114,10 @@ describe("#208 Chinese and Japanese count per character", () => {
     expect(splitSentences("没有句号")).toEqual(["没有句号."]);
   });
 });
+
+describe("sentence and speech edge cases", () => {
+  test("a stammer across an ellipsis does not end the sentence", () => {
+    expect(splitSentences("I… I don’t know. Fine.")).toEqual(["I… I don’t know.", "Fine."]);
+    expect(splitSentences("We... we should go. Now.")).toEqual(["We... we should go.", "Now."]);
+  });
+});

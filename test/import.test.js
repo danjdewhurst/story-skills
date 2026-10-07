@@ -1240,3 +1240,32 @@ describe("#187 import warns about chapter lines it did not split on", () => {
     expect(result.err).not.toContain("warning:");
   });
 });
+
+describe("import edge cases", () => {
+  test("a document with a Chapter Text heading but no frontmatter is split as plain markdown", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), "# Chapter 1: Arrival\n\nOutline notes.\n\n## Chapter Text\n\nThe ship came in at dawn.\n", "utf8");
+    const result = importManuscript({ source: "book.md", title: "No Frontmatter", cwd });
+    const [first] = scanProject(result.root).chapters;
+    expect(first.title).toBe("Arrival");
+    // Not read as a Story Skills chapter, so the outline stays in the prose.
+    expect(fs.readFileSync(first.file, "utf8")).toContain("Outline notes.");
+  });
+
+  test("a list item over a dash line is not a setext chapter heading", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "book.md"), [
+      "# Chapter 1: Lists",
+      "",
+      "Before the list.",
+      "",
+      "- Chapter Two",
+      "---",
+      "",
+      "After the list."
+    ].join("\n"), "utf8");
+    const result = importManuscript({ source: "book.md", title: "List Book", cwd });
+    expect(result.chapters).toBe(1);
+    expect(scanProject(result.root).chapters.map((chapter) => chapter.title)).toEqual(["Lists"]);
+  });
+});

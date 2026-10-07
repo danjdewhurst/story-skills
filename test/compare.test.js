@@ -5,7 +5,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareChapters, formatComparison, proseParagraphs } from "../src/compare.js";
 import { compareProject, createStoryProject } from "../src/story.js";
-import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { git, makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 function writeChapter(root, number, body, title = `Chapter ${number}`) {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: ${title}\nnumber: ${number}\nstatus: draft`, `## Chapter Text\n\n${body}\n`);
@@ -40,6 +40,22 @@ function gitProject({ subdir = "book" } = {}) {
 
 function chapter(id, title, paragraphs) {
   return { id, title, words: paragraphs.join(" ").split(/\s+/).filter(Boolean).length, paragraphs };
+}
+
+function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+// Runs fn with PATH pointing only at `dir`, so git is whatever lives there.
+function withPath(dir, fn) {
+  const saved = process.env.PATH;
+  process.env.PATH = dir;
+  try {
+    return fn();
+  } finally {
+    process.env.PATH = saved;
+  }
 }
 
 describe("story compare", () => {
@@ -257,5 +273,37 @@ describe("#189 compare pairs chapters renumbered by move", () => {
     expect(comparison.chapters[0].status).toBe("changed");
     expect(comparison.chapters[0].movedFrom).toBeUndefined();
     expect(formatComparison(comparison, "x")).toContain("(0 added, 0 removed)\n");
+  });
+});
+
+describe("compare --ref git failures", () => {
+  test("reports git missing from PATH", () => {
+    const root = gapProject();
+    const empty = makeTempDir();
+    expect(() => withPath(empty, () => compareProject(root, { ref: "HEAD" }))).toThrow("compare --ref needs git, which was not found on PATH");
+  });
+
+  // The fake git is a shell script, which Windows cannot run from PATH.
+  test.skipIf(process.platform === "win32")("reports the first line of an unexpected git error", () => {
+    const root = gapProject();
+    const bin = makeTempDir();
+    const fake = path.join(bin, "git");
+    fs.writeFileSync(fake, "#!/bin/sh\necho 'fatal: something odd happened' >&2\necho 'second line' >&2\nexit 128\n", "utf8");
+    fs.chmodSync(fake, 0o755);
+    expect(() => withPath(bin, () => compareProject(root, { ref: "HEAD" }))).toThrow("compare --ref could not run git: fatal: something odd happened");
+  });
+
+  test("warns when story.md is missing at the ref", () => {
+    const repo = makeTempDir();
+    const root = path.join(repo, "book");
+    createStoryProject({ cwd: repo, title: "Late Story", dir: root });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nFirst words.\n");
+    git(repo, "init", "-q");
+    git(repo, "add", "-A");
+    git(repo, "reset", "-q", "--", "book/story.md");
+    git(repo, "commit", "-qm", "chapters first");
+    git(repo, "tag", "early");
+    const result = compareProject(root, { ref: "early" });
+    expect(messages(result.warnings)).toContain("story.md does not exist at git ref early: the project may not have existed then");
   });
 });
