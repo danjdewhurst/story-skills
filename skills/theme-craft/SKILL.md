@@ -1,6 +1,6 @@
 ---
 name: theme-craft
-description: This skill should be used when the user asks about "theme", "controlling idea", "thematic argument", "moral argument", "thematic arc", "flat arc", "negative arc", "the lie", "antagonist design", "motif", "symbolism", "theme audit", or wants to plan, track, or revise the thematic layer of a story. NOT for finding or testing a story premise (use premise-workshop), or a character's profile, relationships, or "character arc" record (use character-management).
+description: This skill should be used when the user asks about "theme", "controlling idea", "thematic argument", "moral argument", "thematic arc", "flat arc", "negative arc", "the lie", "antagonist design", "motif", "symbolism", "theme audit", or wants to plan, track, or revise the thematic layer of a story, including the lie, truth, ghost-wound, and arc-type fields of a character file. NOT for finding or testing a story premise (use premise-workshop), or a character's profile, relationships, or "character arc" record (use character-management).
 ---
 
 # Theme Craft
