@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, assertWriteAllowed, currentText, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, assertWriteAllowed, currentText, ignoresCase, lstatIfExists, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
+import { plural } from "./plural.js";
 import { EXIT_CODES, exitCodeFor, refusedError, usageError } from "./exit-codes.js";
 import { reindexProject } from "./mutate.js";
-import { assertProjectParses, markdownFiles, requireStoryFile, scanProject } from "./scan.js";
+import { PROJECT_DIRECTORIES, assertProjectParses, markdownFiles, requireStoryFile, scanProject } from "./scan.js";
 
 // Named snapshots: `story snapshot <name>` copies the project's markdown to
 // .snapshots/<name>/, so a writer without git can keep a draft and compare
@@ -223,13 +224,16 @@ export function existingSnapshot(root, value) {
 // story snapshot --restore <name>: puts the project's markdown back as the
 // snapshot holds it. Every markdown file in the snapshot is written back
 // (one that is already the same is left alone), and every markdown file a
-// scan reads that the snapshot lacks is deleted. Those are the files a
-// snapshot copies, so dist/, .snapshots/ and other dot-folders, nested
-// projects, and files that are not markdown are never touched. Before any
-// change the project as it is is saved as snapshot before-restore-<id>-<n>,
-// so the restore can itself be undone, and a restore that fails part way
-// names it. The registries are rebuilt afterwards when every restored file
-// parses.
+// scan reads that the snapshot lacks is deleted, with each folder that
+// leaves empty. Those are the files a snapshot copies, so dist/,
+// .snapshots/ and other dot-folders, nested projects, and files that are
+// not markdown are never touched. Before any change the project as it is is
+// saved as snapshot before-restore-<id>-<n>, so the restore can itself be
+// undone, and a restore that fails part way names it. The registries are
+// rebuilt afterwards when every restored file parses. `caseInsensitive`
+// says whether the project's file system ignores letter case; it is asked
+// of the project when not given (see ignoresCase). `occupied` names the
+// folders a --dry-run copy shows emptier than they are, which stay.
 export function restoreSnapshot(root, options = {}) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
@@ -246,9 +250,16 @@ export function restoreSnapshot(root, options = {}) {
     parses = false;
   }
 
+  // Where the file system ignores letter case, the project's notes.md is
+  // the snapshot's Notes.md, and its Chapters/ the snapshot's chapters/: such
+  // a file is written back under the project's spelling, which is the file
+  // the snapshot's spelling reaches, and is never deleted as a file the
+  // snapshot lacks (#581).
+  const nameKey = (options.caseInsensitive ?? ignoresCase(projectRoot, "story.md")) ? (relative) => relative.toLowerCase() : (relative) => relative;
+  const present = new Map(markdownFiles(projectRoot).map((file) => [nameKey(projectPath(projectRoot, file)), file]));
   const writes = [];
   for (const [relative, source] of saved) {
-    const target = path.join(projectRoot, ...relative.split("/"));
+    const target = present.get(nameKey(relative)) ?? path.join(projectRoot, ...relative.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
     // A file that cannot be read as text (swapped for a symlink or a FIFO
@@ -259,20 +270,20 @@ export function restoreSnapshot(root, options = {}) {
     }
     // The text read here is the one replaced, so an edit saved meanwhile
     // stops the restore rather than being lost.
-    writes.push({ path: relative, target, text, created: existing === null, original: current });
+    writes.push({ path: projectPath(projectRoot, target), target, text, created: existing === null, original: current });
   }
-  const deletes = markdownFiles(projectRoot)
-    .map((file) => ({ path: projectPath(projectRoot, file), target: file }))
-    .filter((file) => !saved.has(file.path))
-    .map((file) => ({ ...file, original: readTextFile(file.target) }));
+  const kept = new Set([...saved.keys()].map(nameKey));
+  const deletes = [...present]
+    .filter(([key]) => !kept.has(key))
+    .map(([, file]) => ({ path: projectPath(projectRoot, file), target: file, original: readTextFile(file) }));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
-    return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
+    return { restored, safety: null, created: [], updated: [], deleted: [], removedFolders: [], reindexed: false, warnings: [] };
   }
 
   const safetyId = nextSafetyId(projectRoot, id);
   const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
-  const done = { created: [], updated: [], deleted: [] };
+  const done = { created: [], updated: [], deleted: [], removedFolders: [] };
   try {
     for (const write of writes) {
       writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
@@ -281,6 +292,15 @@ export function restoreSnapshot(root, options = {}) {
     for (const file of deletes) {
       removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
       done.deleted.push(file.path);
+    }
+    // Only a folder the deletes left with nothing in it goes, so a folder
+    // that was already empty, or still holds a file of any kind, stays.
+    for (const folder of deletedFolders(deletes, nameKey)) {
+      const full = path.join(projectRoot, ...folder.split("/"));
+      if (options.occupied?.has(folder) !== true && fs.readdirSync(full).length === 0) {
+        removeDirectory(full, { action: "rmdir" });
+        done.removedFolders.push(folder);
+      }
     }
     if (parses) {
       reindexProject(projectRoot);
@@ -294,6 +314,25 @@ export function restoreSnapshot(root, options = {}) {
     });
   }
   return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+}
+
+// The folders init makes, and the folders above them: a restore that
+// empties one keeps it, as a new project has it.
+const PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap((folder) => folder.split("/").map((_, depth, parts) => parts.slice(0, depth + 1).join("/"))))];
+
+// The folders that hold the files a restore deletes, and the folders above
+// them up to the project, other than PROJECT_FOLDERS: deepest first, so a
+// folder is emptied before the one that holds it is looked at.
+function deletedFolders(deletes, nameKey) {
+  const keep = new Set(PROJECT_FOLDERS.map(nameKey));
+  const folders = new Set();
+  for (const file of deletes) {
+    const parts = file.path.split("/").slice(0, -1);
+    for (let depth = 1; depth <= parts.length; depth += 1) {
+      folders.add(parts.slice(0, depth).join("/"));
+    }
+  }
+  return [...folders].filter((folder) => !keep.has(nameKey(folder))).sort().reverse();
 }
 
 // The markdown files of a snapshot that a restore writes back, by their
@@ -353,10 +392,11 @@ export function formatRestore(result) {
   }
   const lines = [
     `Saved the project as it was in snapshot ${result.safety.id} (${result.safety.dir}/)`,
-    `Restored snapshot ${result.restored.id}: ${result.updated.length} updated, ${result.created.length} created, ${result.deleted.length} deleted (not in the snapshot)`,
+    `Restored snapshot ${result.restored.id}: ${result.updated.length} updated, ${result.created.length} created, ${result.deleted.length} deleted (not in the snapshot)${result.removedFolders.length === 0 ? "" : `, ${plural(result.removedFolders.length, "folder")} removed (left empty)`}`,
     ...result.updated.map((file) => `  update  ${file}`),
     ...result.created.map((file) => `  create  ${file}`),
     ...result.deleted.map((file) => `  delete  ${file}`),
+    ...result.removedFolders.map((folder) => `  rmdir   ${folder}`),
     ...(result.reindexed ? [] : ["Registries not rebuilt: some restored files do not parse. Fix them (story validate lists them), then run story reindex"]),
     `Undo it: story snapshot --restore ${result.safety.id}`
   ];
@@ -368,7 +408,7 @@ export function formatRestorePreview(result) {
   if (result.safety === null) {
     return `The project already matches snapshot ${result.restored.id}: nothing to restore\n`;
   }
-  const deleted = result.deleted.length === 0 ? "" : `; it would delete ${result.deleted.length === 1 ? "1 markdown file" : `${result.deleted.length} markdown files`} the snapshot does not have`;
+  const deleted = result.deleted.length === 0 ? "" : `; it would delete ${result.deleted.length === 1 ? "1 markdown file" : `${result.deleted.length} markdown files`} the snapshot does not have${result.removedFolders.length === 0 ? "" : `, and ${plural(result.removedFolders.length, "folder")} they leave empty`}`;
   return `Restoring snapshot ${result.restored.id} would first save the project as snapshot ${result.safety.id}${deleted}\n`;
 }
 

@@ -215,14 +215,14 @@ function removeFile(filePath, options = {}) {
     record(filePath, true, "delete");
   }
 }
-function removeDirectory(directory) {
+function removeDirectory(directory, { action = "delete" } = {}) {
   assertWriteAllowed(directory);
   if (planning > 0) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
   }
-  record(directory, true, "delete");
+  record(directory, true, action);
 }
 var refusals = [];
 function refuseWrites(root, message, run) {
@@ -279,12 +279,13 @@ function summarizeJournal(root, journal) {
   const base = path.resolve(root);
   const changes = [];
   for (const [file, { existed, action }] of journal) {
-    const kind = action === "mkdir" ? "mkdir" : action === "delete" ? existed ? "delete" : null : existed ? "update" : "create";
+    const kind = action === "mkdir" ? "mkdir" : action === "delete" || action === "rmdir" ? existed ? action : null : existed ? "update" : "create";
     if (kind !== null) {
       changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") || "." });
     }
   }
-  return changes.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  const key = (change) => change.action === "rmdir" ? `${change.path}/￿` : change.path;
+  return changes.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
 }
 function writeWholeFile(filePath, contents, options) {
   const target = prepareWriteTarget(filePath, options.root);
@@ -515,6 +516,11 @@ function isPathInside(root, target) {
 var IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
+}
+function ignoresCase(folder, name) {
+  const other = name === name.toUpperCase() ? name.toLowerCase() : name.toUpperCase();
+  const [first, second] = [name, other].map((each) => fs.lstatSync(path.join(folder, each), { bigint: true, throwIfNoEntry: false }));
+  return other !== name && first !== undefined && second !== undefined && first.dev === second.dev && first.ino === second.ino;
 }
 function isShortNameOf(name, longName) {
   const match = /^([^~.]{1,6})~\d+(?:\.([^.]{1,3}))?$/.exec(name);
@@ -25269,25 +25275,28 @@ function restoreSnapshot(root, options = {}) {
   } catch {
     parses = false;
   }
+  const nameKey = options.caseInsensitive ?? ignoresCase(projectRoot, "story.md") ? (relative) => relative.toLowerCase() : (relative) => relative;
+  const present = new Map(markdownFiles(projectRoot).map((file) => [nameKey(projectPath(projectRoot, file)), file]));
   const writes = [];
   for (const [relative, source] of saved) {
-    const target = path13.join(projectRoot, ...relative.split("/"));
+    const target = present.get(nameKey(relative)) ?? path13.join(projectRoot, ...relative.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
     const current = existing?.isFile() ? currentText(target) : null;
     if (current === text) {
       continue;
     }
-    writes.push({ path: relative, target, text, created: existing === null, original: current });
+    writes.push({ path: projectPath(projectRoot, target), target, text, created: existing === null, original: current });
   }
-  const deletes = markdownFiles(projectRoot).map((file) => ({ path: projectPath(projectRoot, file), target: file })).filter((file) => !saved.has(file.path)).map((file) => ({ ...file, original: readTextFile(file.target) }));
+  const kept = new Set([...saved.keys()].map(nameKey));
+  const deletes = [...present].filter(([key]) => !kept.has(key)).map(([, file]) => ({ path: projectPath(projectRoot, file), target: file, original: readTextFile(file) }));
   const restored = { name: manifest?.name ?? id, id };
   if (writes.length === 0 && deletes.length === 0) {
-    return { restored, safety: null, created: [], updated: [], deleted: [], reindexed: false, warnings: [] };
+    return { restored, safety: null, created: [], updated: [], deleted: [], removedFolders: [], reindexed: false, warnings: [] };
   }
   const safetyId = nextSafetyId(projectRoot, id);
   const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
-  const done = { created: [], updated: [], deleted: [] };
+  const done = { created: [], updated: [], deleted: [], removedFolders: [] };
   try {
     for (const write of writes) {
       writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
@@ -25296,6 +25305,13 @@ function restoreSnapshot(root, options = {}) {
     for (const file of deletes) {
       removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
       done.deleted.push(file.path);
+    }
+    for (const folder of deletedFolders(deletes, nameKey)) {
+      const full = path13.join(projectRoot, ...folder.split("/"));
+      if (options.occupied?.has(folder) !== true && fs9.readdirSync(full).length === 0) {
+        removeDirectory(full, { action: "rmdir" });
+        done.removedFolders.push(folder);
+      }
     }
     if (parses) {
       reindexProject(projectRoot);
@@ -25310,6 +25326,18 @@ ${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the proje
     });
   }
   return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+}
+var PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap((folder) => folder.split("/").map((_, depth, parts) => parts.slice(0, depth + 1).join("/"))))];
+function deletedFolders(deletes, nameKey) {
+  const keep = new Set(PROJECT_FOLDERS.map(nameKey));
+  const folders = new Set;
+  for (const file of deletes) {
+    const parts = file.path.split("/").slice(0, -1);
+    for (let depth = 1;depth <= parts.length; depth += 1) {
+      folders.add(parts.slice(0, depth).join("/"));
+    }
+  }
+  return [...folders].filter((folder) => !keep.has(nameKey(folder))).sort().reverse();
 }
 function restoreSources(root, name) {
   const projectRoot = path13.resolve(root);
@@ -25359,10 +25387,11 @@ function formatRestore(result) {
   }
   const lines = [
     `Saved the project as it was in snapshot ${result.safety.id} (${result.safety.dir}/)`,
-    `Restored snapshot ${result.restored.id}: ${result.updated.length} updated, ${result.created.length} created, ${result.deleted.length} deleted (not in the snapshot)`,
+    `Restored snapshot ${result.restored.id}: ${result.updated.length} updated, ${result.created.length} created, ${result.deleted.length} deleted (not in the snapshot)${result.removedFolders.length === 0 ? "" : `, ${plural(result.removedFolders.length, "folder")} removed (left empty)`}`,
     ...result.updated.map((file) => `  update  ${file}`),
     ...result.created.map((file) => `  create  ${file}`),
     ...result.deleted.map((file) => `  delete  ${file}`),
+    ...result.removedFolders.map((folder) => `  rmdir   ${folder}`),
     ...result.reindexed ? [] : ["Registries not rebuilt: some restored files do not parse. Fix them (story validate lists them), then run story reindex"],
     `Undo it: story snapshot --restore ${result.safety.id}`
   ];
@@ -25375,7 +25404,7 @@ function formatRestorePreview(result) {
     return `The project already matches snapshot ${result.restored.id}: nothing to restore
 `;
   }
-  const deleted = result.deleted.length === 0 ? "" : `; it would delete ${result.deleted.length === 1 ? "1 markdown file" : `${result.deleted.length} markdown files`} the snapshot does not have`;
+  const deleted = result.deleted.length === 0 ? "" : `; it would delete ${result.deleted.length === 1 ? "1 markdown file" : `${result.deleted.length} markdown files`} the snapshot does not have${result.removedFolders.length === 0 ? "" : `, and ${plural(result.removedFolders.length, "folder")} they leave empty`}`;
   return `Restoring snapshot ${result.restored.id} would first save the project as snapshot ${result.safety.id}${deleted}
 `;
 }
@@ -29874,7 +29903,7 @@ function runRestore(context, name) {
   const projectRoot = context.root();
   const seed = (target) => {
     if (target === projectRoot) {
-      return;
+      return new Set;
     }
     restoreSources(projectRoot, restore);
     const folder = path19.join(projectRoot, SNAPSHOTS_DIR);
@@ -29891,11 +29920,27 @@ function runRestore(context, name) {
       }
     }
     fs15.cpSync(directory, path19.join(target, SNAPSHOTS_DIR, path19.basename(directory)), { recursive: true });
+    return fullerFolders(projectRoot, target);
   };
+  const caseInsensitive = ignoresCase(projectRoot, "story.md");
   return runWrite(context, "snapshot", (target) => {
-    seed(target);
-    return restoreSnapshot(target, { name: restore });
+    const occupied = seed(target);
+    return restoreSnapshot(target, { name: restore, caseInsensitive, occupied });
   }, formatRestore, formatRestorePreview);
+}
+function fullerFolders(source, copy, prefix = "", found = new Set) {
+  for (const entry of fs15.readdirSync(copy, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.name.startsWith(".")) {
+      const folder = `${prefix}${entry.name}`;
+      const from = path19.join(source, entry.name);
+      const to = path19.join(copy, entry.name);
+      if (fs15.readdirSync(from).some((child) => lstatIfExists(path19.join(to, child)) === null)) {
+        found.add(folder);
+      }
+      fullerFolders(from, to, `${folder}/`, found);
+    }
+  }
+  return found;
 }
 function runWrite({ parsed, io, root, overrides }, command, write, describe, detail = () => "") {
   const projectRoot = root();

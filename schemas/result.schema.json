@@ -227,7 +227,7 @@
       "type": "object",
       "required": ["action", "path"],
       "properties": {
-        "action": { "enum": ["create", "update", "delete", "mkdir"] },
+        "action": { "enum": ["create", "update", "delete", "mkdir", "rmdir"] },
         "path": { "type": "string", "minLength": 1, "description": "Relative to the project root, with / separators." }
       }
     },
@@ -690,7 +690,7 @@
         {
           "if": { "required": ["restored"] },
           "then": {
-            "required": ["restored", "safety", "created", "updated", "deleted", "reindexed", "dryRun", "changes"],
+            "required": ["restored", "safety", "created", "updated", "deleted", "removedFolders", "reindexed", "dryRun", "changes"],
             "properties": {
               "restored": {
                 "type": "object",
@@ -713,9 +713,10 @@
               "created": { "type": "array", "items": { "type": "string" }, "description": "Markdown files written back that the project did not have, relative to the project root." },
               "updated": { "type": "array", "items": { "type": "string" }, "description": "Markdown files rewritten to the snapshot's text." },
               "deleted": { "type": "array", "items": { "type": "string" }, "description": "Markdown files the snapshot does not have, deleted from the project." },
+              "removedFolders": { "type": "array", "items": { "type": "string" }, "description": "Folders the deletes left empty, removed from the project, deepest first (rmdir in changes). A folder init makes is kept, as is any folder that was already empty or still holds something." },
               "reindexed": { "type": "boolean", "description": "False when nothing changed, or when a restored file does not parse, so the registries were left for story reindex after the fix." },
               "dryRun": { "type": "boolean" },
-              "changes": { "type": "array", "description": "Every file created, updated, or deleted, the safety snapshot's and the registries reindex rebuilt included.", "items": { "$ref": "#/$defs/change" } }
+              "changes": { "type": "array", "description": "Every file created, updated, or deleted, and every folder removed, the safety snapshot's files and the registries reindex rebuilt included.", "items": { "$ref": "#/$defs/change" } }
             }
           }
         },

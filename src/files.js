@@ -233,16 +233,17 @@ export function removeFile(filePath, options = {}) {
 }
 
 // Deletes an empty folder, recording it like a deleted file (a stale codex
-// folder a build emptied). Planned, it checks only that the folder's parent
-// is writable, since the files that would empty it are still there.
-export function removeDirectory(directory) {
+// folder a build emptied), or with `action: "rmdir"` as a folder removed (one
+// a snapshot restore emptied). Planned, it checks only that the folder's
+// parent is writable, since the files that would empty it are still there.
+export function removeDirectory(directory, { action = "delete" } = {}) {
   assertWriteAllowed(directory);
   if (planning > 0) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
   }
-  record(directory, true, "delete");
+  record(directory, true, action);
 }
 
 // Projects whose lock could not be made (see withProjectLock): a write
@@ -291,9 +292,10 @@ function record(target, existed, action) {
 }
 
 // Runs `run` and returns its result with the changes it made: { action,
-// path } entries sorted by path, where action is create, update, delete, or
-// mkdir (a folder made) and path is relative to `root` with / separators.
-// A file created and then deleted by the same run is left out. Calls nest:
+// path } entries sorted by path, where action is create, update, delete,
+// mkdir (a folder made), or rmdir (a folder removed, listed after what it
+// held) and path is relative to `root` with / separators. A file created and
+// then deleted by the same run is left out. Calls nest:
 // an inner call's changes are recorded in the outer one too.
 export function recordChanges(root, run) {
   const journal = new Map();
@@ -336,14 +338,16 @@ function summarizeJournal(root, journal) {
   const changes = [];
   for (const [file, { existed, action }] of journal) {
     const kind = action === "mkdir" ? "mkdir"
-      : action === "delete" ? (existed ? "delete" : null)
+      : action === "delete" || action === "rmdir" ? (existed ? action : null)
         : existed ? "update" : "create";
     if (kind !== null) {
       // The root itself, a new project's folder, is ".".
       changes.push({ action: kind, path: path.relative(base, file).split(path.sep).join("/") || "." });
     }
   }
-  return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  // "\uffff" sorts after every name, so a removed folder follows its files.
+  const key = (change) => (change.action === "rmdir" ? `${change.path}/\uffff` : change.path);
+  return changes.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
 }
 
 function writeWholeFile(filePath, contents, options) {
@@ -685,6 +689,18 @@ const IGNORABLE_CHARACTERS = /\p{Default_Ignorable_Code_Point}/gu;
 // as git's core.protectNTFS does.
 export function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
+}
+
+// Whether the file system holding `folder` finds a name in any letter case,
+// as macOS and Windows do by default and a casefold folder on Linux does:
+// `name`, a file in `folder`, is found again in the other case as the same
+// file, rather than as none or as a file of its own. It is asked of the
+// folder itself, not the platform, since a Mac can have a case-sensitive
+// volume and Windows a case-sensitive folder.
+export function ignoresCase(folder, name) {
+  const other = name === name.toUpperCase() ? name.toLowerCase() : name.toUpperCase();
+  const [first, second] = [name, other].map((each) => fs.lstatSync(path.join(folder, each), { bigint: true, throwIfNoEntry: false }));
+  return other !== name && first !== undefined && second !== undefined && first.dev === second.dev && first.ino === second.ino;
 }
 
 // NTFS also gives a long name a short one, unless the volume turns that
