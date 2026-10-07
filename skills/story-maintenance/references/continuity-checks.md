@@ -226,3 +226,27 @@ Run `story similarity . --against '<source>'` when the user asks whether a passa
 - It is advisory and exits 0. Shared text is not proof of copying, so report what it found and where, never a verdict.
 
 See the `editorial-review` skill.
+
+## series
+
+Run `story series .` when `story.md` has `follows` or `precedes` links to other books.
+
+`story series [path]` finds every book reachable through `follows` and `precedes`, then orders them by chronology. At each step, among the books whose earlier books are already listed, the lowest `book-number` goes next, then title, then folder path. It only follows links between sibling book folders. It lists shared canon and reports:
+
+- **Errors**
+  - A linked path that is not a story project
+  - Books that declare different `series` ids
+  - Two books that share a `book-number`, or a `book-number` that is not a number 0 or more
+  - A chronology cycle
+  - A character who is dead at the end of an earlier book (by `died-in`, a status progression to `deceased`, or `status: deceased`) but not `deceased` in a later one
+  - A later book whose chapter or scene lists that character as `pov` or under `characters`, before a status progression in that book brings them back. Move flashbacks, memories, and ghosts to `mentions`. A ghost narrator may stay the `pov` when also listed in `mentions`.
+  - A later book where a character learns a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. In a prequel, the usual fix is to remove the knowledge from the prequel, or to change which book the discovery happens in.
+  - A later book where a character who died in an earlier book learns something (a `knowledge-state` entry with `learned-in`) before being brought back
+  - A later book's scene whose `state-changes` target an artifact `destroyed` in an earlier book
+- **Warnings**
+  - A shared entity whose `name` (or glossary `term`) or `pronunciation` differs from the most recent earlier book
+  - Linked books that set different `series-title` values
+  - An artifact that is `destroyed` in an earlier book but has a different status in a later one
+  - Linked books that set no `series` id while the others share one (`Linked books <titles> set no series id; add series: <id>`); add the id to each named book
+
+See the `series-continuity` skill. `docs/series.md` gives the fix for each finding.
