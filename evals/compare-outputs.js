@@ -17,7 +17,7 @@
  * dir-b draft must pass at least that many more of the fixture's checks
  * than the dir-a draft. It reads dir-a as the no-skill baseline and dir-b
  * as the skill's run, the order above. Pass --no-judge to run only the
- * margin checks.
+ * margin checks; it leaves out, and lists, the fixtures that set no margin.
  *
  * Exits non-zero when a fixture has no draft in one directory (a missing
  * draft is a failed comparison, not a tie), when a margin is not met, when
@@ -144,6 +144,18 @@ export function main(argv, { spawn = spawnSync } = {}) {
     console.log("no fixtures selected");
     return 2;
   }
+  // Without the judge only a margin can be checked, so a fixture that sets
+  // none is left out, and said to be.
+  if (!judge) {
+    const margined = names.filter((n) => loadFixture(path.join(FIXTURES_DIR, n)).checks.baseline_margin !== undefined);
+    const skipped = names.filter((n) => !margined.includes(n));
+    if (skipped.length > 0) console.log(`skipped, no baseline_margin: ${skipped.join(", ")}`);
+    if (margined.length === 0) {
+      console.log("no selected fixture sets baseline_margin, and --no-judge skips the judge");
+      return 1;
+    }
+    names = margined;
+  }
 
   const tally = { a: 0, b: 0, tie: 0 };
   const margins = { met: 0, missed: 0 };
@@ -198,8 +210,6 @@ export function main(argv, { spawn = spawnSync } = {}) {
   }
   if (margins.met + margins.missed > 0) {
     console.log(`${judge ? "" : "\n"}margins met: ${margins.met} of ${margins.met + margins.missed}`);
-  } else if (!judge) {
-    console.log("no selected fixture sets baseline_margin, and --no-judge skips the judge");
   }
   // A missing draft or judge verdict fails the run, and so does a missed
   // margin or a run that compared nothing, so it is never a vacuous pass.

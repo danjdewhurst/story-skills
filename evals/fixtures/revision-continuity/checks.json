@@ -3,15 +3,17 @@
   "skill": "revision-continuity",
   "brief": "Revise chapter 3 so it keeps every established fact, Tomas still has not opened Ana's sea-chest, and no one is named as the key-leaver. First person, past tense, under 150 words of prose. This edit starts the next pass on the book's revision ladder. You cannot run commands here, so reply with your plan in one line, then the commands you would run before and after the edit, in order, in one fenced shell block, then the revised chapter file, frontmatter included.",
   "keep": "file",
-  "required": [
-    "brass key",
-    "chest"
-  ],
-  "required_regex": [
-    "story passes (?:--path )?\\. --start continuity\\b",
-    "(?:^|\\n)status: *['\"]?revised\\b",
-    "story reindex (?:--path )?\\.[\\s\\S]*?story wordcount (?:--path )?\\. --write[\\s\\S]*?story check (?:--path )?\\.",
-    "## Chapter Text[\\s\\S]*\\bI\\b"
+  "required_in_order": [
+    [
+      "story passes\\b[^\\n]*--start[ =]['\"]?continuity\\b",
+      "story reindex\\b",
+      "story wordcount\\b[^\\n]*--write\\b",
+      "story check\\b"
+    ],
+    [
+      "story passes\\b[^\\n]*--start[ =]['\"]?continuity\\b",
+      "(?:^|\\n)##[ \\t]+Chapter Text\\b"
+    ]
   ],
   "banned": [
     "the logbook",
@@ -25,13 +27,24 @@
     "Ana who left it",
     "Ana left it"
   ],
-  "banned_regex": [
-    "(?:^|\\n)status: *['\"]?final\\b",
-    "## Chapter Text[\\s\\S]*\\b(?:opened|unlocked|opening|unlocking) the (?:sea[- ]?)?chest\\b",
-    "## Chapter Text[\\s\\S]*\\binside (?:the (?:sea[- ]?)?chest|was|lay)\\b",
-    "## Chapter Text[\\s\\S]*\\b(?:a|one) week\\b",
-    "## Chapter Text[\\s\\S]*\\bit was\\b.{0,50}\\bwho\\b"
-  ],
+  "chapter_frontmatter": {
+    "required_regex": [
+      "(?:^|\\n)number:[ \\t]*['\"]?3\\b",
+      "(?:^|\\n)status:[ \\t]*['\"]?revised\\b"
+    ],
+    "banned_regex": ["(?:^|\\n)status:[ \\t]*['\"]?final\\b"]
+  },
+  "chapter_text": {
+    "required": ["brass key", "chest", "three days"],
+    "banned_regex": [
+      "(?<!\\b(?:not|never)\\s+(?:(?:yet|once|ever|been)\\s+)?|n't\\s+(?:(?:yet|once|ever|been)\\s+)?|\\b(?:nobody|no one|no-one)\\s+(?:(?:has|had|ever)\\s+){1,2})\\b(?:(?:opened|unlocked|opening|unlocking|forced|prised|pried)\\s+(?:[\\w'-]+\\s+){0,2}?(?:sea[- ]?)?chest|(?:lifted|raised)\\s+(?:the|its)\\s+lid)\\b",
+      "\\binside\\s+(?:(?:the|Ana's|her)\\s+)?(?:(?:sea[- ]?)?chest\\s+)?(?:was|lay|were|sat)\\b",
+      "\\b(?:(?:a|one|two|four|five|six|seven|eight|nine|ten|several|a few|many|\\d+)\\s+(?:days?|weeks?|fortnights?|months?)|(?:a|the)\\s+fortnight|weeks)\\b",
+      "\\bit was\\b.{0,50}\\bwho\\b"
+    ],
+    "requires_first_person": true,
+    "requires_past_tense": true
+  },
   "max_words": 150,
   "baseline_margin": 2
 }

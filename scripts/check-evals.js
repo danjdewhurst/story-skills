@@ -47,6 +47,55 @@ function holdsFrontmatter(text) {
   return /^---\r?\n/.test(text) || /^ {0,3}(?:`{3,}|~{3,})[^\n]*\r?\n---\r?\n/m.test(text);
 }
 
+// The parts of a reply a fixture can scope checks to, and the keys a scope
+// takes: the text checks, and on the chapter text the narration checks.
+const SCOPES = {
+  chapter_text: ["required", "required_regex", "banned", "banned_regex", "required_in_order", "requires_first_person", "requires_past_tense"],
+  chapter_frontmatter: ["required", "required_regex", "banned", "banned_regex", "required_in_order"],
+};
+
+const isPatternList = (list) => Array.isArray(list) && list.every((s) => typeof s === "string" && s.trim() !== "");
+
+/**
+ * The phrase, pattern, and order lists of `checks` (a fixture or one of its
+ * scopes, named by `label`): each a list of non-empty strings, each pattern
+ * compiling in Unicode mode, and `required_in_order` a list of such lists.
+ */
+function checkTextKeys(errors, label, checks) {
+  for (const key of ["required", "required_regex", "banned", "banned_regex"]) {
+    if (key in checks && !isPatternList(checks[key])) {
+      errors.push(`${label}: ${key} must be a list of non-empty strings`);
+    }
+  }
+  if ("required_in_order" in checks) {
+    const sequences = checks.required_in_order;
+    if (!Array.isArray(sequences) || sequences.length === 0 || !sequences.every((seq) => isPatternList(seq) && seq.length > 1)) {
+      errors.push(`${label}: required_in_order must be a list of lists of two or more patterns`);
+    }
+  }
+  // Every string that is meant as a pattern compiles, even in a list that
+  // also holds something else.
+  const strings = (list) => (Array.isArray(list) ? list.filter((p) => typeof p === "string") : []);
+  const patterns = [
+    ...["required_regex", "banned_regex"].flatMap((key) => strings(checks[key]).map((p) => [key, p])),
+    ...strings([].concat(...(Array.isArray(checks.required_in_order) ? checks.required_in_order.filter(Array.isArray) : []))).map((p) => ["required_in_order", p]),
+  ];
+  for (const [key, pattern] of patterns) {
+    try {
+      new RegExp(pattern, "iu");
+    } catch (err) {
+      errors.push(`${label}: ${key} /${pattern}/ does not compile (${err.message})`);
+    }
+  }
+  return errors;
+}
+
+// Whether a scope or fixture defines any text check of its own.
+function hasTextChecks(checks) {
+  return ["required", "banned", "required_regex", "banned_regex"].some((key) => nonemptyStrings(checks[key]))
+    || (Array.isArray(checks.required_in_order) && checks.required_in_order.length > 0);
+}
+
 const trimmed = (s) => String(s).trim();
 const lowered = (s) => String(s).toLowerCase();
 
@@ -234,13 +283,27 @@ export function checkEvals(root = ROOT, log = console.log) {
     checkFixtureSkill(errors, path.join(root, "skills"), checks.skill, name, (skillPath) =>
       fs.existsSync(skillPath)
     );
-    for (const key of ["required", "required_regex", "banned", "banned_regex"]) {
-      if (key in checks) {
-        check(
-          Array.isArray(checks[key]) && checks[key].every((s) => typeof s === "string" && s.trim() !== ""),
-          `${name}/checks.json: ${key} must be a list of non-empty strings`
-        );
+    checkTextKeys(errors, `${name}/checks.json`, checks);
+    for (const [scope, keys] of Object.entries(SCOPES)) {
+      if (!(scope in checks)) continue;
+      const scoped = checks[scope];
+      const label = `${name}/checks.json: ${scope}`;
+      if (typeof scoped !== "object" || scoped === null || Array.isArray(scoped)) {
+        errors.push(`${label} must be an object`);
+        continue;
       }
+      for (const key of Object.keys(scoped)) {
+        if (!keys.includes(key)) errors.push(`${label} has unknown key ${JSON.stringify(key)} (known: ${keys.join(", ")})`);
+      }
+      checkTextKeys(errors, label, scoped);
+      for (const key of ["requires_first_person", "requires_past_tense"]) {
+        if (key in scoped && typeof scoped[key] !== "boolean") errors.push(`${label}: ${key} must be a boolean`);
+      }
+      check(
+        hasTextChecks(scoped) ||
+          ["requires_first_person", "requires_past_tense"].some((key) => keys.includes(key) && scoped[key] === true),
+        `${label} defines no checks`
+      );
     }
     for (const key of ["max_words_ratio", "min_words_ratio", "max_words"]) {
       if (key in checks) {
@@ -314,10 +377,8 @@ export function checkEvals(root = ROOT, log = console.log) {
     }
     const voiceActive = voiceDriftActive(checks.voice_drift);
     check(
-      nonemptyStrings(checks.required) ||
-        nonemptyStrings(checks.banned) ||
-        nonemptyStrings(checks.required_regex) ||
-        nonemptyStrings(checks.banned_regex) ||
+      hasTextChecks(checks) ||
+        Object.keys(SCOPES).some((scope) => scope in checks) ||
         checks.max_words_ratio !== undefined ||
         checks.min_words_ratio !== undefined ||
         checks.max_words !== undefined ||
@@ -326,18 +387,8 @@ export function checkEvals(root = ROOT, log = console.log) {
         checks.requires_first_person === true ||
         checks.requires_past_tense === true ||
         voiceActive,
-      `${name}/checks.json: defines no required, required_regex, banned, banned_regex, length, structural, or voice_drift checks`
+      `${name}/checks.json: defines no required, required_regex, banned, banned_regex, required_in_order, scoped, length, structural, or voice_drift checks`
     );
-    for (const key of ["required_regex", "banned_regex"]) {
-      for (const pattern of Array.isArray(checks[key]) ? checks[key] : []) {
-        if (typeof pattern !== "string") continue;
-        try {
-          new RegExp(pattern, "iu");
-        } catch (err) {
-          errors.push(`${name}/checks.json: ${key} /${pattern}/ does not compile (${err.message})`);
-        }
-      }
-    }
 
     // Cross-check phrases against the fixture input and its canon. Both
     // collisions are warnings, not errors: anti-slop-style briefs ("rewrite

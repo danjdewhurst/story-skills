@@ -57,6 +57,13 @@ describe("check-evals", () => {
     addFixture(root, "whole-file", { ...good, keep: "file" });
     addFixture(root, "prose", { ...good, keep: "chapter-text" });
     addFixture(root, "margin", { ...good, baseline_margin: 2 });
+    addFixture(root, "scoped", {
+      brief: "Draft.",
+      skill: "chapter-writing",
+      required_in_order: [["story passes", "story check"]],
+      chapter_text: { banned: ["a week"], requires_past_tense: true },
+      chapter_frontmatter: { required_regex: ["(?:^|\\n)status: revised"] },
+    });
     addFixture(root, "pattern", { brief: "Draft.", skill: "chapter-writing", required_regex: ["^---\\n"] });
     const result = run(root);
     expect(result.status).toBe(0);
@@ -121,7 +128,7 @@ describe("check-evals", () => {
       "FAIL fields/checks.json: banned_regex /(unclosed/ does not compile",
       "FAIL fields/checks.json: required_regex /[a-/ does not compile",
       "FAIL empty/checks.json: voice_drift must be an object",
-      "FAIL empty/checks.json: defines no required, required_regex, banned, banned_regex, length, structural, or voice_drift checks",
+      "FAIL empty/checks.json: defines no required, required_regex, banned, banned_regex, required_in_order, scoped, length, structural, or voice_drift checks",
       'FAIL file-as-prose/checks.json: evals/examples/file-as-prose.md holds frontmatter, so set "keep": "file"',
       'FAIL fenced-as-prose/checks.json: evals/examples/fenced-as-prose.md holds frontmatter, so set "keep": "file"',
       "FAIL evals/examples/stray.md: no matching fixture"
@@ -133,6 +140,33 @@ describe("check-evals", () => {
     expect(result.out).not.toContain("scene-break/checks.json");
     expect(result.out).not.toContain("notes.txt");
     expect(result.lines.at(-1)).toMatch(/^\d+ problem\(s\) found$/);
+  });
+
+  test("checks a scope's keys and every ordered pattern", () => {
+    const root = evalsRoot();
+    addFixture(root, "scopes", {
+      ...good,
+      required_in_order: [["story passes"], ["(open", "story check"], "story check"],
+      chapter_text: { requires_person: true, requires_past_tense: "yes", banned_regex: ["[a-"] },
+      chapter_frontmatter: { requires_first_person: true, required: [] },
+    });
+    addFixture(root, "not-object", { ...good, chapter_text: ["a week"] });
+    addFixture(root, "empty-scope", { ...good, chapter_frontmatter: {} });
+    const result = run(root);
+    expect(result.status).toBe(1);
+    for (const line of [
+      "FAIL scopes/checks.json: required_in_order must be a list of lists of two or more patterns",
+      "FAIL scopes/checks.json: required_in_order /(open/ does not compile",
+      'FAIL scopes/checks.json: chapter_text has unknown key "requires_person"',
+      "FAIL scopes/checks.json: chapter_text: requires_past_tense must be a boolean",
+      "FAIL scopes/checks.json: chapter_text: banned_regex /[a-/ does not compile",
+      'FAIL scopes/checks.json: chapter_frontmatter has unknown key "requires_first_person"',
+      "FAIL scopes/checks.json: chapter_frontmatter defines no checks",
+      "FAIL not-object/checks.json: chapter_text must be an object",
+      "FAIL empty-scope/checks.json: chapter_frontmatter defines no checks",
+    ]) {
+      expect(result.out).toContain(line);
+    }
   });
 
   test("warnings still print beside failures", () => {
