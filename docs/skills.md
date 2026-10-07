@@ -222,8 +222,8 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
 
    `--form` records `form` in `story.md` and, when no target is given, sets a default `target-words`: novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500. Serials get no book-level default. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose. The story id recorded in every registry comes from the title, and `--dir` sets only the directory. A title with no ASCII letters or digits takes its story id from the folder name: a Cyrillic or Greek title is transliterated for the default folder (`Война и мир` goes in `voyna-i-mir`), and a title in a script with no transliteration table needs `--dir` with an ASCII folder name. `init` refuses an existing directory unless you pass `--force`, and with `--force` it only adds missing starter files.
 3. Records the language: `story init` has no flag for it, so the skill adds `language` to `story.md` by hand with the exact tag you gave (`en-GB` included). For a book not in English it also sets `dialect: unspecified` in `style-sheet.md` and suggests settling dialogue punctuation with voice-style before the first chapter.
-4. Drafts a working `premise` (value plus cause) and `counter-premise` in `story.md` as hypotheses to revisit in revision, not commitments.
-5. Without the CLI, writes the same folder layout and empty registries by hand from the templates in the skill.
+4. Drafts a working `premise` (value plus cause) and `counter-premise` in `story.md` as hypotheses to revisit in revision, not commitments. `story init` writes neither field, so the skill adds both by hand.
+5. Only when neither `story` nor the bundled fallback can run, writes the same folder layout and empty registries by hand from [`manual-setup.md`](../skills/story-init/references/manual-setup.md).
 6. Suggests next steps (workshop the premise if it is still a guess, a first character, worldbuilding, plot structure, the style sheet, `story next .`) and runs `story validate` on the new project.
 
 It doesn't ask for the other publishing metadata (`isbn`, `publisher`, `description`, `keywords`, and the rest). That waits for [publishing](#publishing).
@@ -235,6 +235,7 @@ It doesn't ask for the other publishing metadata (`isbn`, `publisher`, `descript
 **References.**
 
 - [`title-logline.md`](../skills/story-init/references/title-logline.md): title craft (comps, hook phrasing, the title as a promise) and the logline recipe. The `submission` skill reuses it for the pitch.
+- [`manual-setup.md`](../skills/story-init/references/manual-setup.md): the folder layout, `story.md` bible, and empty registries to write by hand when no Story CLI can run.
 
 Every skill follows the same conventions: kebab-case ids, YAML frontmatter on every file, `_index.md` registry tables that `story reindex` rebuilds (never edited by hand), bidirectional links, `status: deceased` plus `died-in` for deaths, `characters` versus `mentions`, and no project-local generator scripts. They are listed in story-maintenance's [`conventions.md`](../skills/story-maintenance/references/conventions.md), which every `SKILL.md` links under "Shared Conventions" with a one-line summary for a skill installed on its own. [Core concepts](concepts.md) explains them.
 

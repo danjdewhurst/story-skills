@@ -57,213 +57,13 @@ If `story` is not installed, use the bundled fallback `node ../story-maintenance
 node <skills>/story-maintenance/scripts/story.js init '{Title}' --form '{form}' --genre '{genre}' --sub-genre '{sub-genre}' --setting-era '{era}' --pov '{pov-style}' --tense '{tense}' --synopsis '{synopsis}' --theme '{theme-1}' --theme '{theme-2}'
 ```
 
-If no CLI is available, create the files manually using the steps below.
+If neither `story` nor the bundled fallback can run (Node is missing, or the `story-maintenance` skill is not installed), create the files by hand from `references/manual-setup.md`, then continue with step 2.
 
-2. Create the folder structure at the current working directory:
+2. Draft a working premise:
 
-```
-{story-title-kebab}/
-├── .gitignore
-├── story.md
-├── style-sheet.md
-├── characters/
-│   └── _index.md
-├── worldbuilding/
-│   ├── _index.md
-│   ├── locations/
-│   ├── systems/
-│   ├── factions/
-│   └── artifacts/
-├── plot/
-│   ├── _index.md
-│   ├── arcs/
-│   └── timeline.md
-├── scenes/
-│   └── _index.md
-├── continuity/
-│   ├── state.md
-│   ├── questions/
-│   │   └── _index.md
-│   ├── promises/
-│   │   └── _index.md
-│   └── clues/
-│       └── _index.md
-├── glossary/
-│   ├── _index.md
-│   └── terms/
-└── chapters/
-    └── _index.md
-```
+`story init` writes neither `premise` nor `counter-premise`, so add both to the `story.md` frontmatter by hand, as quoted strings (`premise: "..."`), and reuse a `premise-workshop` premise if there is one. Fill in the `premise:` and `counter-premise:` fields as hypotheses, not commitments. The premise is a one-sentence controlling idea — value + cause, e.g. "justice triumphs because the hero outsmarts the system". The counter-premise is the antagonist's embodied argument: the story's opposing value, stated as the antagonist would believe it. Draft both early, alongside the synopsis, but do not force theme — a working premise is a guess to be audited, not a conclusion to be imposed. Revisit it during revision: the `revision-continuity` theme audit pass (see the `theme-craft` skill for the deep pass) checks whether the ending actually dramatizes the premise through consequence. If the draft argues a different premise, update the premise, not the draft.
 
-Write `.gitignore` only if the folder has none, with `dist/`, `.story.lock`, `.*.story-*.tmp`, `.story-*.tmp`, `.DS_Store`, `Thumbs.db`, `*.swp`, `*.swo`, and `*~`, one per line.
-
-3. Populate `story.md` with the story bible:
-
-```yaml
----
-title: "{Title}"
-schema-version: 2
-genre: {genre}
-sub-genre: {sub-genre}
-setting-era: {era}
-status: planning
-form: {form}
-themes:
-  - {theme-1}
-  - {theme-2}
-premise: "{One-sentence controlling idea: value + cause, e.g. justice triumphs because the hero outsmarts the system}"
-counter-premise: "{The antagonist's embodied argument}"
-pov: {pov-style}
-tense: {tense}
-language: {language-tag}
----
-```
-
-Below the frontmatter, include sections:
-- **Synopsis** - the 2-3 sentence synopsis provided
-- **Tone & Style** - brief notes on the story's voice (derive from genre/themes)
-- **Notes** - empty section for the user to fill in
-
-4. Draft a working premise:
-
-Fill in the `premise:` and `counter-premise:` fields as hypotheses, not commitments. The premise is a one-sentence controlling idea — value + cause, e.g. "justice triumphs because the hero outsmarts the system". The counter-premise is the antagonist's embodied argument: the story's opposing value, stated as the antagonist would believe it. Draft both early, alongside the synopsis, but do not force theme — a working premise is a guess to be audited, not a conclusion to be imposed. Revisit it during revision: the `revision-continuity` theme audit pass (see the `theme-craft` skill for the deep pass) checks whether the ending actually dramatizes the premise through consequence. If the draft argues a different premise, update the premise, not the draft.
-
-5. Populate each `_index.md` with an empty registry:
-
-**`characters/_index.md`:**
-```markdown
----
-type: character-registry
-story: {story-title-kebab}
----
-
-# Characters
-
-## Registry
-
-| Name | Role | Status | File |
-|------|------|--------|------|
-| *No characters yet* | | | |
-
-## Relationship Map
-
-*No relationships defined yet.*
-
-## Family Trees
-
-*No family trees defined yet.*
-```
-
-**`worldbuilding/_index.md`:**
-```markdown
----
-type: world-registry
-story: {story-title-kebab}
----
-
-# Worldbuilding
-
-## World Overview
-
-*Describe the world at a high level here.*
-
-## Locations
-
-| Name | Type | Region | File |
-|------|------|--------|------|
-| *No locations yet* | | | |
-
-## Systems
-
-| Name | Type | File |
-|------|------|------|
-| *No systems yet* | | |
-
-## Factions
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-| *No factions yet* | | | |
-
-## Artifacts
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-| *No artifacts yet* | | | |
-```
-
-**`plot/_index.md`:**
-```markdown
----
-type: plot-registry
-story: {story-title-kebab}
-structure: three-act
----
-
-# Plot Structure
-
-## Story Structure
-
-**Model:** Three-Act Structure (adjust as needed)
-
-## Arcs
-
-| Name | Type | Status | File |
-|------|------|--------|------|
-| *No arcs yet* | | | |
-
-## Theme Tracking
-
-| Theme | Arcs | Chapters |
-|-------|------|----------|
-| *No themes tracked yet* | | |
-```
-
-**`plot/timeline.md`:**
-```markdown
----
-type: timeline
-story: {story-title-kebab}
----
-
-# Story Timeline
-
-| When | Event | Arc | Chapter |
-|------|-------|-----|---------|
-| *No events yet* | | | |
-```
-
-**`chapters/_index.md`:**
-```markdown
----
-type: chapter-registry
-story: {story-title-kebab}
----
-
-# Chapters
-
-## Registry
-
-| # | Title | POV | Status | Word Count | File |
-|---|-------|-----|--------|------------|------|
-| *No chapters yet* | | | | | |
-
-## Total Word Count: 0
-```
-
-Also create the v2 support files. Every registry and `continuity/state.md` needs `story: {story-title-kebab}` in addition to its `type`, or `story validate` reports a missing `story` field:
-
-- `scenes/_index.md` with frontmatter `type: scene-registry` and `story: {story-title-kebab}`
-- `continuity/state.md` with frontmatter `type: continuity-state`, `story: {story-title-kebab}`, `current-chapter: 0`, and empty `character-state`, `object-state`, and `knowledge-state` lists
-- `continuity/questions/_index.md` with frontmatter `type: question-registry` and `story: {story-title-kebab}`
-- `continuity/promises/_index.md` with frontmatter `type: promise-registry` and `story: {story-title-kebab}`
-- `continuity/clues/_index.md` with frontmatter `type: clue-registry` and `story: {story-title-kebab}`
-- `glossary/_index.md` with frontmatter `type: glossary-registry` and `story: {story-title-kebab}`
-- `style-sheet.md` (optional) with frontmatter `type: style-sheet`, `dialect: unspecified`, and empty `preferred`, `watch-words`, and `allow-words` lists, plus the body sections described in the `voice-style` skill
-
-If manual initialization gets tedious, stop and ask the user to install or run the Story CLI rather than inventing a different project shape.
-
-6. Present a summary of what was created and suggest next steps:
+3. Present a summary of what was created and suggest next steps:
    - "Workshop the premise" (triggers premise-workshop skill) if the premise is still a guess
    - "Add your first character" (triggers character-management skill)
    - "Start worldbuilding" (triggers worldbuilding skill)
@@ -271,7 +71,7 @@ If manual initialization gets tedious, stop and ask the user to install or run t
    - "Set up the style sheet" (triggers voice-style skill) once there is a writing sample
    - "Run `story next .`" to show deterministic next actions
 
-7. When CLI access is available, run the maintenance commands from inside the new project folder (`{story-title-kebab}/`, or the folder given to `--dir`). They matter most after creating the registries by hand:
+4. When CLI access is available, run the maintenance commands from inside the new project folder (`{story-title-kebab}/`, or the folder given to `--dir`). They matter most after creating the registries by hand:
 
 ```shell
 story reindex .
@@ -284,6 +84,7 @@ If `story` is not installed, use the bundled fallback `node ../story-maintenance
 ## Reference Files
 
 - **`references/title-logline.md`** - Title craft (comps, hook phrasing, title as promise) and the logline recipe
+- **`references/manual-setup.md`** - The folder layout, `story.md` bible, and empty registries to write by hand when no Story CLI can run
 
 ## Shared Conventions
 
