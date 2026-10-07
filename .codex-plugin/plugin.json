@@ -14,7 +14,7 @@
   "interface": {
     "displayName": "Story Skills",
     "shortDescription": "Plan stories, manage characters and worlds, and write chapters.",
-    "longDescription": "Story Skills adds end-to-end fiction-writing workflows for Codex, in English or any other language: premise development, story initialization, character management, worldbuilding, plot structure, theme, scene craft, outlined and discovery drafting, chapter writing, interactive fiction, series continuity, verse, line editing, revision and continuity audits, beta-reader feedback, editorial review, research, query letters and submissions, publishing, and adaptation, plus deterministic project maintenance with markdown registries and YAML frontmatter.",
+    "longDescription": "Story Skills adds end-to-end fiction-writing workflows for Codex, in English or any other language: premise development, story initialization, character management, worldbuilding, plot structure, theme, scene craft, outlined and discovery drafting, chapter writing, interactive fiction, series continuity, verse, genre craft, voice and style, line editing, revision passes, continuity, pacing and fair-play checks, beta-reader feedback, simulated reader panels, editorial review, research, query letters and submissions, publishing, and adaptation, plus deterministic project maintenance with markdown registries and YAML frontmatter.",
     "developerName": "Daniel Dewhurst",
     "category": "Productivity",
     "capabilities": ["Plan", "Write"],

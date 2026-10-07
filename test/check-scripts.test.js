@@ -793,18 +793,49 @@ describe("check-metadata plugin manifests (#568)", () => {
   const codexPlugin = JSON.parse(readRepo(".codex-plugin/plugin.json"));
   const claudeMarketplace = JSON.parse(readRepo(".claude-plugin/marketplace.json"));
   const base = { packageJson, claudePlugin, codexPlugin, claudeMarketplace };
-  const withEntry = (fields) => ({ ...claudeMarketplace, plugins: [{ ...claudeMarketplace.plugins[0], ...fields }] });
+  const entry = claudeMarketplace.plugins[0];
+  const withPlugins = (...plugins) => ({ ...claudeMarketplace, plugins });
+  const { homepage, repository } = claudePlugin;
+
+  // The phrase each skill's area goes by in both descriptions, so a new skill
+  // fails here until the descriptions name it.
+  const AREAS = {
+    adaptation: "adaptation",
+    "chapter-writing": "chapter writing",
+    "character-management": "character management",
+    "discovery-drafting": "discovery drafting",
+    "editorial-review": "editorial review",
+    "feedback-triage": "feedback",
+    "genre-craft": "genre craft",
+    "interactive-fiction": "interactive fiction",
+    "line-editing": "line editing",
+    "plot-structure": "plot structure",
+    "premise-workshop": "premise development",
+    publishing: "publishing",
+    "reader-panel": "simulated reader panels",
+    research: "research",
+    "revision-continuity": "revision passes",
+    "scene-craft": "scene craft",
+    "series-continuity": "series",
+    "story-init": "story initialization",
+    "story-maintenance": "maintenance",
+    submission: "submission",
+    "theme-craft": "theme",
+    "verse-craft": "verse",
+    "voice-style": "voice and style",
+    worldbuilding: "worldbuilding"
+  };
 
   test("accepts the committed manifests", () => {
     expect(checkPluginManifests([], base)).toEqual([]);
   });
 
-  test("the shared description covers the newer skill areas", () => {
-    for (const area of ["interactive fiction", "series", "submission", "feedback", "theme", "discovery drafting", "any other language"]) {
-      expect(claudePlugin.description).toContain(area);
-    }
-    for (const area of ["interactive fiction", "series", "submissions", "feedback", "theme", "discovery drafting", "any other language"]) {
-      expect(codexPlugin.interface.longDescription).toContain(area);
+  test("both descriptions name every skill's area, pacing, and other languages", () => {
+    const skills = fs.readdirSync(path.join(repoRoot, "skills"), { withFileTypes: true }).filter((item) => item.isDirectory()).map((item) => item.name);
+    expect(Object.keys(AREAS).sort()).toEqual(skills.sort());
+    for (const text of [claudePlugin.description, codexPlugin.interface.longDescription]) {
+      const missing = [...Object.values(AREAS), "pacing", "any other language"].filter((area) => !text.includes(area));
+      expect(missing).toEqual([]);
     }
   });
 
@@ -813,32 +844,51 @@ describe("check-metadata plugin manifests (#568)", () => {
     expect(checkPluginManifests([], { ...base, codexPlugin: stale })).toEqual([
       ".codex-plugin/plugin.json description differs from .claude-plugin/plugin.json; give both the same text"
     ]);
-    expect(checkPluginManifests([], { ...base, claudeMarketplace: withEntry({ description: "Older text." }) })).toEqual([
-      ".claude-plugin/marketplace.json plugin description differs from .claude-plugin/plugin.json; give both the same text"
+    const { description, ...bare } = entry;
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: withPlugins(bare) })).toEqual([
+      ".claude-plugin/marketplace.json plugins[0] description differs from .claude-plugin/plugin.json; give both the same text"
     ]);
-    // The marketplace entry may leave the description to plugin.json.
-    const { description, ...bare } = claudeMarketplace.plugins[0];
-    expect(description).toBe(claudePlugin.description);
-    expect(checkPluginManifests([], { ...base, claudeMarketplace: { ...claudeMarketplace, plugins: [bare] } })).toEqual([]);
+  });
+
+  // Qodo on #651: only the first entry with the plugin's name was read.
+  test("checks every marketplace entry with the plugin's name, and no other", () => {
+    const other = { name: "other-plugin", source: entry.source, description: "Something else." };
+    const drifted = { ...entry, description: "Older text.", homepage: "https://example.com" };
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: withPlugins(other, entry, drifted, null) })).toEqual([
+      ".claude-plugin/marketplace.json plugins[2] description differs from .claude-plugin/plugin.json; give both the same text",
+      `.claude-plugin/marketplace.json plugins[2] homepage mismatch: expected ${homepage}, got https://example.com`
+    ]);
     expect(checkPluginManifests([], { ...base, claudeMarketplace: null })).toEqual([]);
   });
 
-  test("requires a description, homepage, and repository in each plugin manifest", () => {
-    const { homepage, repository, ...bare } = claudePlugin;
-    const blank = { description: " " };
-    const missing = { ...base, claudePlugin: { ...bare, ...blank }, codexPlugin: { ...codexPlugin, ...blank }, claudeMarketplace: withEntry(blank) };
+  test("requires a description, homepage, and repository in each manifest", () => {
+    const blank = (manifest) => ({ ...manifest, description: " ", homepage: undefined, repository: undefined });
+    const missing = { ...base, claudePlugin: blank(claudePlugin), codexPlugin: blank(codexPlugin), claudeMarketplace: withPlugins(blank(entry)) };
     expect(checkPluginManifests([], missing)).toEqual([
       ".claude-plugin/plugin.json is missing description",
       `.claude-plugin/plugin.json homepage mismatch: expected ${homepage}, got undefined`,
-      `.claude-plugin/plugin.json repository mismatch: expected ${repository}, got undefined`
+      `.claude-plugin/plugin.json repository mismatch: expected ${repository}, got undefined`,
+      `.codex-plugin/plugin.json homepage mismatch: expected ${homepage}, got undefined`,
+      `.codex-plugin/plugin.json repository mismatch: expected ${repository}, got undefined`,
+      `.claude-plugin/marketplace.json plugins[0] homepage mismatch: expected ${homepage}, got undefined`,
+      `.claude-plugin/marketplace.json plugins[0] repository mismatch: expected ${repository}, got undefined`
     ]);
-    const moved = withEntry({ repository: "https://example.com/fork" });
-    expect(checkPluginManifests([], { ...base, claudeMarketplace: moved })).toEqual([
-      `.claude-plugin/marketplace.json plugin repository mismatch: expected ${repository}, got https://example.com/fork`
-    ]);
+    // Qodo on #651: without the package.json fields, the manifests could drop theirs.
+    const { homepage: _homepage, repository: _repository, ...unlinked } = packageJson;
+    const bare = (manifest) => ({ ...manifest, homepage: undefined, repository: undefined });
+    expect(checkPluginManifests([], {
+      packageJson: unlinked,
+      claudePlugin: bare(claudePlugin),
+      codexPlugin: bare(codexPlugin),
+      claudeMarketplace: withPlugins(bare(entry))
+    })).toEqual(["package.json is missing homepage", "package.json is missing repository"]);
   });
 
-  test("reads package.json repository as a string or an npm object", () => {
+  test("compares the repository without npm's git+ and .git", () => {
+    const moved = { ...codexPlugin, repository: "https://github.com/someone/story-skills" };
+    expect(checkPluginManifests([], { ...base, codexPlugin: moved })).toEqual([
+      `.codex-plugin/plugin.json repository mismatch: expected ${repository}, got https://github.com/someone/story-skills`
+    ]);
     expect(repositoryUrl({ type: "git", url: "git+https://github.com/a/b.git" })).toBe("https://github.com/a/b");
     expect(repositoryUrl("https://github.com/a/b")).toBe("https://github.com/a/b");
     expect(repositoryUrl(undefined)).toBeUndefined();
@@ -1054,26 +1104,59 @@ describe("check-links", () => {
       ".github/workflows/ci.yml": "",
       ".github/PULL_REQUEST_TEMPLATE.md": `[guide](${repo}/blob/main/AGENTS.md) [gone](${repo}/blob/main/GONE.md)\n`,
       "docs/README.md": [
-        `[a](${repo}/blob/main/AGENTS.md#agent-instructions) [e](${repo}/blob/main/evals/README.md#skill-coverage)`,
-        `[w](${repo}/tree/main/.github/workflows) [ci](${repo}/blob/main/.github/workflows/ci.yml?plain=1#L3) [root](${repo}/tree/main)`,
+        `[a](${repo}/blob/main/AGENTS.md#agent-instructions) [e](${repo}/blob/main/evals/README.md#skill-coverage) [host](https://GitHub.com/DanJDewhurst/Story-Skills/blob/main/AGENTS.md)`,
+        `[w](${repo}/tree/main/.github/workflows) [ci](${repo}/blob/main/.github/workflows/ci.yml?plain=1#L3) [root](${repo}/tree/main) [slash](${repo}/tree/main/)`,
         `[gone](${repo}/blob/main/scripts/gone.js) [bad](${repo}/blob/main/AGENTS.md#nope) [up](${repo}/blob/main/../outside.md)`,
-        `[issues](${repo}/issues/1) [tag](${repo}/blob/v0.1.0/gone.md) [fork](https://github.com/someone/story-skills/blob/main/gone.md) [branch](${repo}/blob/mainline/gone.md)`
+        `[issues](${repo}/issues/1) [tag](${repo}/blob/v0.1.0/gone.md) [fork](https://github.com/someone/story-skills/blob/main/gone.md) [branch](${repo}/blob/mainline/gone.md)`,
+        `[upper](${repo}/blob/MAIN/AGENTS.md) [mixed](${repo}/Tree/main/evals) [double](${repo}/blob/main//gone.md) [inner](${repo}/blob/main/evals//README.md)`
       ].join("\n")
     });
+    const caseProblem = (name) => `names ${name}, but GitHub paths are case-sensitive; write blob/main or tree/main`;
+    const emptySegment = "has an empty path segment (//), which GitHub does not serve";
     expect(checkLinks(root).failures).toEqual([
       `.github/PULL_REQUEST_TEMPLATE.md:1: ${repo}/blob/main/GONE.md points at a missing file`,
       `docs/README.md:3: ${repo}/blob/main/scripts/gone.js points at a missing file`,
       `docs/README.md:3: ${repo}/blob/main/AGENTS.md#nope has no heading or anchor #nope in AGENTS.md`,
-      `docs/README.md:3: ${repo}/blob/main/../outside.md points outside the repository`
+      `docs/README.md:3: ${repo}/blob/main/../outside.md points outside the repository`,
+      `docs/README.md:5: ${repo}/blob/MAIN/AGENTS.md ${caseProblem("blob/MAIN")}`,
+      `docs/README.md:5: ${repo}/Tree/main/evals ${caseProblem("Tree/main")}`,
+      `docs/README.md:5: ${repo}/blob/main//gone.md ${emptySegment}`,
+      `docs/README.md:5: ${repo}/blob/main/evals//README.md ${emptySegment}`
+    ]);
+  });
+
+  // GitHub does not follow a symlink in a /blob/ or /tree/ URL, though a
+  // relative link through one resolves on disk. Windows needs Developer Mode
+  // to create a symlink.
+  test.skipIf(process.platform === "win32")("rejects a GitHub URL that goes through a symlink (#569)", () => {
+    const repo = "https://github.com/danjdewhurst/story-skills";
+    const root = linkRepo({
+      "AGENTS.md": "# Overview\n",
+      "docs/guide.md": [
+        `[file](${repo}/blob/main/CLAUDE.md#overview) [folder](${repo}/blob/main/plugins/story-skills/AGENTS.md) [real](${repo}/blob/main/AGENTS.md#overview)`,
+        "[relative](../CLAUDE.md#overview)"
+      ].join("\n")
+    });
+    fs.symlinkSync("AGENTS.md", path.join(root, "CLAUDE.md"));
+    fs.mkdirSync(path.join(root, "plugins"));
+    fs.symlinkSync("..", path.join(root, "plugins", "story-skills"));
+    const message = "goes through a symlink, which a GitHub URL does not follow; link the real path";
+    expect(checkLinks(root).failures).toEqual([
+      `docs/guide.md:1: ${repo}/blob/main/CLAUDE.md#overview ${message}`,
+      `docs/guide.md:1: ${repo}/blob/main/plugins/story-skills/AGENTS.md ${message}`
     ]);
   });
 
   test("repoPath maps main-branch GitHub URLs to root-relative paths", () => {
     const repo = "https://github.com/danjdewhurst/story-skills";
-    expect(repoPath(`${repo}/blob/main/docs/cli.md#check`)).toBe("/docs/cli.md#check");
-    expect(repoPath(`${repo}/tree/main/evals/`)).toBe("/evals/");
-    expect(repoPath(`${repo}/tree/main`)).toBe("/");
-    expect(repoPath(`${repo}/blob/main?plain=1`)).toBe("/?plain=1");
+    expect(repoPath(`${repo}/blob/main/docs/cli.md#check`)).toEqual({ path: "/docs/cli.md#check" });
+    expect(repoPath(`${repo}/tree/main/evals/`)).toEqual({ path: "/evals/" });
+    expect(repoPath(`${repo}/tree/main`)).toEqual({ path: "/" });
+    expect(repoPath(`${repo}/blob/main?plain=1`)).toEqual({ path: "/?plain=1" });
+    expect(repoPath(`${repo}/blob/main/a.md?q=x//y#a//b`)).toEqual({ path: "/a.md?q=x//y#a//b" });
+    expect(repoPath(`${repo}/blob/Main/README.md`).problem).toContain("case-sensitive");
+    expect(repoPath(`${repo}/BLOB/main/README.md`).problem).toContain("case-sensitive");
+    expect(repoPath(`${repo}/blob/main//README.md`).problem).toContain("empty path segment");
     for (const other of [`${repo}/issues/1`, `${repo}/blob/v1.0.0/README.md`, `${repo}/blob/mainline/README.md`, "https://example.com/blob/main/x.md", "docs/cli.md"]) {
       expect(repoPath(other)).toBeNull();
     }
@@ -1834,6 +1917,7 @@ describe("the published README only links to files the package ships (#401)", ()
       "```"
     ].join("\n");
     expect(relativeLinks(markdown)).toEqual([
+      "/root.md",
       "CODE_OF_CONDUCT.md",
       "CONTRIBUTING.md",
       "SECURITY.md",
@@ -1844,23 +1928,26 @@ describe("the published README only links to files the package ships (#401)", ()
     ]);
   });
 
-  test("relativeLinks skips inline code, comments, queries, and root-relative paths", () => {
-    const markdown = "`[code](code.md)` <!-- [hidden](hidden.md) --> [q](docs/a.md?plain=1#L2) [root](/AGENTS.md) [bad](100%.md)\n";
-    expect(relativeLinks(markdown)).toEqual(["100%.md", "docs/a.md"]);
+  test("relativeLinks skips inline code, comments, and queries, and keeps root-relative paths", () => {
+    const markdown = "`[code](code.md)` <!-- [hidden](hidden.md) --> [q](docs/a.md?plain=1#L2) [root](/AGENTS.md) [cdn](//cdn.example.com/x.js) [bad](100%.md)\n";
+    expect(relativeLinks(markdown)).toEqual(["/AGENTS.md", "100%.md", "docs/a.md"]);
   });
 
   // #569: check:package read only the README, so docs/ shipped about thirty
   // links to files the tarball leaves out.
   test("unshippedLinks checks every shipped markdown file against the shipped files (#569)", () => {
     const texts = {
-      "README.md": "[docs](docs/) [guide](docs/guide.md#part) [root](./)",
+      "README.md": "[docs](docs/) [guide](docs/guide.md#part) [root](./) [abs](/docs/guide.md)",
       "CHANGELOG.md": "[c](CONTRIBUTING.md#changelog)",
       "docs/guide.md": "[up](../README.md) [agents](../AGENTS.md) [evals](../evals/README.md) [case](Guide.md) [out](../../outside.md) [pkg](..)",
       "skills/demo/SKILL.md": "[ref](references/a.md) [docs](../../docs/guide.md) [test](../../test/demo.test.js)",
       "skills/demo/references/a.md": "fine",
       "bin/story.js": "[not](markdown.md)"
     };
+    // A root-relative link resolves from the disk's root in node_modules, so
+    // it fails even when the package ships its target.
     expect(unshippedLinks(Object.keys(texts), (file) => texts[file])).toEqual([
+      "README.md -> /docs/guide.md",
       "CHANGELOG.md -> CONTRIBUTING.md",
       "docs/guide.md -> ../../outside.md",
       "docs/guide.md -> ../AGENTS.md",

@@ -13,6 +13,8 @@
  * file on this repository's main branch on GitHub (/blob/main/ or
  * /tree/main/) is checked like a link from the repository root: docs that
  * ship in the npm package link that way to files the package leaves out.
+ * GitHub serves such a link only with that exact case, no empty path segment,
+ * and no symlink on the way, so each of those fails too.
  * Fenced code, inline code, HTML comments, other links with a scheme (https:,
  * mailto:), and template placeholders such as {name-kebab}.md are skipped.
  * Run from anywhere; exits non-zero on failure.
@@ -237,14 +239,26 @@ export function extractLinks(text) {
   return links;
 }
 
-// A file or folder on this repository's main branch on GitHub.
-const REPO_URL = /^https:\/\/github\.com\/danjdewhurst\/story-skills\/(?:blob|tree)\/main(?=[/?#]|$)\/?/i;
+// A file or folder on a branch of this repository on GitHub. GitHub matches
+// the host, owner, and repository name in any case, but not the rest.
+const REPO_URL = /^https:\/\/github\.com\/danjdewhurst\/story-skills\/(blob|tree)\/([^/?#]+)/i;
 
-// The root-relative path (/docs/cli.md#check) that a link to this repository
-// on GitHub names, or null for any other link.
+// What a link to this repository's main branch on GitHub names: { path } with
+// the root-relative path (/docs/cli.md#check), or { problem } when GitHub
+// would not serve it. Null for any other link, another branch or tag included.
 export function repoPath(target) {
   const match = REPO_URL.exec(target);
-  return match ? `/${target.slice(match[0].length)}` : null;
+  if (!match || match[2].toLowerCase() !== "main") {
+    return null;
+  }
+  if (!/^(?:blob|tree)$/.test(match[1]) || match[2] !== "main") {
+    return { problem: `names ${match[1]}/${match[2]}, but GitHub paths are case-sensitive; write blob/main or tree/main` };
+  }
+  const rest = target.slice(match[0].length).replace(/^\//, "");
+  if (/^\/|\/\//.test(rest.replace(/[?#].*$/, ""))) {
+    return { problem: "has an empty path segment (//), which GitHub does not serve" };
+  }
+  return { path: `/${rest}` };
 }
 
 // Links that are not local paths, or are templates rather than real paths.
@@ -284,7 +298,11 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
   };
   for (const { target: link, line } of extractLinks(text)) {
     const fromUrl = repoPath(link);
-    const target = fromUrl ?? link;
+    if (fromUrl && fromUrl.problem) {
+      failures.push(`${relative}:${line}: ${link} ${fromUrl.problem}`);
+      continue;
+    }
+    const target = fromUrl ? fromUrl.path : link;
     if (isSkipped(target)) {
       continue;
     }
@@ -313,6 +331,12 @@ export function checkFile(file, root = ROOT, cache = new Map()) {
     }
     if (isOutside(realRoot, fs.realpathSync(resolved))) {
       failures.push(`${relative}:${line}: ${link} points outside the repository through a symlink`);
+      continue;
+    }
+    // GitHub shows a symlink in a /blob/ URL as the link itself, and a path
+    // through a symlinked folder (plugins/story-skills/...) as missing.
+    if (fromUrl && path.relative(realRoot, fs.realpathSync(resolved)) !== path.relative(path.resolve(root), resolved)) {
+      failures.push(`${relative}:${line}: ${link} goes through a symlink, which a GitHub URL does not follow; link the real path`);
       continue;
     }
     if (fragment === null || fragment === "" || !resolved.endsWith(".md") || !fs.statSync(resolved).isFile()) {
