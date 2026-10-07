@@ -1342,7 +1342,7 @@ Words: 111 then, 143 now (+32)
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
-The first line names the source: the absolute path of the `--against` folder, `git ref <ref>` with `--ref`, or `snapshot <name>` with `--snapshot`. A removed chapter reads `removed (was <n> words)`.
+The first line names the source: the absolute path of the `--against` folder, `git ref <ref>` with `--ref`, or `snapshot <id>` with `--snapshot`, the snapshot's id rather than the name you passed (`snapshot draft-1` for `"Draft 1"`). A removed chapter reads `removed (was <n> words)`.
 
 How to read it:
 

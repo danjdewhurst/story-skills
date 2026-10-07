@@ -1814,23 +1814,23 @@ Every skill that changes story files finishes with the maintenance block, in thi
 |----------|----------------|
 | Premise workshop (`premise-workshop`) | `init --form`, `names`, `report` |
 | Project setup (`story-init`) | `init --form`, `next` (suggested) |
-| Plot (`plot-structure`) | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
-| Character, world (`character-management`, `worldbuilding`) | `names`, `diagram relationships`/`locations` |
+| Plot (`plot-structure`) | `add arc`, `add chapter`, `add scene`, `timeline`, `pacing`, `clues`, `grid`, `diagram timeline`/`arcs`/`clues` |
+| Character, world (`character-management`, `worldbuilding`) | `names`, `add character`, `add location`, `add faction`, `add artifact`, `add term`, `diagram relationships`/`locations` |
 | Outline-first chapter (`chapter-writing`) | `context`, `next`, `pacing`, `progress` (`--log` if you keep a log) |
 | Discovery chapter (`discovery-drafting`) | `progress --log` |
 | Scene craft (`scene-craft`) | `pacing` |
 | Theme (`theme-craft`) | None |
-| Voice (`voice-style`) | `prose`, `voices` |
-| Genre packs (`genre-craft`) | `clues` (mystery), `pacing` (thriller, serial) |
-| Research (`research`) | None |
-| Revision (`revision-continuity`) | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
+| Voice (`voice-style`) | `prose`, `voices`, `names`, `rename character` |
+| Genre packs (`genre-craft`) | `add clue`, `clues`, and `diagram clues` (mystery), `pacing` (thriller, serial) |
+| Research (`research`) | `add research` |
+| Revision (`revision-continuity`) | `report`, `passes`, `next`, `move`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` if linked |
 | Line editing (`line-editing`) | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `build --pdf` |
 | Reader panel (`reader-panel`) | `snapshot` (without git), `build --format html --stamp`, `context`, `prose` |
 | Feedback (`feedback-triage`) | `build --format html` |
-| Editorial review (`editorial-review`) | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
+| Editorial review (`editorial-review`) | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref`, `similarity` |
 | Submission (`submission`) | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
 | Publishing (`publishing`) | `prose`, `passes`, `add matter`, `build --format metadata`/`epub`/`print` |
-| Adaptation (`adaptation`) | `build --format narration`, `timeline`, `names`, `compare --against` |
+| Adaptation (`adaptation`) | `build --format narration`/`fountain`, `timeline`, `names`, `init --form picture-book`, `compare --against` |
 
 When in doubt, `story doctor .` runs the health checks and prints a repair step for each finding. For automating these checks on every push, see [Automation and CI](automation.md).
 
