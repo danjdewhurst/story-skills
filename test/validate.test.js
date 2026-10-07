@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, createEntity, createStoryProject, validateLinks, validateProject } from "../src/story.js";
-import { makeTempDir, messages, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, messages, writeMarkdown } from "./helpers.js";
 
 function newProject(title = "Gull") {
   const cwd = makeTempDir();
@@ -63,6 +63,10 @@ function gapProject(title = "Gap Story") {
 function writeStory(root, update) {
   const storyPath = path.join(root, "story.md");
   fs.writeFileSync(storyPath, update(fs.readFileSync(storyPath, "utf8")), "utf8");
+}
+
+function safetyProject(title = "Safety") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
 }
 
 describe("#112 scheduled chapters in arc bodies", () => {
@@ -192,5 +196,50 @@ describe("story.md validation", () => {
     fs.mkdirSync(path.join(root, "cover.png"));
     writeStory(root, (text) => text.replace(/^---\n/, "---\ncover: cover.png\n"));
     expect(messages(validateProject(root).errors)).toContain("story.md cover cover.png is not a file");
+  });
+});
+
+describe("unreadable files name their path once (#383)", () => {
+  test("validate names a non-UTF-8, oversized, unreadable, or symlinked file once", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    createEntity(root, { kind: "character", name: "Mara" });
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), Buffer.from([0xff]));
+    fs.appendFileSync(path.join(root, "characters", "_index.md"), Buffer.from([0xff]));
+    fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), "a".repeat(5 * 1024 * 1024 + 1));
+    fs.symlinkSync(path.join(root, "story.md"), path.join(root, "continuity", "exemptions.md"));
+    if (!CHMOD_IGNORED) {
+      fs.chmodSync(path.join(root, "characters", "mara.md"), 0o000);
+    }
+    const errors = messages(validateProject(root).errors);
+    for (const error of errors) {
+      const [label] = error.split(": ");
+      expect(error.slice(label.length)).not.toContain(label);
+      expect(error).not.toContain(root);
+    }
+    expect(errors).toContain(`${"chapters/chapter-01.md"}: is not valid UTF-8 (byte 0xff at offset ${fs.statSync(path.join(root, "chapters", "chapter-01.md")).size - 1}): re-save it as UTF-8`);
+    expect(errors).toContain(`${"chapters/chapter-02.md"}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
+    expect(errors).toContain(`${"continuity/exemptions.md"}: Refusing to read through symlink`);
+    expect(errors.filter((error) => error.startsWith(`${"characters/_index.md"}: is not valid UTF-8`))).toHaveLength(1);
+    if (!CHMOD_IGNORED) {
+      expect(errors).toContain(`${"characters/mara.md"}: Cannot read: permission denied`);
+    }
+  });
+
+  test("an unreadable optional registry or timeline is reported once", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), Buffer.from([0xff]));
+    fs.mkdirSync(path.join(root, "matter"));
+    fs.writeFileSync(path.join(root, "matter", "_index.md"), Buffer.from([0x2d, 0xff]));
+    fs.mkdirSync(path.join(root, "research"));
+    fs.symlinkSync(path.join(root, "story.md"), path.join(root, "research", "_index.md"));
+    const once = (errors, label) => errors.filter((error) => error.startsWith(`${label}: `));
+    const errors = messages(validateProject(root).errors);
+    expect(once(errors, "plot/timeline.md")).toHaveLength(1);
+    expect(once(errors, "matter/_index.md")).toEqual([`${"matter/_index.md"}: is not valid UTF-8 (byte 0xff at offset 1): re-save it as UTF-8 (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(errors, "research/_index.md")).toEqual([`${"research/_index.md"}: Refusing to read through symlink (it is a registry: run story reindex to rebuild it)`]);
+    expect(once(messages(validateLinks(root).errors), "plot/timeline.md")).toHaveLength(1);
   });
 });

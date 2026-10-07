@@ -138,6 +138,46 @@ function reviewProject(fields = "") {
   return { root, cwd };
 }
 
+function safetyProject(title = "Safety") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function readProjectFile(root, file) {
+  return fs.readFileSync(path.join(root, file), "utf8");
+}
+
+function listDir(root, dir) {
+  return fs.readdirSync(path.join(root, dir)).sort();
+}
+
+// Makes fs.rmSync throw for the first path matching `pattern`, standing in
+// for a process killed (or a delete refused) at that point.
+function failingRemove(pattern, run) {
+  const original = fs.rmSync;
+  let failed = false;
+  fs.rmSync = (target, ...rest) => {
+    if (!failed && pattern.test(String(target))) {
+      failed = true;
+      throw Object.assign(new Error(`EBUSY: resource busy or locked, rm '${target}'`), { code: "EBUSY", syscall: "rm", path: target });
+    }
+    return original(target, ...rest);
+  };
+  try {
+    expect(run).toThrow("EBUSY");
+  } finally {
+    fs.rmSync = original;
+  }
+}
+
+function readOnly(file, run) {
+  fs.chmodSync(file, 0o444);
+  try {
+    expect(run).toThrow();
+  } finally {
+    fs.chmodSync(file, 0o644);
+  }
+}
+
 describe("rename and remove reference rewriting", () => {
   test("rename rejects names that produce an empty id (findings 0, 12)", () => {
     const root = project("Empty Id");
@@ -904,5 +944,110 @@ describe("review fixes", () => {
     writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: S\nchapter: chapter-01\nscene: 1\nstatus: draft\nstate-changes:\n  - character: mara\n    to: yonder", "# S\n");
     renameEntity(root, { kind: "location", id: "yonder", name: "Far Yonder" });
     expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8")).toContain("    to: yonder");
+  });
+});
+
+describe("interrupted rename (#181, #192)", () => {
+  test("renaming a missing id onto an existing name is refused", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "character", name: "Bo" });
+    createEntity(root, { kind: "chapter", name: "Two", mention: "ghost" });
+    const chapter = readProjectFile(root, "chapters/chapter-01.md");
+    const result = invoke(root, ["rename", "character", "ghost", "Bo"]);
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("character ghost does not exist");
+    expect(readProjectFile(root, "chapters/chapter-01.md")).toBe(chapter);
+  });
+
+  test("a rename killed before deleting the old file can be rerun", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "location", name: "Port" });
+    createEntity(root, { kind: "character", name: "Ilya Venn", location: "port" });
+    createEntity(root, { kind: "chapter", name: "One", character: "ilya-venn" });
+    failingRemove(/ilya-venn\.md$/, () => renameEntity(root, { kind: "character", id: "ilya-venn", name: "Zed Quill" }));
+    expect(listDir(root, "characters")).toEqual(["_index.md", "ilya-venn.md", "zed-quill.md"]);
+    const rerun = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
+    // It puts back what the killed run changed, then renames (#604).
+    expect(rerun.err).toMatch(/^note: story rename character ilya-venn 'Zed Quill' stopped part way, so this first put back the \d+ files it had changed\n$/);
+    expect(rerun.code).toBe(0);
+    expect(listDir(root, "characters")).toEqual(["_index.md", "zed-quill.md"]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+});
+
+describe("interrupted move (#191, #193, #194)", () => {
+  // Runs `check` on the project a move stopped part way, and on a copy
+  // without its undo log, as a move by an older story left it. A rerun
+  // finishes the move either way: with the log it puts back what the
+  // stopped run changed and moves again (#604), and without one it finishes
+  // where the run stopped.
+  function withAndWithoutLog(root, check) {
+    const copy = path.join(makeTempDir(), "copy");
+    fs.cpSync(root, copy, { recursive: true });
+    fs.rmSync(path.join(copy, ".story-undo.tmp"));
+    check(root);
+    check(copy);
+  }
+
+  function book() {
+    const root = safetyProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "character", name: "Edran" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara" });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2, character: "mara" });
+    createEntity(root, { kind: "chapter", name: "Three", number: 3, character: "mara" });
+    createEntity(root, { kind: "scene", name: "Dock", chapter: "chapter-01", character: "mara" });
+    createEntity(root, { kind: "scene", name: "Mill", chapter: "chapter-02", character: "mara" });
+    createEntity(root, { kind: "scene", name: "Extra", chapter: "chapter-02", character: "edran" });
+    return root;
+  }
+
+  test("move chapter deletes its scenes before the chapter, so a rerun finishes", () => {
+    const root = book();
+    failingRemove(/chapters[\\/]chapter-01\.md$/, () => moveEntity(root, { kind: "chapter", id: "chapter-01", number: 5 }));
+    // The old scene is already gone; the chapter is still there to rerun.
+    expect(listDir(root, "scenes")).not.toContain("chapter-01-scene-01.md");
+    expect(listDir(root, "chapters")).toContain("chapter-01.md");
+    withAndWithoutLog(root, (project) => {
+      expect(moveEntity(project, { kind: "chapter", id: "chapter-01", number: 5 }).id).toBe("chapter-05");
+      expect(listDir(project, "chapters")).toEqual(["_index.md", "chapter-02.md", "chapter-03.md", "chapter-05.md"]);
+      expect(listDir(project, "scenes")).toEqual(["_index.md", "chapter-02-scene-01.md", "chapter-02-scene-02.md", "chapter-05-scene-01.md"]);
+      expect(messages(validateLinks(project).errors)).toEqual([]);
+    });
+  });
+
+  test("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const root = book();
+    readOnly(path.join(root, "chapters", "chapter-03.md"), () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }));
+    expect(moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }).id).toBe("chapter-03-scene-01");
+    expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-02-scene-01.md", "chapter-03-scene-01.md"]);
+    expect(scanProject(root).chapters.find((chapter) => chapter.id === "chapter-03").characters).toContain("edran");
+  });
+
+  test("rerunning move scene without --scene reuses the number the interrupted run took", () => {
+    const root = book();
+    failingRemove(/chapter-02-scene-02\.md$/, () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-01" }));
+    expect(listDir(root, "scenes")).toContain("chapter-01-scene-02.md");
+    withAndWithoutLog(root, (project) => {
+      const rerun = invoke(project, ["move", "scene", "chapter-02-scene-02", "--chapter", "chapter-01"]);
+      expect(rerun.out).toContain("to chapter-01-scene-02");
+      expect(listDir(project, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-01-scene-02.md", "chapter-02-scene-01.md"]);
+      expect(messages(validateLinks(project).errors)).toEqual([]);
+    });
+  });
+
+  test("a move onto an identical placeholder is refused", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "chapter", name: "TBD", number: 2 });
+    createEntity(root, { kind: "chapter", name: "TBD", number: 5 });
+    expect(() => moveEntity(root, { kind: "chapter", id: "chapter-02", number: 5 })).toThrow("chapter-05 already exists: move it first");
+    createEntity(root, { kind: "scene", name: "Beat", chapter: "chapter-05" });
+    createEntity(root, { kind: "scene", name: "Beat", chapter: "chapter-05" });
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-05-scene-01", scene: 2 })).toThrow("chapter-05-scene-02 already exists");
+    expect(listDir(root, "chapters")).toEqual(["_index.md", "chapter-02.md", "chapter-05.md"]);
+    expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-05-scene-01.md", "chapter-05-scene-02.md"]);
   });
 });
