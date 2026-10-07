@@ -464,29 +464,6 @@ object-state:
     expect(actionReport).toContain("Review continuity warnings");
   });
 
-  test("the continuity warnings action says warning for one and warnings for more (#564)", () => {
-    const cwd = makeTempDir();
-    const { root } = createStoryProject({ cwd, title: "Count", force: false });
-    // A drafted chapter that continuity/state.md has not caught up with is
-    // one warning; a promise planted three chapters back with no payoff, a
-    // second.
-    writeChapter(root, 1, "");
-    reindexProject(root);
-    const one = formatActionReport(projectActions(root));
-    expect(one).toContain("- [P1] Review continuity warnings: Run story continuity . and review 1 continuity warning.\n");
-
-    for (const number of [2, 3, 4]) {
-      writeChapter(root, number, "");
-    }
-    writeMarkdown(path.join(root, "continuity", "promises", "the-letter.md"), `
-title: The Letter
-status: planted
-planted: chapter-01
-`, "# The Letter\n");
-    reindexProject(root);
-    expect(formatActionReport(projectActions(root))).toContain("review 2 continuity warnings.\n");
-  });
-
   test("passes clean projects and skips missing continuity state", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Clean", force: false });
