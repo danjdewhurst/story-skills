@@ -381,7 +381,7 @@ A failure prints `Coverage is below the gate:` followed by one line per gap, key
 
 The command output shown in `README.md` and `docs/` drifts as the CLI changes. [`test/doc-samples.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/doc-samples.test.js) replays every sample marked for it and fails when the CLI no longer prints what the page shows. Mark a sample with a comment on its own line, straight before the sample's first fence:
 
-- `<!-- replay: <example> -->` runs the commands in a copy of `examples/<example>`, shown in output as `~/stories/<example>`. The other examples are copied beside it, so a series link such as `follows: ../the-fall-of-the-citadel` resolves.
+- `<!-- replay: <example> -->` runs the commands in a copy of `examples/<example>`, shown in output as `~/stories/<example>`. The other examples are copied beside it, so a series link such as `follows: ../the-fall-of-the-citadel` resolves. `<!-- replay: . -->` runs them in `~/stories` itself, for `story init` beside the examples.
 - `<!-- replay -->` runs them from a copy of the repository root, shown as `~/story-skills`, for commands that name `examples/<example>` or need no project.
 
 A sample is a `shell` fence of `story` commands, one per line, followed by a `text` fence with their output, or one `text` fence in which each `$ story ...` line is followed by that command's output. Output is stdout and stderr together, in the order the CLI prints them. Blank lines at the end of a command's output are ignored, so a `$` sample may leave one before the next prompt. Each sample runs on fresh copies, so commands that write files are fine. A command must be a plain `story` command with quoted arguments: no pipes, redirects, variables, or `cd`.

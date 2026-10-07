@@ -90,9 +90,9 @@ function samples(file) {
 }
 
 // A scratch home folder, shown in output as ~, with a copy of the examples:
-// as ~/stories, holding the sample's example beside the books it links to,
-// or, for a sample with no example, as ~/story-skills/examples, so it runs
-// from the repository root.
+// as ~/stories, for a sample run in one of them (or, with ".", in ~/stories
+// itself) beside the books it links to, or, for a sample with no example, as
+// ~/story-skills/examples, so it runs from the repository root.
 function scratchHome(example) {
   const home = fs.realpathSync(makeTempDir("story-doc-samples-"));
   const examples = example === undefined ? path.join(home, "story-skills", "examples") : path.join(home, "stories");
@@ -132,7 +132,7 @@ describe.skipIf(process.platform === "win32")("replayed doc samples", () => {
     const shown = sample.steps.flatMap((step) => step.commands).join("; ");
     test(`${sample.where} ${shown}`, () => {
       const { home, cwd } = scratchHome(sample.example);
-      expect(fs.existsSync(path.join(cwd, sample.example === undefined ? "examples" : "story.md"))).toBe(true);
+      expect(fs.existsSync(cwd)).toBe(true);
       for (const step of sample.steps) {
         const actual = step.commands.map((command) => replay(shellWords(command), cwd, home)).join("");
         expect(trimmed(actual)).toBe(trimmed(step.output));
