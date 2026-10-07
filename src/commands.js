@@ -1352,7 +1352,20 @@ function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
-  const { result: report, changes } = runOrPreview(dryRun, projectRoot, fix);
+  let outcome;
+  try {
+    outcome = runOrPreview(dryRun, projectRoot, fix);
+  } catch (error) {
+    // A refused write stopped a repair that had already changed files: the
+    // repairs before it are listed here. Its reason is the error runCli
+    // prints, so the list has no "Stopped" line. The text output only, since
+    // --json prints the error envelope (see runCli).
+    if (Array.isArray(error?.repairs) && error.repairs.length > 0 && !wantsJson(parsed)) {
+      io.stdout.write(formatRepairs(error.repairs, null, error.changes, dryRun, false));
+    }
+    throw error;
+  }
+  const { result: report, changes } = outcome;
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
   const { repairs, stopped, ...rest } = report;
   // Read from the real project, since a --dry-run diagnoses a copy.
@@ -1379,8 +1392,9 @@ function withWorkflowPins(report, projectRoot, cwd) {
   return { ...report, actions: [...actions, ...pins] };
 }
 
-// The repairs doctor --fix applied, each with the changes it made.
-function formatRepairs(repairs, stopped, changes, dryRun) {
+// The repairs doctor --fix applied, each with the changes it made. `diagnosed`
+// is false when a refused write ended the run, so no check follows the list.
+function formatRepairs(repairs, stopped, changes, dryRun, diagnosed = true) {
   const lines = [dryRun ? "Repairs (dry run; nothing was written):" : "Repairs:"];
   if (repairs.length === 0 && stopped === null) {
     lines.push("- No safe repairs needed");
@@ -1397,7 +1411,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
     lines.push(`- Stopped: ${stopped}`);
   }
   if (dryRun) {
-    lines.push(`Dry run: story doctor --fix would make ${changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}; the checks below are what would remain`);
+    lines.push(`Dry run: story doctor --fix would make ${changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}${diagnosed ? "; the checks below are what would remain" : ""}`);
   }
   return `${lines.join("\n")}\n`;
 }
