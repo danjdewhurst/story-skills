@@ -687,6 +687,7 @@
               "words": { "$ref": "#/$defs/count" },
               "characters": { "$ref": "#/$defs/count", "description": "Only in a project counted in characters." },
               "files": { "$ref": "#/$defs/count", "description": "Markdown files copied." },
+              "unparsed": { "type": "integer", "minimum": 1, "description": "Markdown files copied that do not parse, which chapters and words leave out; only when there are any." },
               "dir": { "type": "string", "minLength": 1, "description": "The snapshot folder, relative to the project root: .snapshots/<id>." },
               "replaced": { "type": "boolean", "description": "True when --force replaced a snapshot of the same name." },
               "dryRun": { "type": "boolean" },
@@ -743,7 +744,8 @@
                     "created": { "type": ["string", "null"] },
                     "chapters": { "type": ["integer", "null"], "minimum": 0 },
                     "words": { "type": ["integer", "null"], "minimum": 0 },
-                    "characters": { "type": "integer", "minimum": 0 }
+                    "characters": { "type": "integer", "minimum": 0 },
+                    "unparsed": { "type": "integer", "minimum": 0, "description": "Files the snapshot holds that did not parse when it was taken, left out of chapters and words; only when the manifest records any." }
                   }
                 }
               }
@@ -910,7 +912,7 @@
     },
     "data-import": {
       "$ref": "#/$defs/new-project",
-      "required": ["chapters", "unit", "words", "characterCount", "candidates"],
+      "required": ["chapters", "unit", "words", "characterCount", "candidates", "snapshot"],
       "properties": {
         "chapters": { "$ref": "#/$defs/count", "description": "The chapter files written." },
         "unit": { "enum": ["words", "characters"], "description": "The book's count unit." },
@@ -923,6 +925,16 @@
             "type": "object",
             "required": ["name", "count"],
             "properties": { "name": { "type": "string", "minLength": 1 }, "count": { "$ref": "#/$defs/count" } }
+          }
+        },
+        "snapshot": {
+          "type": ["object", "null"],
+          "required": ["id", "dir", "restore"],
+          "description": "The snapshot --force saved before it deleted the old chapters (with --dry-run, the one it would save); null when there were no chapters to replace.",
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "description": "before-import-<n>." },
+            "dir": { "type": "string", "minLength": 1, "description": ".snapshots/<id>, relative to the project root." },
+            "restore": { "type": "string", "minLength": 1, "description": "The story snapshot --restore command that puts the project back, with --path from where import ran." }
           }
         }
       }

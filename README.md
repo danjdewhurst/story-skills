@@ -257,7 +257,7 @@ It splits the manuscript on chapter headings (or imports a directory of chapter 
 
 `--language` sets the manuscript's language, writes it to the new `story.md`, and splits on that language's own chapter headings: `Chapter` in English (the default), `Capítulo` in Spanish, `Chapitre` in French, and `Kapitel` in German. For a manuscript in any other language, import a folder with one file per chapter.
 
-`--force` lets an import reuse an existing directory. It replaces every `chapter-NN.md` file in `chapters/`, so stale chapters from an earlier import are removed.
+`--force` lets an import reuse an existing directory. It replaces every `chapter-NN.md` file in `chapters/`, so stale chapters from an earlier import are removed. It saves the project as snapshot `before-import-<n>` first, and `story snapshot --restore before-import-<n>` puts the old chapters back.
 
 ## Project structure
 

@@ -4,9 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
+import { lstatIfExists } from "../src/files.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { otherLivePid, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot } from "./helpers.js";
+import { CHMOD_IGNORED, otherLivePid, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot, whileWriting } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -469,7 +470,7 @@ describe("import --force into an existing project", () => {
     const { cwd, root } = importedTwice();
     const refused = invoke(cwd, ["import", "redraft.md", "--title", "Twice", "--dir", "twice"]);
     expect(refused.code).toBe(4);
-    expect(refused.err).toContain(`${root} already exists. Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.`);
+    expect(refused.err).toContain(`${root} already exists. Use --force to import into it: --force saves the project as snapshot before-import-<n>, then deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. story snapshot --restore before-import-<n> puts the old chapters back.`);
     expect(refused.err).not.toContain("never overwritten");
     const init = invoke(cwd, ["init", "Twice", "--dir", "twice"]);
     expect(init.code).toBe(4);
@@ -534,22 +535,221 @@ describe("import --force into an existing project", () => {
     expect(preview.code).toBe(0);
     expect(treeSnapshot(root)).toEqual(locked);
     const lines = preview.out.trimEnd().split("\n");
-    expect(lines.at(-1)).toBe("Dry run: story import would make 3 changes; nothing was written");
-    const listed = lines.slice(0, -1).map((line) => ({ action: line.slice(0, 7).trim(), path: line.slice(8) }));
+    expect(lines[0]).toBe("Importing would first save the project in snapshot before-import-1 (.snapshots/before-import-1/); story snapshot --restore before-import-1 --path twice would undo it");
+    expect(lines.at(-1)).toBe("Dry run: story import would make 32 changes; nothing was written");
+    const listed = lines.slice(1, -1).map((line) => ({ action: line.slice(0, 7).trim(), path: line.slice(8) }));
 
     fs.rmSync(path.join(root, LOCK_FILE));
     const before = treeSnapshot(root);
     const real = invoke(cwd, argv);
     expect(real.code).toBe(0);
     expect(listed).toEqual(treeDiff(before, treeSnapshot(root)));
-    expect(listed).toEqual([
+    expect(listed.filter((change) => !change.path.startsWith(".snapshots"))).toEqual([
       { action: "update", path: "chapters/_index.md" },
       { action: "update", path: "chapters/chapter-01.md" },
       { action: "delete", path: "chapters/chapter-02.md" }
     ]);
+    expect(listed.slice(0, 3)).toEqual([
+      { action: "mkdir", path: ".snapshots" },
+      { action: "create", path: ".snapshots/.gitignore" },
+      { action: "mkdir", path: ".snapshots/before-import-1" }
+    ]);
+    expect(listed).toContainEqual({ action: "create", path: ".snapshots/before-import-1/chapters/chapter-02.md" });
     expect(preview.err).toBe(real.err);
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("Only this.");
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
+  });
+
+  // #600: the chapters --force deletes are kept in a snapshot first.
+  const REDRAFT = ["import", "redraft.md", "--title", "Twice", "--dir", "twice", "--force"];
+
+  // The changes a --dry-run lists, as treeDiff gives them.
+  function listedChanges(out) {
+    return out.split("\n").filter((line) => /^(create|update|delete|mkdir) /.test(line)).map((line) => ({ action: line.slice(0, 7).trim(), path: line.slice(8) }));
+  }
+
+  test("first saves the project as snapshot before-import-<n>, which puts the old chapters back", () => {
+    const { cwd, root } = importedTwice();
+    const chapters = path.join(root, "chapters");
+    const old = treeSnapshot(chapters);
+    const result = invoke(cwd, REDRAFT);
+    expect(result.code).toBe(0);
+    expect(result.out).toStartWith(`Saved the project in snapshot before-import-1 (.snapshots/before-import-1/) before replacing its chapters\nImported 1 chapter (2 words) into ${root}\nUndo it: story snapshot --restore before-import-1 --path twice\n`);
+    const saved = path.join(root, ".snapshots", "before-import-1");
+    expect(treeSnapshot(path.join(saved, "chapters"))).toEqual(old);
+    expect(JSON.parse(fs.readFileSync(path.join(saved, "snapshot.json"), "utf8"))).toMatchObject({ name: "before-import-1", id: "before-import-1", chapters: 2, words: 6 });
+    expect(fs.readFileSync(path.join(root, ".snapshots", ".gitignore"), "utf8")).toEndWith("\n*\n");
+    expect(fs.readFileSync(path.join(chapters, "chapter-01.md"), "utf8")).toContain("Only this.");
+
+    const restored = invoke(cwd, ["snapshot", "--restore", "before-import-1", "--path", "twice"]);
+    expect(restored.code).toBe(0);
+    expect(treeSnapshot(chapters)).toEqual(old);
+  });
+
+  test("numbers the snapshot past the highest taken, and its dry run lists what the real run does", () => {
+    const { root } = importedTwice();
+    for (const name of ["before-import-2", "before-import-09", "before-import-x", "before-import-99999999999999999999999", "draft-5"]) {
+      fs.mkdirSync(path.join(root, ".snapshots", name), { recursive: true });
+    }
+    fs.writeFileSync(path.join(root, ".snapshots", ".gitignore"), "*\n");
+    const argv = ["import", "../redraft.md", "--title", "Twice", "--dir", ".", "--force"];
+    const preview = invoke(root, [...argv, "--dry-run"]);
+    expect(preview.code).toBe(0);
+    expect(preview.out).toStartWith("Importing would first save the project in snapshot before-import-3 (.snapshots/before-import-3/); story snapshot --restore before-import-3 would undo it\n");
+    const before = treeSnapshot(root);
+    const real = invoke(root, argv);
+    expect(real.code).toBe(0);
+    expect(real.out).toStartWith("Saved the project in snapshot before-import-3 (.snapshots/before-import-3/) before replacing its chapters\n");
+    expect(real.out).toContain("\nUndo it: story snapshot --restore before-import-3\n");
+    const listed = listedChanges(preview.out);
+    expect(listed).toEqual(treeDiff(before, treeSnapshot(root)));
+    expect(listed).toContainEqual({ action: "create", path: ".snapshots/before-import-3/snapshot.json" });
+    // The folder was there already, so it gets no .gitignore.
+    expect(listed.filter((change) => !change.path.startsWith(".snapshots/before-import-3/") && change.path.startsWith(".snapshots"))).toEqual([{ action: "mkdir", path: ".snapshots/before-import-3" }]);
+  });
+
+  test("saves a folder without story.md once the starter files make it a project", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "redraft.md"), "# Chapter 1: Only\n\nOnly this.\n", "utf8");
+    const old = "# Old\n\nOld words here.\n";
+    const root = path.join(cwd, "loose");
+    fs.mkdirSync(path.join(root, "chapters"), { recursive: true });
+    fs.writeFileSync(path.join(root, "chapters", "chapter-01.md"), old, "utf8");
+    const result = invoke(cwd, ["import", "redraft.md", "--title", "Loose", "--dir", "loose", "--force"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toStartWith("Saved the project in snapshot before-import-1 (.snapshots/before-import-1/) before replacing its chapters\n");
+    const saved = path.join(root, ".snapshots", "before-import-1");
+    expect(fs.readFileSync(path.join(saved, "chapters", "chapter-01.md"), "utf8")).toBe(old);
+    expect(fs.existsSync(path.join(saved, "story.md"))).toBe(true);
+    expect(invoke(cwd, ["snapshot", "--restore", "before-import-1", "--path", "loose"]).code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toBe(old);
+  });
+
+  test("quotes a project path the restore command needs quoted", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: One\n\nOne two three.\n", "utf8");
+    fs.writeFileSync(path.join(cwd, "redraft.md"), "# Chapter 1: Only\n\nOnly this.\n", "utf8");
+    expect(invoke(cwd, ["import", "draft.md", "--title", "Spaced", "--dir", "my book/b"]).code).toBe(0);
+    const result = invoke(cwd, ["import", "redraft.md", "--title", "Spaced", "--dir", "my book/b", "--force"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain("\nUndo it: story snapshot --restore before-import-1 --path 'my book/b'\n");
+    expect(invoke(cwd, ["snapshot", "--restore", "before-import-1", "--path", "my book/b"]).code).toBe(0);
+    expect(fs.readFileSync(path.join(cwd, "my book", "b", "chapters", "chapter-01.md"), "utf8")).toContain("One two three.");
+  });
+
+  test("takes no snapshot, and reads no .snapshots/, when there is no chapter to replace", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: One\n\nOne two three.\n", "utf8");
+    expect(invoke(cwd, ["init", "Empty", "--dir", "empty"]).code).toBe(0);
+    const snapshots = path.join(cwd, "empty", ".snapshots");
+    fs.mkdirSync(snapshots);
+    // A .snapshots/ no one can read: only an import that takes a snapshot
+    // reads it.
+    fs.chmodSync(snapshots, 0o000);
+    try {
+      const argv = ["import", "draft.md", "--title", "Empty", "--dir", "empty"];
+      const refused = invoke(cwd, [...argv, "--dry-run"]);
+      expect(refused.code).toBe(4);
+      expect(refused.err).toContain("already exists. Use --force to import into it");
+      const preview = invoke(cwd, [...argv, "--force", "--dry-run"]);
+      expect(preview.code).toBe(0);
+      expect(preview.out).not.toContain("snapshot");
+      const result = invoke(cwd, [...argv, "--force"]);
+      expect(result.code).toBe(0);
+      expect(result.out).not.toContain("snapshot");
+    } finally {
+      fs.chmodSync(snapshots, 0o755);
+    }
+    expect(fs.readdirSync(snapshots)).toEqual([]);
+  });
+
+  test("refuses a chapter entry the snapshot cannot keep, before changing anything", () => {
+    const entries = [
+      ["chapter-03.MD", (file) => fs.writeFileSync(file, "# Shouting\n"), "does not end in lower-case .md"],
+      ["chapter-03.md", (file) => fs.mkdirSync(file), "is a folder"],
+      ["chapter-03.md", (file) => fs.symlinkSync(path.join(path.dirname(file), "chapter-01.md"), file), "is a symlink"]
+    ];
+    for (const [name, make, problem] of entries) {
+      const { cwd, root } = importedTwice();
+      try {
+        make(path.join(root, "chapters", name));
+      } catch {
+        console.warn("Skipping a chapter symlink: symlinks unavailable.");
+        continue;
+      }
+      const before = treeSnapshot(root);
+      for (const argv of [[...REDRAFT, "--dry-run"], REDRAFT]) {
+        const result = invoke(cwd, argv);
+        expect(result.code).toBe(4);
+        expect(result.err).toContain(`Cannot import: chapters/${name} ${problem}, so the snapshot import --force takes before replacing the chapters cannot keep it, and --force would delete it. Rename, move, or delete it, then import again. Nothing was changed`);
+      }
+      expect(treeSnapshot(root)).toEqual(before);
+    }
+  });
+
+  test("a snapshot it cannot save stops it before anything changes, in a dry run as in the real run", () => {
+    const outside = makeTempDir();
+    fs.mkdirSync(path.join(outside, "before-import-5"));
+    const cases = [
+      [(root) => fs.writeFileSync(path.join(root, "chapters", "chapter-03.md"), Buffer.from([0xff, 0xfe, 0x41])), 3, "chapter-03.md is not valid UTF-8 (byte 0xff at offset 0): re-save it as UTF-8. "],
+      // A file or a symlink at .snapshots is refused before anything is
+      // looked up through it, on every system. The symlink is not read for
+      // numbering either.
+      [(root) => fs.writeFileSync(path.join(root, ".snapshots"), ""), 3, (root) => `Project path is not a directory: ${path.join(root, ".snapshots")}. `],
+      [(root) => fs.symlinkSync(outside, path.join(root, ".snapshots"), "junction"), 3, (root) => `Refusing to use symlinked project directory: ${path.join(root, ".snapshots")}. `]
+    ];
+    if (!CHMOD_IGNORED) {
+      cases.push([(root) => {
+        fs.mkdirSync(path.join(root, ".snapshots"));
+        fs.chmodSync(path.join(root, ".snapshots"), 0o555);
+      }, 4, "Cannot create the folder twice/.snapshots/before-import-1: permission denied. "]);
+    }
+    for (const [setup, code, reason] of cases) {
+      const { cwd, root } = importedTwice();
+      setup(root);
+      const before = treeSnapshot(root);
+      const preview = invoke(cwd, [...REDRAFT, "--dry-run"]);
+      const real = invoke(cwd, REDRAFT);
+      expect(real.code).toBe(code);
+      expect(real.err).toContain(typeof reason === "function" ? reason(root) : reason);
+      expect(real.err).toContain("The import stopped before deleting any chapter: it could not save the project as snapshot before-import-1 first");
+      expect(preview.code).toBe(code);
+      expect(preview.err).toBe(real.err);
+      expect(treeSnapshot(root)).toEqual(before);
+      expect(fs.readdirSync(outside)).toEqual(["before-import-5"]);
+      if (lstatIfExists(path.join(root, ".snapshots"))?.isDirectory()) {
+        fs.chmodSync(path.join(root, ".snapshots"), 0o755);
+      }
+    }
+  });
+
+  test("a failure after the snapshot names it and the command that puts the project back", () => {
+    const { cwd, root } = importedTwice();
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    const saved = `${fs.readFileSync(chapter, "utf8")}\nSaved meanwhile.\n`;
+    // Saved as the snapshot writes its manifest, after it copied the chapter.
+    const spy = whileWriting(path.join(root, ".snapshots", "before-import-1", "snapshot.json"), () => fs.writeFileSync(chapter, saved));
+    let result;
+    try {
+      result = invoke(cwd, REDRAFT);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("chapters/chapter-02.md changed on disk while story was deleting it, so it was left as it is. Snapshot before-import-1 holds the project as it was before this import: story snapshot --restore before-import-1 --path twice puts it back\n");
+    expect(fs.readFileSync(chapter, "utf8")).toBe(saved);
+    expect(fs.readFileSync(path.join(root, ".snapshots", "before-import-1", "chapters", "chapter-01.md"), "utf8")).toContain("One two three.");
+  });
+
+  test("counts a chapter that does not parse in the snapshot as unparsed", () => {
+    const { cwd, root } = importedTwice();
+    fs.writeFileSync(path.join(root, "chapters", "chapter-03.md"), "---\ntitle: [oops\n---\nBroken.\n", "utf8");
+    expect(invoke(cwd, REDRAFT).code).toBe(0);
+    const saved = path.join(root, ".snapshots", "before-import-1");
+    expect(fs.readFileSync(path.join(saved, "chapters", "chapter-03.md"), "utf8")).toContain("Broken.");
+    expect(JSON.parse(fs.readFileSync(path.join(saved, "snapshot.json"), "utf8"))).toMatchObject({ chapters: 2, words: 6, unparsed: 1 });
+    expect(invoke(cwd, ["snapshot", "--list", "--path", "twice"]).out).toContain("- before-import-1: ");
+    expect(invoke(cwd, ["snapshot", "--list", "--path", "twice"]).out).toContain(", 2 chapters, 6 words, 1 file that did not parse, not counted\n");
   });
 });
 

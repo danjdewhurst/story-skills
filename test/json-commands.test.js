@@ -307,6 +307,7 @@ describe("--json on export, build, init, and import", () => {
       words: 14,
       characterCount: null,
       candidates: [{ name: "Mira Holt", count: 3 }],
+      snapshot: null,
       dryRun: false
     });
     expect(envelope.data.changes).toContainEqual({ action: "create", path: "chapters/chapter-01.md" });
@@ -339,8 +340,15 @@ describe("--json on export, build, init, and import", () => {
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
     createEntity(root, { kind: "chapter", name: "Two", number: 2 });
     fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter One\n\nA new start.\n", "utf8");
-    const { envelope } = invokeJsonOnce(cwd, ["import", "draft.md", "--title", "Other", "--dir", "kept-book", "--force", "--genre", "mystery", "--json"]);
-    expect(envelope.data).toMatchObject({ root, keptStory: true, ignoredOptions: ["title", "--genre"], chapters: 1 });
+    const argv = ["import", "draft.md", "--title", "Other", "--dir", "kept-book", "--force", "--genre", "mystery", "--json"];
+    // The snapshot it saves first, which the dry run names too (#600).
+    const snapshot = { id: "before-import-1", dir: ".snapshots/before-import-1", restore: "story snapshot --restore before-import-1 --path kept-book" };
+    const preview = invokeJsonOnce(cwd, [...argv, "--dry-run"]).envelope;
+    expect(preview.data).toMatchObject({ snapshot, dryRun: true });
+    const { envelope } = invokeJsonOnce(cwd, argv);
+    expect(envelope.data).toMatchObject({ root, keptStory: true, ignoredOptions: ["title", "--genre"], chapters: 1, snapshot });
+    expect(envelope.data.changes).toEqual(preview.data.changes);
+    expect(envelope.data.changes).toContainEqual({ action: "create", path: ".snapshots/before-import-1/chapters/chapter-02.md" });
     expect(envelope.data.changes).toContainEqual({ action: "delete", path: "chapters/chapter-02.md" });
     expect(envelope.data.changes).toContainEqual({ action: "update", path: "chapters/chapter-01.md" });
     expect(envelope.writes).not.toContain(path.join(root, "chapters", "chapter-02.md"));
@@ -365,7 +373,11 @@ describe("--json on export, build, init, and import", () => {
     expect(result.code).toBe(4);
     expect(result.envelope).toMatchObject({ ok: false, data: null });
     expect(result.envelope.diagnostics).toEqual([expect.objectContaining({ code: "write-refused" })]);
-    expect(result.envelope.writes).toEqual([path.join(root, "chapters", "chapter-01.md")]);
+    expect(result.envelope.diagnostics[0].message).toEndWith("Snapshot before-import-1 holds the project as it was before this import: story snapshot --restore before-import-1 --path kept-book puts it back");
+    // The snapshot import --force saved first (#600), then the chapter.
+    const snapshots = path.join(root, ".snapshots");
+    expect(result.envelope.writes.filter((file) => !file.startsWith(`${snapshots}${path.sep}`))).toEqual([path.join(root, "chapters", "chapter-01.md")]);
+    expect(result.envelope.writes).toContain(path.join(snapshots, "before-import-1", "chapters", "chapter-03.md"));
     expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(false);
     expect(fs.readFileSync(second, "utf8")).toBe("Mine.\n");
   });
