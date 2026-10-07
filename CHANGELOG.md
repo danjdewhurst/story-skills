@@ -50,6 +50,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - A scene with `flashback-to` no longer dates its chapter, so a flashback cannot move an undated chapter earlier in story time. ([#699](https://github.com/danjdewhurst/story-skills/issues/699))
   - Before, a dated flashback scene in an undated chapter could hide a posthumous appearance or another story-time error. Chapter dates now come from the chapter's own `date`, or from its earliest dated scene that has no `flashback-to`.
 
+- `story continuity` no longer reports a clue, promise, or question as out of order when its payoff is on a sibling branch with a lower chapter number. ([#700](https://github.com/danjdewhurst/story-skills/issues/700))
+  - In a branching book, a setup and its payoff are ordered along the choices. Only a path that reads the payoff before the setup is an error, so `story check` passes on a valid book.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
