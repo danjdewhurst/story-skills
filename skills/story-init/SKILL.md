@@ -51,10 +51,10 @@ The story id recorded in every registry is the kebab-case form of the title (`--
 
 `init` also writes a `.gitignore` listing `dist/` (build output), `.story.lock`, leftover `.*.story-*.tmp` and `.story-*.tmp` files, and OS and editor swap files, but only when the project has none. It never edits an existing `.gitignore`; if it prints `note: .gitignore was kept and does not ignore dist/`, tell the user and offer to add a `dist/` line (or remove a `!dist/...` negation).
 
-If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder:
+If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning. For example, with the skills installed in `~/.claude/skills`, run this from the folder that will hold the new project:
 
 ```shell
-node ../story-maintenance/scripts/story.js init "{Title}"
+node ~/.claude/skills/story-maintenance/scripts/story.js init "{Title}"
 ```
 
 If neither command is available, create the files manually using the steps below.
@@ -279,7 +279,7 @@ story wordcount . --write
 story check .
 ```
 
-If `story` is not installed, use `bun run story --` from the Story Skills repository checkout or the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments, resolving the path relative to this skill folder.
+If `story` is not installed, use `node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story Skills repository checkout, or the bundled fallback `node ../story-maintenance/scripts/story.js`, with the same arguments. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning.
 
 ## Reference Files
 

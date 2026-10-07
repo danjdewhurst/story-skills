@@ -33,8 +33,10 @@ This page is the reference: triggers, files read and written, CLI commands, and 
 Every skill that runs maintenance looks for the CLI in the same order:
 
 1. `story <command>`, when the npm package is installed
-2. `bun run story -- <command>`, from a Story Skills repository checkout
+2. `node <checkout>/bin/story.js <command>` (or `bun <checkout>/bin/story.js <command>`), where `<checkout>` is a Story Skills repository checkout
 3. `node ../story-maintenance/scripts/story.js <command>`, the bundled fallback, resolved relative to the skill folder
+
+The agent gives the script in forms 2 and 3 as an absolute path and runs the command from the story project folder, so `.` is the project. Every skill words this the same way, and [`test/skill-conventions.test.js`](../test/skill-conventions.test.js) checks it.
 
 `story-maintenance` itself uses `node scripts/story.js`, because the fallback sits inside its own folder. The fallback is a single Node file with no dependencies, so copied skill installs work without npm:
 

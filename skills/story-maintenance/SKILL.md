@@ -14,8 +14,10 @@ Run deterministic maintenance for Story Skills projects. Use the CLI for structu
 Prefer the first available command:
 
 1. `story <command>` - when the package bin is installed
-2. `bun run story -- <command>` - when working from this repository
+2. `node <checkout>/bin/story.js <command>` (or `bun <checkout>/bin/story.js <command>`) - when a Story Skills repository checkout is available, where `<checkout>` is its path
 3. `node scripts/story.js <command>` - bundled fallback, resolving `scripts/story.js` relative to this skill folder
+
+Write the script in forms 2 and 3 as an absolute path and run the command from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Do not run the `story` script in the checkout's `package.json`: a package script runs from the checkout's root, so `.` would be the checkout, not the story project.
 
 If none of these are available, perform the requested maintenance manually using the shared conventions in `references/conventions.md`.
 

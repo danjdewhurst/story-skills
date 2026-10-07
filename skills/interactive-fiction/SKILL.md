@@ -209,10 +209,13 @@ Repair every error. Treat `unreachable-chapter` and `state-differs-by-path`
 as findings to resolve or record. `story next .` suggests drafting the next
 chapter number, as for a linear book: plan from the graph instead.
 
-If `story` is not installed, use `bun run story --` from the Story Skills
-repository checkout or the bundled fallback
-`node ../story-maintenance/scripts/story.js` with the same arguments,
-resolving the path relative to this skill folder.
+If `story` is not installed, use `node <checkout>/bin/story.js` (or
+`bun <checkout>/bin/story.js`), where `<checkout>` is the path to a Story
+Skills repository checkout, or the bundled fallback
+`node ../story-maintenance/scripts/story.js`, with the same arguments. Write
+the script as an absolute path (resolve the fallback relative to this skill
+folder) and run the command from the folder you would run `story` from, so
+`.` and other relative paths keep their meaning.
 
 ## Hard Rules
 
