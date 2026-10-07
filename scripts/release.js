@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { spawnCommand } from "./spawn-command.js";
 import { bumpDocVersions, docVersionFiles } from "./doc-versions.js";
 import { missingBunMessage } from "./bun-missing.js";
 import { CHANGELOG_FILE, hasVersionSection, promoteUnreleased, unreleasedEntries } from "./changelog.js";
@@ -117,8 +118,9 @@ export function releaseDeps(overrides = {}) {
   const root = overrides.root ?? repoRoot;
   return {
     root,
+    // spawnCommand runs npm with node on Windows, where npm is a .cmd shim.
     run: (command, args, options = {}) =>
-      execFileSync(command, args, {
+      execFileSync(...spawnCommand(command, args), {
         cwd: root,
         encoding: "utf8",
         stdio: options.inherit ? ["ignore", "inherit", "inherit"] : ["ignore", "pipe", "pipe"],

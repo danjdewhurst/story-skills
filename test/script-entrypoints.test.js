@@ -202,25 +202,26 @@ describe("build-binaries entry point", () => {
 
 describe("check-package entry point", () => {
   // Stands in for npm: `install` links `source` in as the installed package.
+  // A bin run on Windows is node and the bin's script, so `--version` is last.
   function fakeNpm(source, { version = VERSION } = {}) {
     const calls = [];
     const run = (command, args, cwd) => {
-      calls.push([path.basename(command), ...args]);
+      calls.push([command, ...args]);
       if (args[0] === "pack") return '[{ "filename": "story-skills-test.tgz" }]';
       if (args[0] === "install") {
         fs.mkdirSync(path.join(cwd, "node_modules"), { recursive: true });
         fs.symlinkSync(source, path.join(cwd, "node_modules", "story-skills"), "dir");
         return "";
       }
-      if (args[0] === "--version") return `${version}\n`;
+      if (args.at(-1) === "--version") return `${version}\n`;
       return "";
     };
     return { run, calls };
   }
 
-  function fakePackage({ readme = "See [the docs](docs/README.md).\n", exportsField = true } = {}) {
+  function fakePackage({ readme = "See [the docs](docs/README.md).\n", exportsField = true, bin = { story: "bin/story.js" } } = {}) {
     const dir = makeTempDir("story-fake-package-");
-    const pkg = { name: "story-skills", version: VERSION };
+    const pkg = { name: "story-skills", version: VERSION, bin };
     if (exportsField) pkg.exports = { "./package.json": "./package.json", "./schemas/*": "./schemas/*" };
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify(pkg));
     fs.writeFileSync(path.join(dir, "README.md"), readme);
@@ -234,11 +235,26 @@ describe("check-package entry point", () => {
   test("passes a package that installs, runs, and exports only what it should", () => {
     const npm = fakeNpm(fakePackage());
     const io = capture();
-    const status = checkPackage({ run: npm.run, root: repoRoot, ...io });
+    const status = checkPackage({ run: npm.run, root: repoRoot, platform: "linux", ...io });
     expect(io.err()).toBe("");
     expect(status).toBe(0);
     expect(io.out()).toBe(`Packed tarball story-skills-test.tgz installs and runs story ${VERSION}`);
+    expect(npm.calls.map((call) => path.basename(call[0]))).toEqual(["npm", "npm", "story", "story", path.basename(process.execPath)]);
     expect(npm.calls.map((call) => call[1])).toEqual(["pack", "install", "--version", "validate", expect.stringContaining("story.js")]);
+  });
+
+  // Windows links the bin as story.cmd, which execFileSync refuses to spawn
+  // (EINVAL), so the check runs node with the script the bin field names.
+  test("runs the installed bin's script with node on Windows (#573)", () => {
+    const npm = fakeNpm(fakePackage());
+    const io = capture();
+    expect(checkPackage({ run: npm.run, root: repoRoot, platform: "win32", ...io })).toBe(0);
+    expect(io.err()).toBe("");
+    const script = expect.stringMatching(/node_modules[\\/]story-skills[\\/]bin[\\/]story\.js$/);
+    expect(npm.calls.slice(2, 4)).toEqual([
+      [process.execPath, script, "--version"],
+      [process.execPath, script, "validate", expect.stringContaining("the-last-ember")]
+    ]);
   });
 
   const failures = [
@@ -249,10 +265,16 @@ describe("check-package entry point", () => {
   for (const [name, npm, message] of failures) {
     test(`fails ${name}`, () => {
       const io = capture();
-      expect(checkPackage({ run: npm().run, root: repoRoot, ...io })).toBe(1);
+      expect(checkPackage({ run: npm().run, root: repoRoot, platform: "linux", ...io })).toBe(1);
       expect(io.err()).toBe(`Package check failed: ${message}`);
     });
   }
+
+  test("fails on Windows when the installed package has no story bin (#573)", () => {
+    const io = capture();
+    expect(checkPackage({ run: fakeNpm(fakePackage({ bin: {} })).run, root: repoRoot, platform: "win32", ...io })).toBe(1);
+    expect(io.err()).toBe('Package check failed: The installed story-skills has no "story" bin in its package.json');
+  });
 });
 
 describe("fallback build and check entry points", () => {
