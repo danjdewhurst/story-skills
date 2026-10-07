@@ -60,11 +60,9 @@ for the user unless asked; do say which ones already imply conflict.
 
 For each chosen what-if, draft a logline with the recipe in
 `../story-init/references/title-logline.md` (protagonist + want + obstacle
-+ stakes). Then run the stress tests in `references/premise-tests.md`:
-active protagonist, opposition that can win, a choice at the end, stakes
-that are personal, and a situation that can sustain the chosen length.
-Report each test as pass, weak, or fail with one sentence of why, and
-offer one revision per weak or failed test.
++ stakes). Then run every logline stress test in
+`references/premise-tests.md`. Report each test as pass, weak, or fail
+with one sentence of why, and offer one revision per weak or failed test.
 
 ### 4. Draft premise and counter-premise
 
