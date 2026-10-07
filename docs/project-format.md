@@ -1096,7 +1096,7 @@ exemptions:
 
 ## Glossary
 
-Files: `glossary/terms/<term-id>.md`, for invented words, names, and concepts that must be used consistently. Created with `story add term "Term"`.
+Files: `glossary/terms/<term-id>.md`, for invented words, names, and concepts that must be used consistently. Created with `story add term "Term"`; the [worldbuilding skill](../skills/worldbuilding/SKILL.md) adds them.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|

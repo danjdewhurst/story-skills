@@ -1,6 +1,6 @@
 ---
 name: character-management
-description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character", or needs to manage characters in a story project. NOT for character voices or dialogue style (use voice-style), or for a thematic arc's lie, truth, and arc type (use theme-craft).
+description: This skill should be used when the user asks to "create a character", "update a character", "add a character", "build a family tree", "character relationships", "character timeline", "character arc", "character profile", "relationship graph", "name a character", or needs to manage characters in a story project. NOT for recording or checking character voices (use voice-style), rewriting dialogue so the voices differ (use line-editing), or a thematic arc's lie, truth, and arc type (use theme-craft).
 ---
 
 # Character Management
@@ -150,6 +150,8 @@ voice-avoid:
 Here "love" is a term of address ("all right, love"). Keep notes like that in prose, not as `#` comments in frontmatter; the parser keeps them as part of the value.
 
 `story voices .` fingerprints each character's attributed dialogue (see the `voice-style` skill for how lines are attributed) and warns when they say a `voice-avoid` word, when a `voice-words` entry never appears, and when two characters' voices are near-identical. Keep these lists short (three to eight entries) and consistent with the Voice & Speech Patterns section and the style sheet's Character Voices line (see the `voice-style` skill).
+
+This skill sets a voice when it builds the profile. Recording and checking voices across the book belongs to the `voice-style` skill, and rewriting dialogue so two voices differ belongs to the `line-editing` skill.
 
 ## Cross-Referencing
 

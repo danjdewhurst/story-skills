@@ -1,6 +1,6 @@
 ---
 name: adaptation
-description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive fiction", "Ink", "Twine", "choose your own adventure", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a story project into another form or language.
+description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive edition", "turn the book into Ink or Twine", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a finished story project into another form or language. NOT for writing a new branching or choose-your-own-adventure story (use interactive-fiction), or writing rhyming picture-book text (use verse-craft).
 ---
 
 # Adaptation
@@ -26,7 +26,8 @@ redoing the adaptation; say so if `status` is not `revising` or `complete`.
 
 - Producing an audiobook: narration script, runtime estimate,
   pronunciation guide, narrator and production checklist
-- Adapting the story to a screenplay, comics script, or interactive fiction
+- Adapting the story to a screenplay, comics script, or interactive
+  edition (a linear book turned into Ink or Twine)
 - Planning or drafting a picture book (`form: picture-book`)
 - Translating the book, or preparing a glossary and style sheet for a
   translator
@@ -34,6 +35,8 @@ redoing the adaptation; say so if `status` is not `revising` or `complete`.
   `publishing`); audio and film rights one-sheets live there
 - NOT for query letters or agent submission (use `submission`)
 - NOT for new prose in the source book (use `chapter-writing`)
+- NOT for writing a book that branches from the start, such as a new
+  choose-your-own-adventure story (use `interactive-fiction`)
 - NOT for writing or scanning verse, including rhyming picture-book text
   (use `verse-craft`)
 - Nonfiction and poetry collections are outside the story project model.

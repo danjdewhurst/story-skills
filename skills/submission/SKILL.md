@@ -1,6 +1,6 @@
 ---
 name: submission
-description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", "submit a short story", "magazine submission", "short-fiction markets", "simultaneous submission", "reprint rights", "order a short story collection", or wants to prepare and track a finished manuscript's submission to agents, publishers, magazines, anthologies, or retailers.
+description: This skill should be used when the user asks to "write a query letter", "query", "querying", "pitch", "blurb", "back cover copy", "jacket copy", "comp titles", "comparable titles", "synopsis for agents", "submit to agents", "submission tracker", "self-publishing description", "retailer description", "ready to query", "submission readiness check", "submit a short story", "magazine submission", "short-fiction markets", "simultaneous submission", "reprint rights", "order a short story collection", or wants to prepare and track a finished manuscript's submission to agents, publishers, magazines, anthologies, or retailers. NOT for pitching a series of several books (use series-continuity), or self-publishing production, metadata, or rights sales (use publishing).
 ---
 
 # Submission
@@ -51,6 +51,8 @@ reads, which is usually the book's.
   interiors, launch, rights deals and contracts): use the `publishing`
   skill. This skill still drafts the blurb and retailer description it
   uses, and records the rights a short-fiction market buys
+- NOT for pitching a series of several books or writing its series overview
+  (use `series-continuity`); the query for book one is still drafted here
 - NOT for revising the manuscript itself (use `revision-continuity`)
 - NOT for reader feedback rounds (use `feedback-triage`)
 

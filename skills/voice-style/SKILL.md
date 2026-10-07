@@ -1,6 +1,6 @@
 ---
 name: voice-style
-description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints", or wants to record and enforce the voice and surface conventions of a story project. NOT for rewriting lines when everyone sounds the same (use line-editing).
+description: This skill should be used when the user asks to "create a style sheet", "style guide", "house style", "keep the voice consistent", "voice drift", "British or American spelling", "character voices", "lint the prose", "prose check", "filter words", "said-bookisms", "overused words", "repeated phrases", "similar character names", "voice fingerprints", or wants to record and enforce the voice and surface conventions of a story project. NOT for rewriting dialogue to make the voices distinct when everyone sounds the same (use line-editing), or a character's profile or arc (use character-management).
 ---
 
 # Voice & Style
@@ -41,9 +41,11 @@ pass by reading (see `references/prose-checks.md`, Other languages).
 - Before drafting when voice has drifted between chapters or sessions
 - When a copyedit pass needs a style decision recorded (the copyedit itself belongs to the `line-editing` skill, which reads this file)
 - When the user wants a mechanical prose check before sharing a draft
+- Recording each character's voice (the style sheet's Character Voices line, `voice-words`, `voice-avoid`) and checking it with `story voices`
 - NOT for character personality or arc (use `character-management`)
 - NOT for scene-level craft such as deep POV or subtext (use `scene-craft`)
 - NOT for the line-by-line prose pass itself (line edit, copyedit, read-aloud, proof): use the `line-editing` skill, which reads this style sheet and runs these checks
+- NOT for rewriting dialogue so the voices sound distinct when everyone sounds the same: use the `line-editing` skill's voice differentiation pass, which follows the voices recorded here
 
 ## Workflow
 

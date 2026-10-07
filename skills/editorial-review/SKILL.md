@@ -1,6 +1,6 @@
 ---
 name: editorial-review
-description: This skill should be used when the user asks for a "sensitivity reader", "authenticity reader", "cultural review", "is this portrayal okay", "real people in my novel", "defamation", "can I use song lyrics", "epigraph permission", "permissions", "quote permission", "fair use", "AI disclosure", "do I need to disclose AI", "send to my editor", "editorial round", "Word file for my editor", "editor review copy", "co-author", "collaborate on a book", "shared world", "back up my book", "does this echo my source", "similarity check", "check overlap with my earlier books", or wants to run human editorial, ethics, permissions, or collaboration workflows around a story project. NOT for contracts or selling rights (use publishing) or reader feedback rounds (use feedback-triage).
+description: This skill should be used when the user asks for a "sensitivity reader", "authenticity reader", "cultural review", "is this portrayal okay", "real people in my novel", "defamation", "can I use song lyrics", "epigraph permission", "permissions", "quote permission", "fair use", "AI disclosure", "do I need to disclose AI", "send to my editor", "editorial round", "Word file for my editor", "editor review copy", "co-author", "collaborate on a book", "shared world", "back up my book", "does this echo my source", "similarity check", "check overlap with my earlier books", or wants to run human editorial, ethics, permissions, or collaboration workflows around a story project. NOT for contracts or selling rights (use publishing), or reader feedback rounds and review copies for readers, including the GitHub review-copy setup (use feedback-triage).
 ---
 
 # Editorial Review
@@ -170,25 +170,17 @@ Follow `references/editor-rounds.md`:
 
 ### 7. Review copies for non-technical readers
 
-For beta readers, editors, or agents who never open a terminal:
-
-1. `story build . --format html` produces one file with a table of
-   contents and a clickable paragraph label on every paragraph (`ch03-p12`), so
-   comments can cite exact places in email, a doc, or an issue.
-2. For a GitHub-hosted project, offer the templates from the Story Skills
-   repository (https://github.com/danjdewhurst/story-skills,
-   `templates/github/`): copy `review-copy.yml` into `.github/workflows/`
-   to publish the HTML copy to GitHub Pages on every push to `main`, and
-   `ISSUE_TEMPLATE/manuscript-note.yml` into `.github/ISSUE_TEMPLATE/` so
-   readers file notes with an anchor and a type (typo or wording,
-   confusing, continuity, pacing, character, sensitivity or authenticity,
-   loved this, other). Ask before creating files in
-   `.github/`, and warn that a public Pages site makes the manuscript
-   public unless the repository and Pages are private.
-3. Collect issue notes into a feedback round and triage them with
-   `feedback-triage`. Resolve labels from an older build with
-   `story compare . --ref <round-tag> --anchor '<label>'` before acting on
-   them; see `references/editor-rounds.md`.
+For editors, sensitivity readers, or agents who never open a terminal,
+`story build . --format html` produces one file with a table of contents
+and a clickable paragraph label on every paragraph (`ch03-p12`), so
+comments can cite exact places in email, a doc, or an issue. To publish
+the copy on GitHub Pages with an issue form for notes, follow the GitHub
+review copy setup in step 1 of the `feedback-triage` workflow; it covers
+the templates, the approvals they need, and the warning about a public
+site. Collect the notes that come back into a feedback round and triage
+them with `feedback-triage`. Resolve labels from an older build with
+`story compare . --ref <round-tag> --anchor '<label>'` before acting on
+them; see `references/editor-rounds.md`.
 
 ### 8. Collaboration and backups
 

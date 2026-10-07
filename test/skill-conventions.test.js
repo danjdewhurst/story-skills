@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { parseFrontmatter } from "../src/frontmatter.js";
 import { takesValue } from "../src/options.js";
 
 // Every skill links the shared conventions file and repeats the same short
@@ -503,5 +504,127 @@ describe("user text in story commands", () => {
       }
     }
     expect(checked).toBeGreaterThan(1000);
+  });
+});
+
+// Each trigger phrase belongs to one skill. A description's trigger phrases
+// are the quoted phrases before its first "NOT for"; a quote after it names a
+// request the skill sends elsewhere (theme-craft's "character arc").
+
+const descriptions = Object.fromEntries(skills.map((name) => {
+  const file = path.join(skillsDir, name, "SKILL.md");
+  return [name, parseFrontmatter(fs.readFileSync(file, "utf8"), file).data.description];
+}));
+const NOT_FOR = /\bNOT for\b/;
+const triggerPhrases = (text) => [...text.split(NOT_FOR)[0].matchAll(/"([^"]+)"/g)].map(([, phrase]) => phrase.trim().toLowerCase());
+const redirects = (description) => description.split(NOT_FOR).slice(1).join(" ");
+// A skill name as a whole word, so "self-publishing" does not name publishing.
+const namesSkill = (text, name) => new RegExp(`(?<![\\w-])${name}(?![\\w-])`).test(text);
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const withinWords = (inner, outer) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(inner)}(?![\\p{L}\\p{N}])`, "u").test(outer);
+
+// The trigger problems in a { skill: description } map: a phrase two skills
+// claim, and a phrase inside another skill's phrase ("pitch" in "pitch my
+// series") when neither description's NOT clause names the other skill.
+function triggerProblems(bySkill) {
+  const claims = Object.entries(bySkill).flatMap(([skill, description]) => triggerPhrases(description).map((phrase) => ({ skill, phrase })));
+  const problems = [];
+  for (const a of claims) {
+    for (const b of claims) {
+      if (a.skill === b.skill) {
+        continue;
+      }
+      if (a.phrase === b.phrase) {
+        if (a.skill < b.skill) {
+          problems.push(`"${a.phrase}" is claimed by ${a.skill} and ${b.skill}`);
+        }
+      } else if (withinWords(a.phrase, b.phrase) && !namesSkill(redirects(bySkill[a.skill]), b.skill) && !namesSkill(redirects(bySkill[b.skill]), a.skill)) {
+        problems.push(`${a.skill} "${a.phrase}" is inside ${b.skill} "${b.phrase}", and neither NOT clause names the other skill`);
+      }
+    }
+  }
+  return problems;
+}
+
+describe("skill triggers", () => {
+  test("detects a phrase two skills claim and an overlap with no NOT clause between them", () => {
+    expect(triggerProblems({
+      alpha: 'Use when the user asks to "pitch", "blurb". NOT for a "series pitch" (use gamma).',
+      beta: 'Use when the user asks to "Blurb", "pitch my series".',
+      gamma: 'Use when the user asks to "series pitch", "pitch my book". NOT for one book (use alpha).',
+      delta: 'Use when the user asks about "rights". NOT for self-publishing.',
+      epsilon: 'Use when the user asks about "reprint rights".'
+    })).toEqual([
+      'alpha "pitch" is inside beta "pitch my series", and neither NOT clause names the other skill',
+      '"blurb" is claimed by alpha and beta',
+      'delta "rights" is inside epsilon "reprint rights", and neither NOT clause names the other skill'
+    ]);
+  });
+
+  test("every skill description quotes its trigger phrases", () => {
+    for (const name of skills) {
+      expect(triggerPhrases(descriptions[name]).length, `${name} quotes no trigger phrases`).toBeGreaterThan(0);
+    }
+  });
+
+  test("no two skills claim the same trigger phrase, and overlapping phrases have a NOT clause between them", () => {
+    expect(triggerProblems(descriptions)).toEqual([]);
+  });
+
+  test("each contested request has one owner, and its neighbours send it there", () => {
+    const owners = {
+      "interactive fiction": "interactive-fiction",
+      "choose your own adventure": "interactive-fiction",
+      "turn the book into ink or twine": "adaptation",
+      "reverse outline": "revision-continuity",
+      "cut a subplot": "revision-continuity",
+      "review copy": "feedback-triage",
+      "character voices": "voice-style",
+      "make the voices distinct": "line-editing",
+      "add a glossary term": "worldbuilding",
+      "pitch my series": "series-continuity",
+      "pitch": "submission"
+    };
+    for (const [phrase, owner] of Object.entries(owners)) {
+      expect(skills.filter((name) => triggerPhrases(descriptions[name]).includes(phrase)), phrase).toEqual([owner]);
+    }
+    const sends = [
+      ["adaptation", "interactive-fiction"],
+      ["discovery-drafting", "revision-continuity"],
+      ["character-management", "voice-style"],
+      ["character-management", "line-editing"],
+      ["voice-style", "line-editing"],
+      ["line-editing", "voice-style"],
+      ["editorial-review", "feedback-triage"],
+      ["story-maintenance", "feedback-triage"],
+      ["worldbuilding", "adaptation"],
+      ["series-continuity", "submission"],
+      ["submission", "series-continuity"]
+    ];
+    for (const [from, to] of sends) {
+      expect(namesSkill(redirects(descriptions[from]), to), `${from} has no NOT clause sending requests to ${to}`).toBe(true);
+    }
+  });
+
+  test("docs/skills.md lists the trigger phrases of each skill's description", () => {
+    const catalogue = fs.readFileSync(path.join(repoRoot, "docs", "skills.md"), "utf8");
+    for (const name of skills) {
+      const section = catalogue.split(`\n### ${name}\n`)[1]?.split("\n### ")[0];
+      expect(section, `docs/skills.md has no ${name} section`).toBeString();
+      const line = section.match(/^\*\*Triggers\.\*\* (.*)$/m)?.[1] ?? "";
+      expect(triggerPhrases(line), `docs/skills.md triggers for ${name}`).toEqual(triggerPhrases(descriptions[name]));
+    }
+  });
+
+  test("only feedback-triage explains how to set up the GitHub review copy", () => {
+    // Installing the review-copy workflow and the reader-note form names both
+    // .github folders; every other skill points to feedback-triage.
+    const explainers = markdownFiles(skillsDir)
+      .filter((file) => {
+        const text = fs.readFileSync(file, "utf8");
+        return text.includes(".github/workflows/") && text.includes(".github/ISSUE_TEMPLATE/");
+      })
+      .map((file) => path.relative(skillsDir, file).split(path.sep).join("/"));
+    expect(explainers).toEqual(["feedback-triage/SKILL.md"]);
   });
 });

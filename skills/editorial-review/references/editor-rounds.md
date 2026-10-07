@@ -95,14 +95,8 @@ its text was edited, or its first few words when it is gone, so you can
 search for the reader's quote instead. Add `--note-url <issue-form link>` to
 the build to give every label a **Note** link that prefills the issue form.
 
-For GitHub-hosted projects, the Story Skills repository's
-`templates/github/review-copy.yml` workflow rebuilds the HTML copy on
-every push to `main` and publishes it to GitHub Pages (and as a workflow
-artifact), so readers always have a current link.
-`templates/github/ISSUE_TEMPLATE/manuscript-note.yml` gives readers an
-issue form with the anchor, a note type (typo or wording, confusing,
-continuity, pacing, character, sensitivity or authenticity, loved this,
-other), and the note. Collect those issues into a
-`feedback/round-{N}/` file per reader and triage them with
-`feedback-triage`. Pages sites can be public; confirm visibility with the
-user before enabling it.
+For a GitHub-hosted project, the `feedback-triage` skill sets up the
+review-copy workflow, which republishes the HTML copy to GitHub Pages on
+every push to `main`, and the issue form readers file notes with (step 1
+of its workflow). Collect those issues into a `feedback/round-{N}/` file
+per reader and triage them with `feedback-triage`.

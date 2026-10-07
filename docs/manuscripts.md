@@ -39,7 +39,8 @@ Several skills drive these commands:
 - [`story-maintenance`](../skills/story-maintenance/SKILL.md) handles import, export, and builds.
 - [`submission`](../skills/submission/SKILL.md) builds Shunn manuscripts and rewrites the synopsis scaffold into submission copy.
 - [`publishing`](../skills/publishing/SKILL.md) fills the publishing fields in `story.md`, then works through the metadata sheet, the EPUB, and the print interior.
-- [`editorial-review`](../skills/editorial-review/SKILL.md) builds DOCX and HTML review copies for editors and beta readers, and tracks permissions for quoted matter.
+- [`feedback-triage`](../skills/feedback-triage/SKILL.md) builds the HTML review copy for a round of reader notes and sets up its GitHub Pages workflow.
+- [`editorial-review`](../skills/editorial-review/SKILL.md) builds DOCX and HTML review copies for editors and sensitivity readers, and tracks permissions for quoted matter.
 - [`adaptation`](../skills/adaptation/SKILL.md) builds the narration script for an audiobook, the scene skeleton for a screenplay, and the Twine source for an interactive version.
 
 See the [Skills catalogue](skills.md) for all of them, and the [CLI reference](cli-reference.md) for installing and running the CLI.
