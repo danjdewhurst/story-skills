@@ -222,6 +222,35 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     expect(fs.existsSync(outFile)).toBe(false);
   });
 
+  test("--json names the engine that rendered the PDF, or would have, and a failed engine is the JSON error", () => {
+    const root = pdfProject();
+    const bin = makeTempDir();
+    fakeEngine(bin, "pagedjs-cli");
+    const log = path.join(makeTempDir(), "log.jsonl");
+    const outFile = path.join(root, "dist", "paper-lanterns.shunn.pdf");
+    const run = (mode, extra = []) => {
+      const result = runWith({ PATH: bin, FAKE_PDF_LOG: log, FAKE_PDF_MODE: mode }, ["build", root, "--format", "shunn", "--pdf", "--json", ...extra], root);
+      expect(result.err).toBe("");
+      return { code: result.code, envelope: JSON.parse(result.out) };
+    };
+
+    const preview = run("", ["--dry-run"]);
+    expect(preview.envelope.data).toEqual({ format: "shunn", outFile, chapters: 1, pages: null, pdf: true, engine: "pagedjs-cli", dryRun: true, changes: [{ action: "mkdir", path: "dist" }, { action: "create", path: "dist/paper-lanterns.shunn.pdf" }] });
+    expect(preview.envelope.writes).toEqual([]);
+    expect(readLog(log)).toEqual([]);
+
+    const built = run("");
+    expect(built.code).toBe(0);
+    expect(built.envelope.data).toEqual({ ...preview.envelope.data, dryRun: false });
+    expect(built.envelope.writes).toEqual([outFile]);
+    expect(readLog(log)).toHaveLength(1);
+
+    const failed = run("fail");
+    expect(failed.code).toBe(4);
+    expect(failed.envelope).toMatchObject({ command: "build", ok: false, data: null, writes: [] });
+    expect(failed.envelope.diagnostics[0]).toMatchObject({ code: "write-refused", message: expect.stringContaining("fake engine: font not found") });
+  });
+
   test("a story.md default engine applies to PDF builds and waits out the others", () => {
     const root = pdfProject("cli-defaults:\n  - command: build\n    pdf-engine: prince\n");
     const bin = makeTempDir();

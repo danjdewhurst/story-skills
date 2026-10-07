@@ -8,12 +8,12 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "split", "merge", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid", "list", "snapshot"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "split", "merge", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "passes", "diagram", "synopsis", "grid", "list", "snapshot", "export", "build", "init", "import"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
     "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
-    "writes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Absolute paths of the files the command wrote." }
+    "writes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "Absolute paths of the files the command created or updated; empty for a --dry-run." }
   },
   "allOf": [
     { "if": { "properties": { "command": { "enum": ["validate", "links", "continuity"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-check" } } } },
@@ -41,6 +41,10 @@
     { "if": { "properties": { "command": { "const": "grid" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-grid" } } } },
     { "if": { "properties": { "command": { "const": "list" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-list" } } } },
     { "if": { "properties": { "command": { "const": "snapshot" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-snapshot" } } } },
+    { "if": { "properties": { "command": { "const": "export" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-export" } } } },
+    { "if": { "properties": { "command": { "const": "build" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-build" } } } },
+    { "if": { "properties": { "command": { "const": "init" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-init" } } } },
+    { "if": { "properties": { "command": { "const": "import" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-import" } } } },
     { "if": { "properties": { "data": { "type": "null" } } }, "then": { "properties": { "ok": { "const": false } } } }
   ],
   "$defs": {
@@ -851,6 +855,74 @@
         "outFile": { "type": ["string", "null"], "description": "The absolute path --out wrote (or, with --dry-run, would write), else null." },
         "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
         "changes": { "type": "array", "description": "Every file the command created or updated, and every folder it made, sorted by path; empty when it wrote nothing.", "items": { "$ref": "#/$defs/change" } }
+      }
+    },
+    "output-changes": {
+      "type": "array",
+      "description": "Every file the command created, updated, or deleted, and every folder it made, sorted by path. Paths are relative to the project root for export and build, and to the new project's folder (\".\" when it is made) for init and import, so a file outside it starts with ../.",
+      "items": { "$ref": "#/$defs/change" }
+    },
+    "data-export": {
+      "type": "object",
+      "required": ["outFile", "chapters", "dryRun", "changes"],
+      "properties": {
+        "outFile": { "type": "string", "minLength": 1, "description": "The absolute path of the manuscript written (or, with --dry-run, that would be written)." },
+        "chapters": { "$ref": "#/$defs/count" },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "$ref": "#/$defs/output-changes" }
+      }
+    },
+    "data-build": {
+      "type": "object",
+      "required": ["format", "outFile", "chapters", "pages", "pdf", "engine", "dryRun", "changes"],
+      "properties": {
+        "format": { "enum": ["markdown", "epub", "docx", "shunn", "html", "print", "narration", "metadata", "fountain", "twee", "ink", "codex"], "description": "The format built; md reads as markdown." },
+        "outFile": { "type": "string", "minLength": 1, "description": "The absolute path of the file written (or, with --dry-run, that would be written); for codex, the folder of pages." },
+        "chapters": { "$ref": "#/$defs/count" },
+        "pages": { "type": ["integer", "null"], "minimum": 0, "description": "codex: the pages written; null for every other format." },
+        "pdf": { "type": "boolean", "description": "True for --pdf." },
+        "engine": { "enum": ["prince", "weasyprint", "pagedjs-cli", "chrome", null], "description": "--pdf: the engine that rendered the PDF, or with --dry-run the one found and not run; null without --pdf." },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "$ref": "#/$defs/output-changes" }
+      }
+    },
+    "new-project": {
+      "type": "object",
+      "required": ["root", "storyId", "keptStory", "ignoredOptions", "gitignore", "dryRun", "changes"],
+      "properties": {
+        "root": { "type": "string", "minLength": 1, "description": "The absolute path of the project made or filled." },
+        "storyId": { "type": "string", "minLength": 1 },
+        "keptStory": { "type": "boolean", "description": "True when --force kept an existing story.md. For import, the old chapter files were replaced, so scenes, bible entries, and continuity files may point at chapters that are gone or changed: run story links." },
+        "ignoredOptions": { "type": "array", "items": { "type": "string" }, "description": "The options the kept story.md did not take: title for the title, else the flag, such as --genre. The kept-story-options diagnostic names them too." },
+        "gitignore": { "enum": ["created", "kept", "missing-dist"], "description": "created when the command wrote .gitignore; kept for an existing one that ignores dist/, or that was not checked (a symlink, or not UTF-8 text); missing-dist for an existing one that does not ignore dist/, so builds would be committed." },
+        "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },
+        "changes": { "$ref": "#/$defs/output-changes" }
+      }
+    },
+    "data-init": {
+      "$ref": "#/$defs/new-project",
+      "required": ["linkedBooks"],
+      "properties": {
+        "linkedBooks": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "The absolute paths of the books --follows or --precedes linked to, whose story.md got the backlink." }
+      }
+    },
+    "data-import": {
+      "$ref": "#/$defs/new-project",
+      "required": ["chapters", "unit", "words", "characterCount", "candidates"],
+      "properties": {
+        "chapters": { "$ref": "#/$defs/count", "description": "The chapter files written." },
+        "unit": { "enum": ["words", "characters"], "description": "The book's count unit." },
+        "words": { "$ref": "#/$defs/count" },
+        "characterCount": { "type": ["integer", "null"], "minimum": 0, "description": "The characters in the chapters, for a book counted in characters; null otherwise." },
+        "candidates": {
+          "type": "array",
+          "description": "Capitalised names that appear three or more times, most frequent first, up to 25: candidates for story add.",
+          "items": {
+            "type": "object",
+            "required": ["name", "count"],
+            "properties": { "name": { "type": "string", "minLength": 1 }, "count": { "$ref": "#/$defs/count" } }
+          }
+        }
       }
     },
     "data-similarity": {

@@ -133,11 +133,6 @@ export function runCli(argv, io) {
       return EXIT_CODES.usage;
     }
 
-    if (command.project === "none" && parsed.options.path !== undefined) {
-      io.stderr.write(`${name} uses --dir for the target directory. --path is the project root for other commands.\n`);
-      return EXIT_CODES.usage;
-    }
-
     const misuse = commandUsageError(command, parsed);
     if (misuse) {
       if (failJson) {
@@ -289,6 +284,9 @@ function describeError(error, cwd) {
 }
 
 function commandUsageError(command, parsed) {
+  if (command.project === "none" && parsed.options.path !== undefined) {
+    return `${command.name} uses --dir for the target directory. --path is the project root for other commands.`;
+  }
   const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
   const extra = parsed.positionals.slice(1 + maxArgs);
   if (extra.length > 0) {

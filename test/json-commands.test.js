@@ -1,36 +1,57 @@
 import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { BUILD_EXTENSIONS } from "../src/build.js";
 import { API_VERSION } from "../src/json.js";
 import { createEntity, createStoryProject } from "../src/story.js";
 import { shellWord } from "../src/report.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
-// --json on names, compare, passes, diagram, and synopsis.
+// --json on names, compare, passes, diagram, synopsis, export, build, init,
+// and import.
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 const examples = fs.readdirSync(examplesRoot).sort().filter((name) => fs.existsSync(path.join(examplesRoot, name, "story.md")));
 
-function invoke(cwd, argv) {
+// `stdin`, when given, stands in for text piped to `story <command> -`.
+function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
+  if (stdin !== undefined) {
+    io.readStdin = () => Buffer.from(stdin);
+  }
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
 }
 
 // One JSON object on stdout, nothing on stderr, the schema, and ok matching
-// the exit code, which is the text mode's.
-function invokeJson(cwd, argv) {
-  const result = invoke(cwd, argv);
+// the exit code.
+function invokeJsonOnce(cwd, argv, stdin) {
+  const result = invoke(cwd, argv, stdin);
   expect(result.err).toBe("");
   const envelope = JSON.parse(result.out);
   expect(validateAgainstSchema(envelope, schema)).toEqual([]);
   expect(envelope.apiVersion).toBe(API_VERSION);
   expect(envelope.ok).toBe(result.code === 0);
-  expect(result.code).toBe(invoke(cwd, argv.filter((arg) => arg !== "--json")).code);
   return { ...result, envelope };
+}
+
+// invokeJsonOnce, then the same command without --json, which must exit
+// with the same code.
+function invokeJson(cwd, argv) {
+  const result = invokeJsonOnce(cwd, argv);
+  expect(result.code).toBe(invoke(cwd, argv.filter((arg) => arg !== "--json")).code);
+  return result;
+}
+
+// A copy of an example in a temp folder, for the commands that write.
+function copyExample(name = "the-unraveled-thread") {
+  const root = path.join(makeTempDir(), name);
+  fs.cpSync(path.join(examplesRoot, name), root, { recursive: true });
+  return root;
 }
 
 function writeChapter(root, number, body) {
@@ -140,5 +161,173 @@ describe("--json on names, compare, passes, diagram, and synopsis", () => {
     const unknown = invokeJson(root, ["diagram", "maps", "--json"]);
     expect(unknown.code).toBe(2);
     expect(unknown.envelope.data).toBeNull();
+  });
+});
+
+describe("--json on export, build, init, and import", () => {
+  test("export and build give the file they wrote, its chapters, and the warnings they print", () => {
+    const root = copyExample();
+    const manuscript = path.join(root, "dist", "manuscript.md");
+    const exported = invokeJson(root, ["export", "--json"]).envelope;
+    expect(exported).toMatchObject({ command: "export", ok: true, diagnostics: [], writes: [manuscript] });
+    expect(exported.data).toEqual({ outFile: manuscript, chapters: 4, dryRun: false, changes: [{ action: "mkdir", path: "dist" }, { action: "create", path: "dist/manuscript.md" }] });
+
+    const book = path.join(root, "dist", "the-unraveled-thread.md");
+    const built = invokeJson(root, ["build", "--format", "md", "--json"]).envelope;
+    expect(built.data).toEqual({ format: "markdown", outFile: book, chapters: 4, pages: null, pdf: false, engine: null, dryRun: false, changes: [{ action: "create", path: "dist/the-unraveled-thread.md" }] });
+    expect(built.writes).toEqual([book]);
+    // A rebuild lists the file it rewrote as an update.
+    expect(invokeJson(root, ["build", "--json"]).envelope.data.changes).toEqual([{ action: "update", path: "dist/the-unraveled-thread.md" }]);
+
+    const twee = invokeJson(root, ["build", "--format", "twee", "--json"]).envelope;
+    expect(twee.data.outFile).toBe(path.join(root, "dist", "the-unraveled-thread.twee"));
+    expect(twee.diagnostics).toEqual([expect.objectContaining({ severity: "warning", file: "story.md", code: "derived-ifid", check: "build" })]);
+    expect(invoke(root, ["build", "--format", "twee"]).err).toBe(`warning: ${twee.diagnostics[0].message} [derived-ifid]\n`);
+
+    const codex = invokeJson(root, ["build", "--format", "codex", "--json"]).envelope;
+    const folder = path.join(root, "dist", "codex");
+    expect(codex.data).toMatchObject({ format: "codex", outFile: folder, chapters: 4, pdf: false, engine: null });
+    expect(codex.writes).toHaveLength(codex.data.pages);
+    expect(codex.writes).toContain(path.join(folder, "index.html"));
+    expect(codex.writes.every((file) => file.startsWith(`${folder}${path.sep}`) && file.endsWith(".html"))).toBe(true);
+  });
+
+  test("a warning story.md severity promotes fails a build or export, with exit 1", () => {
+    const root = copyExample();
+    const storyPath = path.join(root, "story.md");
+    const text = fs.readFileSync(storyPath, "utf8");
+    const end = text.indexOf("\n---\n", 4);
+    fs.writeFileSync(storyPath, `${text.slice(0, end)}\nseverity:\n  - warning: derived-ifid\n    level: error\n  - warning: empty-chapter\n    level: error${text.slice(end)}`, "utf8");
+    writeMarkdown(path.join(root, "chapters", "chapter-05.md"), "title: Unwritten\nnumber: 5\nstatus: outline", "## Chapter Text\n");
+    const twee = invokeJson(root, ["build", "--format", "twee", "--json"]);
+    expect(twee.code).toBe(1);
+    expect(twee.envelope.diagnostics.map((entry) => [entry.severity, entry.code])).toContainEqual(["error", "derived-ifid"]);
+    // The build still wrote its file, so writes lists it.
+    expect(twee.envelope.writes).toEqual([path.join(root, "dist", "the-unraveled-thread.twee")]);
+    const exported = invokeJson(root, ["export", "--json"]);
+    expect(exported.code).toBe(1);
+    expect(exported.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "error", file: "chapters/chapter-05.md", code: "empty-chapter", check: "export" })]);
+  });
+
+  test("a build named by a substitute story id says so", () => {
+    const cwd = makeTempDir();
+    const { root: made } = createStoryProject({ cwd, title: "Placeholder", dir: "book" });
+    createEntity(made, { kind: "chapter", name: "One", number: 1 });
+    const storyPath = path.join(made, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^title: .*$/m, "title: 東京物語"), "utf8");
+    const root = path.join(cwd, "東京");
+    fs.renameSync(made, root);
+    const { envelope } = invokeJson(root, ["build", "--format", "epub", "--json"]);
+    expect(envelope.data.outFile).toBe(path.join(root, "dist", "story-d209412e.epub"));
+    expect(envelope.diagnostics.find((entry) => entry.code === "substitute-story-id")).toMatchObject({ severity: "warning", file: "story.md", check: "build" });
+  });
+
+  test("the schema lists every build format", () => {
+    expect(schema.$defs["data-build"].properties.format.enum).toEqual(Object.keys(BUILD_EXTENSIONS));
+  });
+
+  test("init gives the project it made, the books it linked, and the files it wrote", () => {
+    const cwd = makeTempDir();
+    const first = invokeJsonOnce(cwd, ["init", "Paper Lanterns", "--json"]).envelope;
+    const root = path.join(cwd, "paper-lanterns");
+    expect(first.data).toMatchObject({ root, storyId: "paper-lanterns", keptStory: false, ignoredOptions: [], gitignore: "created", linkedBooks: [], dryRun: false });
+    expect(first.data.changes[0]).toEqual({ action: "mkdir", path: "." });
+    expect(first.writes).toContain(path.join(root, "story.md"));
+    expect(first.writes).toEqual(first.data.changes.filter((change) => change.action === "create").map((change) => path.join(root, change.path)));
+    expect(first.diagnostics).toEqual([]);
+
+    const sequel = invokeJsonOnce(cwd, ["init", "Paper Boats", "--follows", "paper-lanterns", "--json"]).envelope;
+    expect(sequel.data.linkedBooks).toEqual([root]);
+    expect(sequel.data.changes).toContainEqual({ action: "update", path: "../paper-lanterns/story.md" });
+    expect(sequel.writes).toContain(path.join(root, "story.md"));
+    expect(fs.readFileSync(path.join(root, "story.md"), "utf8")).toContain("paper-boats");
+  });
+
+  test("init --force names the options a kept story.md did not take, and a .gitignore that misses dist/", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Kept Book", force: false });
+    fs.writeFileSync(path.join(root, ".gitignore"), "node_modules/\n", "utf8");
+    fs.rmSync(path.join(root, "glossary"), { recursive: true });
+    const { envelope } = invokeJsonOnce(cwd, ["init", "Other Title", "--dir", "kept-book", "--force", "--genre", "mystery", "--json"]);
+    expect(envelope.data).toMatchObject({ root, storyId: "kept-book", keptStory: true, ignoredOptions: ["title", "--genre"], gitignore: "missing-dist" });
+    expect(envelope.data.changes).toContainEqual({ action: "create", path: "glossary/_index.md" });
+    expect(envelope.diagnostics).toEqual([{
+      severity: "warning",
+      file: "story.md",
+      chapter: null,
+      message: "story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them.",
+      code: "kept-story-options",
+      check: "init"
+    }]);
+  });
+
+  test("import gives the chapters, their length, the candidates, and the warnings it found", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter One\n\nMira Holt walked. Mira Holt ran. Mira Holt sat.\n\nChapter 2\n\nMore of it.\n", "utf8");
+    const { envelope } = invokeJsonOnce(cwd, ["import", "draft.md", "--title", "The Draft", "--json"]);
+    const root = path.join(cwd, "the-draft");
+    expect(envelope.data).toMatchObject({
+      root,
+      storyId: "the-draft",
+      keptStory: false,
+      ignoredOptions: [],
+      gitignore: "created",
+      chapters: 1,
+      unit: "words",
+      words: 14,
+      characterCount: null,
+      candidates: [{ name: "Mira Holt", count: 3 }],
+      dryRun: false
+    });
+    expect(envelope.data.changes).toContainEqual({ action: "create", path: "chapters/chapter-01.md" });
+    expect(envelope.writes).toContain(path.join(root, "chapters", "chapter-01.md"));
+    expect(envelope.diagnostics.map((entry) => [entry.severity, entry.code, entry.check])).toEqual([["warning", "unsplit-chapter-lines", "import"]]);
+
+    // A book counted in characters gives its character count.
+    const zh = invokeJsonOnce(cwd, ["import", "-", "--title", "Zh Book", "--language", "zh", "--json"], "# 第一章\n\n你好，世界！她说。\n").envelope;
+    expect(zh.data).toMatchObject({ unit: "characters", chapters: 1, characterCount: 9 });
+  });
+
+  test("import --force lists the chapters it deleted, and names the options the kept story.md did not take", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Kept Book", force: false });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "chapter", name: "Two", number: 2 });
+    fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter One\n\nA new start.\n", "utf8");
+    const { envelope } = invokeJsonOnce(cwd, ["import", "draft.md", "--title", "Other", "--dir", "kept-book", "--force", "--genre", "mystery", "--json"]);
+    expect(envelope.data).toMatchObject({ root, keptStory: true, ignoredOptions: ["title", "--genre"], chapters: 1 });
+    expect(envelope.data.changes).toContainEqual({ action: "delete", path: "chapters/chapter-02.md" });
+    expect(envelope.data.changes).toContainEqual({ action: "update", path: "chapters/chapter-01.md" });
+    expect(envelope.writes).not.toContain(path.join(root, "chapters", "chapter-02.md"));
+    expect(envelope.diagnostics).toEqual([expect.objectContaining({ code: "kept-story-options", check: "import", message: expect.stringContaining("--title and --genre were not applied") })]);
+  });
+
+  test("a failure is the JSON error result, with the text run's exit code", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Taken", force: false });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const cases = [
+      [cwd, ["init", "Taken", "--json"], 4, "write-refused", "already exists"],
+      [cwd, ["init", "--json"], 2, "usage-error", "A story title is required"],
+      [cwd, ["init", "Elsewhere", "--path", ".", "--json"], 2, "usage-error", "init uses --dir for the target directory"],
+      [cwd, ["import", "nowhere.md", "--title", "Gone", "--json"], 2, "usage-error", "Import source not found"],
+      [cwd, ["import", "nowhere.md", "--title", "Gone", "--dry-run", "--json"], 2, "usage-error", "Import source not found"],
+      [cwd, ["export", "--json"], 3, "unusable-project", "is not a story project"],
+      [root, ["export", "--out", "../escape.md", "--json"], 4, "write-refused", "outside project root"],
+      [root, ["build", "--format", "pdf", "--json"], 2, "usage-error", "Unsupported build format: pdf"],
+      [root, ["build", "--format", "epub", "--pdf", "--dry-run", "--json"], 2, "usage-error", "--pdf applies only to --format print and --format shunn"]
+    ];
+    for (const [where, argv, code, diagnosticCode, message] of cases) {
+      const result = invokeJsonOnce(where, argv);
+      expect(result.code).toBe(code);
+      expect(result.envelope).toMatchObject({ command: argv[0], ok: false, data: null, writes: [] });
+      expect(result.envelope.diagnostics).toEqual([expect.objectContaining({ severity: "error", code: diagnosticCode, check: argv[0], message: expect.stringContaining(message) })]);
+      expect(invoke(where, argv.filter((arg) => arg !== "--json")).code).toBe(code);
+    }
+    // Empty input on stdin is refused as JSON too.
+    const piped = invokeJsonOnce(cwd, ["import", "-", "--title", "Piped", "--json"], "");
+    expect(piped.code).toBe(2);
+    expect(piped.envelope).toMatchObject({ command: "import", ok: false, data: null });
+    expect(fs.readdirSync(cwd)).toEqual(["taken"]);
   });
 });

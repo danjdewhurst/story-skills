@@ -71,7 +71,7 @@ describe("docs/cli-reference.md", () => {
 
   test("the JSON output section names exactly the commands that read --json", () => {
     const paragraph = section("### JSON output").split("\n").find((line) => line.startsWith("`--json` prints"));
-    const list = paragraph.slice(paragraph.indexOf("It works on"), paragraph.indexOf("Other commands refuse it"));
+    const list = paragraph.slice(paragraph.indexOf("Every command takes it"), paragraph.indexOf("Nothing is written to stderr"));
     const withJson = COMMANDS.filter((command) => (command.options ?? []).includes("json")).map((command) => command.name);
     expect(sorted(codeWords(list))).toEqual(sorted(withJson));
   });
