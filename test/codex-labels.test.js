@@ -30,8 +30,8 @@ const DATA_WORDS = new Set(["draft", "alive", "deceased", "hidden", "resolved", 
 // A story that reaches every codex label a spoiler build can show: every
 // kind of entity, dated, undated, out-of-order, and flashback scenes, a
 // route, a progression, knowledge, a red herring, an arc with no file, a
-// target and deadline, a session log, an untitled chapter, a death, and a
-// chapter with no point of view. Names and values are invented
+// target and deadline, a session log, an untitled chapter, a death, a
+// chapter beat, and a chapter with no point of view. Names and values are invented
 // words, so any English on a page is a label.
 function project(language) {
   const cwd = makeTempDir();
@@ -39,7 +39,7 @@ function project(language) {
   const storyPath = path.join(root, "story.md");
   const story = fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\nlanguage: ${language}\nauthor: Ada Kiro\ntarget-words: 900\ndeadline: 2030-01-01\n`);
   fs.writeFileSync(storyPath, story, "utf8");
-  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Kai\nnumber: 1\nstatus: draft\npov: mara\ncharacters: [mara, tobo]\nlocations: [vela]\narcs-advanced: [suno, zuzu]\nhook: rapa\ntarget-words: 100", "## Chapter Text\n\nMara Tobo.\n");
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Kai\nnumber: 1\nstatus: draft\npov: mara\ncharacters: [mara, tobo]\nlocations: [vela]\narcs-advanced: [suno, zuzu]\nhook: rapa\nbeat: Kuro\ntarget-words: 100", "## Chapter Text\n\nMara Tobo.\n");
   writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: \"\"\nnumber: 2\nstatus: draft\npov: mara\ncharacters: [mara, kalo]", "## Chapter Text\n\nMara.\n");
   writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: Ulo\nnumber: 3\nstatus: draft\ncharacters: [mara]", "## Chapter Text\n\nMara.\n");
   writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: Nemo\nchapter: chapter-01\nscene: 1\npov: mara\nlocation: vela\ndate: 2020-05-02\noutcome: lipo", "\n# Nemo\n");

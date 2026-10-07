@@ -123,7 +123,7 @@ The repository includes eleven sample projects in [`examples/`](../examples/). T
 |---------|-------|
 | [`the-last-ember`](../examples/the-last-ember/) | A fantasy project with a style sheet, front matter, and an arc. Book 1 of a two-book series. |
 | [`the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/) | The prequel to *The Last Ember*, linked with `precedes` and shared `fact` ids |
-| [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, and a pronunciation |
+| [`harbor-of-second-light`](../examples/harbor-of-second-light/) | A science-fiction coastal mystery with populated continuity state, knowledge entries, publishing metadata, a location route, a pronunciation, and a chapter `beat` |
 | [`the-gull-rock-light`](../examples/the-gull-rock-light/) | A short second-person branching story: chapter `choices` for `story build --format twee` and `--format ink` |
 | [`bo-and-the-missing-moon`](../examples/bo-and-the-missing-moon/) | A 32-page picture book (`form: picture-book`): one chapter per spread, a scene record and page-turn `hook` per spread, and a pagination plan with spread briefs |
 | [`the-left-luggage-office`](../examples/the-left-luggage-office/) | The first three episodes of a weekly serial (`form: serial`): `season-goal`, `episode-question`, per-episode `target-words` and `hook`, and a promise paid off in an episode not yet written |

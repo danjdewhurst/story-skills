@@ -147,6 +147,7 @@ export default {
     "codex-plot-grid": "Сюжетная сетка",
     "codex-grid-note": "Арки по главам, как их выводит {command}: x там, где глава или одна из её сцен развивает арку.",
     "codex-unknown": "неизвестно",
+    "codex-beat": "Сюжетный момент",
     "codex-hook": "Крючок",
     "codex-outcomes": "Итоги",
     "codex-session-log": "Журнал сессий"

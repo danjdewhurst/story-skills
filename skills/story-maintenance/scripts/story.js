@@ -576,6 +576,7 @@ var FINDING_CODES = {
   "ambiguous-scene-break": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
+  "beat-too-long": "warning",
   "missing-field": "error",
   "field-not-scalar": "error",
   "field-not-list": "error",
@@ -2115,6 +2116,7 @@ var ar_default = {
     "codex-plot-grid": "شبكة الحبكة",
     "codex-grid-note": "الأقواس السردية بحسب الفصل، كما يطبعها {command}: يشير x إلى أن الفصل أو أحد مشاهده يدفع القوس إلى الأمام.",
     "codex-unknown": "غير معروف",
+    "codex-beat": "المحطة السردية",
     "codex-hook": "الخطّاف",
     "codex-outcomes": "النتائج",
     "codex-session-log": "سجل جلسات الكتابة"
@@ -2323,6 +2325,7 @@ var de_default = {
     "codex-plot-grid": "Handlungsraster",
     "codex-grid-note": "Erzählbögen nach Kapitel, wie {command} sie ausgibt: x, wo ein Kapitel oder eine seiner Szenen den Bogen vorantreibt.",
     "codex-unknown": "unbekannt",
+    "codex-beat": "Handlungsschritt",
     "codex-hook": "Hook",
     "codex-outcomes": "Ergebnisse",
     "codex-session-log": "Schreibprotokoll"
@@ -3692,6 +3695,7 @@ var en_default = {
     "codex-plot-grid": "Plot grid",
     "codex-grid-note": "Arcs by chapter, as {command} prints them: x where a chapter or one of its scenes advances the arc.",
     "codex-unknown": "unknown",
+    "codex-beat": "Beat",
     "codex-hook": "Hook",
     "codex-outcomes": "Outcomes",
     "codex-session-log": "Session log"
@@ -3866,6 +3870,7 @@ var es_default = {
     "codex-plot-grid": "Cuadrícula de tramas",
     "codex-grid-note": "Arcos por capítulo, tal como los muestra {command}: x donde un capítulo o una de sus escenas hace avanzar el arco.",
     "codex-unknown": "desconocido",
+    "codex-beat": "Momento clave",
     "codex-hook": "Gancho",
     "codex-outcomes": "Resultados",
     "codex-session-log": "Registro de sesiones"
@@ -4600,6 +4605,7 @@ var fa_default = {
     "codex-plot-grid": "جدول پیرنگ",
     "codex-grid-note": "قوس‌ها به تفکیک فصل، همان‌طور که {command} چاپ می‌کند: x یعنی آن فصل یا یکی از صحنه‌هایش قوس را پیش می‌برد.",
     "codex-unknown": "نامعلوم",
+    "codex-beat": "نقطهٔ پیرنگ",
     "codex-hook": "قلاب",
     "codex-outcomes": "پیامدها",
     "codex-session-log": "گزارش جلسه‌های نوشتن"
@@ -4756,6 +4762,7 @@ var fr_default = {
     "codex-plot-grid": "Grille des intrigues",
     "codex-grid-note": "Les arcs par chapitre, comme les affiche {command} : x lorsqu’un chapitre ou l’une de ses scènes fait avancer l’arc.",
     "codex-unknown": "inconnu",
+    "codex-beat": "Temps fort",
     "codex-hook": "Accroche",
     "codex-outcomes": "Issues",
     "codex-session-log": "Journal des séances"
@@ -5952,6 +5959,7 @@ var he_default = {
     "codex-plot-grid": "טבלת עלילה",
     "codex-grid-note": "קשתות לפי פרק, כפי ש־{command} מדפיס אותן: x מסמן פרק שהוא או אחת הסצנות שלו מקדמים את הקשת.",
     "codex-unknown": "לא ידוע",
+    "codex-beat": "נקודת עלילה",
     "codex-hook": "קרס",
     "codex-outcomes": "תוצאות",
     "codex-session-log": "יומן כתיבה"
@@ -6099,6 +6107,7 @@ var hi_default = {
     "codex-plot-grid": "कथानक तालिका",
     "codex-grid-note": "अध्याय के अनुसार चाप, जैसे {command} उन्हें छापता है: x वहाँ है जहाँ कोई अध्याय या उसका कोई दृश्य चाप को आगे बढ़ाता है।",
     "codex-unknown": "अज्ञात",
+    "codex-beat": "कथानक बिंदु",
     "codex-hook": "हुक",
     "codex-outcomes": "परिणाम",
     "codex-session-log": "लेखन सत्रों का ब्योरा"
@@ -6244,6 +6253,7 @@ var it_default = {
     "codex-plot-grid": "Griglia delle trame",
     "codex-grid-note": "Archi per capitolo, come li mostra {command}: x dove un capitolo o una delle sue scene fa avanzare l’arco.",
     "codex-unknown": "sconosciuto",
+    "codex-beat": "Momento chiave",
     "codex-hook": "Gancio",
     "codex-outcomes": "Esiti",
     "codex-session-log": "Registro delle sessioni"
@@ -6401,6 +6411,7 @@ var ja_default = {
     "codex-plot-grid": "プロット表",
     "codex-grid-note": "章ごとのアークです（{command} の出力と同じ）。x は、その章またはその章の場面のいずれかでアークが進むことを示します。",
     "codex-unknown": "不明",
+    "codex-beat": "ビート",
     "codex-hook": "引き",
     "codex-outcomes": "結果",
     "codex-session-log": "執筆記録"
@@ -6549,6 +6560,7 @@ var ko_default = {
     "codex-plot-grid": "플롯 표",
     "codex-grid-note": "장별 아크로, {command} 명령의 출력과 같습니다. x는 해당 장이나 그 장의 장면 중 하나가 아크를 진전시킨 곳입니다.",
     "codex-unknown": "알 수 없음",
+    "codex-beat": "비트",
     "codex-hook": "훅",
     "codex-outcomes": "결과",
     "codex-session-log": "작업 기록"
@@ -6694,6 +6706,7 @@ var nl_default = {
     "codex-plot-grid": "Plotraster",
     "codex-grid-note": "Verhaalbogen per hoofdstuk, zoals {command} ze weergeeft: x waar een hoofdstuk of een van zijn scènes de boog verder brengt.",
     "codex-unknown": "onbekend",
+    "codex-beat": "Verhaalmoment",
     "codex-hook": "Hook",
     "codex-outcomes": "Uitkomsten",
     "codex-session-log": "Sessielogboek"
@@ -6839,6 +6852,7 @@ var pl_default = {
     "codex-plot-grid": "Siatka fabuły",
     "codex-grid-note": "Łuki fabularne według rozdziałów, tak jak wypisuje je {command}: x tam, gdzie rozdział lub jedna z jego scen rozwija łuk.",
     "codex-unknown": "nieznane",
+    "codex-beat": "Punkt fabuły",
     "codex-hook": "Haczyk",
     "codex-outcomes": "Rezultaty",
     "codex-session-log": "Dziennik sesji"
@@ -7018,6 +7032,7 @@ var pt_default = {
     "codex-plot-grid": "Grade de tramas",
     "codex-grid-note": "Arcos por capítulo, como {command} os exibe: x onde um capítulo ou uma de suas cenas faz o arco avançar.",
     "codex-unknown": "desconhecido",
+    "codex-beat": "Momento-chave",
     "codex-hook": "Gancho",
     "codex-outcomes": "Resultados",
     "codex-session-log": "Registro de sessões"
@@ -7163,6 +7178,7 @@ var ru_default = {
     "codex-plot-grid": "Сюжетная сетка",
     "codex-grid-note": "Арки по главам, как их выводит {command}: x там, где глава или одна из её сцен развивает арку.",
     "codex-unknown": "неизвестно",
+    "codex-beat": "Сюжетный момент",
     "codex-hook": "Крючок",
     "codex-outcomes": "Итоги",
     "codex-session-log": "Журнал сессий"
@@ -7311,6 +7327,7 @@ var sv_default = {
     "codex-plot-grid": "Handlingsrutnät",
     "codex-grid-note": "Berättelsebågar per kapitel, som {command} skriver ut dem: x där ett kapitel eller en av dess scener för bågen framåt.",
     "codex-unknown": "okänt",
+    "codex-beat": "Handlingsmoment",
     "codex-hook": "Krok",
     "codex-outcomes": "Utfall",
     "codex-session-log": "Skrivlogg"
@@ -7465,6 +7482,7 @@ var tr_default = {
     "codex-plot-grid": "Olay örgüsü tablosu",
     "codex-grid-note": "{command} çıktısındaki gibi bölümlere göre arklar: x, bir bölümün ya da sahnelerinden birinin arkı ilerlettiği yeri gösterir.",
     "codex-unknown": "bilinmiyor",
+    "codex-beat": "Olay örgüsü noktası",
     "codex-hook": "Kanca",
     "codex-outcomes": "Sonuçlar",
     "codex-session-log": "Çalışma günlüğü"
@@ -7610,6 +7628,7 @@ var uk_default = {
     "codex-plot-grid": "Сюжетна сітка",
     "codex-grid-note": "Арки за розділами, як їх виводить {command}: x там, де розділ або одна з його сцен розвиває арку.",
     "codex-unknown": "невідомо",
+    "codex-beat": "Сюжетний момент",
     "codex-hook": "Гачок",
     "codex-outcomes": "Підсумки",
     "codex-session-log": "Журнал сесій"
@@ -7766,6 +7785,7 @@ var zh_default = {
     "codex-plot-grid": "情节表",
     "codex-grid-note": "按章节排列的弧线，与 {command} 的输出一致：x 表示该章或其中某个场景推进了这条弧线。",
     "codex-unknown": "未知",
+    "codex-beat": "节拍",
     "codex-hook": "钩子",
     "codex-outcomes": "结果",
     "codex-session-log": "写作记录"
@@ -7907,6 +7927,7 @@ var labels = {
   "codex-plot-grid": "情節表",
   "codex-grid-note": "依章節排列的弧線，與 {command} 的輸出一致：x 表示該章或其中某個場景推進了這條弧線。",
   "codex-unknown": "未知",
+  "codex-beat": "節拍",
   "codex-hook": "鉤子",
   "codex-outcomes": "結果",
   "codex-session-log": "寫作紀錄"
@@ -12138,6 +12159,7 @@ var OPTIONS = [
   { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
   { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
+  { name: "beat", value: "<text>", help: ["Beat-sheet beat for add chapter, as free text", "(such as Midpoint or All Is Lost)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
   { name: "locations", value: "<ids>", repeatable: true, commas: true, aliasOf: "location" },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },
@@ -13313,6 +13335,7 @@ function scanProject(root) {
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
       hook: typeof data.hook === "string" ? data.hook : "",
+      beat: typeof data.beat === "string" ? beatText(data.beat) : "",
       choices: data.choices
     }), scanErrors).sort((left, right) => left.number - right.number || left.file.localeCompare(right.file, "en")),
     scenes: readEntityFiles(projectRoot, "scenes", (id, file, data) => ({
@@ -14223,6 +14246,10 @@ What changes because of this arc.
 | | | | | planned |
 `;
 }
+var BEAT_MAX_LENGTH = 60;
+function beatText(value) {
+  return String(value).trim().replace(/\s*[\r\n\u2028\u2029]\s*/g, " ");
+}
 function chapterFile(title, number, options, unit, calendar = null) {
   const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
@@ -14232,6 +14259,7 @@ function chapterFile(title, number, options, unit, calendar = null) {
   if (timeError) {
     throw usageError(timeError);
   }
+  const beat = options.beat === undefined ? "" : beatText(options.beat);
   return `${stringifyFrontmatter({
     title,
     number,
@@ -14245,6 +14273,7 @@ function chapterFile(title, number, options, unit, calendar = null) {
     date: options.date ?? "",
     time: options.time ?? "",
     ...options.hook === undefined ? {} : { hook: options.hook },
+    ...beat === "" ? {} : { beat },
     "word-count": 0,
     ...unit.name === "characters" ? { "character-count": 0 } : {}
   })}# ${chapterHeading(number, title)}
@@ -16933,6 +16962,7 @@ function buildContext(project, targetId, readBody, options = {}) {
     field("Arcs advanced", unit.arcsAdvanced),
     field("Date", [unit.date, unit.time].filter(Boolean).join(" ")),
     field("Outcome", target.scene ? target.scene.outcome : ""),
+    field("Beat", target.chapter.beat),
     field("Hook", target.chapter.hook),
     project.unit?.name === "characters" ? field("Target characters", target.chapter.targetCount || "") : field("Target words", target.chapter.targetWords || "")
   ];
@@ -17332,6 +17362,7 @@ function formatPacing(pacing) {
 
 // src/grid.js
 var GRID_FORMATS = ["markdown", "csv"];
+var BEAT_ROW = "(beat)";
 var HOOK_ROW = "(hook)";
 var OUTCOME_ROW = "(outcomes)";
 function buildGrid(project, options = {}) {
@@ -17367,10 +17398,12 @@ function buildGrid(project, options = {}) {
   const chapters = all.slice(start, end + 1);
   return {
     range: { from: chapters[0]?.id ?? null, to: chapters.at(-1)?.id ?? null, total: all.length },
+    beats: all.some((chapter) => chapter.beat !== ""),
     chapters: chapters.map((chapter) => ({
       id: chapter.id,
       number: chapter.number,
       title: String(chapter.title),
+      beat: chapter.beat,
       hook: chapter.hook,
       outcomes: scenes.get(chapter.id).filter((scene) => !scene.sequel && SCENE_OUTCOMES.has(scene.outcome)).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en")).map((scene) => scene.outcome)
     })),
@@ -17398,12 +17431,11 @@ function gridFormat(value) {
 function gridTable(grid) {
   const header = ["Arc", ...grid.chapters.map((chapter) => String(chapter.number))];
   const arcRows = grid.rows.map((row) => [row.known ? row.id : `${row.id} (unknown)`, ...row.cells.map((cell) => cell ? "x" : "")]);
-  return [
-    header,
-    ...arcRows,
+  const labelRows = grid.beats ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]] : [
     [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
     [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
   ];
+  return [header, ...arcRows, ...labelRows];
 }
 function formatGrid(grid, format = "markdown") {
   const table = gridTable(grid);
@@ -17439,7 +17471,7 @@ var FRONTMATTER_KEYS = {
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
-  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "release-date", "time-skip", "choices"],
+  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "choices"],
   scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
@@ -21916,7 +21948,7 @@ var TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -22347,6 +22379,13 @@ function validateChapters(project, errors, warnings) {
     }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    if (data.beat !== undefined) {
+      requireScalar(data, "beat", label, errors);
+      const length = typeof data.beat === "string" ? [...beatText(data.beat)].length : 0;
+      if (length > BEAT_MAX_LENGTH) {
+        warnings.push(warn("beat-too-long", `${label} beat is ${length} characters long: keep it to a short label of at most ${BEAT_MAX_LENGTH} characters, such as Midpoint, and put the detail in the chapter outline`, label));
+      }
+    }
     validateNames(data, "author", label, errors);
     if ((Array.isArray(data.author) ? data.author : [data.author]).some(isPlaceholder)) {
       warnings.push(warn("todo-placeholder", `${label} author is still a [TODO] placeholder; builds leave it out`, label));
@@ -26684,6 +26723,9 @@ ${rows.join(`
     const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
     const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label2(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
+      if (site.grid.beats) {
+        rows.push(`<tr><td>${label2(site, "codex-beat")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.beat)}</td>`).join("")}</tr>`);
+      }
       rows.push(`<tr><td>${label2(site, "codex-hook")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.hook)}</td>`).join("")}</tr>`);
       rows.push(`<tr><td>${label2(site, "codex-outcomes")}</td>${site.grid.chapters.map((chapter) => `<td>${escapeHtml(chapter.outcomes.join(", "))}</td>`).join("")}</tr>`);
     }
@@ -30004,7 +30046,7 @@ var ADD_KIND_OPTIONS = {
   faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
   artifact: ["id", "type", "status", "owner", "location"],
   arc: ["id", "type", "status", "character", "characters", "theme", "themes", "acts", "act"],
-  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
+  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook", "beat"],
   scene: [
     "chapter",
     "scene",
@@ -30507,8 +30549,9 @@ var COMMANDS = [
     usage: "grid [path]",
     summary: [
       "Print the plot grid: arcs by chapter from",
-      "arcs-advanced, with each chapter's hook and scene",
-      "outcomes, as a markdown table or --format csv"
+      "arcs-advanced, with each chapter's beat (or its",
+      "hook and scene outcomes), as a markdown table or",
+      "--format csv"
     ],
     project: "positional",
     options: ["format", "from", "to", "json"],

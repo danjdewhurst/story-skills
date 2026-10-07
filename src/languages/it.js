@@ -141,6 +141,7 @@ export default {
     "codex-plot-grid": "Griglia delle trame",
     "codex-grid-note": "Archi per capitolo, come li mostra {command}: x dove un capitolo o una delle sue scene fa avanzare l’arco.",
     "codex-unknown": "sconosciuto",
+    "codex-beat": "Momento chiave",
     "codex-hook": "Gancio",
     "codex-outcomes": "Esiti",
     "codex-session-log": "Registro delle sessioni"

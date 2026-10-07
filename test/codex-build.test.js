@@ -118,6 +118,24 @@ describe("build --format codex", () => {
     expect(full["timeline.html"]).toContain("dies in chapter 2");
   });
 
+  test("a spoiler codex shows chapter beats in the plot grid, above the hooks and outcomes", () => {
+    const { root } = project();
+    const hookRow = "<tr><td>Hook</td><td>question</td><td></td></tr>";
+    const plain = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);
+    expect(plain["progress.html"]).toContain(hookRow);
+    expect(plain["progress.html"]).not.toContain("<td>Beat</td>");
+
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("status: draft\n", "status: draft\nbeat: All Is Lost <again>\n"), "utf8");
+    const full = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);
+    expect(full["progress.html"]).toContain(`<tr><td>Beat</td><td></td><td>All Is Lost &lt;again&gt;</td></tr>\n${hookRow}`);
+    expect(full["progress.html"]).toContain("<tr><td>Outcomes</td>");
+    // A beat says how the story turns, so a codex for readers leaves it out.
+    const safe = readSite(buildBook(root, { format: "codex" }).outFile);
+    expect(safe["progress.html"]).not.toContain("All Is Lost");
+    expect(safe["progress.html"]).not.toContain("<td>Beat</td>");
+  });
+
   test("is byte-identical across builds and clears pages an earlier codex wrote", () => {
     const { root } = project();
     const first = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);

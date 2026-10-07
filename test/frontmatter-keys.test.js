@@ -57,13 +57,15 @@ describe("misspelled frontmatter keys (#373)", () => {
       // short custom fields and short known keys
       "age", "po", "povs",
       // custom fields far from every known key
-      "mood", "notes", "summary", "beats", "theme", "sex",
+      "mood", "notes", "summary", "motifs", "theme", "sex",
       // keys another kind defines
       "location", "arcs", "scene", "setting", "tags", "type", "themes"
     ]) {
       expect({ key, intended: nearMissKeys(key, chapter) }).toEqual({ key, intended: [] });
     }
     expect(nearMissKeys("Location", chapter)).toEqual([]);
+    // beats was a custom field until chapters had a beat (#531).
+    expect(nearMissKeys("beats", chapter)).toEqual(["beat"]);
     expect(nearMissKeys("locaton", FRONTMATTER_KEYS.scene)).toEqual(["location"]);
     // Two edits count only when the first letter matches: notes is not routes.
     expect(nearMissKeys("notes", FRONTMATTER_KEYS.location)).toEqual([]);

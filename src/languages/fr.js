@@ -182,6 +182,7 @@ export default {
     "codex-plot-grid": "Grille des intrigues",
     "codex-grid-note": "Les arcs par chapitre, comme les affiche {command} : x lorsqu’un chapitre ou l’une de ses scènes fait avancer l’arc.",
     "codex-unknown": "inconnu",
+    "codex-beat": "Temps fort",
     "codex-hook": "Accroche",
     "codex-outcomes": "Issues",
     "codex-session-log": "Journal des séances"

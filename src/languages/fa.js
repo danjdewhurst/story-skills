@@ -143,6 +143,7 @@ export default {
     "codex-plot-grid": "جدول پیرنگ",
     "codex-grid-note": "قوس‌ها به تفکیک فصل، همان‌طور که {command} چاپ می‌کند: x یعنی آن فصل یا یکی از صحنه‌هایش قوس را پیش می‌برد.",
     "codex-unknown": "نامعلوم",
+    "codex-beat": "نقطهٔ پیرنگ",
     "codex-hook": "قلاب",
     "codex-outcomes": "پیامدها",
     "codex-session-log": "گزارش جلسه‌های نوشتن"

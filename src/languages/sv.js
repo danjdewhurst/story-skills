@@ -151,6 +151,7 @@ export default {
     "codex-plot-grid": "Handlingsrutnät",
     "codex-grid-note": "Berättelsebågar per kapitel, som {command} skriver ut dem: x där ett kapitel eller en av dess scener för bågen framåt.",
     "codex-unknown": "okänt",
+    "codex-beat": "Handlingsmoment",
     "codex-hook": "Krok",
     "codex-outcomes": "Utfall",
     "codex-session-log": "Skrivlogg"

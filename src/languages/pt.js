@@ -142,6 +142,7 @@ export default {
     "codex-plot-grid": "Grade de tramas",
     "codex-grid-note": "Arcos por capítulo, como {command} os exibe: x onde um capítulo ou uma de suas cenas faz o arco avançar.",
     "codex-unknown": "desconhecido",
+    "codex-beat": "Momento-chave",
     "codex-hook": "Gancho",
     "codex-outcomes": "Resultados",
     "codex-session-log": "Registro de sessões"

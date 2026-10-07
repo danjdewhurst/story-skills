@@ -66,7 +66,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`doctor [path]`](#doctor) | Show health checks and repair steps; `--fix` applies the safe ones | With `--fix` |
 | Craft and revision | [`pacing [path]`](#pacing) | Show scenes, sequels, outcomes, hooks, and length per chapter | No |
 | | [`clues [path]`](#clues) | Show the clue plant and reveal grid and flag fair-play problems | No |
-| | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with hooks and scene outcomes, as markdown or CSV | No |
+| | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with beats (or hooks and scene outcomes), as markdown or CSV | No |
 | | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
 | | [`names <name...>`](#names) | Check candidate names for clashes and look-alikes | No |
 | | [`mentions [<kind> <id>]`](#mentions) | List where chapter prose names an entity, or audit every chapter's names against its frontmatter | No |
@@ -986,7 +986,7 @@ Run it before drafting or revising a chapter or scene, in place of opening proje
 
 Items are added in this priority order:
 
-1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
+1. **Target**: the chapter or scene's POV, cast, mentions, locations, arcs, date, outcome, the chapter's beat and hook, and `target-words`, the chapter's `## Outline` (up to the `---` rule above the prose), and the chapter's planned scenes or, for a scene, its `## Purpose`.
 2. **Story essentials**: first the book's language contract from `story.md`: `language` (`en` when unset), `writing-mode` (`horizontal` when unset), `chapter-numerals` (`western` when unset), and `count-unit` (the unit lengths are counted in, including the one `language` implies). These belong to the book, not to a chapter, so they are included at every target, and they are a separate small item, so a budget too small for the rest of `story.md` still packs them. Then `story.md` genre, setting era, POV, tense, form, themes, and `premise`, plus its `## Tone & Style`, `## Setting`, and `## Central Conflict` sections; then `style-sheet.md`, when present: `dialect`, `preferred`, `watch-words`, and its body.
 3. **POV knowledge and state**: the POV character's `knowledge-state` entries known at the target (for a scene, a fact learned in that chapter only when an earlier scene's `state-changes` records it; those the reader has not been shown come next, as their own item under `### What <name> knows that the reader has not seen (do not reveal)`, id `hidden-knowledge:<id>` with `--json`, so they never crowd out the rest and can be removed whole), the `character-state` entry from `continuity/state.md` when its `current-chapter` is before the target (in a branching book, before it on some path of choices, whatever the chapter numbers; when `current-chapter` is on a sibling branch, a line says the snapshot is left out), the `state-changes` of earlier scenes whose `character` is the POV character or whose `owner` hands them an artifact, and the POV character's [progressions](project-format.md#progressions) applied by the target.
 4. **Characters on the page**: a card for the POV character and each character in the target's `characters`: role, status at the target, aliases, `voice-words`, `voice-avoid`, the progressions applied by the target, and the `## Appearance`, `## Personality & Traits`, `## Motivations & Goals`, and `## Voice & Speech Patterns` sections.
@@ -1828,7 +1828,7 @@ With no clues it prints `- None: add clues with story add clue "Name" --planted 
 story grid [path] [--format markdown|csv] [--from <chapter>] [--to <chapter>] [--json]
 ```
 
-Prints the plot grid that Plottr and Scrivener's outliner draw: one row per arc, one column per chapter, and an `x` where the chapter, or one of its scenes, lists the arc in `arcs-advanced`. Below the arcs, the `(hook)` row gives each chapter's `hook` and the `(outcomes)` row the `outcome` of each of its scenes, in scene order (sequels have none, so they are left out). The output is a markdown table you can paste into a planning note, or CSV for a spreadsheet with `--format csv`.
+Prints the plot grid that Plottr and Scrivener's outliner draw: one row per arc, one column per chapter, and an `x` where the chapter, or one of its scenes, lists the arc in `arcs-advanced`. Below the arcs, the `(beat)` row gives each chapter's [`beat`](project-format.md#chapters), such as `Midpoint`. In a book where no chapter records a beat, the `(hook)` row gives each chapter's `hook` and the `(outcomes)` row the `outcome` of each of its scenes in its place, in scene order (sequels have none, so they are left out). Once any chapter has a beat, every range of the book shows the `(beat)` row, and [`pacing`](#pacing) still lists the hooks and outcomes. The output is a markdown table you can paste into a planning note, or CSV for a spreadsheet with `--format csv`.
 
 Arcs are listed in the order the book first advances them, then the arcs in `plot/arcs/` that no chapter advances yet (an empty row is a dropped or unstarted thread), then any id that `arcs-advanced` names with no arc file, marked `(unknown)`; `story validate` reports those as errors. Columns are in chapter number order. In a [branching book](project-format.md#branching-chapters) every chapter is a column side by side, whichever path reaches it; `story continuity` checks each reader path. Columns are as wide as their widest cell, so chapter 100 lines up with chapter 9 in the source as well as the rendered table.
 
@@ -1837,7 +1837,7 @@ Arcs are listed in the order the book first advances them, then the arcs in `plo
 | `--format <name>` | `markdown` or `csv` | `markdown` |
 | `--from <chapter>` | First chapter to show, by id (`chapter-12`) or number (`12`), for a book too wide to read at once | The first chapter |
 | `--to <chapter>` | Last chapter to show, by id or number | The last chapter |
-| `--json` | Print a JSON result: `data.range` (`from` and `to`, the chapter ids shown, and `total`, the chapters in the book), `data.chapters` (each column's `id`, `number`, `title`, `hook`, and `outcomes`), and `data.rows` (each arc's `id`, `name`, `status`, `known`, and `cells`, one `true` or `false` per chapter) (see [JSON output](#json-output)) | Off |
+| `--json` | Print a JSON result: `data.range` (`from` and `to`, the chapter ids shown, and `total`, the chapters in the book), `data.beats` (`true` when any chapter in the book has a beat), `data.chapters` (each column's `id`, `number`, `title`, `beat`, `hook`, and `outcomes`, whichever rows the text shows), and `data.rows` (each arc's `id`, `name`, `status`, `known`, and `cells`, one `true` or `false` per chapter) (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
 
 `grid` prints nothing while any project file fails to parse, because the grid would silently drop chapters; it reports the parse errors on stderr and exits 1. An unknown format, a `--from` or `--to` that names no chapter, and a `--from` after `--to` exit 2.
@@ -1854,6 +1854,15 @@ story grid
 | the-ledger-trail | x        | x        | x          | x           |
 | (hook)           | question | decision | revelation | cliffhanger |
 | (outcomes)       | yes-but  | no-and   | yes        | yes-but     |
+```
+
+After adding `beat: Inciting Incident` to chapter 1 and `beat: First Plot Point` to chapter 2, the beat row takes the place of the other two:
+
+```text
+| Arc              | 1                 | 2                | 3   | 4   |
+|------------------|:-----------------:|:----------------:|:---:|:---:|
+| the-ledger-trail | x                 | x                | x   | x   |
+| (beat)           | Inciting Incident | First Plot Point |     |     |
 ```
 
 `story diagram arcs` draws the same links as a Mermaid graph, and `story pacing` gives each chapter's hook and outcome counts with findings about slack runs.
@@ -2322,7 +2331,7 @@ Options by kind:
 | `faction` | `--type`, `--status`, `--member` (`members`; `--character` also works), `--location` (`locations`) | `other`, `active` |
 | `artifact` | `--type`, `--status`, `--owner` (`owner`), `--location` (`location`, a single id; give it once) | `object`, `active` |
 | `arc` | `--type`, `--status`, `--character` (`characters`), `--theme`/`--themes` (`themes`), `--acts` (`acts`) | `subplot`, `planned` |
-| `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time`, `--hook` | One more than the highest chapter number, `outline`; no `hook` |
+| `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time`, `--hook`, `--beat` | One more than the highest chapter number, `outline`; no `hook` or `beat` |
 | `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--outcome`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline`; no `outcome` |
 | `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `answered` with `--resolved`, otherwise `open`; `--status open` with `--resolved` is an error |
 | `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` when `--planted` names an existing chapter, otherwise `planned` |
@@ -2794,7 +2803,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--note-url <url>` | With `--format html`, add a faint **Note** link beside every paragraph label, to this http or https address with `title=[<label>] `, `anchor=<label>`, `build=<stamp>` (with `--stamp`), and `quote=<first six words>` appended as URL-encoded query parameters. Pointed at `https://github.com/<owner>/<repo>/issues/new?template=manuscript-note.yml`, it opens the [manuscript-note form](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) already filled in. An error with any other format or another kind of address. Builds without it are unchanged | None |
 | `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
-| `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter hooks and outcomes, and how questions and promises resolve. An error with any other format | Off |
+| `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter beats, hooks, and outcomes, and how questions and promises resolve. An error with any other format | Off |
 | `--include-pending` | With a build that prints matter pages (`markdown`, `epub`, `docx` without `--shunn`, `html`, `print`, and `narration`), keep the pages whose `permission` is `pending`. An error with any other build. `cli-defaults` cannot set it. See [Pending permissions](#pending-permissions) | Off |
 | `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
 | `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
@@ -3029,6 +3038,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text, in the same block quote or list item. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
 | `no-scene-records` | warning | A chapter has no scene records. |
 | `empty-chapter` | warning | A chapter has no prose yet, and the book is complete or the chapter claims to be written. |
+| `beat-too-long` | warning | A chapter `beat` is longer than 60 characters. Keep it a short label, such as `Midpoint`, and put the detail in the outline. |
 | `missing-field` | error | A required field, or a required key of a list entry, is missing or empty. |
 | `field-not-scalar` | error | A field that takes one value holds a list or mapping. |
 | `field-not-list` | error | A field that takes a list holds something else. |
@@ -3442,6 +3452,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--sequel` | | `add scene` | Boolean |
 | `--outcome` | `<name>` | `add scene` | `yes`, `no`, `yes-but`, `no-and` |
 | `--hook` | `<name>` | `add chapter` | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` |
+| `--beat` | `<text>` | `add chapter` | Free text, such as `Midpoint`; a line break becomes a space, and a blank value sets no beat |
 | `--location` | `<id>` | `add character`, `faction`, `artifact`, `chapter`, `scene` | Repeatable; alias `--locations`. For `add artifact` and `add scene` it sets one location id: give it once; `--locations` is an error there |
 | `--character` | `<id>` | `add location`, `faction`, `arc`, `chapter`, `scene`, `question`, `promise`, `clue` | Repeatable; alias `--characters` |
 | `--mention` | `<id>` | `add chapter`, `add scene` | Repeatable; alias `--mentions` |

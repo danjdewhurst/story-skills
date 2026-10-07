@@ -92,6 +92,7 @@ export const OPTIONS = [
   { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
   { name: "hook", value: "<name>", help: ["Chapter-ending hook for add chapter (cliffhanger,", "question, revelation, reversal, decision,", "emotional, resolution)"] },
+  { name: "beat", value: "<text>", help: ["Beat-sheet beat for add chapter, as free text", "(such as Midpoint or All Is Lost)"] },
   { name: "location", value: "<id>", repeatable: true, help: ["Location reference for add"] },
   { name: "locations", value: "<ids>", repeatable: true, commas: true, aliasOf: "location" },
   { name: "character", value: "<id>", repeatable: true, help: ["Character reference for add; repeatable"] },

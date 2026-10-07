@@ -164,6 +164,7 @@ export default {
     "codex-plot-grid": "情节表",
     "codex-grid-note": "按章节排列的弧线，与 {command} 的输出一致：x 表示该章或其中某个场景推进了这条弧线。",
     "codex-unknown": "未知",
+    "codex-beat": "节拍",
     "codex-hook": "钩子",
     "codex-outcomes": "结果",
     "codex-session-log": "写作记录"

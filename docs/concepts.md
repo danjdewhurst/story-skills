@@ -142,7 +142,7 @@ An entity is anything with its own file and id. `story add <kind> <name>` create
 | `faction` | `worldbuilding/factions/` | `worldbuilding/_index.md` | An organised group, with members and locations |
 | `artifact` | `worldbuilding/artifacts/` | `worldbuilding/_index.md` | An object that matters to the plot, with owner, location, and status |
 | `arc` | `plot/arcs/` | `plot/_index.md` | A plot or character arc, with participants, themes, and acts |
-| `chapter` | `chapters/` | `chapters/_index.md` | Chapter prose, plus POV, cast, locations, arcs advanced, word count, and the ending `hook` |
+| `chapter` | `chapters/` | `chapters/_index.md` | Chapter prose, plus POV, cast, locations, arcs advanced, word count, the ending `hook`, and the structural `beat` |
 | `scene` | `scenes/` | `scenes/_index.md` | A scene record for a chapter: POV, location, cast, mentions, state changes, and the scene `outcome` |
 | `question` | `continuity/questions/` | `continuity/questions/_index.md` | A dramatic question and the chapters where it is introduced and resolved |
 | `promise` | `continuity/promises/` | `continuity/promises/_index.md` | A setup and its payoff, by chapter |
@@ -340,7 +340,7 @@ Beyond the pass-or-fail checks, the CLI has read-only views that measure the man
 |---------|---------------|-----------------|
 | `story pacing` | Scene units, sequels, scene outcomes, chapter hooks, and chapter lengths, with runs that go slack | Scene `sequel` and `outcome`, chapter `hook` |
 | `story clues` | A fair-play grid of where each clue is planted and revealed | Clue `planted`, `payoff`, `characters`, `red-herring`, `significance-delayed` |
-| `story grid` | A plot grid of arcs by chapter, with each chapter's hook and scene outcomes, as markdown or CSV | Chapter and scene `arcs-advanced`, chapter `hook`, scene `outcome` |
+| `story grid` | A plot grid of arcs by chapter, with each chapter's beat (or its hook and scene outcomes), as markdown or CSV | Chapter and scene `arcs-advanced`, chapter `beat` and `hook`, scene `outcome` |
 | `story voices` | A fingerprint of each character's tagged dialogue, and characters who sound alike | Chapter prose, character names and aliases, `voice-words`, `voice-avoid` |
 | `story names` | Whether a candidate name clashes with, or looks like, a name already in the bible | Every character, place, faction, artifact, system, and glossary name |
 | `story diagram` | Mermaid source for the family tree, route map, timeline, clue map, or arc map | Relationships, `routes`, dates, clues, and `arcs-advanced` |

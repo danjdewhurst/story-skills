@@ -431,6 +431,9 @@ export function scanProject(root) {
       strand: String(data.strand ?? ""),
       hasPostHocNotes: hasPostHocNotes(markdown.body),
       hook: typeof data.hook === "string" ? data.hook : "",
+      // One line, as the grid, context, and codex show it; validate reports
+      // a beat that is not text.
+      beat: typeof data.beat === "string" ? beatText(data.beat) : "",
       // Raw: validate reports a malformed list, and chapterChoices keeps
       // only the usable entries.
       choices: data.choices
@@ -1487,6 +1490,17 @@ What changes because of this arc.
 `;
 }
 
+// A chapter beat is a short label, such as Midpoint or All Is Lost, from a
+// beat sheet or the writer's own: validate warns above this many characters,
+// since a sentence would stretch the grid and belongs in the outline.
+export const BEAT_MAX_LENGTH = 60;
+
+// A chapter beat as one line, as a label reads: a line break in a
+// hand-written value, and the spaces around it, become one space.
+export function beatText(value) {
+  return String(value).trim().replace(/\s*[\r\n\u2028\u2029]\s*/g, " ");
+}
+
 export function chapterFile(title, number, options, unit, calendar = null) {
   const dateError = storyDateError(options.date, { calendar });
   if (dateError) {
@@ -1496,6 +1510,8 @@ export function chapterFile(title, number, options, unit, calendar = null) {
   if (timeError) {
     throw usageError(timeError);
   }
+  // A blank --beat sets none.
+  const beat = options.beat === undefined ? "" : beatText(options.beat);
   return `${stringifyFrontmatter({
     title,
     number,
@@ -1509,6 +1525,7 @@ export function chapterFile(title, number, options, unit, calendar = null) {
     date: options.date ?? "",
     time: options.time ?? "",
     ...(options.hook === undefined ? {} : { hook: options.hook }),
+    ...(beat === "" ? {} : { beat }),
     "word-count": 0,
     // A book counted in characters records character-count too.
     ...(unit.name === "characters" ? { "character-count": 0 } : {})

@@ -185,6 +185,7 @@ export default {
     "codex-plot-grid": "Handlungsraster",
     "codex-grid-note": "Erzählbögen nach Kapitel, wie {command} sie ausgibt: x, wo ein Kapitel oder eine seiner Szenen den Bogen vorantreibt.",
     "codex-unknown": "unbekannt",
+    "codex-beat": "Handlungsschritt",
     "codex-hook": "Hook",
     "codex-outcomes": "Ergebnisse",
     "codex-session-log": "Schreibprotokoll"

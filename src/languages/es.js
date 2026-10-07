@@ -170,6 +170,7 @@ export default {
     "codex-plot-grid": "Cuadrícula de tramas",
     "codex-grid-note": "Arcos por capítulo, tal como los muestra {command}: x donde un capítulo o una de sus escenas hace avanzar el arco.",
     "codex-unknown": "desconocido",
+    "codex-beat": "Momento clave",
     "codex-hook": "Gancho",
     "codex-outcomes": "Resultados",
     "codex-session-log": "Registro de sesiones"

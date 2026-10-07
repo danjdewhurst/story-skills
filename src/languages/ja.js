@@ -165,6 +165,7 @@ export default {
     "codex-plot-grid": "プロット表",
     "codex-grid-note": "章ごとのアークです（{command} の出力と同じ）。x は、その章またはその章の場面のいずれかでアークが進むことを示します。",
     "codex-unknown": "不明",
+    "codex-beat": "ビート",
     "codex-hook": "引き",
     "codex-outcomes": "結果",
     "codex-session-log": "執筆記録"

@@ -13,6 +13,7 @@ arcs-advanced:
   - the-drowned-witness
 status: draft
 hook: revelation
+beat: Inciting Incident
 word-count: 1489
 ---
 

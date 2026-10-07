@@ -141,6 +141,7 @@ const labels = {
   "codex-plot-grid": "情節表",
   "codex-grid-note": "依章節排列的弧線，與 {command} 的輸出一致：x 表示該章或其中某個場景推進了這條弧線。",
   "codex-unknown": "未知",
+  "codex-beat": "節拍",
   "codex-hook": "鉤子",
   "codex-outcomes": "結果",
   "codex-session-log": "寫作紀錄"
