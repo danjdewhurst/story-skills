@@ -235,6 +235,18 @@ describe("story split", () => {
     expect(result.warnings[0].message).toBe("chapter-05 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/the-duel.md. Clear them if the cut threads do not belong there");
   });
 
+  test("names split in the adopted-references warning of a scene it moves (#537)", () => {
+    const root = book();
+    setProse(root, "chapter-04", "They landed.\n\n* * *\n\nNight fell.\n");
+    createEntity(root, { kind: "scene", name: "The Landing", chapter: "chapter-04" });
+    createEntity(root, { kind: "scene", name: "The Night", chapter: "chapter-04" });
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-05-scene-01: the night, planned\n");
+    const result = splitChapter(root, { id: "chapter-04", at: "1" });
+    expect(result.warnings.filter((warning) => warning.code === "adopted-references").map((warning) => warning.message)).toEqual([
+      "chapter-05-scene-01 was already referenced before this split, and those references now point at the moved scene: plot/timeline.md. Check them"
+    ]);
+  });
+
   test("leaves the chapters after a numbering gap alone", () => {
     const root = book();
     createEntity(root, { kind: "chapter", name: "Ten", number: 10 });
@@ -403,6 +415,15 @@ describe("story merge", () => {
     expect(merged.pov).toBe("mara-quill");
     expect(merged.status).toBe("outline");
     expect(merged.hook).toBeUndefined();
+  });
+
+  test("names merge in the adopted-references warning of a scene it moves (#537)", () => {
+    const root = book();
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-02-scene-03: a third scene, planned\n");
+    const result = mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(result.warnings.filter((warning) => warning.code === "adopted-references").map((warning) => warning.message)).toEqual([
+      "chapter-02-scene-03 was already referenced before this merge, and those references now point at the moved scene: plot/timeline.md. Check them"
+    ]);
   });
 
   test("keeps the later of two progressions that now start in the same chapter", () => {

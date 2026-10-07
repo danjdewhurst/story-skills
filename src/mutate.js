@@ -1861,7 +1861,9 @@ function normalizeMoveKind(value) {
   return kind;
 }
 
-function moveChapter(project, oldId, options) {
+// `action` names the command for the adopted-references warning: split and
+// merge renumber chapters through here too.
+function moveChapter(project, oldId, options, action = "move") {
   const chapter = project.chapters.find((entry) => entry.id === oldId);
   if (!chapter) {
     throw usageError(`chapter ${oldId} does not exist`);
@@ -1915,7 +1917,7 @@ function moveChapter(project, oldId, options) {
   if (taken && !interruptedMove(plan, moves)) {
     throw refusedError(`${newId} already exists: move it first. To make room, renumber from the highest chapter down`);
   }
-  const warnings = taken ? [] : adoptedReferenceWarnings(project.root, "chapter", newId, chapter.file, "move");
+  const warnings = taken ? [] : adoptedReferenceWarnings(project.root, "chapter", newId, chapter.file, action);
   commitMoves(project.root, plan, moves);
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
@@ -1941,7 +1943,7 @@ function reorderProgressions(project, plan, chronology) {
   }
 }
 
-function moveScene(project, oldId, options) {
+function moveScene(project, oldId, options, action = "move") {
   const scene = project.scenes.find((entry) => entry.id === oldId);
   if (!scene) {
     throw usageError(`scene ${oldId} does not exist`);
@@ -1989,7 +1991,7 @@ function moveScene(project, oldId, options) {
   if (project.scenes.some((entry) => entry.id === newId) && !interruptedMove(plan, moves)) {
     throw refusedError(`${newId} already exists: move it first`);
   }
-  const warnings = project.scenes.some((entry) => entry.id === newId) ? [] : adoptedReferenceWarnings(project.root, "scene", newId, scene.file, "move");
+  const warnings = project.scenes.some((entry) => entry.id === newId) ? [] : adoptedReferenceWarnings(project.root, "scene", newId, scene.file, action);
   // The chapter gains the scene's cast before the old scene is deleted, so a
   // move interrupted at that step can still be rerun.
   commitMoves(project.root, plan, moves, () => applyEntityBacklinks(project.root, "scene", newId, readMarkdown(newFile, project.root).data),
@@ -2071,10 +2073,10 @@ function followingRun(project, number) {
 
 // Renumbers each chapter of `run` by `step` with move chapter: from the
 // highest down when making room, from the lowest up when closing a gap, so
-// no number is ever taken twice.
-function shiftChapters(root, run, step, warnings) {
+// no number is ever taken twice. `action` is the command, split or merge.
+function shiftChapters(root, run, step, warnings, action) {
   for (const chapter of step > 0 ? [...run].reverse() : run) {
-    const result = moveChapter(scanProject(root), chapter.id, { number: String(chapter.number + step) });
+    const result = moveChapter(scanProject(root), chapter.id, { number: String(chapter.number + step) }, action);
     warnings.push(...result.warnings);
   }
 }
@@ -2321,7 +2323,7 @@ export function splitChapter(root, options) {
   const dead = new Set(project.characters.filter((character) => character.diedIn === chapter.id).map((character) => character.id));
 
   restructureWrites(project.root, () => {
-    shiftChapters(project.root, run, 1, warnings);
+    shiftChapters(project.root, run, 1, warnings, "split");
     // The renumbering can rewrite link targets in the chapter, which moves
     // offsets but never paragraphs, so split what it holds now at the same
     // paragraph.
@@ -2353,7 +2355,7 @@ export function splitChapter(root, options) {
     // The latest drafted chapter is now the second half.
     setCurrentChapter(project.root, chapter.number, number);
     for (const [index, scene] of moving.entries()) {
-      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: newId, scene: String(index + 1) }).warnings);
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: newId, scene: String(index + 1) }, "split").warnings);
     }
   });
   const reindexed = reindexProject(project.root);
@@ -2434,7 +2436,7 @@ export function mergeChapters(root, options) {
     // The scenes go first, so the chapter they leave is the only file that
     // still names it by id.
     for (const [index, scene] of scenes.entries()) {
-      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: first.id, scene: String(firstScene + index) }).warnings);
+      warnings.push(...moveScene(scanProject(project.root), scene.id, { chapter: first.id, scene: String(firstScene + index) }, "merge").warnings);
     }
     const current = scanProject(project.root);
     const kept = readMarkdown(first.file, project.root);
@@ -2468,7 +2470,7 @@ export function mergeChapters(root, options) {
       }
       throw error;
     }
-    shiftChapters(project.root, run, -1, warnings);
+    shiftChapters(project.root, run, -1, warnings, "merge");
   });
   const reindexed = reindexProject(project.root);
   return {
@@ -2696,8 +2698,10 @@ const BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 
 // Before a rename or move gives an entity `id`, lists the files that already
 // reference that id (a scheduled chapter, a planned character, a link left
-// by remove): after the command they point at the entity. Only a warning,
-// since an interrupted run that is rerun leaves the same references.
+// by remove): after the command they point at the entity. `action` names the
+// command: rename, move, or split or merge, which move chapters and scenes
+// as move does. Only a warning, since an interrupted run that is rerun
+// leaves the same references.
 function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-adopted-probe`;
@@ -2710,7 +2714,7 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
     return [];
   }
   const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
-  return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "move" ? "moved" : "renamed"} ${kind}: ${files.join(", ")}. Check them`)];
+  return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "rename" ? "renamed" : "moved"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 
 // links lets an abandoned promise, clue, or question keep the chapter-NN it
