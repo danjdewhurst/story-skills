@@ -3,7 +3,7 @@
  * Pairwise comparison of two sets of drafts with a model as judge.
  *
  * Usage:
- *   node evals/compare-outputs.js [--model MODEL] <dir-a> <dir-b> [fixture-name ...]
+ *   node evals/compare-outputs.js [--model MODEL] [--no-judge] <dir-a> <dir-b> [fixture-name ...]
  *
  * For every fixture, the judge sees the brief, the story context, and the
  * two drafts, unlabelled and in both orders, and says which better serves
@@ -11,24 +11,33 @@
  * both orders; a split is a tie. Typical use: dir-a from
  * `run-skill.js --no-skill` and dir-b from `run-skill.js`, to show the
  * skill changes the output for the better and not just differently.
+ *
+ * A fixture whose checks.json sets `baseline_margin` also gets a margin
+ * check, with no model call: the checker runs on both drafts, and the
+ * dir-b draft must pass at least that many more of the fixture's checks
+ * than the dir-a draft. It reads dir-a as the no-skill baseline and dir-b
+ * as the skill's run, the order above. Pass --no-judge to run only the
+ * margin checks.
+ *
  * Exits non-zero when a fixture has no draft in one directory (a missing
- * draft is a failed comparison, not a tie), when nothing was compared, or
- * when a named fixture does not exist. Each judge verdict is logged
- * raw, with the model and temperature noted; `claude -p` exposes no
- * temperature flag, so judging always uses the CLI defaults.
+ * draft is a failed comparison, not a tie), when a margin is not met, when
+ * nothing was compared, or when a named fixture does not exist. Each judge
+ * verdict is logged raw, with the model and temperature noted; `claude -p`
+ * exposes no temperature flag, so judging always uses the CLI defaults.
  *
  * Judges prefer low-perplexity text and the first item shown, and they
  * agree with human writing preferences only about three quarters of the
  * time, so a loss here is a flag to read the two drafts, not a verdict.
  *
- * Requires the Claude Code CLI (`claude`) on PATH with working credentials.
+ * Requires the Claude Code CLI (`claude`) on PATH with working credentials,
+ * unless --no-judge is passed.
  */
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FIXTURES_DIR, fillTemplate, loadFixture } from "./run-evals.js";
+import { FIXTURES_DIR, checkDraft, fillTemplate, loadFixture } from "./run-evals.js";
 
 const CLAUDE_TIMEOUT_MS = 300_000;
 const MAX_RETRIES = 2;
@@ -82,6 +91,20 @@ function ask(spawn, model, prompt) {
   return null;
 }
 
+/**
+ * How far the skill's draft (`skill`, from dir-b) beats the baseline's
+ * (`baseline`, from dir-a) on the fixture's own checks: the number of
+ * checks each passes, out of the same total, and whether the difference
+ * reaches the fixture's `baseline_margin`.
+ */
+export function marginCheck(checks, inputText, baseline, skill) {
+  const passed = (draft) => checkDraft(checks, inputText, draft).filter(([ok]) => ok).length;
+  const total = checkDraft(checks, inputText, skill).length;
+  const a = passed(baseline);
+  const b = passed(skill);
+  return { a, b, total, margin: b - a, needs: checks.baseline_margin, ok: b - a >= checks.baseline_margin };
+}
+
 export function programArgs(argv = process.argv) {
   return argv.slice(2);
 }
@@ -90,13 +113,15 @@ export function programArgs(argv = process.argv) {
 // judge without a `claude` binary.
 export function main(argv, { spawn = spawnSync } = {}) {
   let model = "claude-opus-5";
+  let judge = true;
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--model") model = argv[++i];
+    else if (argv[i] === "--no-judge") judge = false;
     else rest.push(argv[i]);
   }
   if (rest.length < 2) {
-    console.log("Usage: node evals/compare-outputs.js [--model MODEL] <dir-a> <dir-b> [fixture-name ...]");
+    console.log("Usage: node evals/compare-outputs.js [--model MODEL] [--no-judge] <dir-a> <dir-b> [fixture-name ...]");
     return 2;
   }
   const [dirA, dirB, ...only] = rest;
@@ -119,8 +144,9 @@ export function main(argv, { spawn = spawnSync } = {}) {
   }
 
   const tally = { a: 0, b: 0, tie: 0 };
+  const margins = { met: 0, missed: 0 };
   let missing = 0;
-  console.log(`model: ${model}, temperature: default (not settable via claude -p)`);
+  if (judge) console.log(`model: ${model}, temperature: default (not settable via claude -p)`);
   for (const name of names) {
     const aPath = path.join(dirA, `${name}.md`);
     const bPath = path.join(dirB, `${name}.md`);
@@ -132,6 +158,15 @@ export function main(argv, { spawn = spawnSync } = {}) {
     const { checks, inputText } = loadFixture(path.join(FIXTURES_DIR, name));
     const a = fs.readFileSync(aPath, "utf8");
     const b = fs.readFileSync(bPath, "utf8");
+    if (checks.baseline_margin !== undefined) {
+      const m = marginCheck(checks, inputText, a, b);
+      margins[m.ok ? "met" : "missed"]++;
+      console.log(
+        `${name}: ${m.ok ? "margin met" : "FAIL margin"}: B passes ${m.b}/${m.total} checks, A ${m.a}/${m.total}, ` +
+          `margin ${m.margin}, needs ${m.needs}`
+      );
+    }
+    if (!judge) continue;
     const fill = (first, second) =>
       fillTemplate(PROMPT, { brief: checks.brief, context: inputText, first, second });
     const v1 = ask(spawn, model, fill(a, b)); // A first
@@ -154,11 +189,19 @@ export function main(argv, { spawn = spawnSync } = {}) {
       console.log(`${name}: tie (order split)`);
     }
   }
-  console.log(`\nA: ${tally.a}  B: ${tally.b}  ties: ${tally.tie}`);
-  console.log("(Never label which directory came from the skill: labelled authorship shifts judge preference.)");
-  // A missing draft or judge verdict fails the run, and so does a run that
-  // compared nothing, so it is never a vacuous pass.
-  return missing > 0 || tally.a + tally.b + tally.tie === 0 ? 1 : 0;
+  const compared = tally.a + tally.b + tally.tie + margins.met + margins.missed;
+  if (judge) {
+    console.log(`\nA: ${tally.a}  B: ${tally.b}  ties: ${tally.tie}`);
+    console.log("(Never label which directory came from the skill: labelled authorship shifts judge preference.)");
+  }
+  if (margins.met + margins.missed > 0) {
+    console.log(`${judge ? "" : "\n"}margins met: ${margins.met} of ${margins.met + margins.missed}`);
+  } else if (!judge) {
+    console.log("no selected fixture sets baseline_margin, and --no-judge skips the judge");
+  }
+  // A missing draft or judge verdict fails the run, and so does a missed
+  // margin or a run that compared nothing, so it is never a vacuous pass.
+  return missing > 0 || margins.missed > 0 || compared === 0 ? 1 : 0;
 }
 
 const invoked =
