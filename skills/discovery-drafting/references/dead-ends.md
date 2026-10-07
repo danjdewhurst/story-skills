@@ -43,7 +43,10 @@ payoff exists in the ledger, the thread is alive — leave it.
      are, even ones never written: `story links` accepts them on an
      abandoned record. If a chapter with that number is added later,
      `story add chapter` and `story split` warn (`adopted-references`);
-     clear the field then if the cut thread does not belong in it.
+     clear the field then if the cut thread does not belong in it. If
+     `story split` refuses because its renumbering would move a chapter
+     onto that number, point the field at the chapter the thread meant,
+     or clear it, then split again.
    - Update affected scene records' `state-changes` if the cut removes a
      change other chapters assumed.
    - If a character is cut, set their file's `status: cut` and leave the

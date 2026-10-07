@@ -44,7 +44,13 @@ const CASES = [
   { argv: ["move", "scene", "chapter-01-scene-01", "--chapter", "chapter-02"] },
   {
     argv: ["split", "chapter-02", "--at", "The constable came at dusk."],
-    prepare: (root) => fs.appendFileSync(path.join(root, "chapters", "chapter-02.md"), "\n\n* * *\n\nThe constable came at dusk.\n")
+    // The example's state learns something in chapter-05, which has no file:
+    // split refuses to renumber chapter-04 onto it, so it names chapter-04.
+    prepare: (root) => {
+      fs.appendFileSync(path.join(root, "chapters", "chapter-02.md"), "\n\n* * *\n\nThe constable came at dusk.\n");
+      const state = path.join(root, "continuity", "state.md");
+      fs.writeFileSync(state, fs.readFileSync(state, "utf8").replace("learned-in: chapter-05", "learned-in: chapter-04"));
+    }
   },
   { argv: ["merge", "chapter-02", "chapter-03"] },
   { argv: ["add", "character", "Mira Holt", "--location", "the-weavers-loft"] },

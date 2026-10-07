@@ -235,6 +235,35 @@ describe("story split", () => {
     expect(result.warnings[0].message).toBe("chapter-05 was already named by abandoned threads, and those references now point at the new chapter: continuity/promises/the-duel.md. Clear them if the cut threads do not belong there");
   });
 
+  test("refuses to renumber a chapter onto an id that references already name, so a later merge cannot carry them back (#578)", () => {
+    const root = book();
+    createEntity(root, { kind: "promise", name: "The Return", planted: "chapter-01", payoff: "chapter-05" });
+    const before = snapshot(root);
+    expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("continuity/promises/the-return.md names chapter-05, which has no file yet, and this split would renumber chapter-04 to chapter-05, so it would point at that chapter. Point it at the chapter it means first: chapter-04 if it belongs there (the split then carries it to chapter-05), or chapter-06 for the chapter after it; nothing was changed");
+    const failed = invoke(root, ["split", "chapter-02", "--at", "1"]);
+    expect(failed.code).toBe(4);
+    expect(failed.err).toContain("names chapter-05, which has no file yet");
+    expect(snapshot(root)).toEqual(before);
+
+    // Pointed at the chapter after chapter-04, the payoff stays put through
+    // the split and a merge that undoes it.
+    const promise = path.join(root, "continuity", "promises", "the-return.md");
+    fs.writeFileSync(promise, read(root, "continuity", "promises", "the-return.md").replace("payoff: chapter-05", "payoff: chapter-06"), "utf8");
+    expect(codes(splitChapter(root, { id: "chapter-02", at: "1" }))).not.toContain("adopted-references");
+    expect(data(root, "continuity", "promises", "the-return.md").payoff).toBe("chapter-06");
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(data(root, "continuity", "promises", "the-return.md").payoff).toBe("chapter-06");
+
+    // Pointed at chapter-04 itself, it follows that chapter there and back.
+    fs.writeFileSync(promise, read(root, "continuity", "promises", "the-return.md").replace("payoff: chapter-06", "payoff: chapter-04"), "utf8");
+    splitChapter(root, { id: "chapter-02", at: "1" });
+    expect(data(root, "continuity", "promises", "the-return.md").payoff).toBe("chapter-05");
+    expect(data(root, "chapters", "chapter-05.md").title).toBe("Four");
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(data(root, "continuity", "promises", "the-return.md").payoff).toBe("chapter-04");
+    expect(data(root, "chapters", "chapter-04.md").title).toBe("Four");
+  });
+
   test("names split in the adopted-references warning of a scene it moves (#537)", () => {
     const root = book();
     setProse(root, "chapter-04", "They landed.\n\n* * *\n\nNight fell.\n");
@@ -415,6 +444,38 @@ describe("story merge", () => {
     expect(merged.pov).toBe("mara-quill");
     expect(merged.status).toBe("outline");
     expect(merged.hook).toBeUndefined();
+  });
+
+  test("never takes numbered from the second chapter, and warns when the two differ (#578)", () => {
+    const root = book();
+    setFields(root, path.join("chapters", "chapter-03.md"), "numbered: false\n");
+    const result = mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(data(root, "chapters", "chapter-02.md").numbered).toBeUndefined();
+    expect(result.warnings.map((warning) => warning.message)).toContain("chapter-03 is unnumbered (numbered: false) but chapter-02 is not: the merged chapter-02 stays numbered. Set numbered: false on it if it should not be");
+
+    const prologue = book();
+    setFields(prologue, path.join("chapters", "chapter-02.md"), "numbered: false\n");
+    const kept = mergeChapters(prologue, { id: "chapter-02", next: "chapter-03" });
+    expect(data(prologue, "chapters", "chapter-02.md").numbered).toBe(false);
+    expect(kept.warnings.map((warning) => warning.message)).toContain("chapter-02 is unnumbered (numbered: false) but chapter-03 is not: the merged chapter-02 stays unnumbered. Remove numbered: false from it if it should be numbered");
+
+    const both = book();
+    setFields(both, path.join("chapters", "chapter-02.md"), "numbered: true\n");
+    expect(mergeChapters(both, { id: "chapter-02", next: "chapter-03" }).warnings.map((warning) => warning.message).join("\n")).not.toContain("numbered");
+  });
+
+  test("keeps the second chapter's text above its heading and comments after its notes (#578)", () => {
+    const root = book();
+    const third = path.join(root, "chapters", "chapter-03.md");
+    fs.writeFileSync(third, read(root, "chapters", "chapter-03.md")
+      .replace("\n# Chapter 3: Three\n", "\n<!-- KEEP-ME -->\nA note above the heading.\n# Chapter 3: Three\n")
+      .replace("3. Turn or decision\n", "3. Turn or decision\n\n<!-- after the beats -->\n")
+      .replace("---\n\n## Chapter Text", "---\n\n<!-- after the divider -->\n\n## Chapter Text"), "utf8");
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    const text = read(root, "chapters", "chapter-02.md");
+    expect(text).toContain("# Chapter 2: Two\n\n<!-- KEEP-ME -->\nA note above the heading.\n\n## Outline\n\n1. Opening beat\n2. Escalation\n3. Turn or decision\n1. Opening beat\n2. Escalation\n3. Turn or decision\n\n<!-- after the beats -->\n\n<!-- after the divider -->\n\n---\n\n## Chapter Text\n\nMara walked");
+    expect(text).not.toContain("# Chapter 3");
+    expect(prose(root, "chapter-02")).toBe(`${CHAPTER_TWO.trim()}\n\n* * *\n\nThe ferry crossed.`);
   });
 
   test("names merge in the adopted-references warning of a scene it moves (#537)", () => {

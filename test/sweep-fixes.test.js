@@ -1549,6 +1549,32 @@ describe("move", () => {
     expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain("\n# Chapter 3\n");
   });
 
+  test("move chapter renumbers only the body's first heading, never the frontmatter, and a CRLF heading with no colon (#578)", () => {
+    const root = book();
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8")
+      .replace("title: Two\n", "title: Two\n# Chapter 2: was the prologue\n")
+      .replace("# Chapter 2: Two\n", "<!--\n# Chapter 2: an old heading\n-->\n# Chapter 2: Two\n")
+      .replace("## Chapter Text\n", "## Chapter Text\n\n# Chapter 2: a heading in the text\n"));
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
+    const moved = path.join(root, "chapters", "chapter-03.md");
+    const text = fs.readFileSync(moved, "utf8");
+    expect(text).toContain("\ntitle: Two\n# Chapter 2: was the prologue\n");
+    expect(text).toContain("\n<!--\n# Chapter 2: an old heading\n-->\n# Chapter 3: Two\n");
+    expect(text).toContain("\n# Chapter 2: a heading in the text\n");
+
+    fs.writeFileSync(moved, text.replace("# Chapter 3: Two", "# Chapter 3").replace(/\r?\n/g, "\r\n"));
+    moveEntity(root, { kind: "chapter", id: "chapter-03", number: 4 });
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-04.md"), "utf8")).toContain("\r\n# Chapter 4\r\n");
+
+    // A body with no heading at all moves unchanged.
+    const bare = path.join(root, "chapters", "chapter-01.md");
+    const body = "\nJust prose.\n";
+    fs.writeFileSync(bare, fs.readFileSync(bare, "utf8").replace(/\n---\n[\s\S]*$/, `\n---\n${body}`));
+    moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 });
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-02.md"), "utf8")).toEndWith(`\n---\n${body}`);
+  });
+
   test("an interrupted move can be rerun to finish", () => {
     const root = book();
     moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
