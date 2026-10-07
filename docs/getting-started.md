@@ -142,7 +142,7 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 | From a clone of this repository | `node <clone>/bin/story.js --help` or `bun <clone>/bin/story.js --help` |
 | Bundled copy in an installed skill | `node <skills-directory>/story-maintenance/scripts/story.js --help` |
 
-Run a clone or the bundled copy from your project folder, so `.` is the project; for `init` and `import`, which create a project, run it from the folder that should hold the new one, or pass `--dir`. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust.
+Run a clone or the bundled copy from your project folder, so `.` is the project; for `init` and `import`, which create a project, run it from the folder that should hold the new one, or pass `--dir`. `npx story-skills` and `bunx story-skills` run a `story-skills` in the current folder's `node_modules/.bin` before the published one, and Bun reads `bunfig.toml` and `.env` from the current folder. So in a project you do not trust, such as a story repository you cloned, use a global install or a standalone binary instead of `npx`, `bunx`, or a clone run with Bun.
 
 The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against. The checksums file lists every archive, so check only the one you downloaded:
 

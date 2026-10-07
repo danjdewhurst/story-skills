@@ -39,11 +39,9 @@ const CONSTANTS = {
 };
 
 // Each row of the Allowed values table, by its Field cell, and the lists
-// whose values it gives. Most are the lists validateEnum checks a field
-// against; the rest are checked in their own code: object-state status and
-// research risk in validate.js, writing-days through progress.js, pass
-// status in passes.js, severity level in config.js, build-style in
-// build-style.js, and era direction in calendar.js.
+// whose values it gives. The rows validate.js does not check (build-style,
+// severity, calendar, and revision passes) are checked in build-style.js,
+// config.js, calendar.js, and passes.js.
 const ALLOWED = {
   "Story `status`": ["STORY_STATUSES"],
   "Story `tense`": ["STORY_TENSES"],
@@ -87,10 +85,91 @@ const ALLOWED = {
   "Style sheet `dialect`": ["STYLE_DIALECTS"]
 };
 
-// The fields validate.js checks with validateEnum, and the list each is
-// checked against: [["status", "STORY_STATUSES"], ...].
+// The kind each validate.js function checks, as the Allowed values table
+// names it, and the heading of that kind's field table.
+const KINDS = {
+  validateStoryFrontmatter: "story",
+  validateDailyTarget: "story",
+  validateCharacters: "character",
+  validateLocations: "location",
+  validateFactions: "faction",
+  validateArtifacts: "artifact",
+  validateArcs: "arc",
+  validateChapters: "chapter",
+  validateScenes: "scene",
+  validateContinuityState: "state file",
+  validateQuestions: "question",
+  validatePromises: "promise",
+  validateClues: "clue",
+  validateGlossaryTerms: "glossary",
+  validateStyleSheet: "style sheet",
+  validateResearch: "research",
+  validateMatter: "matter"
+};
+
+const FIELD_TABLES = {
+  story: "## Story file",
+  character: "## Characters",
+  location: "### Locations",
+  faction: "### Factions",
+  artifact: "### Artifacts",
+  arc: "### Arcs",
+  chapter: "## Chapters",
+  scene: "## Scenes",
+  "state file": "### State file",
+  question: "### Questions",
+  promise: "### Promises",
+  clue: "### Clues",
+  glossary: "## Glossary",
+  "style sheet": "### Style sheet",
+  research: "### Research notes",
+  matter: "### Front and back matter"
+};
+
+// The checks that report unsupported-value without a list .has() on the
+// line before, by function: writing-days reads its weekdays through
+// weekdayName.
+const OTHER_CHECKS = {
+  validateDailyTarget: { field: "writing-days", list: "WEEKDAYS" }
+};
+
+// Every value check in validate.js, as { kind, field, list }: each
+// validateEnum call, each PROGRESSION_RULES enum, and each unsupported-value
+// error raised after a `!LIST.has(value)` test.
 function enumChecks() {
-  return [...validateSource.matchAll(/validateEnum\([^,]+, "([^"]+)", ([A-Z][A-Z_]+),/g)].map((match) => [match[1], match[2]]);
+  const checks = [];
+  let fn = null;
+  let key = null;
+  const lines = validateSource.split("\n");
+  lines.forEach((line, index) => {
+    fn = line.match(/^(?:export )?function (\w+)/)?.[1] ?? fn;
+    key = line.match(/^ {2}([a-z]+): \{$/)?.[1] ?? key;
+    const where = { fn, line: index + 1 };
+    for (const match of line.matchAll(/validateEnum\([^,]+, "([^"]+)", ([A-Z][A-Z_]+),/g)) {
+      checks.push({ ...where, kind: KINDS[fn], field: match[1], list: match[2] });
+    }
+    if (line.includes("enums: new Map(")) {
+      for (const match of line.matchAll(/\["([^"]+)", ([A-Z][A-Z_]+)\]/g)) {
+        checks.push({ ...where, kind: key, field: match[1], list: match[2] });
+      }
+    }
+    if (line.includes('err("unsupported-value"') && fn !== "validateEnum") {
+      const has = lines[index - 1].match(/!([A-Z][A-Z_]+)\.has\(([\w.]+)\)/);
+      const other = OTHER_CHECKS[fn];
+      expect({ ...where, recognised: has !== null || other !== undefined }).toEqual({ ...where, recognised: true });
+      checks.push(has === null ? { ...where, kind: KINDS[fn], ...other } : { ...where, kind: KINDS[fn], field: has[2].split(".").pop(), list: has[1] });
+    }
+  });
+  return checks;
+}
+
+// The kinds and field an Allowed values row names: "Chapter and scene
+// `status`" is chapter and scene, status.
+function rowKey(label) {
+  return {
+    kinds: label.slice(0, label.indexOf("`")).trim().toLowerCase().split(" and "),
+    field: [...label.matchAll(/`([^`]+)`/g)].pop()[1]
+  };
 }
 
 function values(name) {
@@ -99,19 +178,35 @@ function values(name) {
   return [...(list instanceof Map ? list.keys() : list)].sort();
 }
 
+// The text under a heading, up to the next heading of the same or a higher
+// level.
+function section(heading) {
+  const level = heading.match(/^#+/)[0].length;
+  const lines = formatDoc.split("\n");
+  const start = lines.indexOf(heading);
+  expect({ heading, start: start >= 0 }).toEqual({ heading, start: true });
+  const end = lines.findIndex((line, index) => index > start && /^#+ /.test(line) && line.match(/^#+/)[0].length <= level);
+  return lines.slice(start + 1, end === -1 ? undefined : end).join("\n");
+}
+
+// The rows of the Allowed values table, before the status meanings below it.
 function allowedRows() {
-  const text = formatDoc.slice(formatDoc.indexOf("\n## Allowed values\n"), formatDoc.indexOf("\n### What the status values mean\n"));
-  return text.split("\n")
+  return section("## Allowed values").split("\n### ")[0].split("\n")
     .filter((line) => line.startsWith("| ") && !line.startsWith("| Field |"))
     .map((line) => line.slice(2, -2).split(" | "));
 }
 
 describe("docs/project-format.md", () => {
-  test("every list validate checks a field against has a row in the Allowed values table", () => {
+  test("every value check in validate has an Allowed values row for its kind and field that gives its list", () => {
     const checks = enumChecks();
-    expect(checks.length).toBeGreaterThan(30);
-    const listed = new Set(Object.values(ALLOWED).flat());
-    expect(checks.filter(([, name]) => !listed.has(name))).toEqual([]);
+    expect(checks.length).toBeGreaterThan(35);
+    for (const check of checks) {
+      const rows = Object.keys(ALLOWED).filter((label) => {
+        const { kinds, field } = rowKey(label);
+        return kinds.includes(check.kind) && field === check.field && ALLOWED[label].includes(check.list);
+      });
+      expect({ ...check, rows: rows.length }).toEqual({ ...check, rows: 1 });
+    }
   });
 
   test("the Allowed values table gives each list's values, and has no other rows", () => {
@@ -126,11 +221,12 @@ describe("docs/project-format.md", () => {
   });
 
   // A field validate checks against a list is typed enum (or by its values)
-  // in the field tables, never string. `status` and `type` are left out:
-  // they are free text on locations and systems.
-  test("the field tables do not type an enum field as a string", () => {
-    const fields = [...new Set(enumChecks().map(([field]) => field))].filter((field) => field !== "status" && field !== "type");
-    const stringRows = formatDoc.split("\n").filter((line) => fields.some((field) => line.startsWith(`| \`${field}\` | string |`)));
-    expect(stringRows).toEqual([]);
+  // in its kind's field table, never string.
+  test("the field tables do not type a field validate checks against a list as a string", () => {
+    for (const { kind, field } of enumChecks()) {
+      expect({ kind, table: FIELD_TABLES[kind] !== undefined }).toEqual({ kind, table: true });
+      const stringRows = section(FIELD_TABLES[kind]).split("\n").filter((line) => line.startsWith(`| \`${field}\` | string |`));
+      expect({ kind, field, stringRows }).toEqual({ kind, field, stringRows: [] });
+    }
   });
 });

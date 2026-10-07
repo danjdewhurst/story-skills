@@ -883,7 +883,7 @@ word-count: 1489
 | `character-count` | integer ≥ 0 | no | Prose character count, maintained by `story wordcount --write` in a book [counted in characters](#counting-in-characters). |
 | `target-words` | integer ≥ 1 | no | Word target for the chapter; `story progress` reports against it. |
 | `target-characters` | integer ≥ 1 | no | Character target for the chapter, in a book counted in characters. |
-| `mode` | enum | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. Any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
+| `mode` | enum | no | `discovered` marks a discovery-drafted chapter that must go through the [discovery-drafting](../skills/discovery-drafting/SKILL.md) reconcile loop; `outlined` marks one written outline-first. It may also be empty, as `story add chapter` writes it without `--mode`; any other value is a validate error. Set it with `story add chapter --mode discovered`. `story next` counts the loop done only when `## Chapter Notes (post-hoc)` sits above `## Chapter Text`. |
 | `date` | `YYYY-MM-DD` | no | Story date; enables clock checks. |
 | `time` | string | no | Story time of day (see [Dates and times](#dates-and-times)). |
 | `strand` | string | no | Timeline strand, such as `1990` and `2020` in a dual-timeline book. `story continuity` checks clock order and route travel within each strand, so switching strands never runs backward and is not a journey. Chapters without it share one strand. A crossing between strands is not inferred. |
@@ -1623,7 +1623,7 @@ These enumerations are shared by `story validate` and by the flags that set them
 | Arc `type` | `main`, `subplot`, `character`, `thematic` |
 | Arc `status` | `planned`, `in-progress`, `resolved` |
 | Chapter and scene `status` | `outline`, `draft`, `revised`, `final`, `complete` |
-| Chapter `mode` | `discovered`, `outlined` |
+| Chapter `mode` | `discovered`, `outlined`, or empty |
 | Chapter `hook` | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` |
 | Scene `outcome` | `yes`, `no`, `yes-but`, `no-and` |
 | Question `status` | `open`, `answered`, `resolved`, `dropped`, `abandoned` |

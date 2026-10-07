@@ -21,7 +21,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 
 ## Running the CLI
 
-The CLI has no runtime dependencies. It needs Node 18 or newer, except as a standalone binary (Homebrew installs one). Pick whichever of these fits how you installed Story Skills:
+The CLI has no runtime dependencies. It runs on Node 18 or newer or on Bun, and a standalone binary (Homebrew installs one) needs neither. Pick whichever of these fits how you installed Story Skills:
 
 | How you have it | Command |
 |---|---|
@@ -34,7 +34,7 @@ The CLI has no runtime dependencies. It needs Node 18 or newer, except as a stan
 | A clone of this repository | `node <clone>/bin/story.js <command>` or `bun <clone>/bin/story.js <command>` |
 | Skills copied into an agent, no package | `node <skills-dir>/story-maintenance/scripts/story.js <command>` |
 
-All of them run the same code. Run them from the story project folder, so `.` is the project. [`init`](#init) and [`import`](#import) create a project, so run them from the folder that should hold it, or pass `--dir`; inside an existing project they refuse. Bun reads `bunfig.toml` and `.env` from the current folder, so run a clone with Bun only in projects you trust. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
+All of them run the same code. Run them from the story project folder, so `.` is the project. [`init`](#init) and [`import`](#import) create a project, so run them from the folder that should hold it, or pass `--dir`; inside an existing project they refuse. `npx story-skills` and `bunx story-skills` run a `story-skills` in the current folder's `node_modules/.bin` before the published one, and Bun reads `bunfig.toml` and `.env` from the current folder. So in a project you do not trust, such as a story repository you cloned, use a global install or a standalone binary instead of `npx`, `bunx`, or a clone run with Bun. In a clone, `bun run story -- <command>` also works, but Bun runs it from the clone's root, so give it an absolute project path. The examples on this page use `story`. See [Getting started](getting-started.md) for installation.
 
 ### Example projects used on this page
 
@@ -275,8 +275,8 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 
 The CLI prints results to stdout and diagnostics to stderr.
 
-- `validate`, `links`, `continuity`, and `check` write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
-- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
+- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
+- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
@@ -397,7 +397,7 @@ Dry run: story build would make 2 changes; nothing was written
 
 `init` and `import` list their changes relative to the new project's folder, which is `.` when it would be made (`mkdir   .`); `init --follows` or `--precedes` also lists the linked book's `story.md` it would add the backlink to, such as `update  ../the-last-ember/story.md`. `import` reindexes the chapters it writes, so its dry run runs on a copy of the folder it would fill (the copy is empty for a new project, and copied as above for `--force` into an existing one), reading the manuscript where it is. Both print the same warnings and notes as the real run, but not the `Created` or `Imported` line or the entity candidates. `import --force` first names the snapshot it would save before it replaces the project's chapters, and lists that snapshot's files.
 
-With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` report `dryRun` and `changes` on every run. The rest of `data` is the real run's, so `import --dry-run --json` gives the entity candidates and `build --pdf --dry-run --json` the engine in `data.engine`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
+With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` report `dryRun` and `changes` on every run. The rest of `data` is the real run's, so `import --dry-run --json` gives the entity candidates and `build --pdf --dry-run --json` the engine in `data.engine`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, `doctor` without `--fix`, `snapshot --list`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
 
 ### Where commands write
 
@@ -3640,7 +3640,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
 | `--strict` | | `check` | Boolean; fails on warnings as well as errors |
 | `--json` | | Every command except `init`, `import`, `export`, and `build` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
-| `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write (see [Previewing changes](#previewing-changes-with---dry-run)) |
+| `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--prose` | | `rename` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
 | `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
