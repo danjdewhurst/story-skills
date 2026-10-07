@@ -16,6 +16,12 @@ import { PROJECT_DIRECTORIES, assertProjectParses, markdownFiles, requireStoryFi
 export const SNAPSHOTS_DIR = ".snapshots";
 export const SNAPSHOT_MANIFEST = "snapshot.json";
 
+// Written into .snapshots/ when a snapshot makes the folder: a snapshot
+// copies every markdown file, including ones the project's .gitignore keeps
+// out of git, so the copies stay out too unless the writer deletes it.
+export const SNAPSHOTS_GITIGNORE = ".gitignore";
+const SNAPSHOTS_GITIGNORE_TEXT = "# Snapshots copy every markdown file, including ones git ignores, so git\n# ignores them. Delete this file to commit your snapshots.\n*\n";
+
 const KEBAB_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // The folder name for a snapshot: `id` when given, else the kebab-case form
@@ -44,6 +50,29 @@ export function snapshotId(name, id) {
   return derived;
 }
 
+// <prefix><n> for a snapshot a command takes to keep the project as it was
+// (before-restore-<id>-<n>, before-import-<n>): one more than the highest n
+// a snapshot with that prefix has, so each run keeps its own and later ones
+// number higher. A number of more than 15 digits, too long to add one to
+// exactly, counts for nothing, and a name already taken is passed over.
+// Only a real .snapshots/ folder is read; a symlink or a file there is
+// refused when the snapshot is written.
+export function nextSnapshotId(root, prefix) {
+  const folder = path.join(path.resolve(root), SNAPSHOTS_DIR);
+  const taken = new Set(lstatIfExists(folder)?.isDirectory() ? fs.readdirSync(folder) : []);
+  let next = 1;
+  for (const name of taken) {
+    const rest = name.startsWith(prefix) ? name.slice(prefix.length) : "";
+    if (/^[1-9]\d{0,14}$/.test(rest)) {
+      next = Math.max(next, Number(rest) + 1);
+    }
+  }
+  while (taken.has(`${prefix}${next}`)) {
+    next += 1;
+  }
+  return `${prefix}${next}`;
+}
+
 // Saves every markdown file a scan reads (the files `markdownFiles` walks:
 // not dist/, node_modules/, dot-folders, or nested projects) to
 // .snapshots/<id>/ under the same paths, with a snapshot.json manifest. An
@@ -59,7 +88,15 @@ export function snapshotProject(root, options = {}) {
     assertProjectParses(project, "take a snapshot");
   }
   const projectRoot = project.root;
-  const target = path.join(projectRoot, SNAPSHOTS_DIR, id);
+  // A .snapshots that is a symlink or a file is refused, as --list and
+  // --restore refuse it, before anything is looked up through it: Windows
+  // finds no file under a file where other systems fail the lookup.
+  const folder = path.join(projectRoot, SNAPSHOTS_DIR);
+  const madeFolder = lstatIfExists(folder) === null;
+  if (!madeFolder) {
+    assertSafeProjectDirectory(folder, projectRoot);
+  }
+  const target = path.join(folder, id);
   const existing = lstatIfExists(target);
   if (existing && !options.force) {
     throw refusedError(`Snapshot ${id} already exists in ${SNAPSHOTS_DIR}/${id}: choose another name, or add --force to replace it`);
@@ -76,12 +113,25 @@ export function snapshotProject(root, options = {}) {
     fs.cpSync(target, backup, { recursive: true });
   }
   try {
+    if (madeFolder) {
+      writeFile(path.join(folder, SNAPSHOTS_GITIGNORE), SNAPSHOTS_GITIGNORE_TEXT, { root: projectRoot });
+    }
     const manifest = writeSnapshot(project, target, id, options, previous);
     return { ...manifest, dir: `${SNAPSHOTS_DIR}/${id}`, replaced: existing !== null, warnings: [] };
   } catch (error) {
     fs.rmSync(target, { recursive: true, force: true });
     if (backup !== null) {
       fs.renameSync(backup, target);
+    }
+    // A .snapshots/ folder this snapshot made goes too, unless something
+    // else is in it now.
+    if (madeFolder) {
+      fs.rmSync(path.join(folder, SNAPSHOTS_GITIGNORE), { force: true });
+      try {
+        fs.rmdirSync(folder);
+      } catch {
+        // Not empty, or already gone.
+      }
     }
     throw error;
   } finally {
@@ -91,15 +141,21 @@ export function snapshotProject(root, options = {}) {
   }
 }
 
+// Each copy keeps its source's permissions, with read and write for its
+// owner, so a file only its owner may read stays that way. The counts leave
+// out a file that does not parse (one a safety snapshot keeps); `unparsed`
+// says how many there are.
 function writeSnapshot(project, target, id, options, previous) {
   const projectRoot = project.root;
   const files = markdownFiles(projectRoot);
   const written = new Set();
   for (const file of files) {
     const copy = path.join(target, path.relative(projectRoot, file));
-    writeFile(copy, readTextFile(file), { root: projectRoot });
+    writeFile(copy, readTextFile(file), { root: projectRoot, mode: (fs.statSync(file).mode & 0o777) | 0o600 });
     written.add(copy);
   }
+  const copied = new Set(files.map((file) => projectPath(projectRoot, file)));
+  const unparsed = new Set((project.fileErrors ?? []).map((error) => String(error.file).replace(/\\/g, "/")).filter((file) => copied.has(file))).size;
   const characters = project.unit?.name === "characters";
   const manifest = {
     name: String(options.name).trim(),
@@ -108,7 +164,8 @@ function writeSnapshot(project, target, id, options, previous) {
     chapters: project.chapters.length,
     words: project.chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0),
     ...(characters ? { characters: project.chapters.reduce((sum, chapter) => sum + chapter.count, 0) } : {}),
-    files: files.length
+    files: files.length,
+    ...(unparsed > 0 ? { unparsed } : {})
   };
   const manifestPath = path.join(target, SNAPSHOT_MANIFEST);
   writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { root: projectRoot });
@@ -179,7 +236,8 @@ export function listSnapshots(root) {
           ...(typeof manifest.created === "string" ? { created: manifest.created } : {}),
           ...(Number.isInteger(manifest.chapters) ? { chapters: manifest.chapters } : {}),
           ...(Number.isInteger(manifest.words) ? { words: manifest.words } : {}),
-          ...(Number.isInteger(manifest.characters) ? { characters: manifest.characters } : {})
+          ...(Number.isInteger(manifest.characters) ? { characters: manifest.characters } : {}),
+          ...(Number.isInteger(manifest.unparsed) ? { unparsed: manifest.unparsed } : {})
         };
       } catch {
         return blank;
@@ -476,17 +534,7 @@ function restoreSources(projectRoot, name) {
 // before-restore-<id>-<n>: one more than the highest n a safety snapshot of
 // this id has, so each restore keeps its own and later ones number higher.
 function nextSafetyId(projectRoot, id) {
-  const prefix = `before-restore-${id}-`;
-  const folder = path.join(projectRoot, SNAPSHOTS_DIR);
-  const taken = lstatIfExists(folder) === null ? [] : fs.readdirSync(folder);
-  let next = 1;
-  for (const name of taken) {
-    const rest = name.startsWith(prefix) ? name.slice(prefix.length) : "";
-    if (/^[1-9]\d*$/.test(rest)) {
-      next = Math.max(next, Number(rest) + 1);
-    }
-  }
-  return `${prefix}${next}`;
+  return nextSnapshotId(projectRoot, `before-restore-${id}-`);
 }
 
 export function formatRestore(result) {
@@ -520,7 +568,7 @@ export function formatSnapshot(result) {
   if (result.characters !== undefined) {
     counts.push(`${formatNumber(result.characters)} characters`);
   }
-  return `${result.replaced ? "Replaced" : "Saved"} snapshot ${result.id} in ${result.dir}/ (${counts.join(", ")}; ${result.files} ${result.files === 1 ? "file" : "files"})\nCompare with it later: story compare --snapshot ${result.id}\n`;
+  return `${result.replaced ? "Replaced" : "Saved"} snapshot ${result.id} in ${result.dir}/ (${counts.join(", ")}; ${result.files} ${result.files === 1 ? "file" : "files"}${unparsedNote(result)})\nCompare with it later: story compare --snapshot ${result.id}\n`;
 }
 
 export function formatSnapshotList(report) {
@@ -532,7 +580,13 @@ export function formatSnapshotList(report) {
     const words = snapshot.words === null ? "? words" : `${formatNumber(snapshot.words)} words`;
     const chapters = snapshot.chapters === null ? "? chapters" : `${snapshot.chapters} ${snapshot.chapters === 1 ? "chapter" : "chapters"}`;
     const label = snapshot.name === snapshot.id ? snapshot.id : `${snapshot.id} (${snapshot.name})`;
-    return `- ${label}: ${when}, ${chapters}, ${words}`;
+    return `- ${label}: ${when}, ${chapters}, ${words}${unparsedNote(snapshot)}`;
   });
   return `Snapshots: ${report.snapshots.length}\n\n${lines.join("\n")}\n`;
+}
+
+// The files a snapshot holds that did not parse, so its counts leave out.
+function unparsedNote(snapshot) {
+  const count = snapshot.unparsed ?? 0;
+  return count === 0 ? "" : `, ${count === 1 ? "1 file that did not parse, not counted" : `${count} files that did not parse, not counted`}`;
 }

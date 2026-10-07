@@ -187,7 +187,9 @@ function invalidUtf8Offset(buffer) {
 // than written through. With `unchangedFrom`, the write is refused when the
 // file no longer holds that text (an editor saved it after the command read
 // it), so the save is not overwritten. Any failure, a refusal or the file
-// system's, exits as a refused write.
+// system's, exits as a refused write. `mode` sets the file's permissions
+// in place of the default or the existing file's (a snapshot copy keeps
+// its source's).
 export function writeFile(filePath, contents, options = {}) {
   const existed = lstatIfExists(path.resolve(filePath)) !== null;
   assertWriteAllowed(filePath);
@@ -366,7 +368,7 @@ function writeWholeFile(filePath, contents, options) {
   if (existing) {
     fs.accessSync(target, fs.constants.W_OK);
   }
-  const mode = existing ? existing.mode & 0o777 : 0o666;
+  const mode = options.mode ?? (existing ? existing.mode & 0o777 : 0o666);
   const temporary = temporaryPath(target);
   let created = false;
   try {
@@ -378,7 +380,7 @@ function writeWholeFile(filePath, contents, options) {
     created = true;
     try {
       fs.writeFileSync(descriptor, contents, "utf8");
-      if (existing) {
+      if (existing || options.mode !== undefined) {
         fs.fchmodSync(descriptor, mode);
       }
       fs.fsyncSync(descriptor);

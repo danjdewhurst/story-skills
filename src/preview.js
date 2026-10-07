@@ -350,6 +350,27 @@ function copyProject(source, target, roots, depth = 0) {
   fs.chmodSync(target, copyMode(source, true));
 }
 
+// For a folder the copy leaves out (a dot-folder, such as .snapshots/)
+// that a command reads only the names in: makes `copy` with an empty
+// folder or file for each entry of `source`, and the access the original
+// gives this user. Nothing is made when `source` is not a real folder, or
+// when something is already at `copy` (a symlink or file copyProject kept
+// is the copy's own), so nothing is written outside the scratch folder.
+export function mirrorFolderNames(source, copy) {
+  if (lstatIfExists(source)?.isDirectory() !== true || lstatIfExists(copy) !== null) {
+    return;
+  }
+  fs.mkdirSync(copy);
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      fs.mkdirSync(path.join(copy, entry.name));
+    } else {
+      fs.writeFileSync(path.join(copy, entry.name), "", { flag: "wx" });
+    }
+  }
+  fs.chmodSync(copy, copyMode(source, true));
+}
+
 // Write commands read the text of markdown files only (and import the
 // .gitignore it keeps, and rename its marker), and no file over the read
 // limit; of any other file (the story.md cover) they check at most the size

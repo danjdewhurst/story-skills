@@ -8,12 +8,14 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { MAX_READ_BYTES, lstatIfExists, readFileBytes, removeFile } from "./files.js";
+import { MAX_READ_BYTES, currentText, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
+import { mirrorFolderNames } from "./preview.js";
 import { buildLabels, nameList } from "./publishing.js";
+import { SNAPSHOTS_DIR, nextSnapshotId, snapshotProject } from "./snapshots.js";
 import { STDIN_ARG, decodeUtf8 } from "./stdin.js";
-import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, writeFile } from "./story.js";
-import { EXIT_CODES, usageError, withDefaultExitCode } from "./exit-codes.js";
+import { assertProjectParses, createStoryProject, existingStoryData, existingStoryLanguage, existingStyleData, newProjectRoot, reindexProject, scanProject, shellWord, writeFile } from "./story.js";
+import { EXIT_CODES, exitCodeFor, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
 
 // A lone "I" before a word is the pronoun ("Chapter I Am Legend"), not a numeral.
 const ROMAN_NUMERAL = "(?!i\\s+\\S)(?=[ivxlc])c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})";
@@ -161,14 +163,15 @@ export function importManuscript(options) {
   // not hold it.
   const piped = fromStdin ? options.readStdin() : null;
 
-  // --force into an existing folder deletes and rewrites its chapters, so
-  // it holds the project lock from reading the project's language, count
-  // unit, and style sheet to the reindex, as the other write commands do: a
-  // command already running refuses this one before it reads or changes
-  // anything, and the chapters are never built from settings that changed
-  // meanwhile. A folder without story.md is locked too, so two imports
-  // into it cannot interleave. A symlinked folder is refused unlocked by
-  // createStoryProject, so no lock file is written through it.
+  // --force into an existing folder snapshots, deletes, and rewrites its
+  // chapters, so it holds the project lock from reading the project's
+  // language, count unit, and style sheet to the reindex, as the other
+  // write commands do: a command already running refuses this one before it
+  // reads or changes anything, and the chapters are never built from
+  // settings that changed meanwhile. A folder without story.md is locked
+  // too, so two imports into it cannot interleave. A symlinked folder is
+  // refused unlocked by createStoryProject, so no lock file is written
+  // through it.
   const run = () => {
     const pack = withStyleLists(languagePack(options.language ?? (target === null ? null : existingStoryLanguage(target))), target === null ? null : existingStyleData(target));
     const rules = importRules(pack);
@@ -214,7 +217,7 @@ export function importManuscript(options) {
       return { name, text };
     });
 
-    const created = createStoryProject({
+    const projectOptions = {
       title: options.title,
       cwd,
       dir: options.dir,
@@ -228,11 +231,13 @@ export function importManuscript(options) {
       language: options.language,
       defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path.basename(source)}. Replace with a 2-3 sentence synopsis.`,
       force: options.force,
-      forceHint: "Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.",
-      // Check an existing project parses before deleting its chapters, as the
-      // other mutating commands do. The chapter files about to be replaced may
-      // be broken.
+      forceHint: "Use --force to import into it: --force saves the project as snapshot before-import-<n>, then deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. story snapshot --restore before-import-<n> puts the old chapters back.",
+      // Before anything is written: refuse a chapter entry the snapshot
+      // cannot keep, check an existing project parses before deleting its
+      // chapters, as the other mutating commands do (the chapter files about
+      // to be replaced may be broken), and save the project as it is.
       beforeWrite(root, hasStory) {
+        replaced = replacedChapters(root);
         if (!hasStory) {
           return;
         }
@@ -245,22 +250,42 @@ export function importManuscript(options) {
           return;
         }
         assertProjectParses(project, "import", (error) => /^chapters[\\/]chapter-\d+\.md$/i.test(error.file));
+        if (replaced.length > 0) {
+          snapshot = snapshotBeforeImport(root, cwd, options.preview);
+        }
       }
-    });
-
-    const chaptersDir = path.join(created.root, "chapters");
-    for (const name of fs.readdirSync(chaptersDir)) {
-      if (!/^chapter-\d+\.md$/i.test(name)) {
-        continue;
+    };
+    let replaced = [];
+    let snapshot = null;
+    let created;
+    try {
+      created = createStoryProject(projectOptions);
+      // A folder without story.md is saved once the starter files make it a
+      // project, so the snapshot is a whole one restore can put back.
+      if (snapshot === null && replaced.length > 0) {
+        snapshot = snapshotBeforeImport(created.root, cwd, options.preview);
       }
-      removeFile(path.join(chaptersDir, name));
-    }
+      const chaptersDir = path.join(created.root, "chapters");
+      for (const name of replaced) {
+        // A chapter saved since the snapshot read it is left as saved.
+        removeFile(path.join(chaptersDir, name), { root: created.root, unchangedFrom: currentText(path.join(created.root, snapshot.dir, "chapters", name)) });
+      }
 
-    for (const chapter of chapterFiles) {
-      writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root, unchangedFrom: null });
-    }
+      for (const chapter of chapterFiles) {
+        writeFile(path.join(chaptersDir, chapter.name), chapter.text, { root: created.root, unchangedFrom: null });
+      }
 
-    reindexProject(created.root);
+      reindexProject(created.root);
+    } catch (error) {
+      if (snapshot === null) {
+        throw error;
+      }
+      // Once the snapshot is saved, a failure names it, and exits as a
+      // write that stopped part way, as a failed restore does.
+      const code = exitCodeFor(error);
+      error.exitCode = code === EXIT_CODES.findings ? EXIT_CODES.refused : code;
+      throw withHint(error, `Snapshot ${snapshot.id} holds the project as it was before this import: ${snapshot.restore} puts it back`);
+    }
 
     return {
       root: created.root,
@@ -272,11 +297,72 @@ export function importManuscript(options) {
       ...(characters ? { characters: totalCharacters } : {}),
       warnings,
       gitignore: created.gitignore,
+      snapshot,
       candidates: extractNameCandidates(chapters.map((chapter) => chapter.prose).join("\n\n"), pack)
     };
   };
   const locked = options.force && target !== null && lstatIfExists(target)?.isSymbolicLink() !== true;
   return locked ? withProjectLock(target, run, { folder: true }) : run();
+}
+
+// The chapter files --force replaces: every chapters/chapter-NN.md, in any
+// letter case, so a folder that ignores case has the new files' names free.
+// Each must be one the before-import snapshot keeps, a regular file whose
+// name ends in .md as a scan reads it; anything else there would be deleted
+// unsaved, so it is refused before the project changes.
+function replacedChapters(root) {
+  const folder = path.join(root, "chapters");
+  if (lstatIfExists(folder)?.isDirectory() !== true) {
+    return [];
+  }
+  const entries = fs.readdirSync(folder, { withFileTypes: true }).filter((entry) => /^chapter-\d+\.md$/i.test(entry.name));
+  for (const entry of entries) {
+    const problem = entry.isSymbolicLink() ? "is a symlink"
+      : entry.isDirectory() ? "is a folder"
+        : !entry.isFile() ? "is not a regular file"
+          : !entry.name.endsWith(".md") ? "does not end in lower-case .md"
+            : null;
+    if (problem !== null) {
+      throw refusedError(`Cannot import: chapters/${entry.name} ${problem}, so the snapshot import --force takes before replacing the chapters cannot keep it, and --force would delete it. Rename, move, or delete it, then import again. Nothing was changed`);
+    }
+  }
+  return entries.map((entry) => entry.name).sort();
+}
+
+// The chapters --force deletes are kept first, under the project lock, in
+// snapshot before-import-<n> (one more than the highest n already taken),
+// so `story snapshot --restore` puts them back. It holds every markdown
+// file a scan reads, a chapter that does not parse included. A snapshot
+// that cannot be saved (a chapter that is not UTF-8 text, a full disk)
+// stops the import before any chapter is deleted. A --dry-run runs on a
+// copy of the folder, `preview.root`, which leaves out .snapshots/: the
+// folder is made in the copy as the project has it first, so the copy
+// numbers the snapshot, and refuses it, as the project would.
+function snapshotBeforeImport(root, cwd, preview) {
+  let id = "before-import-<n>";
+  try {
+    if (preview?.root) {
+      mirrorFolderNames(path.join(preview.root, SNAPSHOTS_DIR), path.join(root, SNAPSHOTS_DIR));
+    }
+    id = nextSnapshotId(root, "before-import-");
+    const snapshot = snapshotProject(root, { name: id, id, unparsed: true });
+    return { id: snapshot.id, dir: snapshot.dir, restore: restoreCommand(cwd, preview?.root ?? root, snapshot.id) };
+  } catch (error) {
+    throw withHint(error, `The import stopped before deleting any chapter: it could not save the project as snapshot ${id} first`);
+  }
+}
+
+// The command that puts the project back as snapshot `id` holds it, with
+// the project's path from where import ran (none from inside it).
+function restoreCommand(cwd, root, id) {
+  const where = path.relative(cwd, root).split(path.sep).join("/");
+  return `story snapshot --restore ${id}${where === "" ? "" : ` --path ${shellWord(where)}`}`;
+}
+
+// Adds a sentence after the error's message and any hint it has.
+function withHint(error, hint) {
+  error.hint = typeof error.hint === "string" ? `${error.hint}. ${hint}` : hint;
+  return error;
 }
 
 // A capitalised name word in any script: "Élodie", "O’Brien", "McAllister",

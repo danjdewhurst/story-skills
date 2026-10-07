@@ -46,9 +46,15 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Scene and chapter times run to the last minute of that day, and the clock, `travel-hours`, and route checks count that many hours per day.
   - Named times such as `night` cover the same share of a longer or shorter day, and a screenplay heading reads `HH:MM` as `DAY` over the middle half of it.
   - `story validate` and the schema check the value, and `story add --time` and `story continuity` check times against it; while it cannot be read, `HH:MM` times are not reported as malformed.
+- `story import --force` now saves the project as snapshot `before-import-<n>` before it deletes the old chapters, and prints the command that restores them. (#600)
+  - `--dry-run` names the snapshot and lists its files, and `--json` gives it as `data.snapshot`.
+  - A chapter entry the snapshot cannot keep, such as `chapter-03.MD` or a symlink, is refused before anything changes.
+  - An import whose snapshot cannot be saved stops before it deletes any chapter, and a failure after it names the snapshot and its restore command.
 
 ### Changed
 
+- `snapshot.json` and `story snapshot --list` now count the files that did not parse when the snapshot was taken, as `unparsed`. (#600)
+  - The safety snapshots of `--restore` and `import --force` keep such a file but leave it out of the chapter and word counts.
 - The `revision-continuity`, `series-continuity`, and `genre-craft-mystery` eval fixtures now check what each skill adds, not only canon phrases. (#560)
   - They check the revision pass started and the chapter marked revised, `fact` ids carried into book two without `learned-in`, and each clue's `story add clue` line.
   - A fixture can set `baseline_margin`, and `evals/compare-outputs.js` then fails it unless the skill's draft passes that many more checks than a no-skill draft; `--no-judge` runs only that check.
@@ -144,6 +150,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Security
 
+- A snapshot that creates `.snapshots/` now writes a `.gitignore` there, so git does not commit copies of files your project ignores. (#600)
+  - Each snapshot copy keeps its source file's permissions.
+  - A `.snapshots` that is a symlink or a file is refused before anything is written.
 - The Publish workflow publishes a tag to npm only if it is on the release commit of its `package.json` version on `main`, and only after that commit's CI run on `main` has passed. npm now goes after the binaries and release assets, from a job in the `npm` environment, and a manual run must be dispatched on `main` or on the tag. A later push to `main` no longer cancels the CI run of the commit before it. ([#544](https://github.com/danjdewhurst/story-skills/issues/544))
 - Names and titles can no longer break out of the print and Shunn running heads or `story diagram` labels. A form feed or other control character in the title or author now stays inside the running head's CSS string; before, `author: "Ann\f}} body { display: none } x {"` printed one blank page. `story diagram` writes `#`, `%`, `:`, and backticks in labels, and `#`, `;`, `%`, and `<` in timeline text and dates, as Mermaid entity codes, so `Unit #101; East` no longer renders as `Unit e East`, a `%%{init}%%` in a name no longer changes the diagram's theme, and a colon in a calendar date no longer stops the timeline rendering. ([#590](https://github.com/danjdewhurst/story-skills/issues/590))
 

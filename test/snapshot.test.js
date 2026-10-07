@@ -4,9 +4,9 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { createEntity, createStoryProject } from "../src/story.js";
-import { listSnapshots, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "../src/snapshots.js";
+import { listSnapshots, nextSnapshotId, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "../src/snapshots.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { CHMOD_IGNORED, git, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, git, makeTempDir, memoryIo, treeSnapshot, whileWriting, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -178,10 +178,66 @@ describe("story snapshot", () => {
     expect(fs.readFileSync(path.join(dir, "snapshot.json"), "utf8")).toBe(manifest);
     expect(fs.existsSync(path.join(dir, "chapters", "chapter-02.md"))).toBe(true);
     expect(fs.readFileSync(path.join(dir, "chapters", "chapter-01.md"), "utf8")).toContain("First paragraph.");
-    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["draft"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "draft"]);
 
     expect(invoke(cwd, ["snapshot", "fresh", "--path", root]).code).toBe(3);
-    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["draft"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "draft"]);
+  });
+
+  test("keeps each file's permissions, and keeps .snapshots/ out of git unless its .gitignore is deleted", () => {
+    const { cwd, root } = project();
+    const notes = path.join(root, "research", "private.md");
+    writeMarkdown(notes, "title: Private");
+    fs.appendFileSync(path.join(root, ".gitignore"), "research/private.md\n");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    if (!CHMOD_IGNORED) {
+      fs.chmodSync(notes, 0o600);
+      fs.chmodSync(chapter, 0o640);
+      fs.chmodSync(path.join(root, "chapters", "chapter-02.md"), 0o444);
+    }
+    expect(invoke(cwd, ["snapshot", "draft", "--path", root]).code).toBe(0);
+    const dir = path.join(root, ".snapshots", "draft");
+    if (!CHMOD_IGNORED) {
+      expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o600);
+      expect(fs.statSync(path.join(dir, "chapters", "chapter-01.md")).mode & 0o777).toBe(0o640);
+      // Read-only for everyone, but its owner can replace it.
+      expect(fs.statSync(path.join(dir, "chapters", "chapter-02.md")).mode & 0o777).toBe(0o644);
+      fs.chmodSync(notes, 0o640);
+      expect(invoke(cwd, ["snapshot", "draft", "--force", "--path", root]).code).toBe(0);
+      expect(fs.statSync(path.join(dir, "research", "private.md")).mode & 0o777).toBe(0o640);
+    }
+    const ignore = path.join(root, ".snapshots", ".gitignore");
+    expect(fs.readFileSync(ignore, "utf8")).toBe("# Snapshots copy every markdown file, including ones git ignores, so git\n# ignores them. Delete this file to commit your snapshots.\n*\n");
+    git(root, "init", "-q");
+    git(root, "add", "-A", "--", ".");
+    const tracked = git(root, "ls-files");
+    expect(tracked).toContain("chapters/chapter-01.md");
+    expect(tracked).not.toContain("private.md");
+    expect(tracked).not.toContain(".snapshots");
+    // A .snapshots/ that is already there is left as the writer keeps it.
+    fs.rmSync(ignore);
+    expect(invoke(cwd, ["snapshot", "second", "--path", root]).code).toBe(0);
+    expect(fs.existsSync(ignore)).toBe(false);
+  });
+
+  test("numbers a command's own snapshot past the highest taken, reading only a real .snapshots/", () => {
+    const { root } = project();
+    const folder = path.join(root, ".snapshots");
+    expect(nextSnapshotId(root, "before-import-")).toBe("before-import-1");
+    // 15 digits count; a longer number is passed over, but not its name.
+    for (const name of ["before-import-2", "before-import-09", "before-import-x", "before-import-999999999999999", "before-import-1000000000000000", "before-import-99999999999999999999999", "before-restore-a-7"]) {
+      fs.mkdirSync(path.join(folder, name), { recursive: true });
+    }
+    expect(nextSnapshotId(root, "before-import-")).toBe("before-import-1000000000000001");
+    expect(nextSnapshotId(root, "before-restore-a-")).toBe("before-restore-a-8");
+    const outside = makeTempDir();
+    fs.mkdirSync(path.join(outside, "before-import-5"));
+    fs.rmSync(folder, { recursive: true });
+    fs.symlinkSync(outside, folder, "junction");
+    expect(nextSnapshotId(root, "before-import-")).toBe("before-import-1");
+    fs.rmSync(folder);
+    fs.writeFileSync(folder, "");
+    expect(nextSnapshotId(root, "before-import-")).toBe("before-import-1");
   });
 
   test("a name in a script with no folder spelling needs --id, and compare finds it by name or id", () => {
@@ -298,7 +354,7 @@ describe("story snapshot --force", () => {
     expect(result.err).toContain(`Cannot create the project lock ${LOCK_FILE} (permission denied)`);
     // Not copied aside and put back: the same folder, and no backup left.
     expect(fs.statSync(folder).ino).toBe(inode);
-    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["first"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "first"]);
   });
 });
 
@@ -435,7 +491,7 @@ describe("story snapshot --restore", () => {
     const incomplete = invoke(cwd, ["snapshot", "--restore", "by-hand", "--path", root]);
     expect(incomplete.code).toBe(4);
     expect(incomplete.err).toContain("Cannot restore snapshot by-hand: .snapshots/by-hand has no story.md");
-    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["by-hand", "draft-one"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "by-hand", "draft-one"]);
     expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(true);
 
     // A folder the snapshot writes into that is now a project of its own.
@@ -445,7 +501,7 @@ describe("story snapshot --restore", () => {
     expect(nested.err).toContain("spinoff/notes.md would be written into spinoff/, which is now a story project of its own. Nothing was changed");
     // The preview copy has no nested projects, so it checks the real one.
     expect(invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--path", root]).err).toContain("which is now a story project of its own");
-    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["by-hand", "draft-one"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "by-hand", "draft-one"]);
   });
 
   test("refuses to write through a symlinked folder, such as one into another snapshot", () => {
@@ -458,7 +514,27 @@ describe("story snapshot --restore", () => {
     expect(refused.code).toBe(4);
     expect(refused.err).toContain("Cannot restore snapshot draft: notes/ is a symlink, and notes/idea.md would be written through it. Nothing was changed");
     expect(fs.existsSync(path.join(root, ".snapshots", "other", "idea.md"))).toBe(false);
-    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual(["draft", "other"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "draft", "other"]);
+  });
+
+  test("refuses a .snapshots that is a symlink or a file before changing anything", () => {
+    const outside = makeTempDir();
+    writeMarkdown(path.join(outside, "draft", "story.md"), "title: Elsewhere");
+    for (const [make, message] of [
+      [(folder) => fs.symlinkSync(outside, folder, "junction"), "Refusing to use symlinked project directory"],
+      [(folder) => fs.writeFileSync(folder, ""), "Project path is not a directory"]
+    ]) {
+      const { cwd, root } = project();
+      make(path.join(root, ".snapshots"));
+      const before = treeSnapshot(root);
+      for (const argv of [["snapshot", "--restore", "draft", "--dry-run", "--path", root], ["snapshot", "--restore", "draft", "--path", root]]) {
+        const refused = invoke(cwd, argv);
+        expect(refused.code).toBe(3);
+        expect(refused.err).toContain(message);
+      }
+      expect(treeSnapshot(root)).toEqual(before);
+      expect(fs.readdirSync(outside)).toEqual(["draft"]);
+    }
   });
 
   test("--dry-run skips another snapshot's symlinked manifest, as --list does", () => {
@@ -627,7 +703,7 @@ describe("story snapshot --restore", () => {
     expect(() => restoreSnapshot(root, { name: "base", identity: blurred })).toThrow("Cannot restore snapshot base: the project finds notes/Notes.md under another spelling, but cannot tell which of its files that is (a.md, b.md). Nothing was changed");
     const ghost = (file) => (path.basename(file) === "Notes.md" ? "ghost" : identity(file));
     expect(() => restoreSnapshot(root, { name: "base", identity: ghost })).toThrow("cannot tell which of its files that is. Nothing was changed");
-    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["base"]);
+    expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "base"]);
   });
 
   test.skipIf(IGNORES_CASE)("refuses a snapshot whose two spellings are one file in the project (#581)", () => {

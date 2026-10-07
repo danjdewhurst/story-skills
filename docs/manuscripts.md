@@ -239,7 +239,7 @@ The [`story-maintenance`](../skills/story-maintenance/SKILL.md) skill follows an
 | `--theme <name>`, `--themes <a,b>` | Themes for `story.md`. `--theme` is repeatable. |
 | `--pov <style>`, `--tense <tense>` | Written to `story.md`. |
 | `--synopsis <text>` | Replaces the placeholder synopsis in `story.md`. |
-| `--force` | Import into a directory that already exists. See below. |
+| `--force` | Import into a directory that already exists, replacing its chapters after saving them in snapshot `before-import-<n>`. See below. |
 
 Import uses `--dir`, not `--path`. Passing `--path` is an error:
 
@@ -252,15 +252,25 @@ import uses --dir for the target directory. --path is the project root for other
 Without `--force`, import refuses a target directory that already exists:
 
 ```text
-~/stories/the-salt-road already exists. Use --force to import into it: --force deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. Commit or back up the project first.
+~/stories/the-salt-road already exists. Use --force to import into it: --force saves the project as snapshot before-import-<n>, then deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. story snapshot --restore before-import-<n> puts the old chapters back.
 ```
 
 With `--force`, import adds any missing starter files and leaves other existing files alone, with one exception: it **deletes every `chapter-NN.md` file in `chapters/`** before writing the imported chapters.
 
+Before it deletes a chapter, import saves the project as a [snapshot](cli-reference.md#snapshot) named `before-import-<n>`, numbered one past the last (`before-import-1`, then `before-import-2`), and prints the command that puts the old chapters back:
+
+```text
+Saved the project in snapshot before-import-1 (.snapshots/before-import-1/) before replacing its chapters
+Imported 18 chapters (91200 words) into /home/me/stories/the-salt-road
+Undo it: story snapshot --restore before-import-1 --path the-salt-road
+```
+
+The restore deletes any markdown file the snapshot does not have, such as a chapter or starter file the import added, so run it with `--dry-run` first. A folder with no chapter files to replace gets no snapshot. A `chapter-NN.MD` file, or a symlink or folder named like a chapter, is refused before anything changes, since the snapshot could not keep it. If the snapshot cannot be saved, such as when a chapter is not UTF-8 text, import stops before it deletes any chapter, and if anything fails after it is saved, the error names the snapshot and the restore command. `--dry-run` names the snapshot and lists its files. `.snapshots/` gets a `.gitignore` when the snapshot makes it, so git leaves the copies out (see [`story snapshot`](cli-reference.md#snapshot)).
+
 Before it changes anything, import checks that the project's other files parse, as `story reindex` would; if one does not, it names the file and leaves the project as it was. It holds the [project lock](cli-reference.md#where-commands-write) from reading the project's language, count unit, and style sheet to the final reindex, so while another story command is changing the project it refuses with exit code 4 and changes nothing. An existing `story.md` is kept, so a different `--title` or another `story.md` option is not applied, and import says so in a warning. It also prints a note to run `story links`, since scenes, bible entries, and continuity files may name chapters that are gone or changed.
 
 > [!WARNING]
-> Chapter frontmatter you filled in (POV, locations, characters, status) is lost with the old chapter files. Scene files, bible entries, and `matter/` pages are kept, but scenes may now point at chapters with different content. Commit or back up the project before a forced import. The `story-maintenance` skill asks you before it runs one.
+> Chapter frontmatter you filled in (POV, locations, characters, status) is gone from the project with the old chapter files; only the `before-import-<n>` snapshot keeps it. Scene files, bible entries, and `matter/` pages are kept, but scenes may now point at chapters with different content. The `story-maintenance` skill asks you before it runs a forced import.
 
 ### Import limits and safety
 
@@ -1475,7 +1485,9 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `No markdown or text files found in <dir>` | The folder has no `.md`, `.markdown`, or `.txt` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
 | `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a `.docx` or other zip, a binary file, or text in another encoding | Save or export it as UTF-8 markdown or plain text. |
-| `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or back up the project and use `--force`, which replaces its chapters. |
+| `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or use `--force`, which replaces its chapters after saving them in snapshot `before-import-<n>`. |
+| `... The import stopped before deleting any chapter: it could not save the project as snapshot before-import-<n> first` | `import --force` could not save the project before deleting its chapters, often because a chapter is not UTF-8 text | Fix the problem the message names, then import again. No chapter was deleted. |
+| `Cannot import: chapters/<file> ..., so the snapshot import --force takes before replacing the chapters cannot keep it, ...` | A `chapter-NN.MD` file, or a symlink or folder named like a chapter, is in `chapters/` | Rename, move, or delete it, then import again. Nothing was changed. |
 | `<path> is not a story project: missing story.md` | The project path is wrong | Pass the folder that contains `story.md`. |
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |

@@ -218,12 +218,21 @@ export const COMMANDS = [
         return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: importDiagnostics(result), dryRun, changes });
       }
       if (dryRun) {
+        if (result.snapshot !== null) {
+          io.stdout.write(`Importing would first save the project in snapshot ${result.snapshot.id} (${result.snapshot.dir}/); ${result.snapshot.restore} would undo it\n`);
+        }
         io.stdout.write(formatPreview("import", changes));
         reportImportNotes(io, result);
         return 0;
       }
       const [length, noun] = result.characters === undefined ? [result.words, "word"] : [result.characters, "character"];
+      if (result.snapshot !== null) {
+        io.stdout.write(`Saved the project in snapshot ${result.snapshot.id} (${result.snapshot.dir}/) before replacing its chapters\n`);
+      }
       io.stdout.write(`Imported ${result.chapters} ${result.chapters === 1 ? "chapter" : "chapters"} (${length} ${length === 1 ? noun : `${noun}s`}) into ${result.root}\n`);
+      if (result.snapshot !== null) {
+        io.stdout.write(`Undo it: ${result.snapshot.restore}\n`);
+      }
       reportImportNotes(io, result);
       if (result.candidates.length > 0) {
         io.stdout.write("Entity candidates (review, then create with story add):\n");
@@ -1243,12 +1252,14 @@ function outputDryRun(parsed, command) {
 
 // story import --dry-run: the import runs on a copy of the folder it would
 // fill (previewNewProject), since it reindexes the chapters it writes. The
-// source is read where it is. Returns { result, changes }.
+// source is read where it is. `preview` names the folder the copy stands
+// for, so the snapshot --force takes is numbered, and its restore command
+// written, as in the real run. Returns { result, changes }.
 function previewImport(options) {
   const { cwd } = options;
   const source = String(options.source ?? "").trim();
   const target = newProjectRoot({ title: options.title, cwd, dir: options.dir });
-  const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path.resolve(cwd, source), dir });
+  const run = (dir) => importManuscript({ ...options, source: source === "" || source === STDIN_ARG ? source : path.resolve(cwd, source), dir, preview: { root: target } });
   // Without a folder the import is refused before it writes anything.
   return target === null ? planChanges(cwd, () => run(options.dir)) : previewNewProject(target, run);
 }
@@ -1458,7 +1469,8 @@ function newProjectData(result) {
 
 // story import --json: newProjectData, then the chapters written, their
 // length in the book's count unit (characterCount is null for a book
-// counted in words), and the entity candidates.
+// counted in words), the entity candidates, and the snapshot --force took
+// before replacing the chapters (null when it took none).
 function importData(result) {
   const characters = result.characters !== undefined;
   return {
@@ -1467,7 +1479,8 @@ function importData(result) {
     unit: characters ? "characters" : "words",
     words: result.words,
     characterCount: characters ? result.characters : null,
-    candidates: result.candidates
+    candidates: result.candidates,
+    snapshot: result.snapshot
   };
 }
 
