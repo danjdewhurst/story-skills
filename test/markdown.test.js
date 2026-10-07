@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, countTodoMarkers, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, characterCount, countTodoMarkers, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
 import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
@@ -421,5 +421,67 @@ describe("countTodoMarkers", () => {
     // Link text is printed; a destination, link title, URL, or tag is not.
     expect(countTodoMarkers("[TODO: the sequel](https://example.com) and [TODO: notes][ref]\n\n[ref]: https://example.com/[TODO]")).toBe(2);
     expect(countTodoMarkers("[notes](notes.md \"[TODO: title]\") [site](https://example.com/[TODO]) https://example.com/[TODO] <span title=\"[TODO]\">x</span>")).toBe(0);
+  });
+});
+
+describe("inline markdown edge cases (#592)", () => {
+  // Each line as pandoc's CommonMark reader (pandoc -f commonmark) reads it,
+  // with each link printed as its text and each image left out. Code spans,
+  // escapes, and autolinks stay as written for the builds to read.
+  const linkCases = [
+    ["[Foo](https://en.wikipedia.org/wiki/Foo_(bar))", "Foo"],
+    ["[Foo](https://x.com \"Title (x)\")", "Foo"],
+    ["[Aside](not a link)", "[Aside](not a link)"],
+    ["`[x](y)` and ``[a](b)``", "`[x](y)` and ``[a](b)``"],
+    ["[a [b] c](d)", "a [b] c"],
+    ["[a [b](c) d](e)", "[a b d](e)"],
+    ["![x [a](b) y](c) after", " after"],
+    ["[![cover](a.png)](b)", ""],
+    ["[a](<b c>) [d](<e\nf>)", "a [d](<e\nf>)"],
+    ["[a](b\n\"title\") [c](d 'e') [f](g (h))", "a c f"],
+    ["[a](b (t) [c](d ((e)))", "[a](b (t) [c](d ((e)))"],
+    ["[a]() [b](<>)", "a b"],
+    ["[a](\\(b) [c](d\\))", "a c"],
+    ["[a](foo(and(bar)) [b](foo\\(and\\(bar\\))", "[a](foo(and(bar)) b"],
+    ["[a](b 't' x)", "[a](b 't' x)"],
+    ["[a]\n(b)", "[a]\n(b)"],
+    ["[a\n\nb](c)", "[a\n\nb](c)"],
+    ["[a](b \"t\n\nt\")", "[a](b \"t\n\nt\")"],
+    ["> [a](b\n> \"t\")", "> a"],
+    ["[not a `link](/foo`)", "[not a `link](/foo`)"],
+    ["<http://a.com/[x](y)>", "<http://a.com/[x](y)>"],
+    ["\\[a](b) [a\\](b) \\![c](d)", "\\[a](b) [a\\](b) \\!c"],
+    [`[a](${"(".repeat(32)}x${")".repeat(32)}) [b](${"(".repeat(33)}x${")".repeat(33)})`, `a [b](${"(".repeat(33)}x${")".repeat(33)})`],
+    ["```\n[a](b)\n```\n[c](d)", "```\n[a](b)\n```\nc"]
+  ];
+
+  test("links read as CommonMark reads them: parentheses in pairs, titles, and nothing in code", () => {
+    for (const [markdown, plain] of linkCases) {
+      expect({ markdown, plain: plainLinks(markdown) }).toEqual({ markdown, plain });
+    }
+  });
+
+  test("word and character counts read links, code, and character references as builds print them", () => {
+    // A code span prints as written, and so does text that is not a link.
+    expect(splitWords("`[x](y)` [Aside](not a link) [Foo](https://x.com/Foo_(bar))")).toEqual(["x", "y", "Aside", "not", "a", "link", "Foo"]);
+    expect(splitWords("He left&mdash;then&nbsp;stopped &#8212; &#x2014; &amp; &madeup;")).toEqual(["He", "left", "then", "stopped", "madeup"]);
+    // A reference to U+E000, which word counts use as a placeholder, is a
+    // space like the character itself.
+    expect(splitWords("one &#xE000; two  three https://x.com")).toEqual(["one", "two", "three", "https://x.com"]);
+    expect(characterCount("&mdash;&#x4E00;&nbsp;&#12354;")).toBe(3);
+  });
+
+  test("link destinations, titles, and autolinks are read in linear time", () => {
+    // Unclosed parentheses nested in each destination: each `](` once read
+    // them again, up to 32 deep.
+    expectComparableTime(plainLinks, `[a](${"(".repeat(31)}x`.repeat(8000), `[a]x${"(".repeat(31)}x`.repeat(8000));
+    // Destinations nested in each other that all close.
+    expectLinearTime(plainLinks, (n) => `${"[a](".repeat(n / 8)}x${")".repeat(n / 8)}`, { length: 256000 });
+    // Titles and <destinations> that never close.
+    expectComparableTime(plainLinks, "[a](b \"".repeat(64000), "[a]xb \"".repeat(64000));
+    expectComparableTime(plainLinks, "[a](<".repeat(64000), "[a]x<".repeat(64000));
+    // An email autolink's domain that never closes: a pattern repeating its
+    // labels backtracked over each of them.
+    expectLinearTime(plainLinks, (n) => `<a@${"b.".repeat(n / 2)}`, { length: 256000 });
   });
 });

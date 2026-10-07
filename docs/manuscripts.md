@@ -1354,11 +1354,13 @@ The markdown export copies prose as written, and the narration script nearly doe
 | `<!-- comment -->` | Left out, as it is from word counts and every other build format |
 | Three or more `-`, `*`, `_`, or `~` on a line of their own, optionally spaced (`---`, `***`, `* * *`, `~~~`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` on a line of its own | Scene break, written as `* * *`. The line ends the paragraph above it even with no blank line between them, as a CommonMark thematic break does, unless it is indented by four columns or more, or is in a fenced code block: then it is text, as in CommonMark. A `---` right under a line of text is a scene break here too, but CommonMark, and so a markdown viewer or the markdown export, reads it as an underline that makes the text above a heading: `story validate` warns with `ambiguous-scene-break`, and a blank line above the `---` settles it. |
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph, also in the narration script. A heading with no text (`## `) is dropped. |
-| `` `code` `` spans and `` ``` `` fenced code | The code as plain text, without backticks or fence lines, and with no emphasis inside a span (the `.shunn.md` build keeps the backticks) |
-| `[text](target)` links and `![alt](image)` images | The link's text only; images are left out |
+| `` `code` `` spans and `` ``` `` fenced code | The code as plain text, without backticks or fence lines, and with no emphasis, link, or character reference read inside a span (the `.shunn.md` build keeps the backticks) |
+| `[text](target)` links and `![alt](image)` images | The link's text only; images are left out. Links are read as CommonMark reads them: the target may hold parentheses in pairs and a title, so `[Foo](https://en.wikipedia.org/wiki/Foo_(bar))` and `[Foo](https://example.com "Title (x)")` both print `Foo`. Text that is not a link, such as `[Aside](not a link)`, prints as written, and so does a link inside code. |
+| `&mdash;`, `&nbsp;`, `&#8212;`, `&#x2014;`, and other HTML character references | The character the reference names (`—`, a no-break space), as in CommonMark: any name in the HTML5 list, or a decimal or hexadecimal number, ending in `;`. Anything else, such as `&copy` without the `;`, prints as written. Word and character counts read references the same way; the `.shunn.md` build keeps them as written. |
+| `<https://example.com>` and `<name@example.com>` autolinks | The address, without the angle brackets (the `.shunn.md` build keeps them) |
 | `>` blockquote paragraphs | A block quotation, indented on both sides: `<blockquote>` in EPUB, HTML, and print, the `Quote` style in DOCX, a half-inch block indent in the Shunn DOCX, and kept `>` markers in the `.shunn.md` build. Consecutive quoted paragraphs share one quotation, and nested `>>` markers are read as one level. |
 
-Lists and other markdown are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
+Lists, tables, reference-style links (`[text][label]`), and HTML tags other than comments are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
 
 ### Typesetting other scripts
 

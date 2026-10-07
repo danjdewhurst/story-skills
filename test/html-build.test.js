@@ -131,6 +131,22 @@ describe("html and print builds", () => {
     expectLinearTime(paragraphs, (n) => `# a${" ".repeat(n)}b`);
   });
 
+  test("character references print as their characters and autolinks as their addresses (#592)", () => {
+    const paragraphs = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs;
+    const [paragraph] = paragraphs("He left&mdash;then&nbsp;stopped &amp; wrote to <sera@example.com> from <https://example.com/a_b_c>.");
+    expect(paragraph.html).toBe("He left\u2014then\u00a0stopped &amp; wrote to sera@example.com from https://example.com/a_b_c.");
+    // The review copy's labels match the printed text, on one line.
+    expect(paragraph.text).toBe("He left\u2014then stopped & wrote to sera@example.com from https://example.com/a_b_c.");
+    // A reference is text, never markup, and nothing in a code span or an
+    // autolink is read as one; an escaped & and an unknown name stay as written.
+    expect(inlineHtml("&#42;not emphasis&#42; `&amp;` <https://x.com/?a=1&amp;b=*2*> \\&amp; &madeup; &copy")).toBe("*not emphasis* &amp;amp; https://x.com/?a=1&amp;amp;b=*2* &amp;amp; &amp;madeup; &amp;copy");
+    // Not autolinks: a space inside, no scheme, a bad email domain, or a
+    // one-letter scheme. An autolink holds no emphasis.
+    expect(inlineHtml("<https://a b> <a.b> <a@b..c> <a:b> *<ab:c*d>*")).toBe("&lt;https://a b&gt; &lt;a.b&gt; &lt;a@b..c&gt; &lt;a:b&gt; <em>ab:c*d</em>");
+    expectLinearTime(inlineHtml, (n) => `<a@${"b.".repeat(n / 2)}`);
+    expectLinearTime(inlineHtml, (n) => "&#1".repeat(n / 3));
+  });
+
   test("backtick runs of many lengths build in linear time (#587)", () => {
     const html = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs.map((paragraph) => paragraph.html);
     expect(html("```x `y` *z* `` *w*")).toEqual(["```x y <em>z</em> `` <em>w</em>"]);

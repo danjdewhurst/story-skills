@@ -9,7 +9,8 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { characterReference } from "./entities.js";
+import { autolinkEnd, breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { creditLines, publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -813,7 +814,9 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
 // nested (***both***, *a **b** c*), following the CommonMark delimiter rules:
 // a run opens when it is left-flanking and closes when right-flanking, an
 // underscore inside a word is literal, and a backslash escapes punctuation.
-// Returns runs of { text, strong, em }.
+// A character reference (`&mdash;`, `&#8212;`) is the character it names,
+// and an autolink (`<https://example.com>`) its address, both as plain text,
+// so `&#42;` is never emphasis. Returns runs of { text, strong, em }.
 function inlineRuns(text) {
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
@@ -845,6 +848,18 @@ function inlineRuns(text) {
         buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
         index = end;
       }
+      continue;
+    }
+    const reference = char === "&" ? characterReference(text, index) : null;
+    if (reference !== null) {
+      buffer += reference.value;
+      index += reference.length;
+      continue;
+    }
+    const autolink = char === "<" ? autolinkEnd(text, index) : -1;
+    if (autolink !== -1) {
+      buffer += text.slice(index + 1, autolink - 1);
+      index = autolink;
       continue;
     }
     if (char !== "*" && char !== "_") {
@@ -958,8 +973,8 @@ function canPairEmphasis(opener, closer) {
   return opener.delimiter === closer.delimiter && !ruleOfThree;
 }
 
-// Inline markdown (emphasis, code spans, hard breaks) as HTML, as the
-// review copy sets a paragraph.
+// Inline markdown (emphasis, code spans, character references, autolinks,
+// hard breaks) as HTML, as the review copy sets a paragraph.
 export function inlineHtml(text) {
   return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
 }
@@ -992,8 +1007,8 @@ export const LINE_BREAK = "\uE001";
 // does (see breaksParagraph); a `---` right under a line of text is a break
 // too, not the setext heading CommonMark reads (story validate warns, see
 // setextSceneBreakLines). Fence lines go and the code stays, with no breaks
-// in it; links print as their text and images are left out, as word counts
-// treat them. A build that indents first lines itself passes `ownIndent`,
+// in it; outside code, links print as their text and images are left out,
+// as word counts treat them (see plainLinks). A build that indents first lines itself passes `ownIndent`,
 // and a paragraph's typed indent (the ideographic space a Japanese
 // paragraph opens with) goes, so the two never add up; the other builds
 // keep it as the paragraph's only indent.
@@ -1038,7 +1053,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
   };
   // Each line, and whether it is code: closed backtick fences lose their
   // fence lines, and the code between them has no breaks.
-  const source = splitFences(markdown.replace(/\r\n?/g, "\n")).flatMap((part) => plainLinks(part.fenced ? withoutFenceMarkers(part.text) : part.text)
+  const source = splitFences(markdown.replace(/\r\n?/g, "\n")).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text))
     .split("\n")
     .map((line) => ({ line, code: part.fenced })));
   for (const { line: sourceLine, code } of source) {

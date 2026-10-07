@@ -1,3 +1,4 @@
+import { characterReference } from "./entities.js";
 import { fillLabel } from "./languages/index.js";
 import { formatNumeral } from "./numerals.js";
 import { WORD_PATTERN, wordSpans } from "./words.js";
@@ -126,44 +127,232 @@ const EMPHASIS_UNDERSCORES = /(?<![\p{L}\p{M}\p{N}_])_+|(?<!_)_+(?![\p{L}\p{N}_]
 const URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 
 // A link as its visible text, and no image, which is how every build prints
-// them and how words are counted: images first, then links, as
-// /!\[[^\]]*\]\([^)]*\)/g and /\[([^\]]*)\]\([^)]*\)/g replace them, at any
-// length.
+// them and how words are counted. Links and images are CommonMark inline
+// ones: the text may hold brackets in pairs, the destination parentheses in
+// pairs (`[Foo](https://en.wikipedia.org/wiki/Foo_(bar))`), and a title may
+// follow it (`[Foo](https://x.com "Title (x)")`). Text that is not one, such
+// as `[Aside](not a link)`, stays as written, and so do code spans, closed
+// backtick fences, autolinks, and backslash-escaped brackets.
 export function plainLinks(text) {
-  return withoutLinks(withoutLinks(String(text), "!["), "[");
+  return splitFences(String(text)).map((part) => (part.fenced ? part.text : withoutLinks(part.text))).join("");
 }
 
-// Each `opener` (`![` or `[`) whose text runs to the first `]`, followed
-// by `(` and a destination that runs to the first `)`, replaced by its text,
-// or by nothing for an image. The next `]` is found again only once
-// passed, a `)` that is found ends a link and the scan goes on after it,
-// and a search that fails ends the scan, so a long run of unclosed `[` or
-// `(` stays linear.
-function withoutLinks(source, opener) {
+// ASCII punctuation, which a backslash escapes.
+const ESCAPABLE = /[!-/:-@[-`{-~]/;
+// A line of nothing but spaces, tabs, and block quote markers, which ends a
+// paragraph. Each try reads one line, so a search stays linear.
+const BLANK_LINE = /\n[ \t\r>]*(?:\n|$)/g;
+// An autolink: a scheme of 2 to 32 characters, `:`, and no space, control
+// character, `<`, or `>`; or an email address, as CommonMark reads them,
+// with the labels of its domain (group 1) checked apart (see autolinkEnd).
+// No try reads past the next `<`, so the tries at each `<` stay linear.
+const AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
+const DOMAIN_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+// How deep parentheses nest in a link destination, as in cmark, markdown-it,
+// and Pandoc: a deeper one is not a link.
+const MAX_DESTINATION_PARENS = 32;
+
+// The end of the autolink that starts at `index` (just past its `>`), or -1.
+// An email domain's labels are checked one by one: a pattern that repeats
+// a label backtracks quadratically on a long run of `b.b.b.`.
+export function autolinkEnd(text, index) {
+  AUTOLINK.lastIndex = index;
+  const match = AUTOLINK.exec(text);
+  if (match === null || (match[1] !== undefined && !match[1].split(".").every((label) => DOMAIN_LABEL.test(label)))) {
+    return -1;
+  }
+  return index + match[0].length;
+}
+
+// The source with each link replaced by its text and each image dropped, in
+// one pass as CommonMark's "look for link or image" reads them: a `]` closes
+// the nearest open `[` or `![`, and makes a link when an inline destination
+// follows it; a link's text cannot hold another link, so the `[` before it
+// can no longer open one. Each paragraph is read apart. Code spans and
+// autolinks are skipped whole, and a backslash-escaped character is text.
+// A destination steps over each parenthesised group in it at once (see
+// parenGroups), so one that fails is never read again by the `](` of a
+// link nested in it, and a title is read only up to the next quote or
+// parenthesis of its kind: a long run of unclosed `[`, `![`, `](`, or
+// backticks stays linear.
+function withoutLinks(source) {
+  // [start, end] of the markup to drop: a link's `[` and its `](...)`, or a
+  // whole image.
+  const cuts = [];
+  const openers = [];
+  // A `[` below this index in `openers` holds a link that has closed, so
+  // it opens nothing (a link's text cannot hold a link); a `![` still
+  // opens an image.
+  let inactive = 0;
+  let paragraphStart = 0;
+  let paragraphEnd = -1;
+  let closeSpan = null;
+  let groups = null;
+  for (let index = 0; index < source.length;) {
+    if (index > paragraphEnd) {
+      BLANK_LINE.lastIndex = index;
+      paragraphStart = index;
+      paragraphEnd = BLANK_LINE.exec(source)?.index ?? source.length;
+      openers.length = 0;
+      inactive = 0;
+      closeSpan = codeSpanCloser(source, paragraphEnd);
+      groups = null;
+    }
+    const character = source[index];
+    const autolink = character === "<" ? autolinkEnd(source, index) : -1;
+    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+      index += 2;
+    } else if (character === "`") {
+      let run = index;
+      while (source[run] === "`") {
+        run += 1;
+      }
+      const end = closeSpan(index, run - index);
+      index = end === -1 ? run : end;
+    } else if (autolink !== -1) {
+      index = autolink;
+    } else if (character === "[" || (character === "!" && source[index + 1] === "[")) {
+      inactive = Math.min(inactive, openers.length);
+      openers.push({ start: index, image: character === "!" });
+      index += character === "!" ? 2 : 1;
+    } else if (character === "]" && openers.length > 0) {
+      const opener = openers.pop();
+      let end = -1;
+      if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
+        groups ??= parenGroups(source, paragraphStart, paragraphEnd);
+        end = inlineLinkEnd(source, index + 1, paragraphEnd, groups);
+      }
+      if (end === -1) {
+        index += 1;
+        continue;
+      }
+      if (opener.image) {
+        cuts.push([opener.start, end]);
+      } else {
+        cuts.push([opener.start, opener.start + 1], [index, end]);
+        inactive = openers.length;
+      }
+      index = end;
+    } else {
+      index += 1;
+    }
+  }
+  // Links close in text order, but an image closes after the links in its
+  // text, so the cuts are put in order and joined where they overlap.
+  cuts.sort((left, right) => left[0] - right[0]);
   let result = "";
-  let last = 0;
-  let close = -2;
-  for (let start = source.indexOf(opener); start !== -1;) {
-    const textStart = start + opener.length;
-    if (close < textStart) {
-      close = source.indexOf("]", textStart);
-      if (close === -1) {
-        break;
+  let position = 0;
+  for (const [start, end] of cuts) {
+    if (end > position) {
+      result += source.slice(position, Math.max(start, position));
+      position = end;
+    }
+  }
+  return result + source.slice(position);
+}
+
+// Where each parenthesised group of a paragraph ends, for the link
+// destinations in it: a map from the index of each `(` to the index just
+// past the `)` that closes it, or to -1 when no destination can hold the
+// group, because it holds a space or control character or nests deeper
+// than MAX_DESTINATION_PARENS. A `(` that nothing closes is left out. One
+// pass, with a stack of the groups still open; a backslash escapes the
+// character after it, as in a destination.
+function parenGroups(source, start, end) {
+  const groups = new Map();
+  const open = [];
+  // The deepest nesting closed so far inside each open group.
+  const inner = [];
+  let lastSpace = -1;
+  for (let index = start; index < end; index += 1) {
+    const character = source[index];
+    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+      index += 1;
+    } else if (character === "(") {
+      open.push(index);
+      inner.push(0);
+    } else if (character === ")" && open.length > 0) {
+      const group = open.pop();
+      const depth = inner.pop() + 1;
+      groups.set(group, depth <= MAX_DESTINATION_PARENS && lastSpace < group ? index + 1 : -1);
+      if (inner.length > 0) {
+        inner[inner.length - 1] = Math.max(inner[inner.length - 1], depth);
+      }
+    } else if (character <= " " || character === "\x7f") {
+      lastSpace = index;
+    }
+  }
+  return groups;
+}
+
+// The end, just past its `)`, of the inline link destination and title that
+// open with the `(` at `open`, or -1 when no link does, all before `limit`
+// (the end of the paragraph). The destination is `<...>` on one line or a
+// run of characters other than spaces and control characters, with its
+// parentheses in pairs (`groups`, see parenGroups); the title, after a
+// space, is in `"`, `'`, or `()`. A backslash escapes the character after
+// it in either. Spaces, and one line break with the block quote markers
+// after it, may come between them.
+function inlineLinkEnd(source, open, limit, groups) {
+  const escaped = (index) => source[index] === "\\" && ESCAPABLE.test(source[index + 1] ?? "");
+  let index = skipLinkSpace(source, open + 1, limit);
+  if (source[index] === "<") {
+    for (index += 1; index < limit && source[index] !== ">"; index += escaped(index) ? 2 : 1) {
+      if (source[index] === "<" || source[index] === "\n") {
+        return -1;
       }
     }
-    if (source[close + 1] !== "(") {
-      start = source.indexOf(opener, start + 1);
-      continue;
+    if (index >= limit) {
+      return -1;
     }
-    const paren = source.indexOf(")", close + 2);
-    if (paren === -1) {
-      break;
+    index += 1;
+  } else {
+    while (index < limit) {
+      const character = source[index];
+      if (escaped(index)) {
+        index += 2;
+      } else if (character === "(") {
+        index = groups.get(index) ?? -1;
+        if (index === -1) {
+          return -1;
+        }
+      } else if (character === ")" || character <= " " || character === "\x7f") {
+        break;
+      } else {
+        index += 1;
+      }
     }
-    result += source.slice(last, start) + (opener === "[" ? source.slice(textStart, close) : "");
-    last = paren + 1;
-    start = source.indexOf(opener, last);
   }
-  return result + source.slice(last);
+  const destinationEnd = index;
+  index = skipLinkSpace(source, index, limit);
+  const quote = { "\"": "\"", "'": "'", "(": ")" }[source[index]];
+  if (index > destinationEnd && quote !== undefined) {
+    for (index += 1; index < limit && source[index] !== quote; index += escaped(index) ? 2 : 1) {
+      if (quote === ")" && source[index] === "(") {
+        return -1;
+      }
+    }
+    if (index >= limit) {
+      return -1;
+    }
+    index = skipLinkSpace(source, index + 1, limit);
+  }
+  return index < limit && source[index] === ")" ? index + 1 : -1;
+}
+
+// Past the spaces and tabs at `index`, and a line break among them with the
+// block quote markers that open the next line. A paragraph has no blank
+// line, so there is never a second break.
+function skipLinkSpace(source, index, limit) {
+  while (index < limit && (source[index] === " " || source[index] === "\t" || source[index] === "\r" || source[index] === "\n")) {
+    index += 1;
+    if (source[index - 1] === "\n") {
+      while (index < limit && (source[index] === " " || source[index] === "\t" || source[index] === ">")) {
+        index += 1;
+      }
+    }
+  }
+  return index;
 }
 
 // Heading markers removed, so an in-prose heading reads as a paragraph. A
@@ -799,80 +988,6 @@ const TASK_BOX = /^((?:[ \t]*>)*[ \t]*(?:[-+*]|\d{1,9}[.)])[ \t]+)\[[ xX]\](?=[ 
 const DEFINITION_INDENT = /^(?:[ \t]*>)* {0,3}\[/;
 const NO_LABELS = new Set();
 
-// Named HTML entities a manuscript is likely to hold, taken from the HTML
-// table: HTML 4's set (Latin-1, Greek, punctuation, arrows, maths, card
-// suits), the names of ASCII punctuation, and a few more spaces and
-// symbols. Each run is a first code point and the names of it and the code
-// points after it, `-` where one has no name here.
-const ENTITY_RUNS = [
-  [0x9, "Tab NewLine"],
-  [0x21, "excl quot num dollar percnt amp apos lpar rpar ast plus comma - period sol"],
-  [0x3a, "colon semi lt equals gt quest commat"],
-  [0x5b, "lsqb bsol rsqb Hat lowbar grave"],
-  [0x7b, "lcub verbar rcub"],
-  [0xa0, "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml"],
-  [0x152, "OElig oelig"],
-  [0x160, "Scaron scaron"],
-  [0x178, "Yuml"],
-  [0x192, "fnof"],
-  [0x2c6, "circ caron"],
-  [0x2d8, "breve dot ring ogon tilde dblac"],
-  [0x391, "Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa Lambda Mu Nu Xi Omicron Pi Rho - Sigma Tau Upsilon Phi Chi Psi Omega"],
-  [0x3b1, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigmaf sigma tau upsilon phi chi psi omega"],
-  [0x3d1, "thetasym upsih"],
-  [0x3d6, "piv"],
-  [0x2002, "ensp emsp"],
-  [0x2007, "numsp puncsp thinsp hairsp ZeroWidthSpace zwnj zwj lrm rlm hyphen - - ndash mdash horbar - - lsquo rsquo sbquo - ldquo rdquo bdquo - dagger Dagger bull - - nldr hellip"],
-  [0x2030, "permil - prime Prime"],
-  [0x2039, "lsaquo rsaquo"],
-  [0x203e, "oline"],
-  [0x2044, "frasl"],
-  [0x205f, "MediumSpace NoBreak"],
-  [0x20ac, "euro"],
-  [0x2111, "image"],
-  [0x2118, "weierp"],
-  [0x211c, "real"],
-  [0x2122, "trade"],
-  [0x2135, "alefsym"],
-  [0x2190, "larr uarr rarr darr harr"],
-  [0x21b5, "crarr"],
-  [0x21d0, "lArr uArr rArr dArr hArr"],
-  [0x2200, "forall - part exist - empty - nabla isin notin - ni"],
-  [0x220f, "prod - sum minus"],
-  [0x2217, "lowast - - radic - - prop infin - ang"],
-  [0x2227, "and or cap cup int"],
-  [0x2234, "there4"],
-  [0x223c, "sim"],
-  [0x2245, "cong - - asymp"],
-  [0x2260, "ne equiv - - le ge"],
-  [0x2282, "sub sup nsub - sube supe"],
-  [0x2295, "oplus - otimes"],
-  [0x22a5, "perp"],
-  [0x22c5, "sdot"],
-  [0x2308, "lceil rceil lfloor rfloor"],
-  [0x25ca, "loz"],
-  [0x2605, "starf star"],
-  [0x260e, "phone"],
-  [0x2640, "female - male"],
-  [0x2660, "spades - - clubs - hearts diams"],
-  [0x266d, "flat natur sharp"],
-  [0x2713, "check"],
-  [0x2717, "cross"],
-  [0x27e8, "lang rang"],
-];
-// Second names HTML gives some of them (`&AMP;` is `&amp;`).
-const ENTITY_ALIASES = {
-  AMP: "amp", COPY: "copy", GT: "gt", LT: "lt", QUOT: "quot", REG: "reg", bullet: "bull", dash: "hyphen", half: "frac12",
-  lbrace: "lcub", lbrack: "lsqb", midast: "ast", mldr: "hellip", rbrace: "rcub", rbrack: "rsqb", rdquor: "rdquo", rsquor: "rsquo",
-  vert: "verbar"
-};
-const NAMED_ENTITIES = new Map(ENTITY_RUNS.flatMap(([first, names]) => names.split(" ")
-  .map((name, index) => [name, String.fromCodePoint(first + index)])
-  .filter(([name]) => name !== "-")));
-for (const [alias, name] of Object.entries(ENTITY_ALIASES)) {
-  NAMED_ENTITIES.set(alias, NAMED_ENTITIES.get(name));
-}
-
 // The text as word and character counts read it: closed code fences
 // without their fence lines, and outside them, without markup syntax that
 // is not prose. Only the syntax goes, never the text it marks up: an HTML
@@ -999,17 +1114,11 @@ function markupText(markup) {
   return name === undefined || INLINE_ELEMENTS.has(name) || name.includes("-") ? "" : " ";
 }
 
-// The character an entity (`&amp;`, `&#8217;`, `&#x2019;`) stands for. A
-// name NAMED_ENTITIES lacks is left as written, as CommonMark prints a name
-// it does not know, and names are matched in their case, as HTML matches
-// them. As in HTML, a number that is not a character stands for U+FFFD.
+// The character an entity (`&amp;`, `&#8217;`, `&#x2019;`) stands for, as
+// builds read it (see characterReference). A name HTML lacks, or one in
+// the wrong case, is left as written, as CommonMark prints it.
 function entityText(entity) {
-  const name = entity.slice(1, -1);
-  if (name[0] !== "#") {
-    return NAMED_ENTITIES.get(name) ?? entity;
-  }
-  const code = /^#x/i.test(name) ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
-  return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "�" : String.fromCodePoint(code);
+  return characterReference(entity, 0)?.value ?? entity;
 }
 
 // A label as CommonMark matches labels: case and runs of spaces ignored.
