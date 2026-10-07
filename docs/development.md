@@ -434,7 +434,7 @@ Examples match schemas/story.schema.json: harbor-of-second-light, the-fall-of-th
 
 It fails when `validate` rejects the file and the schema accepts it, or the other way round.
 
-A few differences are deliberate and listed in `EXCEPTIONS` with the reason, such as a chapter number that must match its file name, an ISBN checksum, or an unquoted number read as an id. Add to that list only when one side cannot express the rule. Otherwise fix whichever side is wrong. When you add a field, add it to both, and the test will tell you if they disagree.
+A few differences are deliberate and listed in `EXCEPTIONS` with the reason: rules one side cannot express, such as a chapter number that must match its file name or an ISBN checksum; an unquoted number read as an id; and rules `story links` or `story continuity` owns, such as a state entry's `character`. Add to that list only when one side cannot express the rule or another command owns it. Otherwise fix whichever side is wrong, and keep the schema no stricter than `story check` (see [JSON schema](project-format.md#json-schema)). When you add a field, add it to both, and the test will tell you if they disagree.
 
 `bun run test` runs a fixed seed, and CI also runs seeds 1 to 5. To search further, run more iterations or another seed, and write what it finds to a file:
 
