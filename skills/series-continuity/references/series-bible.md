@@ -70,10 +70,11 @@ characters or events that do not exist in some book's files.
 - **When a fact first appears on the page**, give it a `fact` id with
   `learned-in` in that book, and carry it without `learned-in` into every
   later book.
-- **When a name changes**, run `story rename` with `--prose` (previewed
-  with `--dry-run`) in every book that defines the id, so each book's
-  chapter text follows, or keep the old id. Put a new title or epithet in
-  `aliases`, not `name`.
+- **When a name changes**, rename it with `story rename` and `--prose` in
+  every book that defines the id, so each book's chapter text follows, or
+  keep the old id. In each book, run it with `--dry-run` first, show the
+  user that book's replacements, and run it for real only once they
+  approve. Put a new title or epithet in `aliases`, not `name`.
 - **Before naming a new character** in a later book, run
   `story names '<name>' --path '<other-book>'` against each earlier book, so
   a minor character does not echo a major one.
