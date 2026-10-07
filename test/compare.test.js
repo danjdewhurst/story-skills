@@ -199,7 +199,7 @@ describe("compare (#73, #74, #216, #218)", () => {
       expect(result.out).toContain(`Compared with git ref ${ref}`);
     }
     expect(invoke(repo, ["compare", root, "--ref", "-x"]).err).toContain("Unsupported git ref: -x");
-    const missing = spawnSync(process.execPath, [path.resolve("bin/story.js"), "compare", root, "--ref", "HEAD"], { cwd: repo, encoding: "utf8", env: { ...process.env, PATH: "/nonexistent" } });
+    const missing = spawnSync(process.execPath, [path.join(import.meta.dir, "..", "bin", "story.js"), "compare", root, "--ref", "HEAD"], { cwd: repo, encoding: "utf8", env: { ...process.env, PATH: "/nonexistent" } });
     expect(missing.stderr).toContain("git, which was not found on PATH");
   });
 

@@ -8,7 +8,7 @@ import { MAX_STDIN_BYTES, decodeUtf8, readStdin, stdinText } from "../src/stdin.
 import { createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
-const BIN = path.resolve("bin/story.js");
+const BIN = path.resolve(import.meta.dir, "..", "bin", "story.js");
 
 // runCli in process, with `stdin` standing in for piped input.
 function invoke(cwd, argv, stdin) {
