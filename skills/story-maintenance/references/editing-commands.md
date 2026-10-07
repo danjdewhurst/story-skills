@@ -7,7 +7,7 @@ How the commands that create, rename, move, split, merge, and remove entity file
 `add`, `rename`, `move`, and `remove` for deterministic entity file operations when they fit the requested change.
 
 - `add` takes ids, not names, for reference options (`--planted chapter-01`, `--pov mara-quill`), and `add scene` needs its chapter to exist, so add the chapter first.
-- Ids stay ASCII kebab-case. Cyrillic and Greek names are transliterated (`story add character "Пётр"` writes `characters/petr.md` and keeps `name: Пётр`), but a name in a script with no transliteration table (`李明`) needs the id by hand: `story add character "李明" --id li-ming` writes `characters/li-ming.md`, and `story rename <kind> <id> "<New Name>" --id <new-id>` does the same on a rename. `--id` is refused for chapters and scenes, whose ids come from their numbers.
+- Ids stay ASCII kebab-case. Cyrillic and Greek names are transliterated (`story add character "Пётр"` writes `characters/petr.md` and keeps `name: Пётр`), but a name in a script with no transliteration table (`李明`) needs the id by hand: `story add character "李明" --id li-ming` writes `characters/li-ming.md`, and `story rename <kind> <id> '<New Name>' --id <new-id>` does the same on a rename. `--id` is refused for chapters and scenes, whose ids come from their numbers.
 - `remove chapter` refuses while scene files point at the chapter, so remove those scenes first; it walks back ledger statuses that relied on the chapter (planted to planned, paid-off to planted or planned, answered or resolved questions to open), so review the ledgers afterwards.
 
 ## move

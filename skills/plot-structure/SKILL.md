@@ -34,7 +34,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Which themes it serves
    - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, or as a `[event, character]` flow list; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
-6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc "{Name}" --type main --character {id} --theme {theme}`, then fill in the sections)
+6. Write the file using `references/arc-template.md` (or scaffold it with `story add arc '{Name}' --type main --character {id} --theme {theme}`, then fill in the sections)
 7. Save to `plot/arcs/{arc-name-kebab}.md`
 8. Update `plot/_index.md` arcs table
 9. Update theme tracking in `plot/_index.md`
@@ -96,12 +96,12 @@ For mystery clues, `story clues .` prints a clue-by-chapter fair-play matrix and
 
 For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/{promise-kebab}.md` with `status`, `planted`, `payoff`, `arcs`, and `characters`. For mystery or open-continuity tracking, maintain `continuity/questions/{question-kebab}.md`.
 
-Scaffold chapters and scenes with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story pacing .`.
+Scaffold chapters and scenes with `story add chapter '{Title}' --number {N} --pov {id} --arc {arc-id}` and `story add scene '{Title}' --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story pacing .`.
 
 When pacing or the outline calls for reordering, move the files with the CLI rather than renaming them, because chapter and scene ids encode their numbers and clues, promises, questions, and the timeline point at them:
 
 - Move a scene to another chapter with `story move scene chapter-{NN}-scene-{MM} --chapter chapter-{NN} --path .` (next free number; add `--scene {M}` to place it), or reorder within its chapter with `--scene {M}` alone
-- Renumber a chapter with `story move chapter chapter-{NN} --number {N} --path .`. A taken number is refused, so to open a gap move the later chapters up one, highest first, then `story add chapter "{Title}" --number {N}`
+- Renumber a chapter with `story move chapter chapter-{NN} --number {N} --path .`. A taken number is refused, so to open a gap move the later chapters up one, highest first, then `story add chapter '{Title}' --number {N}`
 - `move` rewrites ids, links, and bare ids in `plot/timeline.md`, arc files, and the `plot/_index.md` Theme Tracking table, but not `Ch {N}` cells, prose, or outline beats: update those by hand, then run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story pacing .`
 
 For splits, merges, and the full checklist, follow the `revision-continuity` skill's Structural Edits section.

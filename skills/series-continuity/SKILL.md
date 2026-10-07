@@ -41,11 +41,13 @@ Links are relative paths from the book root, and every link needs a matching bac
 
 ```shell
 # Sequel: set after book one
-story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
+story init '{Title}' --follows '{existing-book-dir}' --synopsis '{synopsis}'
 
 # Prequel: set before book one
-story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
+story init '{Title}' --precedes '{existing-book-dir}' --synopsis '{synopsis}'
 ```
+
+The title and synopsis are the user's own words, and a folder name can hold spaces, so quote each value for the shell: wrap it in single quotes and write any single quote inside it as `'\''`. Never paste a value into double quotes, where `$(...)`, backticks, and `"` still take effect.
 
 Run `init` from the folder that contains the existing book, never from inside it: `init` refuses a new book inside another project, and a linked book outside the new book's parent folder. It also refuses a `--series` that differs from the linked book's, and a `--book-number` already used in the series. `init` checks that the linked path is a story project, writes the relative link, adds the backlink (and the new book's `series`, when the existing book has none) to the existing book's `story.md`, and inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`, plus `series-title`, `author` or `authors`, and `language` when the linked book sets them. When any book in the linked series has a `book-number`, it sets `book-number` to one more than the highest whole number used anywhere in the series, so publication numbers never collide. A normal `story init` book has none, so a series with no numbered books leaves the new book unnumbered. Pass `--book-number` (or write the field on both `story.md` files) in that case. Pass `--series`, `--genre`, `--pov`, or `--tense` to override the inherited values.
 
