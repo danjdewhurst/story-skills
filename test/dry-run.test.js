@@ -130,6 +130,19 @@ describe("--dry-run", () => {
     expect(invoke(root, ["reindex", "--dry-run"]).out).toBe("Dry run: story reindex would make no changes; nothing was written\n");
   });
 
+  // On a schema-version 1 copy: reindex fills the clue ledger migrate has
+  // just created, and glossary/terms is made with its parent folder.
+  for (const [missing, count] of [["continuity/clues/_index.md", 2], ["glossary", 4]]) {
+    test(`story migrate prints the count its dry run gives, with ${missing} missing`, () => {
+      const root = copyExample("the-unraveled-thread");
+      const story = path.join(root, "story.md");
+      fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2", "schema-version: 1"));
+      fs.rmSync(path.join(root, missing), { recursive: true });
+      expect(invoke(root, ["migrate", "--dry-run"]).out).toEndWith(`Dry run: story migrate would make ${count} changes; nothing was written\n`);
+      expect(invoke(root, ["migrate"]).out).toBe(`Migrated project to current schema: ${count} changes\n`);
+    });
+  }
+
   test("a dry run neither takes nor waits for the project lock", () => {
     const root = copyExample("the-unraveled-thread");
     // A live command holds the lock.

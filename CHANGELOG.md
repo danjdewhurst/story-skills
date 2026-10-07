@@ -157,6 +157,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Those links now go to GitHub, and `check:links` checks that each one names a file in the repository.
   - `check:package` now checks the links in every shipped markdown file, not only the README.
 - `bun run test:examples` now runs `story mentions` and `story pacing` on every example and fails on a warning the example does not exempt. The French, Japanese, and Arabic examples now exempt the chapters that refer to a character without naming them, and `the-last-ember` and `the-fall-of-the-citadel` record their chapter `hook`. ([#567](https://github.com/danjdewhurst/story-skills/issues/567))
+- `story migrate` now prints the same number of changes as `story migrate --dry-run` and `--json` list. Before, a registry it created and then reindexed counted twice, and a folder made with its parent counted once, so a dry run of 3 changes could print `4 changes`. ([#567](https://github.com/danjdewhurst/story-skills/issues/567))
 
 ### Security
 
