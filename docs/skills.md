@@ -143,7 +143,7 @@ The main handoffs:
 | [theme-craft](#theme-craft) | `story.md` premise fields, character arc fields, `continuity/theme-audit.md` | `reindex`, `wordcount --write`, `check` |
 | [genre-craft](#genre-craft) | `continuity/clues/`, promises, `story.md` genre fields | `add clue`, `clues`, `diagram clues`, `pacing`, `reindex`, `wordcount --write`, `check` |
 | [research](#research) | `research/*.md` | `add research`, `reindex`, `wordcount --write`, `check` |
-| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `reindex`, `wordcount --write`, `check`, `next`, `pacing`, `progress` (`--log` if you keep a log) |
+| [chapter-writing](#chapter-writing) | `chapters/chapter-NN.md`, `scenes/*.md`, timeline, continuity | `context`, `reindex`, `wordcount --write`, `check`, `next`, `pacing`, `progress` (`--log` if you keep a log) |
 | [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `reindex`, `wordcount --write`, `check`, `progress --log` |
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `wordcount --write`, `check`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `reindex`, `wordcount --write`, `check`, `rename character` |
@@ -1014,7 +1014,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Not for.** Judging a finding or revising the story to fix it. Continuity errors and revision passes go to [revision-continuity](#revision-continuity), pacing to [plot-structure](#plot-structure), voices and prose to [voice-style](#voice-style), and clues and fair play to [genre-craft](#genre-craft). Sharing a review copy with readers, including the GitHub Pages workflow, goes to [feedback-triage](#feedback-triage). story-maintenance runs the CLI, reads its output, and fixes mechanical problems such as broken references and stale registries.
 
-**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the five commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet, Fountain screenplay skeleton), and `synopsis`.
+**When each command fits.** The skill picks commands the same way the rest of the docs describe: [the maintenance loop](writing-workflows.md#the-maintenance-loop) for the three commands that follow most edits, [When to run what](continuity.md#when-to-run-what) for the analysis commands (`pacing`, `clues`, `voices`, `names`, `passes`, `diagram`, `timeline`, `prose`), and the [command summary](cli-reference.md#command-summary) for everything else, including `init --form`, `import`, `migrate`, `add`/`rename`/`move`/`remove`, `knowledge`, `export`, `build` (markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, metadata sheet, Fountain screenplay skeleton), and `synopsis`.
 
 **Reads.** The CLI's output, and the project files a finding names when it fixes them.
 
