@@ -9727,7 +9727,6 @@ function withoutLinks(source, opener) {
   let result = "";
   let last = 0;
   let close = -2;
-  let paren = -2;
   for (let start = source.indexOf(opener);start !== -1; ) {
     const textStart = start + opener.length;
     if (close < textStart) {
@@ -9740,11 +9739,9 @@ function withoutLinks(source, opener) {
       start = source.indexOf(opener, start + 1);
       continue;
     }
-    if (paren < close + 2) {
-      paren = source.indexOf(")", close + 2);
-      if (paren === -1) {
-        break;
-      }
+    const paren = source.indexOf(")", close + 2);
+    if (paren === -1) {
+      break;
     }
     result += source.slice(last, start) + (opener === "[" ? source.slice(textStart, close) : "");
     last = paren + 1;

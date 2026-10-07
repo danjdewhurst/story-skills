@@ -161,6 +161,10 @@ describe("markdown utilities", () => {
     // Unclosed openers once each read up to a thousand characters ahead.
     expectComparableTime(plainLinks, "![".repeat(128000), "!x".repeat(128000));
     expectComparableTime(plainLinks, "[a](".repeat(256000), "[a]x".repeat(256000));
+    // Openers that share one `]` with no `(` after it: each one searched
+    // for that `]` again. A search for `]` is fast, so the text is longer.
+    expectLinearTime(plainLinks, (n) => `${"[".repeat(n)}]x`, { length: 512000 });
+    expectLinearTime(plainLinks, (n) => `${"![".repeat(n / 2)}]x`, { length: 512000 });
   });
 });
 
