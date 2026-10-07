@@ -153,10 +153,18 @@ describe("test shards", () => {
       writeTimings: "out.json",
       dir: "test"
     });
-    for (const argv of [["--write-timings"], ["--dir"], ["--nope"], ["--audit"], [], ["--dir", "missing-dir", "--write-timings", "out.json"]]) {
+    const refusals = [
+      [["--write-timings"], "--write-timings needs a value"],
+      [["--dir"], "--dir needs a value"],
+      [["--nope"], "Unknown argument --nope"],
+      [["--audit"], "Unknown argument --audit"],
+      [[], "Pass --write-timings <file>"],
+      [["--dir", "missing-dir", "--write-timings", "out.json"], "ENOENT: no such file or directory, scandir 'missing-dir'"]
+    ];
+    for (const [argv, message] of refusals) {
       const result = capture(argv);
       expect(result.code, argv.join(" ")).toBe(1);
-      expect(result.errors[0].length).toBeGreaterThan(0);
+      expect(result.errors, argv.join(" ")).toEqual([message]);
     }
   });
 });

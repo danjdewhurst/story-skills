@@ -846,7 +846,9 @@ describe("check-metadata marketplaces", () => {
         plugins: [{ ...agentsMarketplace.plugins[0], version: "0.0.0" }]
       }
     };
-    expect(checkMarketplaces(stale).join("\n")).toContain("version");
+    expect(checkMarketplaces(stale)).toEqual([
+      `.agents/plugins/marketplace.json plugin story-skills version mismatch: expected ${packageJson.version}, got 0.0.0`
+    ]);
   });
 
   test("detects version drift where versions are declared", () => {
@@ -854,7 +856,9 @@ describe("check-metadata marketplaces", () => {
       ...base,
       claudeMarketplace: { ...claudeMarketplace, version: "0.0.0" }
     };
-    expect(checkMarketplaces(stale).join("\n")).toContain("version");
+    expect(checkMarketplaces(stale)).toEqual([
+      `.claude-plugin/marketplace.json version mismatch: expected ${packageJson.version}, got 0.0.0`
+    ]);
   });
 
   test("expectEqual reports mismatches", () => {

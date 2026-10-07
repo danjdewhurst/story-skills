@@ -140,6 +140,15 @@ const FINDINGS_ARGS = {
   series: ["series"]
 };
 
+// The error line each findings command prints for its broken project. Most
+// break chapter-01's frontmatter; the other commands are listed by name.
+const DUPLICATE_KEY_ERROR = "error: chapters/chapter-01.md: Duplicate frontmatter key: title (line 3)";
+const FINDING_ERRORS = {
+  compare: "error: progress.md: Duplicate frontmatter key: a (line 3)",
+  names: 'error: "Mara Quill" clashes with character mara-quill (Mara Quill)',
+  series: "error: .: chapters/chapter-01.md: Duplicate frontmatter key: title (line 3)"
+};
+
 // A write each command refuses, with the project left as it was.
 const REFUSED = {
   init: (root) => ["init", "Exit Codes", "--dir", root],
@@ -253,7 +262,7 @@ describe("exit codes", () => {
         breakChapter(root);
       }
       const result = invoke(root, args);
-      expect(result.err).toContain("error:");
+      expect(result.err).toContain(FINDING_ERRORS[name] ?? DUPLICATE_KEY_ERROR);
       expect(result.code).toBe(findings);
     });
   }

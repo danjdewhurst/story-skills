@@ -744,7 +744,7 @@ word-count: 9
     expect(help.status).toBe(0);
     expect(help.stdout).toContain("Usage: story");
     expect(help.stdout).toContain("wordcount");
-    expect(help.stdout).toContain("build");
+    expect(help.stdout).toMatch(/^  build \[path\] /m);
 
     // Exercise core commands against a temp copy so reindex cannot dirty the repo.
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-fallback-"));
@@ -768,7 +768,7 @@ word-count: 9
 
       const wordcount = runBundle(["wordcount", fixture]);
       expect(wordcount.status).toBe(0);
-      expect(wordcount.stdout).toContain("Total:");
+      expect(wordcount.stdout).toMatch(/^Total: \d+$/m);
 
       const reindex = runBundle(["reindex", fixture]);
       expect(reindex.status).toBe(0);

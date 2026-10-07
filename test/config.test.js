@@ -296,7 +296,7 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["report", root]).out).toContain("Next Actions");
     const off = invoke(cwd, ["report", root, "--actionable=false"]);
     expect(off.code).toBe(0);
-    expect(off.out).toContain("# ");
+    expect(off.out.split("\n")[0]).toBe("# Configured");
     expect(off.out).not.toContain("Next Actions");
   });
 
