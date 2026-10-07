@@ -99,9 +99,10 @@ Edited by {name}
   given.
 - Put the credit line the rights holder requires in `credit`, and repeat it
   on the copyright page or in back matter as the permission specifies.
-- Short lyric quotations often need permission even when very short.
-  Public domain status depends on the country and the date. When in doubt,
-  the author should ask the rights holder or a lawyer, or cut the quote.
+- Whether a quotation needs permission is a clearance question for the
+  `editorial-review` skill, which covers short lyric quotes and public
+  domain status (`references/real-people-and-permissions.md` there). Record
+  the answer in `permission`.
 - Titles of songs and books are generally not copyrightable, so quoting a
   title alone needs no copyright permission. A title can still be a
   trademark, or part of a protected series name or brand, so check before
