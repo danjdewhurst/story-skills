@@ -251,6 +251,8 @@ const ALLOWED_RAW_READS = [
   // writeWholeFile's temporary file: "wx" makes a new file and never opens
   // one already at the name, symlink or not.
   ["files.js", 'const descriptor = fs.openSync(temporary, "wx", mode);'],
+  // An undo log is made the same way, and only appended to.
+  ["files.js", 'log.descriptor = fs.openSync(path.join(log.root, UNDO_LOG), "ax", 0o600);'],
   // Creates the lock the same way. lock.js reads the lock through files.js.
   ["lock.js", 'const descriptor = fs.openSync(lockPath, "wx", 0o644);'],
   // The PDF engine's log and the PDF it wrote, in a folder this run made

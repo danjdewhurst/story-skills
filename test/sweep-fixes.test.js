@@ -1332,6 +1332,10 @@ describe("round eight", () => {
     } finally {
       fs.rmSync = rmSync;
     }
+    // Its undo log would have a rerun put the rename back and make it again
+    // (test/undo.test.js); without one, as a story from before the log left
+    // it, the marker resumes it.
+    fs.rmSync(path.join(root, ".story-undo.tmp"));
     const rerun = ["rename", "character", "mara-tide", "Mara Quill", "--path", root];
     // The preview's copy of the project holds the marker too.
     expect(invoke(path.dirname(root), [...rerun, "--dry-run"])).toEqual({ code: 0, out: "delete  .story-rename.tmp\nDry run: story rename would make 1 change; nothing was written\n", err: "" });

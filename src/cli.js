@@ -8,6 +8,7 @@ import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
 import { FILE_ERROR_REASONS, portablePath } from "./files.js";
 import { withProjectLock } from "./lock.js";
+import { assertNoInterruptedChange } from "./undo.js";
 
 export { isTruthy, parseArgs };
 
@@ -148,10 +149,17 @@ export function runCli(argv, io) {
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
+    // While a command that stopped part way has left its undo log, only the
+    // commands that put it back first (`recovers`) may change the project,
+    // and the rest are refused, a --dry-run too (see undo.js).
+    const guarded = writesProject(command, parsed.options) && !command.recovers ? () => {
+      assertNoInterruptedChange(root(), name);
+      return run();
+    } : run;
     // A command that changes the project in place holds its lock for the
     // whole run, so two cannot plan from the same files (see lock.js). A
     // --dry-run only reads the project.
-    return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
+    return writesProject(command, parsed.options) && !isTruthy(parsed.options["dry-run"]) ? withProjectLock(root(), guarded) : guarded();
   } catch (error) {
     const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
@@ -163,12 +171,11 @@ export function runCli(argv, io) {
   }
 }
 
-// Whether this run of the command changes the project in place: its
-// `writes` is true, or a function of the options that returns true, and
-// --dry-run is off.
-function writesInPlace(command, options) {
-  const writes = typeof command.writes === "function" ? command.writes(options) : command.writes === true;
-  return writes && !isTruthy(options["dry-run"]);
+// Whether this run of the command changes the project in place, or with
+// --dry-run previews such a change: its `writes` is true, or a function of
+// the options that returns true.
+function writesProject(command, options) {
+  return typeof command.writes === "function" ? command.writes(options) : command.writes === true;
 }
 
 // The project whose story.md holds the config. A passage piped to `story

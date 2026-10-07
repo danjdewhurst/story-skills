@@ -34,6 +34,7 @@ export const FINDING_CODES = {
   "nested-file": "warning",
   "symlinked-file": "warning",
   "interrupted-write": "warning",
+  "interrupted-change": "error",
   "stale-registry": "warning",
   "stale-word-count": "warning",
   "todo-markers": "warning",

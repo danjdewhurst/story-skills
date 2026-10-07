@@ -24,6 +24,7 @@ import {
   readTextFile,
   recordChanges,
   removeFile,
+  withUndoLog,
   writeFile
 } from "./files.js";
 import { withProjectLocks } from "./lock.js";
@@ -62,6 +63,7 @@ import { queryFiltersNaming, retargetFilter, shownFilter, shownQuery } from "./l
 import { EXIT_CODES, projectError, refusedError, usageError } from "./exit-codes.js";
 import { projectActions } from "./report.js";
 import { MENTION_KINDS, proseRenames } from "./mentions.js";
+import { undoInterruptedChange } from "./undo.js";
 import {
   STORY_SCHEMA_VERSION,
   REQUIRED_PATHS,
@@ -1058,47 +1060,64 @@ const DOCTOR_REPAIRS = [
 // command, codes, changes } per repair run, and `stopped`, the message of
 // the error that stopped a repair (a file that does not parse), after
 // which none of the later ones is tried; null when every due repair ran.
+// A change a split, merge, move, rename, or remove left part way is put
+// back first (command `undo`), needing no file to parse, and the other
+// repairs are chosen from the project it puts back.
 export function fixProject(root, options = {}) {
-  const before = projectActions(root, options);
-  const raised = new Set([...before.validation.errors, ...before.validation.warnings].map((finding) => finding.code));
+  let before = projectActions(root, options);
+  const repairs = [];
+  let stopped = null;
+  if (raisedCodes(before).has("interrupted-change")) {
+    stopped = runRepair(root, { command: "undo", codes: ["interrupted-change"], run: undoInterruptedChange }, repairs);
+    before = projectActions(root, options);
+  }
+  const raised = raisedCodes(before);
   const due = DOCTOR_REPAIRS
     .map((repair) => ({ ...repair, codes: repair.codes.filter((code) => raised.has(code)) }))
     .filter((repair) => repair.codes.length > 0);
-  const repairs = [];
-  let stopped = null;
   try {
-    if (due.length > 0) {
+    if (stopped === null && due.length > 0) {
       assertRepairable(root);
     }
   } catch (error) {
     stopped = projectErrorMessage(error);
   }
   for (const repair of stopped === null ? due : []) {
-    if (repair.command === "reindex" && repairs.length > 0) {
+    if (repair.command === "reindex" && repairs.some((entry) => entry.command !== "undo")) {
       continue;
     }
-    // The changes are kept even when the repair stops part way, so the
-    // report lists every file written.
-    const { result: error, changes } = recordChanges(root, () => {
-      try {
-        repair.run(root);
-        return null;
-      } catch (caught) {
-        return caught;
-      }
-    });
-    if (error !== null) {
-      stopped = projectErrorMessage(error);
-    }
-    if (error === null || changes.length > 0) {
-      repairs.push({ command: repair.command, codes: repair.codes, changes });
-    }
-    if (error !== null) {
+    stopped = runRepair(root, repair, repairs);
+    if (stopped !== null) {
       break;
     }
   }
   const after = repairs.length > 0 ? projectActions(root, options) : before;
   return { ...after, repairs, stopped };
+}
+
+// The codes a diagnosis raised: errors and warnings that story.md
+// severity did not turn off.
+function raisedCodes(report) {
+  return new Set([...report.validation.errors, ...report.validation.warnings].map((finding) => finding.code));
+}
+
+// Runs one repair, adding it to `repairs` with its changes, which are kept
+// even when it stops part way, so the report lists every file written.
+// Returns the message of the project error that stopped it, or null.
+function runRepair(root, repair, repairs) {
+  const { result: error, changes } = recordChanges(root, () => {
+    try {
+      repair.run(root);
+      return null;
+    } catch (caught) {
+      return caught;
+    }
+  });
+  const stopped = error === null ? null : projectErrorMessage(error);
+  if (error === null || changes.length > 0) {
+    repairs.push({ command: repair.command, codes: repair.codes, changes });
+  }
+  return stopped;
 }
 
 // Every repair ends in a reindex, which needs each entity file and the plot
@@ -1422,6 +1441,30 @@ function registryLists(root, kind, file) {
 }
 
 export function renameEntity(root, options) {
+  return withUndo(root, ["rename", options.kind, options.id], () => renameNow(root, options));
+}
+
+// Runs a split, merge, move, rename, or remove under an undo log (see
+// withUndoLog), after putting back any change an earlier one left part way,
+// which the result reports as `undone` ({ command, files }), or, when the
+// command then fails, its error's hint. `words` name the command for the
+// log: ["split", "chapter-03"] is story split chapter-03.
+function withUndo(root, words, run) {
+  const undone = undoInterruptedChange(root);
+  const command = ["story", ...words.map((word) => String(word ?? "").trim()).filter((word) => word !== "")].join(" ");
+  try {
+    const result = withUndoLog(root, command, run);
+    return undone === null ? result : { ...result, undone };
+  } catch (error) {
+    if (undone !== null) {
+      const note = `${undone.command} had stopped part way, so the ${undone.files.length} ${undone.files.length === 1 ? "file" : "files"} it changed were put back first`;
+      error.hint = typeof error.hint === "string" ? `${error.hint}. ${note}` : note;
+    }
+    throw error;
+  }
+}
+
+function renameNow(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "rename");
   const kind = normalizeKind(options.kind);
@@ -1645,6 +1688,10 @@ function retitleHeading(markdown, oldName, newName) {
 }
 
 export function removeEntity(root, options) {
+  return withUndo(root, ["remove", options.kind, options.id], () => removeNow(root, options));
+}
+
+function removeNow(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "remove");
   const kind = normalizeKind(options.kind);
@@ -1866,15 +1913,17 @@ function followQueryFilters(root, plan, kind, oldId, newId) {
 // bare ids in plot/timeline.md and arc files. References are written first
 // and the moved files last, so an interrupted move can be rerun.
 export function moveEntity(root, options) {
-  const project = scanProject(root);
-  assertProjectParses(project, "move");
-  const kind = normalizeMoveKind(options.kind);
-  const id = String(options.id ?? "").trim();
-  if (!id) {
-    throw usageError("move requires a chapter or scene id");
-  }
-  requireKebabId(id, `${kind} id`);
-  return kind === "chapter" ? moveChapter(project, id, options) : moveScene(project, id, options);
+  return withUndo(root, ["move", options.kind, options.id], () => {
+    const project = scanProject(root);
+    assertProjectParses(project, "move");
+    const kind = normalizeMoveKind(options.kind);
+    const id = String(options.id ?? "").trim();
+    if (!id) {
+      throw usageError("move requires a chapter or scene id");
+    }
+    requireKebabId(id, `${kind} id`);
+    return kind === "chapter" ? moveChapter(project, id, options) : moveScene(project, id, options);
+  });
 }
 
 // Plural labels for the kinds move refuses.
@@ -2066,15 +2115,15 @@ function moveScene(project, oldId, options, action = "move") {
 // uses: the chapters after the change are renumbered with moveChapter, scene
 // records follow their text with moveScene, and references to a merged
 // chapter are rewritten as move rewrites them. Every check runs before the
-// first write. The steps each write references before files, but a split or
-// merge is several of them, so one stopped part way is finished by hand
-// rather than by a rerun.
-const RESTRUCTURE_HINT = "Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again";
+// first write. A split or merge is several steps, so one stopped part way
+// is not finished where it stopped: its undo log stays (see withUndo), and a
+// rerun puts back what it changed and starts again.
+const RESTRUCTURE_HINT = "Some files were already changed: fix the problem and run the same command again, which puts them back and starts over, or run story doctor --fix to put them back";
 
 // Runs the writes of a split or merge. When a step fails after earlier ones
-// wrote, the error says so in place of any rerun hint the step gave, since
-// rerunning the whole command would not resume it, unless the error is
-// marked `resumable` (a merge that put its last step back). The checks before it
+// wrote, the error says so in place of any rerun hint the step gave, unless
+// the error is marked `resumable` (a merge that put its last step back),
+// whose hint says what a rerun does with the change. The checks before it
 // leave little that can fail (a full disk, a file saved meanwhile), so it is
 // exported for tests.
 export function restructureWrites(root, write) {
@@ -2448,6 +2497,10 @@ function assertRestructurable(project, { chapters, scenes, changed, created, cha
 }
 
 export function splitChapter(root, options) {
+  return withUndo(root, ["split", options.id], () => splitNow(root, options));
+}
+
+function splitNow(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "split");
   const chapter = existingChapter(project, options.id, "split requires a chapter id");
@@ -2590,6 +2643,10 @@ function setCurrentChapter(root, from, to, plan = null) {
 }
 
 export function mergeChapters(root, options) {
+  return withUndo(root, ["merge", options.id, options.next], () => mergeNow(root, options));
+}
+
+function mergeNow(root, options) {
   const project = scanProject(root);
   assertProjectParses(project, "merge");
   const missing = "merge requires two chapter ids: the chapter to keep, then the one after it";
