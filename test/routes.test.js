@@ -126,6 +126,11 @@ function reviewProject(fields = "") {
   return { root, cwd };
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("location routes", () => {
   test("validate and links accept well-formed routes", () => {
     const root = routeProject();
@@ -320,5 +325,68 @@ describe("review fixes", () => {
     scene("chapter-01", 1, "location: x\ndate: 2020-01-01\ntime: morning");
     scene("chapter-01", 2, "location: y\ndate: 2020-01-01\ntime: afternoon");
     expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+  });
+});
+
+describe("reports and views", () => {
+  test("route errors round the gap down and the route up", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "a.md"), "name: A\ntype: city\nroutes:\n  - to: b\n    hours: 11");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "b.md"), "name: B\ntype: city\nroutes:\n  - to: a\n    hours: 11");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
+    createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "b", date: "2024-01-01", time: "10:59" });
+    const error = messages(checkProjectContinuity(root).errors).find((entry) => entry.includes("fastest route"));
+    expect(error).toContain("10.9h after");
+    expect(error).toContain("takes 11h");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("continuity route checks stay fast with a busy character and a big map", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    for (let index = 0; index < 60; index += 1) {
+      const routes = index < 59 ? `\nroutes:\n  - to: loc-${index + 1}\n    hours: 1` : "";
+      writeMarkdown(path.join(root, "worldbuilding", "locations", `loc-${index}.md`), `name: Loc ${index}\ntype: city${routes}`);
+    }
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const scenes = path.join(root, "scenes");
+    for (let index = 0; index < 600; index += 1) {
+      const day = String(1 + Math.floor(index / 24)).padStart(2, "0");
+      const hour = String(index % 24).padStart(2, "0");
+      writeMarkdown(path.join(scenes, `chapter-01-scene-${String(index + 1).padStart(3, "0")}.md`), `title: S${index}\nchapter: chapter-01\nscene: ${index + 1}\nstatus: draft\nlocation: loc-${index % 60}\ncharacters:\n  - mara\ndate: 2024-01-${day}\ntime: "${hour}:00"`);
+    }
+    const started = performance.now();
+    checkProjectContinuity(root);
+    expect(performance.now() - started).toBeLessThan(4000);
+  });
+
+  test("route checks find the shortest path through a branching map", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    const routes = { a: [["b", 5], ["c", 1], ["e", 3], ["f", 9], ["g", 4]], b: [["d", 1]], c: [["b", 1], ["d", 7], ["f", 2]], d: [], e: [["d", 2]], f: [["d", 6]], g: [["d", 8]] };
+    for (const [id, edges] of Object.entries(routes)) {
+      const list = edges.length === 0 ? "" : `\nroutes:\n${edges.map(([to, hours]) => `  - to: ${to}\n    hours: ${hours}`).join("\n")}`;
+      writeMarkdown(path.join(root, "worldbuilding", "locations", `${id}.md`), `name: ${id.toUpperCase()}\ntype: city${list}`);
+    }
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "S1", chapter: "chapter-01", character: "mara", location: "a", date: "2024-01-01", time: "00:00" });
+    createEntity(root, { kind: "scene", name: "S2", chapter: "chapter-01", character: "mara", location: "d", date: "2024-01-01", time: "02:00" });
+    const error = messages(checkProjectContinuity(root).errors).find((entry) => entry.includes("fastest route"));
+    expect(error).toContain("takes 3h");
+  });
+
+  test("a wide-window sighting in between never hides a travel conflict", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "x.md"), "name: X\ntype: city\nroutes:\n  - to: y\n    hours: 1.6");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "y.md"), "name: Y\ntype: city");
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "scene", name: "E", chapter: "chapter-01", character: "mara", location: "x", date: "2024-01-01", time: "19:00" });
+    createEntity(root, { kind: "scene", name: "M", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "night" });
+    createEntity(root, { kind: "scene", name: "C", chapter: "chapter-01", character: "mara", location: "y", date: "2024-01-01", time: "20:30" });
+    expect(messages(checkProjectContinuity(root).errors)).toContain("scenes/chapter-01-scene-03.md puts mara at y 1.5h after scenes/chapter-01-scene-01.md at x, but the fastest route takes 1.6h");
   });
 });

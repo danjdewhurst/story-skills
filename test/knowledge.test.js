@@ -97,6 +97,11 @@ function baseProject(chapters = 5) {
   return root;
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("knowledge queries", () => {
   test("returns pre-existing and learned-in-order knowledge in file order", () => {
     const { root } = knowledgeProject();
@@ -198,5 +203,16 @@ describe("story knowledge (#60)", () => {
     const root = baseProject(2);
     writeState(root, "knowledge-state:\n  - character: ann\n    learned-in: chapter-02");
     expect(() => knowledgeAtChapter(root, "ann", "chapter-02")).toThrow("knowledge-state[0] is missing knows");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("knowledge names the parse error for a broken character file", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.writeFileSync(path.join(root, "characters", "mara.md"), "# No frontmatter\n");
+    const result = invoke(path.dirname(root), ["knowledge", "mara", "--at", "chapter-01", "--path", root]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain("characters/mara.md: is missing YAML frontmatter");
   });
 });

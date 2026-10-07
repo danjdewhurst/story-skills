@@ -60,6 +60,11 @@ function newProject(title = "Bugs") {
   return createStoryProject({ cwd: makeTempDir(), title }).root;
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("synopsis builder", () => {
   test("uses the first synopsis sentence as the premise", () => {
     const { root } = synopsisProject();
@@ -324,5 +329,75 @@ describe("#229 synopsis skips HTML comments", () => {
     expect(text).toContain("Logline: A diver finds a drowned bell.");
     expect(text).toContain("## Main\n\nMara lives on the reef. She hates the bell.");
     expect(text).not.toContain("<!--");
+  });
+});
+
+describe("synopsis", () => {
+  test("skips starter text and turns list items into sentences", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("1. First escalation\n2. Second escalation", "1. The tide turns\n2. The bell rings"));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Logline: No logline recorded.");
+    expect(text).not.toContain("Initial state and inciting pressure");
+    expect(text).not.toContain("Decision point");
+    expect(text).toContain("The tide turns. The bell rings.");
+    expect(text).not.toMatch(/ {2}/);
+  });
+
+  test("truncation keeps headings and paragraphs", () => {
+    const root = sweepProject();
+    for (let index = 1; index <= 30; index += 1) {
+      createEntity(root, { kind: "arc", name: `Arc ${index}` });
+      const arc = path.join(root, "plot", "arcs", `arc-${index}.md`);
+      const setup = Array.from({ length: 3 }, (_, n) => `Setup sentence ${n} for arc ${index} with several more words.`).join(" ");
+      fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("Initial state and inciting pressure.", setup));
+    }
+    const text = synopsisBook(root).text;
+    expect(text).toContain("\n## Arc 1\n\n");
+    expect(text).not.toMatch(/\S ## Arc/);
+    expect(text.trimEnd().endsWith("…")).toBe(true);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("synopsis sentences respect abbreviations, closing quotes, and names", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8")
+      .replace("Initial state and inciting pressure.", "Mara, e.g. the heir, stays. She says \"Run.\" Then everyone runs.")
+      .replace("Decision point or highest tension.", "She chooses the reef!")
+      .replace("What changes because of this arc.", "Mara keeps the light."));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Mara, e.g. the heir, stays. She says \"Run.\"\n");
+    expect(text).toContain("Because she chooses the reef! Mara keeps the light.");
+  });
+
+  test("synopsis sentences handle dotted abbreviations and compound names", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8")
+      .replace("Initial state and inciting pressure.", "Mara joins the U.S. Navy. She leaves at 9 a.m. Then the tide turns.")
+      .replace("Decision point or highest tension.", "A.J. arrives."));
+    const text = synopsisBook(root).text;
+    expect(text).toContain("Mara joins the U.S. Navy. She leaves at 9 a.m.\n");
+    expect(text).toContain("Because A.J. arrives.");
+  });
+
+  test("synopsis labels the logline, and three pages carry more than one", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "arc", name: "Main" });
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    const setup = Array.from({ length: 5 }, (_, index) => `Setup beat ${index + 1} happens.`).join(" ");
+    fs.writeFileSync(arc, fs.readFileSync(arc, "utf8").replace("Initial state and inciting pressure.", setup));
+    const one = synopsisBook(root, { pages: 1 }).text;
+    const three = synopsisBook(root, { pages: 3 }).text;
+    expect(one).toContain("Logline: No logline recorded.");
+    expect(one).toContain("Setup beat 2 happens.");
+    expect(one).not.toContain("Setup beat 3");
+    expect(three).toContain("Setup beat 4 happens.");
   });
 });

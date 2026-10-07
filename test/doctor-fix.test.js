@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { createStoryProject, projectActions, validateProject } from "../src/story.js";
+import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
@@ -57,6 +58,11 @@ function readAll(root) {
   };
   walk(root);
   return files;
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("story doctor --fix", () => {
@@ -229,5 +235,13 @@ describe("story doctor --fix", () => {
     const result = invoke(root, ["doctor", "--dry-run"]);
     expect(result.code).toBe(2);
     expect(result.err).toContain("--dry-run previews doctor --fix: add --fix");
+  });
+});
+
+describe("project structure", () => {
+  test("validate and doctor report the same errors on a partial project", () => {
+    const root = sweepProject();
+    fs.rmSync(path.join(root, "scenes"), { recursive: true });
+    expect(messages(projectActions(root).validation.errors)).toEqual(messages(validateProject(root).errors));
   });
 });

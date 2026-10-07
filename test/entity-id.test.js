@@ -13,7 +13,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 function project(title) {
   return createStoryProject({ cwd: makeTempDir(), title, force: false }).root;
@@ -33,6 +33,11 @@ function frontmatter(root, ...parts) {
 function newProject(title = "Bugs") {
   const cwd = makeTempDir();
   return createStoryProject({ cwd, title, force: false }).root;
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("--id for names outside ASCII", () => {
@@ -162,5 +167,22 @@ describe("#71 ids and names fold Latin letters without decompositions", () => {
       "\"Lukasz\" clashes with character lukasz-nowak (Łukasz)",
       "\"Soren\" clashes with character soren (Søren)"
     ]);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("Windows-reserved ids are refused and flagged", () => {
+    const root = sweepProject();
+    expect(() => createEntity(root, { kind: "character", name: "Con" })).toThrow("Windows reserves the file name con.md");
+    createEntity(root, { kind: "character", name: "Mara" });
+    expect(() => renameEntity(root, { kind: "character", id: "mara", name: "Aux" })).toThrow("Windows reserves");
+    writeMarkdown(path.join(root, "characters", "nul.md"), "name: Nul\nrole: minor\nstatus: alive");
+    expect(messages(validateProject(root).warnings)).toContain("characters/nul.md uses a file name Windows reserves, so the project cannot be checked out on Windows; rename the entity");
+  });
+
+  test("a long id is not pushed over the file name limit", () => {
+    const root = sweepProject();
+    const name = "a".repeat(248);
+    expect(createEntity(root, { kind: "character", name }).id).toBe(name);
   });
 });

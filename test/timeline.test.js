@@ -119,6 +119,11 @@ function setCharacter(root, id, status, extra = "") {
   fs.writeFileSync(file, text, "utf8");
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story timeline", () => {
   test("orders dated scenes and chapters by story time and marks scenes told late", () => {
     const { root } = timelineProject();
@@ -383,5 +388,16 @@ describe("timeline presence and deaths (#174)", () => {
     const io = memoryIo(EXAMPLES);
     runCli(["timeline", "the-unraveled-thread"], io);
     expect(io.output()).toContain("- edran-vale: 3 of 4 chapters, chapters 1-4, longest absence 1 chapter after chapter 2, died in chapter 2");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("timeline counts a pov-only chapter as presence", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace('pov: ""', "pov: mara"));
+    expect(invoke(path.dirname(root), ["timeline", root]).out).toContain("- mara: 1 of 1 chapters");
   });
 });

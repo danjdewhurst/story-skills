@@ -3,9 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProjectSchema } from "../scripts/check-schema.js";
+import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, createEntity, createStoryProject, validateLinks, validateProject } from "../src/story.js";
-import { CHMOD_IGNORED, makeTempDir, messages, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 function newProject(title = "Gull") {
   const cwd = makeTempDir();
@@ -67,6 +68,17 @@ function writeStory(root, update) {
 
 function safetyProject(title = "Safety") {
   return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
 }
 
 describe("#112 scheduled chapters in arc bodies", () => {
@@ -241,5 +253,122 @@ describe("unreadable files name their path once (#383)", () => {
     expect(once(errors, "matter/_index.md")).toEqual([`${"matter/_index.md"}: is not valid UTF-8 (byte 0xff at offset 1): re-save it as UTF-8 (it is a registry: run story reindex to rebuild it)`]);
     expect(once(errors, "research/_index.md")).toEqual([`${"research/_index.md"}: Refusing to read through symlink (it is a registry: run story reindex to rebuild it)`]);
     expect(once(messages(validateLinks(root).errors), "plot/timeline.md")).toHaveLength(1);
+  });
+});
+
+describe("project structure", () => {
+  test("a fresh project validates after a git round trip drops its empty folders", () => {
+    const root = sweepProject();
+    for (const dir of ["worldbuilding/locations", "worldbuilding/systems", "plot/arcs", "glossary/terms"]) {
+      fs.rmSync(path.join(root, dir), { recursive: true });
+    }
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    createEntity(root, { kind: "location", name: "Port" });
+    expect(fs.existsSync(path.join(root, "worldbuilding", "locations", "port.md"))).toBe(true);
+  });
+
+  test("validate outside a project says so instead of listing every path", () => {
+    const result = invoke(makeTempDir(), ["validate"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain("is not a story project: missing story.md");
+    expect(result.err).not.toContain("Missing required path");
+  });
+});
+
+describe("continuity ledger", () => {
+  test("links accept promise and clue chapters scheduled past the last chapter", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-05" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-04", status: "planned" });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    // A planted status needs the chapter written, so add refuses it (#68).
+    expect(() => createEntity(root, { kind: "clue", name: "Ring", planted: "chapter-04", status: "planted" })).toThrow("--planted chapter-04 is not written yet");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("links accept scheduled chapters below a later outline chapter", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-09" });
+    createEntity(root, { kind: "promise", name: "Duel", planted: "chapter-07", status: "planned", payoff: "chapter-12" });
+    createEntity(root, { kind: "chapter", name: "Finale", number: 20 });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+
+  test("links reject chapter-id typos that scheduling would hide", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    expect(() => createEntity(root, { kind: "clue", name: "Locket", planted: "chapter-01", payoff: "chapter-1" })).toThrow("--payoff chapter-1: did you mean chapter-01?");
+    expect(() => createEntity(root, { kind: "clue", name: "Zero", planted: "chapter-01", payoff: "chapter-00" })).toThrow("--payoff chapter-00: chapter numbers start at 1");
+    // links catches the same typos written by hand.
+    writeMarkdown(path.join(root, "continuity", "clues", "locket.md"), "title: Locket\nstatus: planted\nplanted: chapter-01\npayoff: chapter-1");
+    writeMarkdown(path.join(root, "continuity", "clues", "zero.md"), "title: Zero\nstatus: planted\nplanted: chapter-01\npayoff: chapter-00");
+    createEntity(root, { kind: "clue", name: "Later", planted: "chapter-01", payoff: "chapter-09" });
+    const errors = messages(validateLinks(root).errors);
+    expect(errors).toContain("continuity/clues/locket.md references missing chapter chapter-1");
+    expect(errors).toContain("continuity/clues/zero.md references missing chapter chapter-00");
+    expect(errors.join("\n")).not.toContain("chapter-09");
+  });
+
+  test("a question may be introduced in a chapter not written yet", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "question", name: "Who", introduced: "chapter-02" });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    // A resolved chapter must exist, so add refuses it (#68).
+    expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-01", resolved: "chapter-04" })).toThrow("--resolved chapter-04 is not written yet");
+  });
+
+  test("pre-0.10.0 relationship pairs warn instead of failing links", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "characters", "ilya.md"), "name: Ilya\nrole: antagonist\nstatus: alive\nrelationships:\n  - character: theo\n    type: former-supervisor\n  - character: mara\n    type: adversary");
+    writeMarkdown(path.join(root, "characters", "theo.md"), "name: Theo\nrole: supporting\nstatus: alive\nrelationships:\n  - character: ilya\n    type: former-supervisor");
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\nrelationships:\n  - character: ilya\n    type: antagonist");
+    const result = validateLinks(root);
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings)).toContain("characters/ilya.md relationship adversary to mara has backlink antagonist, a pairing from before story-skills 0.10.0; change the backlink to adversary");
+    expect(messages(result.warnings).filter((warning) => warning.includes("change the backlink to former-subordinate"))).toHaveLength(2);
+  });
+
+  test("parse errors name files by their project path only", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "progress.md"), "no frontmatter\n");
+    const errors = messages(validateProject(root).errors);
+    expect(errors).toContain("progress.md: is missing YAML frontmatter");
+    expect(errors.join("\n")).not.toContain(root);
+  });
+
+  test("an unreadable story.md is reported once", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "story.md"), "no frontmatter\n");
+    expect(messages(validateProject(root).errors)).toEqual(["story.md: is missing YAML frontmatter"]);
+  });
+
+  test("validate reports a bad word count and a list status plainly", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: 0", "word-count: many").replace("status: outline", "status:\n  - draft"));
+    let result = validateProject(root);
+    expect(messages(result.warnings).join("\n")).not.toContain("NaN");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: many", "word-count: many\nhook:\n  - cliffhanger"));
+    expect(messages(validateProject(root).errors)).toContain("chapters/chapter-01.md frontmatter field hook must be a single value, not a list");
+    // One error for the list, not two.
+    result = validateProject(root);
+    expect(messages(result.errors).filter((error) => error.includes("field status"))).toEqual(["chapters/chapter-01.md frontmatter field status must be a scalar"]);
+  });
+
+  test("an untitled story.md does not set off registry story errors", () => {
+    const root = sweepProject();
+    fs.writeFileSync(path.join(root, "story.md"), "---\nfoo: bar\n---\n");
+    expect(messages(validateProject(root).errors).join("\n")).not.toContain("story must be");
+  });
+
+  test("links rejects a pov that is a name, not an id", () => {
+    const root = sweepProject();
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft\npov: Mara Quill");
+    expect(messages(validateLinks(root).errors).join("\n")).toContain("must be kebab-case");
   });
 });

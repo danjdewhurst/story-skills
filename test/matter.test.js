@@ -44,6 +44,11 @@ function withBookMatter(root) {
   writeMatter(root, "unwritten", "title: Unwritten\nplacement: back\norder: 3", "# Unwritten\n\n");
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("story add matter", () => {
   test("defaults to front placement and numbers order within each placement", () => {
     const { root } = matterProject();
@@ -551,5 +556,14 @@ describe("[TODO markers on matter pages (#557)", () => {
     expect(fs.existsSync(epub)).toBe(true);
     expect(invoke(cwd, ["export", root]).code).toBe(1);
     expect(invoke(cwd, ["validate", root]).code).toBe(1);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("add matter --heading=false makes a page without a title", () => {
+    const root = sweepProject();
+    const result = invoke(path.dirname(root), ["add", "matter", "Dedication", "--heading=false", "--path", root]);
+    expect(result.code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "matter", "dedication.md"), "utf8")).toContain("heading: false");
   });
 });

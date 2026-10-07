@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
 import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
 import { splitSentences } from "../src/sentences.js";
-import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
+import { computeWordCounts, createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
 import { expectLinearGrowth, expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function proseProject(title = "Prose Story") {
@@ -35,6 +35,15 @@ function invoke(cwd, argv) {
 
 function analyze(prose, style = {}, names = []) {
   return analyzeChapter(prose, proseRules(style, names));
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
 }
 
 describe("style sheet", () => {
@@ -481,5 +490,66 @@ describe("prose findings", () => {
       sentences: { count: 50, spread: 4.9999999 }
     });
     expect(messages(findings)).toEqual(["Chapter 1 sentence lengths are uniform (spread 4.9999999 words over 50 sentences); vary the rhythm"]);
+  });
+});
+
+describe("prose lint", () => {
+  test("British single-quoted dialogue is dialogue, and its tags count", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "‘I really felt it,’ Bob said. ‘I saw it. Honestly.’");
+    const analysis = proseReport(root).chapters[0].analysis;
+    expect(analysis.filterWords).toEqual([]);
+    expect(analysis.adverbs).toEqual([]);
+    expect(analysis.plainTags).toEqual([{ word: "said", count: 1 }]);
+  });
+
+  test("prose right after a heading line still counts", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "### Part One\nThe tide came in over the harbour wall at dusk.");
+    expect(proseReport(root).chapters[0].analysis.words).toBe(10);
+  });
+});
+
+describe("sweep fixes", () => {
+  test("prose and voices stay linear on long unclosed quotes", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", `${"“".repeat(30000)} ${"\"".repeat(30000)} ${"\"a,\" said Bob. ".repeat(4000)}`);
+    const started = performance.now();
+    proseReport(root);
+    invoke(path.dirname(root), ["voices", root]);
+    expect(performance.now() - started).toBeLessThan(5000);
+  });
+
+  test("prose treats unclosed straight and single quotes as speech to the end", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "He walked. \"I really felt it\n\nShe ran. ‘I truly saw it");
+    const analysis = proseReport(root).chapters[0].analysis;
+    expect(analysis.filterWords).toEqual([]);
+    expect(analysis.adverbs).toEqual([]);
+  });
+
+  test("prose keeps words apart across a comment", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "It was really<!--x-->quiet.");
+    expect(proseReport(root).chapters[0].analysis.adverbs).toEqual([{ word: "really", count: 1 }]);
+  });
+
+  test("prose and wordcount agree when a chapter has code fences", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "Words before.\n\n```\ncode words here\n```\n\nWords after.");
+    expect(proseReport(root).chapters[0].analysis.words).toBe(computeWordCounts(root).total);
+  });
+
+  test("repeated phrases are found at any word offset", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    appendProse(root, "chapters/chapter-01.md", "x the grey tide rose. y z the grey tide rose. w the grey tide rose.");
+    expect(proseReport(root).phrases).toContainEqual({ phrase: "the grey tide rose", count: 3 });
   });
 });

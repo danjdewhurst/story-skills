@@ -30,6 +30,11 @@ function writeChapter(root, number, body, extra = "status: draft") {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
 }
 
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
 describe("#109 discovered chapters", () => {
   function reconcile(root) {
     return actionLines(root).split("\n").find((line) => line.includes("Reconcile discovered chapters")) ?? "";
@@ -119,5 +124,44 @@ describe("#77 next drafts an empty outlined chapter before adding one", () => {
     const text = invoke(cwd, ["next", root]).out;
     expect(text).toContain("Draft chapter 2");
     expect(text).toContain("story add chapter");
+  });
+});
+
+describe("reports and views", () => {
+  test("next suggests commands for the path the user typed", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    // A chapter number gap is a continuity warning.
+    createEntity(root, { kind: "chapter", name: "Three", number: 3 });
+    const cwd = path.dirname(root);
+    const result = invoke(cwd, ["next", path.basename(root)]);
+    expect(result.out).toContain(`Run story continuity ${path.basename(root)} and`);
+    expect(invoke(root, ["next"]).out).toContain("Run story continuity . and");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("next stops suggesting chapters for a finished book and sorts by priority", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "arc", name: "Main", status: "resolved" });
+    const actions = projectActions(root).actions;
+    expect(actions.map((item) => item.title).join("\n")).not.toContain("Draft chapter");
+    const priorities = actions.map((item) => item.priority);
+    expect(priorities).toEqual([...priorities].sort());
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/status: \w+/, "status: complete"));
+    fs.rmSync(path.join(root, "plot", "arcs", "main.md"));
+    expect(projectActions(root).actions.map((item) => item.title).join("\n")).not.toContain("Draft chapter");
+  });
+
+  test("next asks for post-hoc notes on discovered chapters", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1, mode: "discovered" });
+    const titles = () => projectActions(root).actions.map((item) => `${item.title}: ${item.detail}`).join("\n");
+    expect(titles()).toContain("Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for chapter-01.");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("## Chapter Text", "## Chapter Notes (post-hoc)\n\nFound the harbour.\n\n## Chapter Text"));
+    expect(titles()).not.toContain("Reconcile discovered chapters");
   });
 });

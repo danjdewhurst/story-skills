@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { createEntity, createStoryProject, reindexProject, renameEntity, validateProject } from "../src/story.js";
+import { computeWordCounts, createEntity, createStoryProject, reindexProject, renameEntity, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function newProject(title = "Bugs") {
@@ -32,6 +32,15 @@ function initProject() {
   const cwd = makeTempDir();
   expect(invoke(cwd, ["init", "Safety", "--dir", "p"]).code).toBe(0);
   return path.join(cwd, "p");
+}
+
+function sweepProject(title = "Sweep") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function appendProse(root, file, prose) {
+  fs.appendFileSync(path.join(root, file), `\n${prose}\n`);
 }
 
 describe("#65 reindex keeps registry frontmatter it does not own", () => {
@@ -89,5 +98,91 @@ describe("damaged registries point at reindex (#199)", () => {
     createEntity(root, { kind: "character", name: "Bo" });
     fs.writeFileSync(path.join(root, "characters", "bo.md"), "# Bo\n");
     expect(() => renameEntity(root, { kind: "character", id: "bo", name: "Bob" })).toThrow(/^(?![\s\S]*reindex)/);
+  });
+});
+
+describe("registries", () => {
+  test("reindex keeps hand-written sections", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## My Notes\n\nKeep this.\n");
+    createEntity(root, { kind: "character", name: "Mara" });
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("## My Notes\n\nKeep this.");
+    expect(text).toContain("[mara](mara.md)");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("reindex keeps CRLF registries CRLF", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace(/\n/g, "\r\n"));
+    createEntity(root, { kind: "character", name: "Mara" });
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("[mara](mara.md)");
+    expect(text.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+});
+
+describe("sweep fixes", () => {
+  test("the chapter total heading never piles up across word-count changes", () => {
+    const root = sweepProject();
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const index = path.join(root, "chapters", "_index.md");
+    for (const words of ["one two three", "four", "five six"]) {
+      appendProse(root, "chapters/chapter-01.md", words);
+      computeWordCounts(root, { write: true });
+    }
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/## Total Word Count/g)).toHaveLength(1);
+    expect(text).toContain("## Total Word Count: 6");
+  });
+
+  test("reindex repairs stale total headings left by 0.10.0", () => {
+    const root = sweepProject();
+    const index = path.join(root, "chapters", "_index.md");
+    fs.appendFileSync(index, "\n## Total Word Count: 4\n\n## Total Word Count: 3\n\n## Notes\n\nKeep.\n");
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/## Total Word Count/g)).toHaveLength(1);
+    expect(text).toContain("## Notes\n\nKeep.");
+  });
+
+  test("a custom section above the title does not duplicate the title", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("# Characters", "## Preface\n\npre text\n\n# Characters"));
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/^# Characters$/gm)).toHaveLength(1);
+    expect(text).toContain("## Preface\n\npre text");
+  });
+
+  test("a second section named like a generated one is kept", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## Registry\n\nMy own registry notes.\n");
+    reindexProject(root);
+    expect(fs.readFileSync(index, "utf8")).toContain("My own registry notes.");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("reindex keeps hand-written sections headed like generated ones with a number", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.appendFileSync(index, "\n## Registry: 2\n\nMy registry notes from March.\n\n## Notes\n\n```\n## Family Trees\n```\n\nAfter the fence.\n");
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("## Registry: 2\n\nMy registry notes from March.");
+    expect(text).toContain("## Notes\n\n```\n## Family Trees\n```\n\nAfter the fence.");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("an unclosed fence in a registry section does not duplicate headings", () => {
+    const root = sweepProject();
+    const index = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("## Relationship Map", "## My Notes\n\n```\nunclosed fence\n\n## Relationship Map"));
+    reindexProject(root);
+    expect(fs.readFileSync(index, "utf8").match(/^## Relationship Map$/gm)).toHaveLength(1);
   });
 });

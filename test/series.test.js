@@ -1088,3 +1088,22 @@ describe("#203 backslash separators", () => {
     expect(errors).not.toContain("must be kebab-case");
   });
 });
+
+describe("sweep fixes", () => {
+  test("series follows a book reached through a symlinked path", () => {
+    const cwd = makeTempDir();
+    const first = createStoryProject({ cwd, title: "First Book" }).root;
+    createStoryProject({ cwd, title: "Second Book", follows: [first] });
+    fs.mkdirSync(path.join(cwd, "links"));
+    fs.symlinkSync(path.join(cwd, "second-book"), path.join(cwd, "links", "second"));
+    const result = invoke(cwd, ["series", "links/second"]);
+    expect(result.err).toContain("Series is consistent");
+  });
+
+  test("init --follows gives the earlier book the series id", () => {
+    const cwd = makeTempDir();
+    const first = createStoryProject({ cwd, title: "First" }).root;
+    createStoryProject({ cwd, title: "Second", follows: [first], series: "tides" });
+    expect(scanProject(first).story.data.series).toBe("tides");
+  });
+});
