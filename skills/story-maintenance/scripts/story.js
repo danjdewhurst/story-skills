@@ -28083,6 +28083,18 @@ function timelineText(text) {
 import fs11 from "node:fs";
 import path16 from "node:path";
 
+// src/chapter-numbers.js
+function printedChapterNumbers(project) {
+  const printed = new Map;
+  let unnumberedSoFar = 0;
+  for (const chapter of project.chapters) {
+    const numbered = readMarkdown(chapter.file, project.root).data.numbered !== false;
+    unnumberedSoFar += numbered ? 0 : 1;
+    printed.set(chapter.id, numbered ? chapter.number - unnumberedSoFar : null);
+  }
+  return printed;
+}
+
 // src/codex.js
 var CODEX_KINDS = [
   { kind: "character", dir: "characters", title: "codex-characters", list: (project) => project.characters },
@@ -28109,6 +28121,7 @@ function codexPages(project, { spoilers = false } = {}) {
     labels: meta.labels,
     type: typesetting(meta.language),
     chapters: [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en")),
+    printedNumbers: printedChapterNumbers(project),
     entities: new Map(CODEX_KINDS.map((entry) => [entry.kind, new Map(entry.list(project).map((entity) => [entity.id, entity]))])),
     grid: buildGrid(project)
   };
@@ -28621,7 +28634,11 @@ function chapterLabel(site, id) {
     return escapeHtml(text);
   }
   const title = String(chapter.title ?? "").trim();
-  return escapeHtml(title === "" ? fillLabel(site.labels, "chapter", { n: chapter.number }) : `${chapter.number}. ${title}`);
+  const printed = site.printedNumbers.get(chapter.id);
+  if (title === "") {
+    return escapeHtml(fillLabel(site.labels, "chapter", { n: printed ?? chapter.number }));
+  }
+  return escapeHtml(printed === null ? title : `${printed}. ${title}`);
 }
 function chapterIdOf(site, number) {
   return site.chapters.find((chapter) => chapter.number === number)?.id ?? String(number);
@@ -29591,7 +29608,7 @@ function bookChapters(project, action = "build") {
   const meta = publishingMeta(project.story.data);
   const chapters = [];
   const warnings = [];
-  let unnumberedSoFar = 0;
+  const printed = printedChapterNumbers(project);
   const keys = new Set;
   for (const chapter of project.chapters) {
     const markdown = readMarkdown(chapter.file, project.root);
@@ -29601,8 +29618,7 @@ function bookChapters(project, action = "build") {
     if (!numbered && title === "") {
       throw projectError(`${relative(project, chapter.file)}: an unnumbered chapter needs a title to build`);
     }
-    unnumberedSoFar += numbered ? 0 : 1;
-    const displayNumber = numbered ? chapter.number - unnumberedSoFar : null;
+    const displayNumber = printed.get(chapter.id);
     const authors = nameList(markdown.data.author);
     const entry = {
       number: chapter.number,
