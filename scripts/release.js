@@ -14,6 +14,9 @@ const VERSION_MODULE = "src/version.js";
 const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
 const STORY_VERSION_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 const RELEASE_BRANCH = "main";
+// A signal that arrives during the local phase rolls the release back instead
+// of ending the process with the bumped files in place.
+const INTERRUPT_SIGNALS = ["SIGINT", "SIGTERM"];
 // test:coverage gates src line and function coverage (not branches, which
 // Bun's lcov report does not record), then the fallback bundle.
 export const PREFLIGHT = ["check:metadata", "check:evals", "check:links", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
@@ -182,23 +185,44 @@ function checkNpm(deps, name, nextVersion) {
   }
 }
 
-function preflight(deps, nextVersion, tag, name) {
+// What origin's main points at. A real run fetches main and the tags, so the
+// checks see origin's refs. A dry run only asks origin with ls-remote, which
+// moves no remote-tracking ref and fetches no tag.
+function originMain(deps, dryRun) {
+  if (dryRun) {
+    return remoteSha(deps, `refs/heads/${RELEASE_BRANCH}`) ?? "";
+  }
+  git(deps, "fetch", "origin", RELEASE_BRANCH, "--tags");
+  return git(deps, "rev-parse", `origin/${RELEASE_BRANCH}`);
+}
+
+// The object origin has under ref, or null when origin has no such ref.
+function remoteSha(deps, ref) {
+  const line = git(deps, "ls-remote", "origin", ref)
+    .split("\n")
+    .find((entry) => entry.split("\t")[1] === ref);
+  return line ? line.split("\t")[0] : null;
+}
+
+function preflight(deps, nextVersion, tag, name, dryRun) {
   if (git(deps, "rev-parse", "--abbrev-ref", "HEAD") !== RELEASE_BRANCH) {
     fail(`releases are cut from ${RELEASE_BRANCH}.`);
   }
   if (git(deps, "status", "--porcelain") !== "") {
     fail("working tree is not clean. Commit or stash your changes first.");
   }
-  git(deps, "fetch", "origin", RELEASE_BRANCH, "--tags");
+  const originHead = originMain(deps, dryRun);
   const head = git(deps, "rev-parse", "HEAD");
-  if (head !== git(deps, "rev-parse", `origin/${RELEASE_BRANCH}`)) {
+  if (head !== originHead) {
     fail(`local ${RELEASE_BRANCH} does not match origin/${RELEASE_BRANCH}. Pull or push first.`);
   }
   const changelogProblem = changelogProblemFor(fs.readFileSync(path.join(deps.root, CHANGELOG_FILE), "utf8"), nextVersion);
   if (changelogProblem) {
     fail(changelogProblem);
   }
-  if (git(deps, "tag", "--list", tag) !== "") {
+  // A dry run has not fetched the tags, so it asks origin for this one.
+  const tagTaken = git(deps, "tag", "--list", tag) !== "" || (dryRun && remoteSha(deps, `refs/tags/${tag}`) !== null);
+  if (tagTaken) {
     fail(`tag ${tag} already exists.`);
   }
   try {
@@ -343,7 +367,7 @@ function release(deps, bump, dryRun) {
   const tag = `v${nextVersion}`;
   deps.log(`Releasing ${packageJson.version} -> ${nextVersion} (${tag})`);
 
-  const head = preflight(deps, nextVersion, tag, packageJson.name);
+  const head = preflight(deps, nextVersion, tag, packageJson.name, dryRun);
   if (dryRun) {
     deps.log(`Dry run: would bump ${[...VERSION_FILES, VERSION_MODULE].join(", ")}, the STORY_VERSION templates, and the version examples in README.md and docs/, move the ${CHANGELOG_FILE} Unreleased entries under ${nextVersion}, rebuild the fallback, commit, tag ${tag}, push, and create the GitHub release. The tag push publishes ${packageJson.name}@${nextVersion} to npm from GitHub Actions.`);
     return;
@@ -352,16 +376,35 @@ function release(deps, bump, dryRun) {
   // Until the push everything is local. `local` records what the release has
   // done so far, so a failure undoes exactly that and nothing else.
   const local = { head, written: [], commit: null, tag: null };
+  // A signal is noticed between the steps and undone like any other failure.
+  // A command the terminal interrupts fails on its own and is undone the same way.
+  const interrupts = [];
+  const listeners = INTERRUPT_SIGNALS.map((signal) => [signal, () => interrupts.push(signal)]);
+  const stopIfInterrupted = () => {
+    if (interrupts.length > 0) {
+      throw new Error(`interrupted by ${interrupts[0]}`);
+    }
+  };
+  for (const [signal, listener] of listeners) {
+    process.on(signal, listener);
+  }
   try {
     writeVersions(deps, packageJson.version, nextVersion, local.written);
+    stopIfInterrupted();
     git(deps, "add", ...local.written);
     git(deps, "commit", "-m", `chore: release ${nextVersion}`);
     local.commit = git(deps, "rev-parse", "HEAD");
+    stopIfInterrupted();
     git(deps, "tag", "-a", tag, "-m", tag);
     local.tag = tag;
+    stopIfInterrupted();
     checkPushTargets(deps, tag);
   } catch (error) {
     rollBack(deps, local, `the release failed before anything was pushed: ${reason(error)}`);
+  } finally {
+    for (const [signal, listener] of listeners) {
+      process.off(signal, listener);
+    }
   }
   pushRelease(deps, local, nextVersion);
   deps.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);

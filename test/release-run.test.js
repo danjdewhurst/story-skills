@@ -65,7 +65,10 @@ function stubRun(overrides = {}, git = null) {
     "git rev-parse origin/main": "abc123\n",
     "git rev-parse refs/tags/v0.5.1": "tag789\n",
     [PUSH_TARGETS]: "abc123\trefs/heads/main\n",
-    [REMOTE_TAG]: ""
+    [REMOTE_TAG]: "",
+    "git ls-remote origin refs/heads/main": "abc123\trefs/heads/main\n",
+    "git ls-remote origin refs/tags/v0.5.1": "",
+    "git ls-remote origin refs/tags/v0.6.0": ""
   };
   const replies = {
     ...(git ? {} : stubGit),
@@ -173,6 +176,31 @@ describe("release run with stubbed commands", () => {
     expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
     expect(read(root, "package.json")).toBe(before);
     expect(read(root, "CHANGELOG.md")).toBe(changelog);
+  });
+
+  test("a dry run fetches nothing and reads origin with ls-remote (#683)", () => {
+    const result = releaseWith(["patch", "--dry-run"]);
+    expect(result.status).toBe(0);
+    expect(result.stub.keys().filter((key) => key.startsWith("git fetch"))).toEqual([]);
+    expect(result.stub.keys()).toContain("git ls-remote origin refs/heads/main");
+  });
+
+  test("a SIGTERM during the local phase rolls the release back before it commits (#684)", () => {
+    const listeners = process.listenerCount("SIGTERM");
+    const result = releaseWith(["patch"], {
+      replies: {
+        "bun run build:fallback": () => {
+          // The signal arrives while the build runs, as a kill would deliver it.
+          process.emit("SIGTERM");
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toContain("the release failed before anything was pushed: interrupted by SIGTERM");
+    expect(result.err).toContain("Rolled back:");
+    expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
+    expect(process.listenerCount("SIGTERM")).toBe(listeners);
   });
 
   test("a full run bumps every file, then commits, tags, pushes, and releases in order", () => {
@@ -428,6 +456,33 @@ const rolledBack = (repo, tag = false) =>
   `Rolled back: main is at ${repo.head} again${tag ? ", the local v0.5.1 tag is deleted," : ""} and the files the release wrote are restored. Fix the problem, then run the release again.`;
 
 describe("release run against a throwaway git origin", () => {
+  test("a dry run leaves origin's refs as they were, even when origin has moved (#683)", () => {
+    const repo = gitFixture();
+    repo.advanceOrigin();
+    const refs = repo.git("for-each-ref", "--format=%(refname) %(objectname)");
+    const result = releaseWith(["patch", "--dry-run"], { root: repo.root, git: (...args) => repo.git(...args) });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe("Release aborted: local main does not match origin/main. Pull or push first.");
+    expect(repo.git("for-each-ref", "--format=%(refname) %(objectname)")).toBe(refs);
+    expect(result.stub.keys().some((key) => key.startsWith("bun run"))).toBe(false);
+  });
+
+  test("a SIGINT during the build rolls back the files the release wrote (#684)", () => {
+    const repo = gitFixture();
+    const result = gitRelease(repo, {
+      replies: {
+        "bun run build:fallback": () => {
+          process.emit("SIGINT");
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: interrupted by SIGINT\n${rolledBack(repo)}`);
+    expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
+    expectUntouched(repo);
+  });
+
   test("a failed step before the commit restores only the files the release wrote", () => {
     const repo = gitFixture();
     const result = gitRelease(repo, {
