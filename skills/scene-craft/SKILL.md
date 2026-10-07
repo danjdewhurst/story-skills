@@ -70,7 +70,8 @@ outline-first drafting workflow.
      scene's moment is settled, and `travel-hours:` (a number) when the
      POV character had to travel since the previous scene. Undated scenes
      switch off the clock and route checks in `story continuity` without
-     a warning; `story timeline` shows what is still undated
+     a warning, except a scene with `travel-hours`, which warns;
+     `story timeline` shows what is still undated
    - Keep `state-changes` current for every change the scene makes
    - When the scene ends its chapter, set the chapter's `hook:` to how the
      chapter ends: `cliffhanger`, `question`, `revelation`, `reversal`,
