@@ -40,7 +40,7 @@ It reuses the promise-ordering machinery for the clue ledger (`continuity/clues/
 
 ### Planned and planted setups
 
-- `story add clue --planted` (and `story add promise --planted`) records the chapter and sets `status: planted` when that chapter exists; with `--planted` naming a chapter not written yet, or without `--planted`, the status is `planned`, and `--status` overrides either default.
+- `story add clue --planted` (and `story add promise --planted`) records the chapter and sets `status: planted` when that chapter has a file, even an `outline` one; with `--planted` naming a chapter that has no file yet, or without `--planted`, the status is `planned`, and `--status` overrides either default. Pass `--status planned` while the planted chapter is only an outline.
 - A promise or clue with `status: planned` and a `planted` chapter warns ("records planted chapter X but status is still planned") only once chapter X has prose, so `--status planned --planted chapter-NN` schedules a setup ahead.
 - Both warnings read the named chapter's own `status`: an `outline` planted or payoff chapter does not count as drafted, even when later chapters are.
 - A recorded payoff chapter that is not drafted yet suppresses the "no payoff yet" warning.
@@ -123,7 +123,7 @@ See the `genre-craft` skill.
 
 ## add clue
 
-Run it when the user plants a new clue. `story add clue 'Name' --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planted` (`planned` when `--planted` is omitted or names a chapter not written yet; pass `--status planned` if the clue is not on the page yet). Omit `--payoff` when the payoff is not yet known, and pass `--red-herring` for a clue meant to mislead.
+Run it when the user plants a new clue. `story add clue 'Name' --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planted` (`planned` when `--planted` is omitted or names a chapter with no file yet; pass `--status planned` if the chapter has a file but the clue is not on the page yet). Omit `--payoff` when the payoff is not yet known, and pass `--red-herring` for a clue meant to mislead.
 
 ## pacing
 
