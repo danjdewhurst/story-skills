@@ -4,6 +4,7 @@ story: kirimi-eki-no-wasuremono
 exemptions:
   - code: mention-not-named
     file: chapters/chapter-02.md
+    pattern: "lists character morita-fumi in mentions"
     reason: "Chapter 2 calls Fumi only 祖母 (grandmother), as Haruka thinks of her, so it is about Fumi without naming her."
 ---
 
