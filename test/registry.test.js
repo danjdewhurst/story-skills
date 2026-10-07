@@ -21,8 +21,13 @@ describe("command registry", () => {
     // These write only generated files (dist/, --out); init and import
     // lock the folder they fill themselves.
     const generated = ["diagram", "export", "build", "synopsis"];
-    for (const command of COMMANDS.filter((entry) => entry.project !== "none" && entry.options?.includes("dry-run"))) {
-      expect([command.name, command.writes !== undefined]).toEqual([command.name, !generated.includes(command.name)]);
+    // Commands that never write the project. Every other command on a
+    // project must declare `writes`, so a new writing command cannot skip
+    // this check, and a command here must not declare it.
+    const readOnly = ["validate", "links", "continuity", "check", "knowledge", "context", "compare", "similarity", "timeline", "prose", "names", "mentions", "pacing", "clues", "grid", "list", "voices", "series", "report", "next"];
+    for (const command of COMMANDS.filter((entry) => entry.project !== "none")) {
+      const writing = !generated.includes(command.name) && !readOnly.includes(command.name);
+      expect([command.name, command.writes !== undefined]).toEqual([command.name, writing]);
     }
     for (const command of COMMANDS.filter((entry) => entry.writes !== undefined)) {
       expect(command.writes === true || typeof command.writes === "function").toBe(true);
