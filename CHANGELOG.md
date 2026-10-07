@@ -102,6 +102,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A book's own `approximate-words` or `approximate-characters` label gives the same wording for every count in these languages, as it does in other languages.
 - `--json` `writes` lists the files a write command changed before it failed, for every write command. ([#722](https://github.com/danjdewhurst/story-skills/issues/722))
   - Before, `reindex`, `wordcount --write`, `rename`, `split`, `doctor --fix`, and the others reported `"writes": []` even when they had rewritten a file.
+- `story export`, `story build`, and `story synopsis` are refused while `.story-undo.tmp` holds a change a stopped command made, as `validate` already reports it. ([#723](https://github.com/danjdewhurst/story-skills/issues/723))
+  - The refusal exits `4`, and `--dry-run` is refused too. Run `story doctor --fix` to put the change back first.
 
 ## [0.23.0] - 2026-10-07
 

@@ -32670,6 +32670,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
     run({ parsed, io, root, overrides }) {
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story export");
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => exportManuscript(projectRoot, { out: parsed.options.out, includePending: isTruthy(parsed.options["include-pending"]) }));
       const findings = checkedWarnings(result.warnings, overrides);
       if (wantsJson(parsed)) {
@@ -32706,6 +32707,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story build");
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => buildBook(projectRoot, {
         out: parsed.options.out,
         format: parsed.options.format,
@@ -32747,6 +32749,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
     run({ parsed, io, root }) {
       const dryRun = outputDryRun(parsed, "synopsis");
       const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story synopsis");
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => synopsisBook(projectRoot, { pages: parsed.options.pages, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
