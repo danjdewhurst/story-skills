@@ -234,6 +234,14 @@ function stripCodeFences(text) {
   return text.replace(/```[\s\S]*?```/g, "").replace(/```[\s\S]*$/g, "");
 }
 
+// The prose the well-formedness and structural checks read: the draft
+// without its fenced blocks, and with each inline code span on one line
+// read as a single word, since a command such as `story reindex .` has a
+// space before its full stop by design.
+function proseText(text) {
+  return stripCodeFences(text).replace(/`[^`\n]+`/g, "code");
+}
+
 // Nonblank lines outside code fences: the line count of a poem.
 function lines(text) {
   return stripCodeFences(text)
@@ -342,7 +350,7 @@ export function checkDraft(checks, inputText, draftText) {
   const results = [];
   const normDraft = normalizeApos(draftText);
   const normInput = normalizeApos(inputText);
-  const proseOnly = stripCodeFences(normDraft);
+  const proseOnly = proseText(normDraft);
 
   for (const fact of checks.required || []) {
     if (typeof fact !== "string") {

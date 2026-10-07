@@ -10,7 +10,7 @@
     "\\bpreferred:\\s*\\[\\s*[^\\]\\s]",
     "\\bwatch-words:\\s*\\[\\s*[^\\]\\s]"
   ],
-  "brief": "Fill style-sheet.md from these two approved chapters: frontmatter and body sections. Record only decisions the prose already makes; where it is inconsistent, ask me rather than choosing. Return only the file.",
+  "brief": "Fill style-sheet.md from these two approved chapters: frontmatter and body sections. Record only decisions the prose already makes; where it is inconsistent, ask me rather than choosing. Return only the file, under 360 words.",
   "keep": "file",
   "max_words": 360,
   "min_words_ratio": 0.4,

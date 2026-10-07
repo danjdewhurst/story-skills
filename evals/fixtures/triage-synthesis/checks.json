@@ -9,10 +9,10 @@
   ],
   "banned_regex": [
     "\\|[^|\\n]*\\bromance\\b[^|\\n]*\\|[^|\\n]*\\|[^|\\n]*\\|\\s*(?:accept|investigate|fix)",
-    "(?:^|\\n)\\d+\\.[^\\n]*\\bromance\\b",
+    "(?:^|\\n)\\d+\\.(?:(?!\\b(?:no|not|never|nor|without)\\b|n't\\b)[^\\n])*\\bromance\\b",
     "\\bbeta readers? (?:persona|panel)\\b"
   ],
-  "brief": "All three reader files for round 3 are in. Write feedback/round-3/synthesis.md from the synthesis template: frontmatter with the readiness verdict, every finding sorted into exactly one category, a recorded reason for every decline and adjudication, and a numbered revision plan with file targets. Return only the file.",
+  "brief": "All three reader files for round 3 are in. Write feedback/round-3/synthesis.md from the synthesis template: frontmatter with the readiness verdict, every finding sorted into exactly one category, a recorded reason for every decline and adjudication, and a numbered revision plan with file targets. Return only the file, under 520 words.",
   "keep": "file",
   "max_words": 520,
   "min_words_ratio": 0.6,

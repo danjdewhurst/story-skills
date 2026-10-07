@@ -12,7 +12,7 @@
     "\\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\\s+\\d{1,2}\\b",
     "\\bDr\\.?\\s+[A-Z]"
   ],
-  "brief": "Draft the reading brief for a sensitivity reader with lived experience of sight loss, from the brief template. Use only the facts given: anything the author has not settled stays a marked placeholder for the author. Return only the brief.",
+  "brief": "Draft the reading brief for a sensitivity reader with lived experience of sight loss, from the brief template. Use only the facts given: anything the author has not settled stays a marked placeholder for the author. Return only the brief, under 520 words.",
   "max_words": 520,
   "min_words_ratio": 0.6,
   "name": "sensitivity-brief",
@@ -24,9 +24,12 @@
     "inspector",
     "Deadline",
     "Fee",
-    "[TODO",
     "Credit",
     "sighted"
+  ],
+  "required_regex": [
+    "\\bDeadline\\b[^\\n]*\\[[^\\]\\n]+\\]",
+    "\\bFee\\b[^\\n]*\\[[^\\]\\n]+\\]"
   ],
   "skill": "editorial-review"
 }

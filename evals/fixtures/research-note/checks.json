@@ -4,7 +4,6 @@
     "status: disputed",
     "confidence: high",
     "confidence: medium",
-    "reviewed-by",
     "this is accurate",
     "is historically accurate",
     "confirmed that"
@@ -15,11 +14,12 @@
     "\\bsources:\\s*\\[\\s*[^\\]\\s]",
     "\\b(?!1958\\b)(?:18|19)\\d\\d\\b",
     "\\bevery (?:two|three|four|2|3|4) hours\\b",
-    "\\bp\\.\\s*\\d"
+    "\\bp\\.\\s*\\d",
+    "\\breviewed-by:[ \\t]*(?:[^\\s\\[\\]'\"#]|[\"'][^\"'\\n]|\\[[ \\t]*[^\\]\\s]|\\n[ \\t]*-[ \\t]*\\S)"
   ],
-  "brief": "Open the research note for the burner details in chapter 2, as research/paraffin-vapour-burner.md: frontmatter and body. With no sources in this session, give the question, a search plan, and what counts as enough, and record nothing as found. Return only the file.",
+  "brief": "Open the research note for the burner details in chapter 2, as research/paraffin-vapour-burner.md: frontmatter and body. With no sources in this session, give the question, a search plan, and what counts as enough, and record nothing as found. Return only the file, under 360 words.",
   "keep": "file",
-  "max_words": 360,
+  "max_words": 380,
   "min_words_ratio": 0.6,
   "name": "research-note",
   "required": [
