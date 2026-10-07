@@ -4,6 +4,27 @@ import { composedText } from "./unicode.js";
 // word comparison goes through wordSpans, so `story wordcount`, `compare`,
 // `similarity`, and the prose checks split these scripts the same way.
 
+// Characters that continue a word: letters, combining marks (vowel signs,
+// viramas, harakat, niqqud, decomposed accents), digits, and the invisible
+// joiners ZWNJ, ZWJ, and the soft hyphen. A word starts with a letter or digit.
+const WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
+// Marks that join two parts of one word: apostrophes, hyphens (ASCII,
+// U+2010, U+2011), the Hebrew maqaf, geresh, and gershayim (בית־ספר,
+// ג׳ירפה, צה״ל), and the Armenian apostrophe and the emphasis, exclamation,
+// question, and abbreviation marks set inside a word (Ո՞վ).
+const JOINING_MARKS = "'\\u2019\\u2010\\u2011\\-\\u05BE\\u05F3\\u05F4\\u055A-\\u055C\\u055E\\u055F";
+// The word rule `story wordcount` counts with, and `compare`, `similarity`,
+// `voices`, and the prose checks split with, for the text between the
+// unspaced scripts (see wordSpans): letters and digits in any script, joined
+// by those marks, by underscores (`snake_case`, which markdown reads as
+// text inside a word), by a `"` between Hebrew letters (צה"ל, as gershayim is
+// often typed), and by `.` `,` `:` between digits, so `don’t`, `well-known`,
+// `$1,000`, `3.14`, and `9:30` are one word each.
+export const WORD_PATTERN = new RegExp(
+  `[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:[${JOINING_MARKS}]|_+|(?<=\\p{Script=Hebrew})"(?=\\p{Script=Hebrew})|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`,
+  "gu"
+);
+
 // One Han, Hiragana, or Katakana character, or the Katakana long-vowel mark,
 // which Unicode files under no single script. Chinese and Japanese count a
 // word per character, as Word and Scrivener count them.

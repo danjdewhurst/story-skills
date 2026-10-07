@@ -110,7 +110,7 @@ What still runs: sentence counts and lengths, the style sheet's watch words and 
 
 ## Counting words or characters
 
-- **Spaced scripts** (Latin, Cyrillic, Greek, Arabic, Hebrew, Devanagari, Hangul) count words between spaces and punctuation.
+- **Spaced scripts** (Latin, Cyrillic, Greek, Arabic, Hebrew, Armenian, Devanagari, Hangul) count words between spaces and punctuation. Marks set inside a word keep it one word: an apostrophe or hyphen, the Hebrew maqaf, geresh, and gershayim (`בית־ספר`, `צה״ל`), and the Armenian question, exclamation, and emphasis marks (`Ո՞վ`). See [How words are counted](project-format.md#how-words-are-counted).
 - **Chinese and Japanese** count each character as a word in word-based analysis, as Word and Scrivener do. A book whose `language` is `zh` or `ja` also **measures its length in characters**: `story wordcount` prints characters, `--write` records `character-count` beside `word-count` in each chapter, and `story progress`, `story report`, the registry, the form check, the Shunn title page, the print page estimate, and the narration runtime all use characters, measured against `target-characters`. Punctuation counts, as it fills a square of manuscript paper; whitespace, including a full-width indent, does not.
 
   ```text

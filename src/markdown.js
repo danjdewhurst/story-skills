@@ -1,6 +1,6 @@
 import { fillLabel } from "./languages/index.js";
 import { formatNumeral } from "./numerals.js";
-import { wordSpans } from "./words.js";
+import { WORD_PATTERN, wordSpans } from "./words.js";
 
 // Latin letters that NFKD does not decompose into a base letter plus marks,
 // spelled the way they are usually transliterated into ASCII.
@@ -115,17 +115,12 @@ export function chapterHeading(number, title, labels = undefined, numerals = "la
   return text === "" || repeats ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
 
-// Characters that continue a word: letters, combining marks (vowel signs,
-// viramas, harakat, niqqud, decomposed accents), digits, and the invisible
-// joiners ZWNJ, ZWJ, and the soft hyphen. A word starts with a letter or digit.
-const WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
 const URL_PLACEHOLDER = "\uE000";
-// Apostrophes and hyphens (ASCII, U+2010, U+2011) join word parts, and so do
-// `.` `,` `:` between digits, so `$1,000`, `3.14`, and `9:30` are one word.
-const WORD_PATTERN = new RegExp(
-  `${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['\u2019\u2010\u2011-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`,
-  "gu"
-);
+// A word as WORD_PATTERN reads one, or a URL or email address set aside.
+const COUNTED_WORD = new RegExp(`${URL_PLACEHOLDER}|${WORD_PATTERN.source}`, "gu");
+// Underscores markdown reads as emphasis: every run but one between two
+// letters or digits (`snake_case`), which is text and joins the word.
+const EMPHASIS_UNDERSCORES = /(?<![\p{L}\p{M}\p{N}_])_+|(?<!_)_+(?![\p{L}\p{N}_])/gu;
 // A bare URL or email address counts as one word. The lookbehinds start a
 // match only at the start of a token, so scanning stays linear.
 const URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
@@ -189,24 +184,26 @@ export function flattenHeadings(text) {
 export function splitWords(markdown) {
   const urls = [];
   // Code is printed by every build, so its words count; only the fence
-  // lines themselves are left out.
-  const normalized = plainLinks(withoutFenceMarkers(String(markdown).replace(/\uE000/g, " ")))
+  // lines themselves, and markup a reader never sees, are left out (see
+  // countedText).
+  const normalized = plainLinks(countedText(markdown).replace(/\uE000/g, " "))
     .replace(URL_OR_EMAIL, (match) => {
       urls.push(match);
       return ` ${URL_PLACEHOLDER} `;
     })
     // A backslash escape (`didn\'t`) is the character it escapes.
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
-    .replace(/[#>*_~|`]/g, " ")
+    .replace(EMPHASIS_UNDERSCORES, " ")
+    .replace(/[#>*~|`]/g, " ")
     .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
 
-  // Letters and digits in any script; apostrophes (straight or curly) and
-  // hyphens join a word rather than split it, so "don\u2019t" and "well-known"
-  // each count once. "U.S.A" is three words because the periods split it.
-  // Chinese and Japanese count a word per character, and Thai, Lao, Khmer,
-  // and Burmese are split by dictionary (see wordSpans).
+  // Letters and digits in any script, joined as WORD_PATTERN says, so
+  // "don\u2019t" and "well-known" each count once. "U.S.A" is three words
+  // because the periods split it. Chinese and Japanese count a word per
+  // character, and Thai, Lao, Khmer, and Burmese are split by dictionary
+  // (see wordSpans).
   let next = 0;
-  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => (word === URL_PLACEHOLDER ? urls[next++] : word));
+  return wordSpans(normalized, COUNTED_WORD).map(({ word }) => (word === URL_PLACEHOLDER ? urls[next++] : word));
 }
 
 // A scene break paragraph: three or more of the same marker, optionally
@@ -553,11 +550,11 @@ let graphemes;
 
 // Characters as Chinese and Japanese count a manuscript: every grapheme
 // cluster that is not whitespace, punctuation included, after the markdown
-// stripping wordCount does. Scene break lines and markup characters are
-// not book text, so they are left out; a full-width space indent is
-// whitespace.
+// stripping wordCount does (see countedText). Scene break lines and markup
+// characters, every underscore among them, are not book text, so they are
+// left out; a full-width space indent is whitespace.
 export function characterCount(markdown) {
-  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " ")))
+  const text = plainLinks(countedText(String(markdown).replace(/\uE000/g, " ")))
     .split("\n")
     .filter((line) => !isSceneBreak(line))
     .join("\n")
@@ -636,12 +633,14 @@ const LINK_TITLE = String.raw`(?:"${titleText('"')}"|'${titleText("'")}'|\(${tit
 // not one. A footnote (`[^1]: text`) is prose. Bounded, so it stays
 // linear.
 const LINK_DEFINITION = new RegExp(String.raw`^${QUOTE_MARKERS}[ \t]*\[(?!\^)([^[\]\n]{1,999})\]:(?:${LINK_BREAK}|[ \t]*)(?:<[^<>\n]*>|[^\s<]\S{0,2000})(?:(?:${LINK_BREAK}|[ \t]+)${LINK_TITLE})?[ \t]*$`, "gm");
-// A full reference's label, after its text's `]`; an autolink; and an
-// HTML tag with its attributes (`<img src="img/Ines.png" alt="Ines">`).
-// Bounded, so a long run of unclosed `[` or `<` stays linear. Inline
-// destinations are found by inlineDestinations.
+// A full reference's label, after its text's `]`.
+const FULL_REFERENCE_LABEL = String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`;
+// A full reference's label; an autolink; and an HTML tag with its
+// attributes (`<img src="img/Ines.png" alt="Ines">`). Bounded, so a long
+// run of unclosed `[` or `<` stays linear. Inline destinations are found
+// by inlineDestinations.
 const LINK_TARGET = new RegExp([
-  String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`,
+  FULL_REFERENCE_LABEL,
   String.raw`<[a-z][a-z0-9+.-]{1,31}:[^<>\s]*>`,
   String.raw`<\/?[a-z][a-z0-9-]*(?:\s(?:[^<>\n]|${NEXT_LINE}){0,2000})?\/?>`
 ].join("|"), "gim");
@@ -656,22 +655,12 @@ const REFERENCE_TEXT = /\[([^[\]\n]{1,999})\](?:\[\])?(?![([])/g;
 // or a thematic break. Blank lines are found apart.
 const BLOCK_LINE = /^[ \t>]*(?:#{1,6}(?:[ \t]|\r?$)|([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$)/;
 
-// Link syntax in `text` a reader does not see as prose, blanked with
-// `blank`, keeping line breaks, so offsets still match: link and image
-// destinations and titles, the label of a full reference, reference
-// definitions, autolinks, HTML tags, and bare URLs and email addresses.
-// Link text and image alt text are kept. A definition counts only where a
-// paragraph may start: at the start, after a blank line (or one of nothing
-// but `blank`, as an earlier mask leaves a comment), a heading, a
-// thematic break, or another definition. Returns { text, references }:
-// `references` lists, as [start, end], the text of each shortcut or
-// collapsed reference whose label is defined, since that text is the
-// label too, and renaming it would break the link.
-export function maskLinkTargets(text, blank = " ") {
-  const source = String(text);
-  const ranges = [];
-  const labels = new Set();
-  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+// The reference definitions in `source`, as [start, end, label]. A
+// definition counts only where a paragraph may start: at the start, after
+// a blank line (or one of nothing but `blank`, as an earlier mask leaves a
+// comment), a heading, a thematic break, or another definition.
+function linkDefinitions(source, blank = " ") {
+  const definitions = [];
   const blankLine = new RegExp(`^[ \\t>${escapeRegExp(blank)}]*\\r?$`);
   let definitionEnd = -1;
   for (const match of source.matchAll(LINK_DEFINITION)) {
@@ -680,10 +669,29 @@ export function maskLinkTargets(text, blank = " ") {
     const opens = match.index === 0 || blankLine.test(previous) || BLOCK_LINE.test(previous)
       || (definitionEnd !== -1 && source.slice(definitionEnd, match.index).trim() === "");
     if (opens) {
-      labels.add(label(match[1]));
-      ranges.push([match.index, match.index + match[0].length]);
       definitionEnd = match.index + match[0].length;
+      definitions.push([match.index, definitionEnd, match[1]]);
     }
+  }
+  return definitions;
+}
+
+// Link syntax in `text` a reader does not see as prose, blanked with
+// `blank`, keeping line breaks, so offsets still match: link and image
+// destinations and titles, the label of a full reference, reference
+// definitions (see linkDefinitions), autolinks, HTML tags, and bare URLs
+// and email addresses. Link text and image alt text are kept. Returns
+// { text, references }: `references` lists, as [start, end], the text of
+// each shortcut or collapsed reference whose label is defined, since that
+// text is the label too, and renaming it would break the link.
+export function maskLinkTargets(text, blank = " ") {
+  const source = String(text);
+  const ranges = [];
+  const labels = new Set();
+  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  for (const [start, end, name] of linkDefinitions(source, blank)) {
+    labels.add(label(name));
+    ranges.push([start, end]);
   }
   for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
     for (const match of source.matchAll(pattern)) {
@@ -751,6 +759,138 @@ function inlineDestinations(source, blank) {
     }
   }
   return ranges;
+}
+
+// HTML elements, so a tag is told from text in angle brackets: `<span
+// class="smallcaps">` is a tag, `<Can you hear me?>` is not. The tags of
+// the inline ones go without a trace, so `<i>un</i>known` is one word; any
+// other tag (`<br>`, `<p>`) parts the words on either side.
+const INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
+const OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress rp rt script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
+const ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")})(?![a-z\\d-])`;
+// An opening or closing tag as CommonMark reads one. Its attributes and
+// their values are bounded, so a long run of unclosed `<` or quotes stays
+// linear.
+const ATTRIBUTE = String.raw`\s+[a-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>\x60]+|'[^'<>]{0,1000}'|"[^"<>]{0,1000}"))?`;
+const HTML_TAG = String.raw`<(?:${ELEMENT}(?:${ATTRIBUTE}){0,100}\s*\/?|\/${ELEMENT}\s*)>`;
+// Markup a reader never sees, as counts leave it out: a full reference's
+// label, an HTML tag, a footnote marker (`[^1]`, with its colon where it
+// opens the note), and an HTML entity, which counts as the character it
+// stands for.
+const FOOTNOTE = String.raw`\[\^[^[\]\s]{1,999}\]`;
+const COUNTED_MARKUP = new RegExp([
+  FULL_REFERENCE_LABEL,
+  HTML_TAG,
+  String.raw`(?<=^[ \t]{0,3})${FOOTNOTE}:`,
+  FOOTNOTE,
+  String.raw`&(?:#\d{1,7}|#x[\da-f]{1,6}|[a-z][a-z\d]{1,31});`
+].join("|"), "gim");
+// A task-list box (`- [ ]`, `1. [x]`), after its list marker.
+const TASK_BOX = /^((?:[ \t]*>)*[ \t]*(?:[-+*]|\d{1,9}[.)])[ \t]+)\[[ xX]\](?=[ \t]|\r?$)/gm;
+// The named HTML entities a manuscript is likely to hold: the Latin-1
+// letters and signs, U+00A0 to U+00FF in order, then the common
+// punctuation, spaces, joiners, and symbols.
+const NAMED_ENTITIES = new Map([
+  ..."nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml"
+    .split(" ").map((name, index) => [name, String.fromCharCode(0xa0 + index)]),
+  ...Object.entries({
+    amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", OElig: "\u0152", oelig: "\u0153", Scaron: "\u0160", scaron: "\u0161",
+    Yuml: "\u0178", fnof: "\u0192", circ: "\u02c6", tilde: "\u02dc", ensp: "\u2002", emsp: "\u2003", thinsp: "\u2009",
+    hairsp: "\u200a", zwnj: "\u200c", zwj: "\u200d", lrm: "\u200e", rlm: "\u200f", hyphen: "\u2010", ndash: "\u2013",
+    mdash: "\u2014", lsquo: "\u2018", rsquo: "\u2019", sbquo: "\u201a", ldquo: "\u201c", rdquo: "\u201d", bdquo: "\u201e",
+    dagger: "\u2020", Dagger: "\u2021", bull: "\u2022", hellip: "\u2026", permil: "\u2030", prime: "\u2032", Prime: "\u2033",
+    lsaquo: "\u2039", rsaquo: "\u203a", euro: "\u20ac", trade: "\u2122", larr: "\u2190", uarr: "\u2191", rarr: "\u2192",
+    darr: "\u2193", harr: "\u2194", minus: "\u2212", spades: "\u2660", clubs: "\u2663", hearts: "\u2665", diams: "\u2666"
+  })
+]);
+
+// The text as word and character counts read it: closed code fences
+// without their fence lines, and outside them, without the markup a reader
+// never sees. That is reference definitions (`[label]: url`), the label of
+// a full reference link, HTML tags, footnote markers (`[^1]`, the note's
+// own text counts), and task-list boxes (`- [x]`); an HTML entity is the
+// character it stands for (`&rsquo;`). Markup in a code span is printed as
+// written, so it counts.
+function countedText(markdown) {
+  return splitFences(String(markdown))
+    .map((part) => (part.fenced ? withoutFenceMarkers(part.text) : withoutUnseenMarkup(part.text)))
+    .join("");
+}
+
+function withoutUnseenMarkup(text) {
+  const edits = linkDefinitions(text).map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+  for (const match of text.matchAll(TASK_BOX)) {
+    const start = match.index + match[1].length;
+    edits.push([start, start + 3, ""]);
+  }
+  for (const match of text.matchAll(COUNTED_MARKUP)) {
+    // A backslash before it (`\<b>`, `\&amp;`) makes it text.
+    if (text[match.index - 1] !== "\\") {
+      edits.push([match.index, match.index + match[0].length, markupText(match[0])]);
+    }
+  }
+  edits.sort((left, right) => left[0] - right[0]);
+  const code = codeSpans(text);
+  let result = "";
+  let position = 0;
+  let next = 0;
+  for (const [start, end, replacement] of edits) {
+    while (next < code.length && code[next][1] <= start) {
+      next += 1;
+    }
+    if (start >= position && (next === code.length || code[next][0] >= end)) {
+      result += text.slice(position, start) + replacement;
+      position = end;
+    }
+  }
+  return result + text.slice(position);
+}
+
+// What a match of COUNTED_MARKUP leaves in the text.
+function markupText(markup) {
+  if (markup[0] === "&") {
+    return entityText(markup.slice(1, -1));
+  }
+  const tag = /^<\/?([a-z\d]+)/i.exec(markup);
+  return tag !== null && !INLINE_ELEMENTS.has(tag[1].toLowerCase()) ? " " : "";
+}
+
+// The character an entity name (`amp`, `#8217`, `#x2019`) stands for. A
+// name NAMED_ENTITIES lacks stands for nothing, and, as in HTML, a number
+// that is not a character stands for U+FFFD.
+function entityText(name) {
+  if (name[0] !== "#") {
+    return NAMED_ENTITIES.get(name) ?? "";
+  }
+  const code = /^#x/i.test(name) ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
+  return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "\ufffd" : String.fromCodePoint(code);
+}
+
+// The code spans in `text`, as [start, end] in order, read as scanMarkup
+// reads them: a run of backticks and the next run of the same length on
+// its line. Each run's closer is found in one pass from the end of the
+// line, so many runs of different lengths stay linear.
+function codeSpans(text) {
+  const spans = [];
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
+    const runs = line.includes("`") ? [...line.matchAll(/`+/g)] : [];
+    const closers = [];
+    const later = new Map();
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      closers[index] = later.get(runs[index][0].length);
+      later.set(runs[index][0].length, index);
+    }
+    for (let index = 0; index < runs.length; index += 1) {
+      const close = closers[index];
+      if (close !== undefined) {
+        spans.push([lineStart + runs[index].index, lineStart + runs[close].index + runs[close][0].length]);
+        index = close;
+      }
+    }
+    lineStart += line.length + 1;
+  }
+  return spans;
 }
 
 // One left-to-right pass over comments, closed backtick fences, and code
