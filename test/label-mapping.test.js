@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { formatLabelMapping, mapLabels } from "../src/compare.js";
 import { openingWords, paragraphLabels, reviewHtml } from "../src/html.js";
 import { buildBook, compareProject, createStoryProject } from "../src/story.js";
-import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearTime, git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -182,6 +182,12 @@ describe("mapLabels", () => {
   test("opening words stop at six with an ellipsis", () => {
     expect(openingWords("She had been diving the reef for eleven years.")).toBe("She had been diving the reef…");
     expect(openingWords("  Short   one. ")).toBe("Short one.");
+  });
+
+  test("opening words skip runs with no letter, in linear time (#587)", () => {
+    expect(openingWords("*_*_ ![ Hello there, said the *_ keeper of the light.")).toBe("*_*_ ![ Hello there, said the *_ keeper of…");
+    expectLinearTime((text) => openingWords(text), (n) => "*_".repeat(n / 2));
+    expectLinearTime((text) => openingWords(text), (n) => "![".repeat(n / 2));
   });
 });
 

@@ -51,9 +51,12 @@ export function paragraphLabels(book) {
 // enough for the author to search for it. A word is a space-separated run
 // with a letter or digit in it, or a word of Chinese, Japanese, Thai, Lao,
 // Khmer, or Burmese, so those quote a few words rather than the paragraph.
+// A match starts only at the start of a run: a long run with no letter in
+// it (*_*_*_) otherwise fails again from each character, which is
+// quadratic in the run's length.
 export function openingWords(text, count = 6) {
   const source = String(text);
-  const words = wordSpans(source, /\S*[\p{L}\p{N}]\S*/gu);
+  const words = wordSpans(source, /(?<!\S)\S*[\p{L}\p{N}]\S*/gu);
   const opening = words.length > count ? source.slice(0, words[count].start) : source;
   const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
   return words.length > count ? `${collapsed}\u2026` : collapsed;

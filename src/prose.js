@@ -520,7 +520,9 @@ function tagWord(word, rules) {
 }
 
 function tagKind(quoted, nextWord, rules) {
-  const end = quoted.trim().replace(/["'”’)\]*_]+$/, "").slice(-1);
+  // The closing marks match only from the start of their run, so a long
+  // run inside the quote stays linear.
+  const end = quoted.trim().replace(/(?<!["'”’)\]*_])["'”’)\]*_]+$/, "").slice(-1);
   if (end === ".") {
     return "none";
   }

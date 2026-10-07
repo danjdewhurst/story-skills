@@ -1,4 +1,4 @@
-import { spyOn } from "bun:test";
+import { expect, spyOn } from "bun:test";
 import { Buffer } from "node:buffer";
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
@@ -251,4 +251,33 @@ export function treeDiff(before, after) {
     }
   }
   return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+// Asserts that `run` takes about linear time in the length of its input,
+// with no wall-clock limit: one input of `length` characters is timed
+// against `pieces` inputs of length / pieces characters each, the same
+// total. A linear scan takes about as long either way; a quadratic one
+// takes `pieces` times as long on the long input. `make(n)` builds an
+// input of about n characters. The fastest of a few tries counts, so one
+// stall on a busy runner does not decide, and the slack covers timer noise
+// when both are quick.
+export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}) {
+  const fastest = (task) => {
+    let best = Infinity;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const started = performance.now();
+      task();
+      best = Math.min(best, performance.now() - started);
+    }
+    return best;
+  };
+  const short = make(length / pieces);
+  const long = make(length);
+  const shortTime = fastest(() => {
+    for (let piece = 0; piece < pieces; piece += 1) {
+      run(short);
+    }
+  });
+  const longTime = fastest(() => run(long));
+  expect(longTime).toBeLessThan(4 * shortTime + 25);
 }

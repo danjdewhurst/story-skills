@@ -46,8 +46,9 @@ function inkLine(line) {
 // break is a space except between Chinese or Japanese characters (see
 // softBreak) and beside a heading, and a line ending in two spaces or a
 // backslash is a hard break (the backslash dropped) that keeps verse on its
-// lines.
-const HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
+// lines. The spaces match only from the start of a run, so a long run inside
+// a line stays linear.
+const HARD_BREAK = /(?:(?<! ) {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 
 function inkProse(body) {
   const out = [];

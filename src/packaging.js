@@ -692,8 +692,11 @@ function inlineRuns(text) {
         buffer += "`".repeat(run);
         index += run;
       } else {
+        // One space comes off each end of a span that is not all spaces.
+        // Plain string tests: a regex for this backtracks quadratically on a
+        // long span.
         const code = text.slice(index + run, end - run);
-        buffer += /^ .*[^ ].* $/.test(code) ? code.slice(1, -1) : code;
+        buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
         index = end;
       }
       continue;
@@ -881,7 +884,9 @@ function markdownParagraphs(markdown, ownIndent = false) {
       if (index === texts.length - 1) {
         return text;
       }
-      if (/\\$| {2,}$/.test(lines[index].line)) {
+      // Plain string tests: a pattern for the spaces backtracks
+      // quadratically on a long run of them inside the line.
+      if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
         return `${text}${LINE_BREAK}`;
       }
       // A soft break is a space, except between Chinese or Japanese

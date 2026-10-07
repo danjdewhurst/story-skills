@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { buildBook, createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { codexPages } from "../src/codex.js";
+import { buildBook, createStoryProject, scanProject } from "../src/story.js";
+import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -199,6 +200,21 @@ describe("build --format codex", () => {
     expect(site["systems/tide-law.html"]).toContain('<tr><th scope="row">Pronunciation</th><td>TIDE-law</td></tr>');
     expect(site["timeline.html"]).toContain("<td>2020-05-01</td><td>06:00</td><td>The Climb</td><td>1. Arrival</td>");
     expect(site["progress.html"]).toContain("<tr><td>2020-05-01</td><td>10</td></tr>");
+  });
+
+  test("reads a long run of spaces inside a notes line in linear time (#587)", () => {
+    // A bare project, rendered without writing the site, so the fixed cost
+    // stays small next to the notes. Each page reads its notes afresh.
+    const { root } = createStoryProject({ cwd: makeTempDir(), title: "Lamp", force: false });
+    const file = path.join(root, "characters", "mara.md");
+    writeMarkdown(file, "name: Mara\nrole: protagonist\nstatus: alive", "\n# Mara\n");
+    const scanned = scanProject(root);
+    const notes = (body) => {
+      fs.writeFileSync(file, `---\nname: Mara\nrole: protagonist\nstatus: alive\n---\n${body}`, "utf8");
+      return codexPages(scanned, { spoilers: true }).find((page) => page.path === "characters/mara.html").html;
+    };
+    expect(notes("\n# Mara\n\nLine one  \nline two\nline three\n")).toContain("<p>Line one<br>line two line three</p>");
+    expectLinearTime(notes, (n) => `\n# Mara\n\na${" ".repeat(n)}b\nc\n`, { length: 128000 });
   });
 
   test("says when there are no threads, entities, or dated scenes", () => {
