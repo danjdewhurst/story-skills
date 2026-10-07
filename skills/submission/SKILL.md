@@ -189,10 +189,8 @@ description with the same copy plus a comp line if the user wants one. The
 blurb never reveals the ending.
 
 This skill owns the retailer description: `submission/blurb.md` is its
-only draft, and the `publishing` skill reads it from there rather than
-writing its own. Keep the retailer description in `submission/blurb.md`
-and the `description` field in `story.md` in step when the user
-self-publishes.
+only draft, and the `publishing` skill reads it there. Keep it and the
+`description` field in `story.md` in step when the user self-publishes.
 
 ### 7. Build the manuscript
 
