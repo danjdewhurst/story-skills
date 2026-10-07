@@ -1205,7 +1205,7 @@ add-words:
 | `filter-words` | `prose` | Narration verbs that filter a scene through a character (felt, saw). |
 | `said-bookisms` | `prose` | Dialogue tags that replace said with an action or manner. Needs `plain-tags` and `beat-pronouns` too. |
 | `plain-tags` | `prose` | The plain tags (said, asked). |
-| `beat-pronouns` | `prose` | Pronouns that, capitalised after a quote ending in `?`, `!`, or a dash, start an action beat rather than a tag. |
+| `beat-pronouns` | `prose`, sentences | Pronouns that, capitalised after a quote ending in `?`, `!`, or a dash, start an action beat rather than a tag. A one-letter pronoun (`I`) before a full stop ends a sentence after a word that is not a name (`So do I.`). |
 | `inversion-links` | `prose`, `voices` | What joins an inverted tag's verb and pronoun (`-t-` and `-` in French `demanda-t-elle`, `dit-il`). |
 | `adverb-suffixes`, `adverb-exceptions` | `prose` | The endings that mark a manner adverb (`ly`), and the words with those endings that are not adverbs. The check needs both. |
 | `adverb-blockers` | `prose` | Words after which an adverb-shaped word is a noun or verb (French `le moment`, `ils aiment`); one ending in an apostrophe is an elision joined to the word (`l'appartement`). |
@@ -1222,7 +1222,7 @@ add-words:
 | `front-matter-words` | `import` | Names of source files that sort before the numbered chapters. |
 | `ordinal-words` | `import` | Ordinals that may come before a chapter or part word (`Erstes Kapitel`, `Première partie`); with this list, a number with a full stop may too (`1. Kapitel`). |
 | `number-words`, `number-joiners` | `import` | Spelled-out chapter numbers. A numeral is a run of number words joined by a space, a hyphen, nothing, or a joiner (`vingt et un`, `einundzwanzig`). Replacing `number-words` drops a pack's built-in numbers, English's included. |
-| `candidate-stopwords` | `import` | Capitalised words that are never names, as written. |
+| `candidate-stopwords` | sentences, `import` | Capitalised words that are never names, as written. A capital alone before one ends a sentence rather than reading as an initial (`plan B. Nobody agreed.`). |
 | `determiners`, `relative-words`, `noun-suffixes` | `import` | For a language that capitalises nouns: words after which a capitalised word is a common noun (`die`, `einem`), the determiners that start a relative clause after a comma instead (`die Frau, die Lena kannte`), and endings only nouns have (`ung`). |
 | `title-words` | `names`, `voices`, `prose` | Titles and articles before a name (Lord, Frau), so a name is known by the word after them. |
 
