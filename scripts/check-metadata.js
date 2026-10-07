@@ -251,6 +251,26 @@ export function checkChangelogVersion(failures, packageVersion, changelog) {
   return failures;
 }
 
+// Each changelog entry leads with one short sentence saying what changed for
+// users, and the detail goes in indented sub-bullets, so a reader can scan the
+// top-level list (#605). A link counts as its text, since its target is not shown.
+export const CHANGELOG_LEAD_LIMIT = 200;
+
+export function checkChangelogEntries(failures, changelog) {
+  changelog.split(/\r?\n/).forEach((line, index) => {
+    if (!/^[-*] /.test(line)) {
+      return;
+    }
+    const length = line.slice(2).replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").length;
+    if (length > CHANGELOG_LEAD_LIMIT) {
+      failures.push(
+        `CHANGELOG.md:${index + 1} entry's first line is ${length} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`
+      );
+    }
+  });
+  return failures;
+}
+
 export function checkMarketplaces({ packageName, packageVersion, claudeMarketplace, agentsMarketplace, exists }) {
   const failures = [];
 
@@ -398,7 +418,9 @@ export function metadataFailures(root = repoRoot) {
     fs.readFileSync(path.join(root, relativePath), "utf8")
   );
 
-  checkChangelogVersion(failures, packageJson.version, fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8"));
+  const changelog = fs.readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
+  checkChangelogVersion(failures, packageJson.version, changelog);
+  checkChangelogEntries(failures, changelog);
 
   const marketplaceFailures = checkMarketplaces({
     packageName: packageJson.name,

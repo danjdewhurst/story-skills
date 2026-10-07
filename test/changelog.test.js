@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { hasVersionSection, promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
-import { checkChangelogVersion } from "../scripts/check-metadata.js";
+import { CHANGELOG_LEAD_LIMIT, checkChangelogEntries, checkChangelogVersion } from "../scripts/check-metadata.js";
 import { changelogProblemFor, updateChangelog } from "../scripts/release.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -104,5 +104,32 @@ Intro.
   test("the repository changelog matches the package version", () => {
     const version = JSON.parse(fs.readFileSync(path.join(repoRoot, "package.json"), "utf8")).version;
     expect(checkChangelogVersion([], version, fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"))).toEqual([]);
+  });
+
+  // #605: entries were single paragraphs of up to 2,000 characters.
+  test("check:metadata keeps each entry's first line short and leaves sub-bullets alone", () => {
+    const link = `([#605](https://github.com/danjdewhurst/story-skills/issues/605${"/x".repeat(100)}))`;
+    const lead = "a".repeat(CHANGELOG_LEAD_LIMIT - "(#605)".length - 1);
+    const fits = changelog(`\n### Fixed\n\n- ${lead} ${link}\n  - ${"Detail. ".repeat(60)}\n    - ${"More. ".repeat(60)}\n\n`);
+    expect(checkChangelogEntries([], fits)).toEqual([]);
+
+    const tooLong = changelog(`\n### Fixed\n\n- ${lead}b ${link}\n* ${"c".repeat(250)}\n\n`);
+    expect(checkChangelogEntries([], tooLong)).toEqual([
+      `CHANGELOG.md:9 entry's first line is ${CHANGELOG_LEAD_LIMIT + 1} characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`,
+      `CHANGELOG.md:10 entry's first line is 250 characters, over ${CHANGELOG_LEAD_LIMIT}: lead with one short sentence and move the detail into indented sub-bullets`
+    ]);
+    expect(checkChangelogEntries([], tooLong.replaceAll("\n", "\r\n"))).toHaveLength(2);
+  });
+
+  test("the repository changelog keeps every entry's first line short", () => {
+    expect(checkChangelogEntries([], fs.readFileSync(path.join(repoRoot, "CHANGELOG.md"), "utf8"))).toEqual([]);
+  });
+
+  test("the release moves an entry's sub-bullets with it and counts only the entry", () => {
+    const text = changelog("\n### Added\n\n- New thing. (#1)\n  - Detail.\n    - Deeper detail.\n\n");
+    expect(unreleasedEntries(text)).toEqual(["- New thing. (#1)"]);
+    expect(promoteUnreleased(text, "1.2.3", "1.3.0", "2026-02-03")).toContain(
+      "## [Unreleased]\n\n## [1.3.0] - 2026-02-03\n\n### Added\n\n- New thing. (#1)\n  - Detail.\n    - Deeper detail.\n\n## [1.2.3]"
+    );
   });
 });
