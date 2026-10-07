@@ -113,6 +113,14 @@ describe("#208 Chinese and Japanese count per character", () => {
     expect(splitSentences("我是一个学生。他很好！你呢？")).toEqual(["我是一个学生。", "他很好！", "你呢？"]);
     expect(splitSentences("没有句号")).toEqual(["没有句号."]);
   });
+
+  test("an abbreviation inside emphasis or a link does not end the sentence (#705)", () => {
+    expect(splitSentences("She reread *Mr. Darcy* twice. Then she slept.")).toEqual(["She reread *Mr. Darcy* twice.", "Then she slept."]);
+    expect(splitSentences("She reread _Mr. Darcy_ twice. Then she slept.")).toEqual(["She reread _Mr. Darcy_ twice.", "Then she slept."]);
+    expect(splitSentences("She met **Dr. Hale** and [Mrs. Hale](x) twice. Then she slept.")).toEqual(["She met **Dr. Hale** and [Mrs. Hale](x) twice.", "Then she slept."]);
+    // The stop can sit inside the emphasis, before its closing mark.
+    expect(splitSentences("She met *Mr.* Darcy. Then she slept.")).toEqual(["She met *Mr.* Darcy.", "Then she slept."]);
+  });
 });
 
 describe("#710 a sentence that starts with an emoji is split", () => {
