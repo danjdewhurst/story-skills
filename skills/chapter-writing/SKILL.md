@@ -61,7 +61,7 @@ Once the scope is agreed, give the chapter its POV and cast so the packed contex
 Create a beat-by-beat outline listing:
 - Each scene/beat and what it accomplishes
 - POV character and location for each beat
-- Which arc plot points are advanced
+- Which arc plot points are advanced, and how the chapter delivers its structural beat when the packed context lists one (`Beat: Midpoint`)
 - Any setup to plant or pay off (see Setups to plant or pay off below)
 - Any machine-readable state changes the scene should record
 - Each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`) and how the chapter ends (`hook`)
