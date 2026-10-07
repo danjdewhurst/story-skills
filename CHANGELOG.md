@@ -159,6 +159,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Sentence counts and the checks that use them now read `She reread *Mr. Darcy* twice.` as one sentence.
 - A backslash-escaped backtick no longer opens a code span, so an HTML comment after it is removed from builds and counts. ([#706](https://github.com/danjdewhurst/story-skills/issues/706))
   - The rest of an escaped run still opens a span, as CommonMark reads it.
+- `story similarity` compares the text of a link, not its target, and counts a bare URL as one word, as `story wordcount` does. ([#707](https://github.com/danjdewhurst/story-skills/issues/707))
+  - Before, the parts of a link target and of a URL were compared as separate words.
 
 ## [0.23.0] - 2026-10-07
 
