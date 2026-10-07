@@ -270,6 +270,11 @@ export function validateProjectOf(project) {
       warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
     }
 
+    if (chapter.footnotes.length > 0) {
+      const one = chapter.footnotes.length === 1;
+      warnings.push(warn("unsupported-footnote", `${file} has ${one ? "a footnote" : `${chapter.footnotes.length} footnotes`} (${one ? "line" : "lines"} ${chapter.footnotes.join(", ")}): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work ${one ? "the note" : "each note"} into the prose or a back-matter page`, file));
+    }
+
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
     }

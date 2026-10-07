@@ -1008,10 +1008,11 @@ export const LINE_BREAK = "\uE001";
 // too, not the setext heading CommonMark reads (story validate warns, see
 // setextSceneBreakLines). Fence lines go and the code stays, with no breaks
 // in it; outside code, links print as their text and images are left out,
-// as word counts treat them (see plainLinks). A build that indents first lines itself passes `ownIndent`,
-// and a paragraph's typed indent (the ideographic space a Japanese
-// paragraph opens with) goes, so the two never add up; the other builds
-// keep it as the paragraph's only indent.
+// as word counts treat them (see plainLinks). Footnotes stay as written
+// (story validate warns, see footnoteLines). A build that indents first
+// lines itself passes `ownIndent`, and a paragraph's typed indent (the
+// ideographic space a Japanese paragraph opens with) goes, so the two never
+// add up; the other builds keep it as the paragraph's only indent.
 function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];

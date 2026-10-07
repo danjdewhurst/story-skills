@@ -630,6 +630,23 @@ export function setextSceneBreakLines(markdownBody) {
   return found;
 }
 
+// A footnote definition (`[^1]: The note.`) as GitHub and Pandoc read one:
+// at the start of a line, in a block quote too. Its label runs to the
+// first `]`, so a test reads the line once.
+const FOOTNOTE_DEFINITION = /^[ \t>]*\[\^[^\]\n]+\]:/;
+
+// Body line indexes (counted from 0) of the footnote definitions in the
+// prose. Builds have no footnotes, so they print a definition and its
+// `[^1]` markers as written, where a markdown viewer shows a footnote.
+// Nothing in an HTML comment or a closed backtick fence counts.
+export function footnoteLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, "\n");
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const first = masked.slice(0, start).split("\n").length - 1;
+  return masked.slice(start).split("\n").flatMap((line, index) => (FOOTNOTE_DEFINITION.test(line) ? [first + index] : []));
+}
+
 // Chinese and Japanese characters, as fixed ranges so that every runtime
 // reads them alike (Unicode's script data grows between versions): CJK
 // radicals and ideographic description, the CJK symbols and punctuation
