@@ -1,6 +1,6 @@
 ---
 name: publishing
-description: This skill should be used when the user asks to "self-publish", "publish my book", "ISBN", "copyright page", "book metadata", "BISAC", "keywords", "KDP", "IngramSpark", "Draft2Digital", "go wide", "Kindle Unlimited", "print interior", "trim size", "paperback", "ebook", "EPUB", "cover wrap", "spine width", "pricing", "launch plan", "ARC team", "advance readers", "newsletter", "reader magnet", "Amazon ads", "BookBub", "rights", "foreign rights", "audio rights", "film rights", "publishing contract", or wants to take a finished manuscript through production, distribution, launch, and rights management. It owns contracts and rights sales; NOT for permission to quote lyrics, epigraphs, or other material in the book (use editorial-review).
+description: This skill should be used when the user asks to "self-publish", "publish my book", "ISBN", "copyright page", "book metadata", "BISAC", "keywords", "KDP", "IngramSpark", "Draft2Digital", "go wide", "Kindle Unlimited", "print interior", "trim size", "paperback", "ebook", "EPUB", "cover wrap", "spine width", "pricing", "launch plan", "ARC team", "advance readers", "newsletter", "reader magnet", "Amazon ads", "BookBub", "rights", "foreign rights", "audio rights", "film rights", "publishing contract", or wants to take a finished manuscript through production, distribution, launch, and rights management. It owns contracts and rights sales; NOT for permission to quote lyrics, epigraphs, or other material in the book (use editorial-review), or for drafting the blurb or retailer description (use submission).
 ---
 
 # Publishing
@@ -44,8 +44,9 @@ law applies elsewhere; say what to check.
 - Building and checking the EPUB or the print interior; choosing trim size
 - Choosing retailers and exclusivity, setting prices, planning a launch
 - Recording rights, reviewing a contract offer, drafting a rights one-sheet
-- NOT for query letters, agent submission, synopsis, or blurb drafting
-  (use `submission`; this skill reuses its blurb)
+- NOT for query letters, agent submission, synopsis, blurb, or retailer
+  description drafting (use `submission`; this skill reuses its blurb and
+  retailer description)
 - NOT for audiobook scripts, screenplays, translations, or other formats
   (use `adaptation`)
 - NOT for revising the manuscript (use `revision-continuity`)
@@ -121,7 +122,8 @@ Fill the `story.md` fields with `references/metadata-checklist.md`:
 `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, and
 `authors` for co-written books, or `editor` for an anthology (each
 story's writer then goes in its chapter's `author`). Take the description from
-`submission/blurb.md` when it exists (the `submission` skill drafts it).
+`submission/blurb.md`, which the `submission` skill drafts and owns; when
+it does not exist yet, draft it with that skill first.
 Write the description and keywords in the book's language. `subjects`
 holds BISAC codes only; when the author's distributors ask for Thema,
 choose the codes from the checklist and record them in
@@ -237,13 +239,16 @@ pricing with the considerations in the same reference, not a formula.
 
 ### 7. Retailer page copy
 
-Draft into `publishing/retailer-copy.md`: a short description (the first
-two lines, which show before "read more"), the long description (checked
-against the metadata sheet's character count), series-page copy when
-`series` is set, and A+ or enhanced-content ideas (a comparison chart of
-series books, a character or map panel, a mood image with a quote). Follow
-`../submission/references/blurb.md` for the copy itself. Copy the chosen
-long description into `description`.
+The retailer description belongs to the `submission` skill: its only
+draft is the Retailer Description section of `submission/blurb.md`, which
+that skill keeps in step with `description`. Check its first two lines,
+which show before "read more", and its length against the metadata
+sheet's character count; make any change in `submission/blurb.md` with
+the `submission` skill, never in a second draft here. Draft into
+`publishing/retailer-copy.md` only the copy around it: series-page copy
+when `series` is set, and A+ or enhanced-content ideas (a comparison chart
+of series books, a character or map panel, a mood image with a quote).
+Follow `../submission/references/blurb.md` for the copy itself.
 
 ### 8. Launch
 

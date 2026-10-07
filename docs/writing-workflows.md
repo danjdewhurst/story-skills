@@ -1669,7 +1669,7 @@ The print build is HTML with CSS paged media: the trim size (`5x8`, `5.25x8`, `5
 Should I go wide or into Kindle Unlimited?
 ```
 
-The [launch plan reference](../skills/publishing/references/launch-plan.md) lays out KDP, IngramSpark, aggregators such as Draft2Digital, and direct sales, and the trade-off between exclusivity and going wide. You decide, and the skill records the choice in `publishing/launch-plan.md`. Pricing is discussed through considerations, not a formula. Retailer copy goes into `publishing/retailer-copy.md`: the first two lines that show before "read more", the long description (checked against the metadata sheet's character count), series-page copy when `series` is set, and enhanced-content ideas. The chosen long description is copied into `description`.
+The [launch plan reference](../skills/publishing/references/launch-plan.md) lays out KDP, IngramSpark, aggregators such as Draft2Digital, and direct sales, and the trade-off between exclusivity and going wide. You decide, and the skill records the choice in `publishing/launch-plan.md`. Pricing is discussed through considerations, not a formula. The retailer description itself stays in `submission/blurb.md`, which the `submission` skill owns and keeps in step with `description`; the skill checks its first two lines, which show before "read more", and its length against the metadata sheet's character count, and any change goes back into `submission/blurb.md`. Only series-page copy, when `series` is set, and enhanced-content ideas go into `publishing/retailer-copy.md`.
 
 ### 5. Plan the launch
 
