@@ -869,7 +869,7 @@ How the skill handles findings:
 
 - Avoided spellings are always fixed.
 - Rates, echoes, and repeated phrases are prompts to reread, not orders. If a flagged word is right, it stays, and a word the book uses on purpose goes into `allow-words`.
-- Similar character names are raised with you first. If you agree to a rename, it checks the replacement with `story names "<Candidate>"`, then uses `story rename character <id> "<New Name>"` so every reference follows.
+- Similar character names are raised with you first. If you agree to a rename, it checks the replacement with `story names '<Candidate>'`, then uses `story rename character <id> '<New Name>'` so every reference follows.
 - For `story voices` warnings, it revises the dialogue, or, when the draft has found a better voice, asks you before updating the character's `voice-words` or `voice-avoid`. Here, either Nell starts saying "reckon" or the word comes off her list.
 
 `story prose` and `story voices` exit 0 unless a file cannot be read or a `story.md` `severity` entry promotes one of their warnings, so by default they never block anything. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
@@ -1067,7 +1067,7 @@ Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
 
 Structural edits change chapter and scene numbers, and those numbers are the ids every clue, question, research note, and state entry points at. The skill makes them with `story move`, `story split`, and `story merge`, which rename the files and rewrite those references, instead of renaming files by hand:
 
-- **Insert a chapter.** Move each later chapter up one, starting from the highest (`story move chapter chapter-05 --number 6`, then `chapter-04 --number 5`), then `story add chapter "<Title>" --number 4`. `move` refuses a number that is taken, so the order matters.
+- **Insert a chapter.** Move each later chapter up one, starting from the highest (`story move chapter chapter-05 --number 6`, then `chapter-04 --number 5`), then `story add chapter '<Title>' --number 4`. `move` refuses a number that is taken, so the order matters.
 - **Move a scene.** `story move scene chapter-03-scene-02 --chapter chapter-05` gives it the next free number in chapter 5; add `--scene <n>` to place it, or use `--scene` alone to reorder within a chapter.
 - **Split a chapter.** `story split chapter-04 --at 2` keeps the text before the second scene break in chapter 4 and makes the rest chapter 5, moving the later chapters up one; `--at` also takes a heading or a line of the text. The skill then checks each file the `split-references` warning lists, since a clue or death in the old chapter may now happen in the new one. If `split` refuses because a scheduled payoff or another reference already names the number a chapter would take, the skill asks which chapter it means and points it there first.
 - **Merge two chapters.** `story merge chapter-04 chapter-05` appends chapter 5 to chapter 4 after a scene break, with its scenes, outline beats, and cast, points every reference to chapter 5 at chapter 4, and moves the later chapters down one. The skill checks the `merge-conflicts` warning for fields the two set differently.

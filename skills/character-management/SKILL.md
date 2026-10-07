@@ -17,7 +17,7 @@ A story project must already exist (created via the story-init skill). Verify by
 
 1. Read `story.md` for genre, themes, and tone context
 2. Read `characters/_index.md` for existing characters
-3. Ask for the character's name and role (protagonist, antagonist, supporting, minor, narrator, deuteragonist). Before settling the name, run `story names "{Name}"` (several candidates can be checked at once): it errors on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names from a culture should follow its naming rules (see `references/naming-languages.md` in the `worldbuilding` skill)
+3. Ask for the character's name and role (protagonist, antagonist, supporting, minor, narrator, deuteragonist). Before settling the name, run `story names '{Name}'` (several candidates can be checked at once): it errors on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names from a culture should follow its naming rules (see `references/naming-languages.md` in the `worldbuilding` skill)
 4. Build the profile through conversation, exploring:
    - Appearance and distinguishing features
    - Personality, traits, and quirks
@@ -28,7 +28,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Character arc (starting state, turning points, ending state)
    - Key life events for the timeline
 5. Write the character file using the template in `references/character-template.md`
-6. Save to `characters/{name-kebab}.md`, or use `story add character "{Name}" --role "{role}"` when the CLI is available. Cyrillic and Greek names are transliterated (`Пётр` gives `characters/petr.md`). When the name is in a script with no transliteration table (`李明`), or the user wants a different spelling, choose the ASCII id yourself and pass it: `story add character "李明" --id li-ming --role supporting` keeps `name: 李明` in the file
+6. Save to `characters/{name-kebab}.md`, or use `story add character '{Name}' --role '{role}'` when the CLI is available. Cyrillic and Greek names are transliterated (`Пётр` gives `characters/petr.md`). When the name is in a script with no transliteration table (`李明`), or the user wants a different spelling, choose the ASCII id yourself and pass it: `story add character "李明" --id li-ming --role supporting` keeps `name: 李明` in the file
 7. Update `characters/_index.md` registry table
 8. If relationships reference existing characters, update those character files too
 9. When CLI access is available, run the maintenance pass in the story root:
@@ -75,8 +75,8 @@ After adding or editing progressions, run `story reindex .`, `story wordcount . 
 
 To rename:
 
-1. Check the new name with `story names "{New Name}"`, and list where the prose uses the old one with `story mentions character {id}`.
-2. Preview with `story rename character {id} "{New Name}" --prose --dry-run`. It prints each replacement in drafted chapter prose (`file:line:column: old → new`) and the files it would change. The full name becomes the new name, the given name alone becomes the new given name, and possessives keep their `'s`. Aliases and nicknames are left as written; outlines, HTML comments, code fences, link and image targets, HTML tags, reference definitions, and URLs are never touched, and an initial (the `J` of `J. R. Dunn`) is not a given name. It refuses a name, or a new given name, that another entity (cut characters included) already uses; pick another name or ask the user.
+1. Check the new name with `story names '{New Name}'`, and list where the prose uses the old one with `story mentions character {id}`.
+2. Preview with `story rename character {id} '{New Name}' --prose --dry-run`. It prints each replacement in drafted chapter prose (`file:line:column: old → new`) and the files it would change. The full name becomes the new name, the given name alone becomes the new given name, and possessives keep their `'s`. Aliases and nicknames are left as written; outlines, HTML comments, code fences, link and image targets, HTML tags, reference definitions, and URLs are never touched, and an initial (the `J` of `J. R. Dunn`) is not a given name. It refuses a name, or a new given name, that another entity (cut characters included) already uses; pick another name or ask the user.
 3. Show the user the replacements before running it for real, then run the same command without `--dry-run`. It also sets `name`, renames the file when the id changes, and rewrites the id in every frontmatter field and markdown link target.
 4. After the summary line, it lists matches it left as written, each with its reason: a word that may be an ordinary word (`May` of May Dunn, which may be the month, or a name opening a sentence in a chapter that also uses the word in lower case), or the text of a reference link whose label is defined (`[Ines]` with `[ines]: …`). Read each one and edit it by hand if it means this character; for a reference link, keep the old label (`[Ruth][Ines]`) so the link still works. A `prose-name-shared` warning lists places another entity shares the name, which were left alone: treat them the same way. Update any alias that should change in the character file and in the prose yourself.
 5. Hand-written registry sections (such as Family Trees in `characters/_index.md`), link labels, and outline beats keep the old display name: search for it (`grep -rn "Old Name" .`) and update each hit by hand.

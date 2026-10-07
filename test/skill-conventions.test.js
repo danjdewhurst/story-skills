@@ -177,3 +177,84 @@ describe("CLI fallback", () => {
     }
   });
 });
+
+// Skills put the user's own words (a title, a name, a synopsis) into a story
+// command in single quotes (#556). Inside double quotes the shell still runs
+// `$(...)` and backticks and expands `$name`, so a title such as `The $5 Fix`
+// loses text and a synopsis with a backtick runs a command. A placeholder for
+// user text is `{...}` or `<...>`. A story command is a line in a fenced
+// block, or an inline code span (wrapped or not), that runs `story` or a
+// `story.js` with Node.
+
+const STORY_COMMAND = /^(?:story|node\s+\S*story\.js)\s/;
+const DOUBLE_QUOTED_PLACEHOLDER = /"[^"\n]*[{<][^"\n]*"/;
+
+// The story commands in a markdown text, each with the line it starts on.
+function storyCommands(text) {
+  const commands = [];
+  let fence = null;
+  const prose = text.replace(/\r\n?/g, "\n").split("\n").map((line, index) => {
+    if (fence) {
+      if (line.trim().startsWith(fence)) {
+        fence = null;
+      } else if (STORY_COMMAND.test(line.trim())) {
+        commands.push({ line: index + 1, command: line.trim() });
+      }
+      return "";
+    }
+    fence = line.match(FENCE)?.[1] ?? null;
+    return fence ? "" : line;
+  }).join("\n");
+  for (const match of prose.matchAll(/`([^`]+)`/g)) {
+    const command = match[1].replace(/\s+/g, " ").trim();
+    if (STORY_COMMAND.test(command)) {
+      commands.push({ line: prose.slice(0, match.index).split("\n").length, command });
+    }
+  }
+  return commands.sort((a, b) => a.line - b.line);
+}
+
+function doubleQuotedPlaceholders(text) {
+  return storyCommands(text)
+    .filter(({ command }) => DOUBLE_QUOTED_PLACEHOLDER.test(command))
+    .map(({ line, command }) => `line ${line}: ${command}`);
+}
+
+describe("user text in story commands", () => {
+  test("detects double-quoted placeholders in fenced and inline story commands", () => {
+    expect(doubleQuotedPlaceholders([
+      "```shell",
+      'story init "{Title}" --synopsis \'{synopsis}\'',
+      'node <skills>/story-maintenance/scripts/story.js init "{Title}"',
+      "```",
+      'Check it with `story names "<candidate>" --path .`, then run `story add',
+      '   character "{Name}" --role supporting`.'
+    ].join("\n"))).toEqual([
+      'line 2: story init "{Title}" --synopsis \'{synopsis}\'',
+      'line 3: node <skills>/story-maintenance/scripts/story.js init "{Title}"',
+      'line 5: story names "<candidate>" --path .',
+      'line 5: story add character "{Name}" --role supporting'
+    ]);
+    expect(doubleQuotedPlaceholders([
+      "```shell",
+      "story init '{Title}' --follows '{existing-book-dir}' --synopsis '{synopsis}'",
+      'git commit -m "Feedback round {N}" -- .',
+      "```",
+      "```yaml",
+      'name: "{Full Name}"',
+      "```",
+      'Run `story split chapter-07 --at "The ferry came at noon."` or `git commit -m "Round {N}" -- .`.',
+      'The title goes in as "{Title}", and `story.md` keeps it.'
+    ].join("\n"))).toEqual([]);
+  });
+
+  test("no story command under skills/ double-quotes a placeholder", () => {
+    const files = markdownFiles(skillsDir);
+    const problems = files.flatMap((file) => doubleQuotedPlaceholders(fs.readFileSync(file, "utf8")).map((problem) => `${path.relative(skillsDir, file)} ${problem}`));
+    expect(problems).toEqual([]);
+    // Guard against a matcher that silently stops finding commands.
+    const singleQuoted = files.flatMap((file) => storyCommands(fs.readFileSync(file, "utf8")))
+      .filter(({ command }) => /'[^'\n]*[{<][^'\n]*'/.test(command));
+    expect(singleQuoted.length).toBeGreaterThan(20);
+  });
+});

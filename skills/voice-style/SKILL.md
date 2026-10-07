@@ -18,7 +18,7 @@ across chapters, drafting sessions, and agents.
 ## Prerequisites
 
 A story project with `story.md` in the root. `story init` scaffolds
-`style-sheet.md`; older projects can add it with `story init "<title>" --dir
+`style-sheet.md`; older projects can add it with `story init '<title>' --dir
 . --force`, which only adds missing files, or by copying
 `references/style-sheet-guide.md`'s frontmatter block by hand.
 
@@ -171,8 +171,8 @@ avoids saying).
 3. For uniform-rhythm warnings, revise sentence length by intent (short for
    impact, long for flow), not by formula.
 4. For similar names, ask the user before renaming; check replacements with
-   `story names "<Candidate>"`, then use
-   `story rename character <id> "<New Name>"` so references follow.
+   `story names '<Candidate>'`, then use
+   `story rename character <id> '<New Name>'` so references follow.
 5. For `story voices` warnings, revise the dialogue or update the
    character's `voice-words`/`voice-avoid` when the draft has found a
    better voice; ask the user before changing canon.

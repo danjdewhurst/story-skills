@@ -192,7 +192,7 @@ The main handoffs:
 
 **Writes.** Optionally `premise-notes.md` in the current directory, outside the future project folder, while no project exists. After init it offers to move that file into the project as `notes/premise-notes.md`, and deletes it only when you ask. In the new project it writes `story.md` `premise`, `counter-premise`, and `## Notes`.
 
-**CLI.** `story init --form`, `story names "<candidate>" ... --path .`, then `story reindex .`, `story wordcount . --write`, and `story check .`, and `story report .`. `story check` warns when `target-words` is outside the chosen form's usual range.
+**CLI.** `story init --form`, `story names '<candidate>' ... --path .`, then `story reindex .`, `story wordcount . --write`, and `story check .`, and `story report .`. `story check` warns when `target-words` is outside the chosen form's usual range.
 
 **References.**
 
@@ -209,7 +209,7 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
 
 **Triggers.** "Start a new story", "initialize a story project", "create a story", "new book", "set up a story".
 
-**Not for.** Adding to an existing project (use the domain skills), a sequel or prequel (use [series-continuity](#series-continuity)), finding the idea itself when you have only a vague notion or several competing ideas (run [premise-workshop](#premise-workshop) first), or converting an existing manuscript (run `story import <source> --title "{Title}"` and build the bible from the entity candidates it prints; see [Import, export, and builds](manuscripts.md)).
+**Not for.** Adding to an existing project (use the domain skills), a sequel or prequel (use [series-continuity](#series-continuity)), finding the idea itself when you have only a vague notion or several competing ideas (run [premise-workshop](#premise-workshop) first), or converting an existing manuscript (run `story import <source> --title '{Title}'` and build the bible from the entity candidates it prints; see [Import, export, and builds](manuscripts.md)).
 
 **Workflow.**
 
@@ -217,7 +217,7 @@ It also borrows `title-logline.md` from story-init and `controlling-idea.md` fro
 2. Scaffolds the project with the CLI:
 
    ```shell
-   story init "{Title}" --form "{form}" --genre "{genre}" --sub-genre "{sub-genre}" --setting-era "{era}" --pov "{pov-style}" --tense "{tense}" --synopsis "{synopsis}" --theme "{theme-1}" --theme "{theme-2}"
+   story init '{Title}' --form '{form}' --genre '{genre}' --sub-genre '{sub-genre}' --setting-era '{era}' --pov '{pov-style}' --tense '{tense}' --synopsis '{synopsis}' --theme '{theme-1}' --theme '{theme-2}'
    ```
 
    `--form` records `form` in `story.md` and, when no target is given, sets a default `target-words`: novel 80,000, novella 30,000, novelette 12,000, short story 5,000, flash 1,000, chapter book 10,000, picture book 500. Serials get no book-level default. Without `--form`, `init` writes neither field, so the skill passes `--form novel` if you don't choose. The story id recorded in every registry comes from the title, and `--dir` sets only the directory. A title with no ASCII letters or digits takes its story id from the folder name: a Cyrillic or Greek title is transliterated for the default folder (`Война и мир` goes in `voyna-i-mir`), and a title in a script with no transliteration table needs `--dir` with an ASCII folder name. `init` refuses an existing directory unless you pass `--force`, and with `--force` it only adds missing starter files.
@@ -251,9 +251,9 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 **Workflow.**
 
 1. Reads `story.md` for genre, themes, and tone, and `characters/_index.md` for the existing cast.
-2. Asks for the name and role: `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, or `deuteragonist`. Before settling the name it runs `story names "{Name}"`, which fails on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names follow the culture's rules in worldbuilding's `naming-languages.md`.
+2. Asks for the name and role: `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, or `deuteragonist`. Before settling the name it runs `story names '{Name}'`, which fails on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names follow the culture's rules in worldbuilding's `naming-languages.md`.
 3. Builds the profile through conversation: appearance, personality, backstory, external wants and internal needs, voice (with sample dialogue), `voice-words` (words they reach for) and `voice-avoid` (words they would never say), `pronunciation` for an invented or easily misread name, arc, and key life events.
-4. Writes `characters/{name-kebab}.md` from the template, or scaffolds it with `story add character "{Name}" --role "{role}"`.
+4. Writes `characters/{name-kebab}.md` from the template, or scaffolds it with `story add character '{Name}' --role '{role}'`.
 5. Adds every relationship in both directions using the inverse pairs in `relationship-types.md`, and updates the Relationship Map and Family Trees sections of `characters/_index.md`.
 6. Generates the relationship graph from frontmatter with `story diagram relationships` (add `--out dist/relationships.mmd` to save it) rather than drawing it by hand. Family edges are styled distinctly, so the family tree stands out. Each pair gets one edge, so the diagram can't show a one-way relationship; `story links` finds those.
 
@@ -280,11 +280,11 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Workflow.**
 
-- **Locations:** covers atmosphere, history, culture, notable features, current state, routes to other locations (travel time in hours and mode), and a `pronunciation` for an invented name. Checks an invented name with `story names "{Candidate}"` first. Saves to `worldbuilding/locations/{name-kebab}.md` and adds the location id to each notable character's `locations` list.
+- **Locations:** covers atmosphere, history, culture, notable features, current state, routes to other locations (travel time in hours and mode), and a `pronunciation` for an invented name. Checks an invented name with `story names '{Candidate}'` first. Saves to `worldbuilding/locations/{name-kebab}.md` and adds the location id to each notable character's `locations` list.
 - **Routes:** records travel as `routes` on the location file (`to`, `hours`, `mode`), not in prose notes. A route is two-way unless the other location declares its own route back. `story links` checks each `to` exists, `story continuity` errors when a character moves between dated scenes faster than the route allows, and `story diagram locations` draws the network as a Mermaid map-graph labelled in hours.
 - **Systems:** uses the prompts for that system type in `world-element-types.md`, saves to `worldbuilding/systems/{name-kebab}.md`, and cross-references the characters who use it. Calendars, naming languages, economies, and magic costs also use their own references below.
-- **Factions:** `story add faction "{Name}" --type "{family|guild|government|military|religion|company|community|criminal|other}"`, covering ideology, power base, members, and conflicts.
-- **Artifacts:** `story add artifact "{Name}" --type "{object|weapon|document|technology|relic|symbol|resource|other}"`, covering function, costs, history, and current owner and location.
+- **Factions:** `story add faction '{Name}' --type '{family|guild|government|military|religion|company|community|criminal|other}'`, covering ideology, power base, members, and conflicts.
+- **Artifacts:** `story add artifact '{Name}' --type '{object|weapon|document|technology|relic|symbol|resource|other}'`, covering function, costs, history, and current owner and location.
 
 Every element goes into the matching table in `worldbuilding/_index.md`, and the world overview is kept current.
 
@@ -292,7 +292,7 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and the
 
 **Writes.** `worldbuilding/**/*.md`, `worldbuilding/_index.md`, and backlinks in character files.
 
-**CLI.** `story names`, `story add faction`, `story add artifact`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location "{Name}"` (with `--region`, `--population`, `--controlled-by`) and `story add system "{Name}"` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
+**CLI.** `story names`, `story add faction`, `story add artifact`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location '{Name}'` (with `--region`, `--population`, `--controlled-by`) and `story add system '{Name}'` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
 
 **References.**
 
@@ -317,12 +317,12 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and the
 **Workflow.**
 
 1. **Structure:** reads `story.md` for genre, themes, and `form`. For `short-story` and `flash` it uses `short-story-form.md` instead of a multi-act beat sheet. Otherwise it recommends a model from `structure-models.md` based on genre (three-act when unclear), sets the `structure` field in `plot/_index.md`, and fills in the beat sheet. A writer who wants to design the whole book first can follow the Snowflake Method in `snowflake.md` on top of that structure.
-2. **Arcs:** asks for the name, type (`main`, `subplot`, `character`, `thematic`), characters, themes, and optionally the MICE threads the arc carries (a `mice-threads` list such as `event` and `character`). Builds setup, escalations, climax, and resolution, and saves `plot/arcs/{arc-kebab}.md`. It can scaffold the file first with `story add arc "{Name}" --type main --character {id} --theme {theme}`.
+2. **Arcs:** asks for the name, type (`main`, `subplot`, `character`, `thematic`), characters, themes, and optionally the MICE threads the arc carries (a `mice-threads` list such as `event` and `character`). Builds setup, escalations, climax, and resolution, and saves `plot/arcs/{arc-kebab}.md`. It can scaffold the file first with `story add arc '{Name}' --type main --character {id} --theme {theme}`.
 3. **Plot points:** adds rows to the arc's Plot Points table and to `plot/timeline.md`. A plot point that makes a promise to the reader, or raises a mystery, gets a file in `continuity/promises/` or `continuity/questions/`.
 4. **Timeline:** keeps `plot/timeline.md` in chronological order using the `| When | Event | Arc | Chapter |` format, and compares it with `story timeline .` output for the written scenes. `story diagram timeline` draws dated scenes and chapters as a Mermaid timeline, and `story diagram arcs` shows which chapters advance each arc.
 5. **Foreshadowing:** tracks each arc's items as `planned`, `planted`, or `paid-off`. For mystery clues, `story clues .` prints the fair-play matrix and `story diagram clues` the plant-to-reveal flow.
 6. **Pacing:** plans each scene's `outcome` (`yes`, `no`, `yes-but`, `no-and`) and each chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) in the outline, then runs `story pacing .` for a per-chapter dashboard. Its warnings (runs of `yes` outcomes, scene units with no sequel, length outliers, runs of `resolution` endings, drafted chapters with no hook) are prompts to reread, not rules.
-7. **Scaffolding:** creates chapter and scene files with `story add chapter "{Title}" --number {N} --pov {id} --arc {arc-id}` and `story add scene "{Title}" --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`. `--hook` and `--outcome` set the pacing fields at scaffold time.
+7. **Scaffolding:** creates chapter and scene files with `story add chapter '{Title}' --number {N} --pov {id} --arc {arc-id}` and `story add scene '{Title}' --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`. `--hook` and `--outcome` set the pacing fields at scaffold time.
 
 **Reads.** `story.md`, `plot/_index.md`, `characters/_index.md`, and arc files.
 
@@ -572,12 +572,12 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 2. Records choices the prose already makes rather than inventing new ones, and asks you which form wins when the draft is inconsistent.
 3. Sets the frontmatter: `dialect` (`british`, `american`, or `unspecified`), one `preferred` entry (`use` and `avoid`) per variant, `watch-words`, and `allow-words`.
 4. Writes one line per major speaker under Character Voices, each linked to the character file, which remains canon. Words a speaker reaches for go in the character file's `voice-words` list and words they would never say in `voice-avoid`, so `story voices` can check them.
-5. Runs `story prose .`, fixes every avoided spelling, and treats the other findings as prompts to reread rather than orders. It asks before renaming a character whose name is too close to another's, checks the replacement with `story names "<Candidate>"`, then uses `story rename character <id> "<New Name>"`.
+5. Runs `story prose .`, fixes every avoided spelling, and treats the other findings as prompts to reread rather than orders. It asks before renaming a character whose name is too close to another's, checks the replacement with `story names '<Candidate>'`, then uses `story rename character <id> '<New Name>'`.
 6. Runs `story voices .`, which fingerprints each character's attributed dialogue and warns when a character says a `voice-avoid` word, when two characters with five or more lines each sound alike, and when a `voice-words` entry is never said. It revises the dialogue, or asks before updating the character's voice lists when the draft has found a better voice.
 
 `story voices` attributes a line only when the narration names the speaker next to a speech verb (`"...," Sera said`, `said Kael`), or when the paragraph's narration names exactly one character. Pronoun tags (`she said`) are never attributed, so a close-third POV character is often under-counted. [Continuity and analysis](continuity.md) covers the output.
 
-`chapter-writing` and `discovery-drafting` read `style-sheet.md` before drafting, and the copyedit in `line-editing` enforces it. Projects created before the style sheet existed can add one with `story init "<title>" --dir . --force`, which only adds missing files.
+`chapter-writing` and `discovery-drafting` read `style-sheet.md` before drafting, and the copyedit in `line-editing` enforces it. Projects created before the style sheet existed can add one with `story init '<title>' --dir . --force`, which only adds missing files.
 
 **Reads.** `story.md` (genre, POV, tense, tone, and `language`), `style-sheet.md`, character voice fields, and two or three drafted chapters or a sample you supply.
 
@@ -978,8 +978,8 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 3. Creates the linked project from the folder that contains the existing book:
 
    ```shell
-   story init "{Title}" --follows {existing-book-dir} --synopsis "{synopsis}"
-   story init "{Title}" --precedes {existing-book-dir} --synopsis "{synopsis}"
+   story init '{Title}' --follows '{existing-book-dir}' --synopsis '{synopsis}'
+   story init '{Title}' --precedes '{existing-book-dir}' --synopsis '{synopsis}'
    ```
 
    `init` writes the backlink into the existing book, inherits `series`, `genre`, `sub-genre`, `pov`, and `tense`, and sets `book-number` when any linked book already has one.
