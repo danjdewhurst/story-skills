@@ -1177,7 +1177,10 @@ function portableSlashes(value) {
 function validatePronunciations(project, errors) {
   const entities = [project.characters, project.locations, project.systems, project.factions, project.artifacts, project.glossaryTerms].flat();
   for (const entity of entities) {
-    if (entity.pronunciation !== undefined && typeof entity.pronunciation !== "string") {
+    // A number or boolean is reported by validateTextFields, with the quoted
+    // value to write, so it is not reported twice here.
+    const value = entity.pronunciation;
+    if (value !== undefined && typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
       errors.push(err("field-not-text", `${relative(project, entity.file)} frontmatter field pronunciation must be text`, relative(project, entity.file)));
     }
   }
