@@ -1,6 +1,6 @@
 # Import, export, and builds
 
-This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, a retailer metadata sheet, a Fountain screenplay skeleton, and a Twine story), and `story synopsis`.
+This page is for writers who want to bring an existing draft into Story Skills or get a finished book out of it. It covers `story import`, front and back matter, the publishing fields in `story.md`, `story export`, `story build` (markdown, EPUB, DOCX, Shunn manuscript format, an HTML review copy, a print interior, an audiobook narration script, a retailer metadata sheet, a Fountain screenplay skeleton, Twine and ink stories, and a story bible site), and `story synopsis`.
 
 All output shown was captured by running the commands against copies of the examples, with absolute paths shortened to `~/stories`.
 
@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [story authors in collections and anthologies](#story-authors-in-collections-and-anthologies), [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story)
+- [Build a book](#build-a-book): [story authors in collections and anthologies](#story-authors-in-collections-and-anthologies), [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story), [story bible site](#story-bible-site-codex)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
