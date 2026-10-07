@@ -25205,11 +25205,13 @@ function runRepair(root, repair, repairs) {
       return caught;
     }
   });
-  const stopped = error === null ? null : projectErrorMessage(error);
   if (error === null || changes.length > 0) {
     repairs.push({ command: repair.command, codes: repair.codes, changes });
   }
-  return stopped;
+  if (error !== null && typeof error === "object" && error.exitCode !== EXIT_CODES.project) {
+    error.repairs = repairs;
+  }
+  return error === null ? null : projectErrorMessage(error);
 }
 function assertRepairable(root) {
   const project = scanProject(root);
@@ -32924,7 +32926,16 @@ function runDoctorFix({ parsed, io, cwd, root }, options) {
   const projectRoot = root();
   const dryRun = isTruthy(parsed.options["dry-run"]);
   const fix = (target) => fixProject(target, options);
-  const { result: report, changes } = runOrPreview(dryRun, projectRoot, fix);
+  let outcome;
+  try {
+    outcome = runOrPreview(dryRun, projectRoot, fix);
+  } catch (error) {
+    if (Array.isArray(error?.repairs) && error.repairs.length > 0 && !wantsJson(parsed)) {
+      io.stdout.write(formatRepairs(error.repairs, null, error.changes, dryRun, false));
+    }
+    throw error;
+  }
+  const { result: report, changes } = outcome;
   const ok = report.validation.ok && report.links.ok && report.continuity.ok;
   const { repairs, stopped, ...rest } = report;
   const diagnosis = withWorkflowPins(rest, projectRoot, cwd);
@@ -32946,7 +32957,7 @@ function withWorkflowPins(report, projectRoot, cwd) {
   const actions = report.actions.filter((item) => item.title !== "Project is mechanically healthy");
   return { ...report, actions: [...actions, ...pins] };
 }
-function formatRepairs(repairs, stopped, changes, dryRun) {
+function formatRepairs(repairs, stopped, changes, dryRun, diagnosed = true) {
   const lines = [dryRun ? "Repairs (dry run; nothing was written):" : "Repairs:"];
   if (repairs.length === 0 && stopped === null) {
     lines.push("- No safe repairs needed");
@@ -32962,7 +32973,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
     lines.push(`- Stopped: ${stopped}`);
   }
   if (dryRun) {
-    lines.push(`Dry run: story doctor --fix would make ${changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}; the checks below are what would remain`);
+    lines.push(`Dry run: story doctor --fix would make ${changes.length === 0 ? "no changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}${diagnosed ? "; the checks below are what would remain" : ""}`);
   }
   return `${lines.join(`
 `)}

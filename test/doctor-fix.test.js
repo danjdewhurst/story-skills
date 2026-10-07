@@ -230,6 +230,30 @@ describe("story doctor --fix", () => {
     }
   });
 
+  test.skipIf(process.getuid?.() === 0)("a refused write keeps the repair that wrote before it in the report (#725)", () => {
+    const root = newProject();
+    // migrate makes the missing glossary registry, then its reindex is
+    // refused by the read-only characters registry, which is stale.
+    fs.rmSync(path.join(root, "glossary", "_index.md"));
+    const registry = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replace("| Mara Quill |", "| Stale Name |"));
+    fs.chmodSync(registry, 0o444);
+    try {
+      const preview = invoke(root, ["doctor", "--fix", "--dry-run"]);
+      expect(preview.code).toBe(4);
+      expect(preview.out).toBe("Repairs (dry run; nothing was written):\n- story migrate (missing-required-path): 1 change\n  create  glossary/_index.md\nDry run: story doctor --fix would make 1 change\n");
+      expect(fs.existsSync(path.join(root, "glossary", "_index.md"))).toBe(false);
+
+      const result = invoke(root, ["doctor", "--fix"]);
+      expect(result.code).toBe(4);
+      expect(result.out).toBe("Repairs:\n- story migrate (missing-required-path): 1 change\n  create  glossary/_index.md\n");
+      expect(result.err).toContain("characters/_index.md");
+      expect(fs.existsSync(path.join(root, "glossary", "_index.md"))).toBe(true);
+    } finally {
+      fs.chmodSync(registry, 0o644);
+    }
+  });
+
   test("--dry-run without --fix is a usage error", () => {
     const root = newProject();
     const result = invoke(root, ["doctor", "--dry-run"]);

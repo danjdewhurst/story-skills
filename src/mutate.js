@@ -1119,7 +1119,9 @@ function raisedCodes(report) {
 
 // Runs one repair, adding it to `repairs` with its changes, which are kept
 // even when it stops part way, so the report lists every file written.
-// Returns the message of the project error that stopped it, or null.
+// Returns the message of the project error that stopped it, or null. Any
+// other error (a refused write) is rethrown with `repairs` on it, so
+// doctor --fix can still list the repairs made before it (see runDoctorFix).
 function runRepair(root, repair, repairs) {
   const { result: error, changes } = recordChanges(root, () => {
     try {
@@ -1129,11 +1131,13 @@ function runRepair(root, repair, repairs) {
       return caught;
     }
   });
-  const stopped = error === null ? null : projectErrorMessage(error);
   if (error === null || changes.length > 0) {
     repairs.push({ command: repair.command, codes: repair.codes, changes });
   }
-  return stopped;
+  if (error !== null && typeof error === "object" && error.exitCode !== EXIT_CODES.project) {
+    error.repairs = repairs;
+  }
+  return error === null ? null : projectErrorMessage(error);
 }
 
 // Every repair ends in a reindex, which needs each entity file and the plot
