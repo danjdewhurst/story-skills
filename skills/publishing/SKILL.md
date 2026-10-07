@@ -122,8 +122,8 @@ Fill the `story.md` fields with `references/metadata-checklist.md`:
 `keywords`, `subjects`, `copyright`, `cover-alt`, `ai-disclosure`, and
 `authors` for co-written books, or `editor` for an anthology (each
 story's writer then goes in its chapter's `author`). Take the description from
-`submission/blurb.md`, which the `submission` skill drafts and owns; when
-it does not exist yet, draft it with that skill first.
+`submission/blurb.md` (the `submission` skill drafts and owns it; draft
+it there first if it is missing).
 Write the description and keywords in the book's language. `subjects`
 holds BISAC codes only; when the author's distributors ask for Thema,
 choose the codes from the checklist and record them in
@@ -239,16 +239,14 @@ pricing with the considerations in the same reference, not a formula.
 
 ### 7. Retailer page copy
 
-The retailer description belongs to the `submission` skill: its only
-draft is the Retailer Description section of `submission/blurb.md`, which
-that skill keeps in step with `description`. Check its first two lines,
-which show before "read more", and its length against the metadata
-sheet's character count; make any change in `submission/blurb.md` with
-the `submission` skill, never in a second draft here. Draft into
-`publishing/retailer-copy.md` only the copy around it: series-page copy
-when `series` is set, and A+ or enhanced-content ideas (a comparison chart
-of series books, a character or map panel, a mood image with a quote).
-Follow `../submission/references/blurb.md` for the copy itself.
+The retailer description has one draft, in `submission/blurb.md`, and
+the `submission` skill owns it: make any change there with that skill.
+Check its first two lines, which show before "read more", and its length
+against the metadata sheet's character count. Draft into
+`publishing/retailer-copy.md` only series-page copy when `series` is set,
+and A+ or enhanced-content ideas (a comparison chart of series books, a
+character or map panel, a mood image with a quote), following
+`../submission/references/blurb.md`.
 
 ### 8. Launch
 
