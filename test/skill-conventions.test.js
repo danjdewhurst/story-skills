@@ -202,7 +202,7 @@ const PLACEHOLDER_WORDS = new Set(["...", "…", "Title", "Name", "New Name"]);
 // Options whose value is the user's text, or a path that can hold spaces,
 // for every command and for one command only (`knowledge --at` takes a
 // chapter id).
-const TEXT_OPTIONS = new Set(["--title", "--synopsis", "--dilemma", "--anchor", "--source", "--genre", "--sub-genre", "--setting-era", "--date", "--follows", "--precedes", "--against", "--path", "--dir"]);
+const TEXT_OPTIONS = new Set(["--title", "--synopsis", "--dilemma", "--anchor", "--source", "--genre", "--sub-genre", "--setting-era", "--theme", "--themes", "--date", "--follows", "--precedes", "--against", "--path", "--dir"]);
 const COMMAND_TEXT_OPTIONS = { split: new Set(["--at"]) };
 // Positional arguments that are the user's text: each command's text
 // positions, counted from 0 after the command word.
@@ -459,7 +459,8 @@ describe("user text in story commands", () => {
     expect(strict("story compare . --ref panel-round-{N} --anchor=<label>")).toEqual(["leaves <label> unquoted"]);
     expect(strict("node <skills>/story-maintenance/scripts/story.js add character {Name}")).toEqual(["leaves {Name} unquoted"]);
     expect(strict("story add character 'Mara O'\\''Neill' --role supporting")).toEqual([]);
-    expect(strict("story add arc '{Name}' --type main --character {id} --theme {theme}")).toEqual([]);
+    expect(strict("story add arc '{Name}' --type main --character {id} --theme {theme}")).toEqual(["leaves {theme} unquoted"]);
+    expect(strict("story add arc '{Name}' --type main --character {id} --theme '{theme}' --themes '{a,b}'")).toEqual([]);
     expect(strict("story rename character {id} '{New Name}' --prose --dry-run")).toEqual([]);
     expect(strict("story snapshot --restore <name> --path . --dry-run")).toEqual([]);
     expect(strict('story "{a}" {id} "{b}"')).toEqual(['double-quotes "{a}"', 'double-quotes "{b}"']);
