@@ -42,9 +42,32 @@ function isDayLength(value) {
 
 // The hours in a day of the story calendar: its `hours-per-day`, or 24 for
 // a book without a calendar or a calendar that does not set it. An invalid
-// calendar keeps a valid `hours-per-day`, so its times still read.
+// calendar keeps a valid `hours-per-day`, so its times still read. When
+// its `hours-per-day` cannot be read, the day's length is unknown (see
+// dayLengthKnown) and this is 24, for views that only show times.
 export function dayHours(calendar) {
   return calendar?.hoursPerDay ?? DEFAULT_HOURS_PER_DAY;
+}
+
+// False when the calendar gives an `hours-per-day` that cannot be read (a
+// validate error), so no time can be judged against the day.
+export function dayLengthKnown(calendar) {
+  return calendar?.hoursPerDay !== null;
+}
+
+function hasDayLength(entry) {
+  return entry !== null && typeof entry === "object" && entry["hours-per-day"] !== undefined;
+}
+
+// An invalid calendar's day length: the one it gives cleanly, 24 when it
+// gives none, or null when an entry gives one that cannot be read, or more
+// than one entry gives one.
+function invalidDayLength(entries, hoursPerDay) {
+  const given = entries.filter(hasDayLength).length;
+  if (given === 0) {
+    return DEFAULT_HOURS_PER_DAY;
+  }
+  return given === 1 ? hoursPerDay : null;
 }
 
 // The English ordinal suffix for a day: 1st, 2nd, 3rd, 4th, 11th, 21st.
@@ -65,15 +88,16 @@ function plainName(value) {
 }
 
 // The calendar a story.md `calendar` value describes, and every problem with
-// it. `calendar` is null when the value is unset, and `{ invalid: true }`
-// when it has problems, so dates are not read against a broken calendar.
+// it. `calendar` is null when the value is unset, and `{ invalid: true,
+// hoursPerDay }` when it has problems, so dates are not read against a
+// broken calendar.
 export function parseCalendar(value) {
   if (value === undefined) {
     return { calendar: null, problems: [] };
   }
   const problems = [];
   if (!Array.isArray(value)) {
-    return { calendar: { invalid: true }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
+    return { calendar: { invalid: true, hoursPerDay: invalidDayLength([value], null) }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
   }
   const months = [];
   const eras = [];
@@ -165,7 +189,7 @@ export function parseCalendar(value) {
     }
   });
   if (problems.length > 0) {
-    return { calendar: { invalid: true, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY }, problems };
+    return { calendar: { invalid: true, hoursPerDay: invalidDayLength(value, hoursPerDay) }, problems };
   }
   let start = 1;
   for (const era of eras) {

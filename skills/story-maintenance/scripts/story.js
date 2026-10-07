@@ -1025,6 +1025,19 @@ function isDayLength(value) {
 function dayHours(calendar) {
   return calendar?.hoursPerDay ?? DEFAULT_HOURS_PER_DAY;
 }
+function dayLengthKnown(calendar) {
+  return calendar?.hoursPerDay !== null;
+}
+function hasDayLength(entry) {
+  return entry !== null && typeof entry === "object" && entry["hours-per-day"] !== undefined;
+}
+function invalidDayLength(entries, hoursPerDay) {
+  const given = entries.filter(hasDayLength).length;
+  if (given === 0) {
+    return DEFAULT_HOURS_PER_DAY;
+  }
+  return given === 1 ? hoursPerDay : null;
+}
 function ordinalSuffix(day) {
   const tens = day % 100;
   if (tens >= 11 && tens <= 13) {
@@ -1044,7 +1057,7 @@ function parseCalendar(value) {
   }
   const problems = [];
   if (!Array.isArray(value)) {
-    return { calendar: { invalid: true }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
+    return { calendar: { invalid: true, hoursPerDay: invalidDayLength([value], null) }, problems: ["must be a list of month, era, weekdays, and hours-per-day entries"] };
   }
   const months = [];
   const eras = [];
@@ -1135,7 +1148,7 @@ function parseCalendar(value) {
     }
   });
   if (problems.length > 0) {
-    return { calendar: { invalid: true, hoursPerDay: hoursPerDay ?? DEFAULT_HOURS_PER_DAY }, problems };
+    return { calendar: { invalid: true, hoursPerDay: invalidDayLength(value, hoursPerDay) }, problems };
   }
   let start = 1;
   for (const era of eras) {
@@ -16190,13 +16203,14 @@ var TIME_RANKS = new Map([
 function checkClock(project, errors, warnings) {
   const calendarInvalid = project.calendar?.invalid === true;
   const hours = dayHours(project.calendar);
+  const timeHours = dayLengthKnown(project.calendar) ? hours : MAX_HOURS_PER_DAY;
   const clock = hours === DEFAULT_HOURS_PER_DAY ? "" : ` (the story calendar's ${hours}-hour day runs 00:00 to ${lastClockTime(hours)})`;
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
     if (scene.date !== "" && !calendarInvalid && !parseStoryDate(scene.date, project.calendar)) {
       warnings.push(warn("malformed-date", `${label} has malformed date "${scene.date}"`, label, chapterOf(scene)));
     }
-    if (scene.time !== "" && parseClockTime(scene.time, hours) === undefined) {
+    if (scene.time !== "" && parseClockTime(scene.time, timeHours) === undefined) {
       warnings.push(warn("malformed-time", `${label} has malformed time "${scene.time}"${clock}`, label, chapterOf(scene)));
     }
     if (scene.travelHours < 0) {
@@ -16210,7 +16224,7 @@ function checkClock(project, errors, warnings) {
     if (chapter.date !== "" && !calendarInvalid && !parseStoryDate(chapter.date, project.calendar)) {
       warnings.push(warn("malformed-date", `Chapter ${chapter.number} has malformed date "${chapter.date}"`, relative2(project, chapter.file), chapter.id));
     }
-    if (chapter.time !== "" && parseClockTime(chapter.time, hours) === undefined) {
+    if (chapter.time !== "" && parseClockTime(chapter.time, timeHours) === undefined) {
       warnings.push(warn("malformed-time", `Chapter ${chapter.number} has malformed time "${chapter.time}"${clock}`, relative2(project, chapter.file), chapter.id));
     }
   }
@@ -16563,8 +16577,12 @@ function storyTimeError(value, { calendar = null } = {}) {
   if (value === undefined || value === null || String(value).trim() === "") {
     return "";
   }
+  const text = String(value);
+  if (!dayLengthKnown(calendar) && parseClockTime(text, MAX_HOURS_PER_DAY) !== undefined && !TIME_RANKS.has(text.trim().toLowerCase())) {
+    return "time cannot be read until the story.md calendar's hours-per-day is fixed (see story validate)";
+  }
   const hours = dayHours(calendar);
-  if (parseClockTime(String(value), hours) === undefined) {
+  if (parseClockTime(text, hours) === undefined) {
     const clock = hours === DEFAULT_HOURS_PER_DAY ? "HH:MM" : `HH:MM from 00:00 to ${lastClockTime(hours)} (the story calendar's ${hours}-hour day)`;
     return `time must be ${clock} or a named part of day (dawn, morning, midday, afternoon, evening, night), got ${value}`;
   }

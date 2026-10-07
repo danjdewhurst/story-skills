@@ -424,7 +424,7 @@ Ordering and travel checks switch on as soon as any scene or chapter has a `date
 | `time` | scene or chapter | `HH:MM` (24-hour, or up to the calendar's [`hours-per-day`](project-format.md#hours-per-day)) or a named part of day |
 | `travel-hours` | scene | A YAML number (not a quoted string): the minimum hours of travel needed to reach this scene from the previous one. `story validate` rejects any other value; inside `story continuity` it is treated as 0, which switches the travel check off. |
 
-Named parts of day cover a span of the clock, the same spans the [route check](#route-travel) uses: `dawn` 04:00-06:59, `morning` 05:00-11:59, `midday` 11:00-13:59, `afternoon` 12:00-17:59, `evening` 17:00-21:59, `night` 20:00-23:59. The clock checks read each at its most generous, so only an order or a journey that is impossible on every reading is reported. (`story timeline` sorts them as fixed points: `dawn` 05:00, `morning` 07:00, `midday` 12:00, `afternoon` 15:00, `evening` 19:00, `night` 23:00.) `HH:MM` needs two-digit hours (`09:00`, not `9:00`). Quoting `HH:MM` times (`time: "22:00"`) keeps other YAML tools from reading them as numbers.
+Named parts of day cover a span of the clock, the same spans the [route check](#route-travel) uses: `dawn` 04:00-06:59, `morning` 05:00-11:59, `midday` 11:00-13:59, `afternoon` 12:00-17:59, `evening` 17:00-21:59, `night` 20:00-23:59. The clock checks read each at its most generous, so only an order or a journey that is impossible on every reading is reported. (`story timeline` sorts them as fixed points: `dawn` 05:00, `morning` 07:00, `midday` 12:00, `afternoon` 15:00, `evening` 19:00, `night` 23:00.) These spans and points are for a 24-hour day. Under a calendar's [`hours-per-day`](project-format.md#hours-per-day), each covers the same share of the day: multiply by `hours-per-day / 24`, so on a 30-hour day `night` is 25:00-29:59 and sorts at 28:45, and a `24:00` scene after a `night` scene on the same day runs backward. `HH:MM` needs two-digit hours (`09:00`, not `9:00`). Quoting `HH:MM` times (`time: "22:00"`) keeps other YAML tools from reading them as numbers.
 
 A book with a [custom calendar](project-format.md#custom-calendars) in `story.md` writes its dates in that calendar, such as `3 Thaw 302 AE`. Every check here reads them as days of that calendar, so a book set in a secondary world gets the same clock, travel, and order checks. A calendar-shaped date that is not a day of it (`31 Thaw 302 AE` in a 30-day month) is a `story validate` error (`invalid-date`), and other text is free text, as below. A calendar with [`hours-per-day`](project-format.md#hours-per-day) also sets the length of the day: times run to its last minute (`29:59` for 30 hours), a journey across midnight counts that many hours per day, and each named part of day covers the same share of it (`night` is 25:00-29:59 of 30 hours).
 
@@ -503,6 +503,8 @@ Scene times are read generously, so only journeys that are impossible on any rea
 | `evening` | 17:00 to 21:59 |
 | `night` | 20:00 to 23:59 |
 | none | Any time that day |
+
+The spans are for a 24-hour day. Under a calendar's [`hours-per-day`](project-format.md#hours-per-day), each covers the same share of the day (multiply by `hours-per-day / 24`: `night` is 25:00 to 29:59 on a 30-hour day), and a scene with no time runs to the day's last minute.
 
 Scenes without a valid `date` or without a `location` are left out. The route check runs alongside the `travel-hours` check and does not replace it.
 
