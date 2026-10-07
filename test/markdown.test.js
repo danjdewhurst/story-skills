@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
 import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
@@ -103,6 +103,41 @@ describe("markdown utilities", () => {
     expect(wordCount("well-known - list item\n\n---\n\nend")).toBe(4);
     expect(kebabCase("O\u2019Brien")).toBe("obrien");
     expect(kebabCase("O'Brien")).toBe("obrien");
+  });
+
+  test("Hebrew maqaf, geresh, and gershayim and Armenian marks inside a word join it", () => {
+    expect(splitWords("בית־ספר צה״ל ג׳ירפה צה\"ל")).toEqual(["בית־ספר", "צה״ל", "ג׳ירפה", "צה\"ל"]);
+    expect(splitWords("Ո՞վ է, Ո՛չ, Ո՜վ")).toEqual(["Ո՞վ", "է", "Ո՛չ", "Ո՜վ"]);
+    // A `"` joins Hebrew letters only, as a typed gershayim.
+    expect(splitWords("She said \"no\"yes")).toEqual(["She", "said", "no", "yes"]);
+  });
+
+  test("footnote markers, entities, HTML tags, reference definitions, and task boxes are not words", () => {
+    expect(splitWords("The end.[^1] Then[^note] more.\n\n[^1]: A note counts.")).toEqual(["The", "end", "Then", "more", "A", "note", "counts"]);
+    expect(splitWords("Tom &amp; Jerry don&rsquo;t pay caf&eacute; prices&#8202;&mdash;&#X2014;&bogus;today&nbsp;now"))
+      .toEqual(["Tom", "Jerry", "don\u2019t", "pay", "caf\u00e9", "prices", "today", "now"]);
+    expect(wordCount("&#0; &#xD800; &#x110000;")).toBe(0);
+    expect(splitWords("<span class=\"smallcaps\">Lord</span> said <i>un</i>known, line<br/>two <P data-x='1'\nhidden>three</P>"))
+      .toEqual(["Lord", "said", "unknown", "line", "two", "three"]);
+    // Text in angle brackets that is not an HTML tag is prose.
+    expect(splitWords("<Can you hear me?> she thought. <Yes.>")).toEqual(["Can", "you", "hear", "me", "she", "thought", "Yes"]);
+    expect(splitWords("See [the mill][mill] at [dawn][].\n\n[mill]: https://example.com/mill \"The Mill\"\n[dawn]: <dawn.md>"))
+      .toEqual(["See", "the", "mill", "at", "dawn"]);
+    expect(splitWords("- [x] Done\n- [ ] Todo\n> * [X] Quoted\n\nA [x] in prose.")).toEqual(["Done", "Todo", "Quoted", "A", "x", "in", "prose"]);
+    expect(splitWords("snake_case and __init__ but _emphasis_ and a_ b")).toEqual(["snake_case", "and", "init", "but", "emphasis", "and", "a", "b"]);
+  });
+
+  test("markup in code, or escaped, is printed, so it counts", () => {
+    expect(splitWords("Type `<b>&amp;[^1]</b>` here, not <b>there</b>.")).toEqual(["Type", "b", "amp", "1", "b", "here", "not", "there"]);
+    expect(splitWords("```\n<div>&amp;</div>\n```\n<div>x</div> ` <b>tick</b>")).toEqual(["div", "amp", "div", "x", "tick"]);
+    expect(splitWords("\\<b> and \\&amp; and \\[^1]")).toEqual(["b", "and", "amp", "and", "1"]);
+  });
+
+  test("markup stays linear on long runs", () => {
+    const started = performance.now();
+    wordCount(`a${"_".repeat(100000)}b ${"<b x=".repeat(20000)} <i title="${"a".repeat(100000)} ${"[^".repeat(50000)} ${"&a".repeat(50000)}`);
+    wordCount(`${"- [".repeat(30000)}\n${" ".repeat(100000)}x\n${"[a]".repeat(30000)}\n${"> ".repeat(50000)}[x]: y`);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("extracts chapter prose from template, outline, and natural formats", () => {

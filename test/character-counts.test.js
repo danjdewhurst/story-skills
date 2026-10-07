@@ -61,6 +61,10 @@ describe("characterCount", () => {
     expect(characterCount("1\\.猫")).toBe(3);
   });
 
+  test("leaves out the markup word counts leave out, and reads an entity as its character", () => {
+    expect(characterCount("猫[^1]と<ruby>犬</ruby>&amp;\n\n[^1]: 鳥\n\n* [x] 魚\n\n[ref]: https://example.com")).toBe(6);
+  });
+
   test("a grapheme cluster counts once", () => {
     expect(characterCount("é")).toBe(1);
     expect(characterCount("👍🏽")).toBe(1);

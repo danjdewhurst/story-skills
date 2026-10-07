@@ -174,6 +174,11 @@ describe("mapLabels", () => {
     expect(formatLabelMapping(mapping, "x")).toBe("ch01-p1 -> ch01-p1 (edited, 99% similar)\n");
   });
 
+  test("paragraphs are compared by the words story wordcount counts", () => {
+    const mapping = mapLabels([entry("ch01-p1", "The <em>well-known</em> keeper&rsquo;s lamp.")], [entry("ch01-p1", "The well-known keeper’s lamp!")], ["ch01-p1"]);
+    expect(mapping[0]).toMatchObject({ status: "edited", to: "ch01-p1", similarity: 1 });
+  });
+
   test("paragraphs without words match nothing but their own text", () => {
     const mapping = mapLabels([entry("ch01-p1", "…")], [entry("ch01-p1", "—")], ["ch01-p1"]);
     expect(mapping[0]).toEqual({ label: "ch01-p1", status: "not-found", excerpt: "…" });

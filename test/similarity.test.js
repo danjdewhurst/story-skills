@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareSimilarity, formatSimilarity, similarityOptions, tokenizeDocument } from "../src/similarity.js";
+import { wordCount } from "../src/markdown.js";
 import { createStoryProject, similarityReport, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
@@ -38,6 +39,13 @@ describe("similarity matching", () => {
     expect(words).toEqual(["don't", "she", "said", "the", "tide", "turning"]);
   });
 
+  test("words are split as story wordcount splits them, with hyphens and soft hyphens folded", () => {
+    const text = "A well-known well\u2011known hyphen\u00adation lamp keeper, בית־ספר, snake_case.";
+    const words = tokenizeDocument([{ label: "p1", text }]).map((entry) => entry.word);
+    expect(words).toEqual(["a", "well-known", "well-known", "hyphenation", "lamp", "keeper", "בית־ספר", "snake_case"]);
+    expect(words).toHaveLength(wordCount(text));
+  });
+
   test("Chinese and Japanese text is compared a character at a time", () => {
     const words = tokenizeDocument([{ label: "p1", text: "灯台守は、階段を数えた。" }]).map((entry) => entry.word);
     expect(words).toEqual(["灯", "台", "守", "は", "階", "段", "を", "数", "え", "た"]);
@@ -46,7 +54,7 @@ describe("similarity matching", () => {
   test("a shared run is reported once, at its full length, with both locations and the text as written", () => {
     const report = compareSimilarity(
       [doc("chapters/chapter-01.md", `Fog came in. ${SHARED}, and then he went down.`)],
-      [doc("book-one.txt", "Something else entirely.", `She wrote: "the lamp-keeper counted the steps twice before he trusted the rail again."`)],
+      [doc("book-one.txt", "Something else entirely.", `She wrote: "the lamp keeper counted the steps twice, before he trusted the rail again."`)],
       { minWords: 8, label: "book-one.txt" }
     );
     expect(report.passages).toHaveLength(1);
@@ -56,7 +64,7 @@ describe("similarity matching", () => {
       to: "p1",
       words: 13,
       text: SHARED,
-      reference: { file: "book-one.txt", from: "p2", to: "p2", text: "the lamp-keeper counted the steps twice before he trusted the rail again" }
+      reference: { file: "book-one.txt", from: "p2", to: "p2", text: "the lamp keeper counted the steps twice, before he trusted the rail again" }
     });
     expect(report.warnings[0].code).toBe("similarity-shared-passage");
     expect(report.warnings[0].message).toContain("chapters/chapter-01.md (p1) shares 13 words with book-one.txt (p2)");

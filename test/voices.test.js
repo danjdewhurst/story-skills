@@ -64,6 +64,12 @@ describe("story voices", () => {
     ]);
   });
 
+  test("counts the words of a line as story wordcount counts them", () => {
+    const { root } = voiceProject();
+    writeChapter(root, 1, ["“The well-known <em>tide</em> turns&hellip;” Mara said."]);
+    expect(voicesReport(root).profiles.find((entry) => entry.id === "mara-quill").words).toBe(4);
+  });
+
   test("flags unused voice-words and characters who sound alike once they have five lines", () => {
     const { root } = voiceProject();
     const lines = [];

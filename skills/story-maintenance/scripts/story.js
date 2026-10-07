@@ -9464,6 +9464,9 @@ function validateChapterNumerals(data, errors) {
 }
 
 // src/words.js
+var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
+var JOINING_MARKS = "'\\u2019\\u2010\\u2011\\-\\u05BE\\u05F3\\u05F4\\u055A-\\u055C\\u055E\\u055F";
+var WORD_PATTERN = new RegExp(`[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:[${JOINING_MARKS}]|_+|(?<=\\p{Script=Hebrew})"(?=\\p{Script=Hebrew})|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
 var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
 var JOINER = "\\u00AD\\u200C\\u200D";
@@ -9716,9 +9719,9 @@ function chapterHeading(number, title, labels = undefined, numerals = "latn") {
   const repeats = [label, chapter(String(number))].some((form) => fold(text) === fold(form));
   return text === "" || repeats ? label : fillLabel(labels, "chapter-heading", { chapter: label, title: text });
 }
-var WORD_CHARS = "\\p{L}\\p{M}\\p{N}\\u200C\\u200D\\u00AD";
 var URL_PLACEHOLDER = "";
-var WORD_PATTERN = new RegExp(`${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['’‐‑-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
+var COUNTED_WORD = new RegExp(`${URL_PLACEHOLDER}|${WORD_PATTERN.source}`, "gu");
+var EMPHASIS_UNDERSCORES = /(?<![\p{L}\p{M}\p{N}_])_+|(?<!_)_+(?![\p{L}\p{N}_])/gu;
 var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 function plainLinks(text) {
   return withoutLinks(withoutLinks(String(text), "!["), "[");
@@ -9760,12 +9763,12 @@ function flattenHeadings(text) {
 }
 function splitWords(markdown) {
   const urls = [];
-  const normalized = plainLinks(withoutFenceMarkers(String(markdown).replace(/\uE000/g, " "))).replace(URL_OR_EMAIL, (match) => {
+  const normalized = plainLinks(countedText(markdown).replace(/\uE000/g, " ")).replace(URL_OR_EMAIL, (match) => {
     urls.push(match);
     return ` ${URL_PLACEHOLDER} `;
-  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
+  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(EMPHASIS_UNDERSCORES, " ").replace(/[#>*~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
   let next = 0;
-  return wordSpans(normalized, WORD_PATTERN).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
+  return wordSpans(normalized, COUNTED_WORD).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
 }
 function isSceneBreak(paragraph) {
   const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
@@ -10004,7 +10007,7 @@ function wordCount(markdown) {
 }
 var graphemes;
 function characterCount(markdown) {
-  const text = plainLinks(withoutFenceMarkers(String(markdown).replace(//g, " "))).split(`
+  const text = plainLinks(countedText(String(markdown).replace(/\uE000/g, " "))).split(`
 `).filter((line) => !isSceneBreak(line)).join(`
 `).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
   graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -10052,19 +10055,17 @@ var LINK_BREAK = String.raw`[ \t]*\r?${NEXT_LINE}${QUOTE_MARKERS}[ \t]*`;
 var titleText = (close) => String.raw`(?:[^${close}\n]|${NEXT_LINE}){0,1000}`;
 var LINK_TITLE = String.raw`(?:"${titleText('"')}"|'${titleText("'")}'|\(${titleText("()")}\))`;
 var LINK_DEFINITION = new RegExp(String.raw`^${QUOTE_MARKERS}[ \t]*\[(?!\^)([^[\]\n]{1,999})\]:(?:${LINK_BREAK}|[ \t]*)(?:<[^<>\n]*>|[^\s<]\S{0,2000})(?:(?:${LINK_BREAK}|[ \t]+)${LINK_TITLE})?[ \t]*$`, "gm");
+var FULL_REFERENCE_LABEL = String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`;
 var LINK_TARGET = new RegExp([
-  String.raw`(?<=\])\[(?:[^[\]\n]|${NEXT_LINE}){0,999}\]`,
+  FULL_REFERENCE_LABEL,
   String.raw`<[a-z][a-z0-9+.-]{1,31}:[^<>\s]*>`,
   String.raw`<\/?[a-z][a-z0-9-]*(?:\s(?:[^<>\n]|${NEXT_LINE}){0,2000})?\/?>`
 ].join("|"), "gim");
 var BARE_ADDRESS = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]*|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 var REFERENCE_TEXT = /\[([^[\]\n]{1,999})\](?:\[\])?(?![([])/g;
 var BLOCK_LINE = /^[ \t>]*(?:#{1,6}(?:[ \t]|\r?$)|([-*_])(?:[ \t]*\1){2,}[ \t]*\r?$)/;
-function maskLinkTargets(text, blank = " ") {
-  const source = String(text);
-  const ranges = [];
-  const labels = new Set;
-  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+function linkDefinitions(source, blank = " ") {
+  const definitions = [];
   const blankLine = new RegExp(`^[ \\t>${escapeRegExp(blank)}]*\\r?$`);
   let definitionEnd = -1;
   for (const match of source.matchAll(LINK_DEFINITION)) {
@@ -10073,10 +10074,20 @@ function maskLinkTargets(text, blank = " ") {
     const previous = source.slice(lineStart, Math.max(lineStart, match.index - 1));
     const opens = match.index === 0 || blankLine.test(previous) || BLOCK_LINE.test(previous) || definitionEnd !== -1 && source.slice(definitionEnd, match.index).trim() === "";
     if (opens) {
-      labels.add(label(match[1]));
-      ranges.push([match.index, match.index + match[0].length]);
       definitionEnd = match.index + match[0].length;
+      definitions.push([match.index, definitionEnd, match[1]]);
     }
+  }
+  return definitions;
+}
+function maskLinkTargets(text, blank = " ") {
+  const source = String(text);
+  const ranges = [];
+  const labels = new Set;
+  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  for (const [start, end, name] of linkDefinitions(source, blank)) {
+    labels.add(label(name));
+    ranges.push([start, end]);
   }
   for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
     for (const match of source.matchAll(pattern)) {
@@ -10137,6 +10148,143 @@ function inlineDestinations(source, blank) {
     }
   }
   return ranges;
+}
+var INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
+var OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress rp rt script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
+var ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")})(?![a-z\\d-])`;
+var ATTRIBUTE = String.raw`\s+[a-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>\x60]+|'[^'<>]{0,1000}'|"[^"<>]{0,1000}"))?`;
+var HTML_TAG = String.raw`<(?:${ELEMENT}(?:${ATTRIBUTE}){0,100}\s*\/?|\/${ELEMENT}\s*)>`;
+var FOOTNOTE = String.raw`\[\^[^[\]\s]{1,999}\]`;
+var COUNTED_MARKUP = new RegExp([
+  FULL_REFERENCE_LABEL,
+  HTML_TAG,
+  String.raw`(?<=^[ \t]{0,3})${FOOTNOTE}:`,
+  FOOTNOTE,
+  String.raw`&(?:#\d{1,7}|#x[\da-f]{1,6}|[a-z][a-z\d]{1,31});`
+].join("|"), "gim");
+var TASK_BOX = /^((?:[ \t]*>)*[ \t]*(?:[-+*]|\d{1,9}[.)])[ \t]+)\[[ xX]\](?=[ \t]|\r?$)/gm;
+var NAMED_ENTITIES = new Map([
+  ..."nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml".split(" ").map((name, index) => [name, String.fromCharCode(160 + index)]),
+  ...Object.entries({
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    OElig: "Œ",
+    oelig: "œ",
+    Scaron: "Š",
+    scaron: "š",
+    Yuml: "Ÿ",
+    fnof: "ƒ",
+    circ: "ˆ",
+    tilde: "˜",
+    ensp: " ",
+    emsp: " ",
+    thinsp: " ",
+    hairsp: " ",
+    zwnj: "‌",
+    zwj: "‍",
+    lrm: "‎",
+    rlm: "‏",
+    hyphen: "‐",
+    ndash: "–",
+    mdash: "—",
+    lsquo: "‘",
+    rsquo: "’",
+    sbquo: "‚",
+    ldquo: "“",
+    rdquo: "”",
+    bdquo: "„",
+    dagger: "†",
+    Dagger: "‡",
+    bull: "•",
+    hellip: "…",
+    permil: "‰",
+    prime: "′",
+    Prime: "″",
+    lsaquo: "‹",
+    rsaquo: "›",
+    euro: "€",
+    trade: "™",
+    larr: "←",
+    uarr: "↑",
+    rarr: "→",
+    darr: "↓",
+    harr: "↔",
+    minus: "−",
+    spades: "♠",
+    clubs: "♣",
+    hearts: "♥",
+    diams: "♦"
+  })
+]);
+function countedText(markdown) {
+  return splitFences(String(markdown)).map((part) => part.fenced ? withoutFenceMarkers(part.text) : withoutUnseenMarkup(part.text)).join("");
+}
+function withoutUnseenMarkup(text) {
+  const edits = linkDefinitions(text).map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+  for (const match of text.matchAll(TASK_BOX)) {
+    const start = match.index + match[1].length;
+    edits.push([start, start + 3, ""]);
+  }
+  for (const match of text.matchAll(COUNTED_MARKUP)) {
+    if (text[match.index - 1] !== "\\") {
+      edits.push([match.index, match.index + match[0].length, markupText(match[0])]);
+    }
+  }
+  edits.sort((left, right) => left[0] - right[0]);
+  const code = codeSpans(text);
+  let result = "";
+  let position = 0;
+  let next = 0;
+  for (const [start, end, replacement] of edits) {
+    while (next < code.length && code[next][1] <= start) {
+      next += 1;
+    }
+    if (start >= position && (next === code.length || code[next][0] >= end)) {
+      result += text.slice(position, start) + replacement;
+      position = end;
+    }
+  }
+  return result + text.slice(position);
+}
+function markupText(markup) {
+  if (markup[0] === "&") {
+    return entityText(markup.slice(1, -1));
+  }
+  const tag = /^<\/?([a-z\d]+)/i.exec(markup);
+  return tag !== null && !INLINE_ELEMENTS.has(tag[1].toLowerCase()) ? " " : "";
+}
+function entityText(name) {
+  if (name[0] !== "#") {
+    return NAMED_ENTITIES.get(name) ?? "";
+  }
+  const code = /^#x/i.test(name) ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
+  return code === 0 || code > 1114111 || code >= 55296 && code <= 57343 ? "�" : String.fromCodePoint(code);
+}
+function codeSpans(text) {
+  const spans = [];
+  let lineStart = 0;
+  for (const line of text.split(`
+`)) {
+    const runs = line.includes("`") ? [...line.matchAll(/`+/g)] : [];
+    const closers = [];
+    const later = new Map;
+    for (let index = runs.length - 1;index >= 0; index -= 1) {
+      closers[index] = later.get(runs[index][0].length);
+      later.set(runs[index][0].length, index);
+    }
+    for (let index = 0;index < runs.length; index += 1) {
+      const close = closers[index];
+      if (close !== undefined) {
+        spans.push([lineStart + runs[index].index, lineStart + runs[close].index + runs[close][0].length]);
+        index = close;
+      }
+    }
+    lineStart += line.length + 1;
+  }
+  return spans;
 }
 function scanMarkup(text) {
   const ranges = [];
@@ -17991,8 +18139,9 @@ function normalise(text) {
 }
 function wordBag(text) {
   const bag = new Map;
-  for (const { word } of wordSpans(String(text).toLowerCase(), /[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)) {
-    bag.set(word, (bag.get(word) ?? 0) + 1);
+  for (const word of splitWords(text)) {
+    const key = word.toLowerCase();
+    bag.set(key, (bag.get(key) ?? 0) + 1);
   }
   return bag;
 }
@@ -19420,7 +19569,6 @@ var SIMILARITY_DEFAULTS = { minWords: 8 };
 var MIN_SHINGLE = 5;
 var MAX_PLACES = 1000;
 var QUOTE_WORDS = 24;
-var WORD_PATTERN2 = /[\p{L}\p{N}\p{M}]+(?:['’ʼ][\p{L}\p{N}\p{M}]+)*/gu;
 function similarityOptions(options = {}) {
   const settings = { ...SIMILARITY_DEFAULTS };
   const raw = options["min-words"];
@@ -19436,8 +19584,9 @@ function similarityOptions(options = {}) {
 function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
-    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN2)) {
-      words.push({ word: word.toLowerCase().replace(/[’ʼ]/g, "'"), paragraph: index, start, end });
+    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN)) {
+      const folded = word.toLowerCase().replace(/[’ʼ]/g, "'").replace(/[\u2010\u2011]/g, "-").replace(/\u00ad/g, "");
+      words.push({ word: folded, paragraph: index, start, end });
     }
   });
   return words;

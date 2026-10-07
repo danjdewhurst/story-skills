@@ -1,7 +1,6 @@
-import { isSceneBreakLine, separateSceneBreaks, withoutFencedCode } from "./markdown.js";
+import { isSceneBreakLine, separateSceneBreaks, splitWords, withoutFencedCode } from "./markdown.js";
 import { openingWords } from "./html.js";
 import { formatPercent } from "./progress.js";
-import { wordSpans } from "./words.js";
 
 // Compares two versions of a manuscript chapter by chapter. Chapters match by
 // id (chapter-NN), except that a chapter whose paragraphs match another id's
@@ -221,13 +220,12 @@ function normalise(text) {
   return String(text).replace(/\s+/g, " ").trim();
 }
 
-// Lowercased words (letters, digits, and inner apostrophes) with counts.
-// Chinese and Japanese are a word per character, and Thai, Lao, Khmer, and
-// Burmese are split by dictionary, as story wordcount counts them.
+// The words story wordcount counts in `text`, lowercased, with counts.
 function wordBag(text) {
   const bag = new Map();
-  for (const { word } of wordSpans(String(text).toLowerCase(), /[\p{L}\p{N}]+(?:['\u2019][\p{L}\p{N}]+)*/gu)) {
-    bag.set(word, (bag.get(word) ?? 0) + 1);
+  for (const word of splitWords(text)) {
+    const key = word.toLowerCase();
+    bag.set(key, (bag.get(key) ?? 0) + 1);
   }
   return bag;
 }

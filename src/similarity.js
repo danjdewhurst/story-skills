@@ -1,7 +1,7 @@
 import { formatNumber } from "./compare.js";
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
-import { wordSpans } from "./words.js";
+import { WORD_PATTERN, wordSpans } from "./words.js";
 
 // story similarity: passages of chapter prose that share a run of words with
 // reference text (the author's earlier books, a previous draft, a source).
@@ -29,12 +29,6 @@ const MAX_PLACES = 1000;
 // The words of a passage the text output quotes; --json keeps them all.
 const QUOTE_WORDS = 24;
 
-// Letters, digits, and combining marks make words, joined by an inner
-// apostrophe (don't, O'Brien). Chinese and Japanese are a word per
-// character, and Thai, Lao, Khmer, and Burmese are split by dictionary, as
-// story wordcount counts them (see wordSpans).
-const WORD_PATTERN = /[\p{L}\p{N}\p{M}]+(?:['’ʼ][\p{L}\p{N}\p{M}]+)*/gu;
-
 export function similarityOptions(options = {}) {
   const settings = { ...SIMILARITY_DEFAULTS };
   const raw = options["min-words"];
@@ -50,12 +44,16 @@ export function similarityOptions(options = {}) {
 
 // The words of one document, each with the paragraph it is in and its place
 // in that paragraph's text, so a shared run can be quoted as written.
-// `paragraphs` is a list of { label, text }.
+// `paragraphs` is a list of { label, text }. Words are split as story
+// wordcount splits them (see WORD_PATTERN and wordSpans), so `well-known`
+// and `don't` are one word each, and compared with apostrophes and hyphens
+// folded to ASCII and soft hyphens dropped.
 export function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
     for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN)) {
-      words.push({ word: word.toLowerCase().replace(/[’ʼ]/g, "'"), paragraph: index, start, end });
+      const folded = word.toLowerCase().replace(/[’ʼ]/g, "'").replace(/[\u2010\u2011]/g, "-").replace(/\u00ad/g, "");
+      words.push({ word: folded, paragraph: index, start, end });
     }
   });
   return words;
