@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { checkProjectSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
-import { computeProgress, formatProgress, historyWeeks, localDate } from "../src/progress.js";
+import { computeProgress, formatProgress, historyWeeks } from "../src/progress.js";
 import { createStoryProject, formatProjectReport, projectProgress, projectReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
@@ -122,7 +124,30 @@ describe("story progress", () => {
 
   test("defaults the date to today", () => {
     const { root } = progressProject("target-words: 1000");
-    expect(projectProgress(root, { log: true }).logged.date).toBe(localDate());
+    // A fixed clock, so the expected day is a literal rather than the helper
+    // the command calls for its default.
+    setSystemTime(new Date(2026, 9, 7, 9, 30));
+    try {
+      expect(projectProgress(root, { log: true }).logged.date).toBe("2026-10-07");
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("localDate reads the local calendar day, just either side of midnight", () => {
+    // A child sets TZ, since this machine runs in UTC, where a UTC reading
+    // would pass. Kiritimati is ahead of UTC and Los Angeles is behind it.
+    const script = `
+      // story.js first, as the test run loads it: progress.js alone meets an import cycle.
+      await import(${JSON.stringify(pathToFileURL(path.join(import.meta.dir, "..", "src", "story.js")).href)});
+      const { localDate } = await import(${JSON.stringify(pathToFileURL(path.join(import.meta.dir, "..", "src", "progress.js")).href)});
+      console.log(JSON.stringify([localDate(new Date(2026, 9, 7, 0, 30)), localDate(new Date(2026, 9, 6, 23, 59, 59, 999))]));
+    `;
+    for (const zone of ["Pacific/Kiritimati", "America/Los_Angeles"]) {
+      const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", env: { ...process.env, TZ: zone }, timeout: 20000 });
+      expect({ zone, status: result.status, stderr: result.stderr }).toEqual({ zone, status: 0, stderr: "" });
+      expect({ zone, days: JSON.parse(result.stdout) }).toEqual({ zone, days: ["2026-10-07", "2026-10-06"] });
+    }
   });
 
   test("validate checks deadline, chapter targets, and the log", () => {
