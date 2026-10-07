@@ -14,7 +14,7 @@ import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.j
 import { PREFLIGHT } from "../scripts/release.js";
 import { CI_WAIT } from "../scripts/publish-gate.js";
 import { packageFiles, relativeLinks, unshippedLinks } from "../scripts/check-package.js";
-import { auditAssignment, shardPlan, testFiles } from "../scripts/test-shards.js";
+import { testFiles, timingsCoverage, timingsDocument } from "../scripts/test-shards.js";
 import { spawnSync } from "node:child_process";
 import { fillTemplate } from "../evals/run-evals.js";
 import { buildJudgePrompt, parseArgs as parseRunSkillArgs, selectFixtures } from "../evals/run-skill.js";
@@ -2111,18 +2111,19 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     const count = Number(/shards: \[(\d+)\]/.exec(windows)[1]);
     const listed = /shard: \[([^\]]+)\]/.exec(windows)[1].split(",").map((value) => Number(value.trim()));
     expect(listed).toEqual(Array.from({ length: count }, (_, index) => index + 1));
-    expect(windows).toContain('node scripts/test-shards.js --shard "$shard" --shards "$shards"');
     const runStep = windows.split(/\n(?= {6}- )/).find((text) => text.includes("name: Run tests"));
     expect(runStep).toBeDefined();
-    expect(runStep).toContain("bun test --timeout 60000");
-    expect(runStep).not.toContain("bun run test");
+    // bun run test keeps the package script's glob. A hand-built file list
+    // makes bun follow plugins/story-skills and exit ELOOP on Windows.
+    expect(runStep).toContain("bun run test -- --shard=");
+    expect(runStep).toContain("--timings=");
+    expect(runStep).not.toContain("bun test --timeout");
     expect(gate).toMatch(/^ {4}name: Tests windows-latest\n/m);
     expect(gate).toContain("needs: test-windows");
-    expect(gate).toContain(`node scripts/test-shards.js --audit --shards ${count}`);
+    expect(gate).toContain("node scripts/test-shards.js --audit");
     const files = testFiles(path.join(repoRoot, "test"));
-    const plan = shardPlan(files, count);
-    expect(auditAssignment(files, plan.map((shard) => shard.files))).toEqual([]);
-    expect(plan.every((shard) => shard.files.length > 0)).toBe(true);
+    expect(timingsCoverage(files, timingsDocument(files))).toEqual([]);
+    expect(count).toBe(4);
   });
 
   test("the check installs the tarball and runs the installed bin", () => {
