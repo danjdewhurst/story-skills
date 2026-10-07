@@ -625,9 +625,10 @@ export function checkDraft(checks, inputText, draftText) {
   if (checks.requires_past_tense === true) {
     PAST_TENSE_RE.lastIndex = 0;
     const markers = proseOnly.match(PAST_TENSE_RE) || [];
+    const present = narration(proseOnly).match(PRESENT_TENSE_ACTION_RE);
     results.push([
-      markers.length >= PAST_TENSE_MIN_MARKERS,
-      `structure: past-tense voice present (${markers.length} marker(s), need ${PAST_TENSE_MIN_MARKERS})`,
+      markers.length >= PAST_TENSE_MIN_MARKERS && !present,
+      `structure: past-tense voice present (${markers.length} marker(s), need ${PAST_TENSE_MIN_MARKERS}${present ? `; present tense: "${present[0]}"` : ""})`,
     ]);
   }
   const unit = lengthUnit(checks.language);

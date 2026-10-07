@@ -596,6 +596,18 @@ describe("the checker's prose checks", () => {
     expect(firstPerson('"I can wait," he said. I walked on.\n')).toEqual([true, "structure: first-person voice present"]);
   });
 
+  test("the top-level past-tense check fails first-person present-tense action, as the chapter check does", () => {
+    const pastTense = (draft) =>
+      checkDraft({ requires_past_tense: true }, "", draft).find(([, desc]) => desc.startsWith("structure: past-tense voice present"));
+    expect(pastTense("I take the key and I kneel by the chest. Petra said it was late.\n")).toEqual([
+      false,
+      'structure: past-tense voice present (2 marker(s), need 2; present tense: "I take")',
+    ]);
+    expect(pastTense("I took the key and knelt by the chest. Petra said it was late.\n")[0]).toBe(true);
+    // A present-tense line of dialogue is not narration.
+    expect(pastTense('Petra said, "I take it." She was late.\n')[0]).toBe(true);
+  });
+
   test("a misspelled top-level field fails the draft instead of being ignored", () => {
     const results = checkDraft({ required: ["Petra"], banned_regx: ["Thursday"] }, "", "Petra came on Thursday.\n");
     expect(results).toContainEqual([false, 'checks.json: unknown key "banned_regx"']);
