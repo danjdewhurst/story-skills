@@ -594,6 +594,15 @@ describe("timeline and the clock", () => {
     ]);
   });
 
+  test("a dated flashback scene does not date its undated chapter (#699)", () => {
+    const root = castProject(3);
+    writeBaseChapter(root, 1, "characters:\n  - ann\n  - bob\ndate: 2024-05-01");
+    writeBaseChapter(root, 2, "characters:\n  - ann\n  - bob\ndate: 2024-05-02");
+    setCharacter(root, "ann", "deceased", "died-in: chapter-02");
+    writeBaseScene(root, 3, 1, "date: 2001-01-01\nflashback-to: the night of the fire");
+    expect(messages(continuity(root).errors)).toEqual(["chapters/chapter-03.md lists ann, who died in chapter-02; move posthumous appearances to mentions"]);
+  });
+
   test("a flash-forward prologue gives one warning and later chapters are still checked (#156)", () => {
     const root = baseProject(5);
     writeBaseChapter(root, 1, "date: 2034-01-01");
