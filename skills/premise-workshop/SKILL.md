@@ -174,11 +174,14 @@ asks after seeing what was carried over.
 ## CLI Maintenance
 
 Use the Story CLI when it is available. If `story` is not installed, use
-`bun run story --` from the Story Skills repository checkout or the bundled
-fallback `node ../story-maintenance/scripts/story.js` with the same
-arguments, resolving the path relative to this skill folder. If no CLI is
-available, create the project by hand as the `story-init` skill describes
-and check names against the registries by reading them.
+`node <checkout>/bin/story.js` (or `bun <checkout>/bin/story.js`), where
+`<checkout>` is the path to a Story Skills repository checkout, or the
+bundled fallback `node ../story-maintenance/scripts/story.js`, with the same
+arguments. Write the script as an absolute path (resolve the fallback
+relative to this skill folder) and run the command from the folder you would
+run `story` from, so `.` and other relative paths keep their meaning. If no
+CLI is available, create the project by hand as the `story-init` skill
+describes and check names against the registries by reading them.
 
 After `story init` and the hand edits to `story.md`:
 
