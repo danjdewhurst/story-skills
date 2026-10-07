@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { findCommand, PDF_ENGINES, renderPdf, resolvePdfEngine, windowsScriptCommand } from "../src/pdf.js";
+import { languagePack } from "../src/languages/index.js";
 import { shunnHtml } from "../src/packaging.js";
+import { buildLabels } from "../src/publishing.js";
 import { createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, processRunning, writeMarkdown } from "./helpers.js";
 
@@ -473,6 +475,31 @@ describe("Shunn manuscript HTML", () => {
     expect(html).not.toContain("Chapter 1");
     expect(html).toContain("<p>One.</p>\n<p class=\"break\">#</p>\n<p>Two.</p>\n<p class=\"break\">#</p>\n<p>Three.</p>");
     expect(html).toContain("<div class=\"short-form\">");
+  });
+
+  // The length line's noun takes the plural form its rounded count needs:
+  // Russian and Ukrainian (and Polish) have one form for 1, another for 2 to
+  // 4 (and 22 to 24), and another for the rest.
+  test("the length line takes the plural form its count needs", () => {
+    const lengthLine = (language, counts) => {
+      const html = shunnHtml({ meta: { language }, chapters: [] }, { ...meta, ...counts, pack: languagePack(language), labels: buildLabels({ language }) });
+      return /<p class="length">([^<]*)<\/p>/.exec(html)[1];
+    };
+    expect(lengthLine("ru", { words: 1 })).toBe("Около 1 слово");
+    expect(lengthLine("ru", { words: 2 })).toBe("Около 2 слова");
+    expect(lengthLine("ru", { words: 11 })).toBe("Около 11 слов");
+    expect(lengthLine("ru", { words: 21 })).toBe("Около 21 слово");
+    expect(lengthLine("ru", { words: 523 })).toBe("Около 523 слова");
+    expect(lengthLine("ru", { characters: 523 })).toBe("Около 523 знака");
+    expect(lengthLine("ru", { characters: 5 })).toBe("Около 5 знаков");
+    expect(lengthLine("uk", { words: 4 })).toBe("Близько 4 слова");
+    expect(lengthLine("uk", { words: 14 })).toBe("Близько 14 слів");
+    expect(lengthLine("uk", { characters: 2 })).toBe("Близько 2 знаки");
+    expect(lengthLine("pl", { words: 1 })).toBe("Około 1 słowo");
+    expect(lengthLine("pl", { words: 3 })).toBe("Około 3 słowa");
+    expect(lengthLine("pl", { words: 12 })).toBe("Około 12 słów");
+    expect(lengthLine("pl", { words: 22 })).toBe("Około 22 słowa");
+    expect(lengthLine("pl", { characters: 3 })).toBe("Około 3 znaki");
   });
 
   test("the page is US Letter by default and A4 on request, with 1in margins on both", () => {

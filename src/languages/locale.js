@@ -71,3 +71,13 @@ export function formatNumber(value, pack = languagePack()) {
   }
   return NUMBER_FORMATS.get(pack.locale).format(value);
 }
+
+// The label key for a count: `key` with the plural form the count takes in
+// the pack's language (`key-one`, `key-few`, and so on, as Intl.PluralRules
+// names them) when the labels have that form, else `key` itself. Russian
+// says 523 words as the few form and 5 words as the many form, which the
+// base key holds.
+export function pluralLabelKey(labels, key, count, pack = languagePack()) {
+  const form = `${key}-${new Intl.PluralRules(pack.locale).select(count)}`;
+  return labels?.[form] !== undefined ? form : key;
+}

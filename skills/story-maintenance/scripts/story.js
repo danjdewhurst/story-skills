@@ -7311,7 +7311,11 @@ var pl_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Redakcja: {names}",
+    "approximate-words-one": "Około {words} słowo",
+    "approximate-words-few": "Około {words} słowa",
     "approximate-words": "Około {words} słów",
+    "approximate-characters-one": "Około {characters} znak",
+    "approximate-characters-few": "Około {characters} znaki",
     "approximate-characters": "Około {characters} znaków",
     "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",
     "narration-opening-anonymous": "{title}. Czyta: {narrator}.",
@@ -7637,7 +7641,11 @@ var ru_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Составление: {names}",
+    "approximate-words-one": "Около {words} слово",
+    "approximate-words-few": "Около {words} слова",
     "approximate-words": "Около {words} слов",
+    "approximate-characters-one": "Около {characters} знак",
+    "approximate-characters-few": "Около {characters} знака",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
     "narration-opening-anonymous": "{title}. Читает {narrator}.",
@@ -8087,7 +8095,11 @@ var uk_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Упорядкування: {names}",
+    "approximate-words-one": "Близько {words} слово",
+    "approximate-words-few": "Близько {words} слова",
     "approximate-words": "Близько {words} слів",
+    "approximate-characters-one": "Близько {characters} знак",
+    "approximate-characters-few": "Близько {characters} знаки",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
     "narration-opening-anonymous": "{title}. Читає {narrator}.",
@@ -9100,6 +9112,10 @@ function formatNumber2(value, pack = languagePack()) {
     NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
   }
   return NUMBER_FORMATS.get(pack.locale).format(value);
+}
+function pluralLabelKey(labels, key, count, pack = languagePack()) {
+  const form = `${key}-${new Intl.PluralRules(pack.locale).select(count)}`;
+  return labels?.[form] !== undefined ? form : key;
 }
 
 // src/series.js
@@ -20419,13 +20435,16 @@ function shunnParagraphXml(script, runXml, centered, quote = false) {
 function shunnChapterHeadingXml(script, text) {
   return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
 }
-function shunnWordCount(words, pack = languagePack()) {
-  const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
-  const rounded = Math.round(words / step) * step;
-  return formatNumber2(rounded, pack);
+function shunnRounded(count) {
+  const step = count < 1000 ? 1 : count < 40000 ? 100 : 1000;
+  return Math.round(count / step) * step;
 }
 function shunnLength(meta) {
-  return meta.characters === undefined ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) }) : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
+  const pack = meta.pack ?? languagePack();
+  const characters = meta.characters !== undefined;
+  const count = shunnRounded(characters ? meta.characters : meta.words);
+  const key = pluralLabelKey(meta.labels, characters ? "approximate-characters" : "approximate-words", count, pack);
+  return fillLabel(meta.labels, key, { [characters ? "characters" : "words"]: formatNumber2(count, pack) });
 }
 function shunnByline(meta) {
   const lines = [];

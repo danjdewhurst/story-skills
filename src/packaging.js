@@ -8,7 +8,7 @@ import { readFileBytes, writeFile } from "./files.js";
 import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } from "./html.js";
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
-import { formatNumber } from "./languages/locale.js";
+import { formatNumber, pluralLabelKey } from "./languages/locale.js";
 import { characterReference } from "./entities.js";
 import { autolinkEnd, breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { creditLines, publishingMeta } from "./publishing.js";
@@ -585,17 +585,24 @@ function shunnChapterHeadingXml(script, text) {
 // 100 below novel length (40,000), and to the nearest 1,000 above it, and
 // written as the story's language writes numbers (12.300 in German).
 export function shunnWordCount(words, pack = languagePack()) {
-  const step = words < 1000 ? 1 : words < 40000 ? 100 : 1000;
-  const rounded = Math.round(words / step) * step;
-  return formatNumber(rounded, pack);
+  return formatNumber(shunnRounded(words), pack);
+}
+
+// A count rounded as shunnWordCount rounds it, as a number.
+function shunnRounded(count) {
+  const step = count < 1000 ? 1 : count < 40000 ? 100 : 1000;
+  return Math.round(count / step) * step;
 }
 
 // The title page's length line in the book's language, in characters for a
-// book counted in characters (`meta.characters`), rounded the same way.
+// book counted in characters (`meta.characters`), rounded the same way. Its
+// noun takes the plural form the rounded count needs (see pluralLabelKey).
 function shunnLength(meta) {
-  return meta.characters === undefined
-    ? fillLabel(meta.labels, "approximate-words", { words: shunnWordCount(meta.words, meta.pack) })
-    : fillLabel(meta.labels, "approximate-characters", { characters: shunnWordCount(meta.characters, meta.pack) });
+  const pack = meta.pack ?? languagePack();
+  const characters = meta.characters !== undefined;
+  const count = shunnRounded(characters ? meta.characters : meta.words);
+  const key = pluralLabelKey(meta.labels, characters ? "approximate-characters" : "approximate-words", count, pack);
+  return fillLabel(meta.labels, key, { [characters ? "characters" : "words"]: formatNumber(count, pack) });
 }
 
 // The title block's byline, as lines: "by" and the author, the name alone

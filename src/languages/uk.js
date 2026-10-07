@@ -34,7 +34,13 @@ export default {
     by: "",
     byline: "{names}",
     "edited-by": "Упорядкування: {names}",
+    // A count's noun takes the form for 1 (-one), for 2 to 4 and 22 to 24
+    // (-few), or the base key's form for the rest.
+    "approximate-words-one": "Близько {words} слово",
+    "approximate-words-few": "Близько {words} слова",
     "approximate-words": "Близько {words} слів",
+    "approximate-characters-one": "Близько {characters} знак",
+    "approximate-characters-few": "Близько {characters} знаки",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
     "narration-opening-anonymous": "{title}. Читає {narrator}.",
