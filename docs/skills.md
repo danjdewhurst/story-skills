@@ -148,7 +148,7 @@ The main handoffs:
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `wordcount --write`, `check`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `reindex`, `wordcount --write`, `check`, `rename character` |
 | [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `reindex`, `wordcount --write`, `check` (story verse only) |
-| [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `remove chapter`, `build --format twee`/`ink`, `reindex`, `wordcount --write`, `check` |
+| [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `split`, `merge`, `remove chapter`, `build --format twee`/`ink`, `reindex`, `wordcount --write`, `check` |
 | [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `reindex`, `wordcount --write`, `check`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `reindex`, `wordcount --write`, `check` |
 | [reader-panel](#reader-panel) | `feedback/round-N/{persona}.md`, marked `source: simulated` | `snapshot` (without git), `build --format html --stamp`, `context`, `prose` (line editor), `reindex`, `wordcount --write`, `check` |
@@ -649,7 +649,7 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 **Writes.** Chapter files and their `choices`, scene records, `continuity/state.md` (one `knowledge-state` entry per branch for a fact learned on two branches), `continuity/exemptions.md` for findings that only reflect branch order, `notes/branch-map.md`, and built copies under `adaptations/interactive/`.
 
-**CLI.** `story add chapter`, `story context`, `story move chapter` (which rewrites every `to`), `story remove chapter`, and `story build --format twee`/`ink`, then `story reindex .`, `story wordcount . --write`, and `story check .`.
+**CLI.** `story add chapter`, `story context`, `story move chapter`, `story split`, and `story merge` (which rewrite every `to`), `story remove chapter`, and `story build --format twee`/`ink`, then `story reindex .`, `story wordcount . --write`, and `story check .`.
 
 **References.**
 

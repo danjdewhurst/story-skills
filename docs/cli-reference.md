@@ -334,7 +334,7 @@ story continuity examples/the-unraveled-thread --json
 }
 ```
 
-The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, `mkdir` (a folder made), or `rmdir` (a folder a [snapshot restore](#restoring-a-snapshot) emptied and removed, listed after the files it held) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
+The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, `renumbered`, `choiceAdded`, and `choicesRetargeted` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, `renumbered`, and `choicesRetargeted` for `merge` (see [split and merge in a branching book](#split-and-merge-in-a-branching-book)), and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, `mkdir` (a folder made), or `rmdir` (a folder a [snapshot restore](#restoring-a-snapshot) emptied and removed, listed after the files it held) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
 
 `export`, `build`, `init`, and `import` put what they wrote in `data`, with `dryRun` and `changes` as above. `changes` is relative to the project root for `export` and `build`, and to the new project's folder for `init` and `import`, so a file outside it starts with `../`. The warnings they print after their output are their diagnostics, such as [`empty-chapter`](#codes-validate), [`substitute-story-id`](#codes-validate), or [`derived-ifid`](#codes-build-and-export) from a build, [`kept-story-options`](#codes-init-and-import) from `init` and `import`, and `unsplit-chapter-lines` from `import`, which is about the manuscript, so its `file` is `null` and its `source` names the manuscript file. For `export` and `build`, a warning a [`severity`](#defaults-and-severity-from-storymd) entry promotes makes `ok` false and exits 1, as in a text run.
 
@@ -2716,7 +2716,7 @@ warning: continuity/questions/who-collected-the-suitcase.md, continuity/question
 | The chapter does not exist | `chapter chapter-09 does not exist` |
 | No `--at` | `split requires --at <marker>: a scene break number, a heading, or a line of the chapter text` |
 | An empty `--title` | `--title cannot be empty: leave it out to use the chapter's title with (continued)` |
-| The book is branching | `story split does not work on a branching book: chapters/chapter-01.md has choices, and a split would change where they lead. Restructure it by hand with story add chapter, story move, and story remove` |
+| The chapter has choices, in a branching book | `story split works on a branching book only when the chapter it splits has no choices, since a chapter's choices end it and a split would change the passage they end: chapters/chapter-04.md choices[0] (to chapter-05), chapters/chapter-04.md choices[1] (to chapter-06). Restructure the book by hand with story add chapter, story move, and story remove` |
 | A scene break number out of range | `--at 3: chapter chapter-02 has 1 scene break, so give a number from 1 to 1, or a heading or a line of the text` |
 | No line matches | `--at "Ines" matches no line in the chapter text of chapter-03: give a scene break number, a heading, or a line of the text` |
 | Several lines match | `--at "said" matches 5 lines in chapter-02 (lines 49, 55, 59, 61, 67): quote more of the line so it matches only one` |
@@ -2727,7 +2727,7 @@ warning: continuity/questions/who-collected-the-suitcase.md, continuity/question
 | A scene file is not named for its `chapter` and `scene` fields | `scenes/chapter-03-scene-01.md is scene 1 of chapter-09 by its frontmatter but not by its file name, so renumbering could collide with it: rename it to scenes/chapter-09-scene-01.md, or fix its chapter and scene fields, first` |
 | A file it would rewrite is read-only | `Cannot write to continuity/clues/the-ticket.md (permission denied); nothing was changed. Fix it and run the command again` |
 
-A branching book (one with `choices`) is refused because a chapter's choices end it: splitting one would make its first half an ending, and the new chapter would be reachable from nothing. Restructure a branching book by hand: [`add`](#add) the new chapter, give the first half a choice that leads to it, and move the original choices across.
+A branching book has its own rules, in [split and merge in a branching book](#split-and-merge-in-a-branching-book).
 
 Like [`move`](#move), `split` parses every file and checks, before it writes anything, that every file any of its steps will change (the references to each renumbered chapter and scene, `continuity/state.md`, the exemptions log, and the registries) is writable and that nothing is in the way of the files it creates. It is several moves in a row, though, so one stopped part way by something it cannot check first (a full disk, say) cannot be finished by running it again: the error says `Some files were already changed, so a rerun cannot finish the job: run story validate and story links to see what is left, or restore the project from git and run the command again`. Preview it with `--dry-run` first.
 
@@ -2766,11 +2766,43 @@ warning: chapter-03 set time "22:05", episode-question "Who took the suitcase ou
 | The same chapter twice | `merge needs two different chapters, got chapter-02 twice` |
 | The chapters are in the wrong order | `chapter-02 comes before chapter-03: name the earlier chapter first (story merge chapter-02 chapter-03)` |
 | A chapter lies between them | `chapter-04 does not follow chapter-02: merge takes neighbouring chapters, and chapter-03 comes between them` |
-| The book is branching | `story merge does not work on a branching book: ...`, as for [split](#split) |
+| A chapter has choices, in a branching book | `story merge works on a branching book only when the chapters it merges have no choices, ...`, as for [split](#split) |
+| A choice leads to the second chapter, in a branching book | `story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of chapter-05 instead: chapters/chapter-04.md choices[1] leads to chapter-06. Point it at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove` |
 | A moved scene would overwrite a file | `scenes/chapter-02-scene-03.md already exists; nothing was changed` |
 | A file in the way, a misnamed scene file, or a read-only file | as for [split](#split) |
 
 As with `split`, a merge stopped part way cannot be finished by a rerun, so preview it with `--dry-run`. Like `move`, `split` and `merge` never edit prose: a "Chapter 3" in the text stays as it was.
+
+#### Split and merge in a branching book
+
+In a branching book (one where any chapter has [`choices`](project-format.md#branching-chapters)), a chapter's choices end it, and a chapter with none is an ending. `split` and `merge` run there only when no choice would change where it leads or which text it ends, and refuse everything else, naming the choices in the way:
+
+- `split` takes only a chapter with no choices, and `merge` only two chapters with no choices. A malformed `choices` entry counts as a choice.
+- `merge` also refuses while any choice leads to the second chapter, since a reader who took it would land at the start of the first. So the second chapter is one no choice reaches, such as an ending drafted before the choice that leads to it.
+- A split gives the first half one choice, `Continue`, that leads to the new chapter, so a reader still reads the two halves in a row. Change its text if the book needs other words. Choices that led to the split chapter still lead to its start, in the first half, so `split-references` leaves them out.
+- A choice that leads to a `chapter-NN` with no file yet is a reference like any other, so `split` refuses to give that id to a chapter and names the choice: `chapters/chapter-03.md choices[1] names chapter-05, which has no file yet, ...`.
+
+The renumbering points each choice that led to a renumbered chapter at its new id, as [`move`](#move) does. `split` and `merge` list every choice they add or point elsewhere, after their summary line, and `--dry-run` lists them above its file list. With `--json`, `data.choiceAdded` (split only; `null` in a linear book) is `{ "file", "index", "text", "to" }`, and `data.choicesRetargeted` lists `{ "file", "index", "text", "from", "to" }`, where `file` is the chapter's file after the renumbering. On a copy of [`the-gull-rock-light`](../examples/the-gull-rock-light/), where chapter 4 leads to chapter 5 or chapter 6 and both are endings:
+
+```text
+$ story split chapter-05 --at "At dawn" --title "Dawn" --dry-run
+Would give chapters/chapter-05.md a choice to chapter-06, the rest of chapter-05: Continue
+Would point chapters/chapter-04.md choices[1] at chapter-07, not chapter-06
+update  chapters/_index.md
+update  chapters/chapter-04.md
+update  chapters/chapter-05.md
+update  chapters/chapter-06.md
+create  chapters/chapter-07.md
+update  continuity/exemptions.md
+update  continuity/state.md
+update  scenes/_index.md
+delete  scenes/chapter-06-scene-01.md
+create  scenes/chapter-07-scene-01.md
+Dry run: story split would make 10 changes; nothing was written
+warning: --at "At dawn" falls inside the text of chapter-05-scene-01, whose record stays in chapter-05; if the scene now belongs to chapter-06, or needs a record in each, use story move scene and story add scene [split-scenes]
+```
+
+The `Continue` choice keeps the two halves from merging back, so remove it first to undo the split with `story merge chapter-05 chapter-06`. To split or merge chapters with choices, restructure the book by hand. For a split, [`add`](#add) the new chapter, give the first half a choice that leads to it, and move the original choices across. For a merge, copy the second chapter's text and choices into the first, point the choices that led to it elsewhere, and [`remove`](#remove) it.
 
 ### remove
 
