@@ -260,7 +260,7 @@ function explained(kind, field, side, reasons) {
 }
 
 describe("story validate and schemas/story.schema.json agree (#295)", () => {
-  test("on the base project, and on every example", () => {
+  test("on the base project", () => {
     const root = baseProject();
     expect(validateProject(root).errors).toEqual([]);
     expect(validateAgainstSchema(buildSchemaDocument(root), schema)).toEqual([]);
