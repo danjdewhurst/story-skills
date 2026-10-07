@@ -440,6 +440,9 @@ describe("PDF engine lookup", () => {
     expect(() => resolvePdfEngine(path.join(dir, "missing", "prince"))).toThrow("or is not an executable file");
     expect(() => resolvePdfEngine("pagedjs-cli-9", { env: { PATH: dir } })).toThrow("PDF engine pagedjs-cli-9 was not found on PATH");
     expect(() => resolvePdfEngine("  ")).toThrow("--pdf-engine needs an engine name");
+    // Keys inherited from Object.prototype are not aliases of an engine.
+    expect(() => resolvePdfEngine("constructor", { env: { PATH: dir } })).toThrow("Unknown PDF engine: constructor");
+    expect(() => resolvePdfEngine("__proto__", { env: { PATH: dir } })).toThrow("Unknown PDF engine: __proto__");
   });
 
   test("an engine that cannot be started or runs too long is a refused write", () => {

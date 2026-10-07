@@ -58,6 +58,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 - `story continuity` reports a destroyed or lost artifact that a later chapter or scene lists in its `characters`, as it does one in `mentions`. ([#702](https://github.com/danjdewhurst/story-skills/issues/702))
   - The message says `lists <artifact>, destroyed/lost since <chapter>`. A chapter or scene that names the artifact in `mentions` keeps the `mentions` message.
+- `build --pdf-engine constructor` stops with an `Unknown PDF engine` message, not a `TypeError`. ([#716](https://github.com/danjdewhurst/story-skills/issues/716))
 
 ## [0.23.0] - 2026-10-07
 
