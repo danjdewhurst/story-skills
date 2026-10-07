@@ -1062,9 +1062,9 @@ Files: `continuity/clues/<clue-id>.md`, a clue ledger for mysteries and fair-pla
 | `arcs` | list of arc ids | no | Arcs the clue belongs to. |
 | `characters` | list of character ids | no | Characters involved; for [`story clues`](#clue-grid), the characters who could notice it. |
 
-`story add promise` and `story add clue` set `status: planted` when you pass `--planted`, and `status: planned` otherwise; `--status` overrides both. To schedule a setup in a chapter you have not drafted, pass `--status planned` with `--planted`; `story continuity` warns once that chapter has prose and the status is still `planned`. `story add clue --significance-delayed` and `--red-herring` set those flags. `story validate` errors when either flag is not `true` or `false`.
+`story add promise` and `story add clue` set `status: planted` when `--planted` names a chapter that exists, and `status: planned` when it names a chapter not written yet or is left out; `--status` overrides both. So `--planted` with an unwritten chapter schedules the setup there, and `story continuity` warns once that chapter has prose and the status is still `planned`. `story add clue --significance-delayed` and `--red-herring` set those flags. `story validate` errors when either flag is not `true` or `false`.
 
-For promises and clues, `story continuity` errors when `payoff` comes before `planted`, when a `paid-off` entry has no `payoff` chapter, and when a `planted` entry has no `planted` chapter. It warns when a `planted` entry's `payoff` chapter is already at or behind the latest chapter past `outline`, or its `payoff` is unset and it was planted at least three chapters before that chapter, and when a promise records a `planted` chapter but is still `planned`. When `story.md` has `status: complete`, any `open` question or `planned` or `planted` promise or clue is an error.
+For promises and clues, `story continuity` errors when `payoff` comes before `planted`, when a `paid-off` entry has no `payoff` chapter, and when a `planted` entry has no `planted` chapter. It warns when a `planted` entry's `payoff` chapter is already at or behind the latest chapter past `outline`, or its `payoff` is unset and it was planted at least three chapters before that chapter, and when an entry is still `planned` though its `planted` chapter has prose. When `story.md` has `status: complete`, any `open` question or `planned` or `planted` promise or clue is an error.
 
 `status: abandoned` marks a thread cut during discovery drafting: `story continuity` skips abandoned questions, promises, and clues entirely, and `story links` lets an abandoned promise or clue keep a `planted` or `payoff` chapter, and an abandoned question an `introduced` chapter, that was never written (see [References and backlinks](#references-and-backlinks)). [What the status values mean](#what-the-status-values-mean) sets out how `abandoned` differs from `dropped`.
 
@@ -1613,8 +1613,8 @@ Scene status is not read by any check beyond validation; chapter status drives t
 
 | Value | Meaning | CLI behaviour |
 |-------|---------|---------------|
-| `planned` | Intended, not yet on the page. | `story add` default without `--planted`. Warning if a `planted` chapter is recorded (promises only). Error when `story.md` is `complete`. Counted by `story next`. |
-| `planted` | On the page, awaiting payoff. | `story add` default with `--planted`. Error if no `planted` chapter; gap warning when the payoff is overdue; error when `story.md` is `complete`. Counted by `story next`. |
+| `planned` | Intended, not yet on the page. | `story add` default without `--planted`, or with `--planted` naming a chapter not written yet. Warning once the recorded `planted` chapter has prose. Error when `story.md` is `complete`. Counted by `story next`. |
+| `planted` | On the page, awaiting payoff. | `story add` default with `--planted` naming a chapter that exists. Error if no `planted` chapter; gap warning when the payoff is overdue; error when `story.md` is `complete`. Counted by `story next`. |
 | `paid-off` | The payoff has landed. | Error if no `payoff` chapter is recorded. |
 | `dropped` | The setup stays in the book but will not be paid off. | No gap warning and no completion error, but still checked: `payoff` must not come before `planted`, and the `planted` chapter must exist. |
 | `abandoned` | The thread was cut, usually during discovery drafting, and kept on record. | Skipped entirely by `story continuity`. `planted` and `payoff` may name a scheduled `chapter-NN` with no file yet. |
