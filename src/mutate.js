@@ -34,7 +34,6 @@ import {
   characterCount,
   escapeRegExp,
   extractSection,
-  fencedLineIndexes,
   isSceneBreak,
   kebabCase,
   maskMarkup,
@@ -656,8 +655,7 @@ function writeRegistry(filePath, build, changed, root) {
   const raw = fs.existsSync(filePath) ? safeRead(filePath, root) : null;
   const existing = (raw ?? "").replace(/\r\n/g, "\n");
   const generated = build(existing);
-  const custom = customSections(existing, generated);
-  let contents = custom.length === 0 ? generated : `${generated.replace(/\n*$/, "\n")}\n${custom.join("\n\n")}\n`;
+  let contents = keepRegistryText(existing, generated);
   contents = keepRegistryFrontmatter(existing, contents);
   writeChanged(filePath, raw?.includes("\r\n") ? contents.replace(/\n/g, "\r\n") : contents, raw, changed, root);
 }
@@ -681,59 +679,146 @@ function keepRegistryFrontmatter(existing, contents) {
 // old total as a hand-written section.
 const VALUE_HEADING_ALIASES = [["Total Word Count", "Total Character Count"]];
 
-function customSections(existing, generated) {
+// The generated registry with the existing registry's own text kept, so a
+// reindex never drops a note. The generator owns its `## ` headings and,
+// under each, the section it writes: a carried hand-written section, or
+// its table (see registryTable). Everything else stays: text above the
+// title, the `# ` title line and the text under it, and text before or
+// after a generated table, `#` and `###` headings included. A `## `
+// section the generator does not write is appended after the generated
+// ones.
+function keepRegistryText(existing, generated) {
   // Only a generated heading that carries a value (`## Total Word Count: 993`)
   // is matched without it; every other heading must match exactly, so a
   // hand-written `## Registry: 2` stays custom. Each generated heading claims
-  // one existing section, and stale copies of a value heading (left by
-  // 0.10.0) are dropped.
+  // one existing section. A stale copy of a value heading (left by 0.10.0)
+  // loses its heading, and its text joins the generated total.
   const valuePattern = /:\s*\d[\d,]*$/;
-  const valueHeadings = new Set();
+  const frontmatter = FRONTMATTER_PATTERN.exec(generated)[0];
+  const fresh = registryParts(generated.slice(frontmatter.length));
+  const freshTitle = fresh.sections.find((section) => section.title);
+  const old = registryParts(existing.replace(FRONTMATTER_PATTERN, ""), freshTitle.text);
+  const valueKeys = new Map();
   const unclaimed = new Map();
-  for (const heading of markdownHeadings(generated).filter((entry) => entry.level === 2)) {
-    const hasValue = valuePattern.test(heading.text);
-    const key = hasValue ? heading.text.replace(valuePattern, "") : heading.text;
+  for (const section of fresh.sections.filter((entry) => entry.level === 2)) {
+    const hasValue = valuePattern.test(section.text);
+    const key = hasValue ? section.text.replace(valuePattern, "") : section.text;
     if (hasValue) {
-      valueHeadings.add(key);
-      VALUE_HEADING_ALIASES.filter((aliases) => aliases.includes(key)).flat().forEach((alias) => valueHeadings.add(alias));
+      (VALUE_HEADING_ALIASES.find((aliases) => aliases.includes(key)) ?? [key]).forEach((alias) => valueKeys.set(alias, section));
     }
-    unclaimed.set(key, (unclaimed.get(key) ?? 0) + 1);
+    unclaimed.set(key, [...(unclaimed.get(key) ?? []), section]);
   }
-  const body = existing.replace(/^---\n[\s\S]*?\n---\n/, "");
-  const lines = body.split("\n");
-  // A section runs to the next heading of level 1 or 2 outside a code
-  // fence, so a section above the title never swallows the `# Title` line.
-  const headings = markdownHeadings(body);
-  const sections = [];
-  for (const [index, heading] of headings.entries()) {
-    if (heading.level !== 2) {
-      continue;
-    }
-    const stripped = heading.text.replace(valuePattern, "");
-    const key = valueHeadings.has(stripped) ? stripped : heading.text;
-    const claimed = (unclaimed.get(key) ?? 0) > 0;
-    if (claimed) {
-      unclaimed.set(key, unclaimed.get(key) - 1);
-    }
-    const stale = key !== heading.text;
-    if (!claimed && !stale) {
-      const end = index + 1 < headings.length ? headings[index + 1].line : lines.length;
-      sections.push(lines.slice(heading.line, end).join("\n").trim());
+  const kept = new Map(fresh.sections.map((section) => [section, { before: [], after: [] }]));
+  const custom = [];
+  for (const section of old.sections) {
+    const stripped = section.text.replace(valuePattern, "");
+    const key = valueKeys.has(stripped) ? stripped : section.text;
+    const target = section.title ? freshTitle : unclaimed.get(key)?.shift();
+    if (target) {
+      const { before, after } = handWrittenText(section.body, target.body);
+      kept.get(target).before.push(before);
+      kept.get(target).after.push(after);
+    } else if (key !== section.text) {
+      kept.get(valueKeys.get(key)).after.push(section.body);
+    } else {
+      custom.push(section.whole);
     }
   }
-  return sections;
+  const oldTitle = old.sections.find((section) => section.title);
+  const blocks = fresh.sections.map((section) => {
+    const { before, after } = kept.get(section);
+    const heading = section.title && oldTitle ? oldTitle.heading : section.heading;
+    return [heading, ...before, section.body, ...after].filter((block) => block !== "").join("\n\n");
+  });
+  return `${frontmatter}\n${[old.preamble, ...blocks, ...custom].filter((block) => block !== "").join("\n\n")}\n`;
 }
 
-// Level 1 and 2 ATX headings with their line numbers, skipping closed
-// fenced code (see fencedLineIndexes).
+// A registry body split at its `## ` headings and its `# ` title: the
+// first `# ` heading reading `titleText`, else a `# ` heading that comes
+// before every other. Any other `# ` heading belongs to the section it is
+// in, as extractSection reads it.
+function registryParts(body, titleText) {
+  const lines = body.split("\n");
+  const headings = markdownHeadings(body);
+  const title = headings.find((heading) => heading.level === 1 && heading.text === titleText)
+    ?? (headings[0]?.level === 1 ? headings[0] : null);
+  const starts = headings.filter((heading) => heading.level === 2 || heading === title);
+  return {
+    preamble: linesText(lines, 0, starts[0]?.line ?? lines.length),
+    sections: starts.map((heading, index) => {
+      const end = starts[index + 1]?.line ?? lines.length;
+      return {
+        level: heading.level,
+        text: heading.text,
+        title: heading === title,
+        heading: lines[heading.line],
+        body: linesText(lines, heading.line + 1, end),
+        whole: linesText(lines, heading.line, end)
+      };
+    })
+  };
+}
+
+// Lines `from` to `to` without the blank lines around them.
+function linesText(lines, from, to) {
+  return lines.slice(from, to).join("\n").replace(/^(?:[ \t]*\n)+/, "").trimEnd();
+}
+
+// The text of an existing section that the generated `freshBody` does not
+// replace, split around the generated table it held. A section the
+// generator carried over unchanged leaves nothing.
+function handWrittenText(oldBody, freshBody) {
+  if (oldBody.trim() === freshBody.trim()) {
+    return { before: "", after: "" };
+  }
+  const lines = oldBody.split("\n");
+  const table = registryTable(lines, freshBody);
+  if (!table) {
+    return { before: "", after: oldBody };
+  }
+  return { before: linesText(lines, 0, table.start), after: linesText(lines, table.end, lines.length) };
+}
+
+// The generated table's place among `lines`: the first table with the
+// generated header row, else the first whose header differs from it in one
+// column name (`Word Count` that became `Character Count`). A table is a
+// run of lines starting with `|` whose second line is a delimiter row; any
+// other table, such as one with a column added by hand, is kept as text.
+function registryTable(lines, freshBody) {
+  const isRow = (line) => /^ {0,3}\|/.test(line ?? "");
+  const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
+  const header = freshBody.split("\n").find(isRow);
+  if (header === undefined) {
+    return null;
+  }
+  const wanted = cells(header);
+  const tables = [];
+  for (let start = 0; start < lines.length; start += 1) {
+    if (isRow(lines[start]) && !isRow(lines[start - 1]) && /^ {0,3}\|[ \t:|-]*-[ \t:|-]*$/.test(lines[start + 1] ?? "")) {
+      let end = start + 2;
+      while (isRow(lines[end])) {
+        end += 1;
+      }
+      tables.push({ start, end, cells: cells(lines[start]) });
+    }
+  }
+  const differences = (table) => (table.cells.length === wanted.length
+    ? table.cells.filter((cell, index) => cell !== wanted[index]).length
+    : Infinity);
+  return tables.find((table) => differences(table) === 0) ?? tables.find((table) => differences(table) === 1) ?? null;
+}
+
+// Level 1 and 2 ATX headings with their line numbers and text (without a
+// closing run of `#`), found as extractSection finds them: up to three
+// spaces of indent, and none inside a closed code fence or an HTML comment.
 function markdownHeadings(markdown) {
   const lines = markdown.split("\n");
-  const fenced = fencedLineIndexes(lines);
+  const masked = maskMarkup(markdown).split("\n");
   const headings = [];
   for (const [line, text] of lines.entries()) {
-    const heading = fenced.has(line) ? null : /^(#{1,2}) +(.+?)[ \t]*$/.exec(text);
-    if (heading) {
-      headings.push({ level: heading[1].length, text: heading[2], line });
+    const heading = /^ {0,3}(#{1,2})(?:[ \t]+(.*?))?[ \t]*$/.exec(text);
+    if (heading && masked[line].trimStart().startsWith("#")) {
+      headings.push({ level: heading[1].length, text: (heading[2] ?? "").replace(/(?:^|[ \t]+)#+$/, ""), line });
     }
   }
   return headings;

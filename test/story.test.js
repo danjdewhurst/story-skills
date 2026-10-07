@@ -2245,3 +2245,56 @@ describe("ids two kinds share (#579)", () => {
     ]);
   });
 });
+
+describe("registry text kept by reindex", () => {
+  function registry(root, file, edit) {
+    const filePath = path.join(root, file);
+    fs.writeFileSync(filePath, edit(fs.readFileSync(filePath, "utf8")), "utf8");
+    return filePath;
+  }
+
+  test("notes under the title, around a generated table, and in ### subsections survive add and rename", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Kept Notes", force: false }).root;
+    const index = registry(root, "characters/_index.md", (text) => text
+      .replace("# Characters\n", "<!-- cast list -->\n\n# Dramatis Personae\n\nEveryone on the page.\n")
+      .replace("## Registry\n\n", "## Registry\n\nMain cast first.\n\n")
+      .replace("| *No characters yet* | | | |\n", "| *No characters yet* | | | |\n\nA note under the table.\n\n### Minor\n\nThe ferryman.\n\n# Appendix\n\nCut names.\n"));
+    createEntity(root, { kind: "character", name: "Mara" });
+    renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" });
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("---\n\n<!-- cast list -->\n\n# Dramatis Personae\n\nEveryone on the page.\n\n## Registry\n\nMain cast first.\n\n| Name | Role | Status | File |\n");
+    expect(text).toContain("| Mara Quill | supporting | alive | [mara-quill](mara-quill.md) |\n\nA note under the table.\n\n### Minor\n\nThe ferryman.\n\n# Appendix\n\nCut names.\n\n## Relationship Map\n");
+    expect(text).not.toContain("No characters yet");
+    expect(text.match(/^# /gm)).toHaveLength(2);
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("text under the chapter total survives a count-unit switch and stale total copies", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Kept Totals", force: false }).root;
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const index = registry(root, "chapters/_index.md", (text) => text
+      .replace("## Total Word Count: 0\n", "## Total Word Count: 0\n\nAim for 90,000.\n\n## Total Word Count: 4\n\nFrom the old outline.\n"));
+    registry(root, "story.md", (text) => text.replace("title:", "count-unit: characters\ntitle:"));
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text).toContain("| 1 | One |  | outline | 0 | [chapter-01](chapter-01.md) |\n\n## Total Character Count: 0\n\nAim for 90,000.\n\nFrom the old outline.\n");
+    expect(text).not.toContain("Word Count");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+
+  test("a heading inside a comment or with closing hashes does not split a kept section", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Kept Map", force: false }).root;
+    const index = registry(root, "characters/_index.md", (text) => text
+      .replace("## Relationship Map\n\n*No relationships defined yet.*", "## Relationship Map ##\n\n<!--\n## Old map\n-->\nMara owes Bo.")
+      .replace("| *No characters yet* | | | |\n", "| *No characters yet* | | | |\n\n| Group | Members |\n|-------|---------|\n| Crew | Mara, Bo |\n"));
+    reindexProject(root);
+    const text = fs.readFileSync(index, "utf8");
+    expect(text.match(/Mara owes Bo\./g)).toHaveLength(1);
+    expect(text).toContain("## Relationship Map\n\n<!--\n## Old map\n-->\nMara owes Bo.\n\n## Family Trees");
+    expect(text).toContain("| *No characters yet* | | | |\n\n| Group | Members |\n|-------|---------|\n| Crew | Mara, Bo |\n\n## Relationship Map");
+    expect(reindexProject(root).changed).toEqual([]);
+  });
+});
