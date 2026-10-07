@@ -58,6 +58,16 @@ if [ ! -e "$SHARED/.git" ]; then
   exit 1
 fi
 
+# Each of these is one folder name in the worktree's path.
+for name in "$PAPERCLIP_AGENT_ID" "$SLUG-$ISSUE"; do
+  case "$name" in
+    */* | . | ..)
+      echo "issue-worktree: '$name' cannot be a folder name: it must not contain '/' or be '.' or '..'" >&2
+      exit 1
+      ;;
+  esac
+done
+
 # A worktree inside the checkout shows up in its `git status`, which then
 # fails the release preflight, so worktrees live outside it. Paperclip keeps
 # project checkouts under <instance>/projects/ and agent workspaces under
@@ -78,19 +88,30 @@ case "$WT" in
   *) WT="$PWD/$WT" ;;
 esac
 
-# A path with symlinks resolved as far as it exists, so a linked folder
-# cannot hide that it leads into the checkout.
+# A path with symlinks and `..` resolved as far as it exists, so a linked
+# folder cannot hide that it leads into the checkout. Below that point mkdir
+# makes plain folders, so the rest is exact unless it holds a `..`, which
+# could climb back into the checkout once those folders exist, or a dangling
+# symlink. Either fails.
 physical() {
   local dir=$1 rest=
   while [ ! -d "$dir" ]; do
+    if [ -L "$dir" ] || [ "$(basename "$dir")" = ".." ]; then
+      return 1
+    fi
     rest="/$(basename "$dir")$rest"
     dir=$(dirname "$dir")
   done
-  printf '%s%s\n' "$(CDPATH='' cd -- "$dir" && pwd -P)" "$rest"
+  printf '%s%s\n' "$(CDPATH='' cd -P -- "$dir" && pwd -P)" "$rest"
 }
 
 CHECKOUT=$(physical "$PAPERCLIP_WORKSPACE_CWD")
-case "$(physical "$WT")/" in
+if ! WT_PHYSICAL=$(physical "$WT"); then
+  echo "issue-worktree: cannot tell where $WT leads: it has '..' or a dangling symlink below a folder that does not exist yet" >&2
+  echo "issue-worktree: set ISSUE_WORKTREE_ROOT to a plain path outside the checkout" >&2
+  exit 1
+fi
+case "$WT_PHYSICAL/" in
   "$CHECKOUT"/*)
     echo "issue-worktree: $WT is inside the shared checkout $PAPERCLIP_WORKSPACE_CWD" >&2
     echo "issue-worktree: set ISSUE_WORKTREE_ROOT to a folder outside the checkout to hold your worktrees" >&2
@@ -114,9 +135,25 @@ held_branch() {
   )
 }
 
+# The physical path of the .git folder that all of a repo's worktrees share.
+common_dir() {
+  (
+    CDPATH='' cd -P -- "$1" &&
+      CDPATH='' cd -P -- "$(git rev-parse --git-common-dir)" &&
+      pwd -P
+  )
+}
+
 # Already provisioned on an earlier heartbeat for this issue: reuse it, but
-# only on the branch asked for, or the agent would commit to the wrong one.
+# only if it is a worktree of this checkout (two checkouts with one name can
+# share a worktree folder) and on the branch asked for, or the agent would
+# commit to the wrong one.
 if [ -e "$WT/.git" ]; then
+  if [ "$(common_dir "$WT" || true)" != "$(common_dir "$SHARED" || true)" ]; then
+    echo "issue-worktree: $WT is not a worktree of $SHARED" >&2
+    echo "issue-worktree: set ISSUE_WORKTREE_ROOT to a folder that only this checkout uses" >&2
+    exit 1
+  fi
   HELD=$(held_branch "$WT" || true)
   if [ "$HELD" != "$BRANCH" ]; then
     if [ -n "$HELD" ]; then
