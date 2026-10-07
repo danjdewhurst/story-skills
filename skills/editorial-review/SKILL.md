@@ -175,10 +175,12 @@ For editors, sensitivity readers, or agents who never open a terminal,
 and a clickable paragraph label on every paragraph (`ch03-p12`), so
 comments can cite exact places in email, a doc, or an issue. To publish
 the copy on GitHub Pages with an issue form for notes, follow the GitHub
-review copy setup in step 1 of the `feedback-triage` workflow; it covers
-the templates, the approvals they need, and the warning about a public
-site. Collect the notes that come back into a feedback round and triage
-them with `feedback-triage`. Resolve labels from an older build with
+review copy setup in step 1 of the `feedback-triage` workflow, which has
+the details. Even without that skill, warn first that a public Pages site
+makes the manuscript public unless the repository and Pages are private,
+confirm the visibility the user wants, and ask before creating any file
+in `.github/`. Collect the notes that come back into a feedback round
+and triage them with `feedback-triage`. Resolve labels from an older build with
 `story compare . --ref <round-tag> --anchor '<label>'` before acting on
 them; see `references/editor-rounds.md`.
 

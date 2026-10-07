@@ -1,6 +1,6 @@
 ---
 name: adaptation
-description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive edition", "turn the book into Ink or Twine", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a finished story project into another form or language. NOT for writing a new branching or choose-your-own-adventure story (use interactive-fiction), or writing rhyming picture-book text (use verse-craft).
+description: This skill should be used when the user asks to "make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive edition", "turn the book into Ink or Twine", "translate the book", "translation", "foreign edition", "glossary for translators", or wants to turn a story project into another form or language, or to plan a picture book. NOT for writing a new branching or choose-your-own-adventure story (use interactive-fiction), or writing rhyming picture-book text (use verse-craft).
 ---
 
 # Adaptation

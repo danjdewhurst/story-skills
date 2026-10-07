@@ -1,6 +1,6 @@
 ---
 name: verse-craft
-description: This skill should be used when the user asks to "write a poem", "write a limerick", "write a sonnet", "haiku", "villanelle", "ballad", "song lyrics", "a song for my character", "a rhyme", "rhyming couplets", "does this scan", "check the meter", "fix the rhythm of this poem", "rhyme scheme", "iambic pentameter", "a prophecy in verse", "a nursery rhyme", "rhyming picture book", or wants verse written, scanned, or revised, whether inside a story project or as a standalone poem. NOT for accidental rhymes in prose (use line-editing) or permissions for quoting someone else's poem (use editorial-review).
+description: This skill should be used when the user asks to "write a poem", "write a limerick", "write a sonnet", "haiku", "villanelle", "ballad", "song lyrics", "a song for my character", "a rhyme", "rhyming couplets", "does this scan", "check the meter", "fix the rhythm of this poem", "rhyme scheme", "iambic pentameter", "a prophecy in verse", "a nursery rhyme", "rhyming picture book", or wants verse written, scanned, or revised, whether inside a story project or as a standalone poem. NOT for accidental rhymes in prose (use line-editing) or permissions for quoting someone else's poem or song lyrics (use editorial-review).
 ---
 
 # Verse Craft

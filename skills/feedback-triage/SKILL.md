@@ -1,6 +1,6 @@
 ---
 name: feedback-triage
-description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "reader readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", "triage the reader panel", or wants to collect, reconcile, and act on external reader feedback for a story project. NOT for rounds with a professional editor (use editorial-review), or for checking a manuscript is ready to query or publish (use submission or publishing).
+description: This skill should be used when the user asks to "process beta reader feedback", "alpha reader feedback", "feedback round", "synthesize reader feedback", "reader notes", "beta feedback", "reader readiness check", "review copy", "send the draft to readers", "share with readers who don't use GitHub", "triage the reader panel", or wants to collect, reconcile, and act on external reader feedback for a story project. NOT for running the simulated reader panel itself (use reader-panel), rounds with a professional editor (use editorial-review), or for checking a manuscript is ready to query or publish (use submission or publishing).
 ---
 
 # Feedback Triage
@@ -97,11 +97,12 @@ readers have read. Verify `story.md` exists in the project root.
    for the label, build, first few words, note type (typo or wording,
    confusing, continuity, pacing, character, sensitivity or authenticity,
    loved this, other), how much it affected their reading, and the note.
-   Copy them into the story repository's `.github/workflows/` and
-   `.github/ISSUE_TEMPLATE/` only with the user's approval, and create a
-   `manuscript-note` label first; GitHub only applies existing labels.
-   Warn that a public Pages site makes the manuscript public unless the
-   repository and Pages are private.
+   Before asking to copy them, warn that a public Pages site makes the
+   manuscript public unless the repository and Pages are private, and
+   confirm the visibility the user wants. Then copy them into the story
+   repository's `.github/workflows/` and `.github/ISSUE_TEMPLATE/` only
+   with the user's approval, and create a `manuscript-note` label first;
+   GitHub only applies existing labels.
 4. For each expected reader, create a stub file from
    `references/feedback-template.md` at
    `feedback/round-{N}/{reader-kebab}.md` with frontmatter filled in and the
