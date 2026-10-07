@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { MAX_READ_BYTES, readFileBytes, readFilePrefix, readTextFile, writeFile } from "../src/files.js";
+import { MAX_READ_BYTES, readFileBytes, readFilePrefix, readTextFile, removeDirectory, removeFile, syncFolder, writeFile } from "../src/files.js";
 import { makeTempDir } from "./helpers.js";
 
 const SRC = path.join(import.meta.dir, "..", "src");
@@ -152,6 +152,86 @@ describe("bounded reads (#548)", () => {
   });
 });
 
+// Runs `run` and returns the changes it made and the folders it flushed, in
+// order: ["mkdir", folder], ["rename", target], ["rm", file], or ["flush",
+// folder] for an fsync of a descriptor opened on a folder.
+function changesAndFlushes(run) {
+  const real = { openSync: fs.openSync, fsyncSync: fs.fsyncSync, mkdirSync: fs.mkdirSync, renameSync: fs.renameSync, rmSync: fs.rmSync };
+  const events = [];
+  const folders = new Map();
+  const spies = [
+    spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
+      const descriptor = real.openSync(file, ...rest);
+      folders.set(descriptor, fs.statSync(file).isDirectory() ? file : null);
+      return descriptor;
+    }),
+    spyOn(fs, "fsyncSync").mockImplementation((descriptor) => {
+      if (folders.get(descriptor)) {
+        events.push(["flush", folders.get(descriptor)]);
+      }
+      return real.fsyncSync(descriptor);
+    }),
+    spyOn(fs, "mkdirSync").mockImplementation((folder, ...rest) => {
+      events.push(["mkdir", folder]);
+      return real.mkdirSync(folder, ...rest);
+    }),
+    spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      events.push(["rename", to]);
+      return real.renameSync(from, to);
+    }),
+    spyOn(fs, "rmSync").mockImplementation((file, ...rest) => {
+      events.push(["rm", file]);
+      return real.rmSync(file, ...rest);
+    })
+  ];
+  try {
+    run();
+  } finally {
+    for (const spy of spies) {
+      spy.mockRestore();
+    }
+  }
+  return events;
+}
+
+describe("folder flushes (#604)", () => {
+  test.skipIf(!POSIX)("a write, a delete, and a new folder flush the folder they change, after the change", () => {
+    const root = makeTempDir();
+    const notes = path.join(root, "notes");
+    const file = path.join(notes, "idea.md");
+    expect(changesAndFlushes(() => writeFile(file, "idea\n", { root }))).toEqual([["mkdir", notes], ["flush", root], ["rename", file], ["flush", notes]]);
+    expect(changesAndFlushes(() => writeFile(file, "idea, revised\n", { root }))).toEqual([["rename", file], ["flush", notes]]);
+    expect(changesAndFlushes(() => removeFile(file))).toEqual([["rm", file], ["flush", notes]]);
+    // Nothing to delete, so nothing to flush.
+    expect(changesAndFlushes(() => removeFile(file, { force: true }))).toEqual([["rm", file]]);
+    expect(changesAndFlushes(() => removeDirectory(notes))).toEqual([["flush", root]]);
+  });
+
+  test("syncFolder skips Windows, which cannot open a folder, and leaves a folder it cannot open or flush as it is", () => {
+    const dir = makeTempDir();
+    const file = path.join(dir, "notes.md");
+    fs.writeFileSync(file, "notes\n");
+    const open = spyOn(fs, "openSync");
+    try {
+      syncFolder(dir, "win32");
+      expect(open).not.toHaveBeenCalled();
+      // A missing folder, and a file, which O_DIRECTORY refuses.
+      expect(() => syncFolder(path.join(dir, "missing"))).not.toThrow();
+      expect(() => syncFolder(file)).not.toThrow();
+    } finally {
+      open.mockRestore();
+    }
+    const fsync = spyOn(fs, "fsyncSync").mockImplementation(() => {
+      throw Object.assign(new Error("EINVAL"), { code: "EINVAL" });
+    });
+    try {
+      expect(() => syncFolder(dir)).not.toThrow();
+    } finally {
+      fsync.mockRestore();
+    }
+  });
+});
+
 // Every read of a file a project (or a cloned repository) controls goes
 // through readFileBytes, readTextFile, or readFilePrefix in src/files.js,
 // which refuse a symlink, a FIFO, a device, and an oversized file. A raw
@@ -165,6 +245,9 @@ const ALLOWED_RAW_READS = [
   ["files.js", "read = fs.readSync(descriptor, buffer, filled, length - filled, null);"],
   ["files.js", "descriptor = fs.openSync(filePath, SAFE_READ_FLAGS);"],
   ["files.js", "read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);"],
+  // syncFolder opens a folder only to flush it, never reading it, and
+  // O_DIRECTORY refuses anything else at the name.
+  ["files.js", "descriptor = fs.openSync(directory, FOLDER_FLAGS);"],
   // writeWholeFile's temporary file: "wx" makes a new file and never opens
   // one already at the name, symlink or not.
   ["files.js", 'const descriptor = fs.openSync(temporary, "wx", mode);'],

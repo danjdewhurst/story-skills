@@ -180,7 +180,8 @@ function invalidUtf8Offset(buffer) {
 }
 
 // Writes a file whole or not at all: the contents go to a temporary file
-// beside the target, which is flushed to disk and then renamed over it. A
+// beside the target, which is flushed to disk and then renamed over it, and
+// then the folder is flushed (see syncFolder). A
 // failed write (a full disk) or a killed process leaves the old file intact
 // rather than truncated. An existing file keeps its permissions, a read-only
 // one stays refused, and a hard link (to a chapter, say) is replaced rather
@@ -230,6 +231,9 @@ export function removeFile(filePath, options = {}) {
     }
   } else {
     fs.rmSync(filePath, { force: Boolean(options.force) });
+    if (existed) {
+      syncFolder(path.dirname(target));
+    }
   }
   if (existed) {
     record(filePath, true, "delete");
@@ -246,8 +250,36 @@ export function removeDirectory(directory, { action = "delete" } = {}) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
+    syncFolder(path.dirname(path.resolve(directory)));
   }
   record(directory, true, action);
+}
+
+// Opens a folder to flush it. O_DIRECTORY refuses anything else, so a FIFO
+// put in the folder's place is never waited on.
+const FOLDER_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0);
+
+// Flushes a folder's list of names to disk after a file was renamed into
+// it, deleted from it, or made in it. A file's own flush covers its
+// contents, not its name, so without this a power loss could undo some of a
+// command's renames and keep later ones. Windows cannot open a folder, so
+// there it is skipped, as it is on a file system that refuses to flush one
+// (some network file systems): the change itself is already made.
+export function syncFolder(directory, platform = process.platform) {
+  if (platform === "win32") {
+    return;
+  }
+  let descriptor = null;
+  try {
+    descriptor = fs.openSync(directory, FOLDER_FLAGS);
+    fs.fsyncSync(descriptor);
+  } catch {
+    // Left as the file system keeps it.
+  } finally {
+    if (descriptor !== null) {
+      fs.closeSync(descriptor);
+    }
+  }
 }
 
 // Projects whose lock could not be made (see withProjectLock): a write
@@ -403,6 +435,7 @@ function writeWholeFile(filePath, contents, options) {
       }
     }
     fs.renameSync(temporary, target);
+    syncFolder(path.dirname(target));
   } catch (error) {
     // Only a file this write made is removed.
     if (created) {
@@ -636,6 +669,7 @@ export function makeDirectories(directory) {
     current = path.join(current, name);
     try {
       fs.mkdirSync(current);
+      syncFolder(path.dirname(current));
       record(current, false, "mkdir");
     } catch (error) {
       if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {

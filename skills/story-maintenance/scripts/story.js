@@ -223,6 +223,9 @@ function removeFile(filePath, options = {}) {
     }
   } else {
     fs.rmSync(filePath, { force: Boolean(options.force) });
+    if (existed) {
+      syncFolder(path.dirname(target));
+    }
   }
   if (existed) {
     record(filePath, true, "delete");
@@ -234,8 +237,24 @@ function removeDirectory(directory, { action = "delete" } = {}) {
     fs.accessSync(path.dirname(path.resolve(directory)), fs.constants.W_OK);
   } else {
     fs.rmdirSync(directory);
+    syncFolder(path.dirname(path.resolve(directory)));
   }
   record(directory, true, action);
+}
+var FOLDER_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0);
+function syncFolder(directory, platform = process.platform) {
+  if (platform === "win32") {
+    return;
+  }
+  let descriptor = null;
+  try {
+    descriptor = fs.openSync(directory, FOLDER_FLAGS);
+    fs.fsyncSync(descriptor);
+  } catch {} finally {
+    if (descriptor !== null) {
+      fs.closeSync(descriptor);
+    }
+  }
 }
 var refusals = [];
 function refuseWrites(root, message, run) {
@@ -337,6 +356,7 @@ function writeWholeFile(filePath, contents, options) {
       }
     }
     fs.renameSync(temporary, target);
+    syncFolder(path.dirname(target));
   } catch (error) {
     if (created) {
       fs.rmSync(temporary, { force: true });
@@ -495,6 +515,7 @@ function makeDirectories(directory) {
     current = path.join(current, name);
     try {
       fs.mkdirSync(current);
+      syncFolder(path.dirname(current));
       record(current, false, "mkdir");
     } catch (error) {
       if (error.code !== "EEXIST" || lstatIfExists(current)?.isDirectory() !== true) {
