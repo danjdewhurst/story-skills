@@ -15,6 +15,15 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Temporary projects go on a Dev Drive when the runner can make one. Defender skips the workspace, the temp folders, `bun.exe`, and `node.exe`, and its real-time monitoring is turned off on the hosted runner.
   - The check name stays `Tests windows-latest`: it passes only after every shard does. macOS is unchanged.
 
+### Fixed
+
+- The craft skills now describe the CLI and the edit-note format correctly. ([#794](https://github.com/danjdewhurst/story-skills/issues/794), [#795](https://github.com/danjdewhurst/story-skills/issues/795), [#797](https://github.com/danjdewhurst/story-skills/issues/797), [#800](https://github.com/danjdewhurst/story-skills/issues/800), [#801](https://github.com/danjdewhurst/story-skills/issues/801))
+  - `scene-craft` says a scene with `travel-hours` and no `date` warns, as `story continuity` does.
+  - `plot-structure` says `story validate` checks that `mice-threads` is a list, not its thread types.
+  - `scene-craft` maps the four psychic-distance levels to the recorded `distant`, `close`, and `deep` values.
+  - `theme-craft` says to record an antagonist's edge in the body of the character file, since no frontmatter key defines it.
+  - `verse-craft` uses the `rhythm` edit-note category in its example.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
