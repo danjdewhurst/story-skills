@@ -204,6 +204,20 @@ describe("draft-next-chapter guardrails (#294)", () => {
       expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("draft/chapter-1\n");
     });
 
+    test("accepts a story file whose name has non-ASCII letters (#687)", () => {
+      // git quotes such a name in its log unless core.quotePath is off, and
+      // a quoted name does not end in .md.
+      const { repo, base } = storyRepo();
+      const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => {
+        fs.mkdirSync(path.join(dir, "characters"), { recursive: true });
+        fs.writeFileSync(path.join(dir, "characters", "José.md"), "# José\n");
+      });
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      expect(result.stdout).not.toContain("not a markdown file");
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+      expect(git(repo, "rev-parse", "--abbrev-ref", "HEAD")).toBe("draft/chapter-1\n");
+    });
+
     for (const [label, change, reason] of [
       ["a workflow file", (dir) => { fs.mkdirSync(path.join(dir, ".github", "workflows"), { recursive: true }); fs.writeFileSync(path.join(dir, ".github", "workflows", "x.md"), "x"); }, "(a hidden file or folder)"],
       ["a skill under .claude", (dir) => { fs.mkdirSync(path.join(dir, ".claude", "skills"), { recursive: true }); fs.writeFileSync(path.join(dir, ".claude", "skills", "SKILL.md"), "x"); }, "(a hidden file or folder)"],
