@@ -50,7 +50,7 @@ import {
 import { skippedChecks } from "./languages/index.js";
 import { buildSeries, canonicalPath } from "./series.js";
 import { warn } from "./findings.js";
-import { EXIT_CODES, projectError, usageError } from "./exit-codes.js";
+import { EXIT_CODES, projectError, usageError, withFlags } from "./exit-codes.js";
 import {
   STYLE_SHEET_FILE,
   scanProject,
@@ -220,10 +220,10 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
 // state file, so an unreadable one stops the command rather than risk a
 // spoiler; other unreadable files are reported as warnings.
 export function draftingContext(root, targetId, options = {}) {
-  const budget = options.budget === undefined ? DEFAULT_CONTEXT_BUDGET : requirePositiveInteger(options.budget, "Budget");
+  const budget = options.budget === undefined ? DEFAULT_CONTEXT_BUDGET : withFlags("budget", () => requirePositiveInteger(options.budget, "Budget"));
   const scenes = options.scenes === undefined ? DEFAULT_CONTEXT_SCENES : parseDecimalInteger(options.scenes);
   if (scenes === null) {
-    throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`);
+    throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`, "scenes");
   }
   const project = scanProject(root);
   // A target scene that fails to parse reports why, not "Unknown scene".
@@ -256,16 +256,17 @@ export function compareProject(root, options = {}) {
   const hasRef = given(options.ref);
   const sources = [hasRef, given(options.against), given(options.snapshot)].filter(Boolean).length;
   if (sources !== 1) {
-    throw usageError("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>");
+    throw usageError("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>", ["ref", "against", "snapshot"]);
   }
   const project = scanProject(root);
   // A chapter that fails to parse would be reported as removed.
   assertProjectParses(project, "compare");
-  // The earlier draft on disk, for --against and --snapshot.
-  const snapshot = given(options.snapshot) ? existingSnapshot(project.root, options.snapshot) : null;
+  // The earlier draft on disk, for --against and --snapshot. Errors reading
+  // it are about the flag that named it (`flag`).
+  const snapshot = given(options.snapshot) ? withFlags("snapshot", () => existingSnapshot(project.root, options.snapshot)) : null;
   const other = hasRef ? null : snapshot !== null
-    ? { root: snapshot.directory, label: `snapshot ${snapshot.id}` }
-    : { root: path.resolve(options.cwd ?? process.cwd(), options.against) };
+    ? { root: snapshot.directory, label: `snapshot ${snapshot.id}`, flag: "snapshot" }
+    : { root: path.resolve(options.cwd ?? process.cwd(), options.against), flag: "against" };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
     return mapProjectLabels(project, anchors, { ...options, other });
@@ -275,14 +276,16 @@ export function compareProject(root, options = {}) {
   let previous;
   let label;
   if (hasRef) {
-    previous = chaptersAtGitRef(project.root, options.ref, warnings);
+    previous = withFlags("ref", () => chaptersAtGitRef(project.root, options.ref, warnings));
     label = `git ref ${options.ref}`;
   } else {
-    const scanned = scanProject(other.root);
-    if (scanned.fileErrors.length > 0) {
-      throw projectError(`Cannot read ${other.label ?? other.root}: ${scanned.fileErrors[0].message}`);
-    }
-    previous = scanned.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, scanned.root)));
+    previous = withFlags(other.flag, () => {
+      const scanned = scanProject(other.root);
+      if (scanned.fileErrors.length > 0) {
+        throw projectError(`Cannot read ${other.label ?? other.root}: ${scanned.fileErrors[0].message}`);
+      }
+      return scanned.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, scanned.root)));
+    });
     label = other.label ?? other.root;
   }
   return {
@@ -299,7 +302,7 @@ export function compareProject(root, options = {}) {
 function normaliseAnchor(value) {
   const anchor = String(value).trim().replace(/^#/, "").toLowerCase();
   if (anchor === "") {
-    throw usageError("--anchor needs a paragraph label from the review copy, such as ch03-p12");
+    throw usageError("--anchor needs a paragraph label from the review copy, such as ch03-p12", "anchor");
   }
   return anchor;
 }
@@ -311,10 +314,10 @@ function mapProjectLabels(project, anchors, options) {
   let label;
   if (options.other === null) {
     label = `git ref ${options.ref}`;
-    previous = withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label));
+    previous = withFlags("ref", () => withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label)));
   } else {
     label = options.other.label ?? options.other.root;
-    previous = labelsIn(options.other.root, label);
+    previous = withFlags(options.other.flag, () => labelsIn(options.other.root, label));
   }
   return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
 }
@@ -475,10 +478,10 @@ export function similarityReport(root, options = {}) {
   const against = typeof options.against === "string" ? options.against.trim() : "";
   const snapshotName = typeof options.snapshot === "string" ? options.snapshot.trim() : "";
   if (against === "" && snapshotName === "") {
-    throw usageError("similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with");
+    throw usageError("similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with", ["against", "snapshot"]);
   }
   if (against !== "" && snapshotName !== "") {
-    throw usageError("similarity takes one of --against <file|folder|git-ref> or --snapshot <name>, not both");
+    throw usageError("similarity takes one of --against <file|folder|git-ref> or --snapshot <name>, not both", ["against", "snapshot"]);
   }
   const { minWords } = similarityOptions(options);
   const project = scanProject(root);
@@ -488,15 +491,17 @@ export function similarityReport(root, options = {}) {
   if (snapshotName !== "") {
     // A snapshot in .snapshots/, found as compare --snapshot finds it; its
     // files are named by their place in the project folder.
-    const snapshot = existingSnapshot(project.root, snapshotName);
+    const snapshot = withFlags("snapshot", () => existingSnapshot(project.root, snapshotName));
     const label = `snapshot ${snapshot.id}`;
-    // Without story.md its notes and registries would be read as reference
-    // text, not just its chapters.
-    if (lstatIfExists(path.join(snapshot.directory, "story.md"))?.isFile() !== true) {
-      throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
-    }
     const self = canonicalPath(project.root);
-    const references = referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
+    const references = withFlags("snapshot", () => {
+      // Without story.md its notes and registries would be read as
+      // reference text, not just its chapters.
+      if (lstatIfExists(path.join(snapshot.directory, "story.md"))?.isFile() !== true) {
+        throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
+      }
+      return referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
+    });
     const report = compareSimilarity(chapters, references, { minWords, label });
     const warnings = report.reference.words === 0 ? [warn("similarity-no-reference-text", `${label} has no chapter text to compare with`)] : [];
     return { ...report, warnings: [...warnings, ...report.warnings] };
@@ -504,6 +509,18 @@ export function similarityReport(root, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const target = path.resolve(options.againstFromProject ? project.root : cwd, against);
   const warnings = [];
+  // Errors reading the reference text are about --against.
+  const { references, label } = withFlags("against", () => againstReferences(project, against, target, cwd));
+  const report = compareSimilarity(chapters, references, { minWords, label });
+  if (report.reference.words === 0) {
+    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
+  }
+  return { ...report, warnings: [...warnings, ...report.warnings] };
+}
+
+// The reference text --against names for story similarity: a file or
+// folder, or else the project's chapters at a git ref.
+function againstReferences(project, against, target, cwd) {
   let references;
   let label;
   if (lstatIfExists(target) !== null) {
@@ -546,11 +563,7 @@ export function similarityReport(root, options = {}) {
       throw error;
     }
   }
-  const report = compareSimilarity(chapters, references, { minWords, label });
-  if (report.reference.words === 0) {
-    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
-  }
-  return { ...report, warnings: [...warnings, ...report.warnings] };
+  return { references, label };
 }
 
 // A reference file as the user will recognise it: the path they typed, with
@@ -978,7 +991,7 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set()) {
     return null;
   }
   if (listed.length === 0) {
-    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
+    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`, "baseline");
   }
   const samples = [];
   const self = canonicalPath(project.root);

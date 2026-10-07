@@ -8,6 +8,7 @@ import { SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliC
 import { warn } from "../src/findings.js";
 import { OPTIONS, optionFamily } from "../src/options.js";
 import { PROSE_THRESHOLDS, proseThresholds } from "../src/prose.js";
+import { BUILD_EXTENSIONS } from "../src/build.js";
 import { createStoryProject, proseReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -18,6 +19,23 @@ function invoke(cwd, argv, stdin) {
   }
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
+}
+
+// Runs `run` with these environment variables set, then puts them back.
+function withEnv(env, run) {
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  try {
+    return run();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 function project() {
@@ -328,21 +346,80 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["build", root, "--format", "scroll"]).err).not.toContain("cli-defaults");
   });
 
-  test("an error is blamed on a default only when it is about that flag (#566)", () => {
+  test("an error names a default only when it is about that flag, not when it quotes its value (#566)", () => {
     const { root, cwd } = project();
-    configure(root, "cli-defaults:\n  - command: progress\n    weeks: 3\n  - command: context\n    scenes: 2\n  - command: synopsis\n    pages: 2");
-    // The error names --date, which the command line gave, so the 3 it quotes is not the default --weeks.
+    configure(root, "cli-defaults:\n  - command: progress\n    weeks: 3\n  - command: context\n    scenes: \" 2 \"\n  - command: synopsis\n    pages: 2\n  - command: build\n    pdf-engine: chrome");
+    // The error is about --date, given on the command line, though it quotes the 3 of the default --weeks.
     const date = invoke(cwd, ["progress", root, "--date", "3"]);
     expect(date.code).toBe(2);
     expect(date.err).toBe("progress --date date must be a real YYYY-MM-DD calendar day, got 3\n");
-    // A default's value is matched as a whole word, not inside an id or a number.
-    const context = invoke(cwd, ["context", "chapter-12", "--path", root]);
-    expect(context.code).toBe(2);
-    expect(context.err).toBe("Unknown chapter or scene chapter-12\n");
+    // An unknown id is about no flag, whatever the value of a default.
+    expect(invoke(cwd, ["context", "2", "--path", root]).err).toBe("Unknown chapter or scene 2\n");
+    expect(invoke(cwd, ["context", "chapter-2", "--path", root]).err).toBe("Unknown chapter or scene chapter-2\n");
     // A usage line lists --scenes as an option, not as the flag that failed.
     expect(invoke(cwd, ["context", "--path", root]).err).toBe("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]\n");
-    // An error that names no flag the command line gave is still blamed on the default whose value it quotes.
+    // The --format on the command line is at fault, not the default engine it happens to name.
+    const format = invoke(cwd, ["build", root, "--format", "chrome"]);
+    expect(format.code).toBe(2);
+    expect(format.err).toBe(`Unsupported build format: chrome. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}\n`);
     expect(invoke(cwd, ["synopsis", root]).err).toBe("Unsupported synopsis length: 2. Supported pages: 1, 3 (story.md cli-defaults set --pages 2)\n");
+  });
+
+  test("an error reading or writing the path a default names says so (#566)", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words here.");
+    configure(root, "cli-defaults:\n  - command: build\n    format: html\n    out: story.md/book.html\n  - command: similarity\n    against: drafts/v1\n  - command: compare\n    against: drafts/v1");
+    const build = invoke(root, ["build"]);
+    expect(build.code).toBe(4);
+    expect(build.err).toBe("Cannot check story.md/book.html: a part of the path is not a folder (story.md cli-defaults set --out story.md/book.html)\n");
+    const similarity = invoke(root, ["similarity"]);
+    expect(similarity.code).toBe(2);
+    expect(similarity.err).toEndWith("(story.md cli-defaults set --against drafts/v1)\n");
+    const compare = invoke(root, ["compare"]);
+    expect(compare.code).toBe(3);
+    expect(compare.err).toEndWith("(story.md cli-defaults set --against drafts/v1)\n");
+  });
+
+  // Root ignores folder permissions, and Windows has no read-only folders.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("a default --out in a folder story cannot write to says so (#566)", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words here.");
+    configure(root, "cli-defaults:\n  - command: export\n    out: locked/book.md");
+    const locked = path.join(root, "locked");
+    fs.mkdirSync(locked);
+    fs.chmodSync(locked, 0o555);
+    try {
+      const result = invoke(root, ["export"]);
+      expect(result.code).toBe(4);
+      expect(result.err).toBe("Cannot write to locked/book.md: permission denied (story.md cli-defaults set --out locked/book.md)\n");
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+  });
+
+  test("a PDF engine error names the default --pdf or --pdf-engine it is about (#566)", () => {
+    const { root, cwd } = project();
+    writeChapter(root, 1, "status: draft", "Words here.");
+    configure(root, "cli-defaults:\n  - command: build\n    format: print\n    pdf: true");
+    const noEngines = { PATH: makeTempDir(), ProgramFiles: "", "ProgramFiles(x86)": "", LOCALAPPDATA: "" };
+    // The engine on the command line is at fault, not the default --pdf or --format print.
+    const unknown = withEnv(noEngines, () => invoke(cwd, ["build", root, "--pdf-engine", "nonsense"]));
+    expect(unknown.code).toBe(2);
+    expect(unknown.err).toStartWith("Unknown PDF engine: nonsense. Name one of");
+    expect(unknown.err).not.toContain("cli-defaults");
+    // Chrome in /Applications on macOS (as on CI runners) would count as an engine.
+    if (process.platform !== "darwin") {
+      const none = withEnv(noEngines, () => invoke(cwd, ["build", root]));
+      expect(none.code).toBe(4);
+      expect(none.err).toStartWith("No PDF engine found on PATH");
+      expect(none.err).toEndWith("(story.md cli-defaults set --pdf)\n");
+    }
+    const storyFile = path.join(root, "story.md");
+    fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace("    pdf: true\n", "    pdf: true\n    pdf-engine: weasyprint\n"), "utf8");
+    const missing = withEnv(noEngines, () => invoke(cwd, ["build", root]));
+    expect(missing.code).toBe(4);
+    expect(missing.err).toStartWith("PDF engine weasyprint was not found on PATH");
+    expect(missing.err).toEndWith("(story.md cli-defaults set --pdf-engine weasyprint)\n");
   });
 
   test("defaults of one linked group all apply, unless the command line gives one (#566)", () => {
@@ -355,8 +432,28 @@ describe("cli-defaults", () => {
     expect(fs.readFileSync(path.join(root, "dist", "configured.html"), "utf8")).toContain("draft-2");
   });
 
+  test("a huge default value or error message is handled in linear time (#566)", () => {
+    const { root, cwd } = project();
+    // The value of a default once went into a regular expression, which V8 refuses above about 32,000 characters.
+    configure(root, `cli-defaults:\n  - command: grid\n    format: ${"x".repeat(40000)}`);
+    const grid = invoke(cwd, ["grid", root, "--json"]);
+    expect(grid.code).toBe(2);
+    expect(JSON.parse(grid.out).diagnostics[0].message).toEndWith(`(story.md cli-defaults set --format ${"x".repeat(40000)})`);
+    // An error message holding user text is not searched, so many unclosed [-- cost nothing.
+    const where = "[-- ".repeat(100000);
+    const started = performance.now();
+    const list = invoke(cwd, ["list", "chapters", "--where", where, "--path", root]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(list.code).toBe(2);
+    expect(list.err).toStartWith("Cannot read --where [-- [-- ");
+  });
+
   test("split and merge take no defaults, so split without --at fails rather than splits at one (#566)", () => {
-    const { root, cwd } = noisyProject();
+    const { root, cwd } = project();
+    // A scene break 1 to split at, so a default --at would be used if it were read.
+    writeChapter(root, 1, "status: draft", "One.\n\n***\n\nTwo.");
+    writeChapter(root, 2, "status: draft", "Three.");
+    expect(invoke(cwd, ["reindex", root]).code).toBe(0);
     const chapter = path.join(root, "chapters", "chapter-01.md");
     const before = fs.readFileSync(chapter, "utf8");
     configure(root, "cli-defaults:\n  - command: split\n    at: 1");
@@ -454,6 +551,8 @@ describe("config validation", () => {
     // The broken config is ignored rather than half applied.
     expect(validate.err).toContain("warning: chapters/chapter-01.md has 1 [TODO marker");
     expect(invoke(cwd, ["doctor", root]).code).toBe(0);
+    expect(invoke(cwd, ["report", root]).code).toBe(0);
+    expect(invoke(cwd, ["next", root]).code).toBe(0);
   });
 });
 

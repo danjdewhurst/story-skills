@@ -51,7 +51,7 @@ export function parseWhere(text) {
   if (comparison) {
     const [, key, operator, value] = comparison;
     if (value === "") {
-      throw usageError(`--where ${filter} needs a value after ${operator}; use --where ${key} for a key that is set, or --where '!${key}' for one that is not`);
+      throw usageError(`--where ${filter} needs a value after ${operator}; use --where ${key} for a key that is set, or --where '!${key}' for one that is not`, "where");
     }
     return { key, op: operator === "=" ? "eq" : "ne", value };
   }
@@ -59,7 +59,7 @@ export function parseWhere(text) {
   if (presence) {
     return { key: presence[2], op: presence[1] === "!" ? "absent" : "present", value: null };
   }
-  throw usageError(`Cannot read --where ${filter}: expected key=value, key!=value, key, or !key`);
+  throw usageError(`Cannot read --where ${filter}: expected key=value, key!=value, key, or !key`, "where");
 }
 
 // The matching entities of `kind`, in scan order (chapters by number, scenes
@@ -90,7 +90,7 @@ export function buildList(project, kindName, whereValues = []) {
     if (!known.includes(filter.key)) {
       const near = nearMissKeys(filter.key, known);
       const hint = near.length > 0 ? `; did you mean ${near.map((key) => `"${key}"`).join(" or ")}?` : "";
-      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${hint}`);
+      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${hint}`, "where");
     }
   }
 

@@ -68,7 +68,7 @@ export function proseThresholds(options = {}) {
     }
     const text = String(raw).trim();
     if (!(whole ? /^\d+$/ : /^\d+(?:\.\d+)?$/).test(text) || !Number.isFinite(Number(text))) {
-      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`);
+      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`, flag);
     }
     thresholds[key] = Number(text);
   }

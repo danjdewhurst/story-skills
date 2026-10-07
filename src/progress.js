@@ -19,7 +19,7 @@ export function historyWeeks(options = {}) {
   }
   const text = String(raw).trim();
   if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
-    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`);
+    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`, "weeks");
   }
   return Number(text);
 }
