@@ -60,6 +60,33 @@ export function makeTempDir(prefix = "story-skills-") {
   return dir;
 }
 
+// Windows' node and npm, for driving the default runners of
+// scripts/check-package.js and scripts/release.js the way they run there:
+// `host` names a node.exe that is this runtime under that name, and an
+// npm-cli.js that records its arguments (read them with `calls()`) and
+// prints `output`.
+export function fakeWindowsNpm(output = "") {
+  const dir = makeTempDir("story-fake-npm-");
+  const node = path.join(dir, "node.exe");
+  try {
+    fs.symlinkSync(process.execPath, node);
+  } catch {
+    fs.copyFileSync(process.execPath, node); // Windows makes symlinks only with extra privileges.
+  }
+  const cli = path.join(dir, "npm-cli.js");
+  const log = path.join(dir, "calls.jsonl");
+  fs.writeFileSync(
+    cli,
+    `require("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");\nprocess.stdout.write(${JSON.stringify(output)});\n`
+  );
+  return {
+    host: { platform: "win32", execPath: node, env: { npm_execpath: cli } },
+    node,
+    cli,
+    calls: () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").map((line) => JSON.parse(line)) : [])
+  };
+}
+
 export function memoryIo(cwd) {
   const out = [];
   const err = [];

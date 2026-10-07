@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { fakeWindowsNpm, makeTempDir } from "./helpers.js";
 import { buildBundle, buildFallback } from "../scripts/build-fallback.js";
 import { TARGETS, archiveName, checksumsName, hostTarget, main as buildBinaries } from "../scripts/build-binaries.js";
 import { checkFallback } from "../scripts/check-fallback.js";
@@ -201,7 +201,8 @@ describe("build-binaries entry point", () => {
 });
 
 describe("check-package entry point", () => {
-  // Stands in for npm: `install` links `source` in as the installed package.
+  // Stands in for npm: `install` links `source` in as the installed package
+  // and writes the story.cmd shim npm writes on Windows for a node script.
   // A bin run on Windows is node and the bin's script, so `--version` is last.
   function fakeNpm(source, { version = VERSION } = {}) {
     const calls = [];
@@ -209,8 +210,13 @@ describe("check-package entry point", () => {
       calls.push([command, ...args]);
       if (args[0] === "pack") return '[{ "filename": "story-skills-test.tgz" }]';
       if (args[0] === "install") {
-        fs.mkdirSync(path.join(cwd, "node_modules"), { recursive: true });
+        fs.mkdirSync(path.join(cwd, "node_modules", ".bin"), { recursive: true });
         fs.symlinkSync(source, path.join(cwd, "node_modules", "story-skills"), "dir");
+        fs.writeFileSync(
+          path.join(cwd, "node_modules", ".bin", "story.cmd"),
+          'IF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n) ELSE (\r\n  SET "_prog=node"\r\n)\r\n' +
+            'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\..\\story-skills\\bin\\story.js" %*\r\n'
+        );
         return "";
       }
       if (args.at(-1) === "--version") return `${version}\n`;
@@ -235,7 +241,7 @@ describe("check-package entry point", () => {
   test("passes a package that installs, runs, and exports only what it should", () => {
     const npm = fakeNpm(fakePackage());
     const io = capture();
-    const status = checkPackage({ run: npm.run, root: repoRoot, platform: "linux", ...io });
+    const status = checkPackage({ run: npm.run, root: repoRoot, host: { platform: "linux" }, ...io });
     expect(io.err()).toBe("");
     expect(status).toBe(0);
     expect(io.out()).toBe(`Packed tarball story-skills-test.tgz installs and runs story ${VERSION}`);
@@ -244,17 +250,28 @@ describe("check-package entry point", () => {
   });
 
   // Windows links the bin as story.cmd, which execFileSync refuses to spawn
-  // (EINVAL), so the check runs node with the script the bin field names.
+  // (EINVAL), so the check reads the shim and runs node with the script the
+  // bin field names.
+  const windowsHost = { platform: "win32", execPath: "C:\\Program Files\\nodejs\\node.exe" };
+
   test("runs the installed bin's script with node on Windows (#573)", () => {
     const npm = fakeNpm(fakePackage());
     const io = capture();
-    expect(checkPackage({ run: npm.run, root: repoRoot, platform: "win32", ...io })).toBe(0);
+    expect(checkPackage({ run: npm.run, root: repoRoot, host: windowsHost, ...io })).toBe(0);
     expect(io.err()).toBe("");
     const script = expect.stringMatching(/node_modules[\\/]story-skills[\\/]bin[\\/]story\.js$/);
     expect(npm.calls.slice(2, 4)).toEqual([
-      [process.execPath, script, "--version"],
-      [process.execPath, script, "validate", expect.stringContaining("the-last-ember")]
+      [windowsHost.execPath, script, "--version"],
+      [windowsHost.execPath, script, "validate", expect.stringContaining("the-last-ember")]
     ]);
+  });
+
+  test("spawns npm on the host it is given when no run stands in (#573)", () => {
+    const npm = fakeWindowsNpm("[]");
+    const io = capture();
+    // The fake npm packs nothing, so the check stops after `npm pack`.
+    expect(checkPackage({ root: repoRoot, host: npm.host, ...io })).toBe(1);
+    expect(npm.calls()).toEqual([["pack", "--json", "--pack-destination", expect.stringMatching(/story-skills-pack-.*[\\/]pack$/)]]);
   });
 
   const failures = [
@@ -265,14 +282,14 @@ describe("check-package entry point", () => {
   for (const [name, npm, message] of failures) {
     test(`fails ${name}`, () => {
       const io = capture();
-      expect(checkPackage({ run: npm().run, root: repoRoot, platform: "linux", ...io })).toBe(1);
+      expect(checkPackage({ run: npm().run, root: repoRoot, host: { platform: "linux" }, ...io })).toBe(1);
       expect(io.err()).toBe(`Package check failed: ${message}`);
     });
   }
 
   test("fails on Windows when the installed package has no story bin (#573)", () => {
     const io = capture();
-    expect(checkPackage({ run: fakeNpm(fakePackage({ bin: {} })).run, root: repoRoot, platform: "win32", ...io })).toBe(1);
+    expect(checkPackage({ run: fakeNpm(fakePackage({ bin: {} })).run, root: repoRoot, host: windowsHost, ...io })).toBe(1);
     expect(io.err()).toBe('Package check failed: The installed story-skills has no "story" bin in its package.json');
   });
 });
