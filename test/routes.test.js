@@ -70,6 +70,17 @@ describe("location routes", () => {
     expect(links).toContain("worldbuilding/locations/bad.md route points at itself");
   });
 
+  // mode is free text, which the codex and the travel messages show only
+  // when it is a string; the schema has always asked for one (#565).
+  test("validate asks for quotes around a route mode that is a number or true", () => {
+    const root = routeProject();
+    writeLocation(root, "ferry", "routes:\n  - to: harbor\n    hours: 2\n    mode: 3\n  - to: mill\n    hours: 1\n    mode: true\n  - to: keep\n    hours: 4\n    mode: \"3\"");
+    expect(messages(validateProject(root).errors)).toEqual([
+      "worldbuilding/locations/ferry.md route to harbor mode must be text: quote it as mode: \"3\"",
+      "worldbuilding/locations/ferry.md route to mill mode must be text: quote it as mode: \"true\""
+    ]);
+  });
+
   test("continuity errors when a character outruns the fastest route", () => {
     const root = routeProject();
     // Mara: harbor 08:00 -> keep 20:00 same day = 12h, needs 6 + 10 = 16h.

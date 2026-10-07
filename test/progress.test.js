@@ -112,7 +112,7 @@ describe("story progress", () => {
   test("validate checks deadline, chapter targets, and the log", () => {
     const { root } = progressProject("deadline: 2026-13-01");
     writeChapter(root, 3, 10, "target-words: 0");
-    writeMarkdown(path.join(root, "progress.md"), "type: notes\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-09-01\n    words: -1\n  - words: 3\n  - nope");
+    writeMarkdown(path.join(root, "progress.md"), "type: notes\nsessions:\n  - date: 2026-09-01\n    words: 5\n  - date: 2026-09-01\n    words: -1\n  - words: 3\n  - nope\n  - date: \"  \"\n    words: 4\n  - date:\n    words: 4");
     const errors = messages(validateProject(root).errors);
 
     expect(errors).toContain("story.md deadline date must be a real YYYY-MM-DD calendar day, got 2026-13-01");
@@ -121,6 +121,9 @@ describe("story progress", () => {
     expect(errors).toContain("progress.md sessions[1] repeats date 2026-09-01");
     expect(errors).toContain("progress.md sessions[1] words must be a non-negative integer");
     expect(errors).toContain("progress.md sessions[2] requires a date");
+    // A blank date, which story progress leaves out, is no date either.
+    expect(errors).toContain("progress.md sessions[4] requires a date");
+    expect(errors).toContain("progress.md sessions[5] requires a date");
     expect(errors).toContain("progress.md frontmatter field sessions must contain objects");
   });
 

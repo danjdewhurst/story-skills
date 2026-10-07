@@ -446,6 +446,7 @@
     },
     "characterState": {
       "type": "object",
+      "required": ["character"],
       "properties": {
         "character": { "$ref": "#/$defs/id" },
         "location": { "type": "string" },
@@ -456,6 +457,7 @@
     },
     "objectState": {
       "type": "object",
+      "required": ["artifact"],
       "properties": {
         "artifact": { "$ref": "#/$defs/id" },
         "owner": { "type": "string" },
@@ -466,6 +468,7 @@
     },
     "knowledgeState": {
       "type": "object",
+      "required": ["character", "knows"],
       "properties": {
         "character": { "$ref": "#/$defs/id" },
         "knows": { "type": "string" },
@@ -502,7 +505,7 @@
         "title": { "type": "string", "pattern": "\\S" },
         "status": { "enum": ["open", "verified", "disputed"] },
         "sources": { "$ref": "#/$defs/stringList" },
-        "used-in": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "used-in": { "$ref": "#/$defs/stringList" },
         "accuracy": { "enum": ["must-be-accurate", "blended", "invented"] },
         "confidence": { "enum": ["high", "medium", "low"] },
         "method": { "enum": ["fact", "interview", "site-visit", "expert-review", "reading"] },
