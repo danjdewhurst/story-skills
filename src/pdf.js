@@ -194,7 +194,10 @@ export function resolvePdfEngine(choice, { env = process.env, platform = process
   if (value === "") {
     throw usageError(`--pdf-engine needs an engine name (${ENGINE_NAMES.join(", ")}) or the path to one`);
   }
-  const named = ENGINE_ALIASES[value.toLowerCase()] ?? (ENGINE_NAMES.includes(value.toLowerCase()) ? value.toLowerCase() : null);
+  // Only the keys of ENGINE_ALIASES are aliases: `constructor` and other
+  // inherited keys are not.
+  const alias = Object.hasOwn(ENGINE_ALIASES, value.toLowerCase()) ? ENGINE_ALIASES[value.toLowerCase()] : null;
+  const named = alias ?? (ENGINE_NAMES.includes(value.toLowerCase()) ? value.toLowerCase() : null);
   if (named !== null) {
     const engine = PDF_ENGINES.find((entry) => entry.name === named);
     const file = locateEngine(engine, env, platform);
