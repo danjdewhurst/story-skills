@@ -50,6 +50,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `--dry-run` names the snapshot and lists its files, and `--json` gives it as `data.snapshot`.
   - A chapter entry the snapshot cannot keep, such as `chapter-03.MD` or a symlink, is refused before anything changes.
   - An import whose snapshot cannot be saved stops before it deletes any chapter, and a failure after it names the snapshot and its restore command.
+- `story build --format docx --shunn` now prints Shunn's running head of surname, short title, and page number on every page after the title page. (#525)
+  - The page number is a Word page field, so it stays right after edits.
+  - The surname is the first author's last name (the first word in a Chinese, Japanese, Korean, or Hungarian book), and the short title is the title before any subtitle; the build cuts them to fit one line.
+  - The new `story.md` fields `surname` and `short-title` set them instead, and are used whole.
 
 ### Changed
 
