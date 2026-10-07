@@ -26160,9 +26160,14 @@ function referencedFiles(project) {
       return;
     }
     const file = path14.resolve(project.root, text);
-    for (const form of [file, realPathThroughAncestors(file)]) {
-      files.push({ names: lookedUpNames(form), label });
+    files.push({ names: lookedUpNames(file), label });
+    let folder;
+    try {
+      folder = realPathThroughAncestors(path14.dirname(file));
+    } catch {
+      return;
     }
+    files.push({ names: lookedUpNames(path14.join(folder, path14.basename(file))), label });
   };
   add(project.story.data.cover, "cover");
   add(buildStyle(project.story.data).css, "build-style css");

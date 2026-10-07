@@ -887,9 +887,18 @@ function referencedFiles(project) {
       return;
     }
     const file = path.resolve(project.root, text);
-    for (const form of [file, realPathThroughAncestors(file)]) {
-      files.push({ names: lookedUpNames(form), label });
+    files.push({ names: lookedUpNames(file), label });
+    // The real path of its folder, not of the file: macOS resolves a path
+    // by opening it, so an unreadable cover would stop the build here (exit
+    // 4) rather than in coverImage (exit 3). A folder that cannot be
+    // resolved leaves the path as written.
+    let folder;
+    try {
+      folder = realPathThroughAncestors(path.dirname(file));
+    } catch {
+      return;
     }
+    files.push({ names: lookedUpNames(path.join(folder, path.basename(file))), label });
   };
   add(project.story.data.cover, "cover");
   add(buildStyle(project.story.data).css, "build-style css");
