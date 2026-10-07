@@ -1,10 +1,23 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { runCli } from "../src/cli.js";
 import { UNDO_LOG } from "../src/files.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
-import { createEntity, createStoryProject, mergeChapters, moveEntity, reindexProject, removeEntity, renameEntity, validateProject } from "../src/story.js";
-import { makeTempDir, whileWriting, writeMarkdown } from "./helpers.js";
+import {
+  checkProjectContinuity,
+  createEntity,
+  createStoryProject,
+  mergeChapters,
+  moveEntity,
+  reindexProject,
+  removeEntity,
+  renameEntity,
+  scanProject,
+  validateLinks,
+  validateProject
+} from "../src/story.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages, whileWriting, writeMarkdown } from "./helpers.js";
 
 function project(title) {
   return createStoryProject({ cwd: makeTempDir(), title, force: false }).root;
@@ -28,6 +41,101 @@ function snapshot(root) {
   };
   walk(root);
   return files;
+}
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function newProject(title = "Refs") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function edit(root, relativePath, from, to) {
+  const file = path.join(root, relativePath);
+  const text = fs.readFileSync(file, "utf8");
+  expect(text).toContain(from);
+  fs.writeFileSync(file, text.replace(from, to));
+}
+
+function gapProject(title = "Gap Story") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title }).root;
+}
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+// Rewrites a character's status and adds frontmatter lines such as died-in.
+function setCharacter(root, id, status, extra = "") {
+  const file = path.join(root, "characters", `${id}.md`);
+  const text = fs.readFileSync(file, "utf8").replace(/^(died-in|revived-in): .*\n/gm, "").replace(/^status: .*$/m, `status: ${status}${extra ? `\n${extra}` : ""}`);
+  fs.writeFileSync(file, text, "utf8");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
+const EXAMPLES = path.join(import.meta.dir, "..", "examples");
+
+function copyExample(name) {
+  const root = path.join(makeTempDir(), name);
+  fs.cpSync(path.join(EXAMPLES, name), root, { recursive: true });
+  return root;
+}
+
+function initProject() {
+  const cwd = makeTempDir();
+  expect(invoke(cwd, ["init", "Safety", "--dir", "p"]).code).toBe(0);
+  return path.join(cwd, "p");
+}
+
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
 }
 
 describe("rename and remove reference rewriting", () => {
@@ -511,5 +619,290 @@ describe("saved story.md queries follow rename, move, and merge, and remove repo
       "story.md queries mara-drafts (pov=mara-quill), without-mara (characters!=mara-quill, pov=mara-quill) still filter on character mara-quill, which remove does not change: update or delete those filters",
       "story.md"
     ]]);
+  });
+});
+
+describe("reference handling in add, rename, remove, and move", () => {
+  test("#62 unmanaged notes with unsupported YAML, oversized, or past the file cap do not block rename or move", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Kael Voss" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    fs.mkdirSync(path.join(root, "notes"));
+    fs.writeFileSync(path.join(root, "notes", "ideas.md"), "---\ntags:\n- idea\n---\n\nSee [Kael](../characters/kael-voss.md).\n");
+    fs.writeFileSync(path.join(root, "notes", "dump.md"), `# Dump\n\n${"lorem ipsum ".repeat(500000)}`);
+
+    renameEntity(root, { kind: "character", id: "kael-voss", name: "Kael Storm" });
+    expect(read(root, "notes", "ideas.md")).toBe("---\ntags:\n- idea\n---\n\nSee [Kael](../characters/kael-storm.md).\n");
+    expect(moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 }).id).toBe("chapter-02");
+
+    // A broken entity file still aborts with nothing changed.
+    writeMarkdown(path.join(root, "worldbuilding", "artifacts", "odd.md"), "name: Odd\nmeta:\n  nested: yes");
+    expect(() => renameEntity(root, { kind: "character", id: "kael-storm", name: "Kael Three" })).toThrow();
+    expect(fs.existsSync(path.join(root, "characters", "kael-storm.md"))).toBe(true);
+  });
+
+  test("#67 move chapter and rename warn when the new id is already referenced", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "chapter", name: "Two" });
+    createEntity(root, { kind: "promise", name: "Gun", planted: "chapter-01", payoff: "chapter-05" });
+    const moved = invoke(root, ["move", "chapter", "chapter-02", "--number", "5"]);
+    expect(moved.code).toBe(0);
+    expect(moved.err).toContain("warning: chapter-05 was already referenced before this move, and those references now point at the moved chapter: continuity/promises/gun.md");
+    // A move onto an unreferenced number says nothing.
+    expect(invoke(root, ["move", "chapter", "chapter-05", "--number", "3"]).err).toBe("");
+
+    createEntity(root, { kind: "character", name: "Mara" });
+    createEntity(root, { kind: "chapter", name: "Four", character: "mara", mention: "bo" });
+    const renamed = invoke(root, ["rename", "character", "mara", "Bo"]);
+    expect(renamed.code).toBe(0);
+    expect(renamed.err).toContain("warning: bo was already referenced before this rename, and those references now point at the renamed character: chapters/chapter-04.md");
+
+    createEntity(root, { kind: "scene", name: "A", chapter: "chapter-01" });
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n- chapter-03-scene-01 left over\n");
+    expect(messages(moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-03" }).warnings).join("\n")).toContain("plot/timeline.md");
+  });
+
+  test("#69 rename and remove artifact follow state-changes target", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "artifact", name: "Moon Blade" });
+    createEntity(root, { kind: "scene", name: "Use", chapter: "chapter-01" });
+    edit(root, "scenes/chapter-01-scene-01.md", "state-changes: []", "state-changes:\n  - target: moon-blade\n    change: swung again");
+    renameEntity(root, { kind: "artifact", id: "moon-blade", name: "Sun Blade" });
+    expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("  - target: sun-blade\n    change: swung again");
+    removeEntity(root, { kind: "artifact", id: "sun-blade" });
+    expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("  - target: \"\"\n    change: swung again");
+  });
+
+  test("#86 a __proto__ key survives a rename and unrelated files are untouched", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Kael" });
+    createEntity(root, { kind: "character", name: "Sera" });
+    edit(root, "characters/sera.md", "status: alive", "status: alive\n__proto__: keep-me");
+    const sera = read(root, "characters", "sera.md");
+    renameEntity(root, { kind: "character", id: "kael", name: "Kael Storm" });
+    expect(read(root, "characters", "sera.md")).toBe(sera);
+  });
+
+  test("#88 add, rename, and names refuse a trailing project path", () => {
+    const root = newProject();
+    const added = invoke(root, ["add", "character", "Ann", "Bee", "."]);
+    expect(added.code).toBe(2);
+    expect(added.err).toContain('"." looks like a project path: story add takes the project as --path .');
+    expect(fs.existsSync(path.join(root, "characters", "ann-bee.md"))).toBe(false);
+    expect(invoke(root, ["names", "Zora", "."]).err).toContain("story names takes the project as --path");
+    expect(invoke(path.dirname(root), ["add", "character", "Ann", `./${path.basename(root)}`]).err).toContain("looks like a project path");
+    expect(invoke(root, ["add", "character", "AC/DC"]).code).toBe(0);
+  });
+
+  test("#97 move names only chapter and scene and pluralises refusals", () => {
+    const root = newProject();
+    expect(() => moveEntity(root, { kind: "", id: "x" })).toThrow("An entity kind is required: expected one of chapter, scene");
+    expect(() => moveEntity(root, { kind: "villain", id: "x" })).toThrow("Unsupported entity kind: villain: expected one of chapter, scene");
+    expect(() => moveEntity(root, { kind: "research", id: "x" })).toThrow("not research notes;");
+    expect(() => moveEntity(root, { kind: "matter", id: "x" })).toThrow("not matter pages;");
+    expect(() => moveEntity(root, { kind: "characters", id: "x" })).toThrow("not characters;");
+  });
+
+  test("#101 rename and move rewrite reference-style link definitions, and links checks them", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "character", name: "Bo" });
+    fs.appendFileSync(path.join(root, "chapters", "chapter-01.md"), "\nMeet [Bo][bo-link].\n\n[bo-link]: ../characters/bo.md\n");
+    renameEntity(root, { kind: "character", id: "bo", name: "Bob Ray" });
+    expect(read(root, "chapters", "chapter-01.md")).toContain("[bo-link]: ../characters/bob-ray.md\n");
+
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n[gone]: ../characters/ghost.md\n");
+    expect(messages(validateLinks(root).errors)).toContain("plot/timeline.md links to missing file ../characters/ghost.md");
+  });
+
+  test("#127 move rewrites chapter ids in the plot/_index.md theme tracking table", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "C1" });
+    createEntity(root, { kind: "chapter", name: "C2" });
+    edit(root, "plot/_index.md", "| *No themes tracked yet* | | |", "| change | main | chapter-02 |");
+    moveEntity(root, { kind: "chapter", id: "chapter-02", number: 3 });
+    expect(read(root, "plot", "_index.md")).toContain("| change | main | chapter-03 |");
+  });
+
+  test("#163 remove chapter refuses while died-in, since, or learned-in names it", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "chapter", name: "Two" });
+    createEntity(root, { kind: "character", name: "Bob" });
+    edit(root, "characters/bob.md", "status: alive", "status: deceased\ndied-in: chapter-02");
+    expect(() => removeEntity(root, { kind: "chapter", id: "chapter-02" })).toThrow("chapter chapter-02 is still named by died-in, since, learned-in, or a progression's from in characters/bob.md");
+    expect(read(root, "characters", "bob.md")).toContain("died-in: chapter-02");
+    edit(root, "characters/bob.md", "died-in: chapter-02", "died-in: chapter-01");
+    removeEntity(root, { kind: "chapter", id: "chapter-02" });
+    expect(fs.existsSync(path.join(root, "chapters", "chapter-02.md"))).toBe(false);
+  });
+
+  test("#167 rename keeps the original text of untouched keys in a changed list item", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Ann" });
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "scene", name: "S", chapter: "chapter-01" });
+    edit(root, "scenes/chapter-01-scene-01.md", "state-changes: []", "state-changes:\n  - character: ann\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451");
+    renameEntity(root, { kind: "character", id: "ann", name: "Anna" });
+    expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("state-changes:\n  - character: anna\n    knowledge: the safe code\n    code: 0451\n    price: 1.50\n    tone: 'calm'\n  - target: ring\n    code: 0451\n");
+  });
+
+  test("#176 add and rename refuse an id another kind uses in a shared reference field", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "Raven" });
+    createEntity(root, { kind: "faction", name: "Night Watch" });
+    createEntity(root, { kind: "artifact", name: "Key", owner: "night-watch" });
+    expect(() => renameEntity(root, { kind: "faction", id: "night-watch", name: "Raven" })).toThrow("raven is already a character id, and controlled-by and owner references could not tell the faction from the character");
+    expect(() => createEntity(root, { kind: "faction", name: "Raven" })).toThrow("raven is already a character id");
+    expect(() => createEntity(root, { kind: "artifact", name: "Raven" })).toThrow("mentions references");
+    // Kinds that share no field may share an id.
+    createEntity(root, { kind: "location", name: "Raven" });
+    expect(read(root, "worldbuilding", "artifacts", "key.md")).toContain("owner: night-watch");
+  });
+
+  test("#179 move scene --chapter with its own chapter is a no-op", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    for (const name of ["a", "b", "c"]) {
+      createEntity(root, { kind: "scene", name, chapter: "chapter-01" });
+    }
+    expect(() => moveEntity(root, { kind: "scene", id: "chapter-01-scene-01", chapter: "chapter-01" })).toThrow("chapter-01-scene-01 is already scene 1 of chapter-01");
+    expect(scanProject(root).scenes.map((scene) => scene.id)).toEqual(["chapter-01-scene-01", "chapter-01-scene-02", "chapter-01-scene-03"]);
+  });
+
+  test("#182 links and move tokenise chapter and scene ids alike", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "A" });
+    createEntity(root, { kind: "scene", name: "x", chapter: "chapter-01" });
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "- chapter-01-draft notes\n- chapter-01-scene-01b alt take\n- pre-chapter-01 backstory\n- chapter-01-scene-01 happens\n");
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 });
+    expect(read(root, "plot", "timeline.md")).toContain("- chapter-02-scene-01 happens\n");
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "- chapter-02-scene-09 happens\n");
+    expect(messages(validateLinks(root).errors)).toEqual(["plot/timeline.md references missing scene chapter-02-scene-09"]);
+    expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
+  });
+});
+
+describe("add, rename, and scan limits", () => {
+  test("rename refuses when a project file's frontmatter does not parse", () => {
+    const root = gapProject();
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), "---\nnot yaml\n---\n", "utf8");
+    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Vell" })).toThrow(/continuity[\\/]exemptions\.md: .*; nothing was changed/);
+  });
+});
+
+test("moving a chapter rewrites revived-in", () => {
+  const root = baseProject(3);
+  setCharacter(root, "ann", "alive", "died-in: chapter-01\nrevived-in: chapter-03");
+  moveEntity(root, { kind: "chapter", id: "chapter-03", number: 4 });
+  expect(fs.readFileSync(path.join(root, "characters", "ann.md"), "utf8")).toContain("revived-in: chapter-04");
+});
+
+describe("write preflight (#198)", () => {
+  test.skipIf(CHMOD_IGNORED)("rename refuses before any write when a file it must rewrite is read-only", () => {
+    const root = copyExample("harbor-of-second-light");
+    const arc = path.join(root, "plot", "arcs", "the-drowned-witness.md");
+    fs.chmodSync(arc, 0o444);
+    const before = snapshot(root);
+    const result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
+    expect(result.code).toBe(4);
+    expect(result.err).toBe(`Cannot write to ${"plot/arcs/the-drowned-witness.md"} (permission denied); nothing was changed. Fix it and run the command again\n`);
+    expect(snapshot(root)).toEqual(before);
+    fs.chmodSync(arc, 0o644);
+    expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+
+  test.skipIf(CHMOD_IGNORED)("move and remove check the folders they write into", () => {
+    const root = initProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "scene", name: "Opening", chapter: "chapter-01" });
+    const scenes = path.join(root, "scenes");
+    fs.chmodSync(scenes, 0o555);
+    try {
+      expect(() => moveEntity(root, { kind: "chapter", id: "chapter-01", number: 2 })).toThrow("Cannot write to scenes/ (permission denied); nothing was changed");
+      expect(fs.existsSync(path.join(root, "chapters", "chapter-01.md"))).toBe(true);
+      expect(() => removeEntity(root, { kind: "scene", id: "chapter-01-scene-01" })).toThrow("scenes/ (permission denied); nothing was changed");
+    } finally {
+      fs.chmodSync(scenes, 0o755);
+    }
+  });
+
+  test("a write that fails partway says the same command finishes the job", () => {
+    const root = copyExample("harbor-of-second-light");
+    const original = fs.renameSync;
+    fs.renameSync = (from, to) => {
+      if (String(to).endsWith("the-drowned-witness.md")) {
+        throw Object.assign(new Error("EIO"), { code: "EIO" });
+      }
+      return original(from, to);
+    };
+    let result;
+    try {
+      result = invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]);
+    } finally {
+      fs.renameSync = original;
+    }
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("an input/output error. Some files were already updated: fix the problem and run the same command again to finish");
+    expect(invoke(root, ["rename", "character", "ilya-venn", "Zed Quill"]).code).toBe(0);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+});
+
+describe("remove (#206, #103)", () => {
+  test("remove scrubs references to an entity whose file is already gone", () => {
+    const root = copyExample("the-unraveled-thread");
+    fs.rmSync(path.join(root, "characters", "edran-vale.md"));
+    expect(validateLinks(root).ok).toBe(false);
+    const result = invoke(root, ["remove", "character", "edran-vale"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toBe("Removed references to character edran-vale: its file was already gone\n");
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    // Nothing left: the id is now simply unknown.
+    expect(invoke(root, ["remove", "character", "edran-vale"]).err).toBe("character edran-vale does not exist\n");
+  });
+
+  test("remove lists body references and exemption patterns it leaves behind", () => {
+    const root = initProject();
+    for (const argv of [["chapter", "One"], ["chapter", "Two"], ["arc", "Main"], ["character", "Bo"]]) {
+      createEntity(root, { kind: argv[0], name: argv[1] });
+    }
+    fs.appendFileSync(path.join(root, "plot", "timeline.md"), "\n| Day 1 | x | main | chapter-02 |\n");
+    fs.appendFileSync(path.join(root, "plot", "arcs", "main.md"), "\nBeat: chapter-02. With [Bo](../../characters/bo.md).\n");
+    fs.appendFileSync(path.join(root, "characters", "_index.md"), "\n## Notes\n\n- [Bo](bo.md)\n");
+    fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), "---\ntype: exemption-log\nstory: safety\nexemptions:\n  - pattern: \"chapters/chapter-02.md has POV bo\"\n    reason: \"On purpose\"\n---\n");
+
+    const chapter = invoke(root, ["remove", "chapter", "chapter-02"]);
+    expect(chapter.code).toBe(0);
+    expect(chapter.err).toContain(`warning: ${"plot/arcs/main.md"}, ${"plot/timeline.md"} still mention chapter chapter-02 in links or ids in the text, which remove does not change: edit them, then run story links`);
+    expect(chapter.err).toContain(`warning: continuity/exemptions.md has an entry naming chapter-02 (exemptions[0]), which no longer matches anything: pattern "chapters/chapter-02.md has POV bo". Delete or update it`);
+
+    const character = invoke(root, ["remove", "character", "bo"]);
+    expect(character.code).toBe(0);
+    expect(character.err).toContain(`warning: ${"characters/_index.md"}, ${"plot/arcs/main.md"} still mention character bo in links in the text`);
+  });
+
+  test("a clean remove prints no warnings", () => {
+    const root = initProject();
+    createEntity(root, { kind: "character", name: "Bo" });
+    const result = invoke(root, ["remove", "character", "bo"]);
+    expect(result.code).toBe(0);
+    expect(result.err).toBe("");
+  });
+});
+
+describe("review fixes", () => {
+  test("rename leaves a `to` key outside routes alone", () => {
+    const { root } = reviewProject();
+    createEntity(root, { kind: "location", name: "Yonder" });
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: S\nchapter: chapter-01\nscene: 1\nstatus: draft\nstate-changes:\n  - character: mara\n    to: yonder", "# S\n");
+    renameEntity(root, { kind: "location", id: "yonder", name: "Far Yonder" });
+    expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8")).toContain("    to: yonder");
   });
 });
