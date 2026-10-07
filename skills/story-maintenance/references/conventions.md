@@ -12,7 +12,7 @@ These conventions apply across all story skills. Every `SKILL.md` links here and
 
 ## Project files
 
-- **`_index.md`** files are authoritative registries for each domain
+- **`_index.md`** registries list each domain's entities. `story reindex` rebuilds their tables from the entity files, and `story add`, `rename`, `move`, and `remove` reindex for you. Never add or edit a registry row by hand, even without the CLI: change the entity file and reindex. Reindex keeps the hand-written sections, which are yours to edit: `## Relationship Map` and `## Family Trees` in `characters/_index.md`, `## World Overview` in `worldbuilding/_index.md`, and `## Story Structure`, `## Theme Tracking`, and the `structure` field in `plot/_index.md`
 - **`story.md`** is the top-level bible read by all skills for context
 - **`style-sheet.md`** records voice and house style; skills that write or revise prose read it
 - **Continuity state** lives in `continuity/state.md`, with open questions, promises, and clues tracked under `continuity/questions/`, `continuity/promises/`, and `continuity/clues/`

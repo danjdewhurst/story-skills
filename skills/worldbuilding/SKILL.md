@@ -27,9 +27,9 @@ A story project must already exist (created via the story-init skill). Verify by
    - Routes to other locations: travel time in hours and mode (see `references/maps-and-routes.md`)
    - Pronunciation, if the name is invented or easily misread (`pronunciation: "KEL-ah-mar"`)
 5. Before settling an invented name, run `story names '{Candidate}'` to catch clashes and look-alikes (see `references/naming-languages.md`)
-6. Create it with `story add location '{Location Name}' --type '{type}'` when the CLI is available (add `--region`, `--population`, `--controlled-by`, and `--character` as known); it writes `worldbuilding/locations/{name-kebab}.md` and updates `worldbuilding/_index.md`. Then fill the body from `references/location-template.md`
+6. Create it with `story add location '{Location Name}' --type '{type}'` when the CLI is available (add `--region`, `--population`, `--controlled-by`, and `--character` as known); it writes `worldbuilding/locations/{name-kebab}.md` and lists it in `worldbuilding/_index.md`. Then fill the body from `references/location-template.md`
 7. Without the CLI, write the file from `references/location-template.md` to `worldbuilding/locations/{name-kebab}.md`
-8. Without the CLI, update the `worldbuilding/_index.md` locations table
+8. Leave the locations table in `worldbuilding/_index.md` to `story reindex .`, even without the CLI; never add a row by hand
 9. If notable characters are listed, verify those character files exist and add this location's kebab-case identifier to each character file's `locations` frontmatter list
 10. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
@@ -60,9 +60,9 @@ Use the travel speeds table in `references/economy-logistics.md` to set plausibl
 2. Read `worldbuilding/_index.md` for existing systems
 3. Identify the system type and consult `references/world-element-types.md` for the relevant prompts. For calendars, naming languages, economies, and magic costs, also use `references/calendars.md`, `references/naming-languages.md`, and `references/economy-logistics.md`
 4. Build the system through conversation, addressing the key questions for that type
-5. Write the file using `references/system-template.md`
-6. Save to `worldbuilding/systems/{name-kebab}.md`
-7. Update `worldbuilding/_index.md` systems table
+5. Create it with `story add system '{System Name}' --type '{type}' --prevalence '{prevalence}'` when the CLI is available (the type and prevalence values are in `references/system-template.md`); it writes `worldbuilding/systems/{name-kebab}.md` and lists it in `worldbuilding/_index.md`. Then fill the body from `references/system-template.md`
+6. Without the CLI, write the file from `references/system-template.md` to `worldbuilding/systems/{name-kebab}.md`
+7. Leave the systems table in `worldbuilding/_index.md` to `story reindex .`; never add a row by hand
 8. Cross-reference with characters who interact with the system (e.g., magic-users for a magic system)
 9. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
@@ -78,7 +78,7 @@ Cover:
 
 Then:
 1. Save to `worldbuilding/factions/{name-kebab}.md`
-2. Update the Factions table in `worldbuilding/_index.md`
+2. Leave the Factions table in `worldbuilding/_index.md` to `story reindex .`; never add a row by hand
 3. If members are listed, verify those character files exist
 4. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
@@ -94,7 +94,7 @@ Cover:
 
 Then:
 1. Save to `worldbuilding/artifacts/{name-kebab}.md`
-2. Update the Artifacts table in `worldbuilding/_index.md`
+2. Leave the Artifacts table in `worldbuilding/_index.md` to `story reindex .`; never add a row by hand
 3. If an owner or location is listed, verify those files exist and cross-reference back
 4. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
@@ -103,7 +103,7 @@ Then:
 Record an invented word, title, rank, or concept that the prose must spell and use the same way every time as a glossary term in `glossary/terms/`.
 
 1. Read `glossary/_index.md` for the existing terms, then run `story names '{Term}'` to catch a clash with another name or term
-2. Use `story add term '{Term}' --category '{person|place|faction|artifact|concept|term|other}'` when the CLI is available, with `--alias '{Variant}'` once for each accepted variant; it writes `glossary/terms/{term-kebab}.md` and updates `glossary/_index.md`. Otherwise create the file with frontmatter fields `term`, `category`, and `aliases`, and add a row to the Registry table in `glossary/_index.md`
+2. Use `story add term '{Term}' --category '{person|place|faction|artifact|concept|term|other}'` when the CLI is available, with `--alias '{Variant}'` once for each accepted variant; it writes `glossary/terms/{term-kebab}.md` and lists it in `glossary/_index.md`. Otherwise create the file with frontmatter fields `term`, `category`, and `aliases`, and leave the `glossary/_index.md` table to `story reindex .`
 3. Fill `## Definition` (what it means in the story) and `## Usage Notes` (spelling, capitalisation, who uses it, and what it never means). Add a `pronunciation` when the term is invented or easily misread
 4. When the term's capitalisation or hyphenation is a house-style decision, record it in `style-sheet.md` too (see the `voice-style` skill)
 5. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
@@ -115,7 +115,7 @@ A glossary for translators belongs to the `adaptation` skill, which adds a `## T
 1. Read the existing file
 2. Make the requested changes. If a location or faction changes partway through the story (a city falls, a guild disbands), add a progression instead of editing the opening value (see Changes Over the Story)
 3. If cross-references changed, update the linked files
-4. Update `worldbuilding/_index.md` if name, type, or status changed
+4. Rename an element with `story rename` (see `references/naming-languages.md`). Change its type or status in its own file only: the `worldbuilding/_index.md` tables pick it up at the next `story reindex .`, so never edit their rows
 5. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Changes Over the Story
@@ -170,4 +170,4 @@ Use the Story CLI when it is available. If `story` is not installed, use the bun
 
 ## Shared Conventions
 
-Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` files as the authoritative registries, bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).
+Every story skill follows the shared conventions in [`../story-maintenance/references/conventions.md`](../story-maintenance/references/conventions.md), resolved relative to this skill folder. Read it before creating, renaming, or linking story files. If that file is missing because this skill was installed without `story-maintenance`, the essentials are: kebab-case ids and filenames, YAML frontmatter on every story-project file, `_index.md` registry tables that `story reindex` rebuilds (never edit them by hand), bidirectional links between entities, `characters` for who is on the page and `mentions` for who is only referred to, `status: deceased` plus `died-in: chapter-{NN}` for deaths, and no project-local generator or build scripts (run only the installed or bundled Story CLI).

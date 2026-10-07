@@ -236,7 +236,7 @@ It doesn't ask for the other publishing metadata (`isbn`, `publisher`, `descript
 
 - [`title-logline.md`](../skills/story-init/references/title-logline.md): title craft (comps, hook phrasing, the title as a promise) and the logline recipe. The `submission` skill reuses it for the pitch.
 
-Every skill follows the same conventions: kebab-case ids, YAML frontmatter on every file, `_index.md` files as authoritative registries, bidirectional links, `status: deceased` plus `died-in` for deaths, `characters` versus `mentions`, and no project-local generator scripts. They are listed in story-maintenance's [`conventions.md`](../skills/story-maintenance/references/conventions.md), which every `SKILL.md` links under "Shared Conventions" with a one-line summary for a skill installed on its own. [Core concepts](concepts.md) explains them.
+Every skill follows the same conventions: kebab-case ids, YAML frontmatter on every file, `_index.md` registry tables that `story reindex` rebuilds (never edited by hand), bidirectional links, `status: deceased` plus `died-in` for deaths, `characters` versus `mentions`, and no project-local generator scripts. They are listed in story-maintenance's [`conventions.md`](../skills/story-maintenance/references/conventions.md), which every `SKILL.md` links under "Shared Conventions" with a one-line summary for a skill installed on its own. [Core concepts](concepts.md) explains them.
 
 ## Planning
 
@@ -253,7 +253,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 1. Reads `story.md` for genre, themes, and tone, and `characters/_index.md` for the existing cast.
 2. Asks for the name and role: `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, or `deuteragonist`. Before settling the name it runs `story names '{Name}'`, which fails on an exact clash with any existing character, alias, location, faction, artifact, system, or glossary term, and warns about look-alikes and names sharing an initial with a major character. Invented names follow the culture's rules in worldbuilding's `naming-languages.md`.
 3. Builds the profile through conversation: appearance, personality, backstory, external wants and internal needs, voice (with sample dialogue), `voice-words` (words they reach for) and `voice-avoid` (words they would never say), `pronunciation` for an invented or easily misread name, arc, and key life events.
-4. Writes `characters/{name-kebab}.md` from the template, or scaffolds it with `story add character '{Name}' --role '{role}'`.
+4. Writes `characters/{name-kebab}.md` from the template, or scaffolds it with `story add character '{Name}' --role '{role}'`. It never adds or edits a row of the `characters/_index.md` table: `story reindex` rebuilds it from the character files.
 5. Adds every relationship in both directions using the inverse pairs in `relationship-types.md`, and updates the Relationship Map and Family Trees sections of `characters/_index.md`.
 6. Generates the relationship graph from frontmatter with `story diagram relationships` (add `--out dist/relationships.mmd` to save it) rather than drawing it by hand. Family edges are styled distinctly, so the family tree stands out. Each pair gets one edge, so the diagram can't show a one-way relationship; `story links` finds those.
 
@@ -261,7 +261,7 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Reads.** `story.md`, `characters/_index.md`, existing character files, and linked location, faction, artifact, and arc files when checking cross-references.
 
-**Writes.** `characters/*.md`, `characters/_index.md`, and the matching backlink in any related character file.
+**Writes.** `characters/*.md`, the hand-written sections of `characters/_index.md`, and the matching backlink in any related character file.
 
 **CLI.** `story names`, `story add character`, `story diagram relationships`, then `story reindex .`, `story wordcount . --write`, and `story check .`.
 
@@ -282,20 +282,20 @@ Every skill follows the same conventions: kebab-case ids, YAML frontmatter on ev
 
 **Workflow.**
 
-- **Locations:** covers atmosphere, history, culture, notable features, current state, routes to other locations (travel time in hours and mode), and a `pronunciation` for an invented name. Checks an invented name with `story names '{Candidate}'` first. Saves to `worldbuilding/locations/{name-kebab}.md` and adds the location id to each notable character's `locations` list.
+- **Locations:** covers atmosphere, history, culture, notable features, current state, routes to other locations (travel time in hours and mode), and a `pronunciation` for an invented name. Checks an invented name with `story names '{Candidate}'` first. Creates `worldbuilding/locations/{name-kebab}.md` with `story add location '{Name}' --type '{type}'` (with `--region`, `--population`, `--controlled-by`, and `--character` as known) and adds the location id to each notable character's `locations` list.
 - **Routes:** records travel as `routes` on the location file (`to`, `hours`, `mode`), not in prose notes. A route is two-way unless the other location declares its own route back. `story links` checks each `to` exists, `story continuity` errors when a character moves between dated scenes faster than the route allows, and `story diagram locations` draws the network as a Mermaid map-graph labelled in hours.
-- **Systems:** uses the prompts for that system type in `world-element-types.md`, saves to `worldbuilding/systems/{name-kebab}.md`, and cross-references the characters who use it. Calendars, naming languages, economies, and magic costs also use their own references below.
+- **Systems:** uses the prompts for that system type in `world-element-types.md`, creates `worldbuilding/systems/{name-kebab}.md` with `story add system '{Name}' --type '{type}' --prevalence '{prevalence}'`, and cross-references the characters who use it. Calendars, naming languages, economies, and magic costs also use their own references below.
 - **Factions:** `story add faction '{Name}' --type '{family|guild|government|military|religion|company|community|criminal|other}'`, covering ideology, power base, members, and conflicts.
 - **Artifacts:** `story add artifact '{Name}' --type '{object|weapon|document|technology|relic|symbol|resource|other}'`, covering function, costs, history, and current owner and location.
 - **Glossary terms:** `story add term '{Term}' --category '{person|place|faction|artifact|concept|term|other}'` with `--alias` for each accepted variant, after `story names '{Term}'`, for an invented word, title, rank, or concept the prose must use the same way every time. Fills the term's definition and usage notes, and a `pronunciation` when it helps. House-style capitalisation and hyphenation also go in `style-sheet.md` ([voice-style](#voice-style)).
 
-Every element goes into the matching table in `worldbuilding/_index.md`, and every term into `glossary/_index.md`, and the world overview is kept current.
+`story reindex` lists every element in `worldbuilding/_index.md` and every term in `glossary/_index.md`; the skill never edits those tables by hand. It keeps only the hand-written World Overview section of `worldbuilding/_index.md` current.
 
 **Reads.** `story.md`, `worldbuilding/_index.md`, `glossary/_index.md`, and the character files it links.
 
-**Writes.** `worldbuilding/**/*.md`, `worldbuilding/_index.md`, `glossary/terms/*.md`, `glossary/_index.md`, and backlinks in character files.
+**Writes.** `worldbuilding/**/*.md` (in `worldbuilding/_index.md`, only the World Overview section), `glossary/terms/*.md`, and backlinks in character files.
 
-**CLI.** `story names`, `story add faction`, `story add artifact`, `story add term`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. The skill writes location and system files from its templates, but the CLI can also scaffold them with `story add location '{Name}'` (with `--region`, `--population`, `--controlled-by`) and `story add system '{Name}'` (with `--prevalence`). Routes are added by hand; `story add location` has no route flag.
+**CLI.** `story names`, `story add location`, `story add system`, `story add faction`, `story add artifact`, `story add term`, `story diagram locations`, then `story reindex .`, `story wordcount . --write`, and `story check .`. Without the CLI, the skill writes the files from its templates. Routes are added by hand; `story add location` has no route flag.
 
 **References.**
 
@@ -320,7 +320,7 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and eve
 **Workflow.**
 
 1. **Structure:** reads `story.md` for genre, themes, and `form`. For `short-story` and `flash` it uses `short-story-form.md` instead of a multi-act beat sheet. Otherwise it recommends a model from `structure-models.md` based on genre (three-act when unclear), sets the `structure` field in `plot/_index.md`, and fills in the beat sheet. A writer who wants to design the whole book first can follow the Snowflake Method in `snowflake.md` on top of that structure.
-2. **Arcs:** asks for the name, type (`main`, `subplot`, `character`, `thematic`), characters, themes, and optionally the MICE threads the arc carries (a `mice-threads` list such as `event` and `character`). Builds setup, escalations, climax, and resolution, and saves `plot/arcs/{arc-kebab}.md`. It can scaffold the file first with `story add arc '{Name}' --type main --character {id} --theme {theme}`.
+2. **Arcs:** asks for the name, type (`main`, `subplot`, `character`, `thematic`), characters, themes, and optionally the MICE threads the arc carries (a `mice-threads` list such as `event` and `character`). Scaffolds `plot/arcs/{arc-kebab}.md` with `story add arc '{Name}' --type main --character {id} --theme {theme}`, then builds setup, escalations, climax, and resolution in it. `story reindex` lists the arc in `plot/_index.md`; the skill updates only that file's hand-written Theme Tracking section.
 3. **Plot points:** adds rows to the arc's Plot Points table and to `plot/timeline.md`. A plot point that makes a promise to the reader, or raises a mystery, gets a file in `continuity/promises/` or `continuity/questions/`.
 4. **Timeline:** keeps `plot/timeline.md` in chronological order using the `| When | Event | Arc | Chapter |` format, and compares it with `story timeline .` output for the written scenes. `story diagram timeline` draws dated scenes and chapters as a Mermaid timeline, and `story diagram arcs` shows which chapters advance each arc.
 5. **Foreshadowing:** tracks each arc's items as `planned`, `planted`, or `paid-off`. For mystery clues, `story clues .` prints the fair-play matrix and `story diagram clues` the plant-to-reveal flow.
@@ -329,7 +329,7 @@ Every element goes into the matching table in `worldbuilding/_index.md`, and eve
 
 **Reads.** `story.md`, `plot/_index.md`, `characters/_index.md`, and arc files.
 
-**Writes.** `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/promises/*.md`, `continuity/questions/*.md`, and scene `outcome` and chapter `hook` fields.
+**Writes.** The `structure` field and hand-written sections of `plot/_index.md`, `plot/arcs/*.md`, `plot/timeline.md`, `continuity/promises/*.md`, `continuity/questions/*.md`, and scene `outcome` and chapter `hook` fields.
 
 **CLI.** `story add arc`, `story add chapter`, `story add scene`, `story timeline .`, `story diagram timeline`, `story diagram arcs`, `story clues .`, then `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .`. Generated diagrams go in `dist/` via `--out`, never in entity folders.
 
@@ -439,7 +439,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Writes.** `research/*.md` and `research/_index.md` (created by the first `story add research`).
 
-**CLI.** `story add research`, then `story reindex .`, `story wordcount . --write`, and `story check .`. `story rename`, `story move`, and `story remove` keep `used-in` current when chapters change.
+**CLI.** `story add research`, then `story reindex .`, `story wordcount . --write`, and `story check .`. `story move`, `story split`, and `story merge` rewrite `used-in` when chapters are renumbered, split, or merged, and `story remove chapter` takes the removed chapter out; `story rename` never changes a chapter id.
 
 **References.**
 

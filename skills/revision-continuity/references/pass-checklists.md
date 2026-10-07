@@ -79,10 +79,10 @@ files say it should do. Reorder, merge, split, or cut where they disagree.
 
 - **Read:** every chapter in `chapters/`, `plot/timeline.md`, active arc
   files.
-- **Update:** `plot/timeline.md`, arc plot-point tables, and
-  `chapters/_index.md` when chapters move, merge, or split. Make the changes
-  with `story move`, `story split`, and `story merge` (see Structural Edits
-  in `SKILL.md`).
+- **Update:** `plot/timeline.md` and arc plot-point tables when chapters
+  move, merge, or split. Make the moves with `story move`, `story split`,
+  and `story merge` (see Structural Edits in `SKILL.md`), which rebuild
+  `chapters/_index.md`; never edit its rows.
 
 ## Theme audit
 
