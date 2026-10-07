@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { checkContinuity } from "../src/continuity.js";
 import {
   checkProjectContinuity,
   createEntity,
   createStoryProject,
+  diagramProject,
   removeEntity,
   renameEntity,
+  scanProject,
   validateLinks,
   validateProject
 } from "../src/story.js";
@@ -49,6 +52,67 @@ status: draft
   writeLocation(root, "keep", "routes:\n  - to: mill\n    hours: 20");
   writeLocation(root, "tower", "");
   return root;
+}
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeBaseScene(root, chapter, scene, fields = "") {
+  writeMarkdown(path.join(root, "scenes", `chapter-${pad(chapter)}-scene-${pad(scene)}.md`), `
+title: Scene ${chapter}.${scene}
+chapter: chapter-${pad(chapter)}
+scene: ${scene}
+status: draft
+${fields}
+`, "# Scene\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+function addRoutes(root, location, routes) {
+  const file = path.join(root, "worldbuilding", "locations", `${location}.md`);
+  const text = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(file, text.replace(/^---\n/, `---\nroutes:\n${routes.trim().split("\n").map((line) => `  ${line}`).join("\n")}\n`), "utf8");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
+function continuity(root) {
+  return checkContinuity(scanProject(root));
 }
 
 describe("location routes", () => {
@@ -165,5 +229,41 @@ strand: "1990"
     expect(harbor).not.toContain("old-mill");
     expect(harbor).not.toContain("hours: 6");
     expect(messages(validateProject(root).errors)).toEqual([]);
+  });
+});
+
+describe("routes", () => {
+  test("diagram draws only the routes the travel check uses, and validate warns on duplicates (#160)", () => {
+    const root = baseProject(1);
+    addRoutes(root, "alpha", "- to: beta\n  hours: 2\n- to: beta\n  hours: 1.5");
+    addRoutes(root, "beta", "- to: gamma\n  hours: 0\n- to: delta\n  hours: -1");
+    const edges = diagramProject(root, { kind: "locations" }).text.split("\n").filter((line) => line.includes("---") || line.includes("-->"));
+    expect(edges).toEqual([`  alpha ---|"1.5h"| beta`]);
+    expect(messages(validateProject(root).warnings)).toContain(
+      "worldbuilding/locations/alpha.md lists more than one route to beta; the travel check and story diagram use only the fastest"
+    );
+  });
+
+  test("the chapter POV travels with scenes that have no POV of their own (#165)", () => {
+    const root = baseProject(1);
+    addRoutes(root, "alpha", "- to: beta\n  hours: 5");
+    writeBaseChapter(root, 1, "pov: ann\ncharacters:\n  - ann\nlocations:\n  - alpha\n  - beta");
+    writeBaseScene(root, 1, 1, "date: 2024-05-01\ntime: \"10:00\"\nlocation: alpha");
+    writeBaseScene(root, 1, 2, "date: 2024-05-01\ntime: \"10:10\"\nlocation: beta\npov: ann\ncharacters:\n  - ann");
+    expect(messages(continuity(root).errors)).toEqual([
+      "scenes/chapter-01-scene-02.md puts ann at beta 0.1h after scenes/chapter-01-scene-01.md at alpha, but the fastest route takes 5h"
+    ]);
+  });
+
+  test("decimal route legs that exactly fit the gap are not an error (#166)", () => {
+    const root = baseProject(1);
+    addRoutes(root, "alpha", "- to: beta\n  hours: 0.1");
+    addRoutes(root, "beta", "- to: gamma\n  hours: 0.2");
+    writeBaseChapter(root, 1, "characters:\n  - ann\nlocations:\n  - alpha\n  - gamma");
+    writeBaseScene(root, 1, 1, "date: 2024-05-01\ntime: \"10:00\"\nlocation: alpha\ncharacters:\n  - ann");
+    writeBaseScene(root, 1, 2, "date: 2024-05-01\ntime: \"10:18\"\nlocation: gamma\ncharacters:\n  - ann");
+    expect(messages(continuity(root).errors)).toEqual([]);
+    writeBaseScene(root, 1, 2, "date: 2024-05-01\ntime: \"10:17\"\nlocation: gamma\ncharacters:\n  - ann");
+    expect(continuity(root).errors).toHaveLength(1);
   });
 });

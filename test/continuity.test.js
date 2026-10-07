@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { checkContinuity, normalizeKnowledge } from "../src/continuity.js";
+import { checkContinuity, normalizeKnowledge, QUESTION_CHAPTER_GAP } from "../src/continuity.js";
 import {
   checkProjectContinuity,
+  createEntity,
   createStoryProject,
   formatActionReport,
+  knowledgeAtChapter,
   projectActions,
   reindexProject,
+  renameEntity,
   scanProject,
   validateLinks,
   validateProject
@@ -22,6 +25,67 @@ ${frontmatter.trim()}
 status: draft
 word-count: 0
 `, `# Chapter ${number}\n\n## Chapter Text\n\nWords.\n`);
+}
+
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeBaseScene(root, chapter, scene, fields = "") {
+  writeMarkdown(path.join(root, "scenes", `chapter-${pad(chapter)}-scene-${pad(scene)}.md`), `
+title: Scene ${chapter}.${scene}
+chapter: chapter-${pad(chapter)}
+scene: ${scene}
+status: draft
+${fields}
+`, "# Scene\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+function addRoutes(root, location, routes) {
+  const file = path.join(root, "worldbuilding", "locations", `${location}.md`);
+  const text = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(file, text.replace(/^---\n/, `---\nroutes:\n${routes.trim().split("\n").map((line) => `  ${line}`).join("\n")}\n`), "utf8");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
+function continuity(root) {
+  return checkContinuity(scanProject(root));
 }
 
 describe("continuity checks", () => {
@@ -437,5 +501,399 @@ knowledge-state:
     expect(normalizeKnowledge("  The Key  Is Lost...!! ")).toBe("the key is lost");
     expect(normalizeKnowledge("Wait... the key is lost")).toBe("wait... the key is lost");
     expectLinearTime(normalizeKnowledge, (n) => `${".".repeat(n)}x`);
+  });
+});
+
+describe("timeline and the clock", () => {
+  test("travel-hours errors print rounded hours (#80)", () => {
+    const root = baseProject(1);
+    writeBaseScene(root, 1, 1, "date: 2024-01-01\ntime: \"10:00\"");
+    writeBaseScene(root, 1, 2, "date: 2024-01-01\ntime: \"10:20\"\ntravel-hours: 1");
+    expect(messages(continuity(root).errors)).toEqual(["scenes/chapter-01-scene-02.md allows only 0.3h for travel of 1h"]);
+  });
+
+  test("an untimed scene does not become the reference point (#154)", () => {
+    const root = baseProject(2);
+    writeBaseScene(root, 1, 1, "date: 2024-05-01\ntime: \"20:00\"");
+    writeBaseScene(root, 2, 1, "date: 2024-05-01");
+    writeBaseScene(root, 2, 2, "date: 2024-05-01\ntime: \"08:00\"");
+    expect(messages(continuity(root).warnings)).toEqual(["scenes/chapter-02-scene-02.md timestamp runs backward"]);
+  });
+
+  test("a flashback does not become the reference point (#154)", () => {
+    const root = baseProject(5);
+    writeBaseScene(root, 1, 1, "date: 2024-05-01\ntime: \"10:00\"");
+    writeBaseScene(root, 2, 1, "date: 2020-01-01\ntime: \"09:00\"\nflashback-to: the war");
+    writeBaseScene(root, 3, 1, "date: 2024-05-01\ntime: \"11:00\"\ntravel-hours: 30");
+    writeBaseScene(root, 4, 1, "date: 2024-04-15\ntime: \"11:00\"");
+    writeBaseScene(root, 4, 2, "date: 2020-01-02\nflashback-to: the war again");
+    writeBaseScene(root, 5, 1, "date: 2024-04-20\ntime: \"11:00\"");
+    const result = continuity(root);
+    expect(messages(result.errors)).toEqual(["scenes/chapter-03-scene-01.md allows only 1h for travel of 30h"]);
+    expect(messages(result.warnings).sort()).toEqual([
+      "scenes/chapter-02-scene-01.md timestamp runs backward",
+      "scenes/chapter-04-scene-01.md timestamp runs backward",
+      "scenes/chapter-04-scene-02.md timestamp runs backward",
+      "scenes/chapter-05-scene-01.md timestamp runs backward"
+    ]);
+  });
+
+  test("a flash-forward prologue gives one warning and later chapters are still checked (#156)", () => {
+    const root = baseProject(5);
+    writeBaseChapter(root, 1, "date: 2034-01-01");
+    writeBaseChapter(root, 2, "date: 2024-05-02");
+    writeBaseChapter(root, 3, "date: 2024-05-03");
+    writeBaseChapter(root, 4, "date: 2024-05-01");
+    writeBaseChapter(root, 5, "date: 2024-05-05");
+    expect(messages(continuity(root).warnings)).toEqual([
+      "Chapter 2 date 2024-05-02 is earlier than Chapter 1 date 2034-01-01",
+      "Chapter 4 date 2024-05-01 is earlier than Chapter 3 date 2024-05-03"
+    ]);
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
+type: exemption-log
+exemptions:
+  - pattern: "than Chapter 1 date 2034-01-01"
+    reason: "Chapter 1 is a flash-forward prologue"
+`);
+    const exempted = continuity(root);
+    expect(messages(exempted.warnings)).toEqual(["Chapter 4 date 2024-05-01 is earlier than Chapter 3 date 2024-05-03"]);
+    expect(exempted.dismissed).toHaveLength(1);
+  });
+
+  test("malformed times are reported on undated scenes and chapters, and undated travel-hours warns (#159)", () => {
+    const root = baseProject(2);
+    writeBaseScene(root, 1, 1, "time: \"25:99\"");
+    writeBaseScene(root, 1, 2, "date: 2024-05-01\ntime: \"10:00\"");
+    writeBaseScene(root, 1, 3, "time: \"11:00\"\ntravel-hours: 50");
+    writeBaseChapter(root, 2, "time: teatime");
+    const warnings = messages(continuity(root).warnings);
+    expect(warnings).toContain("scenes/chapter-01-scene-01.md has malformed time \"25:99\"");
+    expect(warnings).toContain("Chapter 2 has malformed time \"teatime\"");
+    expect(warnings).toContain("scenes/chapter-01-scene-03.md has travel-hours but no date, so the clock check skips it");
+  });
+});
+
+describe("setup ordering and Chekhov gaps", () => {
+  test("a setup planted after its payoff is flagged when the planted chapter is unwritten (#82)", () => {
+    const root = baseProject(3);
+    writeMarkdown(path.join(root, "continuity", "promises", "gun.md"), `
+title: Gun
+status: planned
+planted: chapter-12
+payoff: chapter-03
+`, "# Gun\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "knife.md"), `
+title: Knife
+status: planned
+planted: chapter-09
+payoff: chapter-02
+`, "# Knife\n");
+    const errors = messages(continuity(root).errors);
+    expect(errors).toContain("continuity/promises/gun.md pays off in chapter-03 before it is planted in chapter-12");
+    expect(errors).toContain("continuity/clues/knife.md pays off in chapter-02 before it is planted in chapter-09");
+  });
+
+  test("the unpaid-setup gap counts chapter positions, not numbers (#85)", () => {
+    const root = baseProject(2);
+    writeBaseChapter(root, 10);
+    writeMarkdown(path.join(root, "continuity", "promises", "p.md"), `
+title: P
+status: planted
+planted: chapter-02
+payoff: ""
+`, "# P\n");
+    writeState(root, "", 10);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("chapters ago");
+
+    writeBaseChapter(root, 3);
+    writeBaseChapter(root, 4);
+    writeMarkdown(path.join(root, "continuity", "promises", "p.md"), `
+title: P
+status: planted
+planted: chapter-01
+payoff: ""
+`, "# P\n");
+    expect(messages(continuity(root).warnings)).toContain("continuity/promises/p.md was planted in chapter-01, 4 chapters ago, and has no payoff yet");
+  });
+});
+
+describe("unanswered questions (#347)", () => {
+  function writeQuestion(root, id, fields) {
+    writeMarkdown(path.join(root, "continuity", "questions", `${id}.md`), `
+title: ${id}
+${fields}
+`, `# ${id}\n`);
+  }
+
+  function setStoryStatus(root, status) {
+    const file = path.join(root, "story.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^status: .*$/m, `status: ${status}`), "utf8");
+  }
+
+  test("an open question warns after the wide gap and stays a warning", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    expect(continuity(root)).toMatchObject({ ok: true, errors: [], warnings: [] });
+
+    writeBaseChapter(root, QUESTION_CHAPTER_GAP + 1);
+    writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", QUESTION_CHAPTER_GAP + 1);
+    const result = continuity(root);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual([{
+      code: "question-unanswered",
+      message: `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`,
+      file: "continuity/questions/who-kept-the-key.md",
+      chapter: null
+    }]);
+  });
+
+  test("outline chapters ahead and numbering gaps do not age a question", () => {
+    const root = baseProject(2);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeBaseChapter(root, 30, "", "outline");
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+
+    writeBaseChapter(root, 40);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+  });
+
+  test("a question introduced in an outline chapter does not age until that chapter is drafted", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeBaseChapter(root, 1, "", "outline");
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+
+    writeBaseChapter(root, 1);
+    expect(messages(continuity(root).warnings)).toContain(
+      `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`
+    );
+  });
+
+  test("a resolved, dropped, abandoned, or unintroduced question does not warn", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "answered", `
+status: answered
+introduced: chapter-01
+resolved: chapter-02
+`);
+    writeQuestion(root, "dropped", `
+status: dropped
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "abandoned", `
+status: abandoned
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "unplaced", `
+status: open
+introduced: ""
+resolved: ""
+`);
+    writeQuestion(root, "scheduled", `
+status: open
+introduced: chapter-99
+resolved: ""
+`);
+    expect(messages(continuity(root).warnings).join("\n")).not.toContain("has no resolution yet");
+    expect(messages(continuity(root).errors)).toEqual([]);
+  });
+
+  test("an open question that already names a resolved chapter stays an error, with no gap warning", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "lingering", `
+status: open
+introduced: chapter-01
+resolved: chapter-02
+`);
+    const result = continuity(root);
+    expect(result.ok).toBe(false);
+    expect(messages(result.errors)).toEqual([
+      "continuity/questions/lingering.md records resolved chapter chapter-02 but status is still open"
+    ]);
+    expect(messages(result.warnings).join("\n")).not.toContain("has no resolution yet");
+  });
+
+  test("a deliberate hold is exempted the way an unpaid promise is", () => {
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeQuestion(root, "where-is-the-boat", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    writeMarkdown(path.join(root, "continuity", "exemptions.md"), `
+type: exemption-log
+story: base
+exemptions:
+  - code: question-unanswered
+    file: continuity/questions/who-kept-the-key.md
+    reason: Pays off in book two
+`, "# Exemptions\n");
+    const result = continuity(root);
+    expect(result.ok).toBe(true);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((finding) => finding.file)).toEqual(["continuity/questions/where-is-the-boat.md"]);
+    expect(result.dismissed).toEqual([{
+      finding: expect.objectContaining({ code: "question-unanswered", file: "continuity/questions/who-kept-the-key.md" }),
+      reason: "Pays off in book two",
+      index: 0
+    }]);
+  });
+
+  test("completing the book is an error whether or not the gap has passed", () => {
+    const short = baseProject(3);
+    writeQuestion(short, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    setStoryStatus(short, "complete");
+    const early = continuity(short);
+    expect(early.ok).toBe(false);
+    expect(messages(early.errors)).toEqual([
+      "story.md is complete but continuity/questions/who-kept-the-key.md is still open"
+    ]);
+    expect(messages(early.warnings).join("\n")).not.toContain("has no resolution yet");
+
+    const root = baseProject(QUESTION_CHAPTER_GAP + 1);
+    writeQuestion(root, "who-kept-the-key", `
+status: open
+introduced: chapter-01
+resolved: ""
+`);
+    setStoryStatus(root, "complete");
+    const done = continuity(root);
+    expect(done.ok).toBe(false);
+    expect(messages(done.errors)).toEqual([
+      "story.md is complete but continuity/questions/who-kept-the-key.md is still open"
+    ]);
+    expect(messages(done.warnings)).toEqual([
+      `continuity/questions/who-kept-the-key.md was introduced in chapter-01, ${QUESTION_CHAPTER_GAP} chapters ago, and has no resolution yet`
+    ]);
+  });
+});
+
+describe("continuity state", () => {
+  test("repeated character and artifact entries warn, and custody reports once (#157)", () => {
+    const root = baseProject(5);
+    writeState(root, `
+character-state:
+  - character: ann
+    location: alpha
+  - character: ann
+    location: beta
+object-state:
+  - artifact: ring
+    status: lost
+    since: chapter-03
+  - artifact: ring
+    status: destroyed
+    since: chapter-03
+`);
+    writeBaseScene(root, 5, 1, "state-changes:\n  - target: ring\n    change: used again");
+    const result = continuity(root);
+    expect(messages(result.warnings)).toContain("continuity/state.md character-state[1] repeats character ann from character-state[0]; keep one entry per character");
+    expect(messages(result.warnings)).toContain("continuity/state.md object-state[1] repeats artifact ring from object-state[0]; keep one entry per artifact per since chapter");
+    expect(messages(result.errors).filter((error) => error.includes("uses ring"))).toEqual([
+      "scenes/chapter-05-scene-01.md uses ring, destroyed/lost since chapter-03"
+    ]);
+  });
+
+  test("validate checks object-state status and near-miss keys; custody ignores status case (#158)", () => {
+    const root = baseProject(5);
+    const ring = path.join(root, "worldbuilding", "artifacts", "ring.md");
+    fs.writeFileSync(ring, fs.readFileSync(ring, "utf8").replace(/^status: .*$/m, "status: destroyed"), "utf8");
+    writeState(root, `
+object-state:
+  - artifact: ring
+    status: Destroyed
+    since: chapter-02
+  - artifact: ring
+    status: active
+    since: chapter-99
+knowledge-state:
+  - character: ann
+    knows: the vault code
+    learned_in: chapter-04
+`);
+    const bob = path.join(root, "characters", "bob.md");
+    fs.writeFileSync(bob, fs.readFileSync(bob, "utf8").replace(/^status: .*$/m, "status: deceased\ndied_in: chapter-04"), "utf8");
+    writeBaseScene(root, 5, 1, "state-changes:\n  - target: ring\n    change: used again");
+
+    const validation = validateProject(root);
+    expect(messages(validation.errors)).toContain("continuity/state.md object-state[0] status must be one of active, lost, destroyed, hidden, transferred, unknown, got Destroyed");
+    expect(messages(validation.warnings)).toContain("continuity/state.md knowledge-state[0] has learned_in; did you mean learned-in?");
+    expect(messages(validation.warnings)).toContain("characters/bob.md has died_in; did you mean died-in?");
+
+    const result = continuity(root);
+    expect(messages(result.errors)).toContain("scenes/chapter-05-scene-01.md uses ring, destroyed/lost since chapter-02");
+    expect(messages(result.errors)).toContain("continuity/state.md object-state[1] references missing since chapter chapter-99");
+  });
+
+  test("a repeated fact with no character does not print undefined (#161)", () => {
+    const root = baseProject(2);
+    writeState(root, `
+knowledge-state:
+  - knows: a
+    fact: orphan-fact
+  - knows: b
+    fact: orphan-fact
+`);
+    const errors = messages(continuity(root).errors).join("\n");
+    expect(errors).not.toContain("undefined");
+    expect(errors).toContain("knowledge-state[1] references missing character (unset)");
+  });
+
+  test("numeric and boolean ids resolve as strings (#169)", () => {
+    const root = baseProject(4);
+    createEntity(root, { kind: "character", name: "47" });
+    createEntity(root, { kind: "artifact", name: "1984" });
+    writeState(root, `
+object-state:
+  - artifact: 1984
+    owner: 47
+    status: active
+knowledge-state:
+  - character: 47
+    knows: x
+`, 4);
+    const artifact = path.join(root, "worldbuilding", "artifacts", "1984.md");
+    fs.writeFileSync(artifact, fs.readFileSync(artifact, "utf8").replace(/^status: .*$/m, "status: active"), "utf8");
+    const errors = messages(continuity(root).errors).join("\n");
+    expect(errors).not.toContain("references missing");
+    expect(knowledgeAtChapter(root, "47", "chapter-04")).toEqual([{ knows: "x", learnedIn: "", audience: "reader" }]);
+
+    const character = path.join(root, "characters", "47.md");
+    fs.writeFileSync(character, fs.readFileSync(character, "utf8").replace(/^status: .*$/m, "status: deceased\ndied-in: chapter-02"), "utf8");
+    writeBaseChapter(root, 3, "characters:\n  - 47");
+    expect(messages(continuity(root).errors)).toContain("chapters/chapter-03.md lists 47, who died in chapter-02; move posthumous appearances to mentions");
+
+    addRoutes(root, "alpha", "- to: 1066\n  hours: 2");
+    createEntity(root, { kind: "location", name: "1066" });
+    expect(messages(validateProject(root).errors).join("\n")).not.toContain("route is missing to");
+
+    renameEntity(root, { kind: "character", id: "47", name: "Agent Forty" });
+    const state = fs.readFileSync(path.join(root, "continuity", "state.md"), "utf8");
+    expect(state).toContain("owner: agent-forty");
+    expect(state).toContain("character: agent-forty");
   });
 });

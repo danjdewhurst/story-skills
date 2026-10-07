@@ -78,6 +78,53 @@ arcs-advanced:
   return { root, cwd };
 }
 
+function pad(number) {
+  return String(number).padStart(2, "0");
+}
+
+function writeBaseChapter(root, number, fields = "", status = "draft") {
+  writeMarkdown(path.join(root, "chapters", `chapter-${pad(number)}.md`), `
+title: C${number}
+number: ${number}
+status: ${status}
+${fields}
+`, "## Chapter Text\n\nSome prose here.\n");
+}
+
+function writeState(root, lists, currentChapter = 5) {
+  writeMarkdown(path.join(root, "continuity", "state.md"), `
+type: continuity-state
+story: base
+current-chapter: ${currentChapter}
+${lists}
+`, "# Continuity State\n");
+}
+
+function addRoutes(root, location, routes) {
+  const file = path.join(root, "worldbuilding", "locations", `${location}.md`);
+  const text = fs.readFileSync(file, "utf8");
+  fs.writeFileSync(file, text.replace(/^---\n/, `---\nroutes:\n${routes.trim().split("\n").map((line) => `  ${line}`).join("\n")}\n`), "utf8");
+}
+
+// Characters ann and bob, locations alpha..delta, artifact ring, and
+// `chapters` drafted chapters with no fields.
+function baseProject(chapters = 5) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Base", force: false });
+  for (const name of ["Ann", "Bob"]) {
+    createEntity(root, { kind: "character", name });
+  }
+  for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+    createEntity(root, { kind: "location", name });
+  }
+  createEntity(root, { kind: "artifact", name: "Ring" });
+  for (let number = 1; number <= chapters; number += 1) {
+    writeBaseChapter(root, number);
+  }
+  writeState(root, "character-state: []\nobject-state: []\nknowledge-state: []", chapters);
+  return root;
+}
+
 describe("story diagram", () => {
   test("relationships draws one edge per pair, family edges heavy, and marks the dead", () => {
     const { root } = diagramFixture();
@@ -287,4 +334,40 @@ describe("story diagram", () => {
       }
     });
   }
+});
+
+describe("diagram labels (#55)", () => {
+  test("quotes edge labels so brackets parse, and never emits an empty label", () => {
+    const root = baseProject(3);
+    writeMarkdown(path.join(root, "continuity", "clues", "silence.md"), `
+title: The Silence (odd)
+status: planted
+planted: chapter-02
+payoff: ""
+red-herring: true
+`, "# Silence\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "blank.md"), `
+title: ""
+status: planted
+planted: chapter-01
+payoff: chapter-03
+`, "# Blank\n");
+    addRoutes(root, "alpha", "- to: beta\n  hours: 2\n  mode: boat (fast)");
+
+    const clues = diagramProject(root, { kind: "clues" }).text;
+    expect(clues).toContain(`chapter_02 -.->|"The Silence (odd) (red herring)"| unrevealed`);
+    expect(clues).toContain(`chapter_01 -->|"blank"| chapter_03`);
+    expect(clues).not.toContain("||");
+    expect(diagramProject(root, { kind: "locations" }).text).toContain(`alpha ---|"2h boat (fast)"| beta`);
+
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), `
+title: ""
+number: 1
+status: draft
+date: 2024-01-01
+`, "## Chapter Text\n\nText.\n");
+    const timeline = diagramProject(root, { kind: "timeline" }).text;
+    expect(timeline).toContain("    day : chapter-01\n");
+    expect(timeline).not.toMatch(/: *\n/);
+  });
 });
