@@ -1430,9 +1430,9 @@ describe("clock order reads named times as windows (#84)", () => {
     expect(runCli(["init", "CL", "--dir", "cl"], io)).toBe(0);
     const root = path.join(cwd, "cl");
     const run = (argv) => runCli([...argv, "--path", root], memoryIo(cwd));
-    run(["add", "chapter", "One"]);
-    run(["add", "scene", "A", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "10:20"]);
-    run(["add", "scene", "B", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "morning"]);
+    expect(run(["add", "chapter", "One"])).toBe(0);
+    expect(run(["add", "scene", "A", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "10:20"])).toBe(0);
+    expect(run(["add", "scene", "B", "--chapter", "chapter-01", "--date", "2024-01-01", "--time", "morning"])).toBe(0);
 
     expect(messages(continuity(root).warnings).filter((warning) => warning.includes("runs backward"))).toEqual([]);
   });
