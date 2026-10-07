@@ -19452,7 +19452,8 @@ function listItems(raw, field, errors) {
 }
 function applyDefaults(config, commandName, options) {
   const filled = [];
-  const given = (name) => optionFamily(name).some((member) => options[member] !== undefined);
+  const commandLine = { ...options };
+  const given = (name) => optionFamily(name).some((member) => commandLine[member] !== undefined);
   for (const [key, value] of Object.entries(config.defaults[commandName] ?? {})) {
     const group = (LINKED_FLAGS[commandName] ?? []).find((flags) => flags.includes(key)) ?? [key];
     if (!group.some(given)) {
