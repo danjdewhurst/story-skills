@@ -12,7 +12,7 @@ import { makeTempDir, messages, readArchiveText, writeMarkdown } from "./helpers
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
 // The languages with translated labels, and Traditional Chinese.
-const TRANSLATED = ["es", "fr", "de", "it", "pt", "nl", "sv", "pl", "ru", "uk", "tr", "ar", "he", "fa", "hi", "ja", "zh", "ko", "zh-Hant"];
+const TRANSLATED = ["es", "fr", "de", "it", "pt", "pt-PT", "nl", "sv", "pl", "ru", "uk", "tr", "ar", "he", "fa", "hi", "ja", "zh", "ko", "zh-Hant"];
 
 function project(title, storyFields = "") {
   const cwd = makeTempDir();
