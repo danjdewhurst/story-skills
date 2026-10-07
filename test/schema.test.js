@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { parseClockDate } from "../src/continuity.js";
 import { SCHEMA_PATH, buildSchemaDocument, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
+import { calendarDayPattern, generatedPatterns, main as writeSchemaPatterns, withGeneratedPatterns } from "../scripts/schema-patterns.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf8"));
@@ -115,6 +117,18 @@ exemptions:
     expect(() => validateAgainstSchema([], emptyArray)).toThrow("Unsupported schema keyword uniqueItems at #/$defs/entry");
   });
 
+  test("reads the boolean schemas true and false", () => {
+    expect(validateAgainstSchema(1, true)).toEqual([]);
+    expect(validateAgainstSchema(1, false)).toEqual(["$: not allowed"]);
+    const local = { type: "object", properties: { calendar: false, notes: true } };
+    expect(validateAgainstSchema({ notes: [1] }, local)).toEqual([]);
+    expect(validateAgainstSchema({ calendar: [] }, local)).toEqual(["$.calendar: not allowed"]);
+    // false in an if is the usual way to say a key is absent.
+    const conditional = { if: { properties: { calendar: false } }, then: { required: ["date"] } };
+    expect(validateAgainstSchema({}, conditional)).toEqual(["$: missing required date"]);
+    expect(validateAgainstSchema({ calendar: [] }, conditional)).toEqual([]);
+  });
+
   test("applies keywords beside $ref", () => {
     const local = {
       type: "object",
@@ -175,5 +189,92 @@ status: alive
     expect(errors({ "writing-mode": "vertical", language: "ja" })).toEqual([]);
     expect(errors({ "chapter-numerals": "native", language: "ar" })).toEqual([]);
     expect(errors({ "writing-mode": "horizontal", "chapter-numerals": "western" })).toEqual([]);
+  });
+
+  // validate checks that a date is a real day (#530); the schema's pattern
+  // is generated from the same check.
+  test("the date pattern accepts exactly the days validate does", () => {
+    const day = new RegExp(`^${calendarDayPattern()}$`, "u");
+    const pad = (number, width) => String(number).padStart(width, "0");
+    const disagreements = [];
+    const compare = (text) => {
+      if (day.test(text) !== (parseClockDate(text) !== undefined)) {
+        disagreements.push(text);
+      }
+    };
+    for (const year of [0, 1, 4, 100, 400, 1900, 2000, 2023, 2024, 2100, 9996, 9999]) {
+      for (let month = 0; month <= 13; month += 1) {
+        for (let date = 0; date <= 32; date += 1) {
+          compare(`${pad(year, 4)}-${pad(month, 2)}-${pad(date, 2)}`);
+        }
+      }
+    }
+    for (let year = 0; year <= 9999; year += 1) {
+      compare(`${pad(year, 4)}-02-29`);
+    }
+    expect(disagreements).toEqual([]);
+  });
+
+  test("the date fields take a real day", () => {
+    const fields = schema.properties.story.properties;
+    const accepts = (property, value) => validateAgainstSchema(value, property, schema).length === 0;
+    const chapter = schema.$defs.chapter.properties;
+    const session = schema.$defs.progressLog.properties.sessions.items.properties;
+    for (const property of [fields.deadline, fields["release-start"], fields["publication-date"], chapter["release-date"], session.date]) {
+      expect(accepts(property, "2024-02-29")).toBe(true);
+      expect(accepts(property, " 2000-02-29 ")).toBe(true);
+      for (const value of ["2023-02-29", "1900-02-29", "2024-13-45", "2024-04-31", "2024-00-10", "24-02-29", "soon"]) {
+        expect(accepts(property, value), value).toBe(false);
+      }
+    }
+    // Only publication-date may be blank or a placeholder.
+    expect(accepts(fields["publication-date"], "")).toBe(true);
+    expect(accepts(fields.deadline, "")).toBe(false);
+  });
+
+  // Without a calendar, validate reads a chapter or scene date shaped
+  // YYYY-MM-DD as a real day; with one, as a day of that calendar.
+  test("chapter and scene dates shaped YYYY-MM-DD are real days unless story.md has a calendar", () => {
+    const story = { title: "T", "schema-version": 2, genre: "fantasy", status: "drafting", themes: [], pov: "first", tense: "past" };
+    const errors = (date, extra = {}) => validateAgainstSchema({
+      story: { ...story, ...extra },
+      characters: [],
+      worldbuilding: {},
+      plot: {},
+      chapters: [{ id: "chapter-01", title: "One", number: 1, status: "draft", date }],
+      scenes: [{ id: "chapter-01-scene-01", title: "One", chapter: "chapter-01", scene: 1, status: "draft", date }],
+      continuity: {},
+      glossary: []
+    }, schema);
+    for (const date of ["2024-02-29", " 2024-02-29 ", "", "the night of the fire", "3 Thaw 301 AE", "2024-13"]) {
+      expect(errors(date), date).toEqual([]);
+    }
+    expect(errors("2023-02-29")).toEqual([
+      `$.chapters[chapter-01].date: "2023-02-29" does not match ${schema.$defs.realDateOrText.pattern}`,
+      `$.scenes[chapter-01-scene-01].date: "2023-02-29" does not match ${schema.$defs.realDateOrText.pattern}`
+    ]);
+    expect(errors("2024-13-45", { calendar: [{ month: "Thaw", days: 50 }] })).toEqual([]);
+  });
+
+  test("the generated patterns are up to date (run node scripts/schema-patterns.js)", () => {
+    for (const [pointer, pattern] of Object.entries(generatedPatterns())) {
+      expect(pointer.split("/").slice(1).reduce((node, key) => node[key], schema), pointer).toBe(pattern);
+    }
+    expect(withGeneratedPatterns(fs.readFileSync(SCHEMA_PATH, "utf8"))).toBe(fs.readFileSync(SCHEMA_PATH, "utf8"));
+  });
+
+  test("scripts/schema-patterns.js writes the patterns in place and keeps the layout", () => {
+    const file = path.join(makeTempDir(), "story.schema.json");
+    const text = fs.readFileSync(SCHEMA_PATH, "utf8");
+    const current = schema.$defs.realDate.pattern;
+    fs.writeFileSync(file, text.replace(JSON.stringify(current), JSON.stringify("^stale$")));
+    const log = [];
+    writeSchemaPatterns(file, (line) => log.push(line));
+    expect(fs.readFileSync(file, "utf8")).toBe(text);
+    writeSchemaPatterns(file, (line) => log.push(line));
+    expect(log).toEqual([`Wrote the generated patterns into ${file}`, "The generated schema patterns are up to date"]);
+    expect(() => withGeneratedPatterns(text.replace(/"pattern": "[^"]*",\s*"\$comment": "Generated by scripts\/schema-patterns.js from parseClockDate/, `"$comment": "Generated by scripts/schema-patterns.js from parseClockDate`))).toThrow("The schema has no pattern at /$defs/realDate/pattern");
+    const twice = text.replace(JSON.stringify(schema.$defs.realDateOrText.pattern), JSON.stringify(current));
+    expect(() => withGeneratedPatterns(twice)).toThrow("The pattern at /$defs/realDate/pattern must appear once in the schema");
   });
 });

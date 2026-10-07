@@ -132,8 +132,9 @@ function resolveRef(schema, ref) {
 }
 
 // Dependency-free validator for the JSON Schema keywords story.schema.json
-// and result.schema.json use. Unknown keywords throw so the schemas cannot
-// quietly outgrow it.
+// and result.schema.json use, and for the boolean schemas true (anything)
+// and false (nothing, so `"calendar": false` under properties means no
+// calendar). Unknown keywords throw so the schemas cannot quietly outgrow it.
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
   "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "exclusiveMinimum", "minLength",
@@ -143,6 +144,9 @@ const SUPPORTED = new Set([
 // Walks the whole schema up front, so an unsupported keyword fails even
 // under a property or definition that no project data reaches.
 export function assertSupportedSchema(schema, root = schema, at = "#") {
+  if (typeof schema === "boolean") {
+    return;
+  }
   for (const keyword of Object.keys(schema)) {
     if (!SUPPORTED.has(keyword)) {
       throw new Error(`Unsupported schema keyword ${keyword} at ${at}`);
@@ -177,6 +181,9 @@ export function assertSupportedSchema(schema, root = schema, at = "#") {
 export function validateAgainstSchema(value, schema, root = schema, at = "$") {
   if (schema === root) {
     assertSupportedSchema(root);
+  }
+  if (typeof schema === "boolean") {
+    return schema ? [] : [`${at}: not allowed`];
   }
   const errors = [];
   if (schema.$ref) {
