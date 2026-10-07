@@ -1,4 +1,6 @@
-// Arabic: no letter case; words are spaced. No word lists yet.
+// Arabic: no letter case; words are spaced. No word lists yet. Codex
+// labels about a character are nouns, since a verb takes the subject's
+// gender, and the codex notes use the passive, not a masculine imperative.
 
 export default {
   code: "ar",
@@ -48,8 +50,8 @@ export default {
     // The codex (`build --format codex`), the story bible site: its page
     // names, entity kinds, headings, table columns, and notes. {flag},
     // {command}, and {field} place code that stays in English.
-    "codex-story-bible": "دليل القصة",
-    "codex-index-title": "{title}: دليل القصة",
+    "codex-story-bible": "مرجع القصة",
+    "codex-index-title": "{title}: مرجع القصة",
     "codex-timeline": "الخط الزمني",
     "codex-threads": "الخيوط والقرائن",
     "codex-progress": "التقدّم",
@@ -70,24 +72,24 @@ export default {
     "codex-questions": "الأسئلة",
     "codex-promises": "الوعود",
     "codex-clues": "القرائن",
-    "codex-note-spoilers": "دليل القصة كاملًا بما يكشف أحداثها: ملاحظات الكيانات، وحالاتها، والوفيات، وما تعرفه الشخصيات، والقرائن، وكيف يُحسم كل خيط.",
-    "codex-note-safe": "دليل القصة من دون كشف أحداثها: من وما في القصة، وأين يظهر. حُذفت الملاحظات والحالات والوفيات وما تعرفه الشخصيات والقرائن والحلول؛ ابنِ الدليل باستخدام {flag} للحصول عليه كاملًا.",
+    "codex-note-spoilers": "مرجع القصة كاملًا بما يكشف أحداثها: ملاحظات الكيانات، وحالاتها، والوفيات، وما تعرفه الشخصيات، والقرائن، وكيف يُحسم كل خيط.",
+    "codex-note-safe": "مرجع القصة من دون كشف أحداثها: من وما في القصة، وأين يظهر. حُذفت الملاحظات والحالات والوفيات وما تعرفه الشخصيات والقرائن والحلول؛ ويُبنى المرجع كاملًا باستخدام {flag}.",
     "codex-no-entities": "لا توجد شخصيات أو أماكن أو كيانات أخرى بعد.",
     "codex-relationships": "العلاقات",
-    "codex-appears-in": "يظهر في",
+    "codex-appears-in": "مواضع الظهور",
     "codex-advanced-in": "يتقدّم في",
-    "codex-linked-from": "مذكور في",
+    "codex-linked-from": "مواضع الذكر",
     "codex-changes": "التغييرات",
     "codex-change": "ابتداءً من {chapter}: تصبح قيمة {field} {value}",
-    "codex-knows": "يعرف",
+    "codex-knows": "ما تعرفه الشخصية",
     "codex-known-from-start": "معروف منذ البداية",
     "codex-learned-in": "عُرف في {chapter}",
     "codex-notes": "ملاحظات",
     "codex-role": "الدور",
     "codex-aliases": "أسماء أخرى",
     "codex-status": "الحالة",
-    "codex-dies-in": "يموت في",
-    "codex-revived-in": "يعود إلى الحياة في",
+    "codex-dies-in": "الوفاة في",
+    "codex-revived-in": "العودة إلى الحياة في",
     "codex-type": "النوع",
     "codex-region": "المنطقة",
     "codex-setting": "البيئة",
@@ -105,7 +107,7 @@ export default {
     "codex-pov": "المنظور",
     "codex-told-late": "مروي خارج الترتيب",
     "codex-flashback": "استرجاع إلى {date}",
-    "codex-no-dates": "لا مشاهد أو فصول مؤرّخة بعد. أضف إلى المشاهد الحقل {field} لتحديد موقعها في زمن القصة.",
+    "codex-no-dates": "لا مشاهد أو فصول مؤرّخة بعد. يُحدَّد موقع المشهد في زمن القصة بإضافة الحقل {field} إليه.",
     "codex-timeline-note": "أحداث القصة مرتّبة بحسب زمن القصة، كما يعرضها {command}.",
     "codex-undated": "غير مؤرّخ",
     "codex-point-of-view": "وجهة النظر",
@@ -117,7 +119,7 @@ export default {
     "codex-last": "الأخير",
     "codex-longest-gap": "أطول غياب",
     "codex-death": "الوفاة",
-    "codex-dies-in-chapter": "يموت في الفصل {n}",
+    "codex-dies-in-chapter": "الوفاة في الفصل {n}",
     "codex-threads-note": "الأسئلة المفتوحة والوعود فقط، من دون أجوبتها أو الوفاء بها. تتطلب القرائن والخيوط المحسومة {flag}.",
     "codex-none": "لا شيء.",
     "codex-question": "السؤال",

@@ -1,7 +1,8 @@
 // Ukrainian: build labels and narration pace. No word lists yet. A chapter
 // heading sets its title after a full stop (Розділ 1. Назва), a byline is
 // the name alone, and credits name the author after a colon, which keeps
-// names out of the genitive.
+// names out of the genitive. The editor's credit names the work
+// (Упорядкування), not the person, so it fits any number of editors.
 
 export default {
   code: "uk",
@@ -32,7 +33,7 @@ export default {
     "anchor-title": "Посилання на {label}",
     by: "",
     byline: "{names}",
-    "edited-by": "Упорядник: {names}",
+    "edited-by": "Упорядкування: {names}",
     "approximate-words": "Близько {words} слів",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",

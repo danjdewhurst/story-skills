@@ -118,7 +118,7 @@ export default {
     "codex-death": "مرگ",
     "codex-dies-in-chapter": "مرگ در فصل {n}",
     "codex-threads-note": "فقط پرسش‌های باز و وعده‌ها، بدون پاسخ یا تحقق آن‌ها. سرنخ‌ها و رشته‌های گره‌گشایی‌شده به {flag} نیاز دارند.",
-    "codex-none": "هیچ.",
+    "codex-none": "موردی نیست.",
     "codex-question": "پرسش",
     "codex-raised-in": "طرح در",
     "codex-resolved-in": "گره‌گشایی در",

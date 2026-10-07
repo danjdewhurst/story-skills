@@ -146,6 +146,19 @@ describe("codex labels", () => {
     expect(index).toContain('<a href="timeline.html">Zeitleiste</a>');
   });
 
+  // #539: an Arabic or Hebrew verb takes its subject's gender, so the labels
+  // on a character page are nouns, which read the same for any character.
+  // The note under an empty Questions, Promises, or Clues list agrees with
+  // all three: feminine in Spanish and Portuguese, a noun of its own where
+  // the lists' genders differ (French and Italian).
+  test("labels about a character take no gender, and the empty-list note fits every list", () => {
+    const labels = (tag, keys) => keys.map((key) => languagePack(tag).labels[key]);
+    const character = ["codex-appears-in", "codex-linked-from", "codex-knows", "codex-dies-in", "codex-revived-in", "codex-dies-in-chapter"];
+    expect(labels("ar", character)).toEqual(["مواضع الظهور", "مواضع الذكر", "ما تعرفه الشخصية", "الوفاة في", "العودة إلى الحياة في", "الوفاة في الفصل {n}"]);
+    expect(labels("he", character)).toEqual(["הופעות", "אזכורים", "ידע", "מוות", "חזרה לחיים", "מוות בפרק {n}"]);
+    expect(["es", "pt", "pt-PT", "fr", "it"].map((tag) => languagePack(tag).labels["codex-none"])).toEqual(["Ninguna.", "Nenhuma.", "Nenhuma.", "Aucun élément.", "Nessun elemento."]);
+  });
+
   test("an untitled chapter takes the book's chapter label", () => {
     const folder = buildBook(project("de"), { format: "codex" }).outFile;
     expect(fs.readFileSync(path.join(folder, "progress.html"), "utf8")).toContain("<tr><td>Kapitel 2</td>");

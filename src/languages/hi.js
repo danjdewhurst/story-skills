@@ -1,5 +1,7 @@
 // Hindi: Devanagari has no letter case; words are spaced. No word lists
-// yet, and no narration pace of its own.
+// yet, and no narration pace of its own. A byline is the name alone, and
+// the editor's credit names the work (संपादन), not the person, so neither
+// takes a gender.
 
 export default {
   code: "hi",
@@ -30,9 +32,9 @@ export default {
     note: "टिप्पणी",
     "note-title": "{label} पर टिप्पणी लिखें",
     "anchor-title": "{label} का लिंक",
-    by: "लेखक",
-    byline: "लेखक: {names}",
-    "edited-by": "संपादक: {names}",
+    by: "",
+    byline: "{names}",
+    "edited-by": "संपादन: {names}",
     "approximate-words": "लगभग {words} शब्द",
     "approximate-characters": "लगभग {characters} वर्ण",
     "narration-opening": "{title}। लेखक: {authors}। वाचक: {narrator}।",
