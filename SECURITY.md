@@ -53,8 +53,10 @@ carry a signed build provenance attestation from releases after 0.21.0.
 Check a download with the [GitHub CLI](https://cli.github.com/):
 
 ```shell
-gh attestation verify story-skills_<version>_<os>_<arch>.tar.gz --repo danjdewhurst/story-skills
+gh attestation verify <archive> --repo danjdewhurst/story-skills
 ```
+
+`<archive>` is the file you downloaded, named `story-skills_<version>_<os>_<arch>.tar.gz`, or `.zip` for Windows.
 
 A passing check means the file was built by this repository's
 `publish.yml` workflow. See
