@@ -1899,8 +1899,10 @@ export function validateProgressLog(project, errors) {
       return;
     }
     const label = `${PROGRESS_FILE} sessions[${index}]`;
-    // A blank date is no date: story progress leaves the session out.
-    const dateError = String(entry.date ?? "").trim() === "" ? "requires a date" : storyDateError(entry.date);
+    // A blank date is no date, and a list is not one, though String would
+    // flatten [2024-01-05] into one: story progress leaves both out.
+    const blank = entry.date === undefined || entry.date === null || (typeof entry.date === "string" && entry.date.trim() === "");
+    const dateError = blank ? "requires a date" : typeof entry.date === "string" ? storyDateError(entry.date) : "date must be a YYYY-MM-DD date";
     if (dateError !== "") {
       errors.push(err("invalid-date", `${label} ${dateError}`, PROGRESS_FILE));
     } else if (seen.has(String(entry.date).trim())) {

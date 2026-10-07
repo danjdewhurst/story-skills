@@ -12125,7 +12125,7 @@ function withSession(sessions, date, counts) {
   return kept.sort((left, right) => sessionDate(left).localeCompare(sessionDate(right), "en"));
 }
 function sessionDate(session) {
-  return String(session?.date ?? "").trim();
+  return typeof session?.date === "string" ? session.date.trim() : "";
 }
 function cleanSessions(value) {
   const sessions = [];
@@ -22063,7 +22063,8 @@ function validateProgressLog(project, errors) {
       return;
     }
     const label = `${PROGRESS_FILE} sessions[${index}]`;
-    const dateError = String(entry.date ?? "").trim() === "" ? "requires a date" : storyDateError(entry.date);
+    const blank = entry.date === undefined || entry.date === null || typeof entry.date === "string" && entry.date.trim() === "";
+    const dateError = blank ? "requires a date" : typeof entry.date === "string" ? storyDateError(entry.date) : "date must be a YYYY-MM-DD date";
     if (dateError !== "") {
       errors.push(err("invalid-date", `${label} ${dateError}`, PROGRESS_FILE));
     } else if (seen.has(String(entry.date).trim())) {
