@@ -31081,7 +31081,7 @@ function storySkillsChapter(text) {
   if (!Object.hasOwn(data, "number")) {
     return null;
   }
-  const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
+  const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).replace(/\s+/g, " ").trim() : "";
   const bodyStart = text.length - parsed.body.length;
   const firstLine = text.slice(0, bodyStart).split(`
 `).length;

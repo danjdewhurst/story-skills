@@ -1233,6 +1233,14 @@ describe("frontmatter without a chapter number (#718)", () => {
   });
 });
 
+describe("chapter title whitespace (#719)", () => {
+  test("a multi-line title in a chapter file stays on one line of the chapter heading", () => {
+    const { result, chapters } = importText("---\ntitle: |\n  The Long\n  Night\nnumber: 1\nstatus: draft\n---\n\n## Chapter Text\n\nProse here.\n", { name: "chapter-01.md" });
+    expect(chapters.map((chapter) => chapter.title)).toEqual(["The Long Night"]);
+    expect(chapterFile(result.root, 1)).toContain("\n# Chapter 1: The Long Night\n\n## Chapter Text\n");
+  });
+});
+
 describe("CR line endings (#201)", () => {
   test("a CR-only source splits into chapters", () => {
     const { result, chapters } = importText("# Chapter 1: A\r\rShe ran.\r\r# Chapter 2: B\r\rHe hid.\r");

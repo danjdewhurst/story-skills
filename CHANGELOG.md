@@ -82,6 +82,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Only a file with a `number` in its frontmatter is read as a Story Skills chapter file.
   - Before, the text above `## Chapter Text` was dropped without a warning, and every later `# Chapter` heading stayed in the prose.
   - Text above the heading that a chapter file does not import is reported as an `unused-chapter-text` warning.
+- `import` keeps a chapter's multi-line `title` on one line of its heading. ([#719](https://github.com/danjdewhurst/story-skills/issues/719))
+  - Before, a `title: |` block split the heading across lines, and the rest of the title sat as a stray line under it.
 
 ## [0.23.0] - 2026-10-07
 

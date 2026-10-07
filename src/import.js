@@ -660,7 +660,7 @@ function storySkillsChapter(text) {
   if (!Object.hasOwn(data, "number")) {
     return null;
   }
-  const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
+  const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).replace(/\s+/g, " ").trim() : "";
   // The body is the end of the text, so it starts where the frontmatter ends.
   const bodyStart = text.length - parsed.body.length;
   const firstLine = text.slice(0, bodyStart).split("\n").length;
