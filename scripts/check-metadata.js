@@ -312,6 +312,49 @@ export function checkMarketplaces({ packageName, packageVersion, claudeMarketpla
   return failures;
 }
 
+// package.json `repository` as the plugin manifests write it: the https URL
+// without npm's git+ prefix or the .git suffix.
+export function repositoryUrl(repository) {
+  const url = typeof repository === "string" ? repository : repository && repository.url;
+  return typeof url === "string" ? url.replace(/^git\+/, "").replace(/\.git$/, "") : undefined;
+}
+
+// The plugin manifests describe the same plugin, so their descriptions must
+// match, or one falls behind when a skill is added. Claude Code shows the
+// Claude marketplace entry's description, homepage, and repository in place of
+// plugin.json's, so a field the entry sets must match too. The Codex
+// `interface` text is written for the Codex UI and is not compared.
+export function checkPluginManifests(failures, { packageJson, claudePlugin, codexPlugin, claudeMarketplace }) {
+  const description = claudePlugin.description;
+  if (typeof description !== "string" || description.trim() === "") {
+    failures.push(".claude-plugin/plugin.json is missing description");
+  }
+  const plugins = claudeMarketplace && Array.isArray(claudeMarketplace.plugins) ? claudeMarketplace.plugins : [];
+  const entry = plugins.find((plugin) => plugin && plugin.name === packageJson.name) || {};
+  for (const [label, manifest, required] of [
+    [".codex-plugin/plugin.json", codexPlugin, true],
+    [".claude-plugin/marketplace.json plugin", entry, false]
+  ]) {
+    if ((required || manifest.description !== undefined) && manifest.description !== description) {
+      failures.push(`${label} description differs from .claude-plugin/plugin.json; give both the same text`);
+    }
+  }
+
+  const expected = { homepage: packageJson.homepage, repository: repositoryUrl(packageJson.repository) };
+  for (const [label, manifest, required] of [
+    [".claude-plugin/plugin.json", claudePlugin, true],
+    [".codex-plugin/plugin.json", codexPlugin, true],
+    [".claude-plugin/marketplace.json plugin", entry, false]
+  ]) {
+    for (const [field, value] of Object.entries(expected)) {
+      if (required || manifest[field] !== undefined) {
+        expectEqual(failures, `${label} ${field}`, value, manifest[field]);
+      }
+    }
+  }
+  return failures;
+}
+
 function readJson(root, relativePath) {
   return JSON.parse(fs.readFileSync(path.join(root, relativePath), "utf8"));
 }
@@ -331,6 +374,9 @@ export function metadataFailures(root = repoRoot) {
   expectEqual(failures, "package/plugin version", packageJson.version, claudePlugin.version);
 
   checkVersionModule(failures, packageJson.version, fs.readFileSync(path.join(root, "src", "version.js"), "utf8"));
+
+  const claudeMarketplace = readJson(root, ".claude-plugin/marketplace.json");
+  checkPluginManifests(failures, { packageJson, claudePlugin, codexPlugin, claudeMarketplace });
 
   if (codexPlugin.skills !== "./skills/") {
     failures.push(".codex-plugin/plugin.json skills must point to ./skills/");
@@ -355,7 +401,7 @@ export function metadataFailures(root = repoRoot) {
   const marketplaceFailures = checkMarketplaces({
     packageName: packageJson.name,
     packageVersion: packageJson.version,
-    claudeMarketplace: readJson(root, ".claude-plugin/marketplace.json"),
+    claudeMarketplace,
     agentsMarketplace: readJson(root, ".agents/plugins/marketplace.json"),
     exists: (relativePath) => fs.existsSync(path.join(root, relativePath))
   });

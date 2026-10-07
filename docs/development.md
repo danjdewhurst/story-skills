@@ -463,6 +463,7 @@ Metadata is aligned for story-skills@0.22.1.
 `scripts/check-metadata.js` fails if any of these drift:
 
 - `name` and `version` in `package.json`, `.codex-plugin/plugin.json`, and `.claude-plugin/plugin.json`.
+- `description` in `.codex-plugin/plugin.json` must equal the one in `.claude-plugin/plugin.json`, and so must the `story-skills` entry's in `.claude-plugin/marketplace.json` when it sets one, since Claude Code shows the entry's text in place of the manifest's. Both plugin manifests must set `homepage` to the `package.json` homepage and `repository` to the `package.json` repository URL (without `git+` and `.git`), as must the marketplace entry for either field it sets. The Codex `interface` descriptions are written for the Codex UI and are not compared.
 - `VERSION` in `src/version.js` against the package version.
 - `.codex-plugin/plugin.json` `skills` must be `./skills/`.
 - Every directory in `skills/` must contain a `SKILL.md` whose frontmatter `name` equals the directory name and whose `description` is non-empty.

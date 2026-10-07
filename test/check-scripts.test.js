@@ -7,7 +7,7 @@ import { checkCoverage, parseLcov, sourceFiles } from "../scripts/check-coverage
 import { collectResult, compareFindings } from "../scripts/check-examples.js";
 import { anchorsFor, checkLinks, extractLinks, headingText, isSkipped, maskCode, slugify } from "../scripts/check-links.js";
 import { docVersionFiles } from "../scripts/doc-versions.js";
-import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual, readWorkflows } from "../scripts/check-metadata.js";
+import { checkDocBunPin, checkDocVersions, checkMarketplaces, checkPluginManifests, checkSkillFrontmatter, checkTemplateStoryVersion, checkVersionModule, checkWorkflowBunPin, expectEqual, readWorkflows, repositoryUrl } from "../scripts/check-metadata.js";
 import { bunPinFailure, localBunVersion, parsePinnedBunVersion, readPinnedBunVersion } from "../scripts/bun-pin.js";
 import { checkFixtureOverlaps, checkFixtureSkill } from "../scripts/check-evals.js";
 import { MISSING_BUN_MESSAGE, missingBunMessage } from "../scripts/bun-missing.js";
@@ -784,6 +784,65 @@ describe("check-metadata marketplaces", () => {
   test("expectEqual reports mismatches", () => {
     expect(expectEqual([], "label", "a", "a")).toEqual([]);
     expect(expectEqual([], "label", "a", "b")).toEqual(["label mismatch: expected a, got b"]);
+  });
+});
+
+describe("check-metadata plugin manifests (#568)", () => {
+  const packageJson = JSON.parse(readRepo("package.json"));
+  const claudePlugin = JSON.parse(readRepo(".claude-plugin/plugin.json"));
+  const codexPlugin = JSON.parse(readRepo(".codex-plugin/plugin.json"));
+  const claudeMarketplace = JSON.parse(readRepo(".claude-plugin/marketplace.json"));
+  const base = { packageJson, claudePlugin, codexPlugin, claudeMarketplace };
+  const withEntry = (fields) => ({ ...claudeMarketplace, plugins: [{ ...claudeMarketplace.plugins[0], ...fields }] });
+
+  test("accepts the committed manifests", () => {
+    expect(checkPluginManifests([], base)).toEqual([]);
+  });
+
+  test("the shared description covers the newer skill areas", () => {
+    for (const area of ["interactive fiction", "series", "submission", "feedback", "theme", "discovery drafting", "any other language"]) {
+      expect(claudePlugin.description).toContain(area);
+    }
+    for (const area of ["interactive fiction", "series", "submissions", "feedback", "theme", "discovery drafting", "any other language"]) {
+      expect(codexPlugin.interface.longDescription).toContain(area);
+    }
+  });
+
+  test("detects a description that drifts between the manifests", () => {
+    const stale = { ...codexPlugin, description: "Older text." };
+    expect(checkPluginManifests([], { ...base, codexPlugin: stale })).toEqual([
+      ".codex-plugin/plugin.json description differs from .claude-plugin/plugin.json; give both the same text"
+    ]);
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: withEntry({ description: "Older text." }) })).toEqual([
+      ".claude-plugin/marketplace.json plugin description differs from .claude-plugin/plugin.json; give both the same text"
+    ]);
+    // The marketplace entry may leave the description to plugin.json.
+    const { description, ...bare } = claudeMarketplace.plugins[0];
+    expect(description).toBe(claudePlugin.description);
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: { ...claudeMarketplace, plugins: [bare] } })).toEqual([]);
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: null })).toEqual([]);
+  });
+
+  test("requires a description, homepage, and repository in each plugin manifest", () => {
+    const { homepage, repository, ...bare } = claudePlugin;
+    const blank = { description: " " };
+    const missing = { ...base, claudePlugin: { ...bare, ...blank }, codexPlugin: { ...codexPlugin, ...blank }, claudeMarketplace: withEntry(blank) };
+    expect(checkPluginManifests([], missing)).toEqual([
+      ".claude-plugin/plugin.json is missing description",
+      `.claude-plugin/plugin.json homepage mismatch: expected ${homepage}, got undefined`,
+      `.claude-plugin/plugin.json repository mismatch: expected ${repository}, got undefined`
+    ]);
+    const moved = withEntry({ repository: "https://example.com/fork" });
+    expect(checkPluginManifests([], { ...base, claudeMarketplace: moved })).toEqual([
+      `.claude-plugin/marketplace.json plugin repository mismatch: expected ${repository}, got https://example.com/fork`
+    ]);
+  });
+
+  test("reads package.json repository as a string or an npm object", () => {
+    expect(repositoryUrl({ type: "git", url: "git+https://github.com/a/b.git" })).toBe("https://github.com/a/b");
+    expect(repositoryUrl("https://github.com/a/b")).toBe("https://github.com/a/b");
+    expect(repositoryUrl(undefined)).toBeUndefined();
+    expect(repositoryUrl({ type: "git" })).toBeUndefined();
   });
 });
 
