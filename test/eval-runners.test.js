@@ -608,6 +608,18 @@ describe("the checker's prose checks", () => {
     expect(pastTense('Petra said, "I take it." She was late.\n')[0]).toBe(true);
   });
 
+  test("the chapter past-tense check fails first-person present-tense wait and pull", () => {
+    const narration = (text) =>
+      checkDraft({ chapter_text: { requires_past_tense: true } }, "", `## Chapter Text\n\n${text}\n`).find(([, desc]) =>
+        desc.startsWith("chapter text: past-tense narration")
+      );
+    expect(narration("I wait by the door and I pull the lever. Petra said it was late.")).toEqual([
+      false,
+      'chapter text: past-tense narration (2 marker(s), need 2; present tense: "I wait")',
+    ]);
+    expect(narration("I waited by the door and I pulled the lever. Petra said it was late.")[0]).toBe(true);
+  });
+
   test("a misspelled top-level field fails the draft instead of being ignored", () => {
     const results = checkDraft({ required: ["Petra"], banned_regx: ["Thursday"] }, "", "Petra came on Thursday.\n");
     expect(results).toContainEqual([false, 'checks.json: unknown key "banned_regx"']);

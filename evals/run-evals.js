@@ -440,7 +440,7 @@ function narration(text) {
 // left out, since past-tense narration uses them too, and so are verbs whose
 // past is the same word (put, set, shut).
 const PRESENT_TENSE_ACTION_RE =
-  /\bI (?:take|turn|kneel|walk|climb|carry|hold|stand|sit|look|reach|open|light|trim|lift|weigh)\b/i;
+  /\bI (?:take|turn|kneel|walk|climb|carry|hold|stand|sit|look|reach|open|light|trim|lift|weigh|wait|pull|push|step|press|grab|drop|touch|unlock|pick|lean)\b/i;
 
 function runPattern(pattern, text, flags = "iu") {
   return new RegExp(pattern, flags).test(text);
