@@ -89,7 +89,7 @@ const ADD_KIND_OPTIONS = {
   faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
   artifact: ["id", "type", "status", "owner", "location"],
   arc: ["id", "type", "status", "character", "characters", "theme", "themes", "acts", "act"],
-  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook"],
+  chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook", "beat"],
   scene: [
     "chapter", "scene", "pov", "location", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "date", "time",
     "travel-hours", "sequel", "outcome", "dilemma"
@@ -605,8 +605,9 @@ export const COMMANDS = [
     usage: "grid [path]",
     summary: [
       "Print the plot grid: arcs by chapter from",
-      "arcs-advanced, with each chapter's hook and scene",
-      "outcomes, as a markdown table or --format csv"
+      "arcs-advanced, with each chapter's beat (or its",
+      "hook and scene outcomes), as a markdown table or",
+      "--format csv"
     ],
     project: "positional",
     options: ["format", "from", "to", "json"],

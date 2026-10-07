@@ -372,12 +372,28 @@ describe("cli", () => {
     expect(help).not.toContain("--characters");
   });
 
+  test("add chapter --beat writes the beat on one line, and a blank one sets none (#531)", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["init", "Beats"]).code).toBe(0);
+    const root = path.join(cwd, "beats");
+    const frontmatter = (number) => parseFrontmatter(fs.readFileSync(path.join(root, "chapters", `chapter-0${number}.md`), "utf8")).data;
+    expect(invoke(root, ["add", "chapter", "Storm", "--beat", "  Inciting\n  Incident ", "--hook", "revelation"]).code).toBe(0);
+    expect(frontmatter(1)).toMatchObject({ hook: "revelation", beat: "Inciting Incident" });
+    // A beat that looks like a number is written as text.
+    expect(invoke(root, ["add", "chapter", "Year", "--beat", "1984"]).code).toBe(0);
+    expect(frontmatter(2).beat).toBe("1984");
+    expect(invoke(root, ["add", "chapter", "Lull", "--beat", " "]).code).toBe(0);
+    expect(Object.hasOwn(frontmatter(3), "beat")).toBe(false);
+    expect(invoke(root, ["check"]).code).toBe(0);
+    expect(invoke(root, ["add", "scene", "Wreck", "--chapter", "chapter-01", "--beat", "Midpoint"]).err).toContain("--beat does not apply to story add scene:");
+  });
+
   test("each add kind lists exactly the options its builder reads", () => {
     // A value for every add option that differs from the builder's default.
     const values = {
       id: "custom-id", number: "7", chapter: "chapter-01", scene: "9", type: "zz-type", role: "zz-role", status: "zz-status",
       mode: "discovered", date: "2026-01-02", time: "dawn", "travel-hours": "3", dilemma: "Stay or go", sequel: true,
-      outcome: "yes-but", hook: "cliffhanger", location: "port", locations: "port", character: "mara", characters: "mara",
+      outcome: "yes-but", hook: "cliffhanger", beat: "Midpoint", location: "port", locations: "port", character: "mara", characters: "mara",
       mention: "ivo", mentions: "ivo", member: "mara", members: "mara", owner: "mara", arc: "long-road", arcs: "long-road",
       introduced: "chapter-01", resolved: "chapter-01", planted: "chapter-01", payoff: "chapter-02", "significance-delayed": true,
       "red-herring": true, category: "zz-category", alias: "Rite", aliases: "Rite", region: "North", population: "Few",

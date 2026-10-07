@@ -145,6 +145,7 @@ export default {
     "codex-plot-grid": "Olay örgüsü tablosu",
     "codex-grid-note": "{command} çıktısındaki gibi bölümlere göre arklar: x, bir bölümün ya da sahnelerinden birinin arkı ilerlettiği yeri gösterir.",
     "codex-unknown": "bilinmiyor",
+    "codex-beat": "Olay örgüsü noktası",
     "codex-hook": "Kanca",
     "codex-outcomes": "Sonuçlar",
     "codex-session-log": "Çalışma günlüğü"

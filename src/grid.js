@@ -1,7 +1,8 @@
 // Plot grid: arcs as rows and chapters as columns, as Plottr and Scrivener's
 // outliner lay a book out, built from each chapter's (and its scenes')
-// arcs-advanced, plus a row for each chapter's hook and one for its scene
-// outcomes. A view only: unknown arc ids are validate errors, so the grid
+// arcs-advanced, plus a row for each chapter's beat. A book that records no
+// beats gets a row for each chapter's hook and one for its scene outcomes in
+// its place. A view only: unknown arc ids are validate errors, so the grid
 // shows them as rows but raises no finding of its own.
 
 import { usageError } from "./exit-codes.js";
@@ -11,6 +12,7 @@ export const GRID_FORMATS = ["markdown", "csv"];
 
 // The labels of the rows below the arcs. Parentheses cannot appear in an arc
 // id, so they never clash with one.
+const BEAT_ROW = "(beat)";
 const HOOK_ROW = "(hook)";
 const OUTCOME_ROW = "(outcomes)";
 
@@ -55,10 +57,14 @@ export function buildGrid(project, options = {}) {
   const chapters = all.slice(start, end + 1);
   return {
     range: { from: chapters[0]?.id ?? null, to: chapters.at(-1)?.id ?? null, total: all.length },
+    // Whether any chapter in the whole book records a beat, so a range of
+    // chapters with none still shows the same rows as the rest of the book.
+    beats: all.some((chapter) => chapter.beat !== ""),
     chapters: chapters.map((chapter) => ({
       id: chapter.id,
       number: chapter.number,
       title: String(chapter.title),
+      beat: chapter.beat,
       hook: chapter.hook,
       // Scene outcomes in scene order; sequels have none.
       outcomes: scenes.get(chapter.id)
@@ -92,17 +98,18 @@ export function gridFormat(value) {
 }
 
 // The grid as a table of strings: a header row of chapter numbers, a row
-// per arc with x where the chapter advances it, then the hook and outcome
-// rows.
+// per arc with x where the chapter advances it, then the beat row, or the
+// hook and outcome rows in a book with no beats.
 function gridTable(grid) {
   const header = ["Arc", ...grid.chapters.map((chapter) => String(chapter.number))];
   const arcRows = grid.rows.map((row) => [row.known ? row.id : `${row.id} (unknown)`, ...row.cells.map((cell) => (cell ? "x" : ""))]);
-  return [
-    header,
-    ...arcRows,
-    [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
-    [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
-  ];
+  const labelRows = grid.beats
+    ? [[BEAT_ROW, ...grid.chapters.map((chapter) => chapter.beat)]]
+    : [
+      [HOOK_ROW, ...grid.chapters.map((chapter) => chapter.hook)],
+      [OUTCOME_ROW, ...grid.chapters.map((chapter) => chapter.outcomes.join(", "))]
+    ];
+  return [header, ...arcRows, ...labelRows];
 }
 
 export function formatGrid(grid, format = "markdown") {

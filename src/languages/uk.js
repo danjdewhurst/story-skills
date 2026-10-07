@@ -147,6 +147,7 @@ export default {
     "codex-plot-grid": "Сюжетна сітка",
     "codex-grid-note": "Арки за розділами, як їх виводить {command}: x там, де розділ або одна з його сцен розвиває арку.",
     "codex-unknown": "невідомо",
+    "codex-beat": "Сюжетний момент",
     "codex-hook": "Гачок",
     "codex-outcomes": "Підсумки",
     "codex-session-log": "Журнал сесій"

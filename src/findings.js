@@ -41,6 +41,7 @@ export const FINDING_CODES = {
   "ambiguous-scene-break": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
+  "beat-too-long": "warning",
   "missing-field": "error",
   "field-not-scalar": "error",
   "field-not-list": "error",

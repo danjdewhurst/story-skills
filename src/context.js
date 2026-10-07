@@ -312,6 +312,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
     field("Arcs advanced", unit.arcsAdvanced),
     field("Date", [unit.date, unit.time].filter(Boolean).join(" ")),
     field("Outcome", target.scene ? target.scene.outcome : ""),
+    field("Beat", target.chapter.beat),
     field("Hook", target.chapter.hook),
     project.unit?.name === "characters"
       ? field("Target characters", target.chapter.targetCount || "")

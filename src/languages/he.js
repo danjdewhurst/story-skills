@@ -145,6 +145,7 @@ export default {
     "codex-plot-grid": "טבלת עלילה",
     "codex-grid-note": "קשתות לפי פרק, כפי ש־{command} מדפיס אותן: x מסמן פרק שהוא או אחת הסצנות שלו מקדמים את הקשת.",
     "codex-unknown": "לא ידוע",
+    "codex-beat": "נקודת עלילה",
     "codex-hook": "קרס",
     "codex-outcomes": "תוצאות",
     "codex-session-log": "יומן כתיבה"

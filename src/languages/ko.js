@@ -146,6 +146,7 @@ export default {
     "codex-plot-grid": "플롯 표",
     "codex-grid-note": "장별 아크로, {command} 명령의 출력과 같습니다. x는 해당 장이나 그 장의 장면 중 하나가 아크를 진전시킨 곳입니다.",
     "codex-unknown": "알 수 없음",
+    "codex-beat": "비트",
     "codex-hook": "훅",
     "codex-outcomes": "결과",
     "codex-session-log": "작업 기록"

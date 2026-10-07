@@ -349,6 +349,15 @@ state-changes:
     expect(text).toContain("- chapter-01 scene 1: physical cut hand");
   });
 
+  test("the target shows its chapter's beat above the hook, for the chapter and its scenes", () => {
+    const { root } = contextProject();
+    const file = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("hook: question\n", "hook: question\nbeat: Midpoint\n"), "utf8");
+    expect(textOf(contextOf(root, "chapter-02"))).toContain("- Beat: Midpoint\n- Hook: question\n");
+    expect(textOf(contextOf(root, "chapter-02-scene-01"))).toContain("- Beat: Midpoint\n");
+    expect(textOf(contextOf(root, "chapter-01"))).not.toContain("- Beat:");
+  });
+
   test("omitted items name every file they draw on", () => {
     const { root } = contextProject();
     const context = contextOf(root, "chapter-02-scene-02", { budget: "1" });

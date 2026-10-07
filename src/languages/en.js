@@ -354,6 +354,7 @@ export default {
     "codex-plot-grid": "Plot grid",
     "codex-grid-note": "Arcs by chapter, as {command} prints them: x where a chapter or one of its scenes advances the arc.",
     "codex-unknown": "unknown",
+    "codex-beat": "Beat",
     "codex-hook": "Hook",
     "codex-outcomes": "Outcomes",
     "codex-session-log": "Session log"

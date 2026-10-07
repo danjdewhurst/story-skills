@@ -144,6 +144,7 @@ export default {
     "codex-plot-grid": "कथानक तालिका",
     "codex-grid-note": "अध्याय के अनुसार चाप, जैसे {command} उन्हें छापता है: x वहाँ है जहाँ कोई अध्याय या उसका कोई दृश्य चाप को आगे बढ़ाता है।",
     "codex-unknown": "अज्ञात",
+    "codex-beat": "कथानक बिंदु",
     "codex-hook": "हुक",
     "codex-outcomes": "परिणाम",
     "codex-session-log": "लेखन सत्रों का ब्योरा"

@@ -61,6 +61,8 @@ import {
   RESEARCH_METHODS,
   RESEARCH_RISKS,
   RESEARCH_DIR,
+  BEAT_MAX_LENGTH,
+  beatText,
   SETTLED_CHAPTER_STATUSES,
   WRITTEN_CHAPTER_STATUSES,
   scanProject,
@@ -998,7 +1000,7 @@ const TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -1480,6 +1482,15 @@ function validateChapters(project, errors, warnings) {
     }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
+    // Free text: beat sheets name their beats differently, and writers adapt
+    // them, so any label is accepted. Only its type and length are checked.
+    if (data.beat !== undefined) {
+      requireScalar(data, "beat", label, errors);
+      const length = typeof data.beat === "string" ? [...beatText(data.beat)].length : 0;
+      if (length > BEAT_MAX_LENGTH) {
+        warnings.push(warn("beat-too-long", `${label} beat is ${length} characters long: keep it to a short label of at most ${BEAT_MAX_LENGTH} characters, such as Midpoint, and put the detail in the chapter outline`, label));
+      }
+    }
     validateNames(data, "author", label, errors);
     if ((Array.isArray(data.author) ? data.author : [data.author]).some(isPlaceholder)) {
       warnings.push(warn("todo-placeholder", `${label} author is still a [TODO] placeholder; builds leave it out`, label));

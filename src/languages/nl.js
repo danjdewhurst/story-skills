@@ -144,6 +144,7 @@ export default {
     "codex-plot-grid": "Plotraster",
     "codex-grid-note": "Verhaalbogen per hoofdstuk, zoals {command} ze weergeeft: x waar een hoofdstuk of een van zijn scènes de boog verder brengt.",
     "codex-unknown": "onbekend",
+    "codex-beat": "Verhaalmoment",
     "codex-hook": "Hook",
     "codex-outcomes": "Uitkomsten",
     "codex-session-log": "Sessielogboek"

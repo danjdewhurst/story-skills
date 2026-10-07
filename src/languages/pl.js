@@ -146,6 +146,7 @@ export default {
     "codex-plot-grid": "Siatka fabuły",
     "codex-grid-note": "Łuki fabularne według rozdziałów, tak jak wypisuje je {command}: x tam, gdzie rozdział lub jedna z jego scen rozwija łuk.",
     "codex-unknown": "nieznane",
+    "codex-beat": "Punkt fabuły",
     "codex-hook": "Haczyk",
     "codex-outcomes": "Rezultaty",
     "codex-session-log": "Dziennik sesji"

@@ -144,6 +144,7 @@ export default {
     "codex-plot-grid": "شبكة الحبكة",
     "codex-grid-note": "الأقواس السردية بحسب الفصل، كما يطبعها {command}: يشير x إلى أن الفصل أو أحد مشاهده يدفع القوس إلى الأمام.",
     "codex-unknown": "غير معروف",
+    "codex-beat": "المحطة السردية",
     "codex-hook": "الخطّاف",
     "codex-outcomes": "النتائج",
     "codex-session-log": "سجل جلسات الكتابة"
