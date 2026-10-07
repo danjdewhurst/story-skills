@@ -437,7 +437,15 @@ salt-and-lantern/
    story import stories/ --title "Salt and Lantern" --dir collection
    ```
 
-   A chapter file in Story Skills' own layout imports as one chapter, titled by its `title` frontmatter (see [Importing a folder of chapter files](manuscripts.md#importing-a-folder-of-chapter-files)). This works best when each story is a single chapter, with section breaks as scene breaks (`* * *`). A story split into several chapters imports as several chapters, so join its prose into one file first. You can also create the chapters with `story add chapter "Low Tide"` and paste each story's prose under `## Chapter Text`.
+   A chapter file in Story Skills' own layout imports as one chapter, titled by its `title` frontmatter and keeping its `author` (see [Importing a folder of chapter files](manuscripts.md#importing-a-folder-of-chapter-files)). This works best when each story is a single chapter, with section breaks as scene breaks (`* * *`). A story split into several chapters imports as several chapters, so join its prose into one file first. You can also create the chapters with `story add chapter "Low Tide"` and paste each story's prose under `## Chapter Text`.
+
+   For an anthology whose stories arrive as plain markdown or text files, add `--bylines` to credit each story's writer in its chapter's `author` (see **Anthologies** below):
+
+   ```shell
+   story import stories/ --title "Salt and Lantern" --dir collection --bylines
+   ```
+
+   A story's by-line, a line such as `By Ben Other` alone in its paragraph at the top of the story, becomes its `author` and is taken out of the prose. A story without one takes its file's frontmatter `author`. Without `--bylines`, the by-line stays in the prose, so a story that opens with "By the time..." is never mistaken for one. See [`import`](cli-reference.md#import) for the full rules.
 
 2. Leave `form` out of the collection's `story.md`. `story import`, and `story init` without `--form`, leave it unset. Every form describes a single work: `short-story` or `flash` would run the whole book together in the Shunn builds, and `novel` would apply a novel's word-count range.
 
