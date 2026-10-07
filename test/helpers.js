@@ -15,31 +15,60 @@ const tempDirs = [];
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
 
+// The script of the sleeper otherLivePid starts. Each second it checks that
+// the process whose pid is its first argument, the one that started it, is
+// still there, and exits once it is gone: bun test runs no exit handlers,
+// so nothing else ends it when the run ends. EPERM means a process has the
+// pid but this user may not signal it, as in src/lock.js. It exits after 30
+// minutes whatever happens, in case another process takes the pid.
+export const SLEEPER_SCRIPT = `const parent = Number(process.argv[1]);
+setTimeout(() => process.exit(), 30 * 60 * 1000);
+setInterval(() => {
+  try {
+    process.kill(parent, 0);
+  } catch (error) {
+    if (error.code !== "EPERM") {
+      process.exit();
+    }
+  }
+}, 1000);`;
+
 // The pid of a live process other than this one, standing in for another
 // story command that holds a project lock. It is a child that sleeps until
 // the test run ends (the runner's parent is no use: in a container where
-// bun is pid 1 it has pid 0), started on first use. bun test runs no exit
-// handlers, so the child checks each second that this process is still
-// there and exits once it is gone, rather than outliving the run. EPERM
-// means a process has the pid but this user may not signal it, as in
-// src/lock.js.
+// bun is pid 1 it has pid 0), started on first use.
 let sleeper = null;
 export function otherLivePid() {
   if (sleeper === null) {
-    const script = `setInterval(() => {
-      try {
-        process.kill(${process.pid}, 0);
-      } catch (error) {
-        if (error.code !== "EPERM") {
-          process.exit();
-        }
-      }
-    }, 1000);`;
-    sleeper = spawn(process.execPath, ["-e", script], { stdio: "ignore" });
+    sleeper = spawn(process.execPath, ["-e", SLEEPER_SCRIPT, String(process.pid)], { stdio: "ignore" });
     sleeper.unref();
     process.on("exit", () => sleeper.kill());
   }
   return sleeper.pid;
+}
+
+// Whether `pid` is a running process. Where /proc lists processes (Linux),
+// a zombie, a process that has exited but that its parent has not reaped,
+// does not count, though process.kill(pid, 0) still finds it.
+const PROC = fs.existsSync("/proc/self/stat");
+export function processRunning(pid) {
+  if (PROC) {
+    let stat;
+    try {
+      stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    } catch {
+      return false;
+    }
+    // The state follows the command name, which is in parentheses.
+    const state = stat.slice(stat.lastIndexOf(")") + 2)[0];
+    return state !== "Z" && state !== "X";
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
 }
 
 // Runs `save` once, when a story command opens the temporary file it
