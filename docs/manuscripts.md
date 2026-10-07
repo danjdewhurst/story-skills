@@ -657,6 +657,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 
 The story id is the kebab-case title from `story.md` (see [Identifiers and filenames](project-format.md#identifiers-and-filenames) for titles without ASCII letters or digits). Build every format of the example *The Last Ember* like this:
 
+<!-- replay: the-last-ember -->
 ```shell
 story build .
 story build . --format epub
@@ -912,6 +913,7 @@ The [`submission`](../skills/submission/SKILL.md) skill runs these builds as par
 
 Every paragraph carries a small label that is also its link target: `ch03-p12` is chapter 3, paragraph 12. Readers quote the label in an email, a comment, or a GitHub issue, so each note points at an exact paragraph. On *Harbor of Second Light*, unchanged:
 
+<!-- replay: harbor-of-second-light -->
 ```shell
 story build . --format html
 ```
@@ -969,6 +971,7 @@ For a project in a GitHub repository, the `review-copy.yml` workflow template re
 
 `--format print` writes the interior of a paperback as one HTML file styled with CSS paged media. It is not a PDF. Add `--pdf` to have the CLI render it with a paged-media engine you have installed, such as [Paged.js](https://pagedjs.org/) (`pagedjs-cli`), [WeasyPrint](https://weasyprint.org/), or [Prince](https://www.princexml.com/) (see [PDF output](#pdf-output)), or render the HTML with one yourself, then send the PDF to your printer. Pick a trim size with `--trim`:
 
+<!-- replay: harbor-of-second-light -->
 ```shell
 story build . --format print --trim 6x9
 ```
@@ -1197,6 +1200,7 @@ The limits are common defaults, not any one retailer's rules. The [`publishing`]
 
 `--format twee` writes the book as [Twee 3](https://github.com/iftechfoundation/twine-specs/blob/master/twee-3-specification.md), the text format of the [Twine](https://twinery.org) interactive fiction editor. Each chapter becomes a passage named by its chapter id, and the [`choices`](project-format.md#branching-chapters) in its frontmatter become links. [`examples/the-gull-rock-light`](../examples/the-gull-rock-light/) is a branching story built this way:
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story build . --format twee
 ```
@@ -1452,6 +1456,7 @@ When the scaffold runs over budget, it is cut back in steps until it fits:
 
 A 3-page synopsis therefore takes more from each arc and keeps detail that a 1-page synopsis drops.
 
+<!-- replay: the-last-ember -->
 ```shell
 story synopsis . --pages 3 --out submission/synopsis-3-page.md
 ```

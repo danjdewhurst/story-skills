@@ -98,6 +98,7 @@ story continuity .
 
 `story continuity` runs every check below and prints the findings. [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/) is broken on purpose: every file is well-formed, so `story validate` and `story links` pass, but the story does not hold together.
 
+<!-- replay -->
 ```text
 $ story continuity examples/the-unraveled-thread
 Continuity check failed: 4 errors, 3 warnings, 0 dismissed
@@ -616,6 +617,7 @@ A fact the reader has already been shown (its `learned-in` chapter number is at 
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), where Kael's knowledge carries over from the previous book:
 
+<!-- replay -->
 ```text
 $ story knowledge kael-voss --at chapter-01 --path examples/the-last-ember
 - The tunnels from the Vale side reach the Whisper Gate into the High Keep (reader-knowledge, pre-existing)
@@ -719,6 +721,7 @@ Set them with `story add scene --outcome yes-but`, `story add scene --sequel --d
 
 From [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
+<!-- replay -->
 ```text
 $ story pacing examples/the-unraveled-thread
 Pacing: 4 scenes, 0 sequels, 4 of 4 chapters with hooks
@@ -786,6 +789,7 @@ It reads these clue fields:
 
 From [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which carries three clues, two of them flawed on purpose:
 
+<!-- replay -->
 ```text
 $ story clues examples/the-unraveled-thread
 Clues: 3 live (1 red herring), 3 planted, 2 revealed
@@ -888,6 +892,7 @@ story prose .
 
 From [`examples/the-last-ember`](../examples/the-last-ember/), which has a style sheet:
 
+<!-- replay -->
 ```text
 $ story prose examples/the-last-ember
 Prose report: 1 chapter, 993 words
@@ -1015,6 +1020,7 @@ Anything else is counted as unattributed. A character is matched by their full `
 
 From [`examples/the-last-ember`](../examples/the-last-ember/):
 
+<!-- replay -->
 ```text
 $ story voices examples/the-last-ember
 Voices: 1 speaking character, 35 unattributed lines
@@ -1084,6 +1090,7 @@ story names "Ilse Varn" "Teodor" --path .
 
 From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose cast is Mara Quill (protagonist), Theo Quill, and Councillor Ilya Venn (antagonist):
 
+<!-- replay: harbor-of-second-light -->
 ```text
 $ story names "Mara" "Marra Quinn" "Ilse Varn" "Teodor" "Ivo" "Wren Calder" --path .
 Mara: taken
@@ -1129,6 +1136,7 @@ It looks for the entity's `name`, its `aliases`, a character's given name, and e
 
 With no kind and id, `story mentions` runs the same check and adds `mention-not-named`: a character or artifact in a chapter's `mentions` that its prose never names. This one is not part of `continuity`, because a chapter often refers to someone only by relationship ("her father", "Grandmother"). When the warning is right, the mention is stale; when the chapter uses a name the bible lacks, add it to the entity's `aliases`. From [`examples/the-left-luggage-office`](../examples/the-left-luggage-office/):
 
+<!-- replay: the-left-luggage-office -->
 ```text
 $ story mentions --path .
 Mentions checked: 0 errors, 3 warnings, 0 dismissed
@@ -1177,6 +1185,7 @@ flowchart LR
 
 And the clue flow of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), matching the [`story clues`](#story-clues) grid:
 
+<!-- replay -->
 ```text
 $ story diagram clues --path examples/the-unraveled-thread
 flowchart LR
@@ -1263,6 +1272,7 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 
 Without `target-words`, the first line reads `Progress: <n> words (no target-words in story.md)`. Without sessions, the sessions line reads `Sessions: none logged (run story progress --log after a writing session)`. The unmodified example shows both:
 
+<!-- replay -->
 ```text
 $ story progress examples/the-last-ember
 Progress: 993 words (no target-words in story.md)
@@ -1394,6 +1404,7 @@ A full revision works best as a ladder of separate passes, each looking for one 
 
 Without any passes recorded, it prints the default ladder and the checks each pass runs:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story passes .
 Revision passes: none recorded. Run story passes --init to add the default ladder:
@@ -1459,6 +1470,7 @@ These three commands run `validate`, `links`, and `continuity` together and summ
 
 `story report` prints the project's metadata, an inventory of every entity kind, each chapter with status, word count, and POV, each arc, and one line per check. `--actionable` adds the next actions.
 
+<!-- replay -->
 ```text
 $ story report examples/the-unraveled-thread --actionable
 # The Unraveled Thread
@@ -1513,6 +1525,7 @@ The report also shows `Series` when `story.md` sets one, `Form` when it sets a `
 
 `story next` prints the check summary and the action list, and nothing else. It is the quickest way to start a writing session:
 
+<!-- replay -->
 ```text
 $ story next examples/the-last-ember
 # Next Writing Actions: The Last Ember

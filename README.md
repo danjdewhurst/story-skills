@@ -77,6 +77,7 @@ Long-range consistency is what language models are worst at, and prompting can't
 
 [`examples/the-unraveled-thread/`](examples/the-unraveled-thread/) is a deliberately broken mystery. Every file is well-formed, so it passes `story validate` and `story links` cleanly, but the story itself doesn't hold together:
 
+<!-- replay -->
 ```text
 $ story continuity examples/the-unraveled-thread
 Continuity check failed: 4 errors, 3 warnings, 0 dismissed

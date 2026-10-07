@@ -184,6 +184,7 @@ story series [path]
 
 Running it on The Last Ember:
 
+<!-- replay -->
 ```shell
 story series examples/the-last-ember
 ```

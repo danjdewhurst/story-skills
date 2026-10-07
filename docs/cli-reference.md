@@ -109,6 +109,7 @@ Options:
 
 `story --version` (or `-v`) prints the version and exits 0. It wins over every other command and option on the line, including `--help`, but not over a malformed command line: `story validate --bogus -v` still fails with `Unknown option --bogus`, and `story export --out -v` with `Missing value for --out`.
 
+<!-- replay -->
 ```shell
 story --version
 ```
@@ -119,6 +120,7 @@ story --version
 
 An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 2:
 
+<!-- replay -->
 ```text
 $ story valdate
 Unknown command: valdate; did you mean validate?
@@ -147,6 +149,7 @@ story validate --path ~/stories/the-last-ember
 
 If you give both a positional path and `--path`, they must resolve to the same directory:
 
+<!-- replay -->
 ```shell
 story validate the-last-ember --path the-salt-road
 ```
@@ -161,6 +164,7 @@ An empty path is a usage error rather than the current directory, so a script th
 
 `init` and `import` refuse `--path` so it cannot be mistaken for the target directory:
 
+<!-- replay -->
 ```shell
 story init "Tide Book" --path x
 ```
@@ -356,6 +360,7 @@ story build --format epub --json | jq -r '.writes[]'
 
 `add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, `snapshot`, `passes` (with `--init`, `--start`, or `--done`), `progress --log`, `diagram --out`, `synopsis --out`, `export`, `build`, `init`, and `import` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
+<!-- replay: the-unraveled-thread -->
 ```text
 $ story rename character edran-vale "Edran Vane" --dry-run
 update  chapters/chapter-01.md
@@ -390,6 +395,7 @@ With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `wri
 
 Commands that write files keep them inside the project root. A relative `--out` path resolves against the **project root**, not the current directory, and must stay inside it:
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story export --out ../outside.md
 ```
@@ -502,6 +508,7 @@ A `.gitignore` in an enclosing repository is not checked, so a book inside a lar
 
 It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`, also with an extension such as `con.txt`), a folder name ending in a dot or space, and a folder name containing `< > : " | ? *`, because the project could not be checked out there:
 
+<!-- replay -->
 ```shell
 story init con
 ```
@@ -558,6 +565,7 @@ target-words: 30000
 
 An unknown form stops before anything is written:
 
+<!-- replay -->
 ```text
 $ story init "Bad Form" --form epic
 Unsupported form "epic": expected one of flash, short-story, novelette, novella, novel, serial, picture-book, chapter-book
@@ -745,6 +753,7 @@ story reindex
 Updated 1 registries
 ```
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story reindex
 ```
@@ -831,6 +840,7 @@ error: characters/old-bram.md references missing location dock-nine
 error: characters/old-bram.md location gull-harbour is missing notable-character backlink
 ```
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story links
 ```
@@ -857,6 +867,7 @@ Each finding is reported once. A file that fails to parse, which every check rep
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), whose only findings come from `continuity`:
 
+<!-- replay -->
 ```shell
 story check examples/the-unraveled-thread
 ```
@@ -909,6 +920,7 @@ Repeat `--where` for more filters: a file must match every one. A key must be on
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story list scenes --where pov=jonas-reed --where characters=edran-vale
 ```
@@ -947,6 +959,7 @@ Runs the deterministic continuity engine over frontmatter: characters appearing 
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story continuity
 ```
@@ -998,6 +1011,7 @@ Lists the `knowledge-state` entries in `continuity/state.md` that a character kn
 
 In [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/):
 
+<!-- replay: harbor-of-second-light -->
 ```shell
 story knowledge mara-quill --at chapter-01
 ```
@@ -1008,6 +1022,7 @@ story knowledge mara-quill --at chapter-01
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
 
+<!-- replay: the-last-ember -->
 ```shell
 story knowledge kael-voss --at chapter-01
 ```
@@ -1029,6 +1044,7 @@ With `--json`, `data` holds `character`, `at`, and `entries` (each `knows`, `lea
 
 With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
+<!-- replay: the-last-ember -->
 ```text
 $ story knowledge kael-voss
 Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]
@@ -1073,6 +1089,7 @@ The budget is an estimate, not a tokenizer count. Chinese, Japanese, Thai, Lao, 
 
 In [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), with a small budget:
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story context chapter-02 --budget 200
 ```
@@ -1368,6 +1385,7 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 
 Without a target:
 
+<!-- replay: the-last-ember -->
 ```shell
 story progress
 ```
@@ -1489,6 +1507,7 @@ Passage:
 Prose check complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
+<!-- replay: the-last-ember -->
 ```shell
 story prose
 ```
@@ -1522,6 +1541,7 @@ Follows the `follows` and `precedes` links in `story.md` to every connected book
 
 Using copies of [`examples/the-last-ember`](../examples/the-last-ember/) and [`examples/the-fall-of-the-citadel`](../examples/the-fall-of-the-citadel/), which are linked:
 
+<!-- replay: the-last-ember -->
 ```shell
 story series
 ```
@@ -1544,6 +1564,7 @@ Series is consistent: 0 errors, 0 warnings, 0 dismissed
 
 On a standalone book it reports a one-book series and exits 0:
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story series
 ```
@@ -1574,6 +1595,7 @@ Prints a project summary: metadata (with a `Form:` line when `story.md` sets `fo
 |---|---|
 | `--actionable` | Append the prioritised actions that `next` would print |
 
+<!-- replay: the-last-ember -->
 ```shell
 story report --actionable
 ```
@@ -1642,6 +1664,7 @@ Suggested commands use the project path as you typed it, or `.` when you gave no
 
 Always exits 0 on a readable project.
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story next
 ```
@@ -1687,6 +1710,7 @@ Use it when:
 
 To start a writing session, `next` gives the same actions with less around them. In scripts and CI, use [`check`](#check) or the single checks, which exit 1 on errors.
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story doctor
 ```
@@ -1831,6 +1855,7 @@ Sequels are left out of the outcome counts. `pacing` exits 1 only when a file fa
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story pacing
 ```
@@ -1869,6 +1894,7 @@ Ordering errors, such as a reveal before its plant, belong to `story continuity`
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story clues
 ```
@@ -1911,6 +1937,7 @@ Arcs are listed in the order the book first advances them, then the arcs in `plo
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story grid
 ```
@@ -2009,6 +2036,7 @@ warning: "Ilsa" looks like character ilse-varrow (Ilse Varrow) [name-look-alike]
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
 
+<!-- replay: the-last-ember -->
 ```shell
 story names "Sera" "Kaelan" "Marek" "Tamsin"
 ```
@@ -2097,6 +2125,7 @@ Each kind is drawn from a small model of nodes and edges, and `--json` returns i
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story diagram maps
 Unknown diagram kind: maps. Supported kinds: relationships, locations, timeline, clues, arcs
@@ -2104,6 +2133,7 @@ Unknown diagram kind: maps. Supported kinds: relationships, locations, timeline,
 
 In [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/):
 
+<!-- replay: harbor-of-second-light -->
 ```shell
 story diagram relationships
 ```
@@ -2120,6 +2150,7 @@ flowchart LR
   class theo_quill deceased
 ```
 
+<!-- replay: harbor-of-second-light -->
 ```shell
 story diagram locations --out dist/map.mmd
 ```
@@ -2220,6 +2251,7 @@ revision-passes:
 
 A name that is not kebab-case is refused:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story passes --start Bad_Name
 Revision pass names must be kebab-case, got Bad_Name
@@ -2251,6 +2283,7 @@ Every scan skips dot-folders, so `validate`, `links`, `continuity`, `check`, `re
 
 Every chapter must parse, as for `compare`, so the word count and a later comparison see the whole book. A name already taken is refused with exit 4 (a refused write); `--dry-run` refuses it too. A snapshot that fails part way, such as on a markdown file that is not UTF-8, is removed, so no half-written snapshot is left, and so is a `.snapshots/` folder it made. Each copy keeps the permissions of the file it copies, plus read and write for you, so a file only you can read stays that way in the snapshot. `cli-defaults` in `story.md` cannot set `force`, `list`, `id`, or `restore`, which belong to one run. The snapshot is written under the project [lock](#where-commands-write), through the same guarded writes as every other command, so `.snapshots/` cannot be a symlink out of the project: a `.snapshots` that is a symlink or a file is refused with exit 3 before anything is written, as `--list` and `--restore` refuse it.
 
+<!-- replay: the-unraveled-thread -->
 ```shell
 story snapshot "Draft 1"
 ```
@@ -2354,6 +2387,7 @@ story add <kind> <name> [options] [--dry-run] [--json] [--path <project>]
 
 Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Each kind accepts only its own options (see the table below) plus `--dry-run`, `--json`, and `--path`, and `story help add` lists them. Every kind but `chapter` and `scene` also takes `--id`. An option that only another kind reads is an error, as is one no kind reads:
 
+<!-- replay -->
 ```text
 $ story add scene "Night Watch" --chapter chapter-01 --number 5
 --number does not apply to story add scene: story help add lists the options each kind reads
@@ -2364,6 +2398,7 @@ $ story add character Mira --trim 6x9
 
 A missing or unknown kind is also an error:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story add
 An entity kind is required: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
@@ -2374,6 +2409,7 @@ Unsupported entity kind: villain: expected one of character, location, system, f
 
 `--id` sets the id instead of deriving it from the name, which is how a name in a script with no transliteration table gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers (`--number` for a chapter, `--chapter` and `--scene` for a scene):
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story add character "Пётр" --id Petr
 character id must be a kebab-case id, got "Petr"
@@ -2440,6 +2476,7 @@ On `add chapter` and `add scene`, `--pov` names the POV character, and `add` als
 
 Options that name other entities or chapters (`--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, `--used-in`, `--location`, `--character`, `--mention`, `--member`, `--owner`, `--arc`, `--controlled-by`, and their plural forms) must be kebab-case ids, and so must `--pov` on `add chapter` and `add scene`. A character's `--arc` is exempt: it is a free-text arc theme. A name is refused before anything is written, since it could never resolve, and the example in the message matches the option (`port-kestrel` for a location, `the-long-road` for an arc, `mara-quill or harbor-council` for an owner):
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story add promise "The Ledger" --planted "Chapter 1"
 --planted "Chapter 1" must be a kebab-case id (such as chapter-01)
@@ -2453,6 +2490,7 @@ chapter number must be a positive integer, got 0
 
 A chapter id in `--planted`, `--payoff`, `--introduced`, or `--used-in` may name a chapter not written yet, but not `chapter-00`, and only in the spelling `story add chapter` writes (`chapter-01`, not `chapter-1` or `chapter-001`). Any other id must name an existing chapter:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story add promise "The Ledger" --payoff chapter-00
 --payoff chapter-00: chapter numbers start at 1
@@ -2526,6 +2564,7 @@ status: unknown
 
 An invalid enum value stops before anything is written:
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story add character "Tobin Reyes" --role wizard
 ```
@@ -2536,6 +2575,7 @@ Unsupported character role "wizard": expected one of protagonist, antagonist, su
 
 The same applies to the newer craft fields:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story add scene "Bad" --chapter chapter-01 --outcome maybe
 Unsupported scene outcome "maybe": expected one of yes, no, yes-but, no-and
@@ -2712,6 +2752,7 @@ References to the split chapter keep pointing at it, which now holds only the fi
 
 A split gives one chapter a number no chapter has: the last chapter the renumbering moves, or the new chapter when no chapter follows it (at the end of the book or before a gap). When a file already names that `chapter-NN` (a payoff scheduled for a chapter not written yet, a link, a bare id in the timeline), `split` refuses. Those references were planned for another chapter, but the chapter would take them over, and a later `merge` would carry them back with it. Every file counts, the renumbered chapter's own links included, except the registries, which `split` rebuilds, and the abandoned threads that name the new chapter's id, which only warn. A scene id under that number, such as `chapter-05-scene-01`, is no reference to the chapter: the renumbering warns about it (`warning: chapter-05 was already referenced before this split, ...`). Point the references at the chapter they mean first: at the renumbered chapter's current id if they belong to it, since the split carries them along, or at the next id if they mean the chapter after it. For the new chapter, point them at the split chapter if they belong in the text that moves, and at the new chapter after the split. On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
 
+<!-- replay: the-left-luggage-office -->
 ```text
 $ story split chapter-02 --at 1 --title "Shelf Nine"
 continuity/promises/sallis-comes-back.md names chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so it would point at that chapter. Point it at the chapter it means first: chapter-03 if it belongs there (the split then carries it to chapter-04), or chapter-05 for the chapter after it; nothing was changed
@@ -2768,6 +2809,7 @@ The second chapter's scenes move to the end of the first chapter with [`move sce
 
 `merge` warns (`merge-conflicts`) about what it could not combine: a single-value field both chapters set differently (`pov`, `date`, `time`, and so on), where it keeps the first chapter's value; `numbered: false` on only one of the two, where the merged chapter keeps the first chapter's numbering (no `numbered` means numbered), so a merge with an unnumbered interlude never makes a numbered chapter unnumbered; the first chapter's `hook` when the second has none, which it drops; and two progressions of the same field that now both start in the merged chapter, where it keeps the later one, the value the chapter ends with, and drops the earlier, which validate would reject as a repeat. On a copy of `the-left-luggage-office`:
 
+<!-- replay: the-left-luggage-office -->
 ```text
 $ story merge chapter-02 chapter-03
 Merged chapter chapter-03 into chapter-02: ~/stories/the-left-luggage-office/chapters/chapter-02.md (moved 2 scenes)
@@ -2801,6 +2843,7 @@ In a branching book (one where any chapter has [`choices`](project-format.md#bra
 
 The renumbering points each choice that led to a renumbered chapter at its new id, as [`move`](#move) does, a draft choice with no `text` included. A book whose only choices are malformed is linear to the branch checks, so its split adds no `Continue` choice. `split` and `merge` list every choice they add or point elsewhere, after their summary line, and `--dry-run` lists them above its file list. With `--json`, `data.choiceAdded` (split only; `null` in a linear book) is `{ "file", "index", "text", "to" }`, and `data.choicesRetargeted` lists `{ "file", "index", "text", "from", "to" }`, where `file` is the chapter's file after the renumbering and `text` is `null` for a choice with none. On a copy of [`the-gull-rock-light`](../examples/the-gull-rock-light/), where chapter 4 leads to chapter 5 or chapter 6 and both are endings:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story split chapter-05 --at "At dawn" --title "Dawn" --dry-run
 Would give chapters/chapter-05.md a choice to chapter-06, the rest of chapter-05: Continue
@@ -2831,6 +2874,7 @@ Deletes the entity file and scrubs its id from every reference field, searching 
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
+<!-- replay: the-gull-rock-light -->
 ```text
 $ story remove chapter chapter-01
 chapter chapter-01 still has scenes: chapter-01-scene-01. Remove them first with story remove scene <id>
@@ -2871,6 +2915,7 @@ Writes one markdown manuscript: the story title, front matter pages, every chapt
 | `--dry-run` | List the file and folders it would write, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 | `--json` | Print a JSON result: `data.outFile` (the absolute path), `data.chapters`, `data.dryRun`, and `data.changes`, with the file in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
 
+<!-- replay: the-last-ember -->
 ```text
 $ story export
 Exported 1 chapters to ~/stories/the-last-ember/dist/manuscript.md
@@ -3081,6 +3126,7 @@ Builds a mechanical synopsis from the project: a `Logline:` line (the first sent
 | `--dry-run` | With `--out`, list the file it would write and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
 | `--json` | Print a JSON result: `data.title`, `logline`, `pages`, `budget` (in words), `words`, `sections` (each arc's `arc` id, `name`, and the `text` under its heading, leaving out an arc that truncation cut), `text` (the whole synopsis, also when `--out` writes it), `outFile` (the absolute path written, or `null`), `dryRun`, and `changes`, with the file in `writes` (see [JSON output](#json-output)) | Off |
 
+<!-- replay: the-last-ember -->
 ```shell
 story synopsis
 ```
@@ -3099,6 +3145,7 @@ Sera gathers information, allies, and ember power. She discovers the ember well 
 Because Sera infiltrates the citadel through the Whisper Gate. Sera chooses to unseal the ember well and release its power back into the land rather than claim it.
 ```
 
+<!-- replay: the-last-ember -->
 ```text
 $ story synopsis --pages 3 --out dist/synopsis.md
 Wrote synopsis to ~/stories/the-last-ember/dist/synopsis.md

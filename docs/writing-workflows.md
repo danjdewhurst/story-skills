@@ -986,6 +986,7 @@ The first draft is done. Set up the revision passes.
 
 A full revision is tracked as a ladder of named passes in `story.md` `revision-passes`, so it happens in order (there is no point polishing sentences a structural pass may cut) and survives between sessions. The skill writes the default ladder and sets `status: revising`:
 
+<!-- replay: the-gull-rock-light -->
 ```shell
 story passes . --init
 ```
