@@ -21,7 +21,9 @@
 export const CALENDAR_NAME = /^\s*[^\s\d,][^,]*$/u;
 
 const KINDS = ["month", "era", "weekdays", "hours-per-day"];
-const DIRECTIONS = ["forward", "backward"];
+// The ways an era counts its years: up from its start, or down toward the
+// next era, as BC does.
+export const ERA_DIRECTIONS = ["forward", "backward"];
 
 export const DEFAULT_HOURS_PER_DAY = 24;
 // An `HH:MM` time has two hour digits, so the last hour of a day is 99.
@@ -125,7 +127,7 @@ export function parseCalendar(value) {
     if (entry["hours-per-day"] !== undefined && !isDayLength(entry["hours-per-day"])) {
       problems.push(`${at} hours-per-day must be a whole number from 1 to ${MAX_HOURS_PER_DAY}, got ${entry["hours-per-day"]}`);
     }
-    if (entry.direction !== undefined && !DIRECTIONS.includes(entry.direction)) {
+    if (entry.direction !== undefined && !ERA_DIRECTIONS.includes(entry.direction)) {
       problems.push(`${at} direction must be forward or backward, got ${entry.direction}`);
     }
     if (entry.weekdays !== undefined && (!Array.isArray(entry.weekdays) || !entry.weekdays.every(isName))) {
