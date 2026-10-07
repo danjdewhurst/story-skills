@@ -11006,8 +11006,7 @@ function anyOf(marks) {
 var INITIALS = "(?:[A-Za-z]\\.)*[A-Za-z]";
 var CAPITAL_INITIALS = "(?:\\p{Lu}\\.)*\\p{Lu}";
 var INITIAL_RUN = /(?:^|[^\p{L}\p{N}])\p{L}\. ?\p{L}$/u;
-var WORD_BEFORE_CAPITAL = /(?:^|\s)(\S+) \p{Lu}$/u;
-var QUOTATIVE = /^(?:と|って)/;
+var QUOTATIVE = new RegExp("^(?:と|って)(?:$|[、，。！？!?…―—]" + "|[言云思聞訊尋叫答返呟囁告話笑続頷怒書呼考感述繰漏応唱祈誓説念頼謝断命誘促喚呻唸泣嘆記伝教知信決願望名称認]" + "|い[うっいわえ]|おも[うっいわえ]|わら[うっいわえ]|こたえ|さけ[ぶびん]|つぶや|ささや|たずね)");
 var NEVER = "(?!)";
 var CONTEXT_WINDOW = 64;
 var CLOSING_MARKS = ")\\]*_";
@@ -11030,8 +11029,8 @@ function buildRules(pack) {
   const closers = charClass(marks.closers);
   const spacedClosers = [...SPACED_CLOSERS].filter((mark) => marks.closers.includes(mark) && !marks.openers.includes(mark)).join("");
   const spacedOpeners = [...SPACED_OPENERS].filter((mark) => marks.openers.includes(mark) && !marks.closers.includes(mark)).join("");
-  const dashes = pack.cased === false ? "" : marks.dashes;
-  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} |${anyOf(dashes)} ?)*`;
+  const opening = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} )*`;
+  const dashed = `(?:[${openers}${OPENING_MARKS}]|${anyOf(spacedOpeners)} |${anyOf(marks.dashes)} ?)*`;
   const ambiguous = [...marks.closers].filter((mark) => marks.openers.includes(mark)).join("");
   const plainClosers = charClass([...marks.closers].filter((mark) => !ambiguous.includes(mark)).join(""));
   const ends = [
@@ -11039,14 +11038,14 @@ function buildRules(pack) {
     marks.fullWidthEnds === "" ? null : `${anyOf(marks.fullWidthEnds)}+`
   ].filter(Boolean);
   const startLetter = pack.cased === false ? "\\p{L}\\p{N}" : "\\p{Lu}\\p{Lo}\\p{N}";
-  const nonNames = either([...words("candidateStopwords"), ...words("calendarWords")]);
+  const nonNames = either(words("candidateStopwords"));
   return {
     title: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("titleAbbreviations"))})$`),
     initial: new RegExp(`(?:^|[\\s${openers}(])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
-    nextInitial: new RegExp(`^${opening}\\p{Lu}\\.`, "u"),
-    nextNonName: new RegExp(`^${opening}(?:${nonNames})(?![\\p{L}\\p{N}]|['’]\\p{Lu})`, "u"),
-    nonName: new RegExp(`^(?:${nonNames})$`, "u"),
-    pronouns: new Set((checkList(pack, "beatPronouns") ?? []).filter((word) => [...word].length === 1).map((word) => upperCase(word, pack))),
+    nextInitial: new RegExp(`^${dashed}\\p{Lu}\\.`, "u"),
+    nextNonName: new RegExp(`^${dashed}(${nonNames})(?![\\p{L}\\p{N}]|['’]\\p{Lu})( \\p{Lu})?`, "u"),
+    particles: checkSet(pack, "titleWords") ?? new Set,
+    dash: new RegExp(`^${anyOf(marks.dashes)}`),
     context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...pack.ordinalStop === true ? ["\\d+"] : []])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     end: new RegExp(ends.join("|") || NEVER, "g"),
@@ -11054,9 +11053,9 @@ function buildRules(pack) {
     fullWidthCloser: new RegExp(`[${plainClosers}${CLOSING_MARKS}${FULL_WIDTH_CLOSERS}]`),
     ambiguous,
     pairs: marks.pairs,
-    start: new RegExp(`^${opening}[${startLetter}]`, "u"),
+    start: new RegExp(`^(?:${opening}[${startLetter}]|${dashed}\\p{Lu})`, "u"),
     finished: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}(?: ${anyOf(spacedClosers)})?[${closers})\\]${FULL_WIDTH_CLOSERS}]*$`),
-    firstWord: new RegExp(`^${opening}([\\p{L}\\p{N}'’]+)`, "u")
+    firstWord: new RegExp(`^${dashed}([\\p{L}\\p{N}'’]+)`, "u")
   };
 }
 function closingQuotes(text, start, end, rules, quoteOpen) {
@@ -11076,7 +11075,7 @@ function openQuotes(text, rules) {
   let counts = new Map;
   let last = new Map;
   return (from, position, mark) => {
-    if (from !== start || position < read) {
+    if (from !== start) {
       start = from;
       read = from;
       counts = new Map;
@@ -11119,7 +11118,7 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
     }
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) : rules.title.test(before) || rules.initial.test(before) && !loneCapitalEnds(before, next, rules));
+    const abbreviation = match[0] === "." && (rules.context.test(before) ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) || rules.dash.test(next) : rules.title.test(before) || rules.initial.test(before) && !loneCapitalEnds(before, next, rules, pack));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);
     if (abbreviation || stammer) {
       continue;
@@ -11133,15 +11132,12 @@ function splitSentences(text, { capitalStart = true, pack = languagePack() } = {
   }
   return sentences.filter((sentence) => sentence !== "");
 }
-function loneCapitalEnds(before, next, rules) {
+function loneCapitalEnds(before, next, rules, pack) {
   if (!/\p{Lu}$/u.test(before) || INITIAL_RUN.test(before) || rules.nextInitial.test(next)) {
     return false;
   }
-  if (rules.nextNonName.test(next)) {
-    return true;
-  }
-  const word = WORD_BEFORE_CAPITAL.exec(before);
-  return rules.pronouns.has(before.at(-1)) && word !== null && (/^\p{Ll}/u.test(word[1]) || rules.nonName.test(word[1].replace(/[,;:]$/, "")));
+  const word = rules.nextNonName.exec(next);
+  return word !== null && !(word[2] !== undefined && rules.particles.has(lowerCase(word[1], pack)));
 }
 function isStammer(before, next, rules) {
   const last = /([\p{L}\p{N}'’]+)$/u.exec(before);
