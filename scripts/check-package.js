@@ -9,9 +9,9 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { packageBin, spawnCommand } from "./spawn-command.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
 // Markdown and HTML link targets that are paths inside the package, without
 // their #fragment: inline links (with or without a title or <angle> target),
@@ -35,12 +35,14 @@ export function relativeLinks(markdown) {
 }
 
 function execRun(command, args, cwd) {
-  return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  return execFileSync(...spawnCommand(command, args), { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
-// Returns the exit status. `run(command, args, cwd)` stands in for
-// execFileSync, so tests can stand in for npm without packing anything.
-export function checkPackage({ run = execRun, root = repoRoot, log = console.log, error: logError = console.error } = {}) {
+// Returns the exit status. `run(command, args, cwd)` stands in for execRun,
+// which spawns npm through spawnCommand, so tests can stand in for npm without
+// packing anything. `platform` picks how the installed bin runs, since
+// Windows links it as a .cmd shim.
+export function checkPackage({ run = execRun, root = repoRoot, log = console.log, error: logError = console.error, platform = process.platform } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-pack-"));
   try {
     const packDir = path.join(work, "pack");
@@ -48,21 +50,21 @@ export function checkPackage({ run = execRun, root = repoRoot, log = console.log
     fs.mkdirSync(packDir);
     fs.mkdirSync(installDir);
 
-    const packed = JSON.parse(run(npm, ["pack", "--json", "--pack-destination", packDir], root));
+    const packed = JSON.parse(run("npm", ["pack", "--json", "--pack-destination", packDir], root));
     const tarball = path.join(packDir, packed[0].filename);
     const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 
     fs.writeFileSync(path.join(installDir, "package.json"), '{ "name": "story-skills-pack-check", "private": true }\n');
-    run(npm, ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
+    run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
 
     const installed = path.join(installDir, "node_modules", "story-skills");
-    const bin = path.join(installDir, "node_modules", ".bin", process.platform === "win32" ? "story.cmd" : "story");
+    const story = (args) => packageBin(installDir, "story-skills", "story", args, { platform });
 
-    const printed = run(bin, ["--version"], installDir).trim();
+    const printed = run(...story(["--version"]), installDir).trim();
     if (!printed.includes(version)) {
       throw new Error(`Installed story --version printed "${printed}", expected ${version}`);
     }
-    run(bin, ["validate", path.join(installed, "examples", "the-last-ember")], installDir);
+    run(...story(["validate", path.join(installed, "examples", "the-last-ember")]), installDir);
     run(process.execPath, [path.join(installed, "skills", "story-maintenance", "scripts", "story.js"), "--version"], installDir);
 
     // The README is read from node_modules too, so a relative link must point
