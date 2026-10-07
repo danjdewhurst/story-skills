@@ -61,7 +61,8 @@ exist or be in progress.
      Run `story clues .` for the fair-play matrix and `story diagram clues`
      for the plant-to-reveal flow.
    - Thriller: log every promised deadline in `continuity/promises/` and
-     track story-time in `plot/timeline.md`.
+     give every scene a `date` and `time`, so `story timeline .` shows the
+     story clock.
    - Serial: record `season-goal:` in `story.md` and `episode-question:`
      in each installment's frontmatter, and the release cadence as
      `release-every:` (days) and `release-start:` (YYYY-MM-DD) in

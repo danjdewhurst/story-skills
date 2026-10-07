@@ -52,4 +52,3 @@ Mara refuses to dump every stolen memory onto the public band. Instead, she rele
 |---------|--------|-----------------|----------------|--------|
 | Mara sees a second reflection in her eye after playback | Memory exposure leaves a visible diagnostic trace | Ch 1 | Ch 4 | planted |
 | Theo says the archive was "lit during the blackout" | Venn preserved the archive by draining grid power | Ch 1 | Ch 9 | planted |
-| The bell rings underwater before the capsule opens | The archive uses old civic warning hardware as a failsafe | Ch 1 | Ch 7 | planted |

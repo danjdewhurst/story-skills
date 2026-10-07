@@ -7,7 +7,7 @@ description: This skill should be used when the user asks to "create a plot arc"
 
 ## Overview
 
-Plan and manage story arcs, plot points, foreshadowing, and narrative timeline. Each arc is a markdown file in `plot/arcs/` with a chronological timeline maintained in `plot/timeline.md`. The plot index tracks all arcs, their status, and theme coverage.
+Plan and manage story arcs, plot points, setups and payoffs, and the narrative timeline. Each arc is a markdown file in `plot/arcs/`, and `plot/timeline.md` holds the planned events and backstory in story order. The plot index lists all arcs, their status, and theme coverage.
 
 ## Prerequisites
 
@@ -47,13 +47,12 @@ Plot points live within arc files in the "Plot Points" table. When adding a plot
 1. Read the relevant arc file
 2. Add the plot point to the table with chapter reference (if known)
 3. Add the event to `plot/timeline.md` in chronological order
-4. If the plot point involves foreshadowing, add it to the arc's foreshadowing table
-5. If the plot point creates a reader promise or mystery, create or update a record in `continuity/promises/` or `continuity/questions/`
-6. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
+4. If the plot point sets up a later payoff or raises a question, record it in the one place Setup and Payoff Records below gives it
+5. When CLI access is available, run `story reindex .`, `story wordcount . --write`, and `story check .`
 
 ## Timeline Management
 
-The timeline at `plot/timeline.md` is a chronological master list of all story events across all arcs.
+`plot/timeline.md` is the hand-kept plan: a chronological list of the story's events across all arcs, including backstory and events not drafted yet. It does not own when a drafted scene happens: the scene's `date` and `time` do, and `story timeline .` orders the drafted scenes from them. Do not add a plan row for each drafted scene.
 
 When adding events:
 - Insert in chronological order
@@ -62,7 +61,7 @@ When adding events:
   - **When:** story-relative time for story events (e.g. `Day 1, morning`), or how long ago for backstory (e.g. `12 years ago`, `~300 years ago`)
   - **Event:** one concise line describing what happened
   - **Arc:** the arc's display name as written in its file (e.g. `The Drowned Witness`), or `-` when the event belongs to no arc. `story rename arc` rewrites ids but not display names, and nothing checks this cell, so after renaming an arc search for the old name (`grep -rn "Old Name" .`) and update each hit by hand, including the timeline rows
-  - **Chapter:** `Ch {N}` once the event is written (e.g. `Ch 1`), or `-` for backstory and unwritten events
+  - **Chapter:** `Ch {N}` once the event is written (e.g. `Ch 1`), or `-` for backstory and unwritten events. Once a row has a chapter, its scenes' `date` and `time` say when it happens: if the row's **When** disagrees, the scene is right, so correct the row
 
 When reviewing the timeline:
 - Run `story timeline .` to see written scenes in story-time order from their `date`/`time` fields, with scenes told out of order marked, and compare it with `plot/timeline.md`
@@ -81,19 +80,20 @@ Two optional fields make pacing checkable:
 
 Plan both in the outline, then run `story pacing .` for a per-chapter dashboard of words, scene and sequel counts, scene outcomes, and hooks. It warns about three or more consecutive `yes` outcomes (no pressure), four or more scene units with no sequel (no breath), chapter length outliers (over twice or under half the median once three chapters have prose), three or more consecutive chapters ending on `resolution`, and drafted chapters with no `hook`. Treat the warnings as prompts to reread, not rules: a quiet `resolution` chapter after the climax is right.
 
-## Foreshadowing Tracking
+## Setup and Payoff Records
 
-Each arc tracks its own foreshadowing in the "Foreshadowing" table:
-- **Planted:** What hint or setup is placed
-- **Payoff:** What the payoff will be
-- **Chapter Planted / Chapter Payoff:** Where each occurs
-- **Status:** `planned`, `planted`, or `paid-off`
+Each setup has exactly one record. Pick it by use, update only that record, and never copy a setup into a second place:
 
-During chapter writing, flag any `planted` items that haven't been paid off as reminders.
+| Use | Record | Create with | Checked by |
+|-----|--------|-------------|------------|
+| A mystery clue or red herring | `continuity/clues/{id}.md` | `story add clue '{Title}' --planted chapter-{NN} --payoff chapter-{NN}` | `story clues`, `story continuity` |
+| Any other setup the reader is owed a payoff on: a Chekhov's gun, a vow, a prophecy, a deadline | `continuity/promises/{id}.md` (`references/promise-template.md`) | `story add promise '{Title}' --arc {arc-id} --planted chapter-{NN}` | `story continuity` |
+| A question the reader is left asking | `continuity/questions/{id}.md` (`references/question-template.md`) | `story add question '{Title}' --introduced chapter-{NN}` | `story continuity` |
+| A hint inside one arc that needs no checked payoff: an image, a motif, an echo | a row of the arc's `## Foreshadowing` table | by hand | nothing |
 
-For mystery clues, `story clues .` prints a clue-by-chapter fair-play matrix and `story diagram clues` the plant-to-reveal flow (see the `genre-craft` skill).
+A promise or clue record is `planned` until its chapter is drafted, then `planted` with `planted: chapter-{NN}`, then `paid-off` with `payoff: chapter-{NN}`. `--payoff` may name a chapter not written yet, and so may `--planted`, which then records the setup as `planned`. A question is `open` with `introduced: chapter-{NN}` until it is `answered` with `resolved: chapter-{NN}`. The records give a promise, clue, or question its `arcs` and `characters`, so the arc's `## Foreshadowing` table holds only the arc's small hints, each with **Planted**, **Payoff**, **Chapter Planted**, **Chapter Payoff**, and a **Status** of `planned`, `planted`, or `paid-off`.
 
-For durable cross-arc setup/payoff tracking, also maintain `continuity/promises/{promise-kebab}.md` with `status`, `planted`, `payoff`, `arcs`, and `characters`. For mystery or open-continuity tracking, maintain `continuity/questions/{question-kebab}.md`.
+`story context` packs the open promises, clues, and questions into each chapter's drafting context, and `story next .` reports the open questions and the promises that need planting or a payoff decision. For mystery clues, `story clues .` prints a clue-by-chapter fair-play matrix and `story diagram clues` the plant-to-reveal flow (see the `genre-craft` skill).
 
 Scaffold chapters and scenes with `story add chapter '{Title}' --number {N} --pov {id} --arc {arc-id}` and `story add scene '{Title}' --chapter chapter-{NN} --scene {M} --pov {id} --location {id}`, then write the prose and outline content into the created files. Set `outcome` on scene records and `hook` on chapters as the outline settles them, then run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story pacing .`.
 

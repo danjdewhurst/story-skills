@@ -2634,10 +2634,10 @@ A split gives one chapter a number no chapter has: the last chapter the renumber
 
 ```text
 $ story split chapter-02 --at 1 --title "Shelf Nine"
-continuity/promises/sallis-comes-back.md, plot/arcs/folas-suitcase.md name chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so they would point at that chapter. Point them at the chapter they mean first: chapter-03 if they belong there (the split then carries them to chapter-04), or chapter-05 for the chapter after it; nothing was changed
+continuity/promises/sallis-comes-back.md names chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so it would point at that chapter. Point it at the chapter it means first: chapter-03 if it belongs there (the split then carries it to chapter-04), or chapter-05 for the chapter after it; nothing was changed
 ```
 
-The promise pays off in an episode not drafted yet, the one after chapter 3, so its `payoff` and the arc's Foreshadowing row now say `chapter-05`, and the split runs:
+The promise pays off in an episode not drafted yet, the one after chapter 3, so its `payoff` now says `chapter-05`, and the split runs:
 
 ```text
 $ story split chapter-02 --at 1 --title "Shelf Nine"

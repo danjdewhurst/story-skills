@@ -17,6 +17,19 @@ These conventions apply across all story skills. Every `SKILL.md` links here and
 - **`style-sheet.md`** records voice and house style; skills that write or revise prose read it
 - **Continuity state** lives in `continuity/state.md`, with open questions, promises, and clues tracked under `continuity/questions/`, `continuity/promises/`, and `continuity/clues/`
 
+## Setups, payoffs, and story time
+
+Each setup and each event has one record. Update that record, and never copy it into another:
+
+- **A mystery clue or red herring** - `continuity/clues/{id}.md` (`story add clue`), checked by `story clues` and `story continuity`
+- **Any other setup the reader is owed a payoff on** (a Chekhov's gun, a vow, a prophecy, a deadline) - `continuity/promises/{id}.md` (`story add promise`), checked by `story continuity`
+- **A question the reader is left asking** - `continuity/questions/{id}.md` (`story add question`), checked by `story continuity`
+- **A hint inside one arc that needs no checked payoff** (an image, a motif, an echo) - a row of that arc's `## Foreshadowing` table, which no command reads. A clue or promise never gets a row there too
+- **When a drafted scene happens** - the scene's `date` and `time`, which `story timeline` orders and `story continuity` checks
+- **Backstory and planned events** - `plot/timeline.md`, the hand-kept plan. Once an event is drafted, set its `Chapter` cell; the scene's `date` and `time` then say when it happens, so do not add a plan row for each drafted scene
+
+A promise or clue moves from `planned` to `planted` (with `planted: chapter-{NN}`) to `paid-off` (with `payoff: chapter-{NN}`); a question moves from `open` to `answered` (with `resolved: chapter-{NN}`).
+
 ## Links and casts
 
 - **Bidirectional cross-links** - when referencing another entity, update both files

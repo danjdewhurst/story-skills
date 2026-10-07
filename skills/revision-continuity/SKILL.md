@@ -88,10 +88,11 @@ are clean or every remaining finding is a recorded decision. Set story
 6. Update dependent metadata:
    - Chapter frontmatter `status` (`draft` -> `revised`, `revised` -> `final` only when appropriate)
    - Chapter `word-count` via CLI when available
-   - `plot/timeline.md` if events changed
+   - `plot/timeline.md` if planned events or backstory changed (scene `date` and `time` say when drafted scenes happen)
    - `scenes/` records if POV, location, participants, or state changes moved
-   - `continuity/state.md`, `continuity/questions/`, or `continuity/promises/` when knowledge, object ownership, mystery state, or payoffs changed
-   - Arc plot points or foreshadowing status if the revision changes setup/payoff
+   - `continuity/state.md` when knowledge or object ownership changed
+   - The one record that owns each setup the revision moves, adds, or cuts: a promise, clue, or question file (`status` and its chapter fields), or, for a small hint with no record, its arc `## Foreshadowing` row. Never record one setup in two places
+   - Arc plot points if the revision changes which chapter hits them
    - Character or location files when state, relationship, or location references changed
 7. Run maintenance:
 
@@ -160,7 +161,7 @@ Run `story continuity .` first to collect the deterministic findings, then check
 - Character state: injuries, emotions, alliances, location, and status carry forward
 - Timeline: time of day, travel time, sequence, and cause/effect stay coherent. `story timeline .` shows dated scenes in story order and marks flashbacks; check each marked scene is meant to be one. `story diagram timeline` prints the same order as a Mermaid timeline. `story continuity .` errors when a character moves between locations joined by `routes` faster than the route's `hours` allow
 - Plot arcs: each changed scene still advances or intentionally pauses an arc
-- Foreshadowing: planted and paid-off items match arc files; `story clues .` shows every clue's plant and payoff chapter
+- Setups and payoffs: each promise, clue, and question record names the chapters where the prose now plants and pays it off, and each arc `## Foreshadowing` row (hints with no record) matches too; `story clues .` shows every clue's plant and payoff chapter
 - Promises/questions: durable continuity records match what the chapter now reveals or withholds
 - Scene state: every chapter scene has machine-readable POV, location, participants, arcs, and state-change notes
 - World rules: magic, technology, politics, and geography stay consistent with worldbuilding files

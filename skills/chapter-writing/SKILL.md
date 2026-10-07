@@ -7,7 +7,7 @@ description: This skill should be used when the user asks to "write a chapter", 
 
 ## Overview
 
-Write story chapters using an outline-first workflow. Gathers context with `story context`, which keeps later chapters out, builds a beat-by-beat outline for approval, then writes full prose. After writing, updates the timeline, continuity state, and foreshadowing in the entity files, and rebuilds registries with `story reindex`.
+Write story chapters using an outline-first workflow. Gathers context with `story context`, which keeps later chapters out, builds a beat-by-beat outline for approval, then writes full prose. After writing, records the scene dates, the continuity state, and each setup planted or paid off in the one record that owns it, and rebuilds registries with `story reindex`.
 
 ## Prerequisites
 
@@ -62,7 +62,7 @@ Create a beat-by-beat outline listing:
 - Each scene/beat and what it accomplishes
 - POV character and location for each beat
 - Which arc plot points are advanced
-- Any foreshadowing to plant or pay off
+- Any promise, clue, or question from the packed context to plant or pay off, and any small arc hint
 - Any machine-readable state changes the scene should record
 - Each scene's intended `outcome` (`yes`, `no`, `yes-but`, `no-and`) and how the chapter ends (`hook`)
 
@@ -95,10 +95,10 @@ Write chapter prose directly into the chapter markdown file. Do not stage prose 
 After the chapter is written:
 
 1. **Leave the registries alone.** Every `_index.md` registry, including `chapters/_index.md` and the question, promise, and clue indexes, is generated. `story reindex` rebuilds those tables from the entity files, and `story wordcount . --write` refreshes the chapter word counts and then reindexes. Do not add or edit registry rows by hand.
-2. **Update `plot/timeline.md`** - add events from this chapter in chronological order
+2. **Mark the plan in `plot/timeline.md`** - the `date` and `time` on the scene records say when this chapter happens, and `story timeline` orders them, so do not add a row for each scene. Set the `Chapter` cell to `Ch {N}` on each planned event this chapter put on the page, and add a row, in chronological order, only for backstory the chapter reveals or a plot event the plan lacks
 3. **Update arc files** - mark advanced plot points with chapter reference
 4. **Update scene records** - make sure every scene has a corresponding `scenes/` file
-5. **Update continuity** - after the prose is saved, carry forward character state, object ownership, knowledge, open questions, and promises/payoffs. This is the one time to open `continuity/state.md`: recording the new state, not reading it for drafting context. The CLI reads its frontmatter, not its body tables (those are optional notes), so record state there:
+5. **Update continuity** - after the prose is saved, carry forward character state, object ownership, and knowledge. This is the one time to open `continuity/state.md`: recording the new state, not reading it for drafting context. The CLI reads its frontmatter, not its body tables (those are optional notes), so record state there:
 
    ```yaml
    current-chapter: 3
@@ -119,7 +119,11 @@ After the chapter is written:
    ```
 
    `story continuity` checks these entries and `story knowledge <id> --at <chapter>` reads `knowledge-state`. When `story.md` links other books through `follows` or `precedes`, give reveals the series depends on a stable `fact` id in `knowledge-state` (see `series-continuity`)
-6. **Update foreshadowing** - mark any items as `planted` or `paid-off` with chapter reference
+6. **Update the setup records** - each setup has one record (see Setups, payoffs, and story time in the shared conventions), and only that record changes:
+   - A promise (`continuity/promises/`) or clue (`continuity/clues/`) this chapter planted: set `status: planted` and `planted: chapter-{NN}`. One it paid off: set `status: paid-off` and `payoff: chapter-{NN}`
+   - A question (`continuity/questions/`) this chapter raised: set `introduced: chapter-{NN}`. One it answered: set `status: answered` and `resolved: chapter-{NN}`
+   - A new setup or question the chapter put on the page: create its record with `story add promise '{Title}' --planted chapter-{NN}`, `story add clue '{Title}' --planted chapter-{NN}`, or `story add question '{Title}' --introduced chapter-{NN}`
+   - A small hint with no record: mark its row in the arc's `## Foreshadowing` table `planted` or `paid-off` with the chapter. Never add a row there for a promise, clue, or question
 7. **Note character changes** - if a character's status changed (injury, revelation, relationship shift), flag for the user to update the character file
 8. **Run CLI maintenance when available:**
 
