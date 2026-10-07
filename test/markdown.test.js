@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
-import { expectLinearTime } from "./helpers.js";
+import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -126,6 +126,41 @@ describe("markdown utilities", () => {
     // Many lines and no backtick: each line once searched the rest of the
     // text for one. That search is fast, so the text is longer.
     expectLinearTime(maskMarkup, (n) => "a\n".repeat(n / 2), { length: 512000 });
+  });
+
+  test("code spans and fences are matched in linear time (#587)", () => {
+    // The ``` finds no closer, so the line is read once; `y` still closes,
+    // and the `` after it still finds no closer.
+    expect(maskMarkup("```x `y` <!--z--> `` <!--w-->")).toBe("```x `y`          ``         ");
+    // The five-backtick fence never closes; the three-backtick one does.
+    expect(maskMarkup("`````\n```\ncode <!-- x -->\n```\n<!-- y -->")).toBe("`````\n   \n               \n   \n          ");
+    // A shorter line of backticks inside a fence does not close it.
+    expect(maskMarkup("````\n```\n# a\n````\n# b")).toBe("    \n   \n   \n    \n# b");
+    // One long line of code spans: the line's end was found again after
+    // each span. A search for a newline is fast, so the text is longer.
+    expectLinearTime(maskMarkup, (n) => "`a` ".repeat(n / 4), { length: 1024000 });
+    // Runs of backticks of every length, none closed: each run read to the
+    // end of the line.
+    expectLinearTime(maskMarkup, backtickRuns, { length: 512000, pieces: 256 });
+    // Fence openers that nothing closes, each shorter than the last, then
+    // many lines: each opener read every line after it.
+    const fences = (n) => {
+      let text = "";
+      for (let length = Math.floor(Math.sqrt(n)); length >= 3; length -= 1) {
+        text += `${"`".repeat(length)}\n`;
+      }
+      return text + "a\n".repeat(n / 4);
+    };
+    expectLinearTime(maskMarkup, fences, { length: 512000, pieces: 256 });
+  });
+
+  test("links and images print as their text at any length, in linear time (#587)", () => {
+    const destination = "x/".repeat(600);
+    expect(plainLinks(`See [the map](${destination}map.md "Map") and ![a gull](${"y".repeat(1200)}.png) here.`)).toBe("See the map and  here.");
+    expect(plainLinks("[a](b) [c] (d) ![e](f [g](h")).toBe("a [c] (d) ![e](f [g](h");
+    // Unclosed openers once each read up to a thousand characters ahead.
+    expectComparableTime(plainLinks, "![".repeat(128000), "!x".repeat(128000));
+    expectComparableTime(plainLinks, "[a](".repeat(256000), "[a]x".repeat(256000));
   });
 });
 

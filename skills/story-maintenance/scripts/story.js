@@ -9721,7 +9721,36 @@ var URL_PLACEHOLDER = "";
 var WORD_PATTERN = new RegExp(`${URL_PLACEHOLDER}|[\\p{L}\\p{N}][${WORD_CHARS}]*(?:(?:['’‐‑-]|(?<=\\p{N})[.,:](?=\\p{N}))[\\p{L}\\p{N}][${WORD_CHARS}]*)*`, "gu");
 var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
 function plainLinks(text) {
-  return String(text).replace(/!\[[^\]]{0,1000}\]\([^)]{0,1000}\)/g, "").replace(/\[([^\]]{0,1000})\]\([^)]{0,1000}\)/g, "$1");
+  return withoutLinks(withoutLinks(String(text), "!["), "[");
+}
+function withoutLinks(source, opener) {
+  let result = "";
+  let last = 0;
+  let close = -2;
+  let paren = -2;
+  for (let start = source.indexOf(opener);start !== -1; ) {
+    const textStart = start + opener.length;
+    if (close < textStart) {
+      close = source.indexOf("]", textStart);
+      if (close === -1) {
+        break;
+      }
+    }
+    if (source[close + 1] !== "(") {
+      start = source.indexOf(opener, start + 1);
+      continue;
+    }
+    if (paren < close + 2) {
+      paren = source.indexOf(")", close + 2);
+      if (paren === -1) {
+        break;
+      }
+    }
+    result += source.slice(last, start) + (opener === "[" ? source.slice(textStart, close) : "");
+    last = paren + 1;
+    start = source.indexOf(opener, last);
+  }
+  return result + source.slice(last);
 }
 function flattenHeadings(text) {
   return String(text).replace(/^(#+)(?:[ \t]+([^\n]*))?$/gm, (line, hashes, content) => {
@@ -10115,22 +10144,26 @@ function inlineDestinations(source, blank) {
 function scanMarkup(text) {
   const ranges = [];
   let unclosed = false;
-  let fenceLimit = Infinity;
+  let fences = null;
+  let closeSpan = null;
   let nextOpen = -2;
   let nextTick = -2;
+  let lineEnd = -1;
   let position = 0;
   while (position < text.length) {
-    const newline = text.indexOf(`
+    if (position > lineEnd) {
+      const newline = text.indexOf(`
 `, position);
-    const lineEnd = newline === -1 ? text.length : newline;
+      lineEnd = newline === -1 ? text.length : newline;
+      closeSpan = null;
+    }
     if (position === 0 || text[position - 1] === `
 `) {
       const marker = /^ {0,3}(`{3,})/.exec(text.slice(position, lineEnd));
-      if (marker && marker[1].length < fenceLimit) {
-        const end = fenceEnd(text, lineEnd, marker[1].length);
-        if (end === -1) {
-          fenceLimit = marker[1].length;
-        } else {
+      if (marker) {
+        fences ??= fenceCloser(text);
+        const end = fences(lineEnd, marker[1].length);
+        if (end !== -1) {
           ranges.push({ kind: "fence", start: position, end });
           position = end;
           continue;
@@ -10146,7 +10179,13 @@ function scanMarkup(text) {
     const open = nextOpen !== -1 && nextOpen < lineEnd ? nextOpen : -1;
     const tick = nextTick;
     if (tick !== -1 && tick < lineEnd && (open === -1 || tick < open)) {
-      position = codeSpanEnd(text, tick, lineEnd);
+      let runEnd = tick;
+      while (text[runEnd] === "`") {
+        runEnd += 1;
+      }
+      closeSpan ??= codeSpanCloser(text, lineEnd);
+      const end = closeSpan(tick, runEnd - tick);
+      position = end === -1 ? runEnd : end;
       continue;
     }
     if (open === -1) {
@@ -10165,42 +10204,66 @@ function scanMarkup(text) {
   }
   return { ranges, unclosed };
 }
-function fenceEnd(text, openerEnd, length) {
-  for (let lineStart = openerEnd + 1;lineStart < text.length; ) {
+function fenceCloser(text) {
+  const closers = [];
+  for (let lineStart = 0;lineStart < text.length; ) {
     const next = text.indexOf(`
 `, lineStart);
     const lineEnd = next === -1 ? text.length : next;
     const line = text.slice(lineStart, lineEnd);
     const marker = /^ {0,3}(`{3,})/.exec(line);
-    if (marker && marker[1].length >= length && line.trim() === marker[1]) {
-      return Math.min(lineEnd + 1, text.length);
+    if (marker && line.trim() === marker[1]) {
+      closers.push({ start: lineStart, end: Math.min(lineEnd + 1, text.length), length: marker[1].length });
     }
     lineStart = lineEnd + 1;
   }
-  return -1;
+  const longest = closers.map((closer) => closer.length);
+  for (let index = longest.length - 2;index >= 0; index -= 1) {
+    longest[index] = Math.max(longest[index], longest[index + 1]);
+  }
+  let first = 0;
+  return (openerEnd, length) => {
+    while (first < closers.length && closers[first].start <= openerEnd) {
+      first += 1;
+    }
+    if (first === closers.length || longest[first] < length) {
+      return -1;
+    }
+    let index = first;
+    while (closers[index].length < length) {
+      index += 1;
+    }
+    return closers[index].end;
+  };
 }
-function codeSpanEnd(text, tick, lineEnd) {
-  let runEnd = tick;
-  while (text[runEnd] === "`") {
-    runEnd += 1;
-  }
-  const length = runEnd - tick;
-  let search = runEnd;
-  while (search < lineEnd) {
-    const start = text.indexOf("`", search);
-    if (start === -1 || start >= lineEnd) {
-      break;
+function codeSpanCloser(text, limit = text.length) {
+  const last = new Map;
+  let scanned = false;
+  return (start, length) => {
+    if (scanned && !(last.get(length) > start)) {
+      return -1;
     }
-    let end = start;
-    while (text[end] === "`") {
-      end += 1;
+    let search = start + length;
+    while (search < limit) {
+      const next = text.indexOf("`", search);
+      if (next === -1 || next >= limit) {
+        break;
+      }
+      let end = next;
+      while (text[end] === "`") {
+        end += 1;
+      }
+      if (end - next === length) {
+        return end;
+      }
+      if (!scanned) {
+        last.set(end - next, next);
+      }
+      search = end;
     }
-    if (end - start === length) {
-      return end;
-    }
-    search = end;
-  }
-  return runEnd;
+    scanned = true;
+    return -1;
+  };
 }
 function fencedLineIndexes(lines) {
   const fenced = new Set;
@@ -13049,9 +13112,61 @@ function newerSchemaMessage(version) {
 function canonicalChapterId(number) {
   return `chapter-${String(number).padStart(2, "0")}`;
 }
-var LINK_OR_URL_PATTERN = /(\]\([^)\n]{0,1000}\)|<[a-z][a-z0-9+.-]*:[^>\s]{0,1000}>|\b[a-z][a-z0-9+.-]{0,63}:\/\/[^\s<>)\]]*)/gi;
 function mapOutsideLinks(body, transform) {
-  return body.split(LINK_OR_URL_PATTERN).map((part, index) => index % 2 === 1 ? part : transform(part)).join("");
+  let result = "";
+  let last = 0;
+  for (const [start, end] of linksAndUrls(body)) {
+    result += transform(body.slice(last, start)) + body.slice(start, end);
+    last = end;
+  }
+  return result + transform(body.slice(last));
+}
+var LINK_OR_URL_START = /[\]<]|(?<![A-Za-z0-9_])[A-Za-z]/g;
+var SCHEME_RUN = /[A-Za-z0-9+.-]*/y;
+function linksAndUrls(body) {
+  const spans = [];
+  const next = (pattern, from) => {
+    pattern.lastIndex = from;
+    return pattern.exec(body)?.index ?? -1;
+  };
+  let destinationEnd = -2;
+  let autolinkEnd = -2;
+  LINK_OR_URL_START.lastIndex = 0;
+  for (let match;(match = LINK_OR_URL_START.exec(body)) !== null; ) {
+    const start = match.index;
+    let end = -1;
+    if (match[0] === "]") {
+      if (body[start + 1] === "(") {
+        if (destinationEnd !== -1 && destinationEnd < start + 2) {
+          destinationEnd = next(/[)\n]/g, start + 2);
+        }
+        end = body[destinationEnd] === ")" ? destinationEnd + 1 : -1;
+      }
+    } else if (match[0] === "<") {
+      SCHEME_RUN.lastIndex = start + 1;
+      const colon = start + 1 + SCHEME_RUN.exec(body)[0].length;
+      if (/[A-Za-z]/.test(body[start + 1] ?? "") && body[colon] === ":") {
+        if (autolinkEnd !== -1 && autolinkEnd < colon + 1) {
+          autolinkEnd = next(/[>\s]/g, colon + 1);
+        }
+        end = body[autolinkEnd] === ">" ? autolinkEnd + 1 : -1;
+      }
+    } else {
+      SCHEME_RUN.lastIndex = start;
+      const scheme = start + SCHEME_RUN.exec(body)[0].length;
+      if (body.startsWith("://", scheme)) {
+        const stop = next(/[\s<>)\]]/g, scheme + 3);
+        end = stop === -1 ? body.length : stop;
+      } else {
+        LINK_OR_URL_START.lastIndex = scheme;
+      }
+    }
+    if (end !== -1) {
+      spans.push([start, end]);
+      LINK_OR_URL_START.lastIndex = end;
+    }
+  }
+  return spans;
 }
 function storyBible(options) {
   const data = {
@@ -19027,7 +19142,7 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
 }
 function inlineRuns(text) {
   const nodes = [];
-  const unclosedTicks = new Set;
+  const closeSpan = codeSpanCloser(text);
   let buffer = "";
   const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
@@ -19043,9 +19158,8 @@ function inlineRuns(text) {
       while (text[index + run] === "`") {
         run += 1;
       }
-      const end = unclosedTicks.has(run) ? -1 : codeSpanEnd2(text, index, run);
+      const end = closeSpan(index, run);
       if (end === -1) {
-        unclosedTicks.add(run);
         buffer += "`".repeat(run);
         index += run;
       } else {
@@ -19147,20 +19261,6 @@ function inlineRuns(text) {
     }
   }
   return runs;
-}
-function codeSpanEnd2(text, start, length) {
-  let next = text.indexOf("`", start + length);
-  while (next !== -1) {
-    let end = next;
-    while (text[end] === "`") {
-      end += 1;
-    }
-    if (end - next === length) {
-      return end;
-    }
-    next = text.indexOf("`", end);
-  }
-  return -1;
 }
 function canPairEmphasis(opener, closer) {
   const both = opener.close || closer.open;

@@ -253,31 +253,55 @@ export function treeDiff(before, after) {
   return changes.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
+// The fastest of a few runs of `task`, in milliseconds, so one stall on a
+// busy runner does not decide a timing test.
+function fastestTime(task) {
+  let best = Infinity;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const started = performance.now();
+    task();
+    best = Math.min(best, performance.now() - started);
+  }
+  return best;
+}
+
 // Asserts that `run` takes about linear time in the length of its input,
 // with no wall-clock limit: one input of `length` characters is timed
 // against `pieces` inputs of length / pieces characters each, the same
 // total. A linear scan takes about as long either way; a quadratic one
-// takes `pieces` times as long on the long input. `make(n)` builds an
-// input of about n characters. The fastest of a few tries counts, so one
-// stall on a busy runner does not decide, and the slack covers timer noise
-// when both are quick.
+// takes `pieces` times as long on the long input, and one that grows as
+// n^1.5 the square root of `pieces` times as long, so it needs 256 pieces.
+// `make(n)` builds an input of about n characters. The slack covers timer
+// noise when both are quick.
 export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}) {
-  const fastest = (task) => {
-    let best = Infinity;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const started = performance.now();
-      task();
-      best = Math.min(best, performance.now() - started);
-    }
-    return best;
-  };
   const short = make(length / pieces);
   const long = make(length);
-  const shortTime = fastest(() => {
+  const shortTime = fastestTime(() => {
     for (let piece = 0; piece < pieces; piece += 1) {
       run(short);
     }
   });
-  const longTime = fastest(() => run(long));
+  const longTime = fastestTime(() => run(long));
   expect(longTime).toBeLessThan(4 * shortTime + 25);
+}
+
+// Asserts that `run` takes about as long on `input` as on `control`, an
+// input of the same length that it passes over at once, again with no
+// wall-clock limit. A scan that is linear but does up to a thousand steps
+// at each character of `input` takes hundreds of times as long on it.
+export function expectComparableTime(run, input, control) {
+  const controlTime = fastestTime(() => run(control));
+  const inputTime = fastestTime(() => run(input));
+  expect(inputTime).toBeLessThan(4 * controlTime + 25);
+}
+
+// About n characters of backtick runs of every length from 1 up, each
+// followed by a letter, so no run closes another: a scan that reads ahead
+// for a closer from each run reads n^1.5 characters in all.
+export function backtickRuns(n) {
+  let text = "";
+  for (let length = 1; text.length < n; length += 1) {
+    text += `${"`".repeat(length)}a`;
+  }
+  return text;
 }
