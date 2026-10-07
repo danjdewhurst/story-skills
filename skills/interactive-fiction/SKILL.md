@@ -82,7 +82,7 @@ numbering. Then:
    add its `choices` by hand (`story add` does not write them):
 
    ```shell
-   story add chapter "The Landing" --number 1 --status outline --pov ada-fenn --character ada-fenn --hook decision --path .
+   story add chapter 'The Landing' --number 1 --status outline --pov ada-fenn --character ada-fenn --hook decision --path .
    ```
 
 4. Check the skeleton before writing prose. `story links .` warns

@@ -42,7 +42,7 @@ archive playback.
 - Cover invented words, titles and ranks, forms of address, place names,
   faction names, units, and recurring phrases (oaths, sayings,
   catchphrases).
-- Add terms the glossary lacks: `story add term "Name" --category
+- Add terms the glossary lacks: `story add term 'Name' --category
   <category>`.
 
 ## Names
@@ -62,7 +62,7 @@ the id does not change. Check new names for clashes in the translated
 project:
 
 ```shell
-story names "Zweitlicht" "Schwarzwasser" --path ../book-de
+story names 'Zweitlicht' 'Schwarzwasser' --path ../book-de
 ```
 
 Update `pronunciation` in the translated project for its narrator.

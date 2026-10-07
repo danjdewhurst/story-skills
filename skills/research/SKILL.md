@@ -41,7 +41,7 @@ registry are created by the first `story add research`.
 ### 1. Open a note
 
 ```shell
-story add research "Tidal bore timing" --used-in chapter-03 \
+story add research 'Tidal bore timing' --used-in chapter-03 \
   --accuracy must-be-accurate --method fact --confidence low
 ```
 

@@ -53,10 +53,10 @@ exist or be in progress.
 2. **Set the constraints up front.** Apply the pack's structural
    requirements during planning:
    - Mystery: create `continuity/clues/` and ledger every clue and red
-     herring via `story add clue "..." --planted chapter-NN --payoff
+     herring via `story add clue '...' --planted chapter-NN --payoff
      chapter-NN`, with `significance-delayed` frontmatter where the reader
      sees the clue before understanding it and `red-herring: true` on
-     misleading clues (`story add clue "..." --red-herring`; their
+     misleading clues (`story add clue '...' --red-herring`; their
      `payoff` is the chapter that debunks them).
      Run `story clues .` for the fair-play matrix and `story diagram clues`
      for the plant-to-reveal flow.

@@ -178,7 +178,7 @@ layout, the bylines, and the builds.
    that its first publisher allows reprinting in a collection, and list any
    that need the user to confirm. Never add a credit the user has not given.
    In the collection project, put the credits on a back-matter page:
-   `story add matter "Acknowledgements" --placement back`, then write the
+   `story add matter 'Acknowledgements' --placement back`, then write the
    lines into `matter/acknowledgements.md` and run `story validate .`.
 5. **Check the stories against each other.** In a linked collection, run
    each story's checks (`story check .`) and compare

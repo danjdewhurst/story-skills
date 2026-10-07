@@ -39,7 +39,7 @@ start — arcs get built during reconciliation.
    a want, an obstacle, a tone signal). Store it in `story.md` under
    `## Story Kernel` and set `draft-mode: discovered` in frontmatter.
 2. **Draft forward.** Create the chapter with
-   `story add chapter "Title" --number N --mode discovered` so `story next`
+   `story add chapter 'Title' --number N --mode discovered` so `story next`
    flags it until it is reconciled (in a `draft-mode: discovered` project a
    drafted chapter with no `mode` is flagged too). Write the chapter from the kernel using the session
    shape in `references/drafting-cadence.md` (re-read → write → close with
@@ -58,7 +58,7 @@ start — arcs get built during reconciliation.
      keeping names as the prose spells them. Ids stay ASCII kebab-case:
      Cyrillic and Greek names get one automatically (`Пётр` gives
      `petr`), and a name in a script with no transliteration table
-     (`李明`) needs `story add character "李明" --id li-ming`, with the
+     (`李明`) needs `story add character '李明' --id li-ming`, with the
      id agreed with the user
    - Reverse-outline the chapter into the chapter file and `scenes/` records
    - Diff against the bible (new / contradiction / enrichment / dangling)

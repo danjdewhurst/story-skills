@@ -266,7 +266,7 @@ Entries with `status: abandoned` are skipped entirely. Everything else is checke
 | error | `<question> records resolved chapter <chapter> but status is still open` | Set `status: resolved` (or `answered`), or clear `resolved`. |
 | warning | `<promise or clue> records planted chapter <chapter> but status is still planned` | Set `status: planted` once the setup is on the page. The warning appears only once that chapter has prose: its own `status` is not `outline`, even when later chapters are drafted. |
 
-`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`; and a research note may name one in `used-in`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter "Title" --number 7`). Outline chapters satisfy the link check without counting as drafted.
+`story links` separately checks that the chapter ids in these fields exist, with one allowance for scheduling ahead. A promise or clue may name a `chapter-NN` that has no chapter file yet in `payoff`, and in `planted` while its status is `planned`; a question may name one in `introduced` while its status is `open`; and a research note may name one in `used-in`. The number must be 1 or more and must not belong to an existing chapter under another id, so `chapter-1` beside `chapter-01`, or `chapter-00`, is reported as a missing chapter. Once the status is `planted` or `paid-off`, the `planted` chapter must exist, and once it is `paid-off`, the `payoff` chapter must exist too. A question's `introduced` chapter must exist once it is no longer `open`, and its `resolved` chapter must always exist; scaffold the chapter first (`story add chapter 'Title' --number 7`). Outline chapters satisfy the link check without counting as drafted.
 
 #### Unfired setups (the Chekhov warning)
 
@@ -713,7 +713,7 @@ story pacing .
 | `sequel` | scene | `true` | The scene is a sequel unit: the character reacts, weighs a `dilemma`, and decides. Sequels are counted separately and their `outcome` is ignored. |
 | `hook` | chapter | `cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution` | How the chapter's last page pulls the reader on. `resolution` is the one ending that lets them put the book down. |
 
-Set them with `story add scene --outcome yes-but`, `story add scene --sequel --dilemma "<text>"`, and `story add chapter --hook question`, or by hand. `story validate` rejects any other `outcome` or `hook` value.
+Set them with `story add scene --outcome yes-but`, `story add scene --sequel --dilemma '<text>'`, and `story add chapter --hook question`, or by hand. `story validate` rejects any other `outcome` or `hook` value.
 
 From [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
@@ -1593,7 +1593,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Moment | Commands |
 |--------|----------|
 | Start of a session | `story next .` |
-| Before naming a character, place, or term | `story names "<candidate>" --path .` |
+| Before naming a character, place, or term | `story names '<candidate>' --path .` |
 | Before renaming or removing a character, place, or term | `story mentions <kind> <id> --path .` |
 | After drafting or revising a chapter | `story reindex .`, `story wordcount . --write`, `story check .`, `story pacing .` |
 | Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |

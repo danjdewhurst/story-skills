@@ -7,7 +7,7 @@ How the commands that create, rename, move, split, merge, and remove entity file
 `add`, `rename`, `move`, and `remove` for deterministic entity file operations when they fit the requested change.
 
 - `add` takes ids, not names, for reference options (`--planted chapter-01`, `--pov mara-quill`), and `add scene` needs its chapter to exist, so add the chapter first.
-- Ids stay ASCII kebab-case. Cyrillic and Greek names are transliterated (`story add character "Пётр"` writes `characters/petr.md` and keeps `name: Пётр`), but a name in a script with no transliteration table (`李明`) needs the id by hand: `story add character "李明" --id li-ming` writes `characters/li-ming.md`, and `story rename <kind> <id> '<New Name>' --id <new-id>` does the same on a rename. `--id` is refused for chapters and scenes, whose ids come from their numbers.
+- Ids stay ASCII kebab-case. Cyrillic and Greek names are transliterated (`story add character 'Пётр'` writes `characters/petr.md` and keeps `name: Пётр`), but a name in a script with no transliteration table (`李明`) needs the id by hand: `story add character '李明' --id li-ming` writes `characters/li-ming.md`, and `story rename <kind> <id> '<New Name>' --id <new-id>` does the same on a rename. `--id` is refused for chapters and scenes, whose ids come from their numbers.
 - `remove chapter` refuses while scene files point at the chapter, so remove those scenes first; it walks back ledger statuses that relied on the chapter (planted to planned, paid-off to planted or planned, answered or resolved questions to open), so review the ledgers afterwards.
 
 ## move
@@ -24,7 +24,7 @@ How the commands that create, rename, move, split, merge, and remove entity file
 
 `split` and `merge` to split a chapter in two or join two neighbouring chapters, instead of moving prose and renumbering by hand.
 
-- `story split <chapter-id> --at <marker>` keeps the text before the marker and makes the rest the next chapter (`--title` names it; default `<title> (continued)`), moving the later chapters up one. The marker is a scene break number (`--at 2`), a heading, or a unique line of the chapter text. Scene records after the split move with their text, by order.
+- `story split <chapter-id> --at '<marker>'` keeps the text before the marker and makes the rest the next chapter (`--title` names it; default `<title> (continued)`), moving the later chapters up one. The marker is a scene break number (`--at 2`), a heading, or a unique line of the chapter text. Scene records after the split move with their text, by order.
 - `story merge <chapter-id> <next-chapter-id>` appends the second chapter's prose after a scene break, adds its outline beats, notes, scenes, and list fields to the first, points every reference to it at the first, and moves the later chapters down one.
 - Both refuse a branching book (one with `choices`).
 - `split` also refuses when it would give a chapter (the last one it renumbers, or the new one when none follows) a `chapter-NN` that a file already names, such as a payoff scheduled for a chapter not written yet. Only abandoned threads naming the new chapter's id are let through, with an `adopted-references` warning. Ask the user which chapter those references mean, point them where the message says (the chapter they belong to, or the next id), then run it again.

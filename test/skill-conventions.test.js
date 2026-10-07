@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { takesValue } from "../src/options.js";
 
 // Every skill links the shared conventions file and repeats the same short
 // summary, so a skill installed without story-maintenance still has them.
@@ -178,83 +179,329 @@ describe("CLI fallback", () => {
   });
 });
 
-// Skills put the user's own words (a title, a name, a synopsis) into a story
-// command in single quotes (#556). Inside double quotes the shell still runs
-// `$(...)` and backticks and expands `$name`, so a title such as `The $5 Fix`
-// loses text and a synopsis with a backtick runs a command. A placeholder for
-// user text is `{...}` or `<...>`. A story command is a line in a fenced
-// block, or an inline code span (wrapped or not), that runs `story` or a
-// `story.js` with Node.
+// Skills put the user's own words (a title, a name, a synopsis, a label from
+// a reader's note) into a story command in single quotes (#556). Inside double
+// quotes a POSIX shell still runs `$(...)` and backticks and expands `$name`,
+// so a title such as `The $5 Fix` loses text and a synopsis with a backtick
+// runs a command; unquoted, the words split and `;` or `&` runs a command.
+//
+// A story command is a line of a fenced block (joined across `\` line ends)
+// or an inline code span that runs `story` or a `story.js` with Node, after
+// any `$ ` prompt, `NAME=value` prefix, or `cd x &&`. Under skills/, which
+// agents copy, no story command double-quotes an argument, and a placeholder
+// (`{Title}`, `<name>`) where the CLI takes the user's text is single-quoted.
+// In docs/ and the README, which show literal examples too, only a
+// double-quoted placeholder is an error.
 
+const docsDir = path.join(repoRoot, "docs");
 const STORY_COMMAND = /^(?:story|node\s+\S*story\.js)\s/;
-const DOUBLE_QUOTED_PLACEHOLDER = /"[^"\n]*[{<][^"\n]*"/;
+const PLACEHOLDER = /(?<!\$)\{[^{}\s]+(?:\s[^{}\s]+)*\}|<[^<>\s]+(?:\s[^<>\s]+)*>/;
+const PLACEHOLDER_WORDS = new Set(["...", "…", "Title", "Name", "New Name"]);
+// Options whose value is the user's text, or a path that can hold spaces,
+// for every command and for one command only (`knowledge --at` takes a
+// chapter id).
+const TEXT_OPTIONS = new Set(["--title", "--synopsis", "--dilemma", "--anchor", "--source", "--genre", "--sub-genre", "--setting-era", "--date", "--follows", "--precedes", "--against", "--path", "--dir"]);
+const COMMAND_TEXT_OPTIONS = { split: new Set(["--at"]) };
+// Positional arguments that are the user's text: each command's text
+// positions, counted from 0 after the command word.
+const TEXT_POSITIONS = { init: [0], add: [1], names: "all", rename: [2], import: [0] };
+// An inline span that is one option and its value (`--title '<Title>'`) is
+// part of a story command named in prose; a longer span such as an error
+// message that starts with an option is not.
+const OPTION_FRAGMENT = /^--[a-z][\w-]*[ =](?:'[^']*'|"(?:[^"\\]|\\.)*"|[^\s'"]+)$/;
+
+// The code spans of a markdown text, as CommonMark reads them: a run of n
+// backticks closes only at the next run of exactly n, and a run with no
+// match is literal text.
+function codeSpans(text) {
+  const spans = [];
+  let index = 0;
+  while (index < text.length) {
+    const open = text.slice(index).match(/`+/);
+    if (!open) {
+      break;
+    }
+    const start = index + open.index;
+    const ticks = open[0].length;
+    const close = new RegExp(`(?<!\`)\`{${ticks}}(?!\`)`, "g");
+    close.lastIndex = start + ticks;
+    const end = close.exec(text);
+    if (!end) {
+      index = start + ticks;
+      continue;
+    }
+    let content = text.slice(start + ticks, end.index).replace(/\n/g, " ");
+    if (/^ .*\S.* $/.test(content)) {
+      content = content.slice(1, -1);
+    }
+    spans.push({ start, end: end.index + ticks, content });
+    index = end.index + ticks;
+  }
+  return spans;
+}
+
+// The shell words of a command line. Each word is a list of parts with the
+// quote that wrapped them: `'`, `"`, or "" for none.
+function shellWords(line) {
+  const words = [];
+  let word = null;
+  let index = 0;
+  const add = (text, quote) => {
+    word ??= [];
+    word.push({ text, quote });
+  };
+  while (index < line.length) {
+    const char = line[index];
+    if (/\s/.test(char)) {
+      if (word) {
+        words.push(word);
+        word = null;
+      }
+      index += 1;
+    } else if (char === "'") {
+      const end = line.indexOf("'", index + 1);
+      const stop = end < 0 ? line.length : end;
+      add(line.slice(index + 1, stop), "'");
+      index = stop + 1;
+    } else if (char === '"') {
+      let end = index + 1;
+      while (end < line.length && line[end] !== '"') {
+        end += line[end] === "\\" ? 2 : 1;
+      }
+      add(line.slice(index + 1, end), '"');
+      index = end + 1;
+    } else {
+      const run = line.slice(index).match(/^(?:\\.|[^\s'"\\]|\\$)+/)[0];
+      add(run, "");
+      index += run.length;
+    }
+  }
+  if (word) {
+    words.push(word);
+  }
+  return words;
+}
+
+// A command line split at `&&`, `||`, `;`, and `|` outside quotes and
+// placeholders, each piece without its `$ ` prompt or `NAME=value` prefixes.
+function commandPieces(line) {
+  const pieces = [];
+  let current = "";
+  let quote = null;
+  let depth = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote) {
+      current += char;
+      if (char === quote) {
+        quote = null;
+      } else if (char === "\\" && quote === '"') {
+        current += line[++index] ?? "";
+      }
+      continue;
+    }
+    if (char === "\\") {
+      current += char + (line[++index] ?? "");
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === "{" || char === "<") {
+      depth += 1;
+    } else if ((char === "}" || char === ">") && depth > 0) {
+      depth -= 1;
+    } else if (depth === 0 && (char === ";" || char === "|" || (char === "&" && line[index + 1] === "&"))) {
+      pieces.push(current);
+      current = "";
+      if (line[index + 1] === char) {
+        index += 1;
+      }
+      continue;
+    }
+    current += char;
+  }
+  pieces.push(current);
+  return pieces.map((piece) => piece.trim().replace(/^\$\s+/, "").replace(/^(?:[A-Za-z_]\w*=\S*\s+)+/, "")).filter((piece) => STORY_COMMAND.test(piece));
+}
+
+const oneLine = (text) => text.replace(/\s+/g, " ").trim();
 
 // The story commands in a markdown text, each with the line it starts on.
 function storyCommands(text) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const commands = [];
   let fence = null;
-  const prose = text.replace(/\r\n?/g, "\n").split("\n").map((line, index) => {
+  const prose = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    prose.push("");
     if (fence) {
-      if (line.trim().startsWith(fence)) {
+      if (line.trim().startsWith(fence) && /^[`~]+$/.test(line.trim())) {
         fence = null;
-      } else if (STORY_COMMAND.test(line.trim())) {
-        commands.push({ line: index + 1, command: line.trim() });
+        continue;
       }
-      return "";
+      let joined = line;
+      const first = index + 1;
+      while (/\\\s*$/.test(joined) && index + 1 < lines.length && !lines[index + 1].trim().startsWith(fence)) {
+        index += 1;
+        prose.push("");
+        joined = `${joined.replace(/\\\s*$/, "")} ${lines[index].trim()}`;
+      }
+      commands.push(...commandPieces(oneLine(joined)).map((command) => ({ line: first, command })));
+      continue;
     }
-    fence = line.match(FENCE)?.[1] ?? null;
-    return fence ? "" : line;
-  }).join("\n");
-  for (const match of prose.matchAll(/`([^`]+)`/g)) {
-    const command = match[1].replace(/\s+/g, " ").trim();
-    if (STORY_COMMAND.test(command)) {
-      commands.push({ line: prose.slice(0, match.index).split("\n").length, command });
+    const open = line.match(FENCE);
+    if (open) {
+      fence = open[1];
+      continue;
     }
+    prose[prose.length - 1] = line;
   }
-  return commands.sort((a, b) => a.line - b.line);
+  const body = prose.join("\n");
+  for (const span of codeSpans(body)) {
+    const line = body.slice(0, span.start).split("\n").length;
+    const content = oneLine(span.content);
+    if (OPTION_FRAGMENT.test(content)) {
+      commands.push({ line, command: content, fragment: true });
+    }
+    commands.push(...commandPieces(content).map((command) => ({ line, command })));
+  }
+  return { commands: commands.sort((a, b) => a.line - b.line), prose: body };
 }
 
-function doubleQuotedPlaceholders(text) {
-  return storyCommands(text)
-    .filter(({ command }) => DOUBLE_QUOTED_PLACEHOLDER.test(command))
-    .map(({ line, command }) => `line ${line}: ${command}`);
+const isPlaceholder = (text) => PLACEHOLDER.test(text) || PLACEHOLDER_WORDS.has(text);
+
+// Why a story command quotes user text unsafely, or [] when it does not.
+// `strict` is the skills/ rule; otherwise only double-quoted placeholders
+// count. A fragment is checked for double quotes only, since prose names an
+// option's value as `--path <project>`.
+function quotingProblems(command, strict, fragment = false) {
+  const words = shellWords(command);
+  const problems = words.flatMap((word) => word.filter((part) => part.quote === '"' && (strict || isPlaceholder(part.text))).map((part) => `double-quotes "${part.text}"`));
+  if (!strict || fragment) {
+    return problems;
+  }
+  const subcommand = words[0].map((part) => part.text).join("") === "story" ? words[1] : words[2];
+  const name = subcommand?.map((part) => part.text).join("");
+  const positions = TEXT_POSITIONS[name];
+  let position = -1;
+  for (let index = words.indexOf(subcommand) + 1; index < words.length; index += 1) {
+    const word = words[index];
+    const first = word[0].text;
+    let value = null;
+    if (first.startsWith("--")) {
+      const option = first.split("=")[0];
+      if (!TEXT_OPTIONS.has(option) && !COMMAND_TEXT_OPTIONS[name]?.has(option)) {
+        // Skip the option's value too, so it is not read as a positional.
+        if (!first.includes("=") && takesValue(option.slice(2))) {
+          index += 1;
+        }
+        continue;
+      }
+      if (first.includes("=")) {
+        value = [{ ...word[0], text: first.slice(option.length + 1) }, ...word.slice(1)];
+      } else if (words[index + 1] && !words[index + 1][0].text.startsWith("--")) {
+        index += 1;
+        value = words[index];
+      }
+    } else {
+      position += 1;
+      if (positions === "all" || positions?.includes(position)) {
+        value = word;
+      }
+    }
+    for (const part of value ?? []) {
+      if (part.quote === "" && PLACEHOLDER.test(part.text)) {
+        problems.push(`leaves ${part.text} unquoted`);
+      }
+    }
+  }
+  return problems;
+}
+
+function fileQuotingProblems(text, strict) {
+  return storyCommands(text).commands.flatMap(({ line, command, fragment }) => quotingProblems(command, strict, fragment).map((why) => `line ${line}: ${why} in \`${command}\``));
 }
 
 describe("user text in story commands", () => {
-  test("detects double-quoted placeholders in fenced and inline story commands", () => {
-    expect(doubleQuotedPlaceholders([
+  test("finds story commands in fences, wrapped spans, double-backtick spans, and shell lines", () => {
+    const { commands } = storyCommands([
       "```shell",
-      'story init "{Title}" --synopsis \'{synopsis}\'',
-      'node <skills>/story-maintenance/scripts/story.js init "{Title}"',
+      "story add research 'A' --used-in chapter-03 \\",
+      "  --method fact",
+      "$ story check .",
+      "cd book && STORY_LOCK_WAIT_MS=0 story reindex . | tee log; story names 'Mara'",
       "```",
-      'Check it with `story names "<candidate>" --path .`, then run `story add',
-      '   character "{Name}" --role supporting`.'
-    ].join("\n"))).toEqual([
-      'line 2: story init "{Title}" --synopsis \'{synopsis}\'',
-      'line 3: node <skills>/story-maintenance/scripts/story.js init "{Title}"',
-      'line 5: story names "<candidate>" --path .',
-      'line 5: story add character "{Name}" --role supporting'
+      "A literal fence: `` ``` `` in prose, then `story add",
+      "   character 'Ines'` and ``story names 'a`b'``; `--title '<Title>'` names it."
+    ].join("\n"));
+    expect(commands).toEqual([
+      { line: 2, command: "story add research 'A' --used-in chapter-03 --method fact" },
+      { line: 4, command: "story check ." },
+      { line: 5, command: "story reindex ." },
+      { line: 5, command: "story names 'Mara'" },
+      { line: 7, command: "story add character 'Ines'" },
+      { line: 8, command: "story names 'a`b'" },
+      { line: 8, command: "--title '<Title>'", fragment: true }
     ]);
-    expect(doubleQuotedPlaceholders([
-      "```shell",
-      "story init '{Title}' --follows '{existing-book-dir}' --synopsis '{synopsis}'",
-      'git commit -m "Feedback round {N}" -- .',
-      "```",
-      "```yaml",
-      'name: "{Full Name}"',
-      "```",
-      'Run `story split chapter-07 --at "The ferry came at noon."` or `git commit -m "Round {N}" -- .`.',
-      'The title goes in as "{Title}", and `story.md` keeps it.'
-    ].join("\n"))).toEqual([]);
   });
 
-  test("no story command under skills/ double-quotes a placeholder", () => {
-    const files = markdownFiles(skillsDir);
-    const problems = files.flatMap((file) => doubleQuotedPlaceholders(fs.readFileSync(file, "utf8")).map((problem) => `${path.relative(skillsDir, file)} ${problem}`));
+  test("flags double quotes and unquoted text placeholders under skills/", () => {
+    const strict = (command) => quotingProblems(command, true);
+    expect(strict('story init "{Title}" --synopsis \'{synopsis}\'')).toEqual(['double-quotes "{Title}"']);
+    expect(strict('story add chapter "Title" --number 7')).toEqual(['double-quotes "Title"']);
+    expect(strict('story split chapter-07 --at "The ferry came at noon."')).toEqual(['double-quotes "The ferry came at noon."']);
+    expect(strict("story split chapter-07 --at <marker> --title '<Title>'")).toEqual(["leaves <marker> unquoted"]);
+    expect(strict("story names <name> 'Kelvos'")).toEqual(["leaves <name> unquoted"]);
+    expect(strict("story init '{Title}' --follows <book-dir>")).toEqual(["leaves <book-dir> unquoted"]);
+    expect(strict("story compare . --ref panel-round-{N} --anchor=<label>")).toEqual(["leaves <label> unquoted"]);
+    expect(strict("node <skills>/story-maintenance/scripts/story.js add character {Name}")).toEqual(["leaves {Name} unquoted"]);
+    expect(strict("story add character 'Mara O'\\''Neill' --role supporting")).toEqual([]);
+    expect(strict("story add arc '{Name}' --type main --character {id} --theme {theme}")).toEqual([]);
+    expect(strict("story rename character {id} '{New Name}' --prose --dry-run")).toEqual([]);
+    expect(strict("story snapshot --restore <name> --path . --dry-run")).toEqual([]);
+    expect(strict('story "{a}" {id} "{b}"')).toEqual(['double-quotes "{a}"', 'double-quotes "{b}"']);
+    expect(strict("story knowledge <id> --at <chapter>")).toEqual([]);
+    expect(strict("story init --form <form> '{Title}'")).toEqual([]);
+    expect(quotingProblems('--title "<Title>"', true, true)).toEqual(['double-quotes "<Title>"']);
+    expect(quotingProblems("--path <project>", true, true)).toEqual([]);
+    expect(storyCommands('`--at "..." is at the start of the chapter text` and `--source "<URL>"`').commands).toEqual([
+      { line: 1, command: '--source "<URL>"', fragment: true }
+    ]);
+  });
+
+  test("flags only double-quoted placeholders in docs/", () => {
+    const lenient = (command) => quotingProblems(command, false);
+    expect(lenient('story rename <kind> <id> "<New Name>"')).toEqual(['double-quotes "<New Name>"']);
+    expect(lenient('story add clue "..." --planted chapter-02')).toEqual(['double-quotes "..."']);
+    expect(lenient('story add chapter "Title"')).toEqual(['double-quotes "Title"']);
+    expect(lenient('story add chapter "The Drowned Man" --number 1')).toEqual([]);
+    expect(lenient('story build "$STORY_DIR" --stamp "$(date -u +%Y-%m-%d) ${GITHUB_SHA::7}"')).toEqual([]);
+    expect(lenient('story "a" {id} "b"')).toEqual([]);
+  });
+
+  const files = [
+    ...markdownFiles(skillsDir).map((file) => ({ file, strict: true })),
+    ...[...markdownFiles(docsDir), path.join(repoRoot, "README.md")].map((file) => ({ file, strict: false }))
+  ];
+
+  test("no story command under skills/, docs/, or the README quotes user text unsafely", () => {
+    const problems = files.flatMap(({ file, strict }) => fileQuotingProblems(fs.readFileSync(file, "utf8"), strict).map((problem) => `${path.relative(repoRoot, file)} ${problem}`));
     expect(problems).toEqual([]);
-    // Guard against a matcher that silently stops finding commands.
-    const singleQuoted = files.flatMap((file) => storyCommands(fs.readFileSync(file, "utf8")))
-      .filter(({ command }) => /'[^'\n]*[{<][^'\n]*'/.test(command));
-    expect(singleQuoted.length).toBeGreaterThan(20);
+  });
+
+  test("every inline story command in each file is inside a code span the parser found", () => {
+    // Guard against code-span pairing that silently drops a file's later
+    // commands: each `story <command> in prose must start inside a span.
+    let checked = 0;
+    for (const { file } of files) {
+      const { prose } = storyCommands(fs.readFileSync(file, "utf8"));
+      const spans = codeSpans(prose);
+      for (const match of prose.matchAll(/`(?:\$ )?story [a-z]/g)) {
+        checked += 1;
+        expect(spans.some((span) => span.start <= match.index && match.index < span.end), `${path.relative(repoRoot, file)} line ${prose.slice(0, match.index).split("\n").length}`).toBe(true);
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
   });
 });

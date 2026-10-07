@@ -89,7 +89,7 @@ ids. After a revision, paragraph numbers can shift. Tag the commit you
 share, build with `story build . --format html --stamp <tag>` so the copy
 names its build, and ask reviewers to quote the build and each paragraph's
 first few words. To place an old note, run
-`story compare . --ref <round-tag> --anchor <label>` (repeat `--anchor` for
+`story compare . --ref <round-tag> --anchor '<label>'` (repeat `--anchor` for
 every label in the round): it prints each paragraph's current label, whether
 its text was edited, or its first few words when it is gone, so you can
 search for the reader's quote instead. Add `--note-url <issue-form link>` to

@@ -58,12 +58,14 @@ the panel.
    same section (or from `story.md` frontmatter only, where a missing
    field means `en`): it is no spoiler, and every persona reads the book as a reader of that
    language would.
-2. Pick the round number: the next free `N` under `feedback/`. A panel
-   gets its own round. Never add simulated reads to a round of human
-   readers, so the human synthesis stays independent.
+2. Pick the round number: the next `N` that is free under `feedback/`
+   and not yet the name of a tag or snapshot `panel-round-{N}`
+   (`git tag --list 'panel-round-*'` and `story snapshot --list --path .`
+   list them). A panel gets its own round. Never add simulated reads to
+   a round of human readers, so the human synthesis stays independent.
 3. Save the text the panel will cite under the name `panel-round-{N}`,
    so `feedback-triage` can map its labels to a later draft with
-   `story compare . --ref panel-round-{N}` once the chapters change:
+   `story compare` once the chapters change:
 
    - **Git project:** work from the book's folder, the one that holds
      `story.md` (`cd` there first), because `-- .` below means the
@@ -74,9 +76,17 @@ the panel.
      points at the last commit, so uncommitted changes would make the two
      differ. Look through it for private files (a `.env`, keys or
      credentials, scanned documents): unless the user says to commit one,
-     add it to `.gitignore` first. Ask before committing and before
-     tagging. With approval, commit the project folder only (skip the
-     commit when the tree is already clean) and tag that commit:
+     add it to `.gitignore` first. `.gitignore` does not untrack a file
+     git already tracks, so also run `git ls-files -- .` and look for the
+     same kinds of file: if one is listed, the commit below would include
+     its changes, so stop and ask the user before committing. A tag holds only
+     tracked files, so run `git ls-files --others --ignored
+     --exclude-standard -- .` as well: if it lists a markdown file outside
+     `dist/` and `.snapshots/`, or the cover or stylesheet `story.md`
+     names, the build reads a file the tag would miss, so take a snapshot
+     as below instead. Ask before committing and before tagging. With
+     approval, commit the project folder only (skip the commit when the
+     tree is already clean) and tag that commit:
 
      ```shell
      git add -A -- .
@@ -85,10 +95,13 @@ the panel.
      ```
 
      If the user declines the commit, never tag the last commit over an
-     uncommitted tree: take a snapshot as below, or stop. Never push, and
-     never move or delete a tag, without the user's approval.
-   - **Project without git, or the user declined the commit:** take a
-     snapshot with `story snapshot panel-round-{N} --path .`.
+     uncommitted tree: take a snapshot as below, or stop. If `git tag`
+     says the tag already exists, an earlier attempt saved this round:
+     never move it; ask the user, or pick the next free `N`. Never push,
+     and never move or delete a tag, without the user's approval.
+   - **Project without git, the user declined the commit, or an ignored
+     file the build reads:** take a snapshot with
+     `story snapshot panel-round-{N} --path .`.
 
 4. Build the review copy the panel cites from that text, so its labels
    match the ones human readers will use:
@@ -171,9 +184,10 @@ rates a note `blocking`, and the first-page reader has no `nit`).
 ### 5. Hand off to feedback-triage
 
 Hand the round to the `feedback-triage` skill for synthesis, and tell it
-the round's tag or snapshot (`panel-round-{N}`): it maps a label to the
-current text with `story compare . --ref panel-round-{N} --anchor <label>`,
-or `--snapshot panel-round-{N}` in place of `--ref`. It reads
+whether step 1 saved the text as a tag or as a snapshot named
+`panel-round-{N}`. It maps a label to the current text with
+`story compare . --ref panel-round-{N} --anchor '<label>'`, or with
+`--snapshot panel-round-{N}` in place of `--ref` for a snapshot. It reads
 `source: simulated` and weighs the round accordingly: agreement between
 personas is not independent convergence, and a simulated round's
 `ready` verdict means ready for human readers, nothing more. Tell the

@@ -41,7 +41,7 @@ Once the project exists, run candidate titles' key words, and every new
 character, place, or term name, through the collision check:
 
 ```shell
-story names "Maren" "Bellrock" --path .
+story names 'Maren' 'Bellrock' --path .
 ```
 
 Pass each word separately when a title or name has more than one

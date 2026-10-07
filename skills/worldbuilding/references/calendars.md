@@ -55,7 +55,7 @@ With a calendar, scene and chapter `date` values are written in it:
 - `3 Thaw 412` (no era: the last era)
 - `Seconday, 3 Thaw 412 AF` (a stated weekday must be the right one)
 
-`story add scene --date "3 Thaw 412 AF"` takes the same forms. Use `time`
+`story add scene --date '3 Thaw 412 AF'` takes the same forms. Use `time`
 for the time of day: it keeps the 24-hour `HH:MM` clock and the named
 parts of the day (`dawn`, `evening`), even if people in the world count
 hours differently.
@@ -71,7 +71,7 @@ or a weekday must be a real day of the calendar: `31 Thaw 412 AF` in a
 ## Record the rest as a system file
 
 ```shell
-story add system "Reckoning of Vell" --type social
+story add system 'Reckoning of Vell' --type social
 ```
 
 Fill `worldbuilding/systems/reckoning-of-vell.md` with what the `calendar`

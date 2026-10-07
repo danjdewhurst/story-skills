@@ -101,7 +101,7 @@ Once a project exists, check title words and new names against the story's
 entities before adopting them:
 
 ```shell
-story names "Bell Tower" Bell "Maren" --path .
+story names 'Bell Tower' Bell 'Maren' --path .
 ```
 
 An exact clash exits 1 and must be resolved: the candidate equals an
@@ -134,10 +134,13 @@ with the brief:
 story init 'The Keeper of Skerry Light' --form novella --genre fantasy --sub-genre coastal --synopsis 'A lighthouse keeper who has never left the rock must choose between the light and her drowned brother.' --theme isolation
 ```
 
-Workshop text is the user's own words, so quote every value for the shell
-before running the command: wrap each in single quotes and write any
-single quote inside it as `'\''`. Never paste a value into double quotes,
-where `$(...)`, backticks, and `"` still take effect.
+Workshop text is the user's own words, so wrap every value in single
+quotes before running the command. Never paste a value into double
+quotes, where `$(...)`, backticks, and `"` still take effect. A single
+quote inside a value depends on the shell: write it as `'\''` in a POSIX
+shell (bash, zsh, sh, Git Bash) and as `''` in PowerShell. Never run the
+command in cmd.exe, which has no single quotes and runs `&` inside a
+value; use PowerShell or a POSIX shell.
 
 `--form` sets `form` in `story.md` and a default `target-words` for the
 form when none is given (`serial` sets none; set per-episode chapter

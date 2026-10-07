@@ -154,7 +154,7 @@ The [form reference](../skills/premise-workshop/references/form-choice.md) count
 
 ### 5. Hand off to story-init
 
-The skill shows a one-screen brief (working title, logline, premise, counter-premise, stakes, form, genre and sub-genre, POV and tense if known, themes, comps, and the book's language). On your approval it follows `story-init` with that brief, so you are not asked the same questions twice. Workshop text is your own words, so it quotes every value in single quotes for the shell, writing an apostrophe inside a value as `'\''`:
+The skill shows a one-screen brief (working title, logline, premise, counter-premise, stakes, form, genre and sub-genre, POV and tense if known, themes, comps, and the book's language). On your approval it follows `story-init` with that brief, so you are not asked the same questions twice. Workshop text is your own words, so it quotes every value in single quotes for the shell, writing an apostrophe inside a value as `'\''` in a POSIX shell such as bash or zsh (in PowerShell it doubles the apostrophe instead, and it never uses cmd.exe for user text):
 
 ```shell
 story init 'The Gannet Point Light' --form novel --genre mystery --sub-genre coastal \
@@ -921,7 +921,7 @@ story add research "Drowning and cold water" --used-in chapter-01 \
 | `confidence` | `high`, `medium`, `low` | How sure the findings are; start low and raise it as sources agree |
 | `risk` | `legal`, `medical`, `weapons`, `safety`, `cultural`, `defamation`, `technical` | Getting it wrong could harm a reader, a real person, or you. Pass `--risk` once per value |
 
-The note has `## Question`, `## Findings`, and `## Story Use` sections and starts at `status: open`. Add `--source "<citation or URL>"` (repeatable) to record sources up front.
+The note has `## Question`, `## Findings`, and `## Story Use` sections and starts at `status: open`. Add `--source '<citation or URL>'` (repeatable) to record sources up front.
 
 ### 2. Plan the investigation
 
@@ -1201,7 +1201,7 @@ story build . --format html
 story build . --format print --trim 6x9
 ```
 
-It checks for typos introduced by editing, doubled or missing words, broken scene breaks, chapter headings, matter pages, and widows and orphans in the print copy, citing each by paragraph anchor. Rendering the print HTML to PDF needs a paged-media engine you install (Paged.js CLI, WeasyPrint, or Prince); see [Import, export, and builds](manuscripts.md).
+It checks for typos introduced by editing, doubled or missing words, broken scene breaks, chapter headings, matter pages, and widows and orphans in the print copy, citing each by paragraph anchor. For a PDF it adds `--pdf` to the print build (`story build . --format print --trim 6x9 --pdf`), which runs a paged-media engine you have installed (Prince, WeasyPrint, `pagedjs-cli`, or Chrome as a fallback; `--pdf-engine` picks one) and writes `dist/<story-id>.pdf`. The CLI bundles none, and the skill asks before installing one; see [PDF output](manuscripts.md#pdf-output).
 
 ### 7. Close the pass
 
@@ -1773,7 +1773,7 @@ For a screenplay, the skill builds a scene list from the scene records (reading 
 Plan this as a picture book.
 ```
 
-For a picture book, set `form: picture-book` in `story.md`, or start a new project with `story init "Title" --form picture-book`, which sets a 500-word target. The skill plans 32 pages and 14 story spreads, with a page-turn beat on each, in `adaptations/picture-book/pagination.md`. The text stays in chapters, one per spread, and illustration briefs and art notes stay in the plan, not the prose ([picture book reference](../skills/adaptation/references/picture-book.md)).
+For a picture book, set `form: picture-book` in `story.md`, or start a new project with `story init 'Title' --form picture-book`, which sets a 500-word target. The skill plans 32 pages and 14 story spreads, with a page-turn beat on each, in `adaptations/picture-book/pagination.md`. The text stays in chapters, one per spread, and illustration briefs and art notes stay in the plan, not the prose ([picture book reference](../skills/adaptation/references/picture-book.md)).
 
 ### Translation
 

@@ -245,6 +245,7 @@ describe("skills and docs commit the book's folder only (#598)", () => {
       "skills/editorial-review/SKILL.md",
       "skills/editorial-review/references/editor-rounds.md",
       "skills/feedback-triage/SKILL.md",
+      "skills/reader-panel/SKILL.md",
       "skills/revision-continuity/SKILL.md",
     ]));
   });
@@ -266,6 +267,43 @@ describe("skills and docs commit the book's folder only (#598)", () => {
         checked.push(where.split("/")[1]);
       }
     }
-    expect(checked).toEqual(expect.arrayContaining(["editorial-review", "feedback-triage", "revision-continuity"]));
+    expect(checked).toEqual(expect.arrayContaining(["editorial-review", "feedback-triage", "reader-panel", "revision-continuity"]));
+  });
+});
+
+// reader-panel saves the text its labels come from as panel-round-{N}, a tag
+// or a snapshot, and feedback-triage maps the panel's labels against that
+// name (#556). The panel picks a name no tag or snapshot has yet, and, since
+// a tag holds only tracked files, checks for tracked private files and
+// ignored files the build reads before it commits.
+
+describe("reader-panel saves its round under the name feedback-triage maps against (#556)", () => {
+  const read = (name) => unwrapInlineCode(fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8")).replace(/\s+/g, " ");
+  const panel = read("reader-panel");
+  const triage = read("feedback-triage");
+
+  test("every stamp, tag, snapshot, and compare in reader-panel names panel-round-{N}", () => {
+    const names = {
+      stamp: [...panel.matchAll(/--stamp (\S+)/g)],
+      tag: [...panel.matchAll(/git tag (?!--)(\S+)/g)],
+      snapshot: [...panel.matchAll(/story snapshot (?!--)(\S+)/g)],
+      ref: [...panel.matchAll(/--(?:ref|snapshot) (\S+)/g)],
+    };
+    for (const [kind, matches] of Object.entries(names)) {
+      expect(matches.length, `reader-panel has no ${kind}`).toBeGreaterThan(0);
+      expect(matches.map((match) => match[1].replace(/[`.,]+$/, "")), kind).toEqual(matches.map(() => "panel-round-{N}"));
+    }
+    expect(triage).toContain("`panel-round-{N}`");
+    expect(triage).toContain("`--snapshot feedback-round-{N}` in place of `--ref`");
+  });
+
+  test("reader-panel checks names, tracked private files, and ignored files before it commits", () => {
+    const add = panel.indexOf("git add -A -- .");
+    expect(add).toBeGreaterThan(0);
+    for (const check of ["git tag --list 'panel-round-*'", "story snapshot --list --path .", "git ls-files -- .", "git ls-files --others --ignored --exclude-standard -- ."]) {
+      const at = panel.indexOf(check);
+      expect(at, check).toBeGreaterThanOrEqual(0);
+      expect(at, `${check} comes after git add`).toBeLessThan(add);
+    }
   });
 });

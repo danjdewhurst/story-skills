@@ -123,7 +123,7 @@ See the `genre-craft` skill.
 
 ## add clue
 
-Run it when the user plants a new clue. `story add clue "Name" --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planted` (`planned` when `--planted` is omitted or names a chapter not written yet; pass `--status planned` if the clue is not on the page yet). Omit `--payoff` when the payoff is not yet known, and pass `--red-herring` for a clue meant to mislead.
+Run it when the user plants a new clue. `story add clue 'Name' --planted chapter-02 --payoff chapter-05` creates the clue ledger entity in `continuity/clues/` with `status: planted` (`planned` when `--planted` is omitted or names a chapter not written yet; pass `--status planned` if the clue is not on the page yet). Omit `--payoff` when the payoff is not yet known, and pass `--red-herring` for a clue meant to mislead.
 
 ## pacing
 
@@ -161,7 +161,7 @@ See the `voice-style` skill for acting on them.
 
 ## mentions
 
-Run `story mentions <kind> <id> --path <project>` to list every place the chapter prose names a character, location, faction, artifact, system, or glossary term, and before `story remove`, which never changes prose, or `story rename` without `--prose`.
+Run `story mentions <kind> <id> --path '<project>'` to list every place the chapter prose names a character, location, faction, artifact, system, or glossary term, and before `story remove`, which never changes prose, or `story rename` without `--prose`.
 
 - It looks for the `name`, `aliases`, a character's given name (not an initial such as the `J` of `J. R. Dunn`), and each without leading titles or articles (`Hollow` for `The Hollow`). Names match as written and as whole words, so `Rose` is not found in "a rose"; possessives count. Outlines, HTML comments, and code fences are skipped.
 - `story continuity` warns `named-not-listed` when a drafted chapter's prose names a character that its `pov`, `characters`, and `mentions` leave out. Add them to `characters` if they are on the page, or `mentions` if they are only talked about. A one-word name that opens a sentence is not counted when the chapter also uses it as a plain word.
@@ -169,7 +169,7 @@ Run `story mentions <kind> <id> --path <project>` to list every place the chapte
 
 ## names
 
-Run `story names <name...>` before naming a character, place, faction, artifact, system, or glossary term. It checks candidates against every existing name and alias.
+Run `story names '<name>' ...` before naming a character, place, faction, artifact, system, or glossary term. It checks candidates against every existing name and alias.
 
 - A candidate's given name (first word that is not a title or article such as `the`, `lord`, or `captain`) is compared with each character's given name, and everything else as a whole name; an exact match with either is a clash, an error (exit 1).
 - Look-alikes (the same first four letters, or the same initial within edit distance 1, or 2 when both words have five letters or more) and a given name sharing an initial with a protagonist, antagonist, deuteragonist, or narrator are warnings.
@@ -207,7 +207,7 @@ See the `revision-continuity` skill.
 
 ## compare
 
-Run `story compare . --ref <git-ref>` or `story compare . --against <project-path>` after a revision pass, or when the user asks what changed since a draft. It needs exactly one of the two.
+Run `story compare . --ref <git-ref>` or `story compare . --against '<project-path>'` after a revision pass, or when the user asks what changed since a draft. It needs exactly one of the two.
 
 - `--ref` reads chapters at a git branch, tag, or commit with `git show` (it never writes to the repository), and `--against` reads another copy of the project.
 - It reports per-chapter word changes, added and removed chapters, and the share of paragraphs unchanged.
@@ -217,7 +217,7 @@ See Draft Snapshots in the `revision-continuity` skill for taking the snapshot.
 
 ## similarity
 
-Run `story similarity . --against <source>` when the user asks whether a passage echoes another text too closely: their earlier books, a previous draft, or a source they worked from.
+Run `story similarity . --against '<source>'` when the user asks whether a passage echoes another text too closely: their earlier books, a previous draft, or a source they worked from.
 
 - `--against` takes a file, a folder (another story project's chapters, or every `.md`, `.markdown`, and `.txt` file in it), or a git ref.
 - It reports each run of `--min-words` (default 8) or more shared words, compared lowercased without punctuation, as a `similarity-shared-passage` warning with the chapter's review-copy label, the reference's location, and the shared words, then per-chapter and total shares.

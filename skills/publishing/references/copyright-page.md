@@ -4,7 +4,7 @@ The copyright page sits on the verso (left-hand page) behind the title
 page in print, and near the front of an ebook. Create it with:
 
 ```shell
-story add matter "Copyright" --order 0 --heading=false
+story add matter 'Copyright' --order 0 --heading=false
 ```
 
 Give it an `order` lower than every other front page (`0` works unless
