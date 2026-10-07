@@ -345,6 +345,16 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["synopsis", root]).err).toBe("Unsupported synopsis length: 2. Supported pages: 1, 3 (story.md cli-defaults set --pages 2)\n");
   });
 
+  test("defaults of one linked group all apply, unless the command line gives one (#566)", () => {
+    const options = {};
+    expect(applyDefaults({ defaults: { build: { format: "html", stamp: "draft-2" } } }, "build", options)).toEqual(["format", "stamp"]);
+    expect(options).toEqual({ format: "html", stamp: "draft-2" });
+    const { root, cwd } = noisyProject();
+    configure(root, "cli-defaults:\n  - command: build\n    format: html\n    stamp: draft-2");
+    expect(invoke(cwd, ["build", root]).code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "dist", "configured.html"), "utf8")).toContain("draft-2");
+  });
+
   test("split and merge take no defaults, so split without --at fails rather than splits at one (#566)", () => {
     const { root, cwd } = noisyProject();
     const chapter = path.join(root, "chapters", "chapter-01.md");

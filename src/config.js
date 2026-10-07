@@ -229,10 +229,13 @@ function listItems(raw, field, errors) {
 
 // Fills in a command's configured defaults for the flags the command line did
 // not give (an alias, or another flag of a linked group, given on the command
-// line counts), and returns the names of the flags it filled in.
+// line counts), and returns the names of the flags it filled in. Only the
+// command line drops a group, so `format: html` with `stamp: draft-2` fills
+// in both, not just the first.
 export function applyDefaults(config, commandName, options) {
   const filled = [];
-  const given = (name) => optionFamily(name).some((member) => options[member] !== undefined);
+  const commandLine = { ...options };
+  const given = (name) => optionFamily(name).some((member) => commandLine[member] !== undefined);
   for (const [key, value] of Object.entries(config.defaults[commandName] ?? {})) {
     const group = (LINKED_FLAGS[commandName] ?? []).find((flags) => flags.includes(key)) ?? [key];
     if (!group.some(given)) {
