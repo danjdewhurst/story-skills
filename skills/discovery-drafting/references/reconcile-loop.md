@@ -50,8 +50,9 @@ bible:
 ### 4. Reconcile
 
 Apply the diff: update bible files, `continuity/state.md`,
-`plot/timeline.md`, and the chapter/scene records. `story reindex .` then
-rebuilds the registries. The two legal outcomes
+`plot/timeline.md`, and the chapter/scene records. Then run `story reindex .`,
+`story wordcount . --write`, and `story check .` to rebuild the registries and
+check the result. The two legal outcomes
 are **update the bible** (the chapter discovered something true) or
 **revise the chapter** (the chapter broke something true). "Leave both"
 is not an outcome — unresolved diffs become continuity bugs.

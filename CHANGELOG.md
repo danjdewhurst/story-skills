@@ -115,6 +115,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - A double-quoted value with no closing quote is now a frontmatter error. ([#728](https://github.com/danjdewhurst/story-skills/issues/728))
   - Before, `title: "The Last Ember` passed validation, and `reindex` wrote the quote mark into the registry.
   - Add the closing quote to fix the error. A value over several lines is written as a block scalar, such as `summary: |`.
+- Skill reference files now tell agents to run the maintenance block after they add, rename, or remove an entity. ([#815](https://github.com/danjdewhurst/story-skills/issues/815), [#816](https://github.com/danjdewhurst/story-skills/issues/816))
+  - The block is `story reindex .`, `story wordcount . --write`, and `story check .`, in that order.
+  - The affected references cover the `research`, `publishing`, `premise-workshop`, `voice-style`, `story-maintenance`, `interactive-fiction`, `series-continuity`, `adaptation`, and `submission` skills.
 
 ## [0.23.0] - 2026-10-07
 

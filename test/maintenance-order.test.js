@@ -334,6 +334,29 @@ function maintenanceProblem(block) {
   return repeated ? `repeats \`${repeated}\` after the canonical block` : null;
 }
 
+const ENTITY_COMMAND = /^story (?:add|rename|remove|move|split|merge)(?:\s|$)/;
+
+// Whether a page tells an agent to add, rename, remove, move, split, or merge
+// an entity: a command in a fenced block (not a command catalogue) or in
+// inline code.
+function changesEntities(text) {
+  const commands = [
+    ...fencedBlocks(text).filter((block) => !block.reference).flatMap((block) => block.commands),
+    ...[...proseOnly(text).matchAll(INLINE_COMMAND)].map((match) => match[1].trim())
+  ];
+  return commands.some((command) => ENTITY_COMMAND.test(command));
+}
+
+// Whether a page names the maintenance block: reindex, wordcount --write, and
+// check together in one fenced block or one inline list.
+function namesBlock(text) {
+  const runs = [
+    ...fencedBlocks(text).filter((block) => !block.reference).map((block) => block.commands),
+    ...inlineLists(text, INLINE_MAINTENANCE).map((list) => list.commands)
+  ];
+  return runs.some((commands) => BLOCK_KINDS.every((kind) => commands.some((command) => commandKind(command) === kind)));
+}
+
 describe("maintenance block order", () => {
   test("detects blocks and accepts only the canonical order", () => {
     const check = (body, before = "") => fencedBlocks(`${before}\`\`\`shell\n${body}\n\`\`\`\n`).map(maintenanceProblem)[0];
@@ -482,5 +505,20 @@ describe("maintenance block order", () => {
     // The drafting prompt runs the whole block.
     const draft = templateSequences(fs.readFileSync(path.join(repoRoot, "templates", "github", "draft-next-chapter.yml"), "utf8"));
     expect(draft.map(({ commands }) => commands)).toContainEqual(["story reindex ${{env.STORY_DIR}}", "story wordcount ${{env.STORY_DIR}} --write", "story check ${{env.STORY_DIR}}"]);
+  });
+
+  test("every skill file that adds, renames, or removes an entity names the maintenance block", () => {
+    const problems = markdownFiles(skillsDir).flatMap((file) => {
+      const text = fs.readFileSync(file, "utf8");
+      return changesEntities(text) && !namesBlock(text) ? [path.relative(skillsDir, file)] : [];
+    });
+    expect(problems).toEqual([]);
+  });
+
+  test("the reconcile step of the discovery loop runs the maintenance block", () => {
+    const text = fs.readFileSync(path.join(skillsDir, "discovery-drafting", "references", "reconcile-loop.md"), "utf8");
+    const step = text.slice(text.indexOf("### 4. Reconcile"), text.indexOf("## Post-hoc chapter notes"));
+    expect(step).toContain("### 4. Reconcile");
+    expect(namesBlock(step)).toBe(true);
   });
 });

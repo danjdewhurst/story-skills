@@ -102,3 +102,4 @@ something new. Read it before deciding.
   `story rename character <id> '<New Name>' --prose`, so the chapter text
   follows as well as the references: run it with `--dry-run` first, show
   the user the replacements, and run it for real only once they approve.
+  After a rename, run `story reindex .`, `story wordcount . --write`, and `story check .`.

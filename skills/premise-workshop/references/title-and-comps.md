@@ -56,7 +56,8 @@ clashes.
   reuse is deliberate and rename the existing entity with
   `story rename <kind> <id> '<New Name>' --prose`, so its chapter text
   follows too: run it with `--dry-run` first, show the user the
-  replacements, and run it for real only once they approve.
+  replacements, and run it for real only once they approve. After a rename, run `story reindex .`,
+  `story wordcount . --write`, and `story check .`.
 - **Look-alike warning:** the same first four letters (*Maren* /
   *Marenna*), or the same initial and one letter apart (two for words of
   five letters or more: *Maren* / *Marek*). Readers confuse these.

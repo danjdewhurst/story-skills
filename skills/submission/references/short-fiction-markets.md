@@ -179,7 +179,7 @@ layout, the bylines, and the builds.
    that need the user to confirm. Never add a credit the user has not given.
    In the collection project, put the credits on a back-matter page:
    `story add matter 'Acknowledgements' --placement back`, then write the
-   lines into `matter/acknowledgements.md` and run `story validate .`.
+   lines into `matter/acknowledgements.md`, then run `story reindex .`, `story wordcount . --write`, and `story check .`.
 5. **Check the stories against each other.** In a linked collection, run
    each story's checks (`story check .`) and compare
    shared names, dates, and facts by reading. Note contradictions for the

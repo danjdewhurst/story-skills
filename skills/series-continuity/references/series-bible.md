@@ -74,7 +74,8 @@ characters or events that do not exist in some book's files.
   every book that defines the id, so each book's chapter text follows, or
   keep the old id. In each book, run it with `--dry-run` first, show the
   user that book's replacements, and run it for real only once they
-  approve. Put a new title or epithet in `aliases`, not `name`.
+  approve. In each book, after the rename, run `story reindex .`, `story wordcount . --write`, and
+  `story check .`. Put a new title or epithet in `aliases`, not `name`.
 - **Before naming a new character** in a later book, run
   `story names '<name>' --path '<other-book>'` against each earlier book, so
   a minor character does not echo a major one.
