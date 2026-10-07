@@ -166,9 +166,13 @@ Use `revision-continuity` for the passes, plus these checks:
   [`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#branching-books)
   says which `continuity`, `knowledge`, `context`, `timeline`, and `grid`
   results follow the paths and which go by chapter number.
-- **Renumbering:** `story move chapter` rewrites every `to` that named the
-  old id. It never edits prose, so reread the passages for chapter numbers
-  in the text.
+- **Renumbering:** `story move chapter`, `story split`, and `story merge`
+  rewrite every `to` that named an old id. Split and merge work here only
+  on chapters with no `choices`, and merge only when no choice leads to
+  the second chapter; restructure anything else by hand. A split gives its
+  first half a `Continue` choice that leads to the rest, so offer the user
+  other words for it. None of them edits prose, so reread the passages for
+  chapter numbers in the text.
 - **Rejoin prose:** after changing a branch, reread every rejoin it leads
   to and confirm the prose still holds on that path.
 
