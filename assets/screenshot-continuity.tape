@@ -1,6 +1,6 @@
 # Renders assets/screenshot-continuity.png, the Codex plugin screenshot: the
-# last frame of assets/demo.tape as a still. Run it the way demo.tape's
-# header shows, with this tape's path:
+# last frame of assets/demo.tape as a still. Run it as demo.tape's header
+# shows, natively or in Docker, with this tape's path:
 #   vhs assets/screenshot-continuity.tape
 # It types while hidden and records no GIF, only the screenshot.
 
