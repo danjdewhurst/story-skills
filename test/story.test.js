@@ -998,6 +998,24 @@ word-count: 0
     expect(docx).toContain('<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">name</w:t></w:r>');
   });
 
+  test("prints links as their text, character references as their characters, and autolinks as their addresses in epub and docx (#592)", () => {
+    const cwd = makeTempDir();
+    const created = createStoryProject({ cwd, title: "Inline Build", force: false });
+    writeMarkdown(path.join(created.root, "chapters", "chapter-01.md"), `
+title: One
+number: 1
+status: draft
+word-count: 0
+`, "## Chapter Text\n\nSee [Foo](https://en.wikipedia.org/wiki/Foo_(bar)) and [the map](map.html \"The map (old)\"), not `[x](y)` or [Aside](not a link).\n\nHe left&mdash;then&nbsp;wrote to <https://example.com/a_b>.");
+
+    const epub = readArchiveText(buildBook(created.root, { format: "epub" }).outFile);
+    expect(epub).toContain("<p>See Foo and the map, not [x](y) or [Aside](not a link).</p>");
+    expect(epub).toContain("<p>He left—then wrote to https://example.com/a_b.</p>");
+    const docx = readArchiveText(buildBook(created.root, { format: "docx" }).outFile);
+    expect(docx).toContain('<w:t xml:space="preserve">See Foo and the map, not [x](y) or [Aside](not a link).</w:t>');
+    expect(docx).toContain('<w:t xml:space="preserve">He left—then wrote to https://example.com/a_b.</w:t>');
+  });
+
   test("rename leaves overlapping entity ids and prose words intact", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Rename Overlap", force: false });
