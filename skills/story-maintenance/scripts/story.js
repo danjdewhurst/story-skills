@@ -29602,16 +29602,21 @@ var VERSION = "0.22.1";
 
 // src/workflows.js
 var ENV_LINE = /^\s*(STORY_VERSION|STORY_REF|STORY_PACKAGE)\s*:\s*["']?([^"'\s#]*)/;
-var VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+var VERSION_PATTERN = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+var MAX_LABEL = 64;
+var SHOWN_REF = /^[\w./@+-]{1,100}$/;
 var RELEASES = "https://github.com/danjdewhurst/story-skills/releases";
 function workflowPinActions(projectRoot, cwd = projectRoot) {
   const current = parseVersion(VERSION);
   const actions = [];
+  const newer = [];
   for (const pin of workflowPins(projectRoot)) {
     const where = `${projectPath(cwd, pin.file) || pin.file}:${pin.line}`;
     const parsed = parseVersion(pin.value);
     if (pin.name === "STORY_REF" && parsed === null) {
-      actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF to ${pin.value || "an empty value"}; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#${pin.value || "<ref>"}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
+      const ref = SHOWN_REF.test(pin.value) ? pin.value : null;
+      const named = ref ?? (pin.value === "" ? "an empty value" : "a value that is not a release");
+      actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF to ${named}; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#${ref ?? "<ref>"}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
     } else if (pin.name === "STORY_REF") {
       const target = compareVersions(parsed, current) > 0 ? parsed.text : VERSION;
       actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF; change the line to STORY_VERSION: "${target}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
@@ -29620,40 +29625,67 @@ function workflowPinActions(projectRoot, cwd = projectRoot) {
       if (order < 0) {
         actions.push(action2("Update workflow CLI version", `${where} installs story-skills ${parsed.text}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`));
       } else if (order > 0) {
-        actions.push(action2("Update local CLI version", `${where} installs story-skills ${parsed.text}, newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${cliUpdateHint(parsed.text)}.`));
+        newer.push({ where, version: parsed });
       }
     }
   }
+  if (newer.length > 0) {
+    actions.push(newerPinAction(newer));
+  }
   return actions;
+}
+function newerPinAction(pins) {
+  const newest = pins.reduce((best, pin) => compareVersions(pin.version, best) > 0 ? pin.version : best, pins[0].version);
+  const same = pins.every((pin) => pin.version.text === newest.text);
+  const lines = pins.map((pin) => same ? pin.where : `${pin.where} (${pin.version.text})`);
+  const listed = lines.length === 1 ? lines[0] : `${lines.slice(0, -1).join(", ")} and ${lines[lines.length - 1]}`;
+  const installs = !same ? "install story-skills releases" : `${pins.length === 1 ? "installs" : "install"} story-skills ${newest.text},`;
+  return action2("Update local CLI version", `${listed} ${installs} newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${cliUpdateHint(newest.text)}.`);
 }
 function cliUpdateHint(version, file = fileURLToPath(import.meta.url), execPath = process.execPath) {
   const location = file.replace(/\\/g, "/");
   if (/\/(\$bunfs|~BUN)\//.test(location)) {
     return /\/Cellar\/story-skills\//.test(realPath3(execPath).replace(/\\/g, "/")) ? "update it with brew upgrade story-skills" : `download the ${version} binary for your system from ${RELEASES}/tag/v${version}`;
   }
-  const npm = location.includes("/.pnpm/") ? null : /^(.*)\/node_modules\/story-skills\//.exec(location);
-  if (npm && location.includes("/_npx/")) {
-    return `run that release with npx story-skills@${version}`;
-  }
-  if (npm && /\/bunx-[^/]*\//.test(location)) {
-    return `run that release with bunx story-skills@${version}`;
-  }
-  if (npm && location.includes("/.bun/install/global/")) {
-    return `update it with bun add -g story-skills@${version}`;
-  }
-  if (npm && fs14.existsSync(path18.join(npm[1], "package.json"))) {
-    return `update the story-skills dependency in ${npm[1]}/package.json to ${version}`;
-  }
-  if (npm) {
-    return `update it with npm install -g story-skills@${version}`;
+  const holder = /^(.*)\/node_modules\/story-skills\//.exec(location)?.[1];
+  if (holder !== undefined) {
+    return packageHint(holder, version);
   }
   if (location.endsWith("/story-maintenance/scripts/story.js")) {
     return "update the Story Skills plugin or skills, which carry this bundled CLI (see Update the skills in docs/getting-started.md)";
   }
-  const clone = /^(.*)\/src\/workflows\.js$/.exec(location);
-  if (clone && fs14.existsSync(path18.join(clone[1], ".git"))) {
-    return `update the clone in ${clone[1]} with git pull`;
+  const clone = /^(.*)\/src\/workflows\.js$/.exec(location)?.[1];
+  const head = clone === undefined ? null : gitHead(clone);
+  if (head === "branch") {
+    return `update the clone in ${clone} with git pull`;
   }
+  if (head === "detached") {
+    return `update the clone in ${clone} with git fetch --tags and git checkout v${version}`;
+  }
+  return docsHint(version);
+}
+function packageHint(holder, version) {
+  if (holder.includes("/node_modules/")) {
+    return docsHint(version);
+  }
+  if (holder.includes("/_npx/")) {
+    return `install that release with npm install -g story-skills@${version}`;
+  }
+  if (/\/bunx-[^/]*$/.test(holder)) {
+    return `install that release with bun add -g story-skills@${version}`;
+  }
+  if (holder.endsWith("/.bun/install/global")) {
+    return `update it with bun add -g story-skills@${version}`;
+  }
+  if (fs14.existsSync(path18.join(holder, "package.json"))) {
+    return `update the story-skills dependency in ${holder}/package.json to ${version}`;
+  }
+  if (/\/(lib|npm|nodejs)$/i.test(holder)) {
+    return `update it with npm install -g story-skills@${version}`;
+  }
+  return docsHint(version);
+}
+function docsHint(version) {
   return `update it to ${version} (see Update or pin the CLI in docs/getting-started.md)`;
 }
 function realPath3(file) {
@@ -29661,6 +29693,17 @@ function realPath3(file) {
     return fs14.realpathSync(file);
   } catch {
     return file;
+  }
+}
+function gitHead(root) {
+  try {
+    let gitDir = path18.join(root, ".git");
+    if (fs14.statSync(gitDir).isFile()) {
+      gitDir = path18.resolve(root, /^gitdir:\s*(.+?)\s*$/m.exec(readTextFile(gitDir))[1]);
+    }
+    return readTextFile(path18.join(gitDir, "HEAD")).startsWith("ref:") ? "branch" : "detached";
+  } catch {
+    return null;
   }
 }
 function workflowPins(projectRoot) {
@@ -29672,15 +29715,41 @@ function workflowPins(projectRoot) {
     } catch {
       continue;
     }
-    const lines = text.split(/\r?\n/).map((content, index) => ({ match: ENV_LINE.exec(content), line: index + 1 })).filter((entry) => entry.match);
-    const overridden = lines.some((entry) => entry.match[1] === "STORY_PACKAGE");
-    for (const { match, line } of lines) {
-      if (match[1] !== "STORY_PACKAGE") {
-        pins.push({ file, line, name: match[1], value: match[2], overridden });
+    const entries = envLines(text);
+    const packages = entries.filter((entry) => entry.name === "STORY_PACKAGE" && entry.value !== "");
+    for (const entry of entries) {
+      if (entry.name !== "STORY_PACKAGE") {
+        const overridden = packages.some((item) => item.scope.every((id, index) => entry.scope[index] === id));
+        pins.push({ file, line: entry.line, name: entry.name, value: entry.value, overridden });
       }
     }
   }
   return pins;
+}
+function envLines(text) {
+  const entries = [];
+  const open = [];
+  const lines = text.split(/\r?\n/);
+  for (let index = 0;index < lines.length; index += 1) {
+    const content = lines[index];
+    const indent = content.search(/\S/);
+    if (indent === -1 || content[indent] === "#") {
+      continue;
+    }
+    while (open.length > 0 && open[open.length - 1].indent >= indent) {
+      open.pop();
+    }
+    const match = ENV_LINE.exec(content);
+    if (match) {
+      entries.push({ line: index + 1, name: match[1], value: match[2], scope: open.slice(0, -1).map((item) => item.id) });
+    }
+    open.push({ indent, id: `${index}` });
+    const item = /^-\s+(?=\S)/.exec(content.slice(indent));
+    if (item) {
+      open.push({ indent: indent + item[0].length, id: `${index}:key` });
+    }
+  }
+  return entries;
 }
 function workflowFiles(projectRoot) {
   const dirs = [projectRoot];
@@ -29716,11 +29785,15 @@ function findGitRoot(start) {
 }
 function parseVersion(value) {
   const match = VERSION_PATTERN.exec(value);
-  if (match === null) {
+  if (match === null || (match[4] ?? "").length > MAX_LABEL || (match[5] ?? "").length > MAX_LABEL) {
     return null;
   }
-  const text = match[4] ? `${match.slice(1, 4).join(".")}-${match[4]}` : match.slice(1, 4).join(".");
-  return { numbers: match.slice(1, 4).map(Number), pre: match[4] ? match[4].split(".") : [], text };
+  const numbers = match.slice(1, 4).map(Number);
+  const pre = match[4] === undefined ? [] : match[4].split(".");
+  if (![...numbers, ...pre.filter(isNumeric).map(Number)].every(Number.isSafeInteger)) {
+    return null;
+  }
+  return { numbers, pre, text: match[4] === undefined ? numbers.join(".") : `${numbers.join(".")}-${match[4]}` };
 }
 function compareVersions(left, right) {
   for (let index = 0;index < 3; index += 1) {
@@ -29743,14 +29816,16 @@ function compareIdentifiers(left, right) {
   if (left === undefined || right === undefined) {
     return left === undefined ? -1 : 1;
   }
-  const [leftNumber, rightNumber] = [left, right].map((identifier) => /^\d+$/.test(identifier));
-  if (leftNumber && rightNumber) {
+  if (isNumeric(left) && isNumeric(right)) {
     return Math.sign(Number(left) - Number(right));
   }
-  if (leftNumber !== rightNumber) {
-    return leftNumber ? -1 : 1;
+  if (isNumeric(left) !== isNumeric(right)) {
+    return isNumeric(left) ? -1 : 1;
   }
   return left === right ? 0 : left < right ? -1 : 1;
+}
+function isNumeric(identifier) {
+  return /^\d+$/.test(identifier);
 }
 function action2(title, detail) {
   return { priority: "P3", title, detail };
