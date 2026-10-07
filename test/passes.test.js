@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { formatPasses, nextPass, readPasses, updatePasses } from "../src/passes.js";
+import { DEFAULT_PASSES, formatPasses, nextPass, passChecks, readPasses, updatePasses } from "../src/passes.js";
 import { createEntity, createStoryProject, formatActionReport, projectActions, projectPasses, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, messages, whileWriting } from "./helpers.js";
 
@@ -140,5 +140,24 @@ describe("story passes", () => {
     const broken = invoke(cwd, ["passes", root, "--done", "proof"]);
     expect(broken.code).toBe(3);
     expect(broken.err).toContain("story.md cannot be parsed");
+  });
+});
+
+describe("#76 revision pass checks", () => {
+  test("check commands name the project path", () => {
+    const structure = DEFAULT_PASSES.find((entry) => entry.pass === "structure");
+    expect(passChecks(structure, ".")).toEqual(["story timeline", "story pacing", "story diagram arcs"]);
+    expect(passChecks(structure, "book")).toEqual(["story timeline book", "story pacing book", "story diagram arcs --path book"]);
+    const proof = DEFAULT_PASSES.find((entry) => entry.pass === "proof");
+    expect(passChecks(proof, "book")).toEqual(["story build book --format print", "story build book --format html"]);
+  });
+
+  test("story next from the parent folder prints runnable checks", () => {
+    const cwd = makeTempDir();
+    const root = createStoryProject({ cwd, title: "Book", dir: "book", force: false }).root;
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^status: \w+/m, "status: revising"));
+    expect(invoke(cwd, ["passes", "book", "--init"]).code).toBe(0);
+    expect(invoke(cwd, ["next", "book"]).out).toContain("Run story timeline book, story pacing book, story diagram arcs --path book. Mark it with story passes book --done structure.");
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { makeTempDir } from "./helpers.js";
-import { checkEvals } from "../scripts/check-evals.js";
+import { checkEvals, findOverlaps } from "../scripts/check-evals.js";
 
 function evalsRoot() {
   const root = makeTempDir("story-check-evals-");
@@ -176,5 +176,12 @@ describe("check-evals", () => {
     expect(result.status).toBe(1);
     expect(result.out).toContain("FAIL warned/checks.json: brief must be a non-empty string");
     expect(result.out).toContain('WARN warned: banned phrase "Thursday" appears in input.md');
+  });
+});
+
+describe("#131 eval overlap direction", () => {
+  test("only a required phrase containing a banned one is an overlap", () => {
+    const found = findOverlaps({ banned: ["it was Ana", "brass key"], required: ["Ana", "Petra's brass key"] }, "");
+    expect(found.with_required).toEqual([["brass key", "Petra's brass key"]]);
   });
 });

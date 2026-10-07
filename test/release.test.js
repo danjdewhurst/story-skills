@@ -4,7 +4,9 @@ import path from "node:path";
 import { git, gitEnv, makeTempDir } from "./helpers.js";
 import { spawnSync } from "node:child_process";
 import { bumpDocVersions, staleDocVersions } from "../scripts/doc-versions.js";
-import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
+import { bumpVersion, isAbsentGitHubRelease, isAbsentNpmVersion, parseReleaseArgs, releasePushArgs, replaceVersion, updateVersionFiles } from "../scripts/release.js";
+
+const repoRoot = path.resolve(import.meta.dir, "..");
 
 describe("release script", () => {
   test("bumps patch, minor, and major", () => {
@@ -159,5 +161,33 @@ describe("release script", () => {
       { line: 3, found: "0.5.0" }
     ]);
     expect(staleDocVersions(text.replace(/0\.5\.0/g, "0.6.0").replace("0.5.1 (v0.5.1)", "0.6.1 (v0.6.1)"), "0.6.0")).toEqual([]);
+  });
+});
+
+describe("#114 #129 release arguments", () => {
+  test("unknown flags and extra positionals are refused", () => {
+    expect(parseReleaseArgs(["patch"])).toEqual({ bump: "patch", dryRun: false });
+    expect(parseReleaseArgs(["--dry-run", "minor"])).toEqual({ bump: "minor", dryRun: true });
+    for (const flag of ["--dryrun", "--dry", "--dry_run", "--dryRun", "-n"]) {
+      expect(() => parseReleaseArgs(["patch", flag])).toThrow(`Unknown option ${flag}`);
+    }
+    expect(() => parseReleaseArgs(["patch", "minor"])).toThrow("Expected one version bump, got patch minor");
+    expect(() => parseReleaseArgs([])).toThrow("Missing version bump");
+    expect(() => parseReleaseArgs(["--dry-run"])).toThrow("Missing version bump");
+  });
+
+  test("the release script exits before any check on a mistyped flag", () => {
+    const result = spawnSync(process.execPath, [path.join(repoRoot, "scripts", "release.js"), "patch", "--dryrun"], { encoding: "utf8" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Unknown option --dryrun");
+    expect(result.stdout).toBe("");
+  });
+
+  test("versions with leading zeros are rejected", () => {
+    expect(() => bumpVersion("0.11.0", "0.11.01")).toThrow("without leading zeros");
+    expect(() => bumpVersion("0.11.0", "01.0.0")).toThrow("without leading zeros");
+    expect(() => bumpVersion("0.011.0", "patch")).toThrow("not a plain MAJOR.MINOR.PATCH");
+    expect(bumpVersion("0.11.0", "0.11.10")).toBe("0.11.10");
+    expect(bumpVersion("0.9.0", "0.10.0")).toBe("0.10.0");
   });
 });

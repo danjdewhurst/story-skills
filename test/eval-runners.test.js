@@ -4,7 +4,7 @@ import path from "node:path";
 import { makeTempDir } from "./helpers.js";
 import { main as compareMain } from "../evals/compare-outputs.js";
 import { MAX_REFERENCE_CHARS, main as runSkillMain, skillReferences, stripPreamble, unwrapFence } from "../evals/run-skill.js";
-import { checkDraft, loadFixture } from "../evals/run-evals.js";
+import { characterCount, checkDraft, loadFixture, wordCount } from "../evals/run-evals.js";
 
 // Both runners call `claude -p` through an injected spawn, so these tests
 // answer for the model and never start a real process.
@@ -827,5 +827,147 @@ describe("compare-outputs baseline margins", () => {
     fs.rmSync(path.join(baseline, "genre-craft-mystery.md"));
     expect(compareMain(["--no-judge", baseline, skill, "genre-craft-mystery"], { spawn: noModel })).toBe(1);
     expect(output()).toContain("genre-craft-mystery: FAIL (missing draft in one directory)");
+  });
+});
+
+describe("#98 banned-phrase inflection", () => {
+  function trapResults(banned, draft) {
+    return checkDraft({ banned, required: [] }, "", draft).filter(([, label]) => label.startsWith("trap avoided"));
+  }
+
+  test("silent-e and y-to-ies forms are caught", () => {
+    expect(trapResults(["delve"], "We kept delving deeper.")).toEqual([[false, 'trap avoided: "delve"']]);
+    expect(trapResults(["delve"], "She delved and delves.")).toEqual([[false, 'trap avoided: "delve"']]);
+    expect(trapResults(["tapestry"], "Rich tapestries hung there.")).toEqual([[false, 'trap avoided: "tapestry"']]);
+    expect(trapResults(["rich tapestry"], "A rich tapestries hall.")).toEqual([[false, 'trap avoided: "rich tapestry"']]);
+    expect(trapResults(["key"], "They carved the turkey.")).toEqual([[true, 'trap avoided: "key"']]);
+    expect(trapResults(["delve"], "The delft plates.")).toEqual([[true, 'trap avoided: "delve"']]);
+  });
+});
+
+describe("eval checker in other languages", () => {
+  function results(checks, draft, prefix) {
+    return checkDraft({ required: [], ...checks }, "", draft).filter(([, label]) => label.startsWith(prefix));
+  }
+
+  test("counts each Chinese or Japanese character as a word and other text as before", () => {
+    expect(wordCount("The bell was ringing.")).toBe(4);
+    expect(wordCount("a — b")).toBe(3);
+    expect(wordCount("「来てくれたね」\n\n　大島はうなずいた。")).toBe(14);
+    expect(wordCount("霧見駅 Kirimi 3")).toBe(5);
+    expect(results({ max_words: 3 }, "「ただいま」", "length")).toEqual([[false, "length 4 words <= 3 (absolute cap)"]]);
+  });
+
+  test("a Chinese or Japanese fixture measures length in characters, punctuation included, as story wordcount does", () => {
+    expect(characterCount("　「ただいま」\n\nが")).toBe(7);
+    expect(results({ language: "ja", max_words: 6 }, "「ただいま」", "length")).toEqual([[true, "length 6 characters <= 6 (absolute cap)"]]);
+    expect(results({ language: "zh-Hant", max_words: 5 }, "「你好！」", "length")).toEqual([[true, "length 5 characters <= 5 (absolute cap)"]]);
+    expect(results({ language: "ko", max_words: 5 }, "안녕 하세요", "length")).toEqual([[true, "length 2 words <= 5 (absolute cap)"]]);
+  });
+
+  test("banned_regex runs in Unicode mode, so \\p{L} boundaries hold next to accented letters", () => {
+    const traps = { banned_regex: ["(?<![\\p{L}\\p{M}])(?:the|said)(?![\\p{L}\\p{M}])"] };
+    expect(results(traps, "Elle but son thé.", "trap avoided")[0][0]).toBe(true);
+    expect(results(traps, "She said nothing.", "trap avoided")[0][0]).toBe(false);
+  });
+
+  test("French spacing before ; : ! and ? is well formed only in a French fixture", () => {
+    const draft = "« Tu l’as vu faire ? » Il hocha la tête : oui.";
+    expect(results({ language: "fr" }, draft, "well formed: no space before")).toEqual([[true, "well formed: no space before a comma or full stop"]]);
+    expect(results({ language: "fr-CA" }, "Il partit , seul.", "well formed: no space before")).toEqual([[false, "well formed: no space before a comma or full stop"]]);
+    expect(results({}, draft, "well formed: no space before")).toEqual([[false, "well formed: no space before punctuation"]]);
+    expect(results({ language: "fy" }, draft, "well formed: no space before")).toEqual([[false, "well formed: no space before punctuation"]]);
+  });
+
+  test("phrases keep word boundaries next to accented letters and match unspaced scripts as substrings", () => {
+    expect(results({ banned: ["montre"] }, "Cela démontre tout.", "trap avoided")).toEqual([[true, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["montre"] }, "Cela de\\u0301montre tout.", "trap avoided")).toEqual([[true, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["montre"] }, "Les montres battaient.", "trap avoided")).toEqual([[false, 'trap avoided: "montre"']]);
+    expect(results({ banned: ["arrêté"] }, "Ils sont arrêtés.", "trap avoided")).toEqual([[false, 'trap avoided: "arrêté"']]);
+    expect(results({ required: ["封筒"] }, "青い封筒が一通。", "canon kept")).toEqual([[true, 'canon kept: "封筒"']]);
+    expect(results({ language: "ar", required: ["مخطوطة"] }, "كانت المخطوطة الخضراء هناك.", "canon kept")).toEqual([[true, 'canon kept: "مخطوطة"']]);
+  });
+
+  test("#334 phrases in spaced scripts start at a word boundary, whatever the alphabet", () => {
+    const trap = (phrase, draft, language) => results({ language, banned: [phrase] }, draft, "trap avoided")[0][0];
+    const kept = (phrase, draft, language) => results({ language, required: [phrase] }, draft, "canon kept")[0][0];
+    // A phrase may not start inside a word: French with no ASCII letter,
+    // Russian, Greek, Devanagari, Hebrew, Persian.
+    expect(trap("à", "Il était déjà parti.")).toBe(true);
+    expect(trap("à", "Il pensait à elle.")).toBe(false);
+    expect(trap("кот", "Пастух гнал скот.")).toBe(true);
+    expect(trap("ναι", "Είναι εδώ.")).toBe(true);
+    expect(trap("ναι", "Ναι, είπε.")).toBe(false);
+    expect(trap("राम", "उसने आराम किया।")).toBe(true);
+    expect(trap("राम", "राम घर गया।")).toBe(false);
+    expect(trap("שם", "ירד גשם כל הלילה.")).toBe(true);
+    expect(trap("در", "بدر آمد.", "fa")).toBe(true);
+    // Latin keeps its strict end, with English inflections.
+    expect(trap("montre", "Il montrait tout.", "fr")).toBe(true);
+    // Any other spaced script may run on at the end, for case endings,
+    // plurals, and joined particles.
+    expect(kept("кот", "Она видела кота.", "ru")).toBe(true);
+    expect(kept("мост", "Он шёл к мосту.", "ru")).toBe(true);
+    expect(kept("ספר", "היו שם ספרים.", "he")).toBe(true);
+    expect(kept("책", "책을 읽었다.", "ko")).toBe(true);
+    expect(kept("کتاب", "کتابی خرید.", "fa")).toBe(true);
+  });
+
+  test("#334 Arabic and Hebrew fixtures allow the prefixes those languages join to a word", () => {
+    const trap = (phrase, draft, language) => results({ language, banned: [phrase] }, draft, "trap avoided")[0][0];
+    const kept = (phrase, draft, language) => results({ language, required: [phrase] }, draft, "canon kept")[0][0];
+    // Arabic: conjunction, preposition, and article; ل before ال.
+    expect(trap("نادر", "ونادر لم يأت.", "ar")).toBe(false);
+    expect(trap("مخطوطة", "أمسكت بالمخطوطة.", "ar")).toBe(false);
+    expect(trap("مخطوطة", "قرأت للمخطوطة.", "ar")).toBe(false);
+    expect(trap("المخطوطة", "قرأت للمخطوطة.", "ar")).toBe(false);
+    expect(trap("المخطوطة", "أمسكت بالمخطوطة.", "ar-EG")).toBe(false);
+    expect(trap("علم", "جاء المعلم.", "ar")).toBe(true);
+    // The future س only before a verb's own prefix.
+    expect(trap("يدخل", "سيدخل غدا.", "ar")).toBe(false);
+    expect(trap("حب", "سحب الكرسي.", "ar")).toBe(true);
+    expect(trap("عيد", "كان سعيدا.", "ar")).toBe(true);
+    // Endings: ة as ت or the plural ات, ى as ا.
+    expect(kept("مخطوطة", "فتحت مخطوطتها.", "ar")).toBe(true);
+    expect(kept("مخطوطة", "رأت مخطوطات.", "ar")).toBe(true);
+    expect(kept("ليلى", "رأى ليلاه.", "ar")).toBe(true);
+    expect(kept("مكبس", "رفعت المكبس.", "ar")).toBe(true);
+    // Without an Arabic language, the plain rule: no prefixes.
+    expect(kept("مكبس", "رفعت المكبس.")).toBe(false);
+    expect(kept("مكبس", "رفعت المكبس.", "fa")).toBe(false);
+    // Hebrew: ו, ש after כ or מ, a preposition, and the article.
+    expect(trap("ספר", "הוא קרא בספר.", "he")).toBe(false);
+    expect(trap("הלך", "כשהלך הביתה.", "he")).toBe(false);
+    expect(trap("ספר", "הוא קרא בספר.")).toBe(true);
+  });
+
+  test("#334 digits in any script keep a digit boundary only", () => {
+    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
+    expect(kept("١", "a١")).toBe(true);
+    expect(kept("١", "١٢")).toBe(false);
+    expect(kept("3", "٣3")).toBe(false);
+    expect(kept("3", "x3")).toBe(true);
+  });
+
+  test("#334 unspaced scripts match as substrings, and a mixed phrase bounds each edge by its script", () => {
+    const kept = (phrase, draft) => results({ required: [phrase] }, draft, "canon kept")[0][0];
+    expect(kept("แมว", "แมวดำนอนอยู่")).toBe(true);
+    expect(kept("時刻表", "古い時刻表が")).toBe(true);
+    expect(kept("Kirimi駅", "Kirimi駅前で")).toBe(true);
+    expect(kept("Kirimi駅", "XKirimi駅前で")).toBe(false);
+    expect(kept("駅 Kirimi", "霧見駅 Kirimi")).toBe(true);
+    expect(kept("駅 Kirimi", "駅 Kirimian")).toBe(false);
+  });
+});
+
+describe("eval checker line count", () => {
+  function lineResult(draft) {
+    return checkDraft({ lines: 5, required: [] }, "", draft).filter(([, label]) => label.includes(" line(s), "));
+  }
+
+  test("counts nonblank verse lines, not paragraphs", () => {
+    expect(lineResult("Tomas brought paraffin.")).toEqual([[false, "structure: 1 line(s), brief asks for 5"]]);
+    expect(lineResult("one\ntwo\n\n  three\nfour\nfive\n")).toEqual([[true, "structure: 5 line(s), brief asks for 5"]]);
+    expect(lineResult("one\ntwo\nthree\nfour\nfive\n```\nsix\n```\n")).toEqual([[true, "structure: 5 line(s), brief asks for 5"]]);
   });
 });
