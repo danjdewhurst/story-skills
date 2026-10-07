@@ -105,8 +105,8 @@ exist or be in progress.
 - Clues carry the links: each clue names its `planted` and `payoff`
   chapters and, under `characters`, the suspects it implicates or clears,
   and `story links` checks those ids. Character files have no clue field;
-  to list a suspect's clues, search the clue files for the character id
-  (`grep -l {character-id} continuity/clues/*.md`).
+  to list a suspect's clues, run
+  `story list clues --where characters={character-id}`.
 - Genre audits live in the revision plan or `continuity/` audit files —
   never only in chat.
 

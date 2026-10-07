@@ -759,3 +759,21 @@ describe("generated registries", () => {
     expect(problems).toEqual([]);
   });
 });
+
+// `story continuity` checks only `character` + `knowledge` state changes
+// against `knowledge-state`, and `target` names an artifact (#553), so the
+// scene template records character knowledge in the shape the CLI reads.
+test("the scene template records character knowledge as character + knowledge", () => {
+  const template = fs.readFileSync(path.join(skillsDir, "chapter-writing", "references", "scene-template.md"), "utf8");
+  const block = template.match(/^state-changes:\n((?: {2}.*\n)+)/m)?.[1];
+  expect(block).toBeString();
+  const entries = block.split(/^ {2}- /m).filter((entry) => entry.trim()).map((entry) =>
+    Object.fromEntries(entry.split("\n").filter((line) => line.trim()).map((line) => {
+      const [key, ...value] = line.trim().split(":");
+      return [key, value.join(":").trim()];
+    })));
+  expect(entries.some((entry) => "character" in entry && "knowledge" in entry)).toBe(true);
+  for (const entry of entries.filter((candidate) => "target" in candidate)) {
+    expect(entry.target).not.toContain("character");
+  }
+});
