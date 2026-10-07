@@ -37,6 +37,7 @@ export default {
     "narration-closing": "Einde. U luisterde naar {title}, geschreven door {authors}, voorgelezen door {narrator}.",
     "narration-closing-anonymous": "Einde. U luisterde naar {title}, voorgelezen door {narrator}.",
     "narration-byline": "Geschreven door {names}.",
+    "narration-edited-by": "Onder redactie van {names}.",
     "narration-contributors": "Met bijdragen van {names}.",
     "screenplay-credit": "Geschreven door",
     "screenplay-source": "Naar het werk van {authors}",

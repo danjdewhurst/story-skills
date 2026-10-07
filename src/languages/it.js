@@ -37,6 +37,7 @@ export default {
     "narration-closing": "Fine. Avete ascoltato {title}, scritto da {authors}, letto da {narrator}.",
     "narration-closing-anonymous": "Fine. Avete ascoltato {title}, letto da {narrator}.",
     "narration-byline": "Scritto da {names}.",
+    "narration-edited-by": "A cura di {names}.",
     "narration-contributors": "Con contributi di {names}.",
     "screenplay-credit": "Scritto da",
     "screenplay-source": "Tratto dall’opera di {authors}",

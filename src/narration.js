@@ -1,6 +1,6 @@
 import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { characterCount, flattenHeadings, isSceneBreakLine, plainLinks, separateSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
+import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, separateSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -35,18 +35,21 @@ export function narrationScript(manuscript, guide) {
   const unit = narrationUnit(manuscript);
   const rate = narrationRate(manuscript.meta, unit);
   const count = unit === "characters" ? characterCount : wordCount;
-  const authors = joinNames(manuscript.meta.authors, labels);
+  // Titles and names each go on one line of the script, so a line break
+  // in one cannot start a heading of its own.
+  const title = oneLine(manuscript.title);
+  const authors = joinNames(manuscript.meta.authors.map(oneLine), labels);
   const narrator = "[narrator]";
-  const stories = storyCredits(manuscript.meta, manuscript.chapters);
+  const collection = collectionCredits(manuscript.meta, manuscript.chapters);
   const sections = [
-    ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body })),
-    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body, credit: stories.credit(chapter) })),
-    ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body }))
-  ].map((section) => ({ ...section, words: count(section.body) }));
+    ...manuscript.front.filter((entry) => !entry.copyright).map((entry) => ({ title: entry.title, body: entry.body, credits: [] })),
+    ...manuscript.chapters.map((chapter) => ({ title: chapter.heading, body: chapter.body, credits: collection.story(chapter) })),
+    ...manuscript.back.map((entry) => ({ title: entry.title, body: entry.body, credits: [] }))
+  ].map((section) => ({ ...section, title: oneLine(section.title), words: count(section.body) }));
   const totalWords = sections.reduce((sum, section) => sum + section.words, 0);
 
   const lines = [
-    `# ${manuscript.title}: Narration Script`,
+    `# ${title}: Narration Script`,
     "",
     `Estimated finished runtime: ${formatRuntime(totalWords, rate)} at ${rate} ${unit} per minute (${totalWords} ${unit}). Narration pace varies; time a sample chapter and rescale.`,
     "",
@@ -61,11 +64,8 @@ export function narrationScript(manuscript, guide) {
       lines.push(`| ${cell(entry.name)} | ${cell(entry.pronunciation)} | ${entry.kind} |`);
     }
   }
-  const credit = (key) => fillLabel(labels, authors === "" ? `${key}-anonymous` : key, { title: manuscript.title, authors, narrator });
-  lines.push("", "## Opening Credits", "", withoutDoubledStop(credit("narration-opening"), manuscript.title));
-  if (stories.contributors !== "") {
-    lines.push("", stories.contributors);
-  }
+  const credit = (key) => spokenLabel(labels, authors === "" ? `${key}-anonymous` : key, { title, authors, narrator });
+  lines.push("", "## Opening Credits", "", credit("narration-opening"), ...collection.opening.flatMap((line) => ["", line]));
   // Section times are cut from the running total, so they add up to the
   // finished runtime instead of each rounding on its own.
   let wordsSoFar = 0;
@@ -75,35 +75,52 @@ export function narrationScript(manuscript, guide) {
     const minutes = Math.round(wordsSoFar / rate) - before;
     // A story's credit is spoken after its heading. Like the opening and
     // closing credits, it is not prose, so it is left out of the runtime.
-    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", ...(section.credit ? [section.credit, ""] : []), narrationBody(section.body));
+    lines.push("", `## ${section.title}`, "", `[${minutes < 1 ? "under 1 min" : `about ${minutes} min`}]`, "", ...section.credits.flatMap((line) => [line, ""]), narrationBody(section.body));
   }
   lines.push("", "## Closing Credits", "", credit("narration-closing"), "");
   return lines.join("\n");
 }
 
-// The spoken credits of a collection's or anthology's stories (chapter
-// `author`): each story's, after its heading, and the opening's line for
-// the story authors it does not already name, in reading order. A book
-// whose stories all name its own authors, and no one else, is credited
-// once, in the opening, like any single-author book.
-function storyCredits(meta, chapters) {
+// The spoken credits of a collection or anthology, as lines. The opening
+// credits add the editors (story.md `editor`) and then the story authors
+// (chapter `author`) that neither they nor the book's authors name, each
+// once, in reading order, as the EPUB lists its contributors. Each story
+// with an author is credited after its heading, unless every story names
+// the book's own authors and no one else: such a book is credited once,
+// in the opening, like any single-author book.
+function collectionCredits(meta, chapters) {
   const labels = meta.labels;
-  const own = new Set(meta.authors);
-  const named = chapters.map((chapter) => chapter.authors ?? []).filter((names) => names.length > 0);
+  const authors = meta.authors.map(oneLine);
+  const editors = (meta.editors ?? []).map(oneLine);
+  const storyAuthors = (chapter) => (chapter.authors ?? []).map(oneLine);
+  const own = new Set(authors);
+  const credited = new Set([...authors, ...editors]);
+  const named = chapters.map(storyAuthors).filter((names) => names.length > 0);
   const sameAsBook = (names) => new Set(names).size === own.size && names.every((name) => own.has(name));
   const speak = !named.every(sameAsBook);
-  const contributors = [...new Set(named.flat())].filter((name) => !own.has(name));
+  const contributors = [...new Set(named.flat())].filter((name) => !credited.has(name));
+  const line = (key, names) => (names.length === 0 ? [] : [spokenLabel(labels, key, { names: joinNames(names, labels) })]);
   return {
-    credit: (chapter) => (speak && (chapter.authors ?? []).length > 0 ? fillLabel(labels, "narration-byline", { names: joinNames(chapter.authors, labels) }) : ""),
-    contributors: contributors.length === 0 ? "" : fillLabel(labels, "narration-contributors", { names: joinNames(contributors, labels) })
+    opening: [...line("narration-edited-by", editors), ...line("narration-contributors", contributors)],
+    story: (chapter) => (speak ? line("narration-byline", storyAuthors(chapter)) : [])
   };
 }
 
-// A title that ends a sentence itself ("Run!", "Why?") takes no full stop
-// after it: the credit's "{title}." opening reads "Run! Written by".
-function withoutDoubledStop(text, title) {
+// A spoken credit: the label filled in, without a doubled stop after a
+// value that ends a sentence itself. "{title}. Written by" reads "Run!
+// Written by", and "Written by {names}." reads "Written by Martin Luther
+// King Jr.".
+function spokenLabel(labels, key, values) {
   const ending = /[.!?…。！？]["”’')\]」』》]*$/u;
-  return text.startsWith(title) && ending.test(title) && /^[.。।]/u.test(text.slice(title.length)) ? `${title}${text.slice(title.length + 1)}` : text;
+  const template = fillLabel(labels, key).replace(/\{([a-z]+)\}[.。।]/gu, (match, name) => (ending.test(String(values[name] ?? "")) ? `{${name}}` : match));
+  return fillLabel({ [key]: template }, key, values);
+}
+
+// A title or name on one line: each run of layout whitespace, line breaks
+// included, as one space. Typed spaces, such as French no-break spaces,
+// stay.
+function oneLine(text) {
+  return trimSourceSpace(collapseSourceSpace(text));
 }
 
 export function pronunciationGuide(project) {

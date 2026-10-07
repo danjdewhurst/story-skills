@@ -15,7 +15,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The plain DOCX build now credits the book's authors and editor under its title, as the HTML and print title pages do. (#518)
   - The `author` or `authors` names come first, then `Edited by` and the `editor` names, in the book's language.
   - Each line uses a new centred `Credit` paragraph style, and a book with neither field gets no credit line.
-- The narration script now credits each story in a collection or anthology. A chapter with its own `author` gets a spoken `Written by Ines Calder.` after its heading, and the opening credits add `With contributions by …` for the story authors the book's own credit leaves out; a book whose stories all name its own authors is unchanged. The new `narration-byline` and `narration-contributors` labels are translated in every language pack that has labels. ([#520](https://github.com/danjdewhurst/story-skills/issues/520))
+- The narration script now credits a collection's or anthology's editor and the writer of each story. (#520)
+  - A chapter with its own `author` gets a spoken `Written by Ines Calder.` after its heading.
+  - The opening credits add `Edited by …` for `editor`, then `With contributions by …` for the story authors that the book's authors and editors leave out.
+  - A book whose stories all name its own authors gets no story credits.
+  - The new `narration-byline`, `narration-edited-by`, and `narration-contributors` labels are translated in every language pack that has labels.
 
 ### Changed
 
@@ -47,6 +51,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - An `and` label that repeats `{a}`, such as `{a}{a} and {b}`, no longer multiplies the names it joins. (#518)
   - With a long author list, such a label made the build fail with `Invalid string length`.
   - Builds now fill only the first `{a}` and the first `{b}` and leave out any repeat.
+- The narration script no longer reads a doubled full stop after a name or title that ends in one, or starts a heading at a line break in one. (#520)
+  - A credit for Martin Luther King Jr. now reads `Written by Martin Luther King Jr.`, not `Jr..`.
+  - A line break in a title or name reads as a space.
 - An empty `--path`, positional project path, `--dir`, `--follows`, `--precedes`, or `--against` is a usage error instead of the current directory, so `story reindex --path "$UNSET"` or `story import ms.md --dir "$UNSET" --force` changes nothing, as `--out ""` already did. ([#576](https://github.com/danjdewhurst/story-skills/issues/576))
 - `story prose` now counts each style-sheet sample file once in its baseline, however often `samples` names it. Before, `chapters/chapter-01.md` and `./chapters/chapter-01.md`, or a file listed both on its own and inside a listed folder, were added to the profile twice. `validate` and `prose` warn `style-sample-duplicate` for an entry that names the same file or folder as an earlier one. ([#523](https://github.com/danjdewhurst/story-skills/issues/523))
 - A right-to-left book's print contents now show their page numbers when rendered with WeasyPrint. The numbers still sit at the left margin, but are now placed there without the float that WeasyPrint dropped; left-to-right and vertical books are unchanged. The publishing skill and the docs now also say that Chrome's print to PDF leaves the contents page without page numbers in every book. ([#591](https://github.com/danjdewhurst/story-skills/issues/591))
