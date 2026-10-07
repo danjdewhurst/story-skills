@@ -1,4 +1,4 @@
-import { softBreak, splitAtSceneBreaks } from "./markdown.js";
+import { isHeadingLine, separateSceneBreaks, softBreak } from "./markdown.js";
 
 // ink source for inkle's ink (Inky, inklecate, inkjs): the title, author,
 // and IFID as global tags, then one knot per chapter. A branching book gives
@@ -42,25 +42,33 @@ function inkLine(line) {
 
 // ink prints each source line as a line of its own, so the lines of a
 // markdown paragraph are joined, as the other builds read prose: a blank line
-// or a scene-break line ends a paragraph, a soft break is a space except
-// between Chinese or Japanese characters (see softBreak), and a line ending
-// in two spaces or a backslash is a hard break (the backslash dropped) that
-// keeps verse on its lines.
+// or a scene-break line ends a paragraph (see separateSceneBreaks), a soft
+// break is a space except between Chinese or Japanese characters (see
+// softBreak) and beside a heading, and a line ending in two spaces or a
+// backslash is a hard break (the backslash dropped) that keeps verse on its
+// lines.
 const HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 
 function inkProse(body) {
   const out = [];
-  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/).flatMap(splitAtSceneBreaks)) {
+  for (const paragraph of separateSceneBreaks(body).split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
     const lines = paragraph.split(/\r?\n/);
-    let current = "";
+    // The pieces of the output line so far, and the source line before.
+    let pieces = [];
+    let previous = null;
     lines.forEach((line, index) => {
       const last = index === lines.length - 1;
       const broken = !last && HARD_BREAK.test(line);
       const text = (broken ? line.replace(/\\$/, "") : line).trim();
-      current = current === "" ? text : `${current}${softBreak(current, text)}${text}`;
+      if (previous !== null) {
+        pieces.push(isHeadingLine(previous.line) || isHeadingLine(line) ? " " : softBreak(previous.text, text));
+      }
+      pieces.push(text);
+      previous = { line, text };
       if (broken || last) {
-        out.push(inkLine(current));
-        current = "";
+        out.push(inkLine(pieces.join("")));
+        pieces = [];
+        previous = null;
       }
     });
     out.push("");

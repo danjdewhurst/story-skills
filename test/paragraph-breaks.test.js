@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { shunnHtml } from "../src/packaging.js";
-import { buildBook, createStoryProject, validateProject } from "../src/story.js";
+import { buildBook, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
 import { makeTempDir, readArchiveText, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
@@ -74,8 +75,31 @@ describe("scene-break lines in builds (#551)", () => {
     expect(output.epub).toContain("<blockquote><p>A letter.</p></blockquote><p>* * *</p><blockquote><p>Signed.</p></blockquote>");
   });
 
-  test("the markdown build keeps the prose as written", () => {
-    expect(file(project("en", tight), { format: "markdown" })).toContain("He left.\n* * *\nShe came.\n---\nThen night.\n");
+  test("a break line in a code fence is code, and the paragraph stays whole", () => {
+    // The dashes build as the same text as any other line would.
+    const prose = (line) => `Before.\n\n\`\`\`\nINCOMING TRANSMISSION\n${line}\nOrigin: unknown\n\`\`\`\n\nAfter.\n`;
+    const output = { ...builds(project("en", prose("----------"))), shunnPdf: shunnPdfHtml("en", prose("----------")) };
+    const expected = { ...builds(project("en", prose("=========="))), shunnPdf: shunnPdfHtml("en", prose("==========")) };
+    for (const [format, text] of Object.entries(output)) {
+      expect({ format, same: text.replaceAll("----------", "==========") === expected[format] }).toEqual({ format, same: true });
+    }
+    expect(output.epub).toContain("<p>Before.</p><p>INCOMING TRANSMISSION ---------- Origin: unknown</p><p>After.</p>");
+    expect(output.narration).toContain("```\nINCOMING TRANSMISSION\n----------\nOrigin: unknown\n```");
+    expect(output.ink).toContain("``` INCOMING TRANSMISSION ---------- Origin: unknown ```");
+  });
+
+  test("a break line indented by four columns or more stays in its paragraph, as in CommonMark", () => {
+    const output = builds(project("en", "One\n    ---\ntwo.\n\nThree\n\t***\nfour.\n"));
+    expect(output.epub).toContain("<p>One --- two.</p><p>Three *** four.</p>");
+    expect(output.narration).not.toContain("[pause]");
+    expect(output.ink).toContain("One --- two.\n\nThree *** four.");
+  });
+
+  test("the markdown build, story export, and Twee keep the prose as written", () => {
+    const root = project("en", tight);
+    expect(file(root, { format: "markdown" })).toContain("He left.\n* * *\nShe came.\n---\nThen night.\n");
+    expect(fs.readFileSync(exportManuscript(root, { out: "dist/book.md" }).outFile, "utf8")).toContain("He left.\n* * *\nShe came.\n---\nThen night.\n");
+    expect(file(root, { format: "twee" })).toContain("He left.\n* * *\nShe came.\n---\nThen night.\n");
   });
 
   test("validate warns about a --- right under a line of text, which markdown viewers read as a heading underline", () => {
@@ -154,8 +178,65 @@ describe("soft-wrapped Chinese and Japanese lines in builds (#599)", () => {
     }
   });
 
+  test("a line that ends or starts with emphasis or code keeps its space, so the markup stays apart", () => {
+    const prose = "**強調**\n**次**\n\n*彼は*\n*言った*\n\n他说`东京`\n`大阪`很远\n";
+    const output = { ...builds(project("ja", prose)), shunnPdf: shunnPdfHtml("ja", prose) };
+    expect(output.epub).toContain("<p><strong>強調</strong> <strong>次</strong></p><p><em>彼は</em> <em>言った</em></p><p>他说东京 大阪很远</p>");
+    expect(output.html).toContain("<strong>強調</strong> <strong>次</strong>");
+    expect(output.shunn).toContain("**強調** **次**\n\n*彼は* *言った*\n\n他说`东京` `大阪`很远");
+    expect(output.ink).toContain("\\**強調** **次**\n\n\\*彼は* *言った*\n\n他说`东京` `大阪`很远");
+    delete output.narration;
+    for (const [format, text] of Object.entries(output)) {
+      expect({ format, merged: /強調\*\*\*\*次|彼は\*\*言った|东京``大阪/.test(text) }).toEqual({ format, merged: false });
+    }
+  });
+
+  test("a heading's text keeps a space before the line under it", () => {
+    const output = { ...builds(project("ja", "### 第二部\n本文が始まる。\n")), shunnPdf: shunnPdfHtml("ja", "### 第二部\n本文が始まる。\n") };
+    expect(output.narration).toContain("第二部\n本文が始まる。");
+    expect(output.ink).toContain("\\#\\#\\# 第二部 本文が始まる。");
+    delete output.narration;
+    for (const [format, text] of Object.entries(output)) {
+      expect({ format, spaced: text.includes("第二部 本文が始まる。") }).toEqual({ format, spaced: true });
+    }
+  });
+
   test("a hard line break between Chinese or Japanese lines stays a break", () => {
     const epub = readArchiveText(buildBook(project("ja", "一行目。\\\n二行目。  \n三行目。\n"), { format: "epub" }).outFile);
     expect(epub).toContain("<p>一行目。<br/>二行目。<br/>三行目。</p>");
+  });
+});
+
+describe("paragraph breaks under Node (#551, #599)", () => {
+  test("bin/story.js and the fallback under node build what Bun builds", () => {
+    const root = project("ja", [
+      "一行目の文。",
+      "二行目の文。",
+      "* * *",
+      "列夫\u00b7",
+      "托尔斯泰。",
+      "---",
+      "### 第二部",
+      "本文。",
+      "",
+      "```",
+      "信号",
+      "----------",
+      "```",
+      ""
+    ].join("\n"));
+    const formats = [["epub", "epub"], ["docx", "docx"], ["docx", "docx", "--shunn"], ["shunn", "md"], ["html", "html"], ["print", "html"], ["narration", "md"], ["ink", "ink"]];
+    // Bun and Node deflate archives differently, so archives compare by their
+    // entries.
+    const text = (file) => (/\.(?:epub|docx)$/.test(file) ? readArchiveText(file) : fs.readFileSync(file, "utf8"));
+    for (const [format, extension, ...flags] of formats) {
+      const expected = text(buildBook(root, { format, shunn: flags.length > 0, out: `dist/bun-${format}${flags.join("")}.${extension}` }).outFile);
+      for (const cli of [path.join(repoRoot, "bin", "story.js"), path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js")]) {
+        const out = path.join(root, "dist", `node-${format}${flags.join("")}.${extension}`);
+        const node = spawnSync("node", [cli, "build", root, "--format", format, ...flags, "--out", out], { encoding: "utf8" });
+        expect({ format, flags, cli, status: node.status, stderr: node.stderr }).toEqual({ format, flags, cli, status: 0, stderr: node.stderr });
+        expect({ format, flags, cli, same: text(out) === expected }).toEqual({ format, flags, cli, same: true });
+      }
+    }
   });
 });

@@ -125,6 +125,11 @@ describe("compareChapters", () => {
     expect(trimmed.chapters[0]).toMatchObject({ status: "changed", unchanged: 1 });
   });
 
+  test("a scene-break line ends a paragraph, as builds read one", () => {
+    expect(proseParagraphs("He left.\n* * *\nShe came.")).toEqual(["He left.", "She came."]);
+    expect(proseParagraphs("One\n    ---\ntwo.")).toEqual(["One --- two."]);
+  });
+
   test("orders chapter ids numerically and formats an empty comparison", () => {
     const result = compareChapters([chapter("chapter-10", "a")], [chapter("chapter-9", "b")]);
     expect(result.chapters.map((entry) => entry.id)).toEqual(["chapter-9", "chapter-10"]);

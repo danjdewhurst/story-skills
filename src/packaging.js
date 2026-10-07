@@ -9,7 +9,7 @@ import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } fr
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber } from "./languages/locale.js";
-import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, softBreak, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { breaksParagraph, characterCount, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -857,14 +857,14 @@ export const LINE_BREAK = "\uE001";
 // break, and `quote` marks a blockquote paragraph (an epigraph, a letter).
 // Whitespace-only lines are blank, as in CommonMark, and a scene-break line
 // ends a paragraph even with no blank line around it, as a thematic break
-// does; a `---` right under a line of text is a break too, not the setext
-// heading CommonMark reads (story validate warns, see
-// setextSceneBreakLines). Fence lines go and the code stays; links print as
-// their text and images are left out, as word counts treat them. A build
-// that indents first lines itself passes `ownIndent`, and a paragraph's
-// typed indent (the ideographic space a Japanese paragraph opens with) goes,
-// so the two never add up; the other builds keep it as the paragraph's only
-// indent.
+// does (see breaksParagraph); a `---` right under a line of text is a break
+// too, not the setext heading CommonMark reads (story validate warns, see
+// setextSceneBreakLines). Fence lines go and the code stays, with no breaks
+// in it; links print as their text and images are left out, as word counts
+// treat them. A build that indents first lines itself passes `ownIndent`,
+// and a paragraph's typed indent (the ideographic space a Japanese
+// paragraph opens with) goes, so the two never add up; the other builds
+// keep it as the paragraph's only indent.
 function markdownParagraphs(markdown, ownIndent = false) {
   const paragraphs = [];
   let lines = [];
@@ -876,14 +876,18 @@ function markdownParagraphs(markdown, ownIndent = false) {
     // Each line without the layout whitespace at its ends, which a soft
     // break replaces and a hard break (the backslash, or the trailing
     // spaces) drops.
-    const texts = lines.map((line, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
+    const texts = lines.map(({ line }, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
     const joined = texts.map((text, index) => {
       if (index === texts.length - 1) {
         return text;
       }
+      if (/\\$| {2,}$/.test(lines[index].line)) {
+        return `${text}${LINE_BREAK}`;
+      }
       // A soft break is a space, except between Chinese or Japanese
-      // characters (see softBreak).
-      return /\\$| {2,}$/.test(lines[index]) ? `${text}${LINE_BREAK}` : `${text}${softBreak(text, texts[index + 1])}`;
+      // characters (see softBreak). A heading's text never runs into the
+      // line beside it.
+      return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
     }).join("");
     // Only layout whitespace collapses, so a typed no-break or ideographic
     // space reaches the book (see collapseSourceSpace). A hard-broken line
@@ -898,8 +902,14 @@ function markdownParagraphs(markdown, ownIndent = false) {
     lines = [];
     paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
-  const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, "\n"))));
-  for (const rawLine of source.split("\n")) {
+  // Each line, and whether it is code: closed backtick fences lose their
+  // fence lines, and the code between them has no breaks.
+  const source = splitFences(markdown.replace(/\r\n?/g, "\n")).flatMap((part) => plainLinks(part.fenced ? withoutFenceMarkers(part.text) : part.text)
+    .split("\n")
+    .map((line) => ({ line, code: part.fenced })));
+  for (const { line: sourceLine, code } of source) {
+    const heading = isHeadingLine(sourceLine);
+    const rawLine = flattenHeadings(sourceLine);
     // Blockquote markers (nested ones too) come off; the paragraph is
     // marked as quoted instead.
     const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
@@ -908,7 +918,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
       flush();
       continue;
     }
-    if (isSceneBreakLine(line)) {
+    if (!code && breaksParagraph(line)) {
       flush();
       paragraphs.push({ sceneBreak: true });
       continue;
@@ -921,7 +931,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       quote = Boolean(marker);
     }
-    lines.push(line);
+    lines.push({ line, heading });
   }
   flush();
   return paragraphs;
