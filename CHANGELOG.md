@@ -8,6 +8,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- `story doctor` adds a `[P3] Update local CLI version` action when a copied workflow's `STORY_VERSION` is newer than the CLI you run, since CI then reports findings your local checks miss. It names the update command for how the CLI was installed (npm, npx, bunx, Bun, Homebrew, a downloaded binary, the skills' bundled copy, or a clone) when it can tell. Pins now compare in semver order, so `1.0.0-rc.1` is older than `1.0.0`, and a pin that is not one exact release, such as `latest`, gets no version note. ([#536](https://github.com/danjdewhurst/story-skills/issues/536))
+
 ### Changed
 
 - A boolean flag now takes a value only as `--flag=value` (`--heading=false`, `--baseline=false`, `--json=false`), and a boolean word right after a bare flag (`true`, `no`, `0`, and the rest, in any case) is refused with exit 2. So `story add chapter --dry-run No Way Back`, which used to write a chapter titled "Way Back", now writes nothing; put the flag after the title, or the title after `--`. ([#549](https://github.com/danjdewhurst/story-skills/issues/549))

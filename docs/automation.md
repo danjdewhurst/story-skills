@@ -613,12 +613,30 @@ Templates from 0.21.0 and earlier pinned a git tag with `STORY_REF: "v0.20.0"` a
 
 ### Getting reminders
 
-`story doctor` reads the workflows in the project's `.github/workflows/`, and in the git repository root above it when the project lives in a subdirectory. It adds a low-priority action for each `STORY_VERSION` older than the CLI you are running, and for each legacy `STORY_REF`, naming the file, the line, and what to change it to, where `<old>` is the pinned release and `<cli>` the one you are running:
+`story doctor` reads the workflows in the project's `.github/workflows/`, and in the git repository root above it when the project lives in a subdirectory. It adds a low-priority action for each `STORY_VERSION` older or newer than the CLI you are running, and for each legacy `STORY_REF`, naming the file, the line, and what to change, where `<old>` and `<new>` are the pinned release and `<cli>` the one you are running:
 
 ```text
 - [P3] Update workflow CLI version: .github/workflows/story-checks.yml:30 installs story-skills <old>, older than this CLI (<cli>); after story check passes locally, change the line to STORY_VERSION: "<cli>".
+- [P3] Update local CLI version: .github/workflows/story-checks.yml:30 installs story-skills <new>, newer than this CLI (<cli>), so CI can report findings that story check here does not; update it with npm install -g story-skills@<new>.
 - [P3] Rename workflow STORY_REF: .github/workflows/review-copy.yml:47 sets the legacy STORY_REF; change the line to STORY_VERSION: "<cli>" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).
 ```
+
+A newer pin means CI runs checks your CLI does not have yet, so the note asks you to update the CLI rather than the workflow. It names the command for the way you installed the CLI, judged from where its code runs:
+
+| Installed with | The note says |
+|---|---|
+| `npm install -g` | `update it with npm install -g story-skills@<new>` |
+| A `package.json` dependency | `update the story-skills dependency in <folder>/package.json to <new>` |
+| `npx` or `bunx` | `run that release with npx story-skills@<new>` (or `bunx`) |
+| `bun add -g` | `update it with bun add -g story-skills@<new>` |
+| Homebrew | `update it with brew upgrade story-skills` |
+| A downloaded binary | `download the <new> binary for your system from` the release page |
+| The bundled `scripts/story.js` in the skills | `update the Story Skills plugin or skills, which carry this bundled CLI` |
+| A clone of this repository | `update the clone in <folder> with git pull` |
+
+Any other layout, such as pnpm, gets `update it to <new>` and a pointer to [Update, pin, or remove](getting-started.md#update-pin-or-remove).
+
+Versions compare in semver order: `1.0.0-rc.1` is older than `1.0.0` and newer than `0.9.0`, and build metadata such as `+ci.7` does not count. A `STORY_VERSION` that is not one exact release, such as `latest`, a range like `^0.22.0`, or `0.22`, gets no version note, since `doctor` cannot tell which release CI installs.
 
 A legacy `STORY_REF` that names a release newer than the CLI keeps that release in the suggested line, and one that names a branch or commit gets a `STORY_PACKAGE` line instead. A workflow with an uncommented `STORY_PACKAGE` line gets no `STORY_VERSION` note, since its install step does not use that pin. When there is a workflow note, the `Project is mechanically healthy` action is left out.
 

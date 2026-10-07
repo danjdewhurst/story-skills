@@ -29595,13 +29595,15 @@ function realPath2(target) {
 // src/workflows.js
 import fs14 from "node:fs";
 import path18 from "node:path";
+import { fileURLToPath } from "node:url";
 
 // src/version.js
 var VERSION = "0.22.1";
 
 // src/workflows.js
 var ENV_LINE = /^\s*(STORY_VERSION|STORY_REF|STORY_PACKAGE)\s*:\s*["']?([^"'\s#]*)/;
-var VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)/;
+var VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+var RELEASES = "https://github.com/danjdewhurst/story-skills/releases";
 function workflowPinActions(projectRoot, cwd = projectRoot) {
   const current = parseVersion(VERSION);
   const actions = [];
@@ -29611,13 +29613,55 @@ function workflowPinActions(projectRoot, cwd = projectRoot) {
     if (pin.name === "STORY_REF" && parsed === null) {
       actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF to ${pin.value || "an empty value"}; replace the line with STORY_PACKAGE: "github:danjdewhurst/story-skills#${pin.value || "<ref>"}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
     } else if (pin.name === "STORY_REF") {
-      const target = compareVersions(parsed, current) > 0 ? parsed.join(".") : VERSION;
+      const target = compareVersions(parsed, current) > 0 ? parsed.text : VERSION;
       actions.push(action2("Rename workflow STORY_REF", `${where} sets the legacy STORY_REF; change the line to STORY_VERSION: "${target}" and copy the install step from the current template (see Upgrading the workflows in docs/automation.md).`));
-    } else if (parsed && !pin.overridden && compareVersions(parsed, current) < 0) {
-      actions.push(action2("Update workflow CLI version", `${where} installs story-skills ${parsed.join(".")}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`));
+    } else if (parsed && !pin.overridden) {
+      const order = compareVersions(parsed, current);
+      if (order < 0) {
+        actions.push(action2("Update workflow CLI version", `${where} installs story-skills ${parsed.text}, older than this CLI (${VERSION}); after story check passes locally, change the line to STORY_VERSION: "${VERSION}".`));
+      } else if (order > 0) {
+        actions.push(action2("Update local CLI version", `${where} installs story-skills ${parsed.text}, newer than this CLI (${VERSION}), so CI can report findings that story check here does not; ${cliUpdateHint(parsed.text)}.`));
+      }
     }
   }
   return actions;
+}
+function cliUpdateHint(version, file = fileURLToPath(import.meta.url), execPath = process.execPath) {
+  const location = file.replace(/\\/g, "/");
+  if (/\/(\$bunfs|~BUN)\//.test(location)) {
+    return /\/Cellar\/story-skills\//.test(realPath3(execPath).replace(/\\/g, "/")) ? "update it with brew upgrade story-skills" : `download the ${version} binary for your system from ${RELEASES}/tag/v${version}`;
+  }
+  const npm = location.includes("/.pnpm/") ? null : /^(.*)\/node_modules\/story-skills\//.exec(location);
+  if (npm && location.includes("/_npx/")) {
+    return `run that release with npx story-skills@${version}`;
+  }
+  if (npm && /\/bunx-[^/]*\//.test(location)) {
+    return `run that release with bunx story-skills@${version}`;
+  }
+  if (npm && location.includes("/.bun/install/global/")) {
+    return `update it with bun add -g story-skills@${version}`;
+  }
+  if (npm && fs14.existsSync(path18.join(npm[1], "package.json"))) {
+    return `update the story-skills dependency in ${npm[1]}/package.json to ${version}`;
+  }
+  if (npm) {
+    return `update it with npm install -g story-skills@${version}`;
+  }
+  if (location.endsWith("/story-maintenance/scripts/story.js")) {
+    return "update the Story Skills plugin or skills, which carry this bundled CLI (see Update the skills in docs/getting-started.md)";
+  }
+  const clone = /^(.*)\/src\/workflows\.js$/.exec(location);
+  if (clone && fs14.existsSync(path18.join(clone[1], ".git"))) {
+    return `update the clone in ${clone[1]} with git pull`;
+  }
+  return `update it to ${version} (see Update or pin the CLI in docs/getting-started.md)`;
+}
+function realPath3(file) {
+  try {
+    return fs14.realpathSync(file);
+  } catch {
+    return file;
+  }
 }
 function workflowPins(projectRoot) {
   const pins = [];
@@ -29672,15 +29716,41 @@ function findGitRoot(start) {
 }
 function parseVersion(value) {
   const match = VERSION_PATTERN.exec(value);
-  return match ? match.slice(1, 4).map(Number) : null;
+  if (match === null) {
+    return null;
+  }
+  const text = match[4] ? `${match.slice(1, 4).join(".")}-${match[4]}` : match.slice(1, 4).join(".");
+  return { numbers: match.slice(1, 4).map(Number), pre: match[4] ? match[4].split(".") : [], text };
 }
 function compareVersions(left, right) {
   for (let index = 0;index < 3; index += 1) {
-    if (left[index] !== right[index]) {
-      return left[index] - right[index];
+    if (left.numbers[index] !== right.numbers[index]) {
+      return left.numbers[index] - right.numbers[index];
+    }
+  }
+  if (left.pre.length === 0 || right.pre.length === 0) {
+    return right.pre.length - left.pre.length;
+  }
+  for (let index = 0;index < Math.max(left.pre.length, right.pre.length); index += 1) {
+    const order = compareIdentifiers(left.pre[index], right.pre[index]);
+    if (order !== 0) {
+      return order;
     }
   }
   return 0;
+}
+function compareIdentifiers(left, right) {
+  if (left === undefined || right === undefined) {
+    return left === undefined ? -1 : 1;
+  }
+  const [leftNumber, rightNumber] = [left, right].map((identifier) => /^\d+$/.test(identifier));
+  if (leftNumber && rightNumber) {
+    return Math.sign(Number(left) - Number(right));
+  }
+  if (leftNumber !== rightNumber) {
+    return leftNumber ? -1 : 1;
+  }
+  return left === right ? 0 : left < right ? -1 : 1;
 }
 function action2(title, detail) {
   return { priority: "P3", title, detail };

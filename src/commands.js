@@ -1285,7 +1285,7 @@ function runDoctorFix({ parsed, io, cwd, root }, options) {
 }
 
 // doctor's report with a P3 action for each copied workflow that pins an
-// older CLI or still uses STORY_REF (see workflows.js). With any, the
+// older or newer CLI or still uses STORY_REF (see workflows.js). With any, the
 // "Project is mechanically healthy" action no longer holds and is dropped.
 function withWorkflowPins(report, projectRoot, cwd) {
   const pins = workflowPinActions(projectRoot, cwd);
