@@ -487,6 +487,13 @@ Progress: 132 of 80,000 words (0.2%)
 Remaining: 79,868 words
 Deadline: 2027-03-31 (188 days left): 425 words a day needed
 Sessions: 1 logged; last 2026-09-24 (+0 words since)
+Streak: 0 days (longest 0)
+
+Last 4 weeks:
+- 2026-08-31: 0 words on 0 days
+- 2026-09-07: 0 words on 0 days
+- 2026-09-14: 0 words on 0 days
+- 2026-09-21: 0 words on 0 days
 Progress checked: 0 errors, 0 warnings, 0 dismissed
 ```
 

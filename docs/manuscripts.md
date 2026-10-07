@@ -261,7 +261,7 @@ Before it deletes a chapter, import saves the project as a [snapshot](cli-refere
 
 ```text
 Saved the project in snapshot before-import-1 (.snapshots/before-import-1/) before replacing its chapters
-Imported 18 chapters (91200 words) into /home/me/stories/the-salt-road
+Imported 18 chapters (91200 words) into ~/stories/the-salt-road
 Undo it: story snapshot --restore before-import-1 --path the-salt-road
 ```
 
