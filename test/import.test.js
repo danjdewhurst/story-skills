@@ -710,6 +710,31 @@ describe("import --force into an existing project", () => {
     });
   }
 
+  test("refuses a chapters entry that is a symlink or not a folder, before changing anything (#721)", () => {
+    const entries = [
+      ["is a symlink", (chapters, root) => fs.symlinkSync(path.join(root, "manuscript"), chapters, "dir")],
+      ["is not a folder", (chapters) => fs.writeFileSync(chapters, "not a folder\n", "utf8")]
+    ];
+    for (const [problem, make] of entries) {
+      const { cwd, root } = importedTwice();
+      fs.mkdirSync(path.join(root, "manuscript"));
+      fs.writeFileSync(path.join(root, "manuscript", "chapter-01.md"), "---\ntitle: Old\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Old\n\n## Chapter Text\n\nOld prose.\n", "utf8");
+      fs.rmSync(path.join(root, "chapters"), { recursive: true });
+      try {
+        make(path.join(root, "chapters"), root);
+      } catch {
+        console.warn("Skipping a chapters symlink: symlinks unavailable.");
+        continue;
+      }
+      const before = treeSnapshot(root);
+      const result = invoke(cwd, REDRAFT);
+      expect(result.code).toBe(4);
+      expect(result.err).toContain(`Cannot import: chapters ${problem}, so --force cannot save its chapters in a snapshot before replacing them.`);
+      expect(result.err).toContain("Nothing was changed");
+      expect(treeSnapshot(root)).toEqual(before);
+    }
+  });
+
   test("a snapshot it cannot save stops it before anything changes, in a dry run as in the real run", () => {
     const outside = makeTempDir();
     fs.mkdirSync(path.join(outside, "before-import-5"));

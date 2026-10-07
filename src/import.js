@@ -313,8 +313,16 @@ export function importManuscript(options) {
 // unsaved, so it is refused before the project changes.
 function replacedChapters(root) {
   const folder = path.join(root, "chapters");
-  if (lstatIfExists(folder)?.isDirectory() !== true) {
+  const stats = lstatIfExists(folder);
+  if (stats === null) {
     return [];
+  }
+  // A link or a file named chapters cannot be saved in the snapshot or
+  // replaced, so it is refused before anything changes. A link is not
+  // followed: its chapters are not the project's.
+  if (!stats.isDirectory()) {
+    const problem = stats.isSymbolicLink() ? "is a symlink" : "is not a folder";
+    throw refusedError(`Cannot import: chapters ${problem}, so --force cannot save its chapters in a snapshot before replacing them. Replace it with a folder of chapter files, then import again. Nothing was changed`);
   }
   const entries = fs.readdirSync(folder, { withFileTypes: true }).filter((entry) => /^chapter-\d+\.md$/i.test(entry.name));
   for (const entry of entries) {

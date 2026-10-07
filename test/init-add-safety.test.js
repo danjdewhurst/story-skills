@@ -382,7 +382,20 @@ describe("forced init containment", () => {
     fs.rmSync(path.join(root, "chapters"), { recursive: true, force: true });
     fs.symlinkSync(outside, path.join(root, "chapters"), "dir");
     fs.writeFileSync(path.join(cwd, "m.md"), "# Chapter 1\n\nText.\n", "utf8");
-    expect(() => importManuscript({ source: "m.md", title: "Linked Chapters", cwd, force: true })).toThrow("outside root");
+    // import refuses the symlinked chapters folder before it writes anything.
+    expect(() => importManuscript({ source: "m.md", title: "Linked Chapters", cwd, force: true })).toThrow("Cannot import: chapters is a symlink");
+    expect(fs.readdirSync(outside)).toEqual(["_index.md"]);
+  });
+
+  test("a symlinked folder other than chapters is refused by the starter-file checks, outside root", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Linked Characters" });
+    const outside = makeTempDir();
+    fs.copyFileSync(path.join(root, "characters", "_index.md"), path.join(outside, "_index.md"));
+    fs.rmSync(path.join(root, "characters"), { recursive: true, force: true });
+    fs.symlinkSync(outside, path.join(root, "characters"), "dir");
+    fs.writeFileSync(path.join(cwd, "m.md"), "# Chapter 1\n\nText.\n", "utf8");
+    expect(() => importManuscript({ source: "m.md", title: "Linked Characters", cwd, force: true })).toThrow("outside root");
     expect(fs.readdirSync(outside)).toEqual(["_index.md"]);
   });
 });

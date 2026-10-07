@@ -30836,8 +30836,13 @@ function importManuscript(options) {
 }
 function replacedChapters(root) {
   const folder = path18.join(root, "chapters");
-  if (lstatIfExists(folder)?.isDirectory() !== true) {
+  const stats = lstatIfExists(folder);
+  if (stats === null) {
     return [];
+  }
+  if (!stats.isDirectory()) {
+    const problem = stats.isSymbolicLink() ? "is a symlink" : "is not a folder";
+    throw refusedError(`Cannot import: chapters ${problem}, so --force cannot save its chapters in a snapshot before replacing them. Replace it with a folder of chapter files, then import again. Nothing was changed`);
   }
   const entries = fs13.readdirSync(folder, { withFileTypes: true }).filter((entry) => /^chapter-\d+\.md$/i.test(entry.name));
   for (const entry of entries) {
