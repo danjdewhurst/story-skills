@@ -970,12 +970,36 @@ describe("github workflows", () => {
     expect(drift).toEqual([]);
   });
 
-  test("every template job has a timeout", () => {
+  test("every workflow job has a timeout (#575)", () => {
     // Story checks run on pull requests, so a hostile or huge project must
-    // not hold a runner for GitHub's six-hour default.
-    for (const relativePath of workflowFiles.slice(1)) {
-      const text = readRepo(relativePath);
-      expect(text.match(/^ {4}runs-on:/gm)?.length, relativePath).toBe(text.match(/^ {4}timeout-minutes: \d+$/gm)?.length);
+    // not hold a runner for GitHub's six-hour default, and a hung step in
+    // this repository's own CI or release must fail in minutes too.
+    const missing = [];
+    for (const relativePath of pinnedFiles) {
+      const jobs = workflowJobs(readRepo(relativePath));
+      expect(Object.keys(jobs).length, relativePath).toBeGreaterThan(0);
+      for (const [id, job] of Object.entries(jobs)) {
+        if (!/^ {4}timeout-minutes: [1-9]\d*$/m.test(job)) {
+          missing.push(`${relativePath}: ${id}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  test("the publish gate waits longer than any CI job can run (#575)", () => {
+    // The gate's ci job waits for the whole ci.yml run on the release commit,
+    // so a CI job allowed to run past that wait would fail the release.
+    const timeouts = Object.values(workflowJobs(readRepo(".github/workflows/ci.yml"))).map((job) => Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job)?.[1] ?? Infinity));
+    expect(Math.max(...timeouts) * 60_000).toBeLessThan(CI_WAIT.timeoutMs);
+  });
+
+  test("no CI job runs the suite twice (#575)", () => {
+    // test:coverage runs the whole suite, so a plain `bun run test` beside it
+    // only doubles the job's time.
+    for (const [id, job] of Object.entries(workflowJobs(readRepo(".github/workflows/ci.yml")))) {
+      const runs = job.match(/^\s+run: bun run test(?::coverage)?$/gm) || [];
+      expect(runs.length, id).toBeLessThanOrEqual(1);
     }
   });
 
