@@ -115,6 +115,18 @@ describe("#208 Chinese and Japanese count per character", () => {
   });
 });
 
+describe("#710 a sentence that starts with an emoji is split", () => {
+  test("an emoji run before a capital starts the next sentence", () => {
+    expect(splitSentences("Yay! \u{1F600} Next one here.")).toEqual(["Yay!", "\u{1F600} Next one here."]);
+    expect(splitSentences("Yay! ❤️ Next one here.")).toEqual(["Yay!", "❤️ Next one here."]);
+    expect(splitSentences("Yay! \u{1F468}‍\u{1F469}‍\u{1F467} Next one here.")).toEqual(["Yay!", "\u{1F468}‍\u{1F469}‍\u{1F467} Next one here."]);
+  });
+
+  test("an emoji before a lower-case word still runs on", () => {
+    expect(splitSentences("Yay! \u{1F600} and so on.")).toEqual(["Yay! \u{1F600} and so on."]);
+  });
+});
+
 describe("sentence and speech edge cases", () => {
   test("a stammer across an ellipsis does not end the sentence", () => {
     expect(splitSentences("I… I don’t know. Fine.")).toEqual(["I… I don’t know.", "Fine."]);
