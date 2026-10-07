@@ -131,15 +131,18 @@ describe("--dry-run", () => {
   });
 
   // On a schema-version 1 copy: reindex fills the clue ledger migrate has
-  // just created, and glossary/terms is made with its parent folder.
-  for (const [missing, count] of [["continuity/clues/_index.md", 2], ["glossary", 4]]) {
-    test(`story migrate prints the count its dry run gives, with ${missing} missing`, () => {
+  // just created, and glossary/terms is made with its parent folder. With
+  // nothing missing, the one change is story.md.
+  for (const [missing, changes] of [[null, "1 change"], ["continuity/clues/_index.md", "2 changes"], ["glossary", "4 changes"]]) {
+    test(`story migrate prints the count its dry run gives, with ${missing ?? "nothing"} missing`, () => {
       const root = copyExample("the-unraveled-thread");
       const story = path.join(root, "story.md");
       fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2", "schema-version: 1"));
-      fs.rmSync(path.join(root, missing), { recursive: true });
-      expect(invoke(root, ["migrate", "--dry-run"]).out).toEndWith(`Dry run: story migrate would make ${count} changes; nothing was written\n`);
-      expect(invoke(root, ["migrate"]).out).toBe(`Migrated project to current schema: ${count} changes\n`);
+      if (missing !== null) {
+        fs.rmSync(path.join(root, missing), { recursive: true });
+      }
+      expect(invoke(root, ["migrate", "--dry-run"]).out).toEndWith(`Dry run: story migrate would make ${changes}; nothing was written\n`);
+      expect(invoke(root, ["migrate"]).out).toBe(`Migrated project to current schema: ${changes}\n`);
     });
   }
 
