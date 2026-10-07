@@ -240,7 +240,7 @@ The registries for `characters/`, `worldbuilding/`, and `plot/` also have sectio
 
 `story reindex` also sets the `story` field in `plot/timeline.md` and `continuity/state.md` when the title changes.
 
-Here is the full cycle on a copy of the example, after writing `characters/orrin-hale.md` by hand:
+Here is the full cycle in a copy of the example, after writing `characters/orrin-hale.md` by hand. Copy the whole `examples/` folder, not `the-last-ember` alone: its `story.md` `follows` `../the-fall-of-the-citadel`, and without that book beside it `story links` and `story check` report an error.
 
 ```shell
 story validate .
