@@ -3,10 +3,11 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { isTruthy, parseArgs, runCli } from "../src/cli.js";
+import { handleOutputError, isTruthy, parseArgs, runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { KIND_ALIASES, buildEntity, scanProject } from "../src/scan.js";
+import { createStoryProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -34,6 +35,26 @@ arcs-advanced: []
 status: draft
 word-count: 0
 `, "## Chapter Text\n\nOne two.");
+}
+
+const repoRoot = path.resolve(import.meta.dir, "..");
+
+function newProject(title = "Gull") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title, force: false }).root;
+}
+
+function fakeProcess(exitCode) {
+  const written = [];
+  return {
+    exitCode,
+    exits: [],
+    stderr: { write: (text) => written.push(text) },
+    exit(code) {
+      this.exits.push(code);
+    },
+    written
+  };
 }
 
 describe("cli", () => {
@@ -763,5 +784,93 @@ word-count: 9
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
     }
+  });
+});
+
+describe("#66 output errors", () => {
+  test("a closed pipe exits quietly and keeps the exit code", () => {
+    const proc = fakeProcess(undefined);
+    handleOutputError(Object.assign(new Error("write EPIPE"), { code: "EPIPE", syscall: "write" }), proc);
+    expect(proc.exits).toEqual([0]);
+    expect(proc.written).toEqual([]);
+    const failing = fakeProcess(1);
+    handleOutputError(Object.assign(new Error("write EPIPE"), { code: "EPIPE", syscall: "write" }), failing);
+    expect(failing.exits).toEqual([1]);
+  });
+
+  test("another write failure is one line, and other errors keep their stack", () => {
+    const proc = fakeProcess(0);
+    handleOutputError(Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC", syscall: "write" }), proc);
+    expect(proc.written).toEqual(["Cannot write output: no space left on the device\n"]);
+    expect(proc.exits).toEqual([1]);
+    const other = fakeProcess(0);
+    handleOutputError(new TypeError("boom"), other);
+    expect(other.written[0]).toContain("TypeError: boom");
+    expect(other.exits).toEqual([1]);
+  });
+
+  test.skipIf(!fs.existsSync("/dev/full"))("writing help to a full disk prints one line, not a stack trace", () => {
+    const fd = fs.openSync("/dev/full", "w");
+    try {
+      const result = spawnSync(process.execPath, [path.join(repoRoot, "bin", "story.js"), "--help"], { stdio: ["ignore", fd, "pipe"], encoding: "utf8" });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("Cannot write output: no space left on the device\n");
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
+});
+
+describe("#94 help parsing", () => {
+  test("story help help prints the general usage", () => {
+    const result = invoke(makeTempDir(), ["help", "help"]);
+    expect(result.code).toBe(0);
+    expect(result.out).toStartWith("Usage: story <command> [options]");
+  });
+
+  test("--help and --version take a boolean value", () => {
+    const cwd = makeTempDir();
+    expect(invoke(cwd, ["validate", "--help=true"]).out).toStartWith("Usage: story validate");
+    expect(invoke(cwd, ["--version=1"]).out).toMatch(/^\d+\.\d+\.\d+\n$/);
+    expect(parseArgs(["--help=false", "--version=no"])).toEqual({ positionals: [], options: {} });
+    const bad = invoke(cwd, ["--help=maybe"]);
+    expect(bad.code).toBe(2);
+    expect(bad.err).toContain('Unknown value "maybe" for --help');
+  });
+});
+
+describe("#78 project path errors", () => {
+  test("pointing at story.md says to pass the folder", () => {
+    const root = newProject();
+    const result = invoke(root, ["validate", "story.md"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toBe(`${path.join(root, "story.md")} is a file; pass the folder that contains it\n`);
+  });
+
+  test("a project subfolder hints at the project root", () => {
+    const root = newProject();
+    const result = invoke(path.join(root, "chapters"), ["report"]);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain("is not a story project: missing story.md (the project root looks like ");
+    expect(result.err).toContain("; pass that path instead)");
+    const outside = invoke(makeTempDir(), ["report"]);
+    expect(outside.err).not.toContain("project root looks like");
+  });
+});
+
+describe("#87 positive integer options", () => {
+  test("only plain decimal integers within the safe range are accepted", () => {
+    const root = newProject();
+    for (const value of ["0x10", "1e21", "99999999999999999999", "2.0", "0b11", "-3", "0"]) {
+      const result = invoke(root, ["add", "chapter", "Bad", "--number", value]);
+      expect(result.code).toBe(2);
+      expect(result.err).toContain("chapter number must be a positive integer");
+    }
+    expect(fs.readdirSync(path.join(root, "chapters")).filter((name) => name !== "_index.md")).toEqual([]);
+    expect(invoke(root, ["add", "chapter", "Pad", "--number", " 2 "]).code).toBe(0);
+    expect(invoke(root, ["add", "scene", "Hex", "--chapter", "chapter-02", "--scene", "0x2"]).err).toContain("scene number must be a positive integer");
+    expect(invoke(root, ["synopsis", "--pages", "0x3"]).err).toContain("Unsupported synopsis length: 0x3");
+    expect(invoke(root, ["add", "matter", "Dedication", "--order", "1e1"]).err).toContain("matter order must be a non-negative integer");
+    expect(invoke(makeTempDir(), ["init", "N", "--book-number", "1e3"]).err).toContain("Book number must be 0 or a positive number");
   });
 });
