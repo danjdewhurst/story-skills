@@ -512,6 +512,7 @@ If you would rather write without an outline, ask for discovery drafting instead
 
 After a chapter is drafted, the skill runs the maintenance pass. Every skill runs these three commands in this order, and you can run them yourself at any time. The output below assumes the skill set `current-chapter: 1` in `continuity/state.md` after drafting; if you are running the commands yourself, set it first, or `story check` warns `continuity/state.md current-chapter 0 is behind the latest chapter 1`.
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-drafted -->
 ```shell
 story reindex .
 story wordcount . --write
@@ -533,6 +534,7 @@ Checks passed: 0 errors, 0 warnings, 0 dismissed
 
 `story reindex` rebuilds `chapters/_index.md`; the skill does not edit registry rows by hand. `story next` can name continuity errors and still exit 0, so `story check` is the check. Then ask what to do next:
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-drafted -->
 ```shell
 story next .
 ```
@@ -551,6 +553,7 @@ Actions:
 
 The skill also runs `story pacing .`, which lines each chapter's length, scene outcomes, and hook up against the rest of the book. With one chapter there is little to compare, but it confirms the fields were recorded:
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-drafted -->
 ```shell
 story pacing .
 ```
@@ -571,6 +574,7 @@ As the book grows it warns about runs of easy wins, long stretches with no react
 
 Suppose you edit chapter 1 by hand instead of through the skill. You add a second character, `oskar-lind`, to its `characters` list but forget to create his file, and you leave `continuity/state.md` at `current-chapter: 0`. Chapter 1 is `status: draft`, so the continuity checks now expect the state file to have caught up with it. `story links` reports the missing file:
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-broken exit=1 -->
 ```shell
 story links .
 ```
@@ -582,6 +586,7 @@ error: chapters/chapter-01.md references missing character oskar-lind
 
 `story doctor` runs all three check groups and turns the results into a prioritised list of repairs:
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-broken -->
 ```shell
 story doctor .
 ```
@@ -604,6 +609,7 @@ Actions:
 
 The continuity warning says what is stale:
 
+<!-- replay: the-sunken-ledger setup=sunken-ledger-broken -->
 ```shell
 story continuity .
 ```

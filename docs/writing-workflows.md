@@ -479,10 +479,15 @@ warning: continuity/state.md current-chapter 0 is behind the latest chapter 1; u
 
 Setting `current-chapter: 1` in `continuity/state.md` clears it. `story continuity` cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
 
-`--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. When you keep a session log (the project has a `progress.md`) or ask to log the session, the skill runs `story progress . --log` instead, which also appends the session to `progress.md`:
+`--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. When you keep a session log (the project has a `progress.md`) or ask to log the session, the skill runs `story progress . --log` instead, which also appends the session to `progress.md`. Here it is with the day pinned to 24 September 2026, when the example chapter had 132 words:
+
+<!-- replay: the-gannet-point-light setup=gannet-point-light -->
+```shell
+story progress . --log --date 2026-09-24
+```
 
 ```text
-Logged 132 words for 2026-09-24 in /path/to/the-gannet-point-light/progress.md
+Logged 132 words for 2026-09-24 in ~/stories/the-gannet-point-light/progress.md
 Progress: 132 of 80,000 words (0.2%)
 Remaining: 79,868 words
 Deadline: 2027-03-31 (188 days left): 425 words a day needed
@@ -1191,7 +1196,7 @@ story build . --format narration
 ```
 
 ```text
-Built 3 chapters as narration to /path/to/the-gannet-point-light/dist/the-gannet-point-light.narration.md
+Built 3 chapters as narration to ~/stories/the-gannet-point-light/dist/the-gannet-point-light.narration.md
 ```
 
 It offers to play chapters through the system's text-to-speech if one is installed (`say` on macOS, `espeak-ng` or `spd-say` on Linux), asking before installing anything. Stumbles, unintended rhymes, tongue-twisters, and runs of same-length sentences become edit notes.
@@ -1278,7 +1283,7 @@ story build . --format html
 ```
 
 ```text
-Built 3 chapters as html to /path/to/the-gannet-point-light/dist/the-gannet-point-light.html
+Built 3 chapters as html to ~/stories/the-gannet-point-light/dist/the-gannet-point-light.html
 ```
 
 The single HTML file has a table of contents and a small clickable label beside every paragraph (`ch03-p12` is chapter 3, paragraph 12). Readers put that label at the start of each note, so every note points at an exact place. The feedback template includes a short note to send with the file, asking readers for reactions rather than fixes.
