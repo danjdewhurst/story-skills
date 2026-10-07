@@ -231,6 +231,7 @@ export function importManuscript(options) {
       language: options.language,
       defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path.basename(source)}. Replace with a 2-3 sentence synopsis.`,
       force: options.force,
+      command: "story import --force",
       forceHint: "Use --force to import into it: --force saves the project as snapshot before-import-<n>, then deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. story snapshot --restore before-import-<n> puts the old chapters back.",
       // Before anything is written: refuse a chapter entry the snapshot
       // cannot keep, check an existing project parses before deleting its

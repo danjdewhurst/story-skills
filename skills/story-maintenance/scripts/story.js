@@ -24410,6 +24410,9 @@ function fillStoryProject(root, title, cwd, options) {
   const backlinks = planSeriesBacklinks(root, series);
   const givenThemes = asArray(options.themes).map((theme) => String(theme).trim()).filter(Boolean);
   const themes = givenThemes.length > 0 ? givenThemes : ["change"];
+  if (options.force) {
+    assertNoInterruptedChange(root, options.command ?? "story init --force");
+  }
   options.beforeWrite?.(root, existingStory !== null);
   for (const directory of PROJECT_DIRECTORIES) {
     makeDirectories(path14.join(root, directory));
@@ -30653,6 +30656,7 @@ function importManuscript(options) {
       language: options.language,
       defaultSynopsis: `Imported from ${fromStdin ? "stdin" : path18.basename(source)}. Replace with a 2-3 sentence synopsis.`,
       force: options.force,
+      command: "story import --force",
       forceHint: "Use --force to import into it: --force saves the project as snapshot before-import-<n>, then deletes every chapters/chapter-NN.md and writes the imported chapters in their place, adds missing starter files, keeps story.md and the other files, and reindexes. story snapshot --restore before-import-<n> puts the old chapters back.",
       beforeWrite(root, hasStory) {
         replaced = replacedChapters(root);
