@@ -4,10 +4,11 @@
 // cannot fall out of the run. This script writes the per-file timings bun
 // uses to balance those shards.
 //
-// The workflow must not pass the file list to `bun test` itself. Doing that
-// makes bun walk the repository, follow plugins/story-skills (a symlink to
-// the repo root), and exit ELOOP on Windows. `bun run test -- --shard=i/n`
-// keeps bun's own glob, which stays inside test/.
+// The workflow runs `bun run test -- --shard=i/n`, which hands bun the
+// package script's ./test/*.test.js paths. Bun reads a path without `./`,
+// such as test/a.test.js, as a name filter instead: it then scans the whole
+// repository, follows plugins/story-skills (a symlink to the repo root), and
+// exits ELOOP on Windows.
 //
 // Weights are Windows timings from issue #672. A file with no weight still
 // runs. It takes the default, a few seconds, far below the timed files.
