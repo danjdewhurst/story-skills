@@ -356,12 +356,16 @@ function plural(count, noun, format = String) {
 }
 
 // Rounds a share of a target without claiming 100% (or 0%) before it is
-// reached: 99.8 prints as 99 at whole percents, not 100.
+// reached: 99.8 prints as 99 at whole percents, not 100, and 0.3 prints as
+// 1, not 0, since a share above zero is never 0%.
 export function formatPercent(percent, places) {
   const scale = 10 ** places;
   let value = Math.round(percent * scale) / scale;
   if (value >= 100 && percent < 100) {
     value = Math.floor(percent * scale) / scale;
+  }
+  if (value <= 0 && percent > 0) {
+    value = 1 / scale;
   }
   return value.toFixed(places);
 }
