@@ -3,8 +3,9 @@ import { branchGraph } from "./scan.js";
 
 // Story-time order of chapters, shared by the death, knowledge, and state
 // checks. A chapter's date is its own `date`, else the earliest dated scene
-// in it. Two chapters that are both dated compare by date, so a 2034
-// prologue read first comes after a 2024 chapter 3, and a dual-timeline book
+// in it that is not a flashback (one with `flashback-to`). Two chapters that
+// are both dated compare by date, so a 2034 prologue read first comes after
+// a 2024 chapter 3, and a dual-timeline book
 // compares its 1990 and 2020 strands correctly. An undated chapter happens
 // after every chapter read before it, and on the same day chapters compare
 // by chapter number (reading order); see storyOrder.
@@ -19,8 +20,10 @@ export function chapterChronology(project) {
   }
   const sceneDays = new Map();
   for (const scene of project.scenes) {
+    // A flashback scene is told out of story order, so its date does not
+    // date the chapter it sits in.
     const parsed = parseStoryDate(String(scene.date ?? ""), project.calendar);
-    if (parsed && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
+    if (parsed && !scene.flashbackTo && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
       sceneDays.set(scene.chapter, Math.min(sceneDays.get(scene.chapter) ?? Infinity, parsed.days));
     }
   }

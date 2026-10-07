@@ -17332,7 +17332,7 @@ function chapterChronology(project) {
   const sceneDays = new Map;
   for (const scene of project.scenes) {
     const parsed = parseStoryDate(String(scene.date ?? ""), project.calendar);
-    if (parsed && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
+    if (parsed && !scene.flashbackTo && numbers.has(scene.chapter) && !days.has(scene.chapter)) {
       sceneDays.set(scene.chapter, Math.min(sceneDays.get(scene.chapter) ?? Infinity, parsed.days));
     }
   }

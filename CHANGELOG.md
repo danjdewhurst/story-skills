@@ -47,6 +47,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `story validate` reports a numeric or true/false `pronunciation` once, not twice. ([#698](https://github.com/danjdewhurst/story-skills/issues/698))
   - The error is the one that says to quote the value, such as `pronunciation: "42"`. A list `pronunciation` still gets its own error.
 
+- A scene with `flashback-to` no longer dates its chapter, so a flashback cannot move an undated chapter earlier in story time. ([#699](https://github.com/danjdewhurst/story-skills/issues/699))
+  - Before, a dated flashback scene in an undated chapter could hide a posthumous appearance or another story-time error. Chapter dates now come from the chapter's own `date`, or from its earliest dated scene that has no `flashback-to`.
+
 ## [0.23.0] - 2026-10-07
 
 ### Added
