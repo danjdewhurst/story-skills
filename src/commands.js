@@ -987,7 +987,8 @@ export const COMMANDS = [
       const { parsed } = context;
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
       return runWrite(context, "split", (projectRoot) => splitChapter(projectRoot, options),
-        (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}\n`);
+        (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}\n${choiceChanges(result, false)}`,
+        (result) => choiceChanges(result, true));
     }
   },
   {
@@ -1005,7 +1006,8 @@ export const COMMANDS = [
       const { parsed } = context;
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
       return runWrite(context, "merge", (projectRoot) => mergeChapters(projectRoot, options),
-        (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}\n`);
+        (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}\n${choiceChanges(result, false)}`,
+        (result) => choiceChanges(result, true));
     }
   },
   {
@@ -1135,6 +1137,15 @@ function restructureDetails(result) {
     parts.push(`renumbered ${result.renumbered} ${result.renumbered === 1 ? "chapter" : "chapters"}`);
   }
   return parts.length === 0 ? "" : ` (${parts.join(", ")})`;
+}
+
+// The choices a split or merge in a branching book added or pointed at a
+// renumbered chapter, one line each, in the past tense or, for --dry-run,
+// as what it would do.
+function choiceChanges(result, dryRun) {
+  const [give, point] = dryRun ? ["Would give", "Would point"] : ["Gave", "Pointed"];
+  const added = result.choiceAdded ? [`${give} ${result.choiceAdded.file} a choice to ${result.choiceAdded.to}, the rest of ${result.id}: ${result.choiceAdded.text}`] : [];
+  return [...added, ...result.choicesRetargeted.map((choice) => `${point} ${choice.file} choices[${choice.index}] at ${choice.to}, not ${choice.from}`)].map((line) => `${line}\n`).join("");
 }
 
 // Text piped to `story <command> -`. `io.readStdin` stands in for the real
