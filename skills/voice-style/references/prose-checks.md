@@ -99,6 +99,6 @@ something new. Read it before deciding.
   later check counts them.
 - **Similar names** cost readers attention. Rename the less established
   character, with the user's approval, via
-  `story rename character <id> '<New Name>' --prose` (preview it with
-  `--dry-run` first), so the chapter text follows as well as the
-  references.
+  `story rename character <id> '<New Name>' --prose`, so the chapter text
+  follows as well as the references: run it with `--dry-run` first, show
+  the user the replacements, and run it for real only once they approve.

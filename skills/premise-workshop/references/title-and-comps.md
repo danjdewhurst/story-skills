@@ -54,8 +54,9 @@ clashes.
   such as `The`, `Lord`, or `Captain`) equals a character's given name,
   so *Lady Sera* clashes with *Sera Voss*. Pick another, or confirm the
   reuse is deliberate and rename the existing entity with
-  `story rename <kind> <id> '<New Name>' --prose`, previewed with
-  `--dry-run`, so its chapter text follows too.
+  `story rename <kind> <id> '<New Name>' --prose`, so its chapter text
+  follows too: run it with `--dry-run` first, show the user the
+  replacements, and run it for real only once they approve.
 - **Look-alike warning:** the same first four letters (*Maren* /
   *Marenna*), or the same initial and one letter apart (two for words of
   five letters or more: *Maren* / *Marek*). Readers confuse these.

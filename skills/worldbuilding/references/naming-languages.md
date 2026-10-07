@@ -75,8 +75,8 @@ Change the initial or the length unless the resemblance is deliberate
 
 `story prose .` also warns about similar character first names.
 
-When renaming an existing entity, use
-`story rename <kind> <id> '<New Name>' --prose` (preview it with
-`--dry-run` first) so the chapter text follows as well as the references,
-then run `story reindex .`, `story wordcount . --write`, and
-`story check .`.
+When renaming an existing entity, preview
+`story rename <kind> <id> '<New Name>' --prose --dry-run`, show the user
+the replacements, and run it without `--dry-run` only once they approve,
+so the chapter text follows as well as the references. Then run
+`story reindex .`, `story wordcount . --write`, and `story check .`.
