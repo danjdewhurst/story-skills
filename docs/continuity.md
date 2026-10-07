@@ -98,7 +98,7 @@ story continuity .
 
 `story continuity` runs every check below and prints the findings. [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/) is broken on purpose: every file is well-formed, so `story validate` and `story links` pass, but the story does not hold together.
 
-<!-- replay -->
+<!-- replay exit=1 -->
 ```text
 $ story continuity examples/the-unraveled-thread
 Continuity check failed: 4 errors, 3 warnings, 0 dismissed
@@ -545,6 +545,7 @@ Each finding in the [example output](#story-continuity) has a direct fix:
 
 After those edits, in a copy of the project:
 
+<!-- replay: the-unraveled-thread setup=unraveled-repaired -->
 ```text
 $ story continuity .
 Continuity is consistent: 0 errors, 0 warnings, 1 dismissed
@@ -625,6 +626,7 @@ $ story knowledge kael-voss --at chapter-01 --path examples/the-last-ember
 
 In the repaired unraveled thread, Jonas learns which page matters in chapter 4:
 
+<!-- replay: the-unraveled-thread setup=unraveled-repaired -->
 ```text
 $ story knowledge jonas-reed --at chapter-03
 No recorded knowledge for jonas-reed at chapter-03
@@ -661,6 +663,7 @@ story timeline .
 
 With the scene dates from [Clock and travel time](#clock-and-travel-time) on the repaired unraveled thread:
 
+<!-- replay: the-unraveled-thread setup=unraveled-dated -->
 ```text
 $ story timeline .
 Timeline: 4 dated, 0 undated
@@ -1056,6 +1059,7 @@ voice-avoid:
 
 In a copy of the last ember with those fields on Kael, and Sera's four pronoun tags (three `she said`, one `she murmured`) changed to `Sera said` or `Sera murmured`, which gives her six attributed lines:
 
+<!-- replay: the-last-ember setup=last-ember-voices -->
 ```text
 $ story voices .
 Voices: 2 speaking characters, 29 unattributed lines
@@ -1090,7 +1094,7 @@ story names "Ilse Varn" "Teodor" --path .
 
 From a copy of [`examples/harbor-of-second-light`](../examples/harbor-of-second-light/), whose cast is Mara Quill (protagonist), Theo Quill, and Councillor Ilya Venn (antagonist):
 
-<!-- replay: harbor-of-second-light -->
+<!-- replay: harbor-of-second-light exit=1 -->
 ```text
 $ story names "Mara" "Marra Quinn" "Ilse Varn" "Teodor" "Ivo" "Wren Calder" --path .
 Mara: taken
@@ -1239,6 +1243,7 @@ story progress . --date 2026-09-24
 
 From a copy of the last ember with `target-words: 90000` and `deadline: 2027-03-31` in `story.md`, `target-words: 3500` on chapter 1, and the four sessions in the `progress.md` shown below:
 
+<!-- replay: the-last-ember setup=last-ember-progress -->
 ```text
 $ story progress . --date 2026-09-24
 Progress: 993 of 90,000 words (1.1%)
@@ -1428,6 +1433,7 @@ Revision passes: none recorded. Run story passes --init to add the default ladde
 
 Any kebab-case name works as a pass, so you can add your own (`--start sensitivity-read`). A custom pass has no focus or checks listed. Adding one prints `note: Added custom pass <name>, which is not in the default ladder` to stderr, ending `; did you mean <pass>?` when the name is within two edits of a default pass, such as `charcter`. When the list changes, the command prints `Updated revision-passes in story.md` and rewrites only that frontmatter entry; the rest of `story.md` is kept. It then prints the checklist. From a copy of the unraveled thread after `--init`, `--done structure`, and `--start character`:
 
+<!-- replay: the-unraveled-thread setup=unraveled-passes -->
 ```text
 $ story passes . --start character
 Updated revision-passes in story.md
@@ -1542,6 +1548,7 @@ The last ember follows another book, so run this with its sibling [`the-fall-of-
 
 When `story.md` has `status: revising`, `story next` also names the current [revision pass](#story-passes). From the copy of the unraveled thread in [Story passes](#story-passes), with `character` in progress:
 
+<!-- replay: the-unraveled-thread setup=unraveled-revising -->
 ```text
 $ story next .
 # Next Writing Actions: The Unraveled Thread

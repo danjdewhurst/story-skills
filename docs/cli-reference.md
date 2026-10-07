@@ -124,7 +124,7 @@ story --version
 
 An unknown command prints `Unknown command: <name>`, with a suggestion when the name is close to a real command, and a pointer to the help, to stderr, and exits 2:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```text
 $ story valdate
 Unknown command: valdate; did you mean validate?
@@ -153,7 +153,7 @@ story validate --path ~/stories/the-last-ember
 
 If you give both a positional path and `--path`, they must resolve to the same directory:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```shell
 story validate the-last-ember --path the-salt-road
 ```
@@ -168,7 +168,7 @@ An empty path is a usage error rather than the current directory, so a script th
 
 `init` and `import` refuse `--path` so it cannot be mistaken for the target directory:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```shell
 story init "Tide Book" --path x
 ```
@@ -222,6 +222,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 
 An unknown option close to one the command accepts gets the same kind of suggestion, naming every equally close option (up to three). A single-dash word such as `-x` is a positional argument, so on a command that takes a `[path]` it is read as the project path; when no such project exists, the error says it is not an option.
 
+<!-- replay: the-salt-road setup=salt-road-new exit=2,2,3,2,2,2 -->
 ```text
 $ story validate --verbose
 Unknown option --verbose
@@ -399,7 +400,7 @@ With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `wri
 
 Commands that write files keep them inside the project root. A relative `--out` path resolves against the **project root**, not the current directory, and must stay inside it:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=4 -->
 ```shell
 story export --out ../outside.md
 ```
@@ -490,6 +491,7 @@ An empty `--genre`, `--pov`, or `--tense` (such as `--tense=` from an unset shel
 
 Without `--force`, `init` refuses an existing directory:
 
+<!-- replay: . setup=salt-road-new exit=4 -->
 ```shell
 story init "The Salt Road"
 ```
@@ -512,7 +514,7 @@ A `.gitignore` in an enclosing repository is not checked, so a book inside a lar
 
 It also refuses a story id or target folder name that Windows reserves (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`, also with an extension such as `con.txt`), a folder name ending in a dot or space, and a folder name containing `< > : " | ? *`, because the project could not be checked out there:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```shell
 story init con
 ```
@@ -570,7 +572,7 @@ target-words: 30000
 
 An unknown form stops before anything is written:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```text
 $ story init "Bad Form" --form epic
 Unsupported form "epic": expected one of flash, short-story, novelette, novella, novel, serial, picture-book, chapter-book
@@ -872,7 +874,7 @@ Each finding is reported once. A file that fails to parse, which every check rep
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), whose only findings come from `continuity`:
 
-<!-- replay -->
+<!-- replay exit=1 -->
 ```shell
 story check examples/the-unraveled-thread
 ```
@@ -964,7 +966,7 @@ Runs the deterministic continuity engine over frontmatter: characters appearing 
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
-<!-- replay: the-unraveled-thread -->
+<!-- replay: the-unraveled-thread exit=1 -->
 ```shell
 story continuity
 ```
@@ -991,6 +993,7 @@ routes:
 
 a `saltmere` location, and a second scene that puts Ilse in Saltmere on the evening of the same day as the 06:30 scene at the harbour (both created with `story add scene`, which also adds `saltmere` to the chapter's `locations`):
 
+<!-- replay: the-salt-road setup=salt-road-route exit=1 -->
 ```text
 $ story continuity
 Continuity check failed: 1 errors, 0 warnings, 0 dismissed
@@ -1049,7 +1052,7 @@ With `--json`, `data` holds `character`, `at`, and `entries` (each `knows`, `lea
 
 With nothing recorded, it prints `No recorded knowledge for <id> at <chapter-id>` and exits 0. A missing argument or an unknown character or chapter exits 2; a character file that fails to parse exits 3. A broken character file prints its parse error, such as `characters/mara.md: is missing YAML frontmatter`, rather than `Unknown character`:
 
-<!-- replay: the-last-ember -->
+<!-- replay: the-last-ember exit=2 -->
 ```text
 $ story knowledge kael-voss
 Usage: story knowledge <character-id> --at <chapter-id> [--path <project>]
@@ -1368,6 +1371,7 @@ A book [counted in characters](project-format.md#counting-in-characters) reports
 
 With `target-words: 90000` and `deadline: 2027-03-31` in `story.md`:
 
+<!-- replay: the-last-ember setup=last-ember-target -->
 ```shell
 story progress --log --date 2026-09-20
 ```
@@ -1417,6 +1421,7 @@ Shows three read-only views:
 
 On a separate copy of the Salt Road project (see [Example projects used on this page](#example-projects-used-on-this-page)), after adding a second chapter with a flashback scene dated twelve years earlier. Later examples on this page use the one-chapter project:
 
+<!-- replay: the-salt-road setup=salt-road-flashback -->
 ```shell
 story timeline
 ```
@@ -1689,6 +1694,11 @@ Actions:
 
 On a book with `status: revising`, `next` points at the revision pass in progress, or the first one not done, with the commands that help with it. With no passes recorded it suggests `story passes --init` instead. In The Salt Road, after fixing the journey error from [continuity](#continuity) and with the structure pass done (see [passes](#passes)):
 
+<!-- replay: the-salt-road setup=salt-road-revising -->
+```shell
+story next
+```
+
 ```text
 # Next Writing Actions: The Salt Road
 
@@ -1758,6 +1768,7 @@ Unlike plain `doctor`, `doctor --fix` exits 1 while any check still reports an e
 
 This copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/) has three problems on top of the example's deliberate continuity errors: `glossary/_index.md` has been deleted, chapter 1's `word-count` has been edited to `20`, and its `characters` list has `edran-vael`, a typo for `edran-vale`.
 
+<!-- replay: the-unraveled-thread setup=worked-repair -->
 ```text
 $ story doctor
 # Story Doctor: The Unraveled Thread
@@ -1782,6 +1793,7 @@ Actions:
 
 Preview what `--fix` would repair before letting it write:
 
+<!-- replay: the-unraveled-thread setup=worked-repair exit=1 -->
 ```text
 $ story doctor --fix --dry-run
 Repairs (dry run; nothing was written):
@@ -1817,6 +1829,7 @@ Work down the action list, P0 first, and run `story doctor` again after each rou
 
 - **P0 and P1 actions** each name the check that lists their findings. Run it to see each file and the problem in it:
 
+  <!-- replay: the-unraveled-thread setup=worked-repair exit=1 -->
   ```text
   $ story links
   Link check failed: 1 errors, 0 warnings, 0 dismissed
@@ -1991,6 +2004,7 @@ Speech verbs, pronouns, contractions, and stopwords come from the language pack 
 
 On a copy of [`examples/the-last-ember`](../examples/the-last-ember/), after adding `reckon` to `voice-words` and `soldiers` to `voice-avoid` in `characters/kael-voss.md` (as block lists; the parser does not read `[a, b]`):
 
+<!-- replay: the-last-ember setup=last-ember-kael-voice -->
 ```shell
 story voices
 ```
@@ -2028,6 +2042,7 @@ With `--json`, `data.names` has one entry per candidate, in the order given: `na
 
 In The Salt Road:
 
+<!-- replay: the-salt-road setup=salt-road -->
 ```shell
 story names "Ilsa" "Gull Haven" "Brannoc"
 ```
@@ -2042,7 +2057,7 @@ warning: "Ilsa" looks like character ilse-varrow (Ilse Varrow) [name-look-alike]
 
 In [`examples/the-last-ember`](../examples/the-last-ember/):
 
-<!-- replay: the-last-ember -->
+<!-- replay: the-last-ember exit=1 -->
 ```shell
 story names "Sera" "Kaelan" "Marek" "Tamsin"
 ```
@@ -2132,7 +2147,7 @@ Each kind is drawn from a small model of nodes and edges, and `--json` returns i
 
 `diagram` prints and writes nothing while any project file fails to parse, because the diagram would silently drop entities; it reports the parse errors on stderr and exits 1. An unknown or missing kind exits 2:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story diagram maps
 Unknown diagram kind: maps. Supported kinds: relationships, locations, timeline, clues, arcs
@@ -2168,6 +2183,7 @@ Wrote locations diagram to ~/stories/harbor-of-second-light/dist/map.mmd
 
 In The Salt Road, with the two dated scenes from [continuity](#continuity):
 
+<!-- replay: the-salt-road setup=salt-road-route -->
 ```shell
 story diagram timeline
 ```
@@ -2223,6 +2239,7 @@ With `--json`, `data.passes` lists each recorded pass as `pass`, `status`, and, 
 
 With no passes recorded, `passes` lists the default ladder and suggests `--init`. The suggested commands repeat the path you typed, so `story passes drafts/salt-road` suggests `story passes drafts/salt-road --init` and `mark it with story passes drafts/salt-road --done <pass>`; with no path, or `.`, they read `story passes`. In The Salt Road, after `story passes --init` and `story passes --done structure`:
 
+<!-- replay: the-salt-road setup=salt-road-passes -->
 ```shell
 story passes --start character
 ```
@@ -2258,7 +2275,7 @@ revision-passes:
 
 A name that is not kebab-case is refused:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story passes --start Bad_Name
 Revision pass names must be kebab-case, got Bad_Name
@@ -2375,6 +2392,7 @@ Kinds are case-insensitive. Ids are lowercase kebab-case: Cyrillic and Greek let
 
 Names may be written in any script; ids stay ASCII, so that entity filenames are portable across file systems and archive formats. A name written only in a script with no transliteration table (`李明`, `محمد`, `דוד`) leaves nothing to slug, so [`add`](#add) and [`rename`](#rename) take the id from `--id` instead and keep the name as written. `--id` also overrides a transliteration you would spell differently:
 
+<!-- replay: the-salt-road setup=salt-road exit=0,2,0 -->
 ```text
 $ story add character "Пётр"
 Created character petr: ~/stories/the-salt-road/characters/petr.md
@@ -2394,7 +2412,7 @@ story add <kind> <name> [options] [--dry-run] [--json] [--path <project>]
 
 Creates an entity file with starter frontmatter and body sections, then reindexes. It refuses to overwrite an existing file, and refuses an id that Windows reserves as a file name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`): `Cannot use character id con: Windows reserves the file name con.md. Choose a longer name, such as "con character"`. Each kind accepts only its own options (see the table below) plus `--dry-run`, `--json`, and `--path`, and `story help add` lists them. Every kind but `chapter` and `scene` also takes `--id`. An option that only another kind reads is an error, as is one no kind reads:
 
-<!-- replay -->
+<!-- replay exit=2 -->
 ```text
 $ story add scene "Night Watch" --chapter chapter-01 --number 5
 --number does not apply to story add scene: story help add lists the options each kind reads
@@ -2405,7 +2423,7 @@ $ story add character Mira --trim 6x9
 
 A missing or unknown kind is also an error:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story add
 An entity kind is required: expected one of character, location, system, faction, artifact, arc, chapter, scene, question, promise, clue, term, matter, research
@@ -2416,7 +2434,7 @@ Unsupported entity kind: villain: expected one of character, location, system, f
 
 `--id` sets the id instead of deriving it from the name, which is how a name in a script with no transliteration table gets a file (see [Entity kinds](#entity-kinds)). The value must already be kebab-case, so `add` never quietly rewrites it, and it is refused for chapters and scenes, whose ids come from their numbers (`--number` for a chapter, `--chapter` and `--scene` for a scene):
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story add character "Пётр" --id Petr
 character id must be a kebab-case id, got "Petr"
@@ -2483,7 +2501,7 @@ On `add chapter` and `add scene`, `--pov` names the POV character, and `add` als
 
 Options that name other entities or chapters (`--chapter`, `--planted`, `--payoff`, `--introduced`, `--resolved`, `--used-in`, `--location`, `--character`, `--mention`, `--member`, `--owner`, `--arc`, `--controlled-by`, and their plural forms) must be kebab-case ids, and so must `--pov` on `add chapter` and `add scene`. A character's `--arc` is exempt: it is a free-text arc theme. A name is refused before anything is written, since it could never resolve, and the example in the message matches the option (`port-kestrel` for a location, `the-long-road` for an arc, `mara-quill or harbor-council` for an owner):
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story add promise "The Ledger" --planted "Chapter 1"
 --planted "Chapter 1" must be a kebab-case id (such as chapter-01)
@@ -2497,7 +2515,7 @@ chapter number must be a positive integer, got 0
 
 A chapter id in `--planted`, `--payoff`, `--introduced`, or `--used-in` may name a chapter not written yet, but not `chapter-00`, and only in the spelling `story add chapter` writes (`chapter-01`, not `chapter-1` or `chapter-001`). Any other id must name an existing chapter:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story add promise "The Ledger" --payoff chapter-00
 --payoff chapter-00: chapter numbers start at 1
@@ -2521,6 +2539,7 @@ Location and system `--type`, location `--status`, and system `--prevalence` are
 
 Examples, run in The Salt Road:
 
+<!-- replay: the-salt-road setup=salt-road-new -->
 ```text
 $ story add location "Gull Harbour" --type port --region "the Shallows"
 Created location gull-harbour: ~/stories/the-salt-road/worldbuilding/locations/gull-harbour.md
@@ -2571,7 +2590,7 @@ status: unknown
 
 An invalid enum value stops before anything is written:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```shell
 story add character "Tobin Reyes" --role wizard
 ```
@@ -2582,7 +2601,7 @@ Unsupported character role "wizard": expected one of protagonist, antagonist, su
 
 The same applies to the newer craft fields:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=2 -->
 ```text
 $ story add scene "Bad" --chapter chapter-01 --outcome maybe
 Unsupported scene outcome "maybe": expected one of yes, no, yes-but, no-and
@@ -2618,6 +2637,7 @@ Renamed character li-ming to li-minghua: ~/stories/the-salt-road/characters/li-m
 
 Every rewrite is planned before anything is written, so a file that fails to parse leaves the project unchanged. An entity file (a file directly in an entity folder), one of the registries the CLI writes (the `_index.md` in `characters/`, `worldbuilding/`, `plot/`, `chapters/`, `scenes/`, `continuity/questions/`, `continuity/promises/`, `continuity/clues/`, `glossary/`, `matter/`, and `research/`), or one of `story.md`, `style-sheet.md`, `progress.md`, `plot/timeline.md`, `continuity/state.md`, and `continuity/exemptions.md` with no YAML frontmatter stops it the same way, with `<file> is missing YAML frontmatter; nothing was changed`. Other markdown, such as `continuity/motifs.md`, `continuity/theme-audit.md`, a README, or an `_index.md` in a folder of your own such as `notes/`, may be plain; when its frontmatter uses YAML the CLI does not parse, only its body links are rewritten, and a note over 5 MiB, or past the first 5,000 such notes, is skipped. Reference-style link definitions (`[bo]: ../characters/bo.md`) are rewritten like inline links. A damaged registry gets a hint, since registries are generated: `characters/_index.md is missing YAML frontmatter (it is a registry: run story reindex to rebuild it); nothing was changed`. Every file `rename` will rewrite or delete, and every folder it writes into, must be writable before it starts: otherwise it refuses with `Cannot write to plot/arcs/the-drowned-witness.md (permission denied); nothing was changed. Fix it and run the command again`. A write that still fails partway (a full disk, say) adds `Some files were already updated: fix the problem and run the same command again to finish` to the error; the rerun finishes the job. `move` and `remove` check and report the same way. `rename` refuses if an entity with the new id already exists, if another kind that shares a reference field uses it (see [add](#add)), or if the new id is one Windows reserves as a file name, as `add` does (`Cannot use character id aux: Windows reserves the file name aux.md. ...`).
 
+<!-- replay: the-salt-road setup=salt-road-added -->
 ```text
 $ story rename character ilse-marrow "Ilse Varrow"
 Renamed character ilse-marrow to ilse-varrow: ~/stories/the-salt-road/characters/ilse-varrow.md
@@ -2759,7 +2779,7 @@ References to the split chapter keep pointing at it, which now holds only the fi
 
 A split gives one chapter a number no chapter has: the last chapter the renumbering moves, or the new chapter when no chapter follows it (at the end of the book or before a gap). When a file already names that `chapter-NN` (a payoff scheduled for a chapter not written yet, a link, a bare id in the timeline), `split` refuses. Those references were planned for another chapter, but the chapter would take them over, and a later `merge` would carry them back with it. Every file counts, the renumbered chapter's own links included, except the registries, which `split` rebuilds, and the abandoned threads that name the new chapter's id, which only warn. A scene id under that number, such as `chapter-05-scene-01`, is no reference to the chapter: the renumbering warns about it (`warning: chapter-05 was already referenced before this split, ...`). Point the references at the chapter they mean first: at the renumbered chapter's current id if they belong to it, since the split carries them along, or at the next id if they mean the chapter after it. For the new chapter, point them at the split chapter if they belong in the text that moves, and at the new chapter after the split. On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
 
-<!-- replay: the-left-luggage-office -->
+<!-- replay: the-left-luggage-office exit=4 -->
 ```text
 $ story split chapter-02 --at 1 --title "Shelf Nine"
 continuity/promises/sallis-comes-back.md names chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so it would point at that chapter. Point it at the chapter it means first: chapter-03 if it belongs there (the split then carries it to chapter-04), or chapter-05 for the chapter after it; nothing was changed
@@ -2881,7 +2901,7 @@ Deletes the entity file and scrubs its id from every reference field, searching 
 
 `remove chapter` refuses while scenes still point at the chapter, so remove those first:
 
-<!-- replay: the-gull-rock-light -->
+<!-- replay: the-gull-rock-light exit=4 -->
 ```text
 $ story remove chapter chapter-01
 chapter chapter-01 still has scenes: chapter-01-scene-01. Remove them first with story remove scene <id>
@@ -3152,7 +3172,7 @@ Sera gathers information, allies, and ember power. She discovers the ember well 
 Because Sera infiltrates the citadel through the Whisper Gate. Sera chooses to unseal the ember well and release its power back into the land rather than claim it.
 ```
 
-<!-- replay: the-last-ember -->
+<!-- replay: the-last-ember exit=0,2 -->
 ```text
 $ story synopsis --pages 3 --out dist/synopsis.md
 Wrote synopsis to ~/stories/the-last-ember/dist/synopsis.md

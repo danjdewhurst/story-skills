@@ -160,7 +160,7 @@ Ids stay ASCII kebab-case in every language, so file names and references work e
 - Cyrillic and Greek names are transliterated: `Пётр Иванов` gives `petr-ivanov`, `Ολυμπία` gives `olympia`. The tables are in [Transliteration](project-format.md#transliteration). A name with a letter the tables lack, such as Kazakh `қ`, is not transliterated at all and needs `--id`.
 - Names in any other script (Chinese, Japanese, Korean, Arabic, Hebrew, Devanagari, Thai) need an id from you:
 
-  <!-- replay: kirimi-eki-no-wasuremono -->
+  <!-- replay: kirimi-eki-no-wasuremono exit=2,0 -->
   ```text
   $ story add character "佐伯ミナ"
   Cannot derive a kebab-case id from character name "佐伯ミナ": pass --id with a kebab-case id, or use a name containing ASCII letters or digits

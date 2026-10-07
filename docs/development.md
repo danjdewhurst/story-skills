@@ -379,16 +379,20 @@ A failure prints `Coverage is below the gate:` followed by one line per gap, key
 
 ### Replayed doc samples
 
-The command output shown in `README.md` and `docs/` drifts as the CLI changes. [`test/doc-samples.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/doc-samples.test.js) replays every sample marked for it and fails when the CLI no longer prints what the page shows. Mark a sample with a comment on its own line, straight before the sample's first fence:
+The command output shown in `README.md` and `docs/` drifts as the CLI changes. [`test/doc-samples.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/doc-samples.test.js) replays every sample marked for it and fails when the CLI no longer prints what the page shows, or exits with another code. Mark a sample with a comment on its own line, straight before the sample's first fence: `<!-- replay[: <folder>][ setup=<name>][ exit=<code>] -->`.
 
 - `<!-- replay: <example> -->` runs the commands in a copy of `examples/<example>`, shown in output as `~/stories/<example>`. The other examples are copied beside it, so a series link such as `follows: ../the-fall-of-the-citadel` resolves. `<!-- replay: . -->` runs them in `~/stories` itself, for `story init` beside the examples.
-- `<!-- replay -->` runs them from a copy of the repository root, shown as `~/story-skills`, for commands that name `examples/<example>` or need no project.
+- `<!-- replay -->` runs them from `~/story-skills`, a folder that holds a copy of `examples/` and nothing else from the repository, for commands that name `examples/<example>` or need no project. `node scripts/check-schema.js` may run there too; it reads the checkout.
+- `setup=<name>` first builds the project state the page describes, with one of the setups in `SETUPS` at the top of the test, such as `worked-repair` (the doctor walkthrough's broken copy of the unraveled thread) or `salt-road` (The Salt Road, built with the commands the CLI reference shows). The folder can then be one the setup makes, such as `the-salt-road`. Add a setup when a sample needs a state the examples do not have; build it with the commands and hand edits the page gives.
+- `exit=<code>` is the exit code the commands must return, 0 when left out. Give one code for every command, or one per command in order (`exit=0,2,0`). A command that exits non-zero must leave the copied files as they were.
 
-A sample is a `shell` fence of `story` commands, one per line, followed by a `text` fence with their output, or one `text` fence in which each `$ story ...` line is followed by that command's output. Output is stdout and stderr together, in the order the CLI prints them. Blank lines at the end of a command's output are ignored, so a `$` sample may leave one before the next prompt. Each sample runs on fresh copies, so commands that write files are fine. A command must be a plain `story` command with quoted arguments: no pipes, redirects, variables, or `cd`.
+A sample is a `shell` fence of commands, one per line, followed by a `text` fence with their output, or one `text` fence in which each `$ story ...` line is followed by that command's output. Output is stdout and stderr together, in the order the CLI prints them. Blank lines at the end of a command's output are ignored, so a `$` sample may leave one before the next prompt. Each sample runs on fresh copies, so commands that write files are fine. A command must be a plain `story` command with quoted arguments: no pipes, redirects, variables, or `cd`, and no path outside the scratch folder the copies live in.
 
-Leave a sample unmarked when its output depends on more than the examples: the date (unless `--date` pins it), an installed PDF engine, git history, a project the page builds step by step or edits by hand, or output the page shortens with `...`. Those still need refreshing by hand when the output changes. The test is skipped on Windows, because the samples show POSIX paths.
+The test reads every markdown file in the repository except the example books. A comment that mentions replay but does not match the form above fails it, rather than leaving its sample unchecked, and `MARKED` in the test pins how many samples each file marks, so a marker lost in an edit fails it too: change the count when you add or remove a marker.
 
-Each replayed sample is one test, named by its file and line, so a failure says which sample to refresh. Run the commands on a copy of the example and paste the new output.
+Leave a sample unmarked when its output depends on more than the examples and a setup can build: the date (unless `--date` pins it), an installed PDF engine, git history, or output the page shortens with `...`. Those still need refreshing by hand when the output changes. The replays are skipped on Windows, because the samples show POSIX paths.
+
+Each replayed sample is one test, named by its file and line, so a failure says which sample to refresh. Run the commands on a copy of the example, after the setup's steps, and paste the new output.
 
 ## Examples check
 
@@ -434,6 +438,7 @@ Some patterns are generated rather than written by hand, so they cannot drift fr
 
 The schema check runs as part of `test:examples` and in `test/schema.test.js`, which also checks that projects scaffolded by `story init` and `story add` match the schema. You can run it on its own:
 
+<!-- replay -->
 ```shell
 node scripts/check-schema.js
 ```
