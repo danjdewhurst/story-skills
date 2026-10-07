@@ -5,7 +5,8 @@
  * Checks that every fixture in evals/fixtures/ has an input.md and a
  * checks.json with a brief, at least one check, valid JSON, and compiling
  * regexes, plus a known-good draft in evals/examples/<fixture>.md (and no
- * stray examples). Run from anywhere; exits non-zero on failure.
+ * stray examples). A fixture whose known-good draft opens with frontmatter
+ * must set `keep: file`. Run from anywhere; exits non-zero on failure.
  */
 
 import fs from "node:fs";
@@ -269,6 +270,16 @@ export function checkEvals(root = ROOT, log = console.log) {
       check(
         KEEP_VALUES.includes(checks.keep),
         `${name}/checks.json: keep must be one of ${KEEP_VALUES.map((v) => JSON.stringify(v)).join(", ")}`
+      );
+    }
+    // A known-good draft that opens with frontmatter is a whole file, and
+    // only `keep: file` asks the model for one: under the default prose rule
+    // the brief and the system prompt contradict each other.
+    const examplePath = path.join(examplesDir, `${name}.md`);
+    if (checks.keep !== "file" && fs.existsSync(examplePath)) {
+      check(
+        !/^---\r?\n/.test(fs.readFileSync(examplePath, "utf8")),
+        `${name}/checks.json: evals/examples/${name}.md opens with frontmatter, so set "keep": "file"`
       );
     }
     if ("voice_drift" in checks) {

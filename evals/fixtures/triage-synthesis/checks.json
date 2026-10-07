@@ -13,6 +13,7 @@
     "\\bbeta readers? (?:persona|panel)\\b"
   ],
   "brief": "All three reader files for round 3 are in. Write feedback/round-3/synthesis.md from the synthesis template: frontmatter with the readiness verdict, every finding sorted into exactly one category, a recorded reason for every decline and adjudication, and a numbered revision plan with file targets. Return only the file.",
+  "keep": "file",
   "max_words": 520,
   "min_words_ratio": 0.6,
   "name": "triage-synthesis",

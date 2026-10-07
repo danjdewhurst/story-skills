@@ -83,6 +83,10 @@ describe("check-evals", () => {
     });
     addFixture(root, "empty", { brief: "Draft.", skill: "chapter-writing", voice_drift: [] });
     addFixture(root, "voice", { brief: "Draft.", skill: "chapter-writing", voice_drift: { mean_word_length: 4.2 } });
+    addFixture(root, "file-as-prose", good);
+    fs.writeFileSync(path.join(root, "evals", "examples", "file-as-prose.md"), "---\ntitle: Petra\n---\n\nPetra.\n");
+    addFixture(root, "file", { ...good, keep: "file" });
+    fs.writeFileSync(path.join(root, "evals", "examples", "file.md"), "---\ntitle: Petra\n---\n\nPetra.\n");
     fs.writeFileSync(path.join(root, "evals", "examples", "stray.md"), "Draft.\n");
     fs.writeFileSync(path.join(root, "evals", "examples", "notes.txt"), "ignored\n");
 
@@ -109,11 +113,13 @@ describe("check-evals", () => {
       "FAIL fields/checks.json: required_regex /[a-/ does not compile",
       "FAIL empty/checks.json: voice_drift must be an object",
       "FAIL empty/checks.json: defines no required, required_regex, banned, banned_regex, length, structural, or voice_drift checks",
+      'FAIL file-as-prose/checks.json: evals/examples/file-as-prose.md opens with frontmatter, so set "keep": "file"',
       "FAIL evals/examples/stray.md: no matching fixture"
     ]) {
       expect(result.out).toContain(line);
     }
     expect(result.out).not.toContain("voice/checks.json");
+    expect(result.out).not.toContain(" file/checks.json");
     expect(result.out).not.toContain("notes.txt");
     expect(result.lines.at(-1)).toMatch(/^\d+ problem\(s\) found$/);
   });

@@ -14,6 +14,7 @@
     "\\bto:\\s*(?!skerry-harbour\\b)[a-z]"
   ],
   "brief": "Record both in worldbuilding/locations/greywidow-light.md so the CLI can check them and chapters before the change never see it. Keep every opening value as it is. Return only the updated frontmatter.",
+  "keep": "file",
   "max_words": 120,
   "min_words_ratio": 0.2,
   "name": "location-routes",

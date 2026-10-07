@@ -16,6 +16,7 @@
     "\\bfrom:\\s*chapter-09\\b[\\s\\S]*\\bfrom:\\s*chapter-06\\b"
   ],
   "brief": "Record both changes in characters/tomas-reyes.md so chapters before them never see them. Keep every opening value as it is. Return only the updated frontmatter.",
+  "keep": "file",
   "max_words": 120,
   "min_words_ratio": 0.2,
   "name": "character-progression",

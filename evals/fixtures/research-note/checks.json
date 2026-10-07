@@ -18,6 +18,7 @@
     "\\bp\\.\\s*\\d"
   ],
   "brief": "Open the research note for the burner details in chapter 2, as research/paraffin-vapour-burner.md: frontmatter and body. With no sources in this session, give the question, a search plan, and what counts as enough, and record nothing as found. Return only the file.",
+  "keep": "file",
   "max_words": 360,
   "min_words_ratio": 0.6,
   "name": "research-note",

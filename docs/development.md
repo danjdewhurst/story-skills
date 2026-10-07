@@ -487,7 +487,7 @@ bun run check:evals     # validate fixture structure
 bun run eval:selftest   # run the checker against the known-good drafts
 ```
 
-`scripts/check-evals.js` checks that every fixture has `input.md`, a valid `checks.json` with a non-empty `brief`, a `skill` that matches a directory in `skills/`, at least one real check, well-typed fields, and compiling regexes, plus a matching known-good draft (and no orphan drafts). A clean tree is silent:
+`scripts/check-evals.js` checks that every fixture has `input.md`, a valid `checks.json` with a non-empty `brief`, a `skill` that matches a directory in `skills/`, at least one real check, well-typed fields, and compiling regexes, plus a matching known-good draft (and no orphan drafts). A fixture whose known-good draft opens with frontmatter must set `"keep": "file"`, so the runner asks the model for the file. A clean tree is silent:
 
 ```text
 all eval fixture checks passed
@@ -529,7 +529,7 @@ node evals/run-skill.js --no-skill --no-judge --out evals/baseline
 node evals/compare-outputs.js evals/baseline evals/outputs
 ```
 
-`run-skill.js` sends each fixture through `claude -p` with the skill's `SKILL.md` and references as the system prompt, writes drafts to `evals/outputs/`, runs the checker, and then asks a judge model (`claude-opus-5` unless `--judge-model` says otherwise) to list any invented canon; one listed claim fails the fixture. `compare-outputs.js` does a blind pairwise comparison against a no-skill baseline. Both need the Claude Code CLI on `PATH` with working credentials, cost money, and produce nondeterministic output, so CI never runs them.
+`run-skill.js` sends each fixture through `claude -p` with the skill's `SKILL.md` and the reference files it names as the system prompt, writes drafts to `evals/outputs/`, runs the checker, and then asks a judge model (`claude-opus-5` unless `--judge-model` says otherwise) to list any invented canon; one listed claim fails the fixture. The references follow `SKILL.md`'s paths from its folder, other skills' files included, then the paths those files name, up to a 48,000-character cap (see [`evals/README.md`](../evals/README.md#workflow)). A draft or judge call that fails also fails its fixture, and the summary counts it. `compare-outputs.js` does a blind pairwise comparison against a no-skill baseline. Both need the Claude Code CLI on `PATH` with working credentials, cost money, and produce nondeterministic output, so CI never runs them.
 
 Run the model evals before and after any change to a skill's instructions or references, read the drafts as well as the pass counts, and record the run in the "Last full model run" table in `evals/README.md`. To add a fixture, follow "Adding a fixture" in that README, add its known-good draft, and run `bun run check:evals` and `bun run eval:selftest`.
 
