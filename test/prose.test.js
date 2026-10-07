@@ -146,6 +146,12 @@ describe("prose analysis", () => {
     expect(analysis.words).toBe(6);
   });
 
+  test("counts a sentence that ends at I. or a capital alone, but not at an initial (#586)", () => {
+    const analysis = analyze("So do I. She laughed. He wanted plan B. Nobody agreed. J. R. Hale left.");
+    expect(analysis.sentences.count).toBe(5);
+    expect(analysis.sentences.longest).toBe(4);
+  });
+
   test("drops ATX headings only, so a line of prose that opens with # is analysed", () => {
     const analysis = analyze("#1 on the list was Mara, she said quietly.\n\nShe ran.");
     expect(analysis.words).toBe(11);
