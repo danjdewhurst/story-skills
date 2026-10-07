@@ -217,7 +217,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--force`, `--write`, `--log`, `--list`, `--shunn`, `--pdf`, `--spoilers`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
+- Boolean flags (`--bylines`, `--force`, `--write`, `--log`, `--list`, `--shunn`, `--anonymous`, `--pdf`, `--spoilers`, `--include-pending`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
 - Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -2967,7 +2967,7 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run] [--json]
+story build [path] [--format <name>] [--shunn] [--anonymous] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run] [--json]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
@@ -3199,7 +3199,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [mentions](#codes-mentions) · [names](#codes-names)
 - [context](#codes-context) · [progress and next](#codes-progress-and-next) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
-- [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+- [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [snapshot --restore](#codes-snapshot---restore) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
 
@@ -3620,6 +3620,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--pdf` | | `build` | Boolean; only with `--format print` or `--format shunn`: renders the build to PDF with an installed engine (see [PDF output](#pdf-output)) |
 | `--pdf-engine` | `<name\|path>` | `build` | Only with `--pdf`: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one; default the first found on `PATH` |
 | `--spoilers` | | `build` | Boolean; only with `--format codex` |
+| `--include-pending` | | `export`, `build` | Boolean; keeps matter pages whose `permission` is `pending`, which are left out by default; only with a build that prints matter pages; not a `cli-defaults` entry |
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
@@ -3639,7 +3640,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--actionable` | | `report` | Boolean |
 | `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
 | `--strict` | | `check` | Boolean; fails on warnings as well as errors |
-| `--json` | | Every command except `init`, `import`, `export`, and `build` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
+| `--json` | | Every command | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
 | `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--prose` | | `rename` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
