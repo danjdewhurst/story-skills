@@ -231,13 +231,17 @@ const FENCE = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/;
 const HTML_BLOCK_TAGS = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
 // The seven kinds of HTML block: the first five end at a line holding their
 // end marker, the last two at a blank line, and the seventh (a lone tag)
-// cannot interrupt a paragraph.
+// cannot interrupt a paragraph. The end markers are the ones a browser
+// reads, which can come before CommonMark's: an end tag with a space or
+// attributes before its `>`, a comment's `--!>` as well as `-->`, and the
+// first `>` of a processing instruction or CDATA section, which HTML
+// reads as a comment.
 const HTML_BLOCKS = [
-  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)>/i },
-  { start: /^<!--/, end: /-->/ },
-  { start: /^<\?/, end: /\?>/ },
+  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)\b[^>]*>/i },
+  { start: /^<!--/, end: /--!?>/ },
+  { start: /^<\?/, end: />/ },
   { start: /^<![a-z]/i, end: />/ },
-  { start: /^<!\[CDATA\[/, end: /\]\]>/ },
+  { start: /^<!\[CDATA\[/, end: />/ },
   { start: new RegExp(`^</?(?:${HTML_BLOCK_TAGS})(?:[ \\t>]|/>|$)`, "i"), end: null },
   { start: /^(?:<[a-z][a-z0-9-]*(?:[ \t]+[a-z_:][\w.:-]*(?:[ \t]*=[ \t]*(?:[^ \t"'=<>`]+|'[^']*'|"[^"]*"))?)*[ \t]*\/?>|<\/[a-z][a-z0-9-]*[ \t]*>)[ \t]*$/i, end: null, interrupts: false }
 ];

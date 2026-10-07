@@ -9777,11 +9777,11 @@ var ATX_HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
 var FENCE = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/;
 var HTML_BLOCK_TAGS = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
 var HTML_BLOCKS = [
-  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)>/i },
-  { start: /^<!--/, end: /-->/ },
-  { start: /^<\?/, end: /\?>/ },
+  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)\b[^>]*>/i },
+  { start: /^<!--/, end: /--!?>/ },
+  { start: /^<\?/, end: />/ },
   { start: /^<![a-z]/i, end: />/ },
-  { start: /^<!\[CDATA\[/, end: /\]\]>/ },
+  { start: /^<!\[CDATA\[/, end: />/ },
   { start: new RegExp(`^</?(?:${HTML_BLOCK_TAGS})(?:[ \\t>]|/>|$)`, "i"), end: null },
   { start: /^(?:<[a-z][a-z0-9-]*(?:[ \t]+[a-z_:][\w.:-]*(?:[ \t]*=[ \t]*(?:[^ \t"'=<>`]+|'[^']*'|"[^"]*"))?)*[ \t]*\/?>|<\/[a-z][a-z0-9-]*[ \t]*>)[ \t]*$/i, end: null, interrupts: false }
 ];

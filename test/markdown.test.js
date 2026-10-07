@@ -234,6 +234,20 @@ describe("scene-break lines (#551)", () => {
     }
   });
 
+  test("ends an HTML block where a browser ends it", () => {
+    const lines = (prose) => setextSceneBreakLines(`## Chapter Text\n\n${prose}`).map((index) => index - 2);
+    // A comment ends at --!> as well as -->, a processing instruction or a
+    // CDATA section at its first >, and a script at an end tag with a space.
+    expect(lines("<!--\nnote --!>\n\nHe left.\n---\n")).toEqual([4]);
+    expect(lines("<!--\nnote -->\n\nHe left.\n---\n")).toEqual([4]);
+    expect(lines("<?php\necho 1 >\n\nHe left.\n---\n")).toEqual([4]);
+    expect(lines("<![CDATA[\nx >\n\nHe left.\n---\n")).toEqual([4]);
+    expect(lines("<script>\nx\n</script >\n\nHe left.\n---\n")).toEqual([5]);
+    // Until then, a --- is inside the block.
+    expect(lines("<!--\nHe left.\n---\n")).toEqual([]);
+    expect(lines("<script>\nHe left.\n---\n</scripts>\n")).toEqual([]);
+  });
+
   test("stays linear on deeply nested list and quote markers", () => {
     const started = performance.now();
     expect(setextSceneBreakLines(`${"- ".repeat(50000)}x\n---\n\n${"> ".repeat(50000)}x\n---\n`)).toEqual([]);
