@@ -954,7 +954,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Reads.** `story.md` (`title`, `form`, `language`, `status`), chapter and scene records, and the character, location, and glossary files the adaptation touches.
 
-**Writes.** `pronunciation` fields and glossary `## Translations` sections in the source project, planning and script files under `adaptations/audiobook/`, `screenplay/`, `picture-book/`, `comics/`, and `interactive/`, and a translated sibling project. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`, `translation-notes`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it.
+**Writes.** `pronunciation` fields and glossary `## Translations` sections in the source project, planning and script files under `adaptations/audiobook/`, `screenplay/`, `picture-book/`, `comics/`, and `interactive/`, and a translated sibling project. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it.
 
 **CLI.** `story build . --format narration`, `story build . --format fountain`, `story timeline .`, `story names`, `story init --form picture-book`, and `story compare --against`, then `story reindex .`, `story wordcount . --write`, and `story check .` after adding pronunciations or translations, setting `form` or `language`, or changing chapters in a picture-book or translated project.
 

@@ -217,7 +217,9 @@ Follow `references/translation.md`.
   never include them.
 - Markdown planning files carry frontmatter with a `type`
   (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`,
-  `branch-map`, `translation-notes`) and `updated: YYYY-MM-DD`.
+  `branch-map`) and `updated: YYYY-MM-DD`. Translation decisions go in the
+  glossary's `## Translations` sections and the edition's `style-sheet.md`,
+  not in a planning file.
 - Scenes, characters, and locations keep their story ids in every
   adaptation file, so each adapted scene traces back to its source.
 - `pronunciation` is plain respelling in capitals for the stressed

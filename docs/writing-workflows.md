@@ -1817,7 +1817,7 @@ Run the same block after changing chapters in a picture-book or translated proje
 
 ### Result
 
-The source project gains `pronunciation` fields and glossary translations, and an `adaptations/` folder with `audiobook/`, `screenplay/`, `picture-book/`, `comics/`, or `interactive/` as needed. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`, `translation-notes`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it. A translated edition sits beside the source as a separate project with the same ids and its own `language`, `isbn`, and metadata.
+The source project gains `pronunciation` fields and glossary translations, and an `adaptations/` folder with `audiobook/`, `screenplay/`, `picture-book/`, `comics/`, or `interactive/` as needed. Markdown planning files carry a `type` (`audiobook-production`, `scene-list`, `pagination-plan`, `page-plan`, `branch-map`) and `updated`. The CLI doesn't validate `adaptations/`, and builds never include it. A translated edition sits beside the source as a separate project with the same ids and its own `language`, `isbn`, and metadata.
 
 ## Checks by workflow
 
