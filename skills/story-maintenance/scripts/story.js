@@ -573,6 +573,7 @@ var FINDING_CODES = {
   "stale-word-count": "warning",
   "todo-markers": "warning",
   "unclosed-comment": "warning",
+  "ambiguous-scene-break": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
   "missing-field": "error",
@@ -9744,6 +9745,65 @@ function isSceneBreak(paragraph) {
   const text = String(paragraph).replace(/\\([*_~-])/g, "$1").trim();
   return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
+function isSceneBreakLine(line) {
+  return isSceneBreak(collapseSourceSpace(plainSpaces(line)));
+}
+function splitAtSceneBreaks(paragraph) {
+  const pieces = [];
+  let lines = [];
+  for (const line of String(paragraph).split(`
+`)) {
+    if (!isSceneBreakLine(line)) {
+      lines.push(line);
+      continue;
+    }
+    if (lines.length > 0) {
+      pieces.push(lines.join(`
+`));
+    }
+    pieces.push(line);
+    lines = [];
+  }
+  if (lines.length > 0) {
+    pieces.push(lines.join(`
+`));
+  }
+  return pieces;
+}
+function setextSceneBreakLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, `
+`);
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const first = masked.slice(0, start).split(`
+`).length - 1;
+  const found = [];
+  let paragraph = "none";
+  for (const [index, rawLine] of masked.slice(start).split(`
+`).entries()) {
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
+    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
+    const inParagraph = paragraph === (marker ? "quoted" : "plain");
+    const item = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])[ \t]/.exec(line);
+    if (line.trim() === "") {
+      paragraph = "none";
+    } else if (isSceneBreakLine(line)) {
+      if (inParagraph && /^ {0,3}-{3,}[ \t]*$/.test(line)) {
+        found.push(first + index);
+      }
+      paragraph = "none";
+    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(line) || inParagraph && /^ {0,3}=+[ \t]*$/.test(line)) {
+      paragraph = "none";
+    } else if (item && !(inParagraph && item[1] !== undefined && Number(item[1]) !== 1)) {
+      paragraph = "list";
+    } else if (marker) {
+      paragraph = "quoted";
+    } else if (paragraph === "none") {
+      paragraph = /^(?: {4}| {0,3}\t)/.test(line) ? "none" : "plain";
+    }
+  }
+  return found;
+}
 var SOURCE_SPACE = new Set([" ", "\t", `
 `, "\v", "\f", "\r", "\u2028", "\u2029"]);
 var SOURCE_SPACE_RUN = /[ \t\n\v\f\r\u2028\u2029]+/g;
@@ -12715,6 +12775,7 @@ function scanProject(root) {
       ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
+      setextBreaks: setextBreaks(markdown),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       releaseDate: data["release-date"],
@@ -13979,6 +14040,11 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     }
   }
   return entities;
+}
+function setextBreaks(markdown) {
+  const frontmatterLines = markdown.rawMarkdown.slice(0, markdown.rawMarkdown.length - markdown.body.length).split(`
+`).length - 1;
+  return setextSceneBreakLines(markdown.body).map((index) => frontmatterLines + index + 1);
 }
 function hasPostHocNotes(body) {
   const chapterText = /^## Chapter Text\s*$/im.exec(body);
@@ -18990,7 +19056,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreak(text.replace(/\s+/g, " ")) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
   const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, `
 `))));
@@ -19000,6 +19066,11 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const line = marker ? rawLine.slice(marker[0].length) : rawLine;
     if (line.trim() === "") {
       flush();
+      continue;
+    }
+    if (isSceneBreakLine(line)) {
+      flush();
+      paragraphs.push({ sceneBreak: true });
       continue;
     }
     if (lines.length > 0 && marker && !quote) {
@@ -20671,6 +20742,10 @@ function validateProjectOf(project) {
     }
     if (chapter.unclosedComment) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
+    }
+    if (chapter.setextBreaks.length > 0) {
+      const one = chapter.setextBreaks.length === 1;
+      warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
     }
     if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
@@ -26328,7 +26403,7 @@ function pronunciationGuide(project) {
 function narrationBody(body) {
   return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
 `))).replace(/\\\n/g, `
-`).replace(/^[^\S\n]+$/gm, "").split(/\n{2,}/).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreak(plainSpaces(paragraph)) ? "[pause]" : paragraph).join(`
+`).replace(/^[^\S\n]+$/gm, "").split(/\n{2,}/).flatMap(splitAtSceneBreaks).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreakLine(paragraph) ? "[pause]" : paragraph).join(`
 
 `);
 }
@@ -26356,7 +26431,7 @@ function inkLine(line) {
 var HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 function inkProse(body) {
   const out = [];
-  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
+  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/).flatMap(splitAtSceneBreaks)) {
     const lines = paragraph.split(/\r?\n/);
     let current = [];
     lines.forEach((line, index) => {

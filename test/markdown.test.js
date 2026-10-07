@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chapterHeading, chapterProse, extractSection, kebabCase, maskLinkTargets, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, setextSceneBreakLines, splitAtSceneBreaks, titleCaseSlug, wordCount } from "../src/markdown.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -116,5 +116,57 @@ describe("markdown utilities", () => {
     const markdown = "# Index\n\n## Registry\n\nRows\n\n## Family Trees\n\nTrees\n\n## Notes\n\nEnd";
     expect(extractSection(markdown, "Family Trees")).toBe("Trees");
     expect(extractSection(markdown, "Missing")).toBe("");
+  });
+});
+
+describe("scene-break lines (#551)", () => {
+  test("a line of three or more markers, however spaced, is a scene break", () => {
+    for (const line of ["* * *", "*  *\t*", "*\u00a0*\u202f*", "---", "  ***  ", "~~~", "___", "#", "\\* \\* \\*"]) {
+      expect({ line, sceneBreak: isSceneBreakLine(line) }).toEqual({ line, sceneBreak: true });
+    }
+    for (const line of ["He left.", "* *", "--", "# Heading", "#hashtag", "* * * and more"]) {
+      expect({ line, sceneBreak: isSceneBreakLine(line) }).toEqual({ line, sceneBreak: false });
+    }
+  });
+
+  test("splits a paragraph at each scene-break line", () => {
+    expect(splitAtSceneBreaks("He left.\n* * *\nShe came.")).toEqual(["He left.", "* * *", "She came."]);
+    expect(splitAtSceneBreaks("---\nOne\ntwo.\n#\n***")).toEqual(["---", "One\ntwo.", "#", "***"]);
+    expect(splitAtSceneBreaks("One\ntwo.")).toEqual(["One\ntwo."]);
+  });
+
+  test("finds a --- right under a line of text, where CommonMark reads a heading underline", () => {
+    const lines = (prose) => setextSceneBreakLines(`## Chapter Text\n\n${prose}`).map((index) => index - 2);
+    expect(lines("He left.\n---\nShe came.\n")).toEqual([1]);
+    expect(lines("One\ntwo.\n  ---  \nThree.\n---\n")).toEqual([2, 4]);
+    expect(lines("> He said.\n> ---\n")).toEqual([1]);
+    // A list that does not start at 1 cannot interrupt a paragraph.
+    expect(lines("He wrote:\n1999. The year it ended.\n---\n")).toEqual([2]);
+    // CommonMark reads each of these as a thematic break, as builds do.
+    for (const prose of [
+      "He left.\n\n---\n",
+      "He left.\n* * *\n",
+      "He left.\n- - -\n",
+      "> He said.\n---\n",
+      "> He said.\nlazily.\n---\n",
+      "He left.\n> She said.\n---\n",
+      "- An item\n---\n",
+      "1999. The year it ended.\n---\n",
+      "He left.\n1. An item\n---\n",
+      "### Part Two\n---\n",
+      "Part Two\n===\n---\n",
+      "    indented code\n---\n",
+      "---\n---\n",
+      "```\nHe left.\n---\n```\n",
+      "<!--\nHe left.\n---\n-->\n"
+    ]) {
+      expect({ prose, lines: lines(prose) }).toEqual({ prose, lines: [] });
+    }
+  });
+
+  test("counts body lines from the top, past an outline and its divider, and in CRLF files", () => {
+    expect(setextSceneBreakLines("He left.\n---\n")).toEqual([1]);
+    expect(setextSceneBreakLines("## Outline\n\n1. Beat\n---\n\nHe left.\n---\n")).toEqual([6]);
+    expect(setextSceneBreakLines("\r\n## Chapter Text\r\n\r\nHe left.\r\n---\r\nShe came.\r\n")).toEqual([4]);
   });
 });

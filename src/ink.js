@@ -1,3 +1,5 @@
+import { splitAtSceneBreaks } from "./markdown.js";
+
 // ink source for inkle's ink (Inky, inklecate, inkjs): the title, author,
 // and IFID as global tags, then one knot per chapter. A branching book gives
 // each chapter its choices as sticky `+ [text] -> knot` lines and ends a
@@ -40,13 +42,14 @@ function inkLine(line) {
 
 // ink prints each source line as a line of its own, so the lines of a
 // markdown paragraph are joined, as the other builds read prose: a blank line
-// ends a paragraph, and a line ending in two spaces or a backslash is a hard
-// break (the backslash dropped) that keeps verse on its lines.
+// or a scene-break line ends a paragraph, and a line ending in two spaces or
+// a backslash is a hard break (the backslash dropped) that keeps verse on its
+// lines.
 const HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 
 function inkProse(body) {
   const out = [];
-  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
+  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/).flatMap(splitAtSceneBreaks)) {
     const lines = paragraph.split(/\r?\n/);
     let current = [];
     lines.forEach((line, index) => {

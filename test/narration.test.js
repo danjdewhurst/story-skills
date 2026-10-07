@@ -73,6 +73,14 @@ describe("narration build", () => {
     expect(text).toContain("| Either \\\\\\| Or | EE-ther \\*OR\\* | term |");
   });
 
+  test("a scene-break line is a pause with no blank line around it", () => {
+    const cwd = makeTempDir();
+    const { root } = createStoryProject({ cwd, title: "Tight", force: false });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nHe left.\n* * *\nShe came\nback.\n#\nEnd.\n");
+    const text = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+    expect(text).toContain("[under 1 min]\n\nHe left.\n\n[pause]\n\nShe came\nback.\n\n[pause]\n\nEnd.\n\n## Closing Credits");
+  });
+
   test("formatRuntime rounds to minutes", () => {
     expect(formatRuntime(0)).toBe("0h 00m");
     expect(formatRuntime(155 * 61)).toBe("1h 01m");

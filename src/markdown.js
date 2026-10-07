@@ -183,6 +183,86 @@ export function isSceneBreak(paragraph) {
   return text === "#" || /^([*_~-])( ?\1){2,}$/.test(text);
 }
 
+// A line (or paragraph) that is a scene break, also one spaced with runs of
+// spaces or typed spaces (`* * *`). Builds end the paragraph above
+// it and start a new one below it even with no blank line between, as
+// CommonMark does at a thematic break.
+export function isSceneBreakLine(line) {
+  return isSceneBreak(collapseSourceSpace(plainSpaces(line)));
+}
+
+// A paragraph's text in pieces at each scene-break line: the text before
+// the break, the break line itself, and the text after it, for the builds
+// that split prose into paragraphs at blank lines themselves.
+export function splitAtSceneBreaks(paragraph) {
+  const pieces = [];
+  let lines = [];
+  for (const line of String(paragraph).split("\n")) {
+    if (!isSceneBreakLine(line)) {
+      lines.push(line);
+      continue;
+    }
+    if (lines.length > 0) {
+      pieces.push(lines.join("\n"));
+    }
+    pieces.push(line);
+    lines = [];
+  }
+  if (lines.length > 0) {
+    pieces.push(lines.join("\n"));
+  }
+  return pieces;
+}
+
+// Body line indexes (counted from 0) of the `---` scene breaks right under
+// a line of a plain or quoted paragraph. Builds print a scene break there,
+// but CommonMark reads the `---` as a setext heading underline, so a
+// markdown viewer (and the markdown export in one) shows the text above as
+// a heading. A `---` under a list item or a quote line it does not belong
+// to, or under a heading, is a thematic break in CommonMark too. Comments
+// and closed code fences are masked, so a `---` inside one never counts.
+export function setextSceneBreakLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, "\n");
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const first = masked.slice(0, start).split("\n").length - 1;
+  const found = [];
+  // The paragraph the line above belongs to: none, "plain", "quoted", or
+  // "list" (a list item's, which a `---` never underlines).
+  let paragraph = "none";
+  for (const [index, rawLine] of masked.slice(start).split("\n").entries()) {
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
+    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
+    // Whether the line is in the same container as the paragraph above: an
+    // underline continues a paragraph in its own container only, so a `---`
+    // with no `>` under a quote's lazy line ends the quote.
+    const inParagraph = paragraph === (marker ? "quoted" : "plain");
+    const item = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])[ \t]/.exec(line);
+    if (line.trim() === "") {
+      paragraph = "none";
+    } else if (isSceneBreakLine(line)) {
+      if (inParagraph && /^ {0,3}-{3,}[ \t]*$/.test(line)) {
+        found.push(first + index);
+      }
+      paragraph = "none";
+    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(line) || (inParagraph && /^ {0,3}=+[ \t]*$/.test(line))) {
+      // A heading, or the `===` underline that makes the text above one.
+      paragraph = "none";
+    } else if (item && !(inParagraph && item[1] !== undefined && Number(item[1]) !== 1)) {
+      // Only a list that starts at 1 interrupts a paragraph, so `1999. The
+      // year it ended.` inside one is text.
+      paragraph = "list";
+    } else if (marker) {
+      // A quote line interrupts a plain paragraph or list.
+      paragraph = "quoted";
+    } else if (paragraph === "none") {
+      // An indented line that starts no paragraph is code in CommonMark.
+      paragraph = /^(?: {4}| {0,3}\t)/.test(line) ? "none" : "plain";
+    }
+  }
+  return found;
+}
+
 // Whitespace that only lays out the markdown source: ASCII spaces, tabs,
 // and line ends, and the Unicode line and paragraph separators. A space a
 // writer types as text is not layout and stays: the no-break space and

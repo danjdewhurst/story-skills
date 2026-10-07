@@ -142,7 +142,7 @@ Present a summary of all updates made.
 
 ## Scene Breaks
 
-Within a chapter, separate scenes with `---`. Each scene should have a clear POV character (even if the same as the previous scene) and location.
+Within a chapter, separate scenes with `---` on a line of its own, with a blank line above and below it: right under a line of text, markdown reads `---` as a heading underline. Each scene should have a clear POV character (even if the same as the previous scene) and location.
 
 ## Branching Books
 
