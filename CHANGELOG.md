@@ -104,6 +104,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Before, `reindex`, `wordcount --write`, `rename`, `split`, `doctor --fix`, and the others reported `"writes": []` even when they had rewritten a file.
 - `story export`, `story build`, and `story synopsis` are refused while `.story-undo.tmp` holds a change a stopped command made, as `validate` already reports it. ([#723](https://github.com/danjdewhurst/story-skills/issues/723))
   - The refusal exits `4`, and `--dry-run` is refused too. Run `story doctor --fix` to put the change back first.
+- `story wordcount --write` checks every chapter and registry it rewrites before it changes any, so a read-only file no longer leaves earlier chapters rewritten. ([#724](https://github.com/danjdewhurst/story-skills/issues/724))
 
 ## [0.23.0] - 2026-10-07
 

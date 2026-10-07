@@ -1069,7 +1069,7 @@ describe("sweep fixes", () => {
     appendProse(root, "chapters/chapter-01.md", "Some words here.");
     const chapter = path.join(root, "chapters", "chapter-01.md");
     fs.chmodSync(chapter, 0o444);
-    expect(() => computeWordCounts(root, { write: true })).toThrow("EACCES");
+    expect(() => computeWordCounts(root, { write: true })).toThrow("Cannot write to chapters/chapter-01.md (permission denied); nothing was changed");
     fs.chmodSync(chapter, 0o600);
     computeWordCounts(root, { write: true });
     expect(fs.statSync(chapter).mode & 0o777).toBe(0o600);

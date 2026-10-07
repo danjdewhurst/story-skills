@@ -25095,6 +25095,11 @@ function computeWordCounts(root, options = {}) {
   assertProjectParses(project, "count words");
   const characters = project.unit.name === "characters";
   const chapters = [];
+  const needsCount = (chapter) => chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count;
+  if (options.write) {
+    assertWritable(project.root, project.chapters.filter(needsCount).map((chapter) => chapter.file));
+    planChanges(project.root, () => reindexProject(project.root));
+  }
   for (const chapter of project.chapters) {
     chapters.push({
       number: chapter.number,
@@ -25103,7 +25108,7 @@ function computeWordCounts(root, options = {}) {
       wordCount: chapter.wordCount,
       ...characters ? { characterCount: chapter.count } : {}
     });
-    if (options.write && (chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count)) {
+    if (options.write && needsCount(chapter)) {
       const markdown = readMarkdown(chapter.file, project.root);
       const prose = chapterProse(markdown.body);
       writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, {
