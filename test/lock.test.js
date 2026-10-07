@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -97,17 +97,34 @@ describe("project lock (#196)", () => {
     expect(fs.existsSync(path.join(root, LOCK_FILE))).toBe(false);
   });
 
-  test("two renames started together both finish without breaking references", () => {
+  test("two renames started together both finish without breaking references", async () => {
     const root = copyExample("harbor-of-second-light");
     const bin = path.join(import.meta.dir, "..", "bin", "story.js");
-    const script = `
-      const { spawn } = require("node:child_process");
-      const run = (args) => new Promise((resolve) => spawn(process.execPath, [${JSON.stringify(bin)}, ...args, "--path", ${JSON.stringify(root)}]).on("exit", resolve));
-      Promise.all([run(["rename", "character", "theo-quill", "Theo Brand"]), run(["rename", "character", "ilya-venn", "Ilya Stone"])])
-        .then((codes) => { console.log(codes.join(",")); });
-    `;
-    const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
-    expect(result.stdout.trim()).toBe("0,0");
+    // A live command holds the project lock, so both renames start while it
+    // is held and must wait for it. Without the lock they would not overlap
+    // at all, and the test would pass anyway.
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`);
+    const exited = [];
+    const runs = [["theo-quill", "Theo Brand"], ["ilya-venn", "Ilya Stone"]].map(([id, name]) => new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [bin, "rename", "character", id, name, "--path", root], {
+        env: { ...process.env, STORY_LOCK_WAIT_MS: "20000" },
+        stdio: "ignore"
+      });
+      child.on("error", reject);
+      child.on("exit", (code) => {
+        exited.push(code);
+        resolve(code);
+      });
+    }));
+    // Both renames wait on the held lock, so neither has finished.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(exited).toEqual([]);
+    expect(fs.existsSync(path.join(root, "characters", "theo-quill.md"))).toBe(true);
+    expect(fs.existsSync(path.join(root, "characters", "ilya-venn.md"))).toBe(true);
+    // Released, the two race for the lock, and the second waits for the first.
+    fs.rmSync(lockPath);
+    expect(await Promise.all(runs)).toEqual([0, 0]);
     expect(fs.readdirSync(path.join(root, "characters")).sort()).toEqual(["_index.md", "ilya-stone.md", "mara-quill.md", "theo-brand.md"]);
     expect(messages(validateLinks(root).errors)).toEqual([]);
   });
