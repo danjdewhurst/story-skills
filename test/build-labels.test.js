@@ -298,6 +298,15 @@ describe("build labels", () => {
     expect(textDirection("")).toBe("ltr");
   });
 
+  // A script subtag counts only right after the language, so an extension
+  // or private-use subtag that spells a script name does not set direction.
+  test("text direction and script read only the subtag after the language", () => {
+    for (const tag of ["en-u-nu-arab", "en-x-arab"]) {
+      expect({ tag, direction: textDirection(tag), script: typesetting(tag).script }).toEqual({ tag, direction: "ltr", script: "Latn" });
+    }
+    expect(textDirection("az-Arab")).toBe("rtl");
+  });
+
   test("narration runtime uses the pack's rate in the book's count unit", () => {
     expect(formatRuntime(300 * 61, 300)).toBe("1h 01m");
     const chapters = [{ number: 1, title: "C", heading: "C", body: "字".repeat(600) }];

@@ -9644,7 +9644,7 @@ var RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr
 function textDirection(language) {
   const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
   const [primary, ...subtags] = lookup.split("-");
-  const script = subtags.find((subtag) => /^[a-z]{4}$/.test(subtag));
+  const script = /^[a-z]{4}$/.test(subtags[0] ?? "") ? subtags[0] : undefined;
   if (script !== undefined) {
     return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
   }
