@@ -747,16 +747,20 @@ describe("skill-specific checks", () => {
     expect(failed(name, example(name))).toEqual([]);
     expect(failed(name, noSkillDrafts[name]())).toEqual([key, hour, herring, clues]);
 
-    const keyLine = '"The brass key on the lamp-room door" --planted chapter-01 --payoff chapter-12 --character tomas-reyes';
+    const keyLine = "'The brass key on the lamp-room door' --planted chapter-01 --payoff chapter-12 --character tomas-reyes";
     const hourLine = "--character tomas-reyes --significance-delayed";
     const herringLine = "--character tomas-reyes --character petra-lindqvist --red-herring";
     // The flags swapped between the hour and the herring.
     expect(failed(name, edit(name, [hourLine, "--character tomas-reyes --red-herring"], [herringLine, "--character tomas-reyes --character petra-lindqvist --significance-delayed"]))).toEqual([hour, herring]);
     expect(failed(name, edit(name, [keyLine, keyLine.replace("chapter-01", "chapter-02")]))).toEqual([key]);
     expect(failed(name, edit(name, [herringLine, "--character tomas-reyes --red-herring"]))).toEqual([herring]);
-    expect(failed(name, edit(name, ["story reindex .", 'story add clue "A fisherman\'s boot print" --planted chapter-02 --payoff chapter-12\nstory reindex .']))).toEqual([invented]);
+    const addClue = (line) => edit(name, ["story reindex .", `${line}\nstory reindex .`]);
+    expect(failed(name, addClue("story add clue 'A fisherman'\\''s boot print' --planted chapter-02 --character petra-lindqvist"))).toEqual([invented]);
+    expect(failed(name, addClue('story add clue "A fisherman\'s boot print" --planted chapter-02'))).toEqual([invented]);
+    // A clue the plan names may hold an escaped quote in its title.
+    expect(failed(name, addClue("story add clue 'Ana'\\''s shut sea-chest' --status planned"))).toEqual([]);
     // Every valid form of the flags counts.
-    expect(failed(name, edit(name, [keyLine, '"The brass key on the lamp-room door" --planted=chapter-01 --payoff=chapter-12 --characters tomas-reyes,petra-lindqvist']))).toEqual([]);
+    expect(failed(name, edit(name, [keyLine, "'The brass key on the lamp-room door' --planted=chapter-01 --payoff=chapter-12 --characters tomas-reyes,petra-lindqvist"]))).toEqual([]);
   });
 });
 
