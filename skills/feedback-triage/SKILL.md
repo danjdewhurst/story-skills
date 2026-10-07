@@ -93,7 +93,10 @@ readers have read. Verify `story.md` exists in the project root.
    copy to GitHub Pages on each push to `main`, stamped with the date and
    short commit, with a **Note** link beside every label (`--note-url`)
    that opens the issue form prefilled with the label, build, and first
-   words. The `ISSUE_TEMPLATE/manuscript-note.yml` issue form asks readers
+   words. Like every build, it leaves out a matter page whose `permission`
+   is `pending` or unclear (warning `permission-pending-left-out`), so an
+   uncleared epigraph never reaches Pages; never add `--include-pending`
+   to the workflow. The `ISSUE_TEMPLATE/manuscript-note.yml` issue form asks readers
    for the label, build, first few words, note type (typo or wording,
    confusing, continuity, pacing, character, sensitivity or authenticity,
    loved this, other), how much it affected their reading, and the note.
