@@ -16,11 +16,16 @@ story voices .
 story pacing .
 story clues .
 story timeline .
+story grid .
+story grid . --format csv
 story passes .
 story passes . --init
 story passes . --start structure
 story passes . --done structure
 story names 'Mira' 'Kelvos'
+story mentions character sera-voss --path .
+story mentions --path .
+story list chapters --where status=draft --path .
 story diagram relationships
 story diagram locations --out dist/locations.mmd
 story diagram timeline
@@ -37,6 +42,8 @@ story compare . --ref beta-round-1 --anchor ch03-p12
 story similarity . --against ../book-one
 story similarity . --snapshot draft-1
 story series .
+story init 'The Last Ember' --form novel
+story init 'Embers of the Vale' --follows ../the-last-ember
 story import draft.md --title 'Title'
 story report .
 story report . --actionable

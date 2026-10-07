@@ -110,11 +110,15 @@ when two voices are near-identical, when a character says a
 2. If a character file has no voice notes, propose `voice-words` and
    `voice-avoid` lists drawn from their best existing lines, and ask
    before adding them to the character file.
-3. Pronoun tags (`she said`) and untagged lines are invisible to the
-   report, so the POV character in close third is often under-counted;
-   read those lines by hand, or name the tags in a sample chapter and
-   rerun. The attribution rules and thresholds are in the voices section
-   of [`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#voices).
+3. A line counts only when the narration names its speaker by a speech
+   verb, or names one character in the paragraph. Pronoun tags
+   (`she said`) and untagged lines are invisible to the report, so the
+   POV character in close third is often under-counted; read those lines
+   by hand, or name the tags in a sample chapter and rerun.
+   `story voices --help` describes the command and, when
+   `story-maintenance` is installed, the voices section of
+   [`../story-maintenance/references/continuity-checks.md`](../story-maintenance/references/continuity-checks.md#voices)
+   gives the full attribution rules and thresholds.
 
 ### 4. Copyedit
 
