@@ -1903,10 +1903,11 @@ describe("github workflows", () => {
     const dependabot = readRepo(".github/dependabot.yml");
     expect(dependabot).toContain("github-actions");
     expect(topLevelKeys(dependabot)).toContain("updates");
-    // The templates users copy must get bump pull requests too, grouped with
-    // the matching .github/workflows bump so the pins stay equal.
+    // Dependabot's github-actions ecosystem reads only /.github/workflows
+    // under each directory, so a templates/github entry is never scanned and
+    // gets no bump pull requests (#677). Its pins are kept in step by hand.
     expect(dependabot).toMatch(/^\s+- "\/"$/m);
-    expect(dependabot).toMatch(/^\s+- "\/templates\/github"$/m);
+    expect(dependabot).not.toMatch(/^\s+- "\/templates\/github"$/m);
     expect(dependabot).toMatch(/^\s+group-by: dependency-name$/m);
   });
 });
