@@ -929,15 +929,17 @@ state-changes:
 | `flashback-to` | string | no | Free-form note of the moment flashed back to. Kept but not checked; continuity checks use `mentions`. |
 | `setting` | enum | no | `interior`, `exterior`, or `both`, for a scene whose place differs from its location's `setting` (on the harbor wall rather than inside the harbor office). Read only by `story build --format fountain`. |
 
-`state-changes` entries are free-form mappings: each must be a mapping, but the CLI does not require particular keys. Two shapes are in use. The [scene template](../skills/chapter-writing/references/scene-template.md) records `target` and `change`:
+`state-changes` entries are free-form mappings: each must be a mapping, but the CLI does not require particular keys. Two shapes are in use, and the [scene template](../skills/chapter-writing/references/scene-template.md) shows both. A change to a character names them with `character` and records `knowledge`, `physical`, or `emotional`, mirroring `continuity/state.md`; a change to an object names the artifact with `target` and describes it in `change`:
 
 ```yaml
 state-changes:
+  - character: sera-voss
+    physical: Burned palm from the ember well
   - target: moon-blade
     change: Cracked across the hilt in the fall
 ```
 
-The examples also record `character` with `knowledge`, `physical`, or `emotional`, mirroring `continuity/state.md`. Use `target` for artifacts: the prop custody check in `story continuity` looks for `target: <artifact-id>` in scenes after an artifact was destroyed or lost, and also flags the artifact in a later scene's or chapter's `mentions`.
+Record what a character learns as `character` + `knowledge`, never under `target`: only those entries are checked against `knowledge-state` (below). Use `target` for artifacts: the prop custody check in `story continuity` looks for `target: <artifact-id>` in scenes after an artifact was destroyed or lost, and also flags the artifact in a later scene's or chapter's `mentions`.
 
 `story continuity` cross-checks these entries with `continuity/state.md` for scenes in chapters up to `current-chapter`. Each `character` + `knowledge` entry needs a `knowledge-state` entry for that character learned by that chapter (matched by an optional `fact` id, then by text, then paired with an entry learned in the same chapter). A `target: <artifact-id>` entry may also set `owner` or `location`; the last one in reading order should match the artifact's latest `object-state` entry.
 

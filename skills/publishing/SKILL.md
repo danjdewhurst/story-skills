@@ -90,12 +90,12 @@ chapter would ship as a heading-only page, so ask whether to write it or
 remove it. `validate` warns about
 `permission: pending` only once the story `status` is `complete`, and
 about a research note with a `risk` but no `reviewed-by` only when a final
-or complete chapter uses it, so also search the files directly before
+or complete chapter uses it, so also list them directly before
 publication:
 
 ```shell
-grep -l "permission: pending" matter/*.md
-grep -l "^risk:" research/*.md
+story list matter --where permission=pending
+story list research --where risk --where '!reviewed-by'
 ```
 
 Report every pending permission, and every risky note without
