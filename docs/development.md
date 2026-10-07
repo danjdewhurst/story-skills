@@ -66,7 +66,7 @@ story-skills/
 ├── skills/story-maintenance/scripts/story.js   # generated Node fallback CLI
 ├── schemas/story.schema.json     # JSON schema for project frontmatter
 ├── schemas/result.schema.json    # JSON schema for story <command> --json output
-├── examples/                     # five sample story projects (shipped in the npm package)
+├── examples/                     # eleven sample story projects (shipped in the npm package)
 ├── test/                         # Bun tests (*.test.js), helpers.js, setup.js
 ├── scripts/                      # check scripts and the release script
 ├── evals/                        # skill regression harness (repo tooling only)
