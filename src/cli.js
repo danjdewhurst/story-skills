@@ -2,7 +2,7 @@ import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { NO_OVERRIDES, applyDefaults, findingOverrides, readCliConfig } from "./config.js";
 import { failureDiagnostic, writeJsonResult } from "./json.js";
-import { documentedOptions, formatOptionsHelp, isBooleanLiteralToken, isBooleanOption, isPathOption, isTruthy, parseArgs, suggestion, takesValue } from "./options.js";
+import { documentedOptions, formatOptionsHelp, isBooleanLiteralToken, isBooleanOption, isPathOption, isTruthy, optionFamily, parseArgs, suggestion, takesValue } from "./options.js";
 import { KIND_ALIASES } from "./scan.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
@@ -92,6 +92,7 @@ const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"])
 
 export function runCli(argv, io) {
   let configured = [];
+  let given = new Set();
   // A command asked for --json reports a usage error or a failure as a JSON
   // result too, so a script reading stdout always gets one object.
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
@@ -149,6 +150,8 @@ export function runCli(argv, io) {
 
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
+    // The flags the command line gave, before defaults fill in the rest.
+    given = new Set(Object.keys(parsed.options));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
@@ -157,7 +160,7 @@ export function runCli(argv, io) {
     // --dry-run only reads the project.
     return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
   } catch (error) {
-    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
+    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured, given)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
       return failJson(message, exitCode);
@@ -197,12 +200,27 @@ function projectConfig(command, root) {
   throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
 }
 
-// When an error names a flag that story.md cli-defaults filled in, or its
-// value, say so: the bad value came from there, not the command line.
-function configuredHint(error, configured) {
-  const message = String(error?.message);
-  const named = configured.filter(([key, value]) => message.includes(`--${key}`) || (typeof value === "string" && message.includes(value)));
+// When an error is about a flag that story.md cli-defaults filled in, say so:
+// the bad value came from there, not the command line. An error is about a
+// default when it names the flag (--pdf, which --pdf-engine does not name),
+// or, when it names no flag the command line gave, when it quotes the
+// default's value as a whole word (Unsupported build format: scroll). So
+// story progress --date 2024-13-02 is about --date, not a default --weeks 2.
+// The optional flags of a usage line ([--scenes <n>]) are not about anything.
+function configuredHint(error, configured, given) {
+  const message = String(error?.message).replace(/\[--[^\]]*\]/g, "");
+  const flags = [...message.matchAll(/(?<![\w-])--([a-z][a-z0-9-]*)/g)].map((match) => match[1]);
+  const fromCommandLine = flags.some((flag) => optionFamily(flag).some((name) => given.has(name)));
+  const named = configured.filter(([key, value]) => flags.includes(key) || (!fromCommandLine && typeof value === "string" && quotesWord(message, value.trim())));
   return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => (value === true ? `--${key}` : value === false ? `--${key}=false` : `--${key} ${value}`)).join(", ")})`;
+}
+
+// Whether text has value as a whole word: not part of a longer word, number,
+// id, or path, so a default of 2 is not found in 2024-13-02 or chapter-2. A
+// default value is never empty: story.md validation refuses one.
+function quotesWord(text, value) {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(String.raw`(?<![\w./\\-])${escaped}(?![\w/\\-]|\.\w)`).test(text);
 }
 
 // The command word, read from the raw arguments so it is known even when

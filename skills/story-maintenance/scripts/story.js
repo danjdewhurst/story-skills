@@ -30314,6 +30314,7 @@ function formatCommandsHelp() {
 var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
+  let given = new Set;
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] }) : null;
   try {
@@ -30365,12 +30366,13 @@ Run story --help to list commands.
     }
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
+    given = new Set(Object.keys(parsed.options));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
     return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
   } catch (error) {
-    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
+    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured, given)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
       return failJson(message, exitCode);
@@ -30397,10 +30399,16 @@ function projectConfig(command, root) {
   }
   throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
 }
-function configuredHint(error, configured) {
-  const message = String(error?.message);
-  const named = configured.filter(([key, value]) => message.includes(`--${key}`) || typeof value === "string" && message.includes(value));
+function configuredHint(error, configured, given) {
+  const message = String(error?.message).replace(/\[--[^\]]*\]/g, "");
+  const flags = [...message.matchAll(/(?<![\w-])--([a-z][a-z0-9-]*)/g)].map((match) => match[1]);
+  const fromCommandLine = flags.some((flag) => optionFamily(flag).some((name) => given.has(name)));
+  const named = configured.filter(([key, value]) => flags.includes(key) || !fromCommandLine && typeof value === "string" && quotesWord(message, value.trim()));
   return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => value === true ? `--${key}` : value === false ? `--${key}=false` : `--${key} ${value}`).join(", ")})`;
+}
+function quotesWord(text, value) {
+  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(String.raw`(?<![\w./\\-])${escaped}(?![\w/\\-]|\.\w)`).test(text);
 }
 function commandWord(argv) {
   for (let index = 0;index < argv.length; index += 1) {

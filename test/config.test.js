@@ -328,6 +328,23 @@ describe("cli-defaults", () => {
     expect(invoke(cwd, ["build", root, "--format", "scroll"]).err).not.toContain("cli-defaults");
   });
 
+  test("an error is blamed on a default only when it is about that flag (#566)", () => {
+    const { root, cwd } = project();
+    configure(root, "cli-defaults:\n  - command: progress\n    weeks: 3\n  - command: context\n    scenes: 2\n  - command: synopsis\n    pages: 2");
+    // The error names --date, which the command line gave, so the 3 it quotes is not the default --weeks.
+    const date = invoke(cwd, ["progress", root, "--date", "3"]);
+    expect(date.code).toBe(2);
+    expect(date.err).toBe("progress --date date must be a real YYYY-MM-DD calendar day, got 3\n");
+    // A default's value is matched as a whole word, not inside an id or a number.
+    const context = invoke(cwd, ["context", "chapter-12", "--path", root]);
+    expect(context.code).toBe(2);
+    expect(context.err).toBe("Unknown chapter or scene chapter-12\n");
+    // A usage line lists --scenes as an option, not as the flag that failed.
+    expect(invoke(cwd, ["context", "--path", root]).err).toBe("Usage: story context <chapter-or-scene-id> [--budget <tokens>] [--scenes <n>] [--path <project>]\n");
+    // An error that names no flag the command line gave is still blamed on the default whose value it quotes.
+    expect(invoke(cwd, ["synopsis", root]).err).toBe("Unsupported synopsis length: 2. Supported pages: 1, 3 (story.md cli-defaults set --pages 2)\n");
+  });
+
   test("split and merge take no defaults, so split without --at fails rather than splits at one (#566)", () => {
     const { root, cwd } = noisyProject();
     const chapter = path.join(root, "chapters", "chapter-01.md");
