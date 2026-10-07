@@ -208,6 +208,27 @@ describe("rename and remove reference rewriting", () => {
     expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("title: The Arrival");
   });
 
+  test("a rename to the same name and id leaves the entity and chapter files unwritten (#726)", () => {
+    const root = project("Same Name");
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "chapter", name: "One", number: 1 });
+    const entity = path.join(root, "characters", "mara-quill.md");
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    fs.appendFileSync(chapter, "\nMara Quill waited.\n", "utf8");
+    const old = new Date("2020-01-01T00:00:00Z");
+    fs.utimesSync(entity, old, old);
+    fs.utimesSync(chapter, old, old);
+    // The rename reindexes, so the registries are current before the snapshot.
+    reindexProject(root);
+    const before = snapshot(root);
+
+    renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Quill", prose: true });
+
+    expect(fs.statSync(entity).mtimeMs).toBe(old.getTime());
+    expect(fs.statSync(chapter).mtimeMs).toBe(old.getTime());
+    expect(snapshot(root)).toEqual(before);
+  });
+
   test("remove only clears fields that point at the removed kind (findings 1, 8)", () => {
     const root = project("Kind Remove");
     createEntity(root, { kind: "faction", name: "Marens Guard" });

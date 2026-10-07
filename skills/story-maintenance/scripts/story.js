@@ -25491,9 +25491,13 @@ function renameNow(root, options) {
     assertWritable(project.root, [oldFile, ...proseFiles.keys()]);
     commitWrites(() => {
       for (const [file, { original, next }] of proseFiles) {
-        writeFile(file, next, { root: project.root, unchangedFrom: original });
+        if (next !== original) {
+          writeFile(file, next, { root: project.root, unchangedFrom: original });
+        }
       }
-      writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+      if (retitled !== markdown.rawMarkdown) {
+        writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+      }
     });
   } else {
     const overrides = new Map([[oldFile, retitled]]);

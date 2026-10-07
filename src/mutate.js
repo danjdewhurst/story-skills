@@ -1535,11 +1535,17 @@ function renameNow(root, options) {
   const retitled = retitleHeading(replaceFrontmatter(markdown.rawMarkdown, data), markdown.data[config.titleField], name);
   if (newFile === oldFile) {
     assertWritable(project.root, [oldFile, ...proseFiles.keys()]);
+    // Only the files whose text changes are written: a rename to the name
+    // the entity already has leaves its files as they are.
     commitWrites(() => {
       for (const [file, { original, next }] of proseFiles) {
-        writeFile(file, next, { root: project.root, unchangedFrom: original });
+        if (next !== original) {
+          writeFile(file, next, { root: project.root, unchangedFrom: original });
+        }
       }
-      writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+      if (retitled !== markdown.rawMarkdown) {
+        writeFile(oldFile, retitled, { root: project.root, unchangedFrom: markdown.rawMarkdown });
+      }
     });
   } else {
     // Plan every rewrite before touching disk so a parse failure leaves the
