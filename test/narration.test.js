@@ -24,6 +24,24 @@ function project() {
   return root;
 }
 
+// A collection or anthology (#520): one chapter per story, each with its
+// own `author` (a name, a list, or null for none).
+function collection(storyFields, authors) {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Tales", force: false });
+  const storyPath = path.join(root, "story.md");
+  fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${storyFields}`), "utf8");
+  authors.forEach((names, index) => {
+    const author = names === null ? "" : Array.isArray(names) ? `\nauthor:\n${names.map((name) => `  - ${name}`).join("\n")}` : `\nauthor: ${names}`;
+    writeMarkdown(path.join(root, "chapters", `chapter-0${index + 1}.md`), `title: Story ${index + 1}\nnumber: ${index + 1}\nstatus: draft${author}`, "## Chapter Text\n\nThe tide went out.\n");
+  });
+  return root;
+}
+
+function narration(root) {
+  return fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
+}
+
 describe("narration build", () => {
   test("writes the pronunciation guide, credits, runtimes, and pauses", () => {
     const root = project();
@@ -79,6 +97,55 @@ describe("narration build", () => {
     writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nHe left.\n* * *\nShe came\nback.\n#\nEnd.\n");
     const text = fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8");
     expect(text).toContain("[under 1 min]\n\nHe left.\n\n[pause]\n\nShe came\nback.\n\n[pause]\n\nEnd.\n\n## Closing Credits");
+  });
+
+  test("#520 an anthology speaks each story's credit after its heading and names its writers in the opening", () => {
+    const root = collection("editor: Cara Editor\nlabels:\n  - chapter-heading: \"{title}\"\n", ["Ben Other", ["Dee Writer", "Eve Poet"], null, "Ben Other"]);
+    const text = narration(root);
+    expect(text).toContain("## Opening Credits\n\nTales. Narrated by [narrator].\n\nWith contributions by Ben Other and Dee Writer and Eve Poet.\n\n## Story 1");
+    expect(text).toContain("## Story 1\n\n[under 1 min]\n\nWritten by Ben Other.\n\nThe tide went out.");
+    expect(text).toContain("## Story 2\n\n[under 1 min]\n\nWritten by Dee Writer and Eve Poet.\n\nThe tide went out.");
+    // A story without `author` has no credit, and no credit is timed.
+    expect(text).toContain("## Story 3\n\n[under 1 min]\n\nThe tide went out.");
+    expect(text).toContain("(16 words)");
+    expect(text).toContain("You have been listening to Tales, narrated by [narrator].");
+  });
+
+  test("#520 a book whose stories all name its own authors speaks no story credits", () => {
+    const single = narration(collection("author: Ada Writer\n", ["Ada Writer", null, "Ada Writer"]));
+    // The opening's "Written by Ada Writer." is the book's own credit.
+    expect(single).not.toContain("min]\n\nWritten by");
+    expect(single).not.toContain("With contributions by");
+    expect(single).toContain("## Chapter 1: Story 1\n\n[under 1 min]\n\nThe tide went out.");
+    // Joint authors in another order are still the book's own.
+    const joint = narration(collection("authors:\n  - Ada Writer\n  - Ben Other\n", [["Ben Other", "Ada Writer"], ["Ada Writer", "Ben Other"]]));
+    expect(joint).not.toContain("min]\n\nWritten by");
+    expect(joint).not.toContain("With contributions by");
+  });
+
+  test("#520 a collection with a guest story credits every story and names only the guest in the opening", () => {
+    const text = narration(collection("author: Ada Writer\n", ["Ada Writer", "Ben Other", null]));
+    expect(text).toContain("## Opening Credits\n\nTales. Written by Ada Writer. Narrated by [narrator].\n\nWith contributions by Ben Other.\n\n");
+    expect(text).toContain("## Chapter 1: Story 1\n\n[under 1 min]\n\nWritten by Ada Writer.\n\n");
+    expect(text).toContain("## Chapter 2: Story 2\n\n[under 1 min]\n\nWritten by Ben Other.\n\n");
+    expect(text).toContain("## Chapter 3: Story 3\n\n[under 1 min]\n\nThe tide went out.");
+    // Co-writers of a joint book each writing their own stories are
+    // credited story by story, but the opening already names them both.
+    const joint = narration(collection("authors:\n  - Ada Writer\n  - Ben Other\n", ["Ada Writer", "Ben Other"]));
+    expect(joint).toContain("Written by Ben Other.");
+    expect(joint).not.toContain("With contributions by");
+  });
+
+  test("#520 story credits follow the book's language and labels", () => {
+    const german = narration(collection("language: de\neditor: Cara Editor\n", ["Ben Other", ["Dee Writer", "Eve Poet"]]));
+    expect(german).toContain("Mit Beiträgen von Ben Other und Dee Writer und Eve Poet.");
+    expect(german).toContain("Geschrieben von Dee Writer und Eve Poet.");
+    const japanese = narration(collection("language: ja\n", ["山田", "佐藤"]));
+    expect(japanese).toContain("『Tales』。朗読、[narrator]。\n\n寄稿、山田、佐藤。");
+    expect(japanese).toContain("作、佐藤。");
+    const custom = narration(collection("labels:\n  - narration-byline: \"A story by {names}.\"\n  - narration-contributors: \"Stories by {names}.\"\n", ["Ben Other"]));
+    expect(custom).toContain("Stories by Ben Other.");
+    expect(custom).toContain("A story by Ben Other.");
   });
 
   test("formatRuntime rounds to minutes", () => {

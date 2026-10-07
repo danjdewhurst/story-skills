@@ -240,6 +240,12 @@ export default {
     "narration-opening-anonymous": "{title}. Narrated by {narrator}.",
     "narration-closing": "The end. You have been listening to {title}, written by {authors}, narrated by {narrator}.",
     "narration-closing-anonymous": "The end. You have been listening to {title}, narrated by {narrator}.",
+    // A collection's or anthology's story credits (chapter `author`):
+    // each story's, spoken after its heading, and the story authors the
+    // opening credits do not already name. {names} is the names joined
+    // with `and`.
+    "narration-byline": "Written by {names}.",
+    "narration-contributors": "With contributions by {names}.",
     // The Fountain title page. {form} is story.md `form` as an English noun
     // (novel, short story), so other languages leave it out.
     "screenplay-credit": "Written by",

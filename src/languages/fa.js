@@ -38,6 +38,8 @@ export default {
     "narration-opening-anonymous": "{title}. با صدای {narrator}.",
     "narration-closing": "پایان. شما {title}، نوشتهٔ {authors}، را با صدای {narrator} شنیدید.",
     "narration-closing-anonymous": "پایان. شما {title} را با صدای {narrator} شنیدید.",
+    "narration-byline": "نوشتهٔ {names}.",
+    "narration-contributors": "با همکاری {names}.",
     "screenplay-credit": "نوشتهٔ",
     "screenplay-source": "برگرفته از اثری از {authors}",
     "screenplay-source-anonymous": "برگرفته از یک اثر ادبی",

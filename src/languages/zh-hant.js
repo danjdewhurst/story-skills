@@ -37,6 +37,8 @@ const labels = {
   "narration-opening-anonymous": "《{title}》。朗讀：{narrator}。",
   "narration-closing": "全書完。您收聽的是《{title}》，作者{authors}，朗讀{narrator}。",
   "narration-closing-anonymous": "全書完。您收聽的是《{title}》，朗讀{narrator}。",
+  "narration-byline": "作者：{names}。",
+  "narration-contributors": "收錄作者：{names}。",
   "screenplay-credit": "編劇",
   "screenplay-source": "改編自{authors}的作品",
   "screenplay-source-anonymous": "改編自原著",

@@ -60,6 +60,8 @@ export default {
     "narration-opening-anonymous": "《{title}》。演播：{narrator}。",
     "narration-closing": "全书完。您收听的是《{title}》，作者{authors}，演播{narrator}。",
     "narration-closing-anonymous": "全书完。您收听的是《{title}》，演播{narrator}。",
+    "narration-byline": "作者：{names}。",
+    "narration-contributors": "收录作者：{names}。",
     "screenplay-credit": "编剧",
     "screenplay-source": "改编自{authors}的作品",
     "screenplay-source-anonymous": "改编自原著",

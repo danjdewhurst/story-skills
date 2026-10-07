@@ -39,6 +39,8 @@ export default {
     "narration-opening-anonymous": "{title}. Читает {narrator}.",
     "narration-closing": "Конец. Вы слушали книгу «{title}». Автор: {authors}. Читает {narrator}.",
     "narration-closing-anonymous": "Конец. Вы слушали книгу «{title}». Читает {narrator}.",
+    "narration-byline": "Автор: {names}.",
+    "narration-contributors": "Авторы рассказов: {names}.",
     "screenplay-credit": "Сценарий",
     "screenplay-source": "По произведению (автор: {authors})",
     "screenplay-source-anonymous": "По литературному произведению",

@@ -829,7 +829,7 @@ word-count: 1489
 |-------|------|----------|---------|
 | `title` | string | yes | Chapter title. |
 | `number` | integer ≥ 1 | yes | Must match the filename and be unique. When it is set to something other than a positive integer, `story validate` errors, the reports and diagrams use the number in the file name, and `story export` and `story build` refuse to run. |
-| `author` | string or list of strings | no | The writer of this chapter's story in a collection or anthology. Builds print it under the heading with the `byline` label (`by Ines Calder`), it never counts toward word counts, and the EPUB lists it as a contributor. See [Story authors in collections and anthologies](manuscripts.md#story-authors-in-collections-and-anthologies). |
+| `author` | string or list of strings | no | The writer of this chapter's story in a collection or anthology. Builds print it under the heading with the `byline` label (`by Ines Calder`), the narration script speaks it after the heading with the `narration-byline` label (`Written by Ines Calder.`), it never counts toward word counts, and the EPUB lists it as a contributor. See [Story authors in collections and anthologies](manuscripts.md#story-authors-in-collections-and-anthologies). |
 | `numbered` | boolean | no | `false` builds the chapter under its title alone, for a Prologue, Interlude, or Epilogue, and leaves it out of the printed chapter count, so the next chapter is still `Chapter 1`. It then needs a title. Default `true`. `story import` sets it for Prologue-style and `{.unnumbered}` headings. |
 | `status` | enum | yes | `outline`, `draft`, `revised`, `final`, or `complete` (default `outline`). |
 | `pov` | character id | no | Point-of-view character. |

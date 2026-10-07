@@ -77,6 +77,8 @@ export default {
     "narration-opening-anonymous": "{title}. Gelesen von {narrator}.",
     "narration-closing": "Ende. Sie hörten {title}, geschrieben von {authors}, gelesen von {narrator}.",
     "narration-closing-anonymous": "Ende. Sie hörten {title}, gelesen von {narrator}.",
+    "narration-byline": "Geschrieben von {names}.",
+    "narration-contributors": "Mit Beiträgen von {names}.",
     "screenplay-credit": "Geschrieben von",
     "screenplay-source": "Nach einer Vorlage von {authors}",
     "screenplay-source-anonymous": "Nach einer literarischen Vorlage",

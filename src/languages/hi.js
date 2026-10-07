@@ -39,6 +39,8 @@ export default {
     "narration-opening-anonymous": "{title}। वाचक: {narrator}।",
     "narration-closing": "समाप्त। आप {title} सुन रहे थे, लेखक {authors}, वाचक {narrator}।",
     "narration-closing-anonymous": "समाप्त। आप {title} सुन रहे थे, वाचक {narrator}।",
+    "narration-byline": "लेखक: {names}।",
+    "narration-contributors": "सहयोगी लेखक: {names}।",
     "screenplay-credit": "लेखक",
     "screenplay-source": "{authors} की रचना पर आधारित",
     "screenplay-source-anonymous": "मूल रचना पर आधारित",

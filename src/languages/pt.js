@@ -37,6 +37,8 @@ export default {
     "narration-opening-anonymous": "{title}. Narrado por {narrator}.",
     "narration-closing": "Fim. Você ouviu {title}, escrito por {authors}, narrado por {narrator}.",
     "narration-closing-anonymous": "Fim. Você ouviu {title}, narrado por {narrator}.",
+    "narration-byline": "Escrito por {names}.",
+    "narration-contributors": "Com contribuições de {names}.",
     "screenplay-credit": "Escrito por",
     "screenplay-source": "Baseado na obra de {authors}",
     "screenplay-source-anonymous": "Baseado na obra original",

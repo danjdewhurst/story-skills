@@ -40,6 +40,8 @@ export default {
     "narration-opening-anonymous": "{title}. בקריאת {narrator}.",
     "narration-closing": "הסוף. האזנתם לספר {title} מאת {authors}, בקריאת {narrator}.",
     "narration-closing-anonymous": "הסוף. האזנתם לספר {title}, בקריאת {narrator}.",
+    "narration-byline": "מאת {names}.",
+    "narration-contributors": "בהשתתפות {names}.",
     "screenplay-credit": "נכתב על ידי",
     "screenplay-source": "על פי היצירה מאת {authors}",
     "screenplay-source-anonymous": "על פי יצירה ספרותית",
