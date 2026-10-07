@@ -1898,6 +1898,10 @@ export function chapterChoices(chapter, label) {
   return { choices, problems };
 }
 
+// The link from each chapter of a linear book to the next, and the choice a
+// split adds in a branching book to lead from the first half to the rest.
+export const CONTINUE_CHOICE = "Continue";
+
 // The chapters as passages of a branching story. With no choices anywhere
 // the book is linear and each chapter continues to the next; once any
 // chapter has choices, a chapter's links are exactly its choices and one
@@ -1918,7 +1922,7 @@ export function branchGraph(project) {
   const passages = parsed.map((entry, position) => {
     if (!branching) {
       const next = project.chapters[position + 1];
-      return { chapter: entry.chapter, links: next ? [{ text: "Continue", to: next.id }] : [] };
+      return { chapter: entry.chapter, links: next ? [{ text: CONTINUE_CHOICE, to: next.id }] : [] };
     }
     for (const choice of entry.choices) {
       if (!ids.has(choice.to)) {

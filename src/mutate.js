@@ -137,6 +137,7 @@ import {
   markdownFiles,
   chapterChoices,
   branchGraph,
+  CONTINUE_CHOICE,
   MAX_SCAN_FILE_BYTES,
   MAX_SCAN_FILES,
   requireStoryFile,
@@ -2106,15 +2107,54 @@ function existingChapter(project, value, missing) {
   return chapter;
 }
 
+// The usable choices of every chapter, each with its chapter: none in a
+// linear book.
+function bookChoices(project) {
+  return project.chapters.flatMap((chapter) => chapterChoices(chapter, "").choices.map((choice) => ({ ...choice, chapter })));
+}
+
+// A choice as a refusal names it: its file and index.
+function choiceLabel(project, chapter, index) {
+  return `${relative(project, chapter.file)} choices[${index}]`;
+}
+
 // In a branching book a chapter's place comes from the choices that lead to
-// it, and its own choices end it: splitting one would leave its first half an
-// ending, and merging two would join chapters a reader never reads in a row.
-function refuseBranching(project, command) {
-  const choosers = project.chapters.filter((chapter) => chapterChoices(chapter, "").choices.length > 0);
-  if (choosers.length > 0) {
-    const files = choosers.map((chapter) => relative(project, chapter.file));
-    throw refusedError(`story ${command} does not work on a branching book: ${files.join(", ")} ${files.length === 1 ? "has" : "have"} choices, and a ${command} would change where they lead. Restructure it by hand with story add chapter, story move, and story remove`);
+// it, and its own choices end it. A split or merge there is safe only when
+// it changes where no choice leads and what text a choice ends: the
+// chapters it splits or joins have no choices (a malformed one counts), and
+// no choice leads to `folded`, the chapter a merge folds into the one
+// before, since a reader who took it would land at the start of that one
+// instead. The renumbering rewrites every other `to`, as move does. Returns
+// the book's choices: none in a linear book.
+function refuseUnsafeBranching(project, command, chapters, folded = null) {
+  const choices = bookChoices(project);
+  if (choices.length === 0) {
+    return choices;
   }
+  const own = chapters.flatMap((chapter) => asArray(chapter.choices).map((choice, index) => `${choiceLabel(project, chapter, index)}${typeof choice?.to === "string" ? ` (to ${choice.to})` : ""}`));
+  if (own.length > 0) {
+    throw refusedError(`story ${command} works on a branching book only when ${command === "split" ? "the chapter it splits has" : "the chapters it merges have"} no choices, since a chapter's choices end it and a ${command} would change the passage they end: ${own.join(", ")}. Restructure the book by hand with story add chapter, story move, and story remove`);
+  }
+  const leading = choices.filter((choice) => choice.to === folded?.id).map((choice) => choiceLabel(project, choice.chapter, choice.index));
+  if (leading.length > 0) {
+    const [it, leads] = leading.length === 1 ? ["it", "leads"] : ["them", "lead"];
+    throw refusedError(`story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of ${chapters[0].id} instead: ${leading.join(", ")} ${leads} to ${folded.id}. Point ${it} at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove`);
+  }
+  return choices;
+}
+
+// The choices whose `to` the renumbering of `run` by `step` rewrites, as
+// { file, index, text, from, to }: each in its chapter's file after the
+// renumbering, for the split or merge to list.
+function retargetedChoices(project, choices, run, step) {
+  const renumbered = new Map(run.map((entry) => [entry.id, canonicalChapterId(entry.number + step)]));
+  return choices.filter((choice) => renumbered.has(choice.to)).map((choice) => ({
+    file: renumbered.has(choice.chapter.id) ? `chapters/${renumbered.get(choice.chapter.id)}.md` : relative(project, choice.chapter.file),
+    index: choice.index,
+    text: choice.text,
+    from: choice.to,
+    to: renumbered.get(choice.to)
+  }));
 }
 
 // The chapters numbered `number`, `number + 1`, and so on up to the first
@@ -2143,7 +2183,8 @@ function followingRun(project, number) {
 // own included, but only the chapter id: a scene id under it is left to the
 // adopted-references warning of the move. An abandoned thread may keep the
 // id a new chapter takes, as add chapter allows, so it only warns
-// (abandonedThreadWarnings).
+// (abandonedThreadWarnings). A choice that leads to the id is named by its
+// index, since the chapter would take over where it leads.
 function refuseSplitAdoption(project, chapter, run) {
   const last = run.at(-1);
   const number = (last ?? chapter).number + 1;
@@ -2156,14 +2197,19 @@ function refuseSplitAdoption(project, chapter, run) {
   if (files.length === 0) {
     return;
   }
-  const [it, them, means, belongs] = files.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
+  const choices = bookChoices(project).filter((choice) => choice.to === target);
+  const named = files.flatMap((file) => {
+    const leading = choices.filter((choice) => relative(project, choice.chapter.file) === file);
+    return leading.length === 0 ? [file] : leading.map((choice) => choiceLabel(project, choice.chapter, choice.index));
+  });
+  const [it, them, means, belongs] = named.length === 1 ? ["it", "it", "it means", "it belongs"] : ["they", "them", "they mean", "they belong"];
   const change = last === undefined
     ? `this split would give that id to its new chapter, the rest of ${chapter.id}`
     : `this split would renumber ${last.id} to ${target}`;
   const keep = last === undefined
     ? `${chapter.id} if ${belongs} in the text that moves (then point ${them} at ${target} after the split)`
     : `${last.id} if ${belongs} there (the split then carries ${them} to ${target})`;
-  throw refusedError(`${files.join(", ")} ${files.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
+  throw refusedError(`${named.join(", ")} ${named.length === 1 ? "names" : "name"} ${target}, which has no file yet, and ${change}, so ${it} would point at that chapter. Point ${them} at the chapter ${means} first: ${keep}, or ${canonicalChapterId(number + 1)} for the chapter after it; nothing was changed`);
 }
 
 // Renumbers each chapter of `run` by `step` with move chapter: from the
@@ -2297,9 +2343,11 @@ function splitAt(paragraphs, index, marker, chapterId) {
 
 // The files besides `excluded` that name `chapterId` in a reference field, a
 // link to its file, or a bare id in the timeline and arc bodies. Registries
-// are left out, since reindex rewrites them.
+// are left out, since reindex rewrites them, and so are choices: one that
+// leads to the chapter leads to its start, which stays in it.
 function chapterReferenceFiles(root, chapterId, excluded) {
-  const context = entityReferenceContext(root, "chapter", chapterId);
+  const named = entityReferenceContext(root, "chapter", chapterId);
+  const context = { ...named, isReferenceKey: (key, listKey) => key !== "to" && named.isReferenceKey(key, listKey) };
   const probe = `${chapterId}-reference-probe`;
   // Only the chapter id itself: its scene ids follow their scenes.
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe),
@@ -2372,7 +2420,7 @@ export function splitChapter(root, options) {
     }
     requireSingleLineName(title, "chapter", "title");
   }
-  refuseBranching(project, "split");
+  const choices = refuseUnsafeBranching(project, "split", [chapter]);
 
   const original = readMarkdown(chapter.file, project.root);
   const headerLines = original.rawMarkdown.slice(0, original.rawMarkdown.length - original.body.length).split("\n").length - 1;
@@ -2381,6 +2429,10 @@ export function splitChapter(root, options) {
   const newId = canonicalChapterId(number);
   const newFile = path.join(project.root, "chapters", `${newId}.md`);
   const run = followingRun(project, number);
+  // In a branching book a chapter with no choices is an ending, so the
+  // first half gets one choice, leading on to the rest: without it the
+  // reader would stop there, and no choice would lead to the new chapter.
+  const added = choices.length === 0 ? null : { file: relative(project, chapter.file), index: 0, text: CONTINUE_CHOICE, to: newId };
 
   // Scene records have no place in the text, so they follow it in order: the
   // records of the scenes before the split stay, the rest move.
@@ -2445,7 +2497,8 @@ export function splitChapter(root, options) {
       ...chapterLengthFields(secondBody, current.unit)
     };
     writeFile(newFile, withLineEndings(`${stringifyFrontmatter(secondData)}${secondBody}`, markdown.rawMarkdown), { root: project.root, unchangedFrom: null });
-    writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...chapterLengthFields(firstBody, current.unit) }, firstBody),
+    const leadOn = added === null ? {} : { choices: [{ text: added.text, to: added.to }] };
+    writeFile(chapter.file, replaceFrontmatter(markdown.rawMarkdown, { ...kept, ...leadOn, ...chapterLengthFields(firstBody, current.unit) }, firstBody),
       { root: project.root, unchangedFrom: markdown.rawMarkdown });
     // The latest drafted chapter is now the second half.
     setCurrentChapter(project.root, chapter.number, number);
@@ -2462,6 +2515,8 @@ export function splitChapter(root, options) {
     file: newFile,
     scenesMoved: moving.length,
     renumbered: run.length,
+    choiceAdded: added,
+    choicesRetargeted: retargetedChoices(project, choices, run, 1),
     changed: [chapter.file, newFile].concat(reindexed.changed),
     warnings
   };
@@ -2507,7 +2562,7 @@ export function mergeChapters(root, options) {
     const between = project.chapters.slice(position + 1, secondPosition).map((chapter) => chapter.id);
     throw usageError(`${second.id} does not follow ${first.id}: merge takes neighbouring chapters, and ${between.join(", ")} ${between.length === 1 ? "comes" : "come"} between them`);
   }
-  refuseBranching(project, "merge");
+  const choices = refuseUnsafeBranching(project, "merge", [first, second], second);
 
   const scenes = project.scenes.filter((scene) => scene.chapter === second.id).sort((left, right) => left.scene - right.scene);
   const firstScene = nextSceneNumber(project, first.id);
@@ -2576,6 +2631,7 @@ export function mergeChapters(root, options) {
     file: first.file,
     scenesMoved: scenes.length,
     renumbered: run.length,
+    choicesRetargeted: retargetedChoices(project, choices, run, -1),
     changed: [first.file].concat(reindexed.changed),
     warnings
   };
