@@ -12608,6 +12608,7 @@ function tweeSource(story) {
 // src/release-schedule.js
 var RELEASE_SOON_DAYS = 3;
 var MONTHS_PATTERN = /^(\d+)\s+months?$/i;
+var MAX_RELEASE_MONTHS = 999999;
 var LAST_DAY = parseClockDate("9999-12-31").days;
 function projectRelease(project, today) {
   return releaseSchedule({
@@ -12633,7 +12634,7 @@ function releaseEvery(value) {
     return value >= 1 ? { every: value, unit: "day" } : null;
   }
   const months = releaseMonths(value);
-  return months !== null && months >= 1 ? { every: months, unit: "month" } : null;
+  return months !== null && months >= 1 && months <= MAX_RELEASE_MONTHS ? { every: months, unit: "month" } : null;
 }
 function releaseMonths(value) {
   const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
@@ -22799,8 +22800,11 @@ function validateReleaseCadence(data, errors) {
     requireInteger(data, "release-every", "story.md", errors, 1);
   } else if (months === 0) {
     errors.push(err("field-below-minimum", "story.md frontmatter field release-every must be at least 1 month", "story.md"));
+  } else if (months > MAX_RELEASE_MONTHS) {
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be at most ${MAX_RELEASE_MONTHS} months`, "story.md"));
   } else if (every !== undefined && months === null) {
-    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got ${JSON.stringify(every)}`, "story.md"));
+    const got = every === null || typeof every === "string" && every.trim() === "" ? "" : `, got ${JSON.stringify(every)}`;
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month${got}`, "story.md"));
   }
   requireInteger(data, "release-warn-days", "story.md", errors, 0);
   validateReleaseDate(start, "story.md release-start", "story.md", errors);

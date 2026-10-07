@@ -21,7 +21,7 @@ import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
 import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.js";
-import { releaseMonths } from "./release-schedule.js";
+import { MAX_RELEASE_MONTHS, releaseMonths } from "./release-schedule.js";
 import { plural } from "./plural.js";
 import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
@@ -1870,8 +1870,13 @@ export function validateReleaseCadence(data, errors) {
     requireInteger(data, "release-every", "story.md", errors, 1);
   } else if (months === 0) {
     errors.push(err("field-below-minimum", "story.md frontmatter field release-every must be at least 1 month", "story.md"));
+  } else if (months > MAX_RELEASE_MONTHS) {
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be at most ${MAX_RELEASE_MONTHS} months`, "story.md"));
   } else if (every !== undefined && months === null) {
-    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got ${JSON.stringify(every)}`, "story.md"));
+    // One rule for both forms, so a blank or non-integer value is
+    // unsupported-value too, naming both.
+    const got = every === null || (typeof every === "string" && every.trim() === "") ? "" : `, got ${JSON.stringify(every)}`;
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month${got}`, "story.md"));
   }
   requireInteger(data, "release-warn-days", "story.md", errors, 0);
   validateReleaseDate(start, "story.md release-start", "story.md", errors);

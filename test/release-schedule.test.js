@@ -206,7 +206,7 @@ describe("releaseSchedule", () => {
       expect(releaseSchedule({ data, chapters, today: "2026-09-05" })).toMatchObject({ every: 7, unit: "day" });
       expect(releaseSchedule({ data: {}, chapters: [episode("chapter-01", "2026-09-04", true)], today: "2026-09-05" })).toMatchObject({ every: null, unit: null, warnDays: 3 });
       // Other units and zero months schedule nothing from the cadence; validate reports them.
-      for (const every of ["1 week", "month", "0 months", "1.5 months", 7.5, true]) {
+      for (const every of ["1 week", "month", "0 months", "1.5 months", "1month", "2 months later", "", null, 0, -7, 7.5, true]) {
         expect(releaseSchedule({ data: { "release-every": every, "release-start": "2026-09-04" }, chapters, today: "2026-09-05" })).toBeNull();
       }
     });
@@ -252,6 +252,54 @@ describe("releaseSchedule", () => {
       const huge = releaseSchedule({ data: { "release-every": "100000 months", "release-start": "2026-09-04" }, chapters, today: "2026-09-05" });
       expect(huge.episodes.map((entry) => entry.date)).toEqual(["2026-09-04"]);
       expect(huge.next).toBeNull();
+      // Episode 6 of the longest cadence is past any year a date can hold, and is not scheduled.
+      const longest = releaseSchedule({ data: { "release-every": "999999 months", "release-start": "2026-09-04" }, chapters: five, today: "2026-09-05" });
+      expect(longest).toMatchObject({ every: 999999, unit: "month", next: null, warnings: [] });
+      expect(longest.episodes.map((entry) => entry.date)).toEqual(["2026-09-04"]);
+    });
+
+    test("schedules nothing from a count over 999999 months, even one too long for a number", () => {
+      for (const every of ["1000000 months", `${"9".repeat(400)} months`]) {
+        expect(releaseSchedule({ data: { "release-every": every, "release-start": "2026-09-04" }, chapters, today: "2026-09-05" })).toBeNull();
+        expect(releaseSchedule({ data: { "release-every": every, "release-start": "2026-09-04" }, chapters: [], today: "2026-09-05" })).toBeNull();
+      }
+    });
+
+    test("counts the episodes due without any chapter, up to and including the day", () => {
+      const monthly = { "release-every": "1 month", "release-start": "2027-01-31" };
+      // Episode 6 went out on 2027-06-30, so on 2027-07-01 the next one is episode 7.
+      const after = releaseSchedule({ data: monthly, chapters: [], today: "2027-07-01" });
+      expect(after.next).toMatchObject({ episode: 7, date: "2027-07-31", daysUntil: 30 });
+      expect(messages(after.warnings)).toEqual(["episode 1 was due 2027-01-31, 151 days ago, and has no chapter yet (and 5 more scheduled episodes after it)"]);
+      expect(releaseSchedule({ data: monthly, chapters: [], today: "2027-06-30" }).next).toMatchObject({ episode: 6, date: "2027-06-30", daysUntil: 0 });
+      // Three days before 2027-06-30, episode 6 is in the window.
+      expect(messages(releaseSchedule({ data: monthly, chapters: [], today: "2027-06-27" }).warnings)).toEqual(["episode 1 was due 2027-01-31, 147 days ago, and has no chapter yet (and 5 more scheduled episodes after it)"]);
+      expect(messages(releaseSchedule({ data: monthly, chapters: [], today: "2027-06-26" }).warnings)).toEqual(["episode 1 was due 2027-01-31, 146 days ago, and has no chapter yet (and 4 more scheduled episodes after it)"]);
+    });
+
+    test("counts nothing due before release-start, by day or by month", () => {
+      for (const every of [7, "1 month", "2 months"]) {
+        const cadence = { "release-every": every, "release-start": "2026-09-04" };
+        const before = releaseSchedule({ data: cadence, chapters: [], today: "2026-09-01" });
+        expect(before.next).toMatchObject({ episode: 1, chapter: null, date: "2026-09-04", daysUntil: 3 });
+        expect(messages(before.warnings)).toEqual(["episode 1 releases 2026-09-04, in 3 days, and has no chapter yet"]);
+        for (const today of ["2026-08-31", "2026-07-31", "2026-06-15", "2025-12-31"]) {
+          const early = releaseSchedule({ data: cadence, chapters: [], today });
+          expect(early.next).toMatchObject({ episode: 1, date: "2026-09-04" });
+          expect(early.warnings).toEqual([]);
+        }
+        const day = releaseSchedule({ data: cadence, chapters: [], today: "2026-09-05" });
+        expect(day.next.episode).toBe(2);
+        expect(messages(day.warnings)).toEqual(["episode 1 was due 2026-09-04, 1 day ago, and has no chapter yet"]);
+      }
+    });
+
+    test("dates a start in the years 0 to 99 in that year, not in the 1900s", () => {
+      const ancient = releaseSchedule({ data: { "release-every": "1 month", "release-start": "0050-01-31" }, chapters: five, today: "0050-02-01" });
+      expect(ancient.episodes.map((entry) => entry.date)).toEqual(["0050-01-31", "0050-02-28", "0050-03-31", "0050-04-30", "0050-05-31"]);
+      expect(ancient.next).toMatchObject({ episode: 2, date: "0050-02-28", daysUntil: 27 });
+      // 48 is a leap year.
+      expect(dates("1 month", "0048-01-31").slice(0, 2)).toEqual(["0048-01-31", "0048-02-29"]);
     });
   });
 
@@ -336,6 +384,13 @@ describe("release schedule in the project", () => {
       ["release-every: 2 weeks", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"2 weeks\""],
       ["release-every: 1.5 months", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"1.5 months\""],
       ["release-every: 7.5", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got 7.5"],
+      ["release-every: 1month", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"1month\""],
+      ["release-every: 2 months later", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"2 months later\""],
+      ["release-every:", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month"],
+      ["release-every: 0", "field-below-minimum", "story.md frontmatter field release-every must be at least 1"],
+      ["release-every: -7", "field-below-minimum", "story.md frontmatter field release-every must be at least 1"],
+      ["release-every: 1000000 months", "unsupported-value", "story.md frontmatter field release-every must be at most 999999 months"],
+      [`release-every: ${"9".repeat(400)} months`, "unsupported-value", "story.md frontmatter field release-every must be at most 999999 months"],
       ["release-every: 7\nrelease-warn-days: -1", "field-below-minimum", "story.md frontmatter field release-warn-days must be at least 0"],
       ["release-every: 7\nrelease-warn-days: soon", "field-not-integer", "story.md frontmatter field release-warn-days must be an integer"]
     ];
@@ -348,6 +403,15 @@ describe("release schedule in the project", () => {
       expect(messages(projectProgress(root, { date: "2026-09-05" }).errors)).toEqual([message]);
     }
     expect(projectProgress(serialProject("release-every: 2 weeks\nrelease-start: 2026-09-04").root, { date: "2026-09-05" }).release).toBeNull();
+    expect(checkProjectSchema(serialProject("release-every: 999999 months\nrelease-start: 2026-09-04").root)).toEqual([]);
+
+    // A month count too long for a number is an error, and next reports it rather than crash.
+    const { root, cwd } = serialProject(`release-every: ${"9".repeat(400)} months\nrelease-start: 2026-09-04`);
+    const next = invoke(cwd, ["next", root, "--date", "2026-09-05", "--json"]);
+    const json = JSON.parse(next.out);
+    expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+    expect(json.data.release).toBeNull();
+    expect(json.diagnostics).toContainEqual(expect.objectContaining({ severity: "error", code: "unsupported-value" }));
   });
 
   test("progress and next follow a monthly cadence and release-warn-days, in text and JSON", () => {
