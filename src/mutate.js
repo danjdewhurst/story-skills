@@ -18,6 +18,7 @@ import {
   isInsideGitDirectory,
   lstatIfExists,
   makeDirectories,
+  planChanges,
   portablePath,
   projectPath,
   RENAME_MARKER,
@@ -967,6 +968,15 @@ export function computeWordCounts(root, options = {}) {
   assertProjectParses(project, "count words");
   const characters = project.unit.name === "characters";
   const chapters = [];
+  // A chapter whose recorded count is out of date is rewritten by --write.
+  const needsCount = (chapter) => chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count;
+  // Every chapter --write rewrites is checked first, and so is each registry
+  // the reindex after them rewrites (a planned run writes nothing), so a
+  // read-only file stops the command before any chapter changes.
+  if (options.write) {
+    assertWritable(project.root, project.chapters.filter(needsCount).map((chapter) => chapter.file));
+    planChanges(project.root, () => reindexProject(project.root));
+  }
 
   for (const chapter of project.chapters) {
     chapters.push({
@@ -979,7 +989,7 @@ export function computeWordCounts(root, options = {}) {
 
     // A project counted in characters records character-count beside
     // word-count.
-    if (options.write && (chapter.declaredWordCount !== chapter.wordCount || chapter.declaredCount !== chapter.count)) {
+    if (options.write && needsCount(chapter)) {
       const markdown = readMarkdown(chapter.file, project.root);
       const prose = chapterProse(markdown.body);
       // An editor saving the chapter meanwhile keeps its save.

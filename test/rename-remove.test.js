@@ -899,6 +899,39 @@ describe("write preflight (#198)", () => {
     }
   });
 
+  test.skipIf(CHMOD_IGNORED)("wordcount --write refuses before it rewrites any chapter when one it must rewrite is read-only (#724)", () => {
+    const root = baseProject(3);
+    const third = path.join(root, "chapters", "chapter-03.md");
+    fs.chmodSync(third, 0o444);
+    const before = snapshot(root);
+    try {
+      const result = invoke(root, ["wordcount", "--write"]);
+      expect(result.code).toBe(4);
+      expect(snapshot(root)).toEqual(before);
+      expect(result.err).toBe("Cannot write to chapters/chapter-03.md (permission denied); nothing was changed. Fix it and run the command again\n");
+    } finally {
+      fs.chmodSync(third, 0o644);
+    }
+    expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
+  });
+
+  test.skipIf(CHMOD_IGNORED)("wordcount --write refuses before it rewrites any chapter when a registry its reindex rewrites is read-only (#724)", () => {
+    const root = baseProject(2);
+    const registry = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replaceAll("Ann", "Stale"));
+    fs.chmodSync(registry, 0o444);
+    const before = snapshot(root);
+    try {
+      const result = invoke(root, ["wordcount", "--write"]);
+      expect(result.code).toBe(4);
+      expect(snapshot(root)).toEqual(before);
+      expect(result.err).toBe("Cannot write to characters/_index.md: permission denied\n");
+    } finally {
+      fs.chmodSync(registry, 0o644);
+    }
+    expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
+  });
+
   test("a write that fails partway says the same command finishes the job", () => {
     const root = copyExample("harbor-of-second-light");
     const original = fs.renameSync;
