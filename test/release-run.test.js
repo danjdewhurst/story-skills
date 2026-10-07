@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { git as gitIn, makeTempDir } from "./helpers.js";
 import { MISSING_BUN_MESSAGE } from "../scripts/bun-missing.js";
 import { PREFLIGHT, USAGE, parseReleaseArgs, releaseDeps, runRelease } from "../scripts/release.js";
 
@@ -367,33 +366,10 @@ describe("release run with stubbed commands", () => {
   });
 });
 
-// git for the throwaway repositories reads nothing from this machine: no
-// global or system config, and no inherited GIT_* variable (a GIT_DIR from a
-// hook would point every command, the release's own included, at another
-// repository). It has a fixed identity, no signing, and no line-ending
-// conversion, so a restore puts files back byte for byte.
-const GIT_SETTINGS = [
-  ["user.name", "Release Test"],
-  ["user.email", "release@example.com"],
-  ["init.defaultBranch", "main"],
-  ["commit.gpgsign", "false"],
-  ["tag.gpgsign", "false"],
-  ["core.autocrlf", "false"]
-];
-
-function gitEnv() {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)));
-  GIT_SETTINGS.forEach(([key, value], index) => {
-    env[`GIT_CONFIG_KEY_${index}`] = key;
-    env[`GIT_CONFIG_VALUE_${index}`] = value;
-  });
-  return { ...env, GIT_CONFIG_COUNT: String(GIT_SETTINGS.length), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
-}
-
-function gitIn(cwd, ...args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: gitEnv() });
-}
-
+// Every git here, the release's own included, runs through the shared
+// helper: no global or system config (so no line-ending conversion, and a
+// restore is byte for byte) and no inherited GIT_* variable, such as a GIT_DIR
+// from a hook that would point it at another repository.
 // The release fixture, plus a file the release never writes, committed on
 // main in a real repository with a bare origin that already has the commit.
 function gitFixture() {
