@@ -88,6 +88,19 @@ function fragments(text) {
   return String(text).split(/\{[a-z]+\}/).map((part) => part.replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, "")).filter((part) => /\p{L}{2}/u.test(part) && !DATA_WORDS.has(part));
 }
 
+// The text of every codex a language shows: the fixture with and without
+// spoilers, and an empty book counted in characters.
+function everySite(tag) {
+  const root = project(tag);
+  const full = siteText(root);
+  fs.rmSync(path.join(root, "dist"), { recursive: true });
+  const safe = siteText(root, { spoilers: false });
+  const empty = createStoryProject({ cwd: makeTempDir(), title: "Lumo", force: false }).root;
+  const story = path.join(empty, "story.md");
+  fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2\n", `schema-version: 2\nlanguage: ${tag}\ncount-unit: characters\ntarget-characters: 900\n`), "utf8");
+  return [full, safe, siteText(empty)];
+}
+
 const word = (fragment) => new RegExp(`(?<![\\p{L}\\p{N}-])${fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}-])`, "u");
 
 describe("codex labels", () => {
@@ -118,17 +131,9 @@ describe("codex labels", () => {
       const english = new Set(CODEX_KEYS.flatMap((key) => fragments(languagePack("en").labels[key])));
       // A word the language's own labels use (French Notes) is its own.
       const check = [...english].filter((fragment) => !word(fragment).test(own));
-      const root = project(tag);
-      const full = siteText(root);
-      fs.rmSync(path.join(root, "dist"), { recursive: true });
-      const safe = siteText(root, { spoilers: false });
-      // An empty book, and one counted in characters.
-      const empty = createStoryProject({ cwd: makeTempDir(), title: "Lumo", force: false }).root;
-      const story = path.join(empty, "story.md");
-      fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("schema-version: 2\n", `schema-version: 2\nlanguage: ${tag}\ncount-unit: characters\ntarget-characters: 900\n`), "utf8");
-      const bare = siteText(empty);
+      const sites = everySite(tag);
       // Each English word left, with the text around it.
-      const left = check.flatMap((fragment) => [full, safe, bare].map((text) => word(fragment).exec(text)).filter(Boolean).slice(0, 1).map((match) => match.input.slice(Math.max(0, match.index - 30), match.index + 30)));
+      const left = check.flatMap((fragment) => sites.map((text) => word(fragment).exec(text)).filter(Boolean).slice(0, 1).map((match) => match.input.slice(Math.max(0, match.index - 30), match.index + 30)));
       expect({ tag, left }).toEqual({ tag, left: [] });
     });
   }
@@ -146,17 +151,67 @@ describe("codex labels", () => {
     expect(index).toContain('<a href="timeline.html">Zeitleiste</a>');
   });
 
-  // #539: an Arabic or Hebrew verb takes its subject's gender, so the labels
-  // on a character page are nouns, which read the same for any character.
-  // The note under an empty Questions, Promises, or Clues list agrees with
-  // all three: feminine in Spanish and Portuguese, a noun of its own where
-  // the lists' genders differ (French and Italian).
-  test("labels about a character take no gender, and the empty-list note fits every list", () => {
-    const labels = (tag, keys) => keys.map((key) => languagePack(tag).labels[key]);
-    const character = ["codex-appears-in", "codex-linked-from", "codex-knows", "codex-dies-in", "codex-revived-in", "codex-dies-in-chapter"];
-    expect(labels("ar", character)).toEqual(["مواضع الظهور", "مواضع الذكر", "ما تعرفه الشخصية", "الوفاة في", "العودة إلى الحياة في", "الوفاة في الفصل {n}"]);
-    expect(labels("he", character)).toEqual(["הופעות", "אזכורים", "ידע", "מוות", "חזרה לחיים", "מוות בפרק {n}"]);
-    expect(["es", "pt", "pt-PT", "fr", "it"].map((tag) => languagePack(tag).labels["codex-none"])).toEqual(["Ninguna.", "Nenhuma.", "Nenhuma.", "Aucun élément.", "Nessun elemento."]);
+  // #539: an Arabic or Hebrew verb or participle takes its subject's gender,
+  // as a Hindi noun for a person does, so the codex says what it knows about
+  // a character with nouns for the action and the passive, which read the
+  // same for any character. These are the masculine forms the packs used
+  // before, and the forms that replaced them.
+  const GENDERED = {
+    ar: {
+      masculine: ["يظهر في", "مذكور في", "يعرف", "يموت", "يعود إلى الحياة", "المالك", "أضف", "ابنِ"],
+      neutral: ["مواضع الظهور", "مواضع الذكر", "ما تعرفه الشخصية", "الوفاة في", "العودة إلى الحياة في", "في حوزة", "يُحدَّد موقع المشهد", "ويُبنى المرجع كاملًا"]
+    },
+    he: {
+      masculine: ["מופיע", "מקושר", "יודע", "מת", "קם לתחייה", "מתקדם"],
+      neutral: ["הופעות", "אזכורים", "ידע", "מוות", "חזרה לחיים", "מתקדמת ב־"]
+    },
+    hi: { masculine: ["स्वामी"], neutral: ["स्वामित्व"] }
+  };
+  for (const [tag, { masculine, neutral }] of Object.entries(GENDERED)) {
+    test(`a codex in ${tag} says nothing about a character in the masculine`, () => {
+      const text = everySite(tag).join("\n");
+      expect({ tag, masculine: masculine.filter((form) => word(form).test(text)) }).toEqual({ tag, masculine: [] });
+      expect({ tag, missing: neutral.filter((form) => !text.includes(form)) }).toEqual({ tag, missing: [] });
+    });
+  }
+
+  test("the Arabic example's heroine gets the neutral headings", () => {
+    const root = makeTempDir();
+    fs.cpSync(path.join(import.meta.dir, "..", "examples", "laysat-lil-bay"), root, { recursive: true });
+    const folder = buildBook(root, { format: "codex", spoilers: true }).outFile;
+    const page = fs.readFileSync(path.join(folder, "characters", "salma-haddad.html"), "utf8");
+    for (const heading of ["مواضع الظهور", "مواضع الذكر", "ما تعرفه الشخصية"]) {
+      expect(page).toContain(`<h2>${heading}</h2>`);
+    }
+    expect(page).not.toMatch(/<h2>(?:يظهر في|مذكور في|يعرف)<\/h2>/);
+  });
+
+  // The death column's cell names the chapter and never repeats the
+  // column's heading word (Turkish bölümde only contains ölüm).
+  test("the death column does not repeat its heading", () => {
+    const repeats = TRANSLATED.filter((tag) => {
+      const { labels, segmentation } = languagePack(tag);
+      const [heading, cell] = [labels["codex-death"], labels["codex-dies-in-chapter"]];
+      return segmentation === "space" ? new RegExp(word(heading).source, "iu").test(cell) : cell.includes(heading);
+    });
+    expect(repeats).toEqual([]);
+  });
+
+  // The other labels #539 changed: the note under an empty Questions,
+  // Promises, or Clues list agrees with all three (feminine in Spanish and
+  // Portuguese, a noun of its own where the lists' genders differ), the
+  // Russian POV column names the character, and Arabic calls the codex a
+  // reference (دليل is also evidence).
+  test("the reviewed labels keep their reviewed wording", () => {
+    const reviewed = (entries) => entries.map(([tag, key]) => [tag, key, languagePack(tag).labels[key]]);
+    const expected = [
+      ["es", "codex-none", "Ninguna."], ["pt", "codex-none", "Nenhuma."], ["pt-PT", "codex-none", "Nenhuma."],
+      ["fr", "codex-none", "Aucun élément."], ["it", "codex-none", "Nessun elemento."], ["fa", "codex-none", "موردی نیست."],
+      ["ru", "codex-pov", "Фокальный персонаж"],
+      ["ar", "codex-story-bible", "مرجع القصة"], ["ar", "codex-index-title", "{title}: مرجع القصة"]
+    ];
+    expect(reviewed(expected)).toEqual(expected);
+    expect(languagePack("ar").labels["codex-note-spoilers"]).toStartWith("مرجع القصة");
   });
 
   test("an untitled chapter takes the book's chapter label", () => {

@@ -138,7 +138,7 @@ export default {
     "codex-last": "最終登場",
     "codex-longest-gap": "最長の不在",
     "codex-death": "死亡",
-    "codex-dies-in-chapter": "第{n}章で死亡",
+    "codex-dies-in-chapter": "第{n}章",
     "codex-threads-note": "未解決の問いと伏線だけを載せ、その答えや回収は省いています。手がかりと解決済みのプロットには {flag} が必要です。",
     "codex-none": "なし。",
     "codex-question": "問い",

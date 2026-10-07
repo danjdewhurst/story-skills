@@ -119,7 +119,7 @@ export default {
     "codex-last": "마지막 등장",
     "codex-longest-gap": "최장 공백",
     "codex-death": "사망",
-    "codex-dies-in-chapter": "제{n}장에서 사망",
+    "codex-dies-in-chapter": "제{n}장",
     "codex-threads-note": "열린 의문과 복선만 보여 주며, 답과 회수는 담지 않습니다. 단서와 해결된 플롯을 보려면 {flag} 옵션이 필요합니다.",
     "codex-none": "없음.",
     "codex-question": "의문",

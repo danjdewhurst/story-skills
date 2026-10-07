@@ -120,7 +120,7 @@ export default {
     "codex-last": "אחרון",
     "codex-longest-gap": "הפער הארוך ביותר",
     "codex-death": "מוות",
-    "codex-dies-in-chapter": "מוות בפרק {n}",
+    "codex-dies-in-chapter": "פרק {n}",
     "codex-threads-note": "שאלות פתוחות והבטחות בלבד, בלי התשובות או המימוש שלהן. רמזים וחוטי עלילה שנפתרו דורשים {flag}.",
     "codex-none": "אין.",
     "codex-question": "שאלה",

@@ -1,6 +1,6 @@
 // Hindi: Devanagari has no letter case; words are spaced. No word lists
 // yet, and no narration pace of its own. A byline is the name alone, and
-// the editor's credit names the work (संपादन), not the person, so neither
+// credits name the work (लेखन, संपादन, स्वर), not the person, so none
 // takes a gender.
 
 export default {
@@ -26,8 +26,8 @@ export default {
     "review-intro": "समीक्षा प्रति।",
     "review-intro-build": "समीक्षा प्रति, संस्करण {build}।",
     "review-labels": "हर अनुच्छेद का एक लेबल है, जैसे {label} (अध्याय 3, अनुच्छेद 12)।",
-    "review-quote": "हर टिप्पणी में लेबल और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी लेखक ठीक वही जगह ढूँढ सके।",
-    "review-quote-build": "हर टिप्पणी में लेबल, संस्करण और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी लेखक ठीक वही जगह ढूँढ सके।",
+    "review-quote": "हर टिप्पणी में लेबल और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी ठीक वही जगह मिल सके।",
+    "review-quote-build": "हर टिप्पणी में लेबल, संस्करण और अनुच्छेद के पहले कुछ शब्द लिखें, ताकि पाठ बदलने के बाद भी ठीक वही जगह मिल सके।",
     "review-note-link": "हर लेबल के पास का टिप्पणी लिंक एक टिप्पणी खोलता है, जिसमें ये जानकारियाँ पहले से भरी होती हैं।",
     note: "टिप्पणी",
     "note-title": "{label} पर टिप्पणी लिखें",
@@ -37,14 +37,14 @@ export default {
     "edited-by": "संपादन: {names}",
     "approximate-words": "लगभग {words} शब्द",
     "approximate-characters": "लगभग {characters} वर्ण",
-    "narration-opening": "{title}। लेखक: {authors}। वाचक: {narrator}।",
-    "narration-opening-anonymous": "{title}। वाचक: {narrator}।",
-    "narration-closing": "समाप्त। आप {title} सुन रहे थे, लेखक {authors}, वाचक {narrator}।",
-    "narration-closing-anonymous": "समाप्त। आप {title} सुन रहे थे, वाचक {narrator}।",
-    "narration-byline": "लेखक: {names}।",
-    "narration-edited-by": "संपादक: {names}।",
-    "narration-contributors": "सहयोगी लेखक: {names}।",
-    "screenplay-credit": "लेखक",
+    "narration-opening": "{title}। लेखन: {authors}। स्वर: {narrator}।",
+    "narration-opening-anonymous": "{title}। स्वर: {narrator}।",
+    "narration-closing": "समाप्त। आपने {title} सुना। लेखन: {authors}। स्वर: {narrator}।",
+    "narration-closing-anonymous": "समाप्त। आपने {title} सुना। स्वर: {narrator}।",
+    "narration-byline": "लेखन: {names}।",
+    "narration-edited-by": "संपादन: {names}।",
+    "narration-contributors": "सहयोग: {names}।",
+    "screenplay-credit": "लेखन",
     "screenplay-source": "{authors} की रचना पर आधारित",
     "screenplay-source-anonymous": "मूल रचना पर आधारित",
     // The codex (`build --format codex`), the story bible site: its page
@@ -97,7 +97,7 @@ export default {
     "codex-routes": "मार्ग",
     "codex-hours": "घंटे: {hours}",
     "codex-members": "सदस्य",
-    "codex-owner": "स्वामी",
+    "codex-owner": "स्वामित्व",
     "codex-themes": "विषय",
     "codex-pronunciation": "उच्चारण",
     "codex-date": "तिथि",
@@ -119,7 +119,7 @@ export default {
     "codex-last": "अंतिम",
     "codex-longest-gap": "सबसे लंबा अंतराल",
     "codex-death": "मृत्यु",
-    "codex-dies-in-chapter": "अध्याय {n} में मृत्यु",
+    "codex-dies-in-chapter": "अध्याय {n}",
     "codex-threads-note": "केवल खुले प्रश्न और वादे, उनके उत्तर या पूर्ति के बिना। सुराग और सुलझे कथासूत्र देखने के लिए {flag} चाहिए।",
     "codex-none": "कोई नहीं।",
     "codex-question": "प्रश्न",
