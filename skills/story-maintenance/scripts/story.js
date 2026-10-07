@@ -31821,7 +31821,7 @@ var COMMANDS = [
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
       });
-      const { result, changes } = dryRun ? planChanges(base, make) : recordNewProject(base, make);
+      const { result, changes } = dryRun ? planChanges(base, make) : recordWrites(base, make);
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "init", base, {
           data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
@@ -31875,7 +31875,7 @@ var COMMANDS = [
         force: isTruthy(parsed.options.force)
       };
       const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
-      const { result, changes } = dryRun ? previewImport(options) : recordNewProject(base, () => importManuscript(options));
+      const { result, changes } = dryRun ? previewImport(options) : recordWrites(base, () => importManuscript(options));
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: importDiagnostics(result), dryRun, changes });
       }
@@ -32859,10 +32859,10 @@ function undoneNote({ command, files }, dryRun) {
 `;
 }
 function runOrPreview(dryRun, projectRoot, write) {
-  return dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+  return dryRun ? previewChanges(projectRoot, write) : recordWrites(projectRoot, () => write(projectRoot));
 }
 function runOrPlan(dryRun, base, run) {
-  return dryRun ? planChanges(base, run) : recordChanges(base, run);
+  return dryRun ? planChanges(base, run) : recordWrites(base, run);
 }
 function outputDryRun(parsed, command) {
   const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -32960,7 +32960,7 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
 `)}
 `;
 }
-function recordNewProject(base, run) {
+function recordWrites(base, run) {
   try {
     return recordChanges(base, run);
   } catch (error) {

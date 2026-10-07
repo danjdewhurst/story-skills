@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { computeWordCounts, createEntity, createStoryProject, reindexProject, renameEntity, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function newProject(title = "Bugs") {
   const cwd = makeTempDir();
@@ -61,6 +61,27 @@ describe("#65 reindex keeps registry frontmatter it does not own", () => {
     const crlf = fs.readFileSync(chapters, "utf8");
     expect(crlf).toContain("type: chapter-registry\r\nstory: bugs\r\nextra: 1\r\n---\r\n");
     expect(crlf.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+});
+
+describe("a refused write lists the files it changed (#722)", () => {
+  test.skipIf(CHMOD_IGNORED)("reindex --json lists the registry it rewrote before a read-only one refused the run", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "scene", name: "Opening", chapter: "chapter-01" });
+    const chapterIndex = path.join(root, "chapters", "_index.md");
+    const sceneIndex = path.join(root, "scenes", "_index.md");
+    editFile(chapterIndex, (text) => text.replace("| One |", "| Stale |"));
+    editFile(sceneIndex, (text) => text.replace("Opening", "Stale"));
+    fs.chmodSync(sceneIndex, 0o444);
+    try {
+      const result = invoke(root, ["reindex", "--json"]);
+      expect(result.code).toBe(4);
+      expect(JSON.parse(result.out).writes).toEqual([chapterIndex]);
+      expect(fs.readFileSync(chapterIndex, "utf8")).not.toContain("Stale");
+    } finally {
+      fs.chmodSync(sceneIndex, 0o644);
+    }
   });
 });
 
