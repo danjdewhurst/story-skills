@@ -354,6 +354,11 @@ describe("matter in export and build", () => {
     // story.md in another letter case than --out.
     replaceCover("cover: Art/Cover.PNG");
     expect(() => buildBook(root, { format: "html", out: "art/cover.png" })).toThrow(refusal);
+    // Names a disk reads as the cover: an NTFS stream, a trailing dot, the
+    // NTFS short name, and an ignorable character HFS+ leaves out.
+    for (const out of ["art/cover.png::$DATA", "art/cover.png.", "ART/COVER~1.PNG", "art/cov\u200Ber.png"]) {
+      expect(() => buildBook(root, { format: "html", out })).toThrow("story.md names it as the cover");
+    }
     // A cover outside the project, which an absolute --out can reach.
     const outside = path.join(makeTempDir(), "cover.png");
     fs.writeFileSync(outside, PNG_BYTES);
