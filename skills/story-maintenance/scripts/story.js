@@ -942,6 +942,7 @@ var FINDING_CODES = {
   "chapter-no-scenes": "warning",
   "scene-no-setting": "warning",
   "permission-pending-left-out": "warning",
+  "matter-placement-left-out": "warning",
   "unknown-reference": "warning",
   "adopted-references": "warning",
   "prose-name-shared": "warning",
@@ -29632,6 +29633,11 @@ function manuscriptParts(project, action = "build", { includePending = false, wa
   for (const entry of warnLeftOut ? leftOutMatter : []) {
     const label = relative(project, entry.file);
     warnings.push(warn("permission-pending-left-out", `${label} ${unclearedPermission(entry)}, so it is left out; pass --include-pending to include it`, label));
+  }
+  const unplaced = project.matter.filter((entry) => !entry.empty && entry.placement !== "front" && entry.placement !== "back");
+  for (const entry of warnLeftOut ? unplaced : []) {
+    const label = relative(project, entry.file);
+    warnings.push(warn("matter-placement-left-out", `${label} placement is ${entry.placement ?? "missing"}, which is neither front nor back, so it is left out`, label));
   }
   const matterPages = written.filter((entry) => !leftOutMatter.includes(entry));
   const matter = (placement) => matterPages.filter((entry) => entry.placement === placement).map((entry) => ({

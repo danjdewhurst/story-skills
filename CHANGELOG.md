@@ -60,6 +60,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The message says `lists <artifact>, destroyed/lost since <chapter>`. A chapter or scene that names the artifact in `mentions` keeps the `mentions` message.
 - `build --pdf-engine constructor` stops with an `Unknown PDF engine` message, not a `TypeError`. ([#716](https://github.com/danjdewhurst/story-skills/issues/716))
 - `story diagram clues` draws a chapter named `unrevealed` as its own node, not as the "not yet revealed" node. ([#717](https://github.com/danjdewhurst/story-skills/issues/717))
+- `export` and builds that print matter warn about a matter page whose `placement` is not `front` or `back`. ([#715](https://github.com/danjdewhurst/story-skills/issues/715))
+  - The page is still left out, as before. The warning is `matter-placement-left-out`, and `build --format markdown` now reports it instead of exiting with no note.
 
 ## [0.23.0] - 2026-10-07
 

@@ -287,6 +287,24 @@ describe("matter in export and build", () => {
     expect(text).toContain("# Author's Note");
   });
 
+  test("a written matter page with a placement other than front or back is left out with a warning", () => {
+    const { root, cwd } = matterProject();
+    writeMatter(root, "stray", "title: Stray\nplacement: Back\norder: 1", "# Stray\n\nA stray page.\n");
+    const built = buildBook(root, { format: "markdown" });
+    expect(fs.readFileSync(built.outFile, "utf8")).not.toContain("A stray page.");
+    expect(built.warnings.filter((finding) => finding.code === "matter-placement-left-out")).toEqual([
+      expect.objectContaining({ file: "matter/stray.md", message: expect.stringContaining("placement is Back") })
+    ]);
+
+    const run = invoke(cwd, ["build", root, "--format", "markdown"]);
+    expect(run.code).toBe(0);
+    expect(run.err).toContain("matter/stray.md");
+    expect(run.err).toContain("[matter-placement-left-out]");
+
+    writeMatter(root, "stray", "title: Stray\nplacement: Back\norder: 1", "");
+    expect(buildBook(root, { format: "markdown" }).warnings.some((finding) => finding.code === "matter-placement-left-out")).toBe(false);
+  });
+
   test("docx places matter around the chapters", () => {
     const { root } = matterProject();
     withBookMatter(root);
