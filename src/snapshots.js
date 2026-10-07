@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, assertWriteAllowed, currentText, ignoresCase, lstatIfExists, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, assertWriteAllowed, currentText, lstatIfExists, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
 import { plural } from "./plural.js";
 import { EXIT_CODES, exitCodeFor, refusedError, usageError } from "./exit-codes.js";
+import { warn } from "./findings.js";
 import { reindexProject } from "./mutate.js";
 import { PROJECT_DIRECTORIES, assertProjectParses, markdownFiles, requireStoryFile, scanProject } from "./scan.js";
 
@@ -230,16 +231,16 @@ export function existingSnapshot(root, value) {
 // not markdown are never touched. Before any change the project as it is is
 // saved as snapshot before-restore-<id>-<n>, so the restore can itself be
 // undone, and a restore that fails part way names it. The registries are
-// rebuilt afterwards when every restored file parses. `caseInsensitive`
-// says whether the project's file system ignores letter case; it is asked
-// of the project when not given (see ignoresCase). `occupied` names the
-// folders a --dry-run copy shows emptier than they are, which stay.
+// rebuilt afterwards when every restored file parses. What changes is
+// planRestore's plan: `plan` passes one already read (a --dry-run reads it
+// from the project and runs it on its copy), and `identity` stands in for
+// fileIdentity in tests.
 export function restoreSnapshot(root, options = {}) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
   const { directory, id } = existingSnapshot(projectRoot, options.name);
   const manifest = listSnapshots(projectRoot).snapshots.find((snapshot) => snapshot.id === id);
-  const saved = restoreSources(projectRoot, options.name);
+  const plan = options.plan ?? planRestore(projectRoot, options.name, options);
   // A safety snapshot keeps a chapter that did not parse, so a snapshot
   // with one is still restored, and its undo works; only the reindex,
   // which needs every file to parse, is left for after the fix.
@@ -250,16 +251,65 @@ export function restoreSnapshot(root, options = {}) {
     parses = false;
   }
 
-  // Where the file system ignores letter case, the project's notes.md is
-  // the snapshot's Notes.md, and its Chapters/ the snapshot's chapters/: such
-  // a file is written back under the project's spelling, which is the file
-  // the snapshot's spelling reaches, and is never deleted as a file the
-  // snapshot lacks (#581).
-  const nameKey = (options.caseInsensitive ?? ignoresCase(projectRoot, "story.md")) ? (relative) => relative.toLowerCase() : (relative) => relative;
-  const present = new Map(markdownFiles(projectRoot).map((file) => [nameKey(projectPath(projectRoot, file)), file]));
+  const restored = { name: manifest?.name ?? id, id };
+  if (plan.writes.length === 0 && plan.deletes.length === 0) {
+    return { restored, safety: null, created: [], updated: [], deleted: [], removedFolders: [], reindexed: false, warnings: [] };
+  }
+
+  const safetyId = nextSafetyId(projectRoot, id);
+  const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
+  const at = (relative) => path.join(projectRoot, ...relative.split("/"));
+  const done = { created: [], updated: [], deleted: [], removedFolders: [] };
+  const warnings = [];
+  try {
+    for (const write of plan.writes) {
+      writeFile(at(write.path), write.text, { root: projectRoot, unchangedFrom: write.original });
+      done[write.created ? "created" : "updated"].push(write.path);
+    }
+    for (const file of plan.deletes) {
+      removeFile(at(file.path), { root: projectRoot, unchangedFrom: file.original });
+      done.deleted.push(file.path);
+    }
+    done.removedFolders = removeEmptiedFolders(projectRoot, plan.folders, warnings);
+    if (parses) {
+      reindexProject(projectRoot);
+    }
+  } catch (error) {
+    const changed = done.created.length + done.updated.length + done.deleted.length;
+    const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${plan.writes.length + plan.deletes.length} files changed)`;
+    const code = exitCodeFor(error);
+    throw Object.assign(new Error(`Restoring snapshot ${id} stopped: ${error.message}\n${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the project as it was before: story snapshot --restore ${safetyId} puts it back`), {
+      exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
+    });
+  }
+  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings };
+}
+
+// What restoring snapshot `name` changes, read from the project without
+// changing anything: { writes: [{ path, text, created, original }],
+// deletes: [{ path, original }], folders }, every path relative to the
+// project and spelled as the project spells it, and `original` the text
+// the change replaces (null for none), so one saved meanwhile is refused.
+// Each snapshot file goes to the project file its path reaches, which a
+// folder that ignores letter case (macOS and Windows by default, a
+// casefold folder on Linux) finds under another spelling: the snapshot's
+// Notes.md is then the project's notes.md, and its chapters/ the project's
+// Chapters/. That file is written under the project's spelling and never
+// deleted as one the snapshot lacks (#581). A refusal comes before
+// anything changes.
+export function planRestore(root, name, { identity = fileIdentity } = {}) {
+  const projectRoot = path.resolve(root);
+  const { id, saved } = restoreSources(projectRoot, name);
+  const spell = projectSpelling(projectRoot, identity, id);
   const writes = [];
+  const reached = new Map();
   for (const [relative, source] of saved) {
-    const target = present.get(nameKey(relative)) ?? path.join(projectRoot, ...relative.split("/"));
+    const spelled = spell(relative);
+    if (reached.has(spelled)) {
+      throw refusedError(`Cannot restore snapshot ${id}: its ${reached.get(spelled)} and ${relative} are one file in this project (${spelled}), whose folder does not tell the two spellings apart. Nothing was changed`);
+    }
+    reached.set(spelled, relative);
+    const target = path.join(projectRoot, ...spelled.split("/"));
     const text = readTextFile(source);
     const existing = lstatIfExists(target);
     // A file that cannot be read as text (swapped for a symlink or a FIFO
@@ -270,79 +320,134 @@ export function restoreSnapshot(root, options = {}) {
     }
     // The text read here is the one replaced, so an edit saved meanwhile
     // stops the restore rather than being lost.
-    writes.push({ path: projectPath(projectRoot, target), target, text, created: existing === null, original: current });
+    writes.push({ path: spelled, text, created: existing === null, original: current });
   }
-  const kept = new Set([...saved.keys()].map(nameKey));
-  const deletes = [...present]
-    .filter(([key]) => !kept.has(key))
-    .map(([, file]) => ({ path: projectPath(projectRoot, file), target: file, original: readTextFile(file) }));
-  const restored = { name: manifest?.name ?? id, id };
-  if (writes.length === 0 && deletes.length === 0) {
-    return { restored, safety: null, created: [], updated: [], deleted: [], removedFolders: [], reindexed: false, warnings: [] };
-  }
+  const deletes = markdownFiles(projectRoot)
+    .map((file) => projectPath(projectRoot, file))
+    .filter((file) => !reached.has(file))
+    .map((file) => ({ path: file, original: readTextFile(path.join(projectRoot, ...file.split("/"))) }));
+  return { writes, deletes, folders: emptiedFolders(projectRoot, deletes.map((file) => file.path), writes, identity) };
+}
 
-  const safetyId = nextSafetyId(projectRoot, id);
-  const safety = snapshotProject(projectRoot, { name: safetyId, id: safetyId, now: options.now, unparsed: true });
-  const done = { created: [], updated: [], deleted: [], removedFolders: [] };
-  try {
-    for (const write of writes) {
-      writeFile(write.target, write.text, { root: projectRoot, unchangedFrom: write.original });
-      done[write.created ? "created" : "updated"].push(write.path);
+// What a lookup of `file` finds, as its device and inode, or null for
+// nothing. Two names with the same identity are one file: a folder that
+// ignores letter case finds notes.md as Notes.md too.
+function fileIdentity(file) {
+  const stats = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+  return stats === undefined ? null : `${stats.dev}:${stats.ino}`;
+}
+
+// Spells a snapshot path as the project does. A part its folder lists as
+// written is kept; otherwise, when a lookup of it finds something there,
+// it becomes the listed name that is the same file. No rule for folding
+// letters is assumed (Unicode case, normalization, a case-sensitive folder
+// inside a case-insensitive volume): each folder answers for itself. A
+// part with nothing there yet, and every part after it, is kept as written.
+function projectSpelling(projectRoot, identity, id) {
+  const listings = new Map();
+  const identities = new Map();
+  const listing = (folder) => {
+    if (!listings.has(folder)) {
+      listings.set(folder, lstatIfExists(folder)?.isDirectory() ? fs.readdirSync(folder).sort() : null);
     }
-    for (const file of deletes) {
-      removeFile(file.target, { root: projectRoot, unchangedFrom: file.original });
-      done.deleted.push(file.path);
+    return listings.get(folder);
+  };
+  const identityOf = (file) => {
+    if (!identities.has(file)) {
+      identities.set(file, identity(file));
     }
-    // Only a folder the deletes left with nothing in it goes, so a folder
-    // that was already empty, or still holds a file of any kind, stays.
-    for (const folder of deletedFolders(deletes, nameKey)) {
-      const full = path.join(projectRoot, ...folder.split("/"));
-      if (options.occupied?.has(folder) !== true && fs.readdirSync(full).length === 0) {
-        removeDirectory(full, { action: "rmdir" });
-        done.removedFolders.push(folder);
+    return identities.get(file);
+  };
+  return (relative) => {
+    const parts = relative.split("/");
+    let folder = projectRoot;
+    for (let index = 0; index < parts.length; index += 1) {
+      const names = listing(folder);
+      if (names === null) {
+        break;
       }
+      if (!names.includes(parts[index])) {
+        const found = identityOf(path.join(folder, parts[index]));
+        if (found === null) {
+          break;
+        }
+        const same = names.filter((name) => identityOf(path.join(folder, name)) === found);
+        if (same.length !== 1) {
+          throw refusedError(`Cannot restore snapshot ${id}: the project finds ${relative} under another spelling, but cannot tell which of its files that is${same.length > 1 ? ` (${same.join(", ")})` : ""}. Nothing was changed`);
+        }
+        parts[index] = same[0];
+      }
+      folder = path.join(folder, parts[index]);
     }
-    if (parses) {
-      reindexProject(projectRoot);
-    }
-  } catch (error) {
-    const changed = done.created.length + done.updated.length + done.deleted.length;
-    const state = changed === 0 ? "no file was restored" : `the project is part restored (${changed} of ${writes.length + deletes.length} files changed)`;
-    const code = exitCodeFor(error);
-    throw Object.assign(new Error(`Restoring snapshot ${id} stopped: ${error.message}\n${state[0].toUpperCase()}${state.slice(1)}. Snapshot ${safetyId} holds the project as it was before: story snapshot --restore ${safetyId} puts it back`), {
-      exitCode: code === EXIT_CODES.findings ? EXIT_CODES.refused : code
-    });
-  }
-  return { restored, safety: { id: safety.id, dir: safety.dir }, ...done, reindexed: parses, warnings: [] };
+    return parts.join("/");
+  };
 }
 
 // The folders init makes, and the folders above them: a restore that
 // empties one keeps it, as a new project has it.
-const PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap((folder) => folder.split("/").map((_, depth, parts) => parts.slice(0, depth + 1).join("/"))))];
+const PROJECT_FOLDERS = [...new Set(PROJECT_DIRECTORIES.flatMap(foldersOf).concat(PROJECT_DIRECTORIES))];
 
-// The folders that hold the files a restore deletes, and the folders above
-// them up to the project, other than PROJECT_FOLDERS: deepest first, so a
-// folder is emptied before the one that holds it is looked at.
-function deletedFolders(deletes, nameKey) {
-  const keep = new Set(PROJECT_FOLDERS.map(nameKey));
-  const folders = new Set();
-  for (const file of deletes) {
-    const parts = file.path.split("/").slice(0, -1);
-    for (let depth = 1; depth <= parts.length; depth += 1) {
-      folders.add(parts.slice(0, depth).join("/"));
-    }
-  }
-  return [...folders].filter((folder) => !keep.has(nameKey(folder))).sort().reverse();
+// The folders above a project path: a/b/c.md is in a and a/b.
+function foldersOf(relative) {
+  const parts = relative.split("/").slice(0, -1);
+  return parts.map((_, depth) => parts.slice(0, depth + 1).join("/"));
 }
 
-// The markdown files of a snapshot that a restore writes back, by their
-// project path, after checking the project can take each one: the
+// The folders a restore's deletes leave empty, deepest first: each folder
+// above a deleted file whose every entry is a deleted file or a folder
+// emptied too, and that no write puts a file in. The listing is the
+// project's own, so a hidden folder or a nested project, which a --dry-run
+// copy leaves out, keeps its folder in the preview too. A folder init makes
+// stays, under any spelling that reaches it.
+function emptiedFolders(projectRoot, deletes, writes, identity) {
+  const at = (relative) => path.join(projectRoot, ...relative.split("/"));
+  const deleted = new Set(deletes);
+  const receiving = new Set(writes.flatMap((write) => foldersOf(write.path)));
+  const kept = new Set(PROJECT_FOLDERS.map((folder) => identity(at(folder))).filter((found) => found !== null));
+  const emptied = new Set();
+  const depth = (folder) => folder.split("/").length;
+  const candidates = [...new Set(deletes.flatMap(foldersOf))].sort((a, b) => depth(b) - depth(a) || (a < b ? -1 : a > b ? 1 : 0));
+  for (const folder of candidates) {
+    if (receiving.has(folder) || kept.has(identity(at(folder)))) {
+      continue;
+    }
+    if (fs.readdirSync(at(folder)).every((name) => deleted.has(`${folder}/${name}`) || emptied.has(`${folder}/${name}`))) {
+      emptied.add(folder);
+    }
+  }
+  return [...emptied];
+}
+
+// Removes the folders the plan found the deletes would empty, deepest first,
+// and returns those it removed. Each is checked again first, as a write
+// checks its folder, so one swapped for a symlink stays, as does one
+// something was saved into meanwhile. One that cannot be removed (no
+// permission, or in use on Windows) is a warning, not a failure: every
+// file is already restored.
+function removeEmptiedFolders(projectRoot, folders, warnings) {
+  const removed = [];
+  for (const folder of folders) {
+    const full = path.join(projectRoot, ...folder.split("/"));
+    try {
+      assertSafeProjectDirectory(full, projectRoot);
+      if (fs.readdirSync(full).length === 0) {
+        removeDirectory(full, { action: "rmdir" });
+        removed.push(folder);
+      }
+    } catch (error) {
+      warnings.push(warn("folder-not-removed", `Could not remove ${folder}/, which the restore left empty (${error.code ?? error.message}): delete it yourself if you do not need it`, folder));
+    }
+  }
+  return removed;
+}
+
+// The snapshot's id and the markdown files a restore writes back, by their
+// path in the snapshot, after checking the project can take each one: the
 // snapshot must hold story.md, and no folder on the way to a file may be a
-// symlink or a project of its own now. `--dry-run` runs this on the real
-// project before its preview, since the scratch copy leaves nested
-// projects out. A refusal comes before anything changes.
-export function restoreSources(root, name) {
-  const projectRoot = path.resolve(root);
+// symlink or a project of its own now. planRestore runs it on the real
+// project, so a --dry-run refuses these too, though its copy leaves nested
+// projects out.
+function restoreSources(projectRoot, name) {
   const { directory, id } = existingSnapshot(projectRoot, name);
   if (lstatIfExists(path.join(directory, "story.md"))?.isFile() !== true) {
     throw refusedError(`Cannot restore snapshot ${id}: ${SNAPSHOTS_DIR}/${id} has no story.md, so it is not a whole project. Nothing was changed`);
@@ -350,14 +455,12 @@ export function restoreSources(root, name) {
   const saved = new Map(markdownFiles(directory).map((file) => [projectPath(directory, file), file]));
   const checked = new Set();
   for (const relative of saved.keys()) {
-    const parts = relative.split("/").slice(0, -1);
-    for (let depth = 1; depth <= parts.length; depth += 1) {
-      const folder = parts.slice(0, depth).join("/");
+    for (const folder of foldersOf(relative)) {
       if (checked.has(folder)) {
         continue;
       }
       checked.add(folder);
-      const full = path.join(projectRoot, ...parts.slice(0, depth));
+      const full = path.join(projectRoot, ...folder.split("/"));
       const stats = lstatIfExists(full);
       if (stats?.isSymbolicLink()) {
         throw refusedError(`Cannot restore snapshot ${id}: ${folder}/ is a symlink, and ${relative} would be written through it. Nothing was changed`);
@@ -367,7 +470,7 @@ export function restoreSources(root, name) {
       }
     }
   }
-  return saved;
+  return { id, saved };
 }
 
 // before-restore-<id>-<n>: one more than the highest n a safety snapshot of

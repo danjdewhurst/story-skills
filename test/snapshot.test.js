@@ -4,10 +4,9 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { createEntity, createStoryProject } from "../src/story.js";
-import { ignoresCase } from "../src/files.js";
-import { listSnapshots, restoreSnapshot, snapshotId, snapshotProject } from "../src/snapshots.js";
+import { listSnapshots, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "../src/snapshots.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { git, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, git, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -26,6 +25,30 @@ const IGNORES_CASE = (() => {
 function renameCase(from, to) {
   fs.renameSync(from, `${to}.renaming`);
   fs.renameSync(`${to}.renaming`, to);
+}
+
+// The device and inode a lookup of `file` finds, or null.
+function identity(file) {
+  const stats = fs.lstatSync(file, { bigint: true, throwIfNoEntry: false });
+  return stats === undefined ? null : `${stats.dev}:${stats.ino}`;
+}
+
+// A file identity as a folder that ignores letter case gives it, on any file
+// system: each part of `file` below `root` is found in its folder in any
+// case. Injected into a restore, it stands in for macOS or Windows.
+function caseless(root) {
+  return (file) => {
+    let found = root;
+    for (const part of path.relative(root, file).split(path.sep)) {
+      const names = fs.lstatSync(found, { throwIfNoEntry: false })?.isDirectory() ? fs.readdirSync(found) : [];
+      const name = names.includes(part) ? part : names.find((entry) => entry.toLowerCase() === part.toLowerCase());
+      if (name === undefined) {
+        return null;
+      }
+      found = path.join(found, name);
+    }
+    return identity(found);
+  };
 }
 
 function invoke(cwd, argv) {
@@ -345,7 +368,9 @@ describe("story snapshot --restore", () => {
     expect(planned.dryRun).toBe(true);
     expect(planned.changes).toContainEqual({ action: "delete", path: "chapters/chapter-03.md" });
     expect(planned.changes).toContainEqual({ action: "create", path: ".snapshots/before-restore-draft-one-1/snapshot.json" });
-    expect(planned.changes.slice(-2)).toEqual([{ action: "delete", path: "notes/idea.md" }, { action: "rmdir", path: "notes" }]);
+    // A removed folder is listed after the files it held.
+    const position = (action, file) => planned.changes.findIndex((change) => change.action === action && change.path === file);
+    expect(position("rmdir", "notes")).toBe(position("delete", "notes/idea.md") + 1);
     expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(before);
     expect(fs.existsSync(path.join(root, "chapters", "chapter-03.md"))).toBe(true);
     const text = invoke(cwd, ["snapshot", "--restore", "draft-one", "--dry-run", "--path", root]);
@@ -474,21 +499,25 @@ describe("story snapshot --restore", () => {
     const { cwd, root } = project();
     fs.mkdirSync(path.join(root, "drafts"));
     invoke(cwd, ["snapshot", "base", "--path", root]);
-    // Emptied, and so is the folder that holds it.
-    writeMarkdown(path.join(root, "research", "deep", "ships.md"), "title: Ships");
+    // Emptied, with the folder that holds it, and a shallower one that sorts
+    // later: deepest first.
+    writeMarkdown(path.join(root, "scraps", "deep", "ships.md"), "title: Ships");
+    writeMarkdown(path.join(root, "zeta", "last.md"), "title: Last");
     // Each of these still holds something the restore never touches: an
-    // empty folder, a hidden folder, a nested project, dist/, an image.
+    // empty folder, a hidden folder (one level down, too), a nested
+    // project, dist/, an image.
     const keepers = {
       notes: ["old"],
       extras: [".obsidian"],
+      "lore/deep": [".obsidian"],
       side: ["spin"],
       misc: ["dist"],
       art: []
     };
     for (const [folder, [inside]] of Object.entries(keepers)) {
-      writeMarkdown(path.join(root, folder, "page.md"), "title: Page");
+      writeMarkdown(path.join(root, ...folder.split("/"), "page.md"), "title: Page");
       if (inside !== undefined) {
-        fs.mkdirSync(path.join(root, folder, inside));
+        fs.mkdirSync(path.join(root, ...folder.split("/"), inside));
       }
     }
     writeMarkdown(path.join(root, "side", "spin", "story.md"), "title: Spin");
@@ -499,17 +528,15 @@ describe("story snapshot --restore", () => {
     invoke(cwd, ["reindex", root]);
 
     const preview = json(invoke(cwd, ["snapshot", "--restore", "base", "--dry-run", "--json", "--path", root])).data;
-    expect(preview.changes.filter((change) => change.action === "rmdir")).toEqual([
-      { action: "rmdir", path: "research/deep" },
-      { action: "rmdir", path: "research" }
-    ]);
-    expect(preview.removedFolders).toEqual(["research/deep", "research"]);
+    expect(preview.removedFolders).toEqual(["scraps/deep", "scraps", "zeta"]);
+    expect(preview.changes.filter((change) => change.action === "rmdir").map((change) => change.path)).toEqual(["scraps/deep", "scraps", "zeta"]);
     const real = json(invoke(cwd, ["snapshot", "--restore", "base", "--json", "--path", root])).data;
     expect(real.changes).toEqual(preview.changes);
-    expect(real.removedFolders).toEqual(["research/deep", "research"]);
+    expect(real.removedFolders).toEqual(["scraps/deep", "scraps", "zeta"]);
     expect(real.deleted).toContain("worldbuilding/locations/harbour.md");
-    expect(fs.existsSync(path.join(root, "research"))).toBe(false);
-    for (const folder of ["drafts", "notes/old", "extras/.obsidian", "side/spin/story.md", "misc/dist/book.md", "art/cover.png", "worldbuilding/locations"]) {
+    expect(real.deleted).toContain("lore/deep/page.md");
+    expect(fs.existsSync(path.join(root, "scraps"))).toBe(false);
+    for (const folder of ["drafts", "notes/old", "extras/.obsidian", "lore/deep/.obsidian", "side/spin/story.md", "misc/dist/book.md", "art/cover.png", "worldbuilding/locations"]) {
       expect(fs.existsSync(path.join(root, ...folder.split("/")))).toBe(true);
     }
     expect(fs.readdirSync(path.join(root, "worldbuilding", "locations"))).toEqual([]);
@@ -517,38 +544,100 @@ describe("story snapshot --restore", () => {
 
     // Undone, the safety snapshot puts the files, and so their folders, back.
     const undo = invoke(cwd, ["snapshot", "--restore", "before-restore-base-1", "--path", root]);
-    expect(undo.out).toContain("  create  research/deep/ships.md\n");
+    expect(undo.out).toContain("  create  scraps/deep/ships.md\n");
     expect(undo.out).not.toContain("rmdir");
   });
 
-  test("probes the project's own file system for whether letter case counts", () => {
-    const { root } = project();
-    expect(ignoresCase(root, "story.md")).toBe(IGNORES_CASE);
-    expect(ignoresCase(root, "missing.md")).toBe(false);
-    // A name with no letters has no other case to look up.
-    fs.writeFileSync(path.join(root, "2026"), "");
-    expect(ignoresCase(root, "2026")).toBe(false);
-    if (!IGNORES_CASE) {
-      // Where case counts, STORY.MD can be a file of its own.
-      fs.writeFileSync(path.join(root, "STORY.MD"), "");
-      expect(ignoresCase(root, "story.md")).toBe(false);
+  test.skipIf(CHMOD_IGNORED)("a folder it cannot remove is a warning, and the restore still finishes (#524)", () => {
+    const { cwd, root } = project();
+    invoke(cwd, ["snapshot", "base", "--path", root]);
+    writeMarkdown(path.join(root, "scraps", "deep", "ships.md"), "title: Ships");
+    // scraps/ cannot lose its subfolder, though deep/ can lose its file.
+    fs.chmodSync(path.join(root, "scraps"), 0o555);
+    try {
+      const preview = invoke(cwd, ["snapshot", "--restore", "base", "--dry-run", "--json", "--path", root]);
+      const real = invoke(cwd, ["snapshot", "--restore", "base", "--json", "--path", root]);
+      expect(real.code).toBe(0);
+      const data = json(real).data;
+      expect(data).toMatchObject({ deleted: ["scraps/deep/ships.md"], removedFolders: [], reindexed: true });
+      expect(data.changes).toEqual(json(preview).data.changes);
+      expect(json(real).diagnostics).toEqual([expect.objectContaining({ code: "folder-not-removed", file: "scraps/deep" })]);
+      expect(fs.readdirSync(path.join(root, "scraps", "deep"))).toEqual([]);
+    } finally {
+      fs.chmodSync(path.join(root, "scraps"), 0o755);
     }
+    const text = invoke(cwd, ["snapshot", "--restore", "before-restore-base-1", "--path", root]);
+    expect(text.code).toBe(0);
   });
 
-  test("where case is ignored, never deletes a file the snapshot has under another case (#581)", () => {
+  test("checks a folder again before it removes it, and leaves a symlink in its place alone (#524)", () => {
     const { cwd, root } = project();
-    writeMarkdown(path.join(root, "notes", "Notes.md"), "title: Notes", "As in the snapshot.\n");
     invoke(cwd, ["snapshot", "base", "--path", root]);
-    // Renamed in case and edited, and a folder renamed in case. The
-    // comparison is injected, so this runs on every file system, and the
-    // snapshot's files are written back under the project's spelling.
+    writeMarkdown(path.join(root, "notes", "idea.md"), "title: Idea");
+    // As if notes/ had been swapped for a link to a folder outside the
+    // project after the restore was planned.
+    const outside = path.join(makeTempDir(), "elsewhere");
+    fs.mkdirSync(outside);
+    fs.symlinkSync(outside, path.join(root, "linked"), "junction");
+    const plan = { ...planRestore(root, "base"), folders: ["linked"] };
+    const result = restoreSnapshot(root, { name: "base", plan });
+    expect(result.deleted).toEqual(["notes/idea.md"]);
+    expect(result.removedFolders).toEqual([]);
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["folder-not-removed"]);
+    expect(result.warnings[0].message).toStartWith("Could not remove linked/, which the restore left empty (");
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  test("where a folder ignores case, restores a file the project spells another way, and never deletes it (#581)", () => {
+    const { root } = project();
+    writeMarkdown(path.join(root, "notes", "Notes.md"), "title: Notes", "As in the snapshot.\n");
+    snapshotProject(root, { name: "base" });
+    // Renamed in case and edited; chapters/ renamed in case, with a chapter
+    // to create in it; an init folder renamed in case, with a file to
+    // delete. The identity is injected, so this runs on every file system.
     fs.rmSync(path.join(root, "notes", "Notes.md"));
     writeMarkdown(path.join(root, "notes", "notes.md"), "title: Notes", "Edited since.\n");
     renameCase(path.join(root, "chapters"), path.join(root, "Chapters"));
-    const result = restoreSnapshot(root, { name: "base", caseInsensitive: true });
-    expect(result).toMatchObject({ updated: ["notes/notes.md"], created: [], deleted: [], removedFolders: [] });
+    fs.rmSync(path.join(root, "Chapters", "chapter-02.md"));
+    renameCase(path.join(root, "worldbuilding", "locations"), path.join(root, "worldbuilding", "Locations"));
+    writeMarkdown(path.join(root, "worldbuilding", "Locations", "harbour.md"), "title: Harbour");
+
+    const options = { name: "base", identity: caseless(root) };
+    const plan = planRestore(root, "base", options);
+    expect(plan.writes.map((write) => [write.path, write.created])).toEqual([["Chapters/chapter-02.md", true], ["notes/notes.md", false]]);
+    expect(plan.deletes.map((file) => file.path)).toEqual(["worldbuilding/Locations/harbour.md"]);
+    expect(plan.folders).toEqual([]);
+    const result = restoreSnapshot(root, options);
+    expect(result).toMatchObject({ updated: ["notes/notes.md"], created: ["Chapters/chapter-02.md"], deleted: ["worldbuilding/Locations/harbour.md"], removedFolders: [] });
     expect(fs.readFileSync(path.join(root, "notes", "notes.md"), "utf8")).toContain("As in the snapshot.");
     expect(fs.readFileSync(path.join(root, "Chapters", "chapter-02.md"), "utf8")).toContain("Cut me later.");
+    expect(fs.existsSync(path.join(root, "worldbuilding", "Locations"))).toBe(true);
+  });
+
+  test("refuses, before any change, a snapshot file it cannot match to one project file (#581)", () => {
+    const { root } = project();
+    writeMarkdown(path.join(root, "notes", "Notes.md"), "title: Notes");
+    snapshotProject(root, { name: "base" });
+    fs.rmSync(path.join(root, "notes", "Notes.md"));
+    writeMarkdown(path.join(root, "notes", "a.md"), "title: A");
+    writeMarkdown(path.join(root, "notes", "b.md"), "title: B");
+    // A file system that gives every note one identity (no inode numbers),
+    // and one that finds Notes.md but lists no name that is the same file.
+    const blurred = (file) => (path.basename(path.dirname(file)) === "notes" ? "one" : identity(file));
+    expect(() => restoreSnapshot(root, { name: "base", identity: blurred })).toThrow("Cannot restore snapshot base: the project finds notes/Notes.md under another spelling, but cannot tell which of its files that is (a.md, b.md). Nothing was changed");
+    const ghost = (file) => (path.basename(file) === "Notes.md" ? "ghost" : identity(file));
+    expect(() => restoreSnapshot(root, { name: "base", identity: ghost })).toThrow("cannot tell which of its files that is. Nothing was changed");
+    expect(fs.readdirSync(path.join(root, ".snapshots"))).toEqual(["base"]);
+  });
+
+  test.skipIf(IGNORES_CASE)("refuses a snapshot whose two spellings are one file in the project (#581)", () => {
+    const { root } = project();
+    writeMarkdown(path.join(root, "notes", "notes.md"), "title: Notes");
+    snapshotProject(root, { name: "base" });
+    writeMarkdown(path.join(root, ".snapshots", "base", "notes", "Notes.md"), "title: Other Notes");
+    expect(() => restoreSnapshot(root, { name: "base", identity: caseless(root) })).toThrow("Cannot restore snapshot base: its notes/Notes.md and notes/notes.md are one file in this project (notes/notes.md), whose folder does not tell the two spellings apart. Nothing was changed");
+    // Where the folder tells them apart, both are restored.
+    expect(restoreSnapshot(root, { name: "base" }).created).toEqual(["notes/Notes.md"]);
   });
 
   test.skipIf(!IGNORES_CASE)("on a file system that ignores case, keeps a file or folder renamed only in case (#581)", () => {
@@ -558,15 +647,18 @@ describe("story snapshot --restore", () => {
     renameCase(path.join(root, "notes", "Notes.md"), path.join(root, "notes", "notes.md"));
     fs.writeFileSync(path.join(root, "notes", "notes.md"), "---\ntitle: Notes\n---\nEdited since.\n");
     renameCase(path.join(root, "chapters"), path.join(root, "Chapters"));
+    fs.rmSync(path.join(root, "Chapters", "chapter-02.md"));
+    renameCase(path.join(root, "worldbuilding", "locations"), path.join(root, "worldbuilding", "Locations"));
+    writeMarkdown(path.join(root, "worldbuilding", "Locations", "harbour.md"), "title: Harbour");
 
     const preview = json(invoke(cwd, ["snapshot", "--restore", "base", "--dry-run", "--json", "--path", root])).data;
-    expect(preview.deleted).toEqual([]);
     const real = json(invoke(cwd, ["snapshot", "--restore", "base", "--json", "--path", root]));
-    expect(real.data).toMatchObject({ updated: ["notes/notes.md"], created: [], deleted: [], removedFolders: [] });
+    expect(real.data).toMatchObject({ updated: ["notes/notes.md"], created: ["Chapters/chapter-02.md"], deleted: ["worldbuilding/Locations/harbour.md"], removedFolders: [] });
     expect(real.data.changes).toEqual(preview.changes);
     expect(fs.readdirSync(path.join(root, "notes"))).toEqual(["notes.md"]);
     expect(fs.readFileSync(path.join(root, "notes", "Notes.md"), "utf8")).toContain("As in the snapshot.");
-    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).toContain("First paragraph.");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-02.md"), "utf8")).toContain("Cut me later.");
+    expect(fs.existsSync(path.join(root, "worldbuilding", "Locations"))).toBe(true);
 
     // The same text under another case: nothing to restore, and nothing lost.
     renameCase(path.join(root, "notes", "notes.md"), path.join(root, "notes", "NOTES.md"));

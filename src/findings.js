@@ -286,6 +286,8 @@ export const FINDING_CODES = {
   "split-references": "warning",
   "split-scenes": "warning",
   "merge-conflicts": "warning",
+  // story snapshot --restore
+  "folder-not-removed": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "unsplit-chapter-lines": "warning",

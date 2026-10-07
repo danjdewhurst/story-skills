@@ -691,18 +691,6 @@ export function fileSystemName(name) {
   return name.split(":")[0].replace(IGNORABLE_CHARACTERS, "").replace(/[. ]+$/, "").toLowerCase();
 }
 
-// Whether the file system holding `folder` finds a name in any letter case,
-// as macOS and Windows do by default and a casefold folder on Linux does:
-// `name`, a file in `folder`, is found again in the other case as the same
-// file, rather than as none or as a file of its own. It is asked of the
-// folder itself, not the platform, since a Mac can have a case-sensitive
-// volume and Windows a case-sensitive folder.
-export function ignoresCase(folder, name) {
-  const other = name === name.toUpperCase() ? name.toLowerCase() : name.toUpperCase();
-  const [first, second] = [name, other].map((each) => fs.lstatSync(path.join(folder, each), { bigint: true, throwIfNoEntry: false }));
-  return other !== name && first !== undefined && second !== undefined && first.dev === second.dev && first.ino === second.ino;
-}
-
 // NTFS also gives a long name a short one, unless the volume turns that
 // off: its first six letters without dots or spaces, `~` and a number, and
 // its extension cut to three letters (`GIT~1` for .git, `CHAPTE~1` for
