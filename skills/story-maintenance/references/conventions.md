@@ -24,7 +24,7 @@ Each setup and each event has one record. Update that record, and never copy it 
 - **A mystery clue or red herring** - `continuity/clues/{id}.md` (`story add clue`), checked by `story clues` and `story continuity`
 - **Any other setup the reader is owed a payoff on** (a Chekhov's gun, a vow, a prophecy, a deadline) - `continuity/promises/{id}.md` (`story add promise`), checked by `story continuity`
 - **A question the reader is left asking** - `continuity/questions/{id}.md` (`story add question`), checked by `story continuity`
-- **A hint inside one arc that needs no checked payoff** (an image, a motif, an echo) - a row of that arc's `## Foreshadowing` table, which no command reads. A clue or promise never gets a row there too
+- **A hint inside one arc that needs no checked payoff** (an image, a motif, an echo) - a row of that arc's `## Foreshadowing` table. `story check` only checks that its `chapter-NN` ids exist (and `move` and `split` rewrite or guard them); nothing checks its status or payoff. A clue or promise never gets a row there too
 - **When a drafted scene happens** - the scene's `date` and `time`, which `story timeline` orders and `story continuity` checks
 - **Backstory and planned events** - `plot/timeline.md`, the hand-kept plan. Once an event is drafted, set its `Chapter` cell; the scene's `date` and `time` then say when it happens, so do not add a plan row for each drafted scene
 
