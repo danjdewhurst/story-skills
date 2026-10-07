@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { findCommand, PDF_ENGINES, renderPdf, resolvePdfEngine, windowsScriptCommand } from "../src/pdf.js";
 import { shunnHtml } from "../src/packaging.js";
 import { createStoryProject } from "../src/story.js";
-import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, processRunning, writeMarkdown } from "./helpers.js";
 
 // The fake engines are scripts with a shebang, which Windows cannot run.
 const posix = process.platform !== "win32";
@@ -318,14 +318,12 @@ fs.writeFileSync(out, "%PDF-1.7\\n");
     const env = { ...process.env, HELPER_PID: pidFile, HELPER_DONE: doneFile };
     expect(renderPdf("<p>x</p>", { name: "chrome", file }, { env }).subarray(0, 5).toString()).toBe("%PDF-");
     const pid = Number(fs.readFileSync(pidFile, "utf8"));
-    let alive = true;
+    // processRunning, not process.kill(pid, 0): a zombie the parent has not
+    // reaped still answers kill(pid, 0), as when bun is pid 1 and reaps nothing.
+    let alive = processRunning(pid);
     for (let tries = 0; tries < 50 && alive; tries += 1) {
-      try {
-        process.kill(pid, 0);
-        Bun.sleepSync(20);
-      } catch {
-        alive = false;
-      }
+      Bun.sleepSync(20);
+      alive = processRunning(pid);
     }
     expect(alive).toBe(false);
     expect(fs.existsSync(doneFile)).toBe(false);
