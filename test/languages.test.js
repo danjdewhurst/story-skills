@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { compareImportNames, extractNameCandidates, importManuscript } from "../src/import.js";
-import { DEFAULT_LANGUAGE, canonicalTag, checkList, checkSet, hasLists, isLanguageTag, languagePack, projectLanguage, skippedCheck, skippedChecks, skippedLines } from "../src/languages/index.js";
+import { DEFAULT_LANGUAGE, canonicalTag, checkList, checkSet, hasLists, isLanguageTag, languagePack, lookupTag, projectLanguage, skippedCheck, skippedChecks, skippedLines } from "../src/languages/index.js";
 import { givenName } from "../src/names.js";
 import { adverbLabel, contentWords, proseRules, repeatedPhrases, sentenceLengths } from "../src/prose.js";
 import { endsSentence, splitSentences } from "../src/sentences.js";
@@ -127,6 +127,17 @@ describe("language packs", () => {
       const { root } = languageProject(tag);
       expect(validateProject(root).errors.map((error) => error.code)).not.toContain("invalid-language");
     }
+  });
+
+  // ISO 639-3 codes that have a two-letter code, as Danish, Finnish, and the
+  // right-to-left languages written with one (Urdu, Yiddish, Kurdish).
+  test("ISO 639-3 codes resolve to the two-letter code's pack or language", () => {
+    const codes = { dan: "da", fin: "fi", urd: "ur", yid: "yi", kur: "ku", snd: "sd", pus: "ps", div: "dv", uig: "ug" };
+    for (const [alias, code] of Object.entries(codes)) {
+      expect({ alias, lookup: lookupTag(alias) }).toEqual({ alias, lookup: [code, null] });
+    }
+    expect(languagePack("dan")).toMatchObject({ code: "da", locale: "da" });
+    expect(languagePack("fin")).toMatchObject({ code: "fi", locale: "fi" });
   });
 
   test("a set but invalid language resolves from its first subtag or the base pack, never English", () => {

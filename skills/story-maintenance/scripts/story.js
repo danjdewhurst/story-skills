@@ -8542,7 +8542,16 @@ var LANGUAGE_ALIASES = {
   swe: "sv",
   tha: "th",
   tur: "tr",
-  ukr: "uk"
+  ukr: "uk",
+  dan: "da",
+  fin: "fi",
+  div: "dv",
+  kur: "ku",
+  pus: "ps",
+  snd: "sd",
+  uig: "ug",
+  urd: "ur",
+  yid: "yi"
 };
 var GRANDFATHERED = {
   "en-gb-oed": ["en-gb-oxendict", null],

@@ -87,6 +87,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - `import --force` refuses a `chapters` entry that is a symlink or a file before it changes anything. ([#721](https://github.com/danjdewhurst/story-skills/issues/721))
   - Before, it wrote some files, stopped with a `changed on disk` message, and saved no snapshot.
   - The refusal exits with code 4 and says to replace the entry with a folder of chapter files.
+- A language written with its ISO 639-3 code (`dan`, `fin`, `urd`, and others) now finds the pack for its two-letter code. ([#738](https://github.com/danjdewhurst/story-skills/issues/738))
+  - `dan` and `fin` had no pack, so their books used the base pack's quotes and dashes.
+  - `urd`, `yid`, `kur`, `snd`, `pus`, `div`, and `uig` now build right to left, as `ur`, `yi`, `ku`, `sd`, `ps`, `dv`, and `ug` do.
 
 ## [0.23.0] - 2026-10-07
 

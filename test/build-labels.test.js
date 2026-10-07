@@ -290,10 +290,11 @@ describe("build labels", () => {
   });
 
   test("text direction reads language aliases as the packs do", () => {
-    for (const tag of ["fas", "per", "heb", "iw", "ara", "ar-arz"]) {
+    for (const tag of ["fas", "per", "heb", "iw", "ara", "ar-arz", "urd", "yid", "kur", "snd", "pus", "div", "uig"]) {
       expect({ tag, direction: textDirection(tag) }).toEqual({ tag, direction: "rtl" });
     }
     expect(textDirection("fa-Latn")).toBe("ltr");
+    expect(textDirection("dan")).toBe("ltr");
     expect(textDirection("")).toBe("ltr");
   });
 
