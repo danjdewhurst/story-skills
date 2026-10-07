@@ -81,9 +81,11 @@ story build . --format metadata
 The metadata sheet lists every missing field in its readiness checklist,
 including a `Permissions cleared for quoted matter` row that names each
 matter page still at `permission: pending`, whatever the story status,
-and a `No [TODO markers in chapter prose` row that names each chapter still
-holding a `[TODO` marker, which every build would print. Report it with the
-validate findings, and any `has no prose yet` warning from the build: that
+a `No [TODO markers in chapter prose` row that names each chapter still
+holding a `[TODO` marker, which every build would print, and a
+`No [TODO markers on matter pages` row that names each matter page still
+holding one, such as a `[TODO: author to supply]` ISBN line. Report the
+checklist with the validate findings, and any `has no prose yet` warning from the build: that
 chapter would ship as a heading-only page, so ask whether to write it or
 remove it. `validate` warns about
 `permission: pending` only once the story `status` is `complete`, and
@@ -140,7 +142,13 @@ story build . --format metadata
    free number. `--heading=false` writes `heading: false` (on an existing
    page, edit its `heading:` key rather than adding a second one). Without this page, every build
    except Shunn generates a minimal one from `copyright`; write it by hand when the book needs credits, permissions,
-   or a Library of Congress line.
+   or a Library of Congress line. Leave `[TODO: author to supply]` on any
+   line the author has not given you, such as an ISBN not yet bought.
+   `validate` warns about it (`matter-todo-markers`), and so does every
+   build that prints the page, while still building it. Ask the author
+   for each such line, and tell them not to upload a file built while
+   that warning shows. Promote the code to `level: error` under `severity`
+   in `story.md` only when the author asks for release builds to fail on it.
 3. For each epigraph, lyric, or quoted page in `matter/`, set `permission`
    (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`,
    and `credit`. Quoting song lyrics almost always needs permission.

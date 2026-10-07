@@ -15,6 +15,9 @@ from the template. Without this page, every build except Shunn (markdown,
 EPUB, DOCX, HTML, print, and `story export`) generates a minimal one from
 `copyright`.
 Ask the author for every name, credit, and number; never invent them.
+Write `[TODO: author to supply]` for one the author does not have yet,
+such as an ISBN not yet bought. `story validate` and every build that
+prints the page warn about it (`matter-todo-markers`) until it is filled.
 The template wording is English. For a book in another language
 (`language` in `story.md`), write the page in that language, following
 the conventions of copyright pages in the author's market.
