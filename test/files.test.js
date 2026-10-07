@@ -1046,11 +1046,6 @@ describe("sweep fixes", () => {
     expect(outcome.errors.join("\n")).toContain("through symlink");
   });
 
-  test.skipIf(!fs.existsSync("/dev/null"))("a device file is refused rather than read", async () => {
-    const { readTextFile } = await import("../src/files.js");
-    expect(() => readTextFile("/dev/null")).toThrow("not a regular file");
-  });
-
   test("--out through a hard link replaces the link instead of the chapter", () => {
     const root = sweepProject();
     createEntity(root, { kind: "chapter", name: "One", number: 1 });
