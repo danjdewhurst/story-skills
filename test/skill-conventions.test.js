@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { runCli } from "../src/cli.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { takesValue } from "../src/options.js";
 import { TERM_CATEGORIES } from "../src/scan.js";
+import { makeTempDir, memoryIo } from "./helpers.js";
 
 // Every skill links the shared conventions file and repeats the same short
 // summary, so a skill installed without story-maintenance still has them.
@@ -618,7 +620,8 @@ describe("skill triggers", () => {
       "make the voices distinct": "line-editing",
       "add a glossary term": "worldbuilding",
       "pitch my series": "series-continuity",
-      "pitch": "submission"
+      "pitch": "submission",
+      "retailer description": "submission"
     };
     for (const [phrase, owner] of Object.entries(owners)) {
       expect(skills.filter((name) => triggerPhrases(descriptions[name]).includes(phrase)), phrase).toEqual([owner]);
@@ -636,7 +639,8 @@ describe("skill triggers", () => {
       ["story-maintenance", "review copy", "feedback-triage"],
       ["worldbuilding", "glossary for translators", "adaptation"],
       ["series-continuity", "pitch", "submission"],
-      ["submission", "pitching a series", "series-continuity"]
+      ["submission", "pitching a series", "series-continuity"],
+      ["publishing", "retailer description", "submission"]
     ];
     for (const [from, phrase, to] of sends) {
       expect(sendsTo(descriptions[from], phrase, to), `${from} has no NOT clause sending "${phrase}" to ${to}`).toBe(true);
@@ -675,6 +679,51 @@ describe("skill triggers", () => {
       expect(list, `${file} has no story add term step`).toBeString();
       expect(list.split("|"), file).toEqual([...TERM_CATEGORIES]);
     }
+  });
+});
+
+// CLI detail lives in one skill file (#555, #528), so a CLI change has one
+// place to update: the check rules in story-maintenance's
+// continuity-checks.md, its command catalogue and import notes in its
+// other references, and story-init's manual setup in a reference of its
+// own. A phrase is found across line breaks, as a hard-wrapped skill
+// writes it.
+
+describe("CLI detail in one place", () => {
+  const filesSaying = (phrase) => markdownFiles(skillsDir)
+    .filter((file) => fs.readFileSync(file, "utf8").replace(/\s+/g, " ").includes(phrase))
+    .map((file) => path.relative(skillsDir, file).split(path.sep).join("/"));
+
+  test("only continuity-checks.md lists the voices attribution and story series rules", () => {
+    for (const phrase of ["A name before the verb wins over a name after it", "Two books that share a `book-number`"]) {
+      expect(filesSaying(phrase), phrase).toEqual(["story-maintenance/references/continuity-checks.md"]);
+    }
+  });
+
+  test("story-maintenance keeps its command catalogue and import notes in references", () => {
+    expect(filesSaying("<!-- command-reference -->")).toEqual(["story-maintenance/references/commands.md"]);
+    expect(filesSaying("Directory sources import in natural file-name order")).toEqual(["story-maintenance/references/editing-commands.md"]);
+  });
+
+  test("story-init drafts the working premise after story init, which writes neither field", () => {
+    expect(filesSaying("Populate each `_index.md` with an empty registry")).toEqual(["story-init/references/manual-setup.md"]);
+    const text = fs.readFileSync(path.join(skillsDir, "story-init", "SKILL.md"), "utf8");
+    const premise = text.indexOf("Draft a working premise");
+    expect(premise).toBeGreaterThan(text.indexOf("story init '{Title}'"));
+    expect(text.slice(premise).replace(/\s+/g, " ")).toContain("`story init` writes neither `premise` nor `counter-premise`");
+    const cwd = makeTempDir("story-init-premise-");
+    expect(runCli(["init", "Premise Probe", "--form", "novel", "--synopsis", "A probe."], memoryIo(cwd))).toBe(0);
+    const { data } = parseFrontmatter(fs.readFileSync(path.join(cwd, "premise-probe", "story.md"), "utf8"), "story.md");
+    expect(Object.keys(data)).not.toContain("premise");
+    expect(Object.keys(data)).not.toContain("counter-premise");
+  });
+
+  test("submission owns the retailer description, and publishing drafts none of its own", () => {
+    const read = (name) => fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8").replace(/\s+/g, " ");
+    expect(read("submission")).toContain("This skill owns the retailer description: `submission/blurb.md` is its only draft");
+    const publishing = read("publishing");
+    expect(publishing).toContain("The retailer description has one draft, in `submission/blurb.md`, and the `submission` skill owns it");
+    expect(publishing).not.toMatch(/long description|short description/);
   });
 });
 
