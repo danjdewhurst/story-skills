@@ -84,6 +84,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Text above the heading that a chapter file does not import is reported as an `unused-chapter-text` warning.
 - `import` keeps a chapter's multi-line `title` on one line of its heading. ([#719](https://github.com/danjdewhurst/story-skills/issues/719))
   - Before, a `title: |` block split the heading across lines, and the rest of the title sat as a stray line under it.
+- `import --force` refuses a `chapters` entry that is a symlink or a file before it changes anything. ([#721](https://github.com/danjdewhurst/story-skills/issues/721))
+  - Before, it wrote some files, stopped with a `changed on disk` message, and saved no snapshot.
+  - The refusal exits with code 4 and says to replace the entry with a folder of chapter files.
 
 ## [0.23.0] - 2026-10-07
 

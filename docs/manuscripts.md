@@ -1526,6 +1526,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or use `--force`, which replaces its chapters after saving them in snapshot `before-import-<n>`. |
 | `... The import stopped before deleting any chapter: it could not save the project as snapshot before-import-<n> first` | `import --force` could not save the project before deleting its chapters, often because a chapter is not UTF-8 text | Fix the problem the message names, then import again. No chapter was deleted. |
 | `Cannot import: chapters/<file> ..., so the snapshot import --force takes before replacing the chapters cannot keep it, ...` | A `chapter-NN.MD` file, or a symlink or folder named like a chapter, is in `chapters/` | Rename, move, or delete it, then import again. Nothing was changed. |
+| `Cannot import: chapters is a symlink, ...` or `... chapters is not a folder, ...` | The `chapters` entry of a project that `import --force` would replace is a symlink or a file | Replace it with a folder of chapter files, then import again. Nothing was changed. |
 | `<path> is not a story project: missing story.md` | The project path is wrong | Pass the folder that contains `story.md`. |
 | `No chapters found to export` | The project has no chapter files | Add chapters first. |
 | `Duplicate chapter number N: ...` | Two chapters share a `number` | Renumber one of them, then run `story reindex .`. |
