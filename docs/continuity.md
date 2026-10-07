@@ -1312,6 +1312,7 @@ Run `story progress . --log` at the end of each writing session. The [Automation
 
 ```shell
 story compare . --ref draft-1
+story compare . --snapshot draft-1
 story compare . --against ../the-tide-room-draft-1
 ```
 
@@ -1320,7 +1321,8 @@ story compare . --against ../the-tide-room-draft-1
 | Option | Earlier draft |
 |--------|---------------|
 | `--ref <git-ref>` | A branch, tag, or commit (with `~` and `^` suffixes) in the git repository that contains the project. The project may be a subfolder of the repository. |
-| `--against <path>` | Another copy of the project folder, such as a snapshot made before the pass |
+| `--snapshot <name>` | A snapshot saved with [`story snapshot`](cli-reference.md#snapshot), in the project's `.snapshots/` folder; no git needed |
+| `--against <path>` | Another copy of the project folder, such as one copied before the pass |
 
 With `--ref`, compare reads the `chapters/chapter-NN.md` files at that ref through `git show`. It never commits, tags, or changes the working tree. Old chapter files without frontmatter are compared by prose alone.
 
@@ -1340,7 +1342,7 @@ Words: 111 then, 143 now (+32)
 Comparison complete: 0 errors, 0 warnings, 0 dismissed
 ```
 
-The first line names the source: the absolute path of the `--against` folder, or `git ref <ref>` with `--ref`. A removed chapter reads `removed (was <n> words)`.
+The first line names the source: the absolute path of the `--against` folder, `git ref <ref>` with `--ref`, or `snapshot <name>` with `--snapshot`. A removed chapter reads `removed (was <n> words)`.
 
 How to read it:
 
@@ -1610,7 +1612,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Line edit or copyedit | `story prose .`, `story voices .` |
 | Starting or finishing a revision pass | `story passes .`, `story passes . --done <pass>` |
 | End of a session | `story progress . --log` |
-| After a multi-chapter revision pass | `story compare . --ref <snapshot>` |
+| After a multi-chapter revision pass | `story compare . --snapshot <name>`, or `story compare . --ref <tag>` in git |
 | Something is failing and you do not know why | `story doctor .` |
 
 Books linked with `follows` or `precedes` also need `story series .`, which checks canon shared across books; see [Series](series.md). To run the checks on every push, see [Automation and CI](automation.md).
