@@ -132,7 +132,7 @@ Present fixes in the edit-note format the `line-editing` skill uses, with
 the verse line as the location:
 
 ```markdown
-**stanza 2, line 3** · meter
+**stanza 2, line 3** · rhythm
 > Before: And the boat that did come on the Thursday tide
 > After: And the boat that came in on the Thursday tide
 Why: "did come" pads the line; "came in" keeps four beats without the filler.
