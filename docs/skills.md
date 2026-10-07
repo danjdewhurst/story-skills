@@ -575,7 +575,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 2. Records choices the prose already makes rather than inventing new ones, and asks you which form wins when the draft is inconsistent.
 3. Sets the frontmatter: `dialect` (`british`, `american`, or `unspecified`), one `preferred` entry (`use` and `avoid`) per variant, `watch-words`, and `allow-words`.
 4. Writes one line per major speaker under Character Voices, each linked to the character file, which remains canon. Words a speaker reaches for go in the character file's `voice-words` list and words they would never say in `voice-avoid`, so `story voices` can check them.
-5. Runs `story prose .`, fixes every avoided spelling, and treats the other findings as prompts to reread rather than orders. It asks before renaming a character whose name is too close to another's, checks the replacement with `story names '<Candidate>'`, then uses `story rename character <id> '<New Name>'`.
+5. Runs `story prose .`, fixes every avoided spelling, and treats the other findings as prompts to reread rather than orders. It asks before renaming a character whose name is too close to another's, checks the replacement with `story names '<Candidate>'`, then previews `story rename character <id> '<New Name>' --prose --dry-run` and runs it without `--dry-run`, so the chapter text follows as well as the references.
 6. Runs `story voices .`, which fingerprints each character's attributed dialogue and warns when a character says a `voice-avoid` word, when two characters with five or more lines each sound alike, and when a `voice-words` entry is never said. It revises the dialogue, or asks before updating the character's voice lists when the draft has found a better voice.
 
 `story voices` attributes a line only when the narration names the speaker next to a speech verb (`"...," Sera said`, `said Kael`), or when the paragraph's narration names exactly one character. Pronoun tags (`she said`) are never attributed, so a close-third POV character is often under-counted. [Continuity and analysis](continuity.md) covers the output.
@@ -586,7 +586,7 @@ When `story.md` links other books, reveals the series depends on get a stable `f
 
 **Writes.** `style-sheet.md`, character `voice-words` and `voice-avoid` (with your approval), and chapter prose.
 
-**CLI.** `story reindex .`, `story wordcount . --write`, and `story check .`, then `story prose .` and `story voices .`, and `story names` plus `story rename character` for a name change.
+**CLI.** `story reindex .`, `story wordcount . --write`, and `story check .`, then `story prose .` and `story voices .`, and `story names` plus `story rename character --prose` for a name change.
 
 **References.**
 

@@ -169,8 +169,10 @@ asks after seeing what was carried over.
   title freely before chapter one, then run `story reindex .`: the story
   id in every registry, `plot/timeline.md`, and `continuity/state.md`
   follows the `story.md` title, so `story validate` fails until they are
-  rewritten. After chapter one, rename characters with `story rename` so
-  references follow.
+  rewritten. After chapter one, rename a character with
+  `story rename character <id> '<New Name>' --prose`, previewed with
+  `--dry-run` first, so the chapter text follows as well as the
+  references. Without `--prose` the prose keeps the old name.
 - Never present a comparable title, author, prize, or market fact as
   verified without a source.
 
