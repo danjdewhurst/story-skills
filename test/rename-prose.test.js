@@ -69,6 +69,16 @@ describe("story rename --prose", () => {
     expect(out).toContain("Renamed 3 names in 1 chapter; left 1 alias as written\n");
   });
 
+  test("a name wrapped across a CRLF line break keeps its CRLF line break (#731)", () => {
+    const root = project();
+    const file = chapter(root, 1, "Later Edran\nVale slept.\n");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\n/g, "\r\n"));
+    const { code, out } = invoke(root, ["rename", "character", "edran-vale", "Mara Holt", "--prose"]);
+    expect(code).toBe(0);
+    expect(fs.readFileSync(file, "utf8")).toContain("Later Mara\r\nHolt slept.\r\n");
+    expect(out).toContain("chapters/chapter-01.md:10:7: Edran Vale → Mara Holt (wraps to line 11)\n");
+  });
+
   test("without --prose the text is left alone, and outline chapters are never changed", () => {
     const root = project();
     const drafted = chapter(root, 1, "Edran waited.");
