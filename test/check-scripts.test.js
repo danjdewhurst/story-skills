@@ -964,6 +964,12 @@ describe("check-links", () => {
     expect(maskCode(text).split("\n").length).toBe(text.split("\n").length);
   });
 
+  test("a <!-- in a code span opens no comment, so a later comment hides nothing else", () => {
+    const text = "A `<!--` that never closes.\n\n## Kept\n\n[seen](seen.md)\n\n<!-- marker -->\n";
+    expect([...anchorsFor(text)]).toEqual(["kept"]);
+    expect(extractLinks(text)).toEqual([{ target: "seen.md", line: 5 }]);
+  });
+
   test("extracts titled links, images, angle links, references, and html", () => {
     const text = "[a](a.md \"Title\") ![img](pic.png 'Alt')\n[b](<with space.md>) [c](has(paren).md)\n[ref]: ref.md \"t\"\n<img src=\"logo.svg\"> <a href=\"page.md#x\">x</a>\n";
     expect(extractLinks(text).map((link) => link.target)).toEqual(["a.md", "pic.png", "with space.md", "has(paren).md", "ref.md", "logo.svg", "page.md#x"]);
