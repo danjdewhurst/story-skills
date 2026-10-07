@@ -118,6 +118,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Skill reference files now tell agents to run the maintenance block after they add, rename, or remove an entity. ([#815](https://github.com/danjdewhurst/story-skills/issues/815), [#816](https://github.com/danjdewhurst/story-skills/issues/816))
   - The block is `story reindex .`, `story wordcount . --write`, and `story check .`, in that order.
   - The affected references cover the `research`, `publishing`, `premise-workshop`, `voice-style`, `story-maintenance`, `interactive-fiction`, `series-continuity`, `adaptation`, `submission`, `discovery-drafting`, and `editorial-review` skills.
+- Publishing, submission, series, adaptation, and motif skill instructions now match the CLI and each other. ([#785](https://github.com/danjdewhurst/story-skills/issues/785), [#788](https://github.com/danjdewhurst/story-skills/issues/788), [#796](https://github.com/danjdewhurst/story-skills/issues/796), [#798](https://github.com/danjdewhurst/story-skills/issues/798), [#799](https://github.com/danjdewhurst/story-skills/issues/799), [#802](https://github.com/danjdewhurst/story-skills/issues/802), [#803](https://github.com/danjdewhurst/story-skills/issues/803), [#804](https://github.com/danjdewhurst/story-skills/issues/804), [#805](https://github.com/danjdewhurst/story-skills/issues/805))
+  - `publishing` sends clearance questions for quoted matter to `editorial-review`, and quotes its readiness rows as the metadata sheet prints them.
+  - `submission` puts the CLI output apart from what the CLI does not report, says an undecided thread stays open, names `series-pitch` as a package file, and sets `chapter-heading` in the `story.md` `labels:` list.
+  - `series-continuity` gives the companion `init` form, and says what `init` does not inherit from an unlinked book.
+  - `adaptation` drops the `translation-notes` planning type, which had no template.
+  - Motif rows live only in `continuity/motifs.md`, which the CLI does not read. A motif row in an arc's `## Foreshadowing` table is no longer advised.
 
 ## [0.23.0] - 2026-10-07
 
