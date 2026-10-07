@@ -29222,7 +29222,8 @@ function removeStaleCodexPages(directory, written) {
     }
     const stale = stalePages(folder);
     stale.forEach((file) => removeFile(file));
-    if (folder !== directory && fs11.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
+    const keptByWrite = isPlanning() && [...written].some((file) => path16.dirname(file) === folder);
+    if (folder !== directory && !keptByWrite && fs11.readdirSync(folder).length === (isPlanning() ? stale.length : 0)) {
       removeDirectory(folder);
     }
   }

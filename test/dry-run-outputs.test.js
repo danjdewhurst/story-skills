@@ -117,6 +117,18 @@ describe("--dry-run for builds and exports", () => {
     expect(codex.planned).toContainEqual({ action: "delete", path: "dist/codex/systems" });
   });
 
+  test("a codex preview keeps an entity folder that the build writes a page into", () => {
+    const { parent, root } = copyExample();
+    expect(invoke(root, ["build", "--format", "codex"]).code).toBe(0);
+    // The artifacts folder holds only the old page, so the new page is what
+    // keeps it; a preview cannot see that page until the build writes it.
+    fs.renameSync(path.join(root, "worldbuilding", "artifacts", "vales-compass.md"), path.join(root, "worldbuilding", "artifacts", "vale-compass.md"));
+    const codex = expectTextParity({ parent, cwd: root, base: root, argv: ["build", "--format", "codex"], command: "build", rewrites: true });
+    expect(codex.planned).not.toContainEqual({ action: "delete", path: "dist/codex/artifacts" });
+    expect(codex.planned).toContainEqual({ action: "create", path: "dist/codex/artifacts/vale-compass.html" });
+    expect(codex.planned).toContainEqual({ action: "delete", path: "dist/codex/artifacts/vales-compass.html" });
+  });
+
   test("export --dry-run plans an --out outside the project, folders and all", () => {
     const { parent, root } = copyExample();
     const out = path.join(parent, "outbox", "drafts", "book.md");
