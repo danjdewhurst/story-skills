@@ -277,7 +277,7 @@ The examples on this page show stdout and stderr together, as a terminal does.
 | `0` | The command succeeded. For checks, there were no errors. Warnings and dismissed findings do not change the exit code, unless `severity` in `story.md` promotes a warning to an error. |
 | `1` | Findings: a check reported at least one `error:` line. |
 | `2` | Usage error: an unknown command or option, a missing or invalid option value, an unexpected argument or option, a missing required argument (such as `knowledge` without `--at`), an id that does not exist, or an `import` source that is missing or cannot be read. |
-| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `check`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
+| `3` | Not a usable story project: no `story.md`, invalid `cli-defaults` or `severity` in `story.md` (for commands other than `validate`, `report`, `next`, and `doctor`), a file the command needs cannot be read or parsed or is a symlink, a newer schema than this CLI knows, or nothing to build from. |
 | `4` | Refused or failed write: the target already exists, is project source, inside a `.git` folder, or outside the project, is a symlink, is locked by another story command, changed on disk meanwhile, or the file system refused it, or the project lock could not be created; or `build --pdf` found no PDF engine, or the engine failed. |
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
@@ -796,7 +796,7 @@ story check [path] [--strict]
 
 Runs [`validate`](#validate), [`links`](#links), and [`continuity`](#continuity) over one scan of the project and exits once, with the same [exit codes](#output-streams-and-exit-codes): `1` when any of them reports an error. Each check alone misses problems the others catch: `validate` passes a chapter with `pov: nobody-here`, which only `links` reports.
 
-Each finding is reported once. A file that fails to parse, which every check reports, is listed under `validate`, and a chapter or scene date such as `2024-13-45` is reported as the `validate` error (`invalid-date`), not again as the `continuity` warning (`malformed-date`). [`severity`](#defaults-and-severity-from-storymd) entries in `story.md` and [continuity exemptions](continuity.md#exemptions) apply as they do in each check, and `check`, like `validate`, still runs while `cli-defaults` or `severity` is invalid and reports the problem.
+Each finding is reported once. A file that fails to parse, which every check reports, is listed under `validate`, and a chapter or scene date such as `2024-13-45` is reported as the `validate` error (`invalid-date`), not again as the `continuity` warning (`malformed-date`). [`severity`](#defaults-and-severity-from-storymd) entries in `story.md` and [continuity exemptions](continuity.md#exemptions) apply as they do in each check. While `cli-defaults` or `severity` is invalid, `check` refuses to run and exits 3, as `links` and `continuity` do, rather than pass or fail without the severity a CI job set; `story validate` lists the problems.
 
 | Option | Effect |
 |---|---|

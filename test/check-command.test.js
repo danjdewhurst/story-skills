@@ -150,14 +150,20 @@ describe("story check", () => {
     expect(invoke(root, ["check", "--strict=false"]).code).toBe(0);
   });
 
-  test("still runs while story.md severity is invalid, and reports it", () => {
+  test("refuses to run while story.md severity is invalid, as links does (#566)", () => {
     const root = project();
     const storyFile = path.join(root, "story.md");
     fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace(/^---\n/, "---\nseverity:\n  - warning: not-a-code\n    level: error\n"), "utf8");
     expect(invoke(root, ["links"]).code).toBe(3);
-    const { code, err: stderr } = invoke(root, ["check"]);
-    expect(code).toBe(1);
-    expect(stderr).toContain("not-a-code");
+    const { code, out, err: stderr } = invoke(root, ["check"]);
+    expect(code).toBe(3);
+    expect(out).toBe("");
+    expect(stderr).toBe("Fix cli-defaults or severity in story.md before running story check (story validate lists every problem): story.md severity[0] names unknown warning not-a-code\n");
+    const json = invokeJson(root, ["check", "--json"]);
+    expect(json.code).toBe(3);
+    expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ code: "unusable-project", check: "check" })]);
+    // validate still runs, and lists the problem.
+    expect(invoke(root, ["validate"]).err).toContain("error: story.md severity[0] names unknown warning not-a-code");
   });
 
   test("continuity exemptions dismiss findings as story continuity does", () => {

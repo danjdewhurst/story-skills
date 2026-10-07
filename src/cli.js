@@ -85,8 +85,10 @@ function formatCommandsHelp() {
 
 // Commands that still run when story.md cli-defaults or severity is invalid,
 // ignoring both, because they report the problem: validate lists it, and
-// check, report, next, and doctor include it in their checks.
-const CONFIG_REPAIR_COMMANDS = new Set(["validate", "check", "report", "next", "doctor"]);
+// report, next, and doctor include it in their checks. check is a pass or
+// fail gate, as links and continuity are, so it refuses with them rather
+// than pass or fail without the severity a CI job set.
+const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 
 export function runCli(argv, io) {
   let configured = [];
