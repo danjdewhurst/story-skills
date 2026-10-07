@@ -61,8 +61,37 @@ the panel.
 2. Pick the round number: the next free `N` under `feedback/`. A panel
    gets its own round. Never add simulated reads to a round of human
    readers, so the human synthesis stays independent.
-3. Build the review copy the panel cites, so its labels match the ones
-   human readers will use:
+3. Save the text the panel will cite under the name `panel-round-{N}`,
+   so `feedback-triage` can map its labels to a later draft with
+   `story compare . --ref panel-round-{N}` once the chapters change:
+
+   - **Git project:** work from the book's folder, the one that holds
+     `story.md` (`cd` there first), because `-- .` below means the
+     current folder. Check that `.gitignore` lists `dist/` (add the line
+     if it is missing), so earlier review copies stay out of the commit.
+     Then run `git status --untracked-files=all -- .` and show the user
+     what it lists: the copy is built from the working tree, but a tag
+     points at the last commit, so uncommitted changes would make the two
+     differ. Look through it for private files (a `.env`, keys or
+     credentials, scanned documents): unless the user says to commit one,
+     add it to `.gitignore` first. Ask before committing and before
+     tagging. With approval, commit the project folder only (skip the
+     commit when the tree is already clean) and tag that commit:
+
+     ```shell
+     git add -A -- .
+     git commit -m "Simulated reader panel round {N}" -- .
+     git tag panel-round-{N}
+     ```
+
+     If the user declines the commit, never tag the last commit over an
+     uncommitted tree: take a snapshot as below, or stop. Never push, and
+     never move or delete a tag, without the user's approval.
+   - **Project without git, or the user declined the commit:** take a
+     snapshot with `story snapshot panel-round-{N} --path .`.
+
+4. Build the review copy the panel cites from that text, so its labels
+   match the ones human readers will use:
 
    ```shell
    story build . --format html --stamp panel-round-{N}
@@ -141,7 +170,10 @@ rates a note `blocking`, and the first-page reader has no `nit`).
 
 ### 5. Hand off to feedback-triage
 
-Hand the round to the `feedback-triage` skill for synthesis. It reads
+Hand the round to the `feedback-triage` skill for synthesis, and tell it
+the round's tag or snapshot (`panel-round-{N}`): it maps a label to the
+current text with `story compare . --ref panel-round-{N} --anchor <label>`,
+or `--snapshot panel-round-{N}` in place of `--ref`. It reads
 `source: simulated` and weighs the round accordingly: agreement between
 personas is not independent convergence, and a simulated round's
 `ready` verdict means ready for human readers, nothing more. Tell the
@@ -166,10 +198,11 @@ user plainly that the notes are simulated, and which personas ran.
 Use the Story CLI when it is available. If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root. If no CLI is available, read the chapters in range directly and cite chapter and paragraph positions by hand.
 
 The CLI does not read `feedback/`, so panel files never cause validation
-errors. Run `story build . --format html --stamp panel-round-{N}` for the
-labels and `story context chapter-{NN} --path .` for spoiler-safe
-background. When the synthesis adds or resolves `continuity/questions/`
-entries, run:
+errors. Save the text as `panel-round-{N}` (a git tag, or
+`story snapshot panel-round-{N} --path .`), then run
+`story build . --format html --stamp panel-round-{N}` for the labels and
+`story context chapter-{NN} --path .` for spoiler-safe background.
+When the synthesis adds or resolves `continuity/questions/` entries, run:
 
 ```shell
 story reindex .

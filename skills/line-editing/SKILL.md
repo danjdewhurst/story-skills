@@ -163,8 +163,17 @@ story build . --format print --trim 6x9
    typos introduced by editing, doubled or missing words, broken scene
    breaks, chapter headings, matter pages, widows and orphans in the print
    copy. Cite locations by the HTML copy's paragraph anchors (`ch03-p12`).
-4. Rendering the print HTML to PDF needs a paged-media engine the user
-   installs (Paged.js CLI, WeasyPrint, or Prince); ask before installing.
+4. To proof the print copy as a PDF, add `--pdf` to the print build:
+
+   ```shell
+   story build . --format print --trim 6x9 --pdf
+   ```
+
+   It finds and runs a paged-media engine the user has installed (Prince,
+   WeasyPrint, `pagedjs-cli`, or Chrome as a fallback) and writes
+   `dist/<story-id>.pdf`. Name an engine with `--pdf-engine <name|path>`.
+   With none installed it stops (exit 4) and lists what to install; the
+   CLI bundles none. Ask before installing anything.
 
 ### 7. Close the pass
 

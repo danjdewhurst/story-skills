@@ -84,10 +84,10 @@ outline-first drafting workflow.
    consecutive `yes` outcomes, four or more scene units without a sequel,
    and three or more chapters in a row ending on `resolution`.
 7. **Hand off cleanly.** Scene/sequel planning feeds the chapter-writing
-   drafting workflow; theme-audit findings feed revision-continuity. When a
-   scene decision changes canon (new knowledge, moved objects, changed
-   relationships), update `continuity/state.md` and the affected entity
-   files (bidirectional links, per the shared story conventions).
+   drafting workflow. When a scene decision changes canon (new knowledge,
+   moved objects, changed relationships), update `continuity/state.md`
+   and the affected entity files (bidirectional links, per the shared
+   story conventions).
 
 ## Conventions
 

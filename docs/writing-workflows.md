@@ -428,7 +428,7 @@ Write the next chapter.
 4. **Draft.** It writes the prose in the POV character's voice and the tense from the packed context, into `chapters/chapter-NN.md`, with the approved outline kept above `## Chapter Text`. Word counts start at that heading, so the outline never inflates them. Each speaker uses the `voice-words` and avoids the `voice-avoid` words from their packed character card. It also creates a `scenes/chapter-NN-scene-NN.md` record for each scene.
 5. **Update everything else.** Timeline, arc plot points, scene records, `continuity/state.md`, foreshadowing status. Registry tables, including `chapters/_index.md`, are rebuilt by `story reindex` and are not edited by hand. It sets each scene's `outcome` and the chapter's `hook` (`cliffhanger`, `question`, `revelation`, `reversal`, `decision`, `emotional`, `resolution`) to what actually happened on the page, not what the outline planned. It flags character changes (an injury, a revelation) for you to confirm.
 
-The in-repo [`line-editing`](../skills/line-editing/SKILL.md) skill owns the prose-quality pass on a drafted chapter; see [Line editing](#line-editing). The chapter-writing skill also checks whether the separate [`better-writing`](https://github.com/forjd/better-writing) skill is installed, an optional complement. If it is, the agent uses it for a final prose pass. If not, the agent asks before installing anything and otherwise falls back to its own [writing guidelines](../skills/chapter-writing/references/writing-guidelines.md).
+The in-repo [`line-editing`](../skills/line-editing/SKILL.md) skill owns the prose-quality pass on a drafted chapter; see [Line editing](#line-editing). The chapter-writing skill also checks whether the separate [`better-writing`](https://github.com/forjd/better-writing) skill is installed, an optional complement. If it is, the agent uses it for a final prose pass. If not, the agent falls back to its own [writing guidelines](../skills/chapter-writing/references/writing-guidelines.md). It offers you the link once, when it drafts the project's first chapter, not every session, and asks before installing anything.
 
 The chapter and scene scaffolds come from the CLI, which can set the pacing fields up front:
 
@@ -447,7 +447,7 @@ story wordcount . --write
 story check .
 story next .
 story pacing .
-story progress . --log
+story progress .
 ```
 
 `story check .` runs `validate`, `links`, and `continuity`, prints each finding, and exits non-zero on errors. `story next .` can name those same errors as a P0 line and still exit 0, without the findings, so `story check` is the check.
@@ -479,7 +479,7 @@ warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters
 
 `--pov` already put `nell-carrow` in both `characters` lists, so only the location is missing. Adding `gannet-point-light` to the chapter's `locations` clears it. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
 
-`--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. `--log` also appends the session to `progress.md`:
+`--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. When you keep a session log (the project has a `progress.md`) or ask to log the session, the skill runs `story progress . --log` instead, which also appends the session to `progress.md`:
 
 ```text
 Logged 132 words for 2026-09-24 in /path/to/the-gannet-point-light/progress.md
@@ -1233,7 +1233,7 @@ Chapters carry the accepted edits and, where you agreed, `status: revised`. `sty
 Run a reader panel on chapters 1 to 5 before I send them to beta readers.
 ```
 
-The skill runs five personas by default: a reader of your genre, a line editor, a sensitivity persona, a continuity-minded reader, and a first-page reader. It builds a stamped review copy for paragraph labels, gives each persona only the chapters in range plus `story context` for background (nothing from later chapters, the outline, or the synopsis; its `What <name> knows that the reader has not seen` subsection is deleted first), and writes one file per persona:
+The skill runs five personas by default: a reader of your genre, a line editor, a sensitivity persona, a continuity-minded reader, and a first-page reader. It saves the text as `panel-round-N` (a git tag, with your approval, or a `story snapshot`) and builds a stamped review copy from it for paragraph labels, so feedback-triage can map those labels to a later draft with `story compare`. It gives each persona only the chapters in range plus `story context` for background (nothing from later chapters, the outline, or the synopsis; its `What <name> knows that the reader has not seen` subsection is deleted first), and writes one file per persona:
 
 ```text
 feedback/
@@ -1816,7 +1816,7 @@ Which commands each skill runs when it finishes. All take the project path, `.` 
 | Project setup (`story-init`) | | | | ✓ | | `init --form`, `next` (suggested) |
 | Plot (`plot-structure`) | | ✓ | ✓ | ✓ | | `timeline`, `pacing`, `clues`, `diagram timeline`/`arcs`/`clues` |
 | Character, world (`character-management`, `worldbuilding`) | | ✓ | ✓ | ✓ | | `names`, `diagram relationships`/`locations` |
-| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `next`, `pacing`, `progress --log` |
+| Outline-first chapter (`chapter-writing`) | ✓ | ✓ | ✓ | ✓ | ✓ | `next`, `pacing`, `progress` (`--log` if you keep a log) |
 | Discovery chapter (`discovery-drafting`) | ✓ | ✓ | ✓ | ✓ | ✓ | `progress --log` |
 | Scene craft (`scene-craft`) | | ✓ | ✓ | ✓ | ✓ | `pacing` |
 | Theme (`theme-craft`) | | ✓ | ✓ | ✓ | | |
@@ -1824,8 +1824,8 @@ Which commands each skill runs when it finishes. All take the project path, `.` 
 | Genre packs (`genre-craft`) | | ✓ | ✓ | ✓ | ✓ | `clues` (mystery), `pacing` (thriller, serial) |
 | Research (`research`) | | ✓ | ✓ | ✓ | | |
 | Revision (`revision-continuity`) | ✓ | ✓ | ✓ | ✓ | ✓ | `passes`, `next`, `doctor`, `pacing`, `clues`, `voices`, `compare`, `series` if linked |
-| Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print` |
-| Reader panel (`reader-panel`) | | ✓ | ✓ | ✓ | | `build --format html --stamp`, `context`, `prose` |
+| Line editing (`line-editing`) | ✓ | | ✓ | ✓ | | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `build --pdf` |
+| Reader panel (`reader-panel`) | | ✓ | ✓ | ✓ | | `snapshot` (without git), `build --format html --stamp`, `context`, `prose` |
 | Feedback (`feedback-triage`) | | ✓ | ✓ | ✓ | ✓ | `build --format html` |
 | Editorial review (`editorial-review`) | ✓ | ✓ | ✓ | ✓ | | `add research`, `build --format docx`/`shunn`/`html`/`metadata`, `compare --ref` |
 | Submission (`submission`) | ✓ | | ✓ | ✓ | ✓ | `prose`, `report`, `synopsis`, `build`, `build --format metadata` |
