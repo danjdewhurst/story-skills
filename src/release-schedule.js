@@ -5,13 +5,16 @@ import { plural } from "./plural.js";
 
 // A serial's release schedule: when each episode (chapter, in reading
 // order) goes out, from a chapter's own `release-date` or from the story.md
-// cadence, `release-every` days from `release-start`. Release dates are
-// real-world days, always YYYY-MM-DD, even in a book with a story calendar.
-// Pure functions: the caller passes the chapters and today.
+// cadence, `release-every` days or months from `release-start`. Release
+// dates are real-world days, always YYYY-MM-DD, even in a book with a story
+// calendar. Pure functions: the caller passes the chapters and today.
 
 // An undrafted episode due within this many days is warned about, as well
-// as one already past its date.
+// as one already past its date, unless story.md sets release-warn-days.
 export const RELEASE_SOON_DAYS = 3;
+
+// A monthly release-every, such as `1 month` or `3 months`.
+const MONTHS_PATTERN = /^(\d+)\s+months?$/i;
 
 // The last day a YYYY-MM-DD date can name: a cadence that runs past it
 // schedules nothing more.
@@ -41,34 +44,109 @@ export function releaseData(release) {
   return rest;
 }
 
-// The story.md cadence as { every, start }, or null when either field is
-// unset or invalid (validate reports which).
-export function releaseCadence(data) {
-  const every = data["release-every"];
-  const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
-  return Number.isInteger(every) && every >= 1 && start ? { every, start: start.text, startDays: start.days } : null;
+// story.md release-every as { every, unit }: a whole number of days, such
+// as 7, or of months, such as `1 month`. null when it is neither, or is
+// below 1 (validate reports which).
+export function releaseEvery(value) {
+  if (Number.isInteger(value)) {
+    return value >= 1 ? { every: value, unit: "day" } : null;
+  }
+  const months = releaseMonths(value);
+  return months !== null && months >= 1 ? { every: months, unit: "month" } : null;
 }
 
-// The release schedule as { every, start, complete, last, next, episodes,
-// warnings }, or null when the book sets no cadence and no chapter has a
-// release-date. `chapters` are { id, file, releaseDate, drafted } in reading
-// order, with `releaseDate` the raw frontmatter value or undefined; the
-// episode number is the chapter's position. An episode whose release-date is
-// not a real day is left out rather than put back on the cadence (validate
-// reports it). With a cadence, the episodes after the last chapter are
+// The number of months a `N months` value names, even 0, or null for any
+// other value.
+export function releaseMonths(value) {
+  const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
+  return match ? Number(match[1]) : null;
+}
+
+// The due-soon window in days: story.md release-warn-days, or
+// RELEASE_SOON_DAYS when it is unset or invalid (validate reports it).
+export function releaseWarnDays(data) {
+  const days = data["release-warn-days"];
+  return Number.isInteger(days) && days >= 0 ? days : RELEASE_SOON_DAYS;
+}
+
+// The story.md cadence as { every, unit, start }, or null when either
+// field is unset or invalid (validate reports which). A monthly cadence
+// also keeps the start's month, counted from year 0, and day of the month.
+export function releaseCadence(data) {
+  const every = releaseEvery(data["release-every"]);
+  const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
+  if (every === null || !start) {
+    return null;
+  }
+  const date = new Date(start.days * 86400000);
+  return { ...every, start: start.text, startDays: start.days, startMonth: date.getUTCFullYear() * 12 + date.getUTCMonth(), startDay: date.getUTCDate() };
+}
+
+// The day the cadence releases episode `index + 1`, in days since
+// 1970-01-01: `every` days after the one before, or `every` months after it
+// on the start's day of the month, or on the month's last day when the
+// month is shorter, so a cadence from 31 January goes out on 28 February,
+// or 29 in a leap year, then 31 March. A month past 9999 is Infinity.
+function cadenceDays(cadence, index) {
+  if (cadence.unit === "day") {
+    return cadence.startDays + index * cadence.every;
+  }
+  const month = cadence.startMonth + index * cadence.every;
+  const year = Math.floor(month / 12);
+  if (year > 9999) {
+    return Infinity;
+  }
+  // Day 0 of the next month is this month's last day.
+  const lastDay = utcDate(year, month % 12 + 1, 0).getUTCDate();
+  return utcDate(year, month % 12, Math.min(cadence.startDay, lastDay)).getTime() / 86400000;
+}
+
+// How many cadence episodes are due by the day `days`: the number of the
+// last one on or before it, or 0 before the first.
+function dueBy(cadence, days) {
+  if (days < cadence.startDays) {
+    return 0;
+  }
+  if (cadence.unit === "day") {
+    return Math.floor((days - cadence.startDays) / cadence.every) + 1;
+  }
+  // The last episode in this month or before, which can still be later in
+  // the month than `days`.
+  const date = new Date(days * 86400000);
+  const index = Math.floor((date.getUTCFullYear() * 12 + date.getUTCMonth() - cadence.startMonth) / cadence.every);
+  return cadenceDays(cadence, index) <= days ? index + 1 : index;
+}
+
+// Midnight UTC on a day, with `month` from 0. Date.UTC maps years 0-99 to
+// 1900-1999, so the full year is set explicitly.
+function utcDate(year, month, day) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
+}
+
+// The release schedule as { every, unit, start, warnDays, complete, last,
+// next, episodes, warnings }, or null when the book sets no cadence and no
+// chapter has a release-date. `chapters` are { id, file, releaseDate,
+// drafted } in reading order, with `releaseDate` the raw frontmatter value
+// or undefined; the episode number is the chapter's position. An episode
+// whose release-date is not a real day is left out rather than put back on
+// the cadence (validate reports it). With a cadence, the episodes after the last chapter are
 // projected too, so `next` can be one with no chapter yet (`chapter` and
 // `file` null), unless story.md has `status: complete`: then the chapters
 // are every episode there is, and the cadence stops at the last one. `last`
 // is the episode number of a complete story's final release, or null; it is
 // known only when every chapter is in the schedule, since a chapter with no
-// release date could go out after the others.
+// release date could go out after the others. An undrafted episode due
+// within `warnDays` days, or past due, is warned about.
 export function releaseSchedule({ data, chapters, today }) {
   const cadence = releaseCadence(data);
+  const warnDays = releaseWarnDays(data);
   const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
-    let days = cadence ? cadence.startDays + index * cadence.every : null;
+    let days = cadence ? cadenceDays(cadence, index) : null;
     if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
       days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
     }
@@ -81,25 +159,25 @@ export function releaseSchedule({ data, chapters, today }) {
   }
 
   // Past the last chapter, a cadence keeps scheduling episodes: those due
-  // by today plus RELEASE_SOON_DAYS have no chapter to draft yet, and the
-  // first one today or later can be the next release. A complete story
-  // has no episode past its last chapter, so nothing is projected.
-  // A projection past LAST_DAY is null.
+  // by today plus warnDays have no chapter to draft yet, and the first one
+  // today or later can be the next release. A complete story has no
+  // episode past its last chapter, so nothing is projected. A projection
+  // past LAST_DAY is null.
   const projected = (index) => {
-    const days = cadence.startDays + index * cadence.every;
+    const days = cadenceDays(cadence, index);
     return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
   };
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
   if (cadence !== null && !complete) {
-    const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
+    // The episodes due before today are behind it.
+    const upcoming = projected(Math.max(chapters.length, dueBy(cadence, todayDays - 1)));
     if (upcoming !== null) {
       candidates.push(upcoming);
     }
-    // Today is a real day, so every episode due by today plus a few days
-    // is within LAST_DAY.
-    unwritten = Math.floor((todayDays + RELEASE_SOON_DAYS - cadence.startDays) / cadence.every) - chapters.length + 1;
+    // The window stops at LAST_DAY, so every episode it counts is a real day.
+    unwritten = dueBy(cadence, Math.min(todayDays + warnDays, LAST_DAY)) - chapters.length;
     firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
   }
   candidates.sort((left, right) => left.days - right.days || left.episode - right.episode);
@@ -111,7 +189,7 @@ export function releaseSchedule({ data, chapters, today }) {
 
   const warnings = [];
   for (const episode of episodes) {
-    if (!episode.drafted && episode.days <= todayDays + RELEASE_SOON_DAYS) {
+    if (!episode.drafted && episode.days <= todayDays + warnDays) {
       warnings.push(warn("release-undrafted", `${episode.file} (episode ${episode.episode}) ${releaseWhen(episode.date, episode.days - todayDays)} and has no prose yet`, episode.file));
     }
   }
@@ -122,7 +200,9 @@ export function releaseSchedule({ data, chapters, today }) {
 
   return {
     every: cadence?.every ?? null,
+    unit: cadence?.unit ?? null,
     start: cadence?.start ?? null,
+    warnDays,
     complete,
     last,
     next,

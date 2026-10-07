@@ -23,6 +23,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Chapters take an optional `beat` field, the beat-sheet beat they carry, set by hand or with `story add chapter --beat`. (#531)
   - `story grid` shows a `(beat)` row above the hook and outcome rows once any chapter has one, and `story context` and a spoiler codex show it too.
   - Any text is accepted, such as `Midpoint`, `All Is Lost`, or your own label; `story validate` warns `beat-too-long` above 60 characters.
+- Serials can release monthly with `release-every: 1 month`, and `release-warn-days` sets how many days ahead `release-undrafted` warns. (#522)
+  - A monthly episode goes out on `release-start`'s day of the month, or on the month's last day when the month is shorter, so a serial that starts on the 31st releases on 28 or 29 February.
+  - `release-every` takes from `1 month` to `999999 months`. `release-warn-days` defaults to 3, and `0` warns only from the release day.
+  - `--json` adds `data.release.unit` (`day` or `month`) and `data.release.warnDays`.
 
 ### Changed
 
