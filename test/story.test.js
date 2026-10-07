@@ -1532,7 +1532,7 @@ flashback-to: chapter-01
     expect(messages(validation.errors).filter((error) => error.includes("draft-mode"))).toEqual([]);
   });
 
-  test("validates the chapter beat: any text, one value, and a warning past 60 characters (#531)", () => {
+  test("validates the chapter beat: any text, one value, and a warning past 60 graphemes (#531)", () => {
     const cwd = makeTempDir();
     const root = createStoryProject({ cwd, title: "Beat Fields", force: false }).root;
     const chapter = (number, beat) => writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `
@@ -1547,13 +1547,19 @@ ${beat}
     chapter(4, `beat: ${"x".repeat(60)}`);
     chapter(5, `beat: |\n  ${"Á".repeat(59)}\n  y`);
     chapter(6, "beat: \"\"");
+    // Characters as a reader counts them: 31 emoji are 62 UTF-16 units, an
+    // NFD é is two code points, and कि is a consonant and its vowel sign.
+    chapter(7, `beat: ${"🔥".repeat(31)}`);
+    chapter(8, `beat: ${"e\u0301".repeat(60)}`);
+    chapter(9, `beat: ${"कि".repeat(60)}`);
 
     const result = validateProject(root);
     expect(messages(result.errors).filter((error) => error.includes("beat")).sort()).toEqual([
       "chapters/chapter-02.md frontmatter field beat must be text: quote it as beat: \"1984\"",
       "chapters/chapter-03.md frontmatter field beat must be a scalar"
     ]);
-    // Chapter 4 is at the limit; chapter 5's line break reads as a space.
+    // Chapters 4, 8, and 9 are at the limit; chapter 5's line break reads as
+    // a space.
     expect(result.warnings.filter((warning) => warning.code === "beat-too-long")).toEqual([{
       code: "beat-too-long",
       message: "chapters/chapter-05.md beat is 61 characters long: keep it to a short label of at most 60 characters, such as Midpoint, and put the detail in the chapter outline",

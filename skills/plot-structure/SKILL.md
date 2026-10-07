@@ -28,10 +28,10 @@ A story project must already exist (created via the story-init skill). Verify by
 A chapter's optional `beat` frontmatter field names the beat-sheet beat it delivers, so `story grid`, `story context`, and the codex can show the structure chapter by chapter.
 
 1. Use the beat names of the model in `plot/_index.md`, as `references/structure-models.md` spells them (`Inciting Incident`, `Midpoint`, `All Is Lost`, `Ten (Twist)`), or the writer's own label when they adapt the model. The field is free text, and the CLI checks only that it is text, not that it names a known beat
-2. Write it with the chapter: `story add chapter '{Title}' --number {N} --beat '{Beat}'`, or add `beat: {Beat}` to an existing chapter's frontmatter. Quote a value that looks like a number or contains `: `
+2. Write it with the chapter: `story add chapter '{Title}' --number {N} --beat '{Beat}'`, or add `beat: {Beat}` to an existing chapter's frontmatter. Quote a value that looks like a number or contains `: ` or `#` (`beat: "Try/Fail #2"`), since an unquoted `#` starts a comment
 3. Keep it a short label: `story validate` warns `beat-too-long` above 60 characters. What happens in the beat goes in the chapter's `## Outline`
 4. Leave `beat` off the chapters between beats. A beat that runs over several chapters, such as Fun and Games, goes on the chapter where it starts
-5. Run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story grid .`. Once any chapter has a beat, the grid's `(beat)` row replaces its hook and outcome rows. Check each beat against its position in the model (a Midpoint near the middle chapter, All Is Lost near three quarters of the way through): beats that bunch up, or a long run of chapters with none, are where a middle sags
+5. Run `story reindex .`, `story wordcount . --write`, and `story check .`, then `story grid .`. Once any chapter has a beat, the grid shows a `(beat)` row above its hook and outcome rows. Check each beat against its position in the model (a Midpoint near the middle chapter, All Is Lost near three quarters of the way through): beats that bunch up, or a long run of chapters with none, are where a middle sags
 
 ## Creating an Arc
 
@@ -77,7 +77,7 @@ When adding events:
 When reviewing the timeline:
 - Run `story timeline .` to see written scenes in story-time order from their `date`/`time` fields, with scenes told out of order marked, and compare it with `plot/timeline.md`
 - Run `story diagram timeline` for a Mermaid timeline of dated scenes and chapters, and `story diagram arcs` for which chapters advance each arc (add `--out dist/<name>.mmd` to save either; keep generated diagrams out of entity folders)
-- Run `story grid .` for the plot grid: arcs as rows, chapters as columns, an `x` where a chapter or its scenes list the arc in `arcs-advanced`, plus each chapter's `beat` (or, in a book with no beats, its hook and scene outcomes). Use `--format csv` for a spreadsheet and `--from`/`--to` for a range of chapters. An empty row is an arc no chapter advances, a long gap is an arc the reader may forget, and an `(unknown)` row is an `arcs-advanced` id with no arc file
+- Run `story grid .` for the plot grid: arcs as rows, chapters as columns, an `x` where a chapter or its scenes list the arc in `arcs-advanced`, plus each chapter's `beat` (once any chapter has one), hook, and scene outcomes. Use `--format csv` for a spreadsheet and `--from`/`--to` for a range of chapters. An empty row is an arc no chapter advances, a long gap is an arc the reader may forget, and an `(unknown)` row is an `arcs-advanced` id with no arc file
 - Check for chronological consistency
 - Identify pacing issues (too many events clustered, long gaps)
 - Flag arcs that haven't progressed

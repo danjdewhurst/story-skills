@@ -38,6 +38,7 @@ import { isBookNumber, readBookFrontmatter } from "./series.js";
 import { err, warn } from "./findings.js";
 import { parseExemptions } from "./exemptions.js";
 import { projectError, usageError } from "./exit-codes.js";
+import { oneLine } from "./unicode.js";
 
 export const STORY_SCHEMA_VERSION = 2;
 
@@ -1491,14 +1492,17 @@ What changes because of this arc.
 }
 
 // A chapter beat is a short label, such as Midpoint or All Is Lost, from a
-// beat sheet or the writer's own: validate warns above this many characters,
-// since a sentence would stretch the grid and belongs in the outline.
+// beat sheet or the writer's own: validate warns above this many characters
+// as a reader counts them (grapheme clusters), since a sentence would
+// stretch the grid and belongs in the outline.
 export const BEAT_MAX_LENGTH = 60;
 
 // A chapter beat as one line, as a label reads: a line break in a
-// hand-written value, and the spaces around it, become one space.
+// hand-written value, and the spaces around it, become one space, a tab a
+// space, and any other control character U+FFFD, so an escape sequence
+// cannot drive the terminal `story grid` or `story context` prints to.
 export function beatText(value) {
-  return String(value).trim().replace(/\s*[\r\n\u2028\u2029]\s*/g, " ");
+  return oneLine(value).replace(/\t/g, " ").replace(/[\u0000-\u001f\u007f-\u009f]/g, "\ufffd");
 }
 
 export function chapterFile(title, number, options, unit, calendar = null) {

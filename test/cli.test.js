@@ -382,8 +382,12 @@ describe("cli", () => {
     // A beat that looks like a number is written as text.
     expect(invoke(root, ["add", "chapter", "Year", "--beat", "1984"]).code).toBe(0);
     expect(frontmatter(2).beat).toBe("1984");
-    expect(invoke(root, ["add", "chapter", "Lull", "--beat", " "]).code).toBe(0);
-    expect(Object.hasOwn(frontmatter(3), "beat")).toBe(false);
+    // A # would start a comment, so the writer quotes it.
+    expect(invoke(root, ["add", "chapter", "Again", "--beat", "Try/Fail #2"]).code).toBe(0);
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-03.md"), "utf8")).toContain('beat: "Try/Fail #2"\n');
+    expect(frontmatter(3).beat).toBe("Try/Fail #2");
+    expect(invoke(root, ["add", "chapter", "Lull", "--number", "4", "--beat", " "]).code).toBe(0);
+    expect(Object.hasOwn(frontmatter(4), "beat")).toBe(false);
     expect(invoke(root, ["check"]).code).toBe(0);
     expect(invoke(root, ["add", "scene", "Wreck", "--chapter", "chapter-01", "--beat", "Midpoint"]).err).toContain("--beat does not apply to story add scene:");
   });

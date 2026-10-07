@@ -350,7 +350,7 @@
         "strand": { "type": "string" },
         "episode-question": { "type": "string" },
         "hook": { "enum": ["cliffhanger", "question", "revelation", "reversal", "decision", "emotional", "resolution"] },
-        "beat": { "type": "string", "description": "The beat-sheet beat the chapter carries, as free text: a name from the plot-structure skill's beat sheets (Inciting Incident, Midpoint, All Is Lost) or the writer's own. story grid, story context, and the codex show it; story validate warns above 60 characters." },
+        "beat": { "type": "string", "description": "The beat-sheet beat the chapter carries, as free text: a name from the plot-structure skill's beat sheets (Inciting Incident, Midpoint, All Is Lost) or the writer's own. story grid, story context, and the codex show it; story validate warns above 60 characters (grapheme clusters)." },
         "release-date": { "$ref": "#/$defs/realDate", "description": "Serial: the real-world YYYY-MM-DD day this episode releases, even in a book with a story calendar. Overrides the story.md release-every cadence for this chapter only." },
         "time-skip": { "type": "string" },
         "choices": {

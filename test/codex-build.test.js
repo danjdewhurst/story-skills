@@ -136,6 +136,18 @@ describe("build --format codex", () => {
     expect(safe["progress.html"]).not.toContain("<td>Beat</td>");
   });
 
+  test("a spoiler codex shows the beats of a book with no arcs (#531)", () => {
+    const { root } = createStoryProject({ cwd: makeTempDir(), title: "No Arcs", force: false });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Calm\nnumber: 1\nstatus: draft\nbeat: Opening Image\nhook: question", "## Chapter Text\n\nThe sea was flat.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Storm\nnumber: 2\nstatus: draft", "## Chapter Text\n\nThe sea rose.\n");
+    const full = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);
+    expect(full["progress.html"]).toContain("<h2>Plot grid</h2>");
+    expect(full["progress.html"]).toContain("<tbody>\n<tr><td>Beat</td><td>Opening Image</td><td></td></tr>\n<tr><td>Hook</td><td>question</td><td></td></tr>");
+    fs.rmSync(path.join(root, "dist"), { recursive: true });
+    const safe = readSite(buildBook(root, { format: "codex" }).outFile);
+    expect(safe["progress.html"]).not.toContain("<h2>Plot grid</h2>");
+  });
+
   test("is byte-identical across builds and clears pages an earlier codex wrote", () => {
     const { root } = project();
     const first = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);

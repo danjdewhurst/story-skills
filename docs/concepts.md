@@ -340,7 +340,7 @@ Beyond the pass-or-fail checks, the CLI has read-only views that measure the man
 |---------|---------------|-----------------|
 | `story pacing` | Scene units, sequels, scene outcomes, chapter hooks, and chapter lengths, with runs that go slack | Scene `sequel` and `outcome`, chapter `hook` |
 | `story clues` | A fair-play grid of where each clue is planted and revealed | Clue `planted`, `payoff`, `characters`, `red-herring`, `significance-delayed` |
-| `story grid` | A plot grid of arcs by chapter, with each chapter's beat (or its hook and scene outcomes), as markdown or CSV | Chapter and scene `arcs-advanced`, chapter `beat` and `hook`, scene `outcome` |
+| `story grid` | A plot grid of arcs by chapter, with each chapter's beat, hook, and scene outcomes, as markdown or CSV | Chapter and scene `arcs-advanced`, chapter `beat` and `hook`, scene `outcome` |
 | `story voices` | A fingerprint of each character's tagged dialogue, and characters who sound alike | Chapter prose, character names and aliases, `voice-words`, `voice-avoid` |
 | `story names` | Whether a candidate name clashes with, or looks like, a name already in the bible | Every character, place, faction, artifact, system, and glossary name |
 | `story diagram` | Mermaid source for the family tree, route map, timeline, clue map, or arc map | Relationships, `routes`, dates, clues, and `arcs-advanced` |

@@ -66,7 +66,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`doctor [path]`](#doctor) | Show health checks and repair steps; `--fix` applies the safe ones | With `--fix` |
 | Craft and revision | [`pacing [path]`](#pacing) | Show scenes, sequels, outcomes, hooks, and length per chapter | No |
 | | [`clues [path]`](#clues) | Show the clue plant and reveal grid and flag fair-play problems | No |
-| | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with beats (or hooks and scene outcomes), as markdown or CSV | No |
+| | [`grid [path]`](#grid) | Print the plot grid of arcs by chapter, with beats, hooks, and scene outcomes, as markdown or CSV | No |
 | | [`voices [path\|-]`](#voices) | Fingerprint each character's tagged dialogue, in the chapters or a passage piped to stdin | No |
 | | [`names <name...>`](#names) | Check candidate names for clashes and look-alikes | No |
 | | [`mentions [<kind> <id>]`](#mentions) | List where chapter prose names an entity, or audit every chapter's names against its frontmatter | No |
@@ -840,7 +840,7 @@ Each line gives the id, the title (or name, or term), the file relative to the p
 
 | Filter | Matches when |
 |---|---|
-| `key=value` | The key's value is `value`, or the key is a list that contains `value`. Numbers and booleans compare as text, so `number=3` and `sequel=true` work |
+| `key=value` | The key's value is `value`, or the key is a list that contains `value`. Numbers and booleans compare as text, so `number=3` and `sequel=true` work, and a value written over several lines compares on one line, as `list` prints it, so `beat=Break into Two` finds a block-scalar beat |
 | `key!=value` | The key is not `value` and is not a list that contains it, including when the key is unset |
 | `key` | The key is set and not empty |
 | `!key` | The key is unset or empty. Quote it in the shell: `--where '!hook'` |
@@ -1828,16 +1828,16 @@ With no clues it prints `- None: add clues with story add clue "Name" --planted 
 story grid [path] [--format markdown|csv] [--from <chapter>] [--to <chapter>] [--json]
 ```
 
-Prints the plot grid that Plottr and Scrivener's outliner draw: one row per arc, one column per chapter, and an `x` where the chapter, or one of its scenes, lists the arc in `arcs-advanced`. Below the arcs, the `(beat)` row gives each chapter's [`beat`](project-format.md#chapters), such as `Midpoint`. In a book where no chapter records a beat, the `(hook)` row gives each chapter's `hook` and the `(outcomes)` row the `outcome` of each of its scenes in its place, in scene order (sequels have none, so they are left out). Once any chapter has a beat, every range of the book shows the `(beat)` row, and [`pacing`](#pacing) still lists the hooks and outcomes. The output is a markdown table you can paste into a planning note, or CSV for a spreadsheet with `--format csv`.
+Prints the plot grid that Plottr and Scrivener's outliner draw: one row per arc, one column per chapter, and an `x` where the chapter, or one of its scenes, lists the arc in `arcs-advanced`. Below the arcs, the `(beat)` row gives each chapter's [`beat`](project-format.md#chapters), such as `Midpoint`, once any chapter in the book has one; every range of that book then shows it. The `(hook)` row gives each chapter's `hook` and the `(outcomes)` row the `outcome` of each of its scenes, in scene order (sequels have none, so they are left out). The output is a markdown table you can paste into a planning note, or CSV for a spreadsheet with `--format csv`. In the CSV, a cell that starts with `=`, `+`, `-`, `@`, a tab, or a carriage return starts with a `'` instead, so a spreadsheet opens it as text rather than running it as a formula.
 
-Arcs are listed in the order the book first advances them, then the arcs in `plot/arcs/` that no chapter advances yet (an empty row is a dropped or unstarted thread), then any id that `arcs-advanced` names with no arc file, marked `(unknown)`; `story validate` reports those as errors. Columns are in chapter number order. In a [branching book](project-format.md#branching-chapters) every chapter is a column side by side, whichever path reaches it; `story continuity` checks each reader path. Columns are as wide as their widest cell, so chapter 100 lines up with chapter 9 in the source as well as the rendered table.
+Arcs are listed in the order the book first advances them, then the arcs in `plot/arcs/` that no chapter advances yet (an empty row is a dropped or unstarted thread), then any id that `arcs-advanced` names with no arc file, marked `(unknown)`; `story validate` reports those as errors. Columns are in chapter number order. In a [branching book](project-format.md#branching-chapters) every chapter is a column side by side, whichever path reaches it; `story continuity` checks each reader path. Columns are as wide as their widest cell in terminal columns, so chapter 100 lines up with chapter 9, and a beat in Chinese or with an emoji lines up too, in the source as well as the rendered table.
 
 | Option | Effect | Default |
 |---|---|---|
 | `--format <name>` | `markdown` or `csv` | `markdown` |
 | `--from <chapter>` | First chapter to show, by id (`chapter-12`) or number (`12`), for a book too wide to read at once | The first chapter |
 | `--to <chapter>` | Last chapter to show, by id or number | The last chapter |
-| `--json` | Print a JSON result: `data.range` (`from` and `to`, the chapter ids shown, and `total`, the chapters in the book), `data.beats` (`true` when any chapter in the book has a beat), `data.chapters` (each column's `id`, `number`, `title`, `beat`, `hook`, and `outcomes`, whichever rows the text shows), and `data.rows` (each arc's `id`, `name`, `status`, `known`, and `cells`, one `true` or `false` per chapter) (see [JSON output](#json-output)) | Off |
+| `--json` | Print a JSON result: `data.range` (`from` and `to`, the chapter ids shown, and `total`, the chapters in the book), `data.beats` (`true` when any chapter in the book has a beat), `data.chapters` (each column's `id`, `number`, `title`, `beat`, `hook`, and `outcomes`), and `data.rows` (each arc's `id`, `name`, `status`, `known`, and `cells`, one `true` or `false` per chapter) (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
 
 `grid` prints nothing while any project file fails to parse, because the grid would silently drop chapters; it reports the parse errors on stderr and exits 1. An unknown format, a `--from` or `--to` that names no chapter, and a `--from` after `--to` exit 2.
@@ -1856,13 +1856,15 @@ story grid
 | (outcomes)       | yes-but  | no-and   | yes        | yes-but     |
 ```
 
-After adding `beat: Inciting Incident` to chapter 1 and `beat: First Plot Point` to chapter 2, the beat row takes the place of the other two:
+After adding `beat: Inciting Incident` to chapter 1 and `beat: First Plot Point` to chapter 2, a beat row joins the other two:
 
 ```text
-| Arc              | 1                 | 2                | 3   | 4   |
-|------------------|:-----------------:|:----------------:|:---:|:---:|
-| the-ledger-trail | x                 | x                | x   | x   |
-| (beat)           | Inciting Incident | First Plot Point |     |     |
+| Arc              | 1                 | 2                | 3          | 4           |
+|------------------|:-----------------:|:----------------:|:----------:|:-----------:|
+| the-ledger-trail | x                 | x                | x          | x           |
+| (beat)           | Inciting Incident | First Plot Point |            |             |
+| (hook)           | question          | decision         | revelation | cliffhanger |
+| (outcomes)       | yes-but           | no-and           | yes        | yes-but     |
 ```
 
 `story diagram arcs` draws the same links as a Mermaid graph, and `story pacing` gives each chapter's hook and outcome counts with findings about slack runs.
@@ -3038,7 +3040,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text, in the same block quote or list item. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
 | `no-scene-records` | warning | A chapter has no scene records. |
 | `empty-chapter` | warning | A chapter has no prose yet, and the book is complete or the chapter claims to be written. |
-| `beat-too-long` | warning | A chapter `beat` is longer than 60 characters. Keep it a short label, such as `Midpoint`, and put the detail in the outline. |
+| `beat-too-long` | warning | A chapter `beat` is longer than 60 characters, counted as a reader sees them (grapheme clusters). Keep it a short label, such as `Midpoint`, and put the detail in the outline. |
 | `missing-field` | error | A required field, or a required key of a list entry, is missing or empty. |
 | `field-not-scalar` | error | A field that takes one value holds a list or mapping. |
 | `field-not-list` | error | A field that takes a list holds something else. |
