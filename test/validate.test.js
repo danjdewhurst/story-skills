@@ -44,6 +44,17 @@ function writeChapter(root, number, body, extra = "status: draft") {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("#112 scheduled chapters in arc bodies", () => {
   test("a planned plot point may name a chapter not yet written", () => {
     const root = newProject();
@@ -149,5 +160,12 @@ describe("#133 [TODO markers in chapter prose", () => {
 
     writeChapter(root, 1, "A boy called Harry Rowe came.");
     expect(fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8")).toContain("- [x] No `[TODO` markers in chapter prose\n");
+  });
+});
+
+describe("review fixes", () => {
+  test("a non-text author is a validation error", () => {
+    const { root } = reviewProject("author: 123");
+    expect(messages(validateProject(root).errors)).toContain("story.md frontmatter field author must be text");
   });
 });

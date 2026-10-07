@@ -34,6 +34,17 @@ copyright: © 2026 Ada Writer
 cover-alt: A lighthouse at dusk
 ai-disclosure: No generative AI was used to write the text.`;
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("publishing metadata", () => {
   test("normalizeIsbn accepts valid ISBN-13 and ISBN-10 and rejects bad checksums", () => {
     expect(normalizeIsbn("978-0-306-40615-7")).toBe("9780306406157");
@@ -120,5 +131,30 @@ author: Solo`);
     expect(plain).toContain("<dc:language>en</dc:language>");
     expect(plain).not.toContain("alternativeText");
     expect(plain).not.toContain("copyright");
+  });
+});
+
+describe("review fixes", () => {
+  test("an empty copyright scaffold does not suppress the generated copyright page", () => {
+    const { root } = reviewProject("copyright: © 2026 Ada");
+    createEntity(root, { kind: "matter", name: "Copyright" });
+    const markdown = fs.readFileSync(buildBook(root).outFile, "utf8");
+    expect(markdown).toContain("© 2026 Ada\n\nAll rights reserved.");
+  });
+
+  test("a copyright page found by title is treated as the copyright page everywhere", () => {
+    const { root } = reviewProject("copyright: © 2026 Ada");
+    createEntity(root, { kind: "matter", name: "Legal", order: "1" });
+    const legal = path.join(root, "matter", "legal.md");
+    fs.writeFileSync(legal, fs.readFileSync(legal, "utf8").replace("title: Legal", "title: Copyright Notice") + "\nAll mine.\n");
+    expect(fs.readFileSync(buildBook(root, { format: "narration" }).outFile, "utf8")).not.toContain("Copyright Notice");
+    expect(readArchiveText(buildBook(root, { format: "epub" }).outFile)).toContain('<body epub:type="frontmatter copyright-page"><h1>Copyright Notice</h1>');
+    const print = fs.readFileSync(buildBook(root, { format: "print" }).outFile, "utf8");
+    expect(print.indexOf('id="front-legal"')).toBeLessThan(print.indexOf('class="toc"'));
+  });
+
+  test("an EAN-13 that is not an ISBN is rejected", () => {
+    const { root } = reviewProject("isbn: \"4006381333931\"");
+    expect(messages(validateProject(root).errors)).toContain("story.md isbn 4006381333931 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)");
   });
 });

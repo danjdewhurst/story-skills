@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { checkNames, formatNames, givenName, nameWords } from "../src/names.js";
-import { createEntity, createStoryProject, namesReport } from "../src/story.js";
+import { createEntity, createStoryProject, namesReport, voicesReport } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -22,6 +23,17 @@ function namesProject() {
   createEntity(root, { kind: "artifact", name: "Brass Key" });
   createEntity(root, { kind: "system", name: "Rune Craft" });
   createEntity(root, { kind: "term", name: "Tideglass", alias: "Glass" });
+  return { root, cwd };
+}
+
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
   return { root, cwd };
 }
 
@@ -129,5 +141,50 @@ describe("story names", () => {
     const clear = invoke(cwd, ["names", "Wren", "--path", root]);
     expect(clear.code).toBe(0);
     expect(clear.err).toContain("Names checked: 0 errors, 0 warnings");
+  });
+});
+
+describe("review fixes", () => {
+  test("names match case-sensitively, titles are skipped, and subject tags win", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "characters", "lord-maren.md"), "name: Lord Maren\nrole: antagonist\nstatus: alive", "# L\n");
+    writeMarkdown(path.join(root, "characters", "sera.md"), "name: Sera\nrole: protagonist\nstatus: alive\nvoice-avoid:\n  - don\u2019t", "# S\n");
+    writeMarkdown(path.join(root, "characters", "kael.md"), "name: Kael\nrole: supporting\nstatus: alive", "# K\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", [
+      "## Chapter Text",
+      "\u201cWe ride at dawn,\u201d she said, glancing toward the lord\u2019s hall.",
+      "\u201cI wasn\u2019t there,\u201d Sera told Kael.",
+      "\u2018I don't know,\u2019 Maren said.",
+      "\u2018Don\u2019t,\u2019 said Kael."
+    ].join("\n\n") + "\n");
+    const report = voicesReport(root);
+    expect(report.unattributed).toBe(1);
+    expect(report.profiles.map((entry) => [entry.id, entry.lines]).sort()).toEqual([["kael", 1], ["lord-maren", 1], ["sera", 1]]);
+    expect(messages(report.warnings)).toEqual([]);
+
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "## Chapter Text\n\n\"I don't care,\" Sera said.\n");
+    expect(messages(voicesReport(root).warnings)).toEqual(["sera says \"don\u2019t\", which is in their voice-avoid list (chapter-02)"]);
+  });
+
+  test("story names skips titles and articles and compares whole names whole", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "characters", "lord-maren.md"), "name: Lord Maren\nrole: antagonist\nstatus: alive\naliases:\n  - The Iron Lord", "# L\n");
+    createEntity(root, { kind: "location", name: "The Ashen Citadel" });
+    const report = namesReport(root, ["Lord Vance", "Theo", "The Hollow", "Tobias", "Maren", "Marek"]);
+    expect(messages(report.errors)).toEqual(["\"Maren\" clashes with character lord-maren (Maren)"]);
+    expect(messages(report.warnings)).toEqual([
+      "\"Marek\" looks like character lord-maren (Lord Maren)"
+    ]);
+  });
+
+  test("single-word names get initial checks, and one character is reported once", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: protagonist\nstatus: alive\naliases:\n  - Maro\n  - Mo", "# M\n");
+    const report = namesReport(root, ["Mila", "Maro", "Mo"]);
+    expect(messages(report.errors)).toEqual([
+      "\"Maro\" clashes with character mara (Maro)",
+      "\"Mo\" clashes with character mara (Mo)"
+    ]);
+    expect(messages(report.warnings)).toEqual(["\"Mila\" shares an initial with protagonist mara (Mara)"]);
   });
 });

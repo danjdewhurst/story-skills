@@ -444,3 +444,15 @@ status: alive
     expect(() => withGeneratedPatterns(twice)).toThrow("The pattern at /$defs/realDate/pattern must appear once in the schema");
   });
 });
+
+describe("review fixes", () => {
+  test("the schema rejects zero-hour routes and accepts numeric isbns", () => {
+    const schema = {
+      type: "object",
+      properties: { hours: { type: "number", exclusiveMinimum: 0 }, isbn: { type: ["string", "integer"] } }
+    };
+    expect(validateAgainstSchema({ hours: 0, isbn: 9780306406157 }, schema)).toEqual(["$.hours: 0 must be greater than 0"]);
+    expect(validateAgainstSchema({ hours: 0.5, isbn: "978" }, schema)).toEqual([]);
+    expect(validateAgainstSchema({ isbn: true }, schema)).toEqual(["$.isbn: expected string or integer, got boolean"]);
+  });
+});

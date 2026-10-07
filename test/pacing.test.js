@@ -36,6 +36,17 @@ ${fields}
 `, "# Scene\n");
 }
 
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
+}
+
 describe("story pacing", () => {
   test("tabulates scenes, sequels, outcomes, and hooks per chapter", () => {
     const { root } = project();
@@ -160,5 +171,15 @@ describe("pacing and clues (#216, #217, #223)", () => {
     const rows = text.split("\n").filter((line) => /^\s*\d/.test(line));
     expect(rows[0].indexOf("x")).toBe(rows[1].indexOf("x"));
     expect(rows[0].length).toBe(rows[1].length);
+  });
+});
+
+describe("review fixes", () => {
+  test("sequels never count toward chapter outcomes", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: S\nchapter: chapter-01\nscene: 1\nstatus: draft\nsequel: true\noutcome: yes", "# S\n");
+    const report = pacingReport(root);
+    expect(report.rows[0].outcomes).toEqual({ yes: 0, no: 0, "yes-but": 0, "no-and": 0 });
+    expect(report.totals.outcomesRecorded).toBe(0);
   });
 });

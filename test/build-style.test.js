@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
+import { printHtml } from "../src/html.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
 import { buildStyle, fontList } from "../src/build-style.js";
 import { makeTempDir, memoryIo, messages, readArchiveEntries, writeMarkdown } from "./helpers.js";
@@ -305,5 +306,13 @@ describe("build-style validation", () => {
     expect(buildStyle({ "build-style": [{ preset: "classic" }] }).styled).toBe(false);
     expect(buildStyle({ "build-style": [{ css: "a.css" }] })).toMatchObject({ styled: false, css: "a.css" });
     expect(buildStyle({ "build-style": [{ "drop-caps": false }] }).styled).toBe(true);
+  });
+});
+
+describe("review fixes", () => {
+  test("print css strings cannot close the style element", () => {
+    const html = printHtml({ title: "T", authors: ["</style><script>x()</script> & co"], language: "en", words: 10, parts: [] });
+    expect(html).not.toContain("</style><script>");
+    expect(html).toContain('content: "\\3C /style\\3E \\3C script\\3E x()\\3C /script\\3E  \\26  co"');
   });
 });

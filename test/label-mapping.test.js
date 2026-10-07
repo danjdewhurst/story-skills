@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { formatLabelMapping, mapLabels } from "../src/compare.js";
 import { openingWords, paragraphLabels, reviewHtml } from "../src/html.js";
-import { buildBook, compareProject, createStoryProject } from "../src/story.js";
+import { buildBook, compareProject, createEntity, createStoryProject } from "../src/story.js";
 import { expectLinearTime, git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -46,6 +46,17 @@ function stampProject(title = "Open Issues") {
 
 function writeStampChapter(root, number, body, extra = "status: draft") {
   writeMarkdown(path.join(root, "chapters", `chapter-0${number}.md`), `title: Chapter ${number}\nnumber: ${number}\n${extra}`, `## Chapter Text\n\n${body}\n`);
+}
+
+function reviewProject(fields = "") {
+  const cwd = makeTempDir();
+  const { root } = createStoryProject({ cwd, title: "Fixes", force: false });
+  if (fields !== "") {
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", `schema-version: 2\n${fields}\n`), "utf8");
+  }
+  writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: One\nnumber: 1\nstatus: draft", "## Chapter Text\n\nWords.\n");
+  return { root, cwd };
 }
 
 describe("story compare --anchor", () => {
@@ -288,5 +299,18 @@ describe("#241 #240 review copy build stamp", () => {
     for (const file of ["docs/cli-reference.md", "skills/feedback-triage/SKILL.md", "skills/story-maintenance/SKILL.md", "src/html.js"]) {
       expect(fs.readFileSync(path.join(repo, file), "utf8")).not.toMatch(/stable (?:label|anchor|paragraph anchor)/);
     }
+  });
+});
+
+describe("review fixes", () => {
+  test("matter section ids cannot collide with paragraph anchors in the review copy", () => {
+    const { root } = reviewProject();
+    for (const name of ["Note", "Note P1"]) {
+      createEntity(root, { kind: "matter", name });
+      fs.appendFileSync(path.join(root, "matter", `${name.toLowerCase().replace(" ", "-")}.md`), "\nText.\n");
+    }
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });
