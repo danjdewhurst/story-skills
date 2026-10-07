@@ -65,9 +65,10 @@ exist or be in progress.
      story clock.
    - Serial: record `season-goal:` in `story.md` and `episode-question:`
      in each installment's frontmatter, and the release cadence as
-     `release-every:` (days) and `release-start:` (YYYY-MM-DD) in
-     `story.md`, or `release-date:` on a chapter. `story next .` shows the
-     next episode due and warns when one due soon has no prose.
+     `release-every:` (days, or months such as `1 month`) and
+     `release-start:` (YYYY-MM-DD) in `story.md`, or `release-date:` on a
+     chapter. `story next .` shows the next episode due and warns when one
+     due within `release-warn-days:` (default 3) has no prose.
    - MG/YA: record `target-words:` in `story.md` and check the category
      constraints (protagonist age, minimized adult involvement).
    - Sci-fi: write the speculative element's rules, costs, and limits in

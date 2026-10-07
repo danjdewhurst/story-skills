@@ -1263,7 +1263,7 @@ story progress [path] [--log] [--date <YYYY-MM-DD>] [--weeks <n>] [--dry-run] [-
 
 Reports the manuscript word count against `target-words` in `story.md`, the days left to `deadline` and the words a day needed to meet it, the next serial episode due by the [release schedule](project-format.md#release-schedule), per-chapter `target-words`, and pace from the session log in `progress.md`. Once a session is logged, it also reports today's words (against `daily-target-words` when set), the current and longest writing streak, and the words written in each of the last four weeks (`--weeks` for more or fewer); see [Story progress](continuity.md#story-progress) for how each is counted.
 
-In `--json`, `data.release` is null for a book with no release schedule. Otherwise it holds `every` and `start` (the cadence, or null), `complete` (true when `story.md` has `status: complete`, which stops the cadence at the last chapter), `last` (the episode number of a complete story's final release when every chapter has a release date, or null), `next` (the first release today or later: `episode`, `chapter` and `file`, both null for an episode with no chapter yet, `date`, `drafted`, and `daysUntil`, or null when nothing is scheduled), and `episodes`, each chapter with a release date (`episode`, `chapter`, `file`, `date`, and `drafted`). An episode due within 3 days, or past due, with no prose is a [`release-undrafted`](#codes-progress-and-next) warning.
+In `--json`, `data.release` is null for a book with no release schedule. Otherwise it holds `every`, `unit`, and `start` (the cadence: `every` days when `unit` is `day`, or `every` months when it is `month`; all three null without a cadence), `warnDays` (`release-warn-days`, 3 when unset), `complete` (true when `story.md` has `status: complete`, which stops the cadence at the last chapter), `last` (the episode number of a complete story's final release when every chapter has a release date, or null), `next` (the first release today or later: `episode`, `chapter` and `file`, both null for an episode with no chapter yet, `date`, `drafted`, and `daysUntil`, or null when nothing is scheduled), and `episodes`, each chapter with a release date (`episode`, `chapter`, `file`, `date`, and `drafted`). An episode due within `warnDays` days, or past due, with no prose is a [`release-undrafted`](#codes-progress-and-next) warning.
 
 In `--json`, `data.daily` holds `target` (the daily target, or null), `writingDays` (the `writing-days` as `mon` to `sun`, or null), `today` (`date`, `scheduled`, `written`, `remaining`, and `met`; `written` is null with no session logged before today), `streak` (`current` and `longest`, in days), and `weeks`, one per `--weeks`, oldest first (`start` and `end`, Monday to Sunday, `written`, `days` that gained words, and `target`, the daily target times the writing days in that week, or null).
 
@@ -1561,7 +1561,7 @@ Next Actions:
 story next [path] [--date <YYYY-MM-DD>] [--json]
 ```
 
-Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within 3 days, or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
+Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within `release-warn-days` days (default 3), or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
 
 | Priority | Actions |
 |---|---|
@@ -3314,7 +3314,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 | Code | Level | Reported when |
 |---|---|---|
-| `release-undrafted` | warning | A serial episode's release date is past or within 3 days and its chapter has no prose yet, or, with a `release-every` cadence and a `story.md` status other than `complete`, the episode has no chapter yet (see [Release schedule](project-format.md#release-schedule)). |
+| `release-undrafted` | warning | A serial episode's release date is past or within `release-warn-days` days (default 3) and its chapter has no prose yet, or, with a `release-every` cadence and a `story.md` status other than `complete`, the episode has no chapter yet (see [Release schedule](project-format.md#release-schedule)). |
 
 ### Codes: compare
 

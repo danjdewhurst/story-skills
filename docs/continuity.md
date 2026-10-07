@@ -1219,7 +1219,8 @@ story progress . --date 2026-09-24
 | `story.md` | `deadline` | Due date, `YYYY-MM-DD` |
 | `story.md` | `daily-target-words` | Words a writing day aims for (positive integer) |
 | `story.md` | `writing-days` | The weekdays you plan to write, such as `[mon, tue, thu, fri]`; default every day |
-| `story.md` | `release-every`, `release-start` | A serial's cadence: an episode every so many days from the first release date |
+| `story.md` | `release-every`, `release-start` | A serial's cadence: an episode every so many days, or months such as `1 month`, from the first release date |
+| `story.md` | `release-warn-days` | How many days ahead to warn about an episode with no prose; default 3 |
 | `chapters/chapter-NN.md` | `target-words` | Word target for the chapter (positive integer) |
 | `chapters/chapter-NN.md` | `release-date` | The day this episode releases, off the cadence |
 | `progress.md` | `sessions` | The log: a list of `date` and `words` entries |
@@ -1255,7 +1256,7 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 - **Today** is the words gained since the last session logged before today, measured from the manuscript as it is now, so it counts words not yet logged. It is left out until a session before today exists. A day's words are always a gain against the session before it, because each session records the whole manuscript: the first session is only the starting point.
 - **Streak** counts the days in a row that gained words, ending today or, while today has none yet, yesterday. With `daily-target-words`, a day must reach the target to count. Days outside `writing-days` never break the streak, and count when you write on them anyway. A day with no session counts as a day without writing, so log every writing day; a log that skips days credits their words to the next session.
 - **Last 4 weeks** sums the words gained in each week, Monday to Sunday, ending with the current week, and the days that gained words. `--weeks <n>` shows 1 to 52 weeks instead (`This week:` for 1), and `cli-defaults` in `story.md` can set it for the book. With `daily-target-words`, each week shows its target too: the daily target times the writing days in that week.
-- **Next release** shows the first serial episode due today or later, the days until it, and whether its chapter has prose yet, when the book has a [release schedule](project-format.md#release-schedule). An episode due within 3 days, or past due, with no prose is a `release-undrafted` warning. Once `story.md` has `status: complete`, the schedule ends at the last chapter. When every chapter has a release date, it marks the final release as the last episode, and after it reports the story complete instead of more episodes to write.
+- **Next release** shows the first serial episode due today or later, the days until it, and whether its chapter has prose yet, when the book has a [release schedule](project-format.md#release-schedule). An episode due within `release-warn-days` days (default 3), or past due, with no prose is a `release-undrafted` warning. Once `story.md` has `status: complete`, the schedule ends at the last chapter. When every chapter has a release date, it marks the final release as the last episode, and after it reports the story complete instead of more episodes to write.
 - **Chapter targets** lists only chapters that set `target-words`.
 
 Without `target-words`, the first line reads `Progress: <n> words (no target-words in story.md)`. Without sessions, the sessions line reads `Sessions: none logged (run story progress --log after a writing session)`. The unmodified example shows both:

@@ -15,6 +15,7 @@ daily-target-words: 500
 writing-days: [mon, tue, thu, fri]
 release-every: 7
 release-start: 2026-09-04
+release-warn-days: 4
 season-goal: Find out what Aunty Fola hid at Harrowgate Street station, and keep it from Raymond Sallis.
 premise: A family secret kept to protect someone ends up endangering them, until someone chooses to carry it in the open.
 ---
@@ -33,7 +34,7 @@ Cosy but uneasy: a small, warm workplace at night with something wrong underneat
 
 ## Release Schedule
 
-Weekly, on Fridays at 18:00 UK time, about 500 words an episode. `release-start` and `release-every` above put episode 1 (chapter-01) out on 2026-09-04 and each later episode seven days after the one before, so `story progress` and `story next` show the next episode due and warn when one is close or past with no prose. A chapter's own `release-date` would move just that episode, such as a holiday week.
+Weekly, on Fridays at 18:00 UK time, about 500 words an episode. `release-start` and `release-every` above put episode 1 (chapter-01) out on 2026-09-04 and each later episode seven days after the one before, so `story progress` and `story next` show the next episode due and warn when one is close or past with no prose. `release-warn-days: 4` starts that warning on the Monday before each Friday release rather than the default three days, so a late episode still has all four writing days. A chapter's own `release-date` would move just that episode, such as a holiday week. A monthly serial would set `release-every: 1 month` instead, and go out on the same day each month.
 
 Episode 4 is planned but has no chapter yet: Sallis comes back for the ledger.
 

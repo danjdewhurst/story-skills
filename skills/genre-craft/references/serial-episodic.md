@@ -13,14 +13,19 @@ weekly release schedule (`release-every` and `release-start`).
 ## The release schedule
 
 Record the cadence in `story.md` rather than in prose: `release-every`
-(days between episodes, `7` for weekly) and `release-start` (the real-world
-`YYYY-MM-DD` day episode 1 goes out). Each chapter is an episode in reading
-order. A chapter that moves off the cadence sets its own `release-date`.
-Release dates are always Gregorian, even when the book has a story
-`calendar`. Run `story progress .` or `story next .` to see the next
-episode due; both warn (`release-undrafted`) when an episode due within
-three days, or already past, has no prose or no chapter yet. Draft that
-episode first. When the last episode is written, set `status: complete` in
+(days between episodes, `7` for weekly, or months, `1 month` for monthly)
+and `release-start` (the real-world `YYYY-MM-DD` day episode 1 goes out).
+A monthly cadence releases on the same day each month, or on the month's
+last day when the month is shorter: a serial that starts on the 31st goes
+out on 28 or 29 February. Each chapter is an episode in reading order. A
+chapter that moves off the cadence sets its own `release-date`. Release
+dates are always Gregorian, even when the book has a story `calendar`. Run
+`story progress .` or `story next .` to see the next episode due; both warn
+(`release-undrafted`) when an episode due within three days, or already
+past, has no prose or no chapter yet. Set `release-warn-days` in `story.md`
+to change that window, such as `7` for a monthly serial that needs a week
+to draft, or `0` to warn only from the release day. Draft that episode
+first. When the last episode is written, set `status: complete` in
 `story.md`: the cadence then stops at the last chapter, so the commands stop
 scheduling episodes past it and stop warning about them.
 
