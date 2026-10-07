@@ -34,15 +34,22 @@ export function relativeLinks(markdown) {
   return [...links].sort();
 }
 
-function execRun(command, args, cwd) {
-  return execFileSync(...spawnCommand(command, args), { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+function execRun(command, args, cwd, host) {
+  return execFileSync(...spawnCommand(command, args, host), { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
 // Returns the exit status. `run(command, args, cwd)` stands in for execRun,
-// which spawns npm through spawnCommand, so tests can stand in for npm without
-// packing anything. `platform` picks how the installed bin runs, since
-// Windows links it as a .cmd shim.
-export function checkPackage({ run = execRun, root = repoRoot, log = console.log, error: logError = console.error, platform = process.platform } = {}) {
+// so tests can stand in for npm without packing anything. `host` stands in
+// for the platform and process in scripts/spawn-command.js: npm and the
+// installed bin are .cmd shims on Windows, so there both run as node and a
+// script.
+export function checkPackage({
+  host = {},
+  run = (command, args, cwd) => execRun(command, args, cwd, host),
+  root = repoRoot,
+  log = console.log,
+  error: logError = console.error
+} = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-pack-"));
   try {
     const packDir = path.join(work, "pack");
@@ -58,7 +65,7 @@ export function checkPackage({ run = execRun, root = repoRoot, log = console.log
     run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", tarball], installDir);
 
     const installed = path.join(installDir, "node_modules", "story-skills");
-    const story = (args) => packageBin(installDir, "story-skills", "story", args, { platform });
+    const story = (args) => packageBin(installDir, "story-skills", "story", args, host);
 
     const printed = run(...story(["--version"]), installDir).trim();
     if (!printed.includes(version)) {

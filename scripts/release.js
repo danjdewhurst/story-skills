@@ -119,8 +119,9 @@ export function releaseDeps(overrides = {}) {
   return {
     root,
     // spawnCommand runs npm with node on Windows, where npm is a .cmd shim.
+    // `host` stands in for the platform there, so tests can ask for Windows.
     run: (command, args, options = {}) =>
-      execFileSync(...spawnCommand(command, args), {
+      execFileSync(...spawnCommand(command, args, overrides.host), {
         cwd: root,
         encoding: "utf8",
         stdio: options.inherit ? ["ignore", "inherit", "inherit"] : ["ignore", "pipe", "pipe"],

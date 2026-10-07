@@ -93,7 +93,12 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     const ci = readRepo(".github/workflows/ci.yml");
     const testOs = ci.slice(ci.indexOf("\n  test-os:"), ci.indexOf("\n  node:"));
     expect(testOs).toContain("os: [windows-latest, macos-latest]");
-    expect(testOs).toContain("run: bun run check:package");
+    // Neither the job nor the step has an `if:` that could skip Windows.
+    expect(testOs).not.toMatch(/^ {4}if:/m);
+    const steps = testOs.split(/\n(?= {6}- )/);
+    const step = steps.find((text) => text.includes("run: bun run check:package"));
+    expect(step).toBeDefined();
+    expect(step).not.toMatch(/^\s*if:/m);
   });
 
   test("the check installs the tarball and runs the installed bin", () => {
