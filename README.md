@@ -215,6 +215,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story build [path] --format codex` | Build the story bible as a static, cross-linked HTML site in `dist/codex/` (spoiler-safe unless `--spoilers`) |
 | `story build [path] --format metadata` | Build a retailer metadata sheet from `story.md` with a readiness checklist |
 | `story build [path] --format fountain` | Build a Fountain screenplay skeleton, one scene heading per scene record, to draft an adaptation into |
+| `story build [path] --format twee` | Build a branching book, whose chapters link through `choices`, as a Twine story in Twee 3; `--format ink` builds it as an ink story for Inky and inklecate |
 
 Behavior notes:
 
