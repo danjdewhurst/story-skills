@@ -105,7 +105,8 @@ and spread; filter words and -ly adverbs per 1,000 narration words
 within 30 words; watch-word counts; and avoided spellings. Across the
 manuscript it lists repeated 4-word phrases and character first names that
 readers could confuse. Warnings are advisory and the command exits 0 unless
-a file cannot be read. See `references/prose-checks.md` for what each
+a file cannot be read or a `story.md` `severity` entry promotes a warning to
+an error. See `references/prose-checks.md` for what each
 count means and how to respond.
 
 When the style sheet lists `samples`, the report opens with a profile of
