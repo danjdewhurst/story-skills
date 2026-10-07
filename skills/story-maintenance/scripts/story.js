@@ -31454,8 +31454,8 @@ var COMMANDS = [
     project: "positional",
     options: WRITE_OPTIONS,
     writes: true,
-    run: (context) => runWrite(context, "migrate", migrateProject, (result) => result.changed.length === 0 ? `Project already uses the current schema
-` : `Migrated project to current schema: ${result.changed.length} changes
+    run: (context) => runWrite(context, "migrate", migrateProject, (result, changes) => changes.length === 0 ? `Project already uses the current schema
+` : `Migrated project to current schema: ${changes.length} ${changes.length === 1 ? "change" : "changes"}
 `)
   },
   {
@@ -31758,7 +31758,7 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe, det
       writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
-  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result));
+  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result, changes));
   return writeFindings(io, findings);
 }
 function runOrPreview(dryRun, projectRoot, write) {

@@ -878,9 +878,12 @@ export const COMMANDS = [
     project: "positional",
     options: WRITE_OPTIONS,
     writes: true,
-    run: (context) => runWrite(context, "migrate", migrateProject, (result) => (result.changed.length === 0
+    // The count is of the changes recorded, as --dry-run counts them: a
+    // folder made with its parent is two, and a registry migrate creates
+    // and its reindex then fills is one.
+    run: (context) => runWrite(context, "migrate", migrateProject, (result, changes) => (changes.length === 0
       ? "Project already uses the current schema\n"
-      : `Migrated project to current schema: ${result.changed.length} changes\n`))
+      : `Migrated project to current schema: ${changes.length} ${changes.length === 1 ? "change" : "changes"}\n`))
   },
   {
     name: "add",
@@ -1201,8 +1204,9 @@ function runRestore(context, name) {
 }
 
 // Runs a write command: `write(projectRoot)` makes the changes and
-// `describe(result)` is the text output. Every file it creates, updates, or
-// deletes is recorded as it happens (recordChanges), so --json lists them.
+// `describe(result, changes)` is the text output. Every file it creates,
+// updates, or deletes is recorded as it happens (recordChanges), so --json
+// lists them and a count from `changes` matches the --dry-run count.
 // With --dry-run the same command runs on a copy of the project instead
 // (previewChanges) and the changes it made there are printed: the project
 // is only read and its lock is not taken. The warnings it raises, and the
@@ -1224,7 +1228,7 @@ function runWrite({ parsed, io, root, overrides }, command, write, describe, det
       writes: dryRun ? [] : writtenFiles(projectRoot, changes)
     });
   }
-  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result));
+  io.stdout.write(dryRun ? `${detail(result)}${formatPreview(command, changes)}` : describe(result, changes));
   return writeFindings(io, findings);
 }
 
