@@ -176,6 +176,119 @@ describe("releaseSchedule", () => {
     expect(releaseSchedule({ data, chapters, today: "2026-08-01" }).next).toMatchObject({ episode: 1, daysUntil: 34 });
     expect(releaseSchedule({ data, chapters: [], today: "2026-08-01" }).next).toMatchObject({ episode: 1, chapter: null, date: "2026-09-04" });
   });
+
+  describe("a monthly cadence", () => {
+    const five = [1, 2, 3, 4, 5].map((number) => episode(`chapter-0${number}`, "", true));
+    const dates = (every, start, list = five) => releaseSchedule({ data: { "release-every": every, "release-start": start }, chapters: list, today: "2026-01-01" }).episodes.map((entry) => entry.date);
+
+    test("releases on the start's day each month, or the month's last day when it is shorter", () => {
+      expect(dates("1 month", "2026-09-04")).toEqual(["2026-09-04", "2026-10-04", "2026-11-04", "2026-12-04", "2027-01-04"]);
+      // Each month counts from release-start, so a clamped month does not pull the later ones back.
+      expect(dates("1 month", "2027-01-31")).toEqual(["2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30", "2027-05-31"]);
+      expect(dates("1 month", "2026-08-30")).toEqual(["2026-08-30", "2026-09-30", "2026-10-30", "2026-11-30", "2026-12-30"]);
+      expect(dates("2 months", "2026-12-31")).toEqual(["2026-12-31", "2027-02-28", "2027-04-30", "2027-06-30", "2027-08-31"]);
+      expect(dates("12 months", "2027-03-15")).toEqual(["2027-03-15", "2028-03-15", "2029-03-15", "2030-03-15", "2031-03-15"]);
+    });
+
+    test("releases on 29 February in a leap year", () => {
+      expect(dates("1 month", "2028-01-31").slice(0, 3)).toEqual(["2028-01-31", "2028-02-29", "2028-03-31"]);
+      expect(dates("1 month", "2028-01-29").slice(0, 3)).toEqual(["2028-01-29", "2028-02-29", "2028-03-29"]);
+      // A leap day start falls back to 28 February in a common year, and returns on 29 February in the next leap year.
+      expect(dates("12 months", "2028-02-29")).toEqual(["2028-02-29", "2029-02-28", "2030-02-28", "2031-02-28", "2032-02-29"]);
+      // Century years are leap years only every 400 years.
+      expect(dates("1 month", "2100-01-31").slice(1, 2)).toEqual(["2100-02-28"]);
+      expect(dates("1 month", "2000-01-31").slice(1, 2)).toEqual(["2000-02-29"]);
+    });
+
+    test("reads month and months in any case, and reports the unit", () => {
+      const release = releaseSchedule({ data: { "release-every": " 2 Months ", "release-start": "2026-09-04" }, chapters, today: "2026-09-05" });
+      expect(release).toMatchObject({ every: 2, unit: "month", start: "2026-09-04", warnDays: 3, next: { episode: 2, date: "2026-11-04", daysUntil: 60 } });
+      expect(releaseSchedule({ data, chapters, today: "2026-09-05" })).toMatchObject({ every: 7, unit: "day" });
+      expect(releaseSchedule({ data: {}, chapters: [episode("chapter-01", "2026-09-04", true)], today: "2026-09-05" })).toMatchObject({ every: null, unit: null, warnDays: 3 });
+      // Other units and zero months schedule nothing from the cadence; validate reports them.
+      for (const every of ["1 week", "month", "0 months", "1.5 months", 7.5, true]) {
+        expect(releaseSchedule({ data: { "release-every": every, "release-start": "2026-09-04" }, chapters, today: "2026-09-05" })).toBeNull();
+      }
+    });
+
+    test("finds the next release and the due episodes on clamped days", () => {
+      const monthly = { "release-every": "1 month", "release-start": "2027-01-31" };
+      const three = [episode("chapter-01", "", true), episode("chapter-02", "", true), episode("chapter-03", "", false)];
+      // 2027-02-28 is episode 2's day: next on the day itself, and the day after it is episode 3.
+      expect(releaseSchedule({ data: monthly, chapters: three, today: "2027-02-28" }).next).toMatchObject({ episode: 2, date: "2027-02-28", daysUntil: 0 });
+      expect(releaseSchedule({ data: monthly, chapters: three, today: "2027-03-01" }).next).toMatchObject({ episode: 3, date: "2027-03-31", daysUntil: 30 });
+      expect(releaseSchedule({ data: monthly, chapters: three, today: "2027-03-27" }).warnings).toEqual([]);
+      expect(messages(releaseSchedule({ data: monthly, chapters: three, today: "2027-03-28" }).warnings)).toEqual(["chapters/chapter-03.md (episode 3) releases 2027-03-31, in 3 days, and has no prose yet"]);
+
+      // Past the last chapter, the projected episodes stay on the clamped days.
+      const late = releaseSchedule({ data: monthly, chapters: three, today: "2027-06-28" });
+      expect(late.next).toMatchObject({ episode: 6, chapter: null, date: "2027-06-30", daysUntil: 2 });
+      expect(messages(late.warnings)).toEqual([
+        "chapters/chapter-03.md (episode 3) was due 2027-03-31, 89 days ago, and has no prose yet",
+        "episode 4 was due 2027-04-30, 59 days ago, and has no chapter yet (and 2 more scheduled episodes after it)"
+      ]);
+      // A day earlier, episode 6 on 2027-06-30 is still more than 3 days away.
+      expect(releaseSchedule({ data: monthly, chapters: three, today: "2027-06-26" }).warnings.at(-1).message).toBe("episode 4 was due 2027-04-30, 57 days ago, and has no chapter yet (and 1 more scheduled episode after it)");
+      // Before release-start, episode 1 is next.
+      expect(releaseSchedule({ data: monthly, chapters: [], today: "2026-12-31" }).next).toMatchObject({ episode: 1, chapter: null, date: "2027-01-31", daysUntil: 31 });
+    });
+
+    test("keeps the complete story rules: the cadence stops at the last chapter", () => {
+      const monthly = { "release-every": "1 month", "release-start": "2027-01-31", status: "complete" };
+      const three = [episode("chapter-01", "", true), episode("chapter-02", "", true), episode("chapter-03", "", true)];
+      const before = releaseSchedule({ data: monthly, chapters: three, today: "2027-03-01" });
+      expect(before).toMatchObject({ unit: "month", complete: true, last: 3, next: { episode: 3, date: "2027-03-31" }, warnings: [] });
+      expect(formatNextRelease(before)).toBe("Next release: episode 3 (chapter-03) on 2027-03-31, in 30 days (drafted, the last episode)");
+      const after = releaseSchedule({ data: monthly, chapters: three, today: "2027-06-28" });
+      expect(after).toMatchObject({ last: 3, next: null, warnings: [] });
+      expect(formatNextRelease(after)).toBe("Next release: none, the story is complete; episode 3 (chapter-03) on 2027-03-31 was the last");
+    });
+
+    test("schedules nothing past 9999-12-31", () => {
+      const late = releaseSchedule({ data: { "release-every": "1 month", "release-start": "9999-10-31" }, chapters: five, today: "9999-12-01" });
+      expect(late.episodes.map((entry) => entry.date)).toEqual(["9999-10-31", "9999-11-30", "9999-12-31"]);
+      expect(late.next).toMatchObject({ episode: 3, date: "9999-12-31" });
+      expect(releaseSchedule({ data: { "release-every": "1 month", "release-start": "9999-10-31" }, chapters: [], today: "9999-12-31" }).next).toMatchObject({ episode: 3, chapter: null, date: "9999-12-31" });
+      const huge = releaseSchedule({ data: { "release-every": "100000 months", "release-start": "2026-09-04" }, chapters, today: "2026-09-05" });
+      expect(huge.episodes.map((entry) => entry.date)).toEqual(["2026-09-04"]);
+      expect(huge.next).toBeNull();
+    });
+  });
+
+  describe("release-warn-days", () => {
+    test("sets how many days ahead an undrafted episode is warned about", () => {
+      const wide = { ...data, "release-warn-days": 5 };
+      expect(releaseSchedule({ data: wide, chapters, today: "2026-09-12" }).warnings).toEqual([]);
+      expect(messages(releaseSchedule({ data: wide, chapters, today: "2026-09-13" }).warnings)).toEqual(["chapters/chapter-03.md (episode 3) releases 2026-09-18, in 5 days, and has no prose yet"]);
+      expect(releaseSchedule({ data: wide, chapters, today: "2026-09-13" }).warnDays).toBe(5);
+      // An episode with no chapter yet uses the same window.
+      expect(messages(releaseSchedule({ data: wide, chapters: chapters.slice(0, 2), today: "2026-09-13" }).warnings)).toEqual(["episode 3 releases 2026-09-18, in 5 days, and has no chapter yet"]);
+    });
+
+    test("0 warns only from the release day, and past due episodes always", () => {
+      const none = { ...data, "release-warn-days": 0 };
+      expect(releaseSchedule({ data: none, chapters, today: "2026-09-17" }).warnings).toEqual([]);
+      expect(releaseSchedule({ data: none, chapters: chapters.slice(0, 2), today: "2026-09-17" }).warnings).toEqual([]);
+      expect(messages(releaseSchedule({ data: none, chapters, today: "2026-09-18" }).warnings)).toEqual(["chapters/chapter-03.md (episode 3) releases today (2026-09-18) and has no prose yet"]);
+      expect(messages(releaseSchedule({ data: none, chapters: chapters.slice(0, 2), today: "2026-09-26" }).warnings)).toEqual(["episode 3 was due 2026-09-18, 8 days ago, and has no chapter yet (and 1 more scheduled episode after it)"]);
+    });
+
+    test("an invalid value falls back to 3 days, and a window past 9999-12-31 counts only real days", () => {
+      for (const days of [-1, 2.5, "5"]) {
+        const release = releaseSchedule({ data: { ...data, "release-warn-days": days }, chapters, today: "2026-09-14" });
+        expect(release.warnDays).toBe(3);
+        expect(release.warnings).toEqual([]);
+      }
+      const far = releaseSchedule({ data: { "release-every": 7, "release-start": "9999-12-01", "release-warn-days": 1000000 }, chapters: chapters.slice(0, 1), today: "9999-12-02" });
+      expect(messages(far.warnings)).toEqual(["episode 2 releases 9999-12-08, in 6 days, and has no chapter yet (and 3 more scheduled episodes after it)"]);
+    });
+
+    test("works without a cadence, on release-date episodes", () => {
+      const own = [episode("chapter-01", "2026-10-01", false)];
+      expect(releaseSchedule({ data: { "release-warn-days": 10 }, chapters: own, today: "2026-09-20" }).warnings).toEqual([]);
+      expect(messages(releaseSchedule({ data: { "release-warn-days": 10 }, chapters: own, today: "2026-09-21" }).warnings)).toEqual(["chapters/chapter-01.md (episode 1) releases 2026-10-01, in 10 days, and has no prose yet"]);
+    });
+  });
 });
 
 describe("release schedule in the project", () => {
@@ -186,10 +299,10 @@ describe("release schedule in the project", () => {
     expect(checkProjectSchema(root)).toEqual([]);
 
     const half = serialProject("release-every: 7");
-    expect(messages(validateProject(half.root).errors)).toContain("story.md release-every needs release-start too: an episode every release-every days from release-start");
+    expect(messages(validateProject(half.root).errors)).toContain("story.md release-every needs release-start too: an episode every release-every days or months from release-start");
     expect(checkProjectSchema(half.root).join("\n")).toContain("release-start");
     const other = serialProject("release-start: 2026-09-04");
-    expect(messages(validateProject(other.root).errors)).toContain("story.md release-start needs release-every too: an episode every release-every days from release-start");
+    expect(messages(validateProject(other.root).errors)).toContain("story.md release-start needs release-every too: an episode every release-every days or months from release-start");
     expect(checkProjectSchema(other.root).join("\n")).toContain("release-every");
 
     const bad = serialProject("release-every: 0\nrelease-start: 2026-02-30");
@@ -208,6 +321,50 @@ describe("release schedule in the project", () => {
     writeChapter(calendar.root, 1, 100, "date: 3 Thaw 302 AE\nrelease-date: 2026-09-05");
     expect(messages(validateProject(calendar.root).errors)).toEqual([]);
     expect(projectProgress(calendar.root, { date: "2026-09-01" }).release.next).toMatchObject({ episode: 1, date: "2026-09-05" });
+  });
+
+  test("validate accepts a monthly cadence and release-warn-days, and the schema agrees", () => {
+    for (const fields of ["release-every: 1 month\nrelease-start: 2026-01-31", "release-every: 3 Months\nrelease-start: 2026-01-31\nrelease-warn-days: 0", "release-every: 7\nrelease-start: 2026-09-04\nrelease-warn-days: 10"]) {
+      const { root } = serialProject(fields);
+      expect(messages(validateProject(root).errors)).toEqual([]);
+      expect(validateProject(root).warnings.filter((warning) => warning.code === "near-miss-key")).toEqual([]);
+      expect(checkProjectSchema(root)).toEqual([]);
+    }
+
+    const cases = [
+      ["release-every: 0 months", "field-below-minimum", "story.md frontmatter field release-every must be at least 1 month"],
+      ["release-every: 2 weeks", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"2 weeks\""],
+      ["release-every: 1.5 months", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got \"1.5 months\""],
+      ["release-every: 7.5", "unsupported-value", "story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got 7.5"],
+      ["release-every: 7\nrelease-warn-days: -1", "field-below-minimum", "story.md frontmatter field release-warn-days must be at least 0"],
+      ["release-every: 7\nrelease-warn-days: soon", "field-not-integer", "story.md frontmatter field release-warn-days must be an integer"]
+    ];
+    for (const [fields, code, message] of cases) {
+      const { root } = serialProject(`${fields}\nrelease-start: 2026-09-04`);
+      const errors = validateProject(root).errors;
+      expect(errors).toEqual([expect.objectContaining({ code, message })]);
+      expect(checkProjectSchema(root)).not.toEqual([]);
+      // progress reports the same error, and schedules nothing from a bad cadence.
+      expect(messages(projectProgress(root, { date: "2026-09-05" }).errors)).toEqual([message]);
+    }
+    expect(projectProgress(serialProject("release-every: 2 weeks\nrelease-start: 2026-09-04").root, { date: "2026-09-05" }).release).toBeNull();
+  });
+
+  test("progress and next follow a monthly cadence and release-warn-days, in text and JSON", () => {
+    const { root, cwd } = serialProject("release-every: 1 month\nrelease-start: 2027-01-31\nrelease-warn-days: 7");
+    const quiet = invoke(cwd, ["progress", root, "--date", "2027-03-23"]);
+    expect(quiet.out).toContain("Next release: episode 3 (chapter-03) on 2027-03-31, in 8 days (not drafted)\n");
+    expect(quiet.err).not.toContain("release-undrafted");
+    const text = invoke(cwd, ["next", root, "--date", "2027-03-24"]);
+    expect(text.out).toContain("Next release: episode 3 (chapter-03) on 2027-03-31, in 7 days (not drafted)\n");
+    expect(text.out).toContain("- [P1] Draft the scheduled episode: chapters/chapter-03.md (episode 3) releases 2027-03-31, in 7 days, and has no prose yet");
+
+    for (const command of ["progress", "next"]) {
+      const json = JSON.parse(invoke(cwd, [command, root, "--date", "2027-02-01", "--json"]).out);
+      expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+      expect(json.data.release).toMatchObject({ every: 1, unit: "month", start: "2027-01-31", warnDays: 7, next: { episode: 2, date: "2027-02-28", daysUntil: 27 } });
+      expect(json.data.release.episodes.map((entry) => entry.date)).toEqual(["2027-01-31", "2027-02-28", "2027-03-31"]);
+    }
   });
 
   test("progress prints the next release and warns, in text and JSON", () => {

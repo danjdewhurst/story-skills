@@ -165,10 +165,12 @@
     "release": {
       "type": ["object", "null"],
       "description": "The serial release schedule on --date, or null when story.md sets no release-every cadence and no chapter has a release-date. Each chapter is an episode, in reading order.",
-      "required": ["every", "start", "complete", "last", "next", "episodes"],
+      "required": ["every", "unit", "start", "warnDays", "complete", "last", "next", "episodes"],
       "properties": {
-        "every": { "type": ["integer", "null"], "minimum": 1, "description": "story.md release-every, or null without a cadence." },
+        "every": { "type": ["integer", "null"], "minimum": 1, "description": "The number of days or months between episodes from story.md release-every, or null without a cadence." },
+        "unit": { "enum": ["day", "month", null], "description": "day for a release-every day count, month for a monthly cadence such as 1 month, or null without a cadence." },
         "start": { "type": ["string", "null"], "description": "story.md release-start, or null without a cadence." },
+        "warnDays": { "type": "integer", "minimum": 0, "description": "story.md release-warn-days, or 3 when it is unset: an episode with no prose due within this many days, or past due, is a release-undrafted warning." },
         "complete": { "type": "boolean", "description": "True when story.md has status: complete. The chapters are then every episode there is: the cadence stops at the last one, and nothing is scheduled past it." },
         "last": { "type": ["integer", "null"], "minimum": 1, "description": "The episode number of a complete story's final release, when every chapter has a release date; otherwise null." },
         "next": {

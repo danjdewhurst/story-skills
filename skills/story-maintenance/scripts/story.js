@@ -12607,6 +12607,7 @@ function tweeSource(story) {
 
 // src/release-schedule.js
 var RELEASE_SOON_DAYS = 3;
+var MONTHS_PATTERN = /^(\d+)\s+months?$/i;
 var LAST_DAY = parseClockDate("9999-12-31").days;
 function projectRelease(project, today) {
   return releaseSchedule({
@@ -12627,18 +12628,66 @@ function releaseData(release) {
   const { warnings, ...rest } = release;
   return rest;
 }
+function releaseEvery(value) {
+  if (Number.isInteger(value)) {
+    return value >= 1 ? { every: value, unit: "day" } : null;
+  }
+  const months = releaseMonths(value);
+  return months !== null && months >= 1 ? { every: months, unit: "month" } : null;
+}
+function releaseMonths(value) {
+  const match = typeof value === "string" ? MONTHS_PATTERN.exec(value.trim()) : null;
+  return match ? Number(match[1]) : null;
+}
+function releaseWarnDays(data) {
+  const days = data["release-warn-days"];
+  return Number.isInteger(days) && days >= 0 ? days : RELEASE_SOON_DAYS;
+}
 function releaseCadence(data) {
-  const every = data["release-every"];
+  const every = releaseEvery(data["release-every"]);
   const start = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
-  return Number.isInteger(every) && every >= 1 && start ? { every, start: start.text, startDays: start.days } : null;
+  if (every === null || !start) {
+    return null;
+  }
+  const date = new Date(start.days * 86400000);
+  return { ...every, start: start.text, startDays: start.days, startMonth: date.getUTCFullYear() * 12 + date.getUTCMonth(), startDay: date.getUTCDate() };
+}
+function cadenceDays(cadence, index) {
+  if (cadence.unit === "day") {
+    return cadence.startDays + index * cadence.every;
+  }
+  const month = cadence.startMonth + index * cadence.every;
+  const year = Math.floor(month / 12);
+  if (year > 9999) {
+    return Infinity;
+  }
+  const lastDay = utcDate(year, month % 12 + 1, 0).getUTCDate();
+  return utcDate(year, month % 12, Math.min(cadence.startDay, lastDay)).getTime() / 86400000;
+}
+function dueBy(cadence, days) {
+  if (days < cadence.startDays) {
+    return 0;
+  }
+  if (cadence.unit === "day") {
+    return Math.floor((days - cadence.startDays) / cadence.every) + 1;
+  }
+  const date = new Date(days * 86400000);
+  const index = Math.floor((date.getUTCFullYear() * 12 + date.getUTCMonth() - cadence.startMonth) / cadence.every);
+  return cadenceDays(cadence, index) <= days ? index + 1 : index;
+}
+function utcDate(year, month, day) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month, day);
+  return date;
 }
 function releaseSchedule({ data, chapters, today }) {
   const cadence = releaseCadence(data);
+  const warnDays = releaseWarnDays(data);
   const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
   const episodes = [];
   chapters.forEach((chapter, index) => {
-    let days = cadence ? cadence.startDays + index * cadence.every : null;
+    let days = cadence ? cadenceDays(cadence, index) : null;
     if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
       days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
     }
@@ -12650,18 +12699,18 @@ function releaseSchedule({ data, chapters, today }) {
     return null;
   }
   const projected = (index) => {
-    const days = cadence.startDays + index * cadence.every;
+    const days = cadenceDays(cadence, index);
     return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
   };
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
   if (cadence !== null && !complete) {
-    const upcoming = projected(Math.max(chapters.length, Math.ceil((todayDays - cadence.startDays) / cadence.every)));
+    const upcoming = projected(Math.max(chapters.length, dueBy(cadence, todayDays - 1)));
     if (upcoming !== null) {
       candidates.push(upcoming);
     }
-    unwritten = Math.floor((todayDays + RELEASE_SOON_DAYS - cadence.startDays) / cadence.every) - chapters.length + 1;
+    unwritten = dueBy(cadence, Math.min(todayDays + warnDays, LAST_DAY)) - chapters.length;
     firstUnwritten = unwritten > 0 ? projected(chapters.length) : null;
   }
   candidates.sort((left, right) => left.days - right.days || left.episode - right.episode);
@@ -12669,7 +12718,7 @@ function releaseSchedule({ data, chapters, today }) {
   const last = complete && episodes.length > 0 && episodes.length === chapters.length ? episodes.reduce((latest, episode) => episode.days >= latest.days ? episode : latest).episode : null;
   const warnings = [];
   for (const episode of episodes) {
-    if (!episode.drafted && episode.days <= todayDays + RELEASE_SOON_DAYS) {
+    if (!episode.drafted && episode.days <= todayDays + warnDays) {
       warnings.push(warn("release-undrafted", `${episode.file} (episode ${episode.episode}) ${releaseWhen(episode.date, episode.days - todayDays)} and has no prose yet`, episode.file));
     }
   }
@@ -12679,7 +12728,9 @@ function releaseSchedule({ data, chapters, today }) {
   }
   return {
     every: cadence?.every ?? null,
+    unit: cadence?.unit ?? null,
     start: cadence?.start ?? null,
+    warnDays,
     complete,
     last,
     next,
@@ -17492,7 +17543,7 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
@@ -22743,13 +22794,19 @@ function validateDeadline(data, errors) {
 function validateReleaseCadence(data, errors) {
   const every = data["release-every"];
   const start = data["release-start"];
-  if (every !== undefined) {
+  const months = releaseMonths(every);
+  if (Number.isInteger(every)) {
     requireInteger(data, "release-every", "story.md", errors, 1);
+  } else if (months === 0) {
+    errors.push(err("field-below-minimum", "story.md frontmatter field release-every must be at least 1 month", "story.md"));
+  } else if (every !== undefined && months === null) {
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got ${JSON.stringify(every)}`, "story.md"));
   }
+  requireInteger(data, "release-warn-days", "story.md", errors, 0);
   validateReleaseDate(start, "story.md release-start", "story.md", errors);
   if (every === undefined !== (start === undefined)) {
     const [set, unset] = every === undefined ? ["release-start", "release-every"] : ["release-every", "release-start"];
-    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days from release-start`, "story.md"));
+    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days or months from release-start`, "story.md"));
   }
 }
 function validateReleaseDate(value, name, label, errors) {

@@ -21,6 +21,7 @@ import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
 import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.js";
+import { releaseMonths } from "./release-schedule.js";
 import { plural } from "./plural.js";
 import { STYLE_LISTS, STYLE_LIST_FIELDS, styleListEntries, styleWords } from "./languages/style.js";
 import { lowerCase } from "./languages/locale.js";
@@ -1856,19 +1857,27 @@ export function validateDeadline(data, errors) {
   }
 }
 
-// The serial release cadence: an episode every `release-every` days from
-// `release-start`. Each needs the other, and the start is a real-world day,
-// YYYY-MM-DD even in a book with a story calendar.
+// The serial release cadence: an episode every `release-every` days, or
+// months such as `1 month`, from `release-start`. Each needs the other, and
+// the start is a real-world day, YYYY-MM-DD even in a book with a story
+// calendar. `release-warn-days`, the days before a release that an
+// undrafted episode is warned about, can be 0: only on the day and after.
 export function validateReleaseCadence(data, errors) {
   const every = data["release-every"];
   const start = data["release-start"];
-  if (every !== undefined) {
+  const months = releaseMonths(every);
+  if (Number.isInteger(every)) {
     requireInteger(data, "release-every", "story.md", errors, 1);
+  } else if (months === 0) {
+    errors.push(err("field-below-minimum", "story.md frontmatter field release-every must be at least 1 month", "story.md"));
+  } else if (every !== undefined && months === null) {
+    errors.push(err("unsupported-value", `story.md frontmatter field release-every must be a number of days, such as 7, or of months, such as 1 month, got ${JSON.stringify(every)}`, "story.md"));
   }
+  requireInteger(data, "release-warn-days", "story.md", errors, 0);
   validateReleaseDate(start, "story.md release-start", "story.md", errors);
   if ((every === undefined) !== (start === undefined)) {
     const [set, unset] = every === undefined ? ["release-start", "release-every"] : ["release-every", "release-start"];
-    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days from release-start`, "story.md"));
+    errors.push(err("missing-field", `story.md ${set} needs ${unset} too: an episode every release-every days or months from release-start`, "story.md"));
   }
 }
 
