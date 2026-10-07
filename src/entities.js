@@ -270,7 +270,11 @@ zfr:1d537 zhcy:436 zigrarr:21dd zopf:1d56b zscr:1d4cf zwj:200d zwnj:200c
 // The longest name in the list, CounterClockwiseContourIntegral, has 31
 // letters, so the match is bounded.
 const REFERENCE = /&(?:#([0-9]{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/y;
-const REFERENCES = new RegExp(REFERENCE.source, "g");
+// Characters a reference never stands for: control characters other than a
+// tab or line break, which XML forbids and a terminal would act on (an
+// escape sequence in `story compare` output), and U+E000 and U+E001, which
+// word counts and builds use as markers of their own.
+const UNPRINTABLE = /^[\0-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ue000\ue001]$/;
 
 // Made on first use, so text without a named reference never builds it.
 let named;
@@ -288,25 +292,21 @@ function namedReference(name) {
 
 // The character a reference names, or undefined when it names none. A
 // number that is 0, a surrogate, or past U+10FFFF is U+FFFD, as in
-// CommonMark.
+// CommonMark, and so is an UNPRINTABLE one.
 function referenceValue(decimal, hexadecimal, name) {
   if (name !== undefined) {
     return namedReference(name);
   }
   const code = decimal === undefined ? Number.parseInt(hexadecimal, 16) : Number(decimal);
-  return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "\ufffd" : String.fromCodePoint(code);
+  const invalid = code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff);
+  return invalid || UNPRINTABLE.test(String.fromCodePoint(code)) ? "\ufffd" : String.fromCodePoint(code);
 }
 
 // The reference that starts at `index` of `text`, as { value, length }, or
-// null when none does.
+// null when none does. Builds and word counts both read references here.
 export function characterReference(text, index) {
   REFERENCE.lastIndex = index;
   const match = REFERENCE.exec(text);
   const value = match === null ? undefined : referenceValue(match[1], match[2], match[3]);
   return value === undefined ? null : { value, length: match[0].length };
-}
-
-// The text with each reference replaced by its character.
-export function decodeCharacterReferences(text) {
-  return String(text).replace(REFERENCES, (reference, decimal, hexadecimal, name) => referenceValue(decimal, hexadecimal, name) ?? reference);
 }

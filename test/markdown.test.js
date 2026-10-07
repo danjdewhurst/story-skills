@@ -427,7 +427,9 @@ describe("countTodoMarkers", () => {
 describe("inline markdown edge cases (#592)", () => {
   // Each line as pandoc's CommonMark reader (pandoc -f commonmark) reads it,
   // with each link printed as its text and each image left out. Code spans,
-  // escapes, and autolinks stay as written for the builds to read.
+  // escapes, and autolinks stay as written for the builds to read. Pandoc
+  // alone takes `[a](<b>"t")` for a link: CommonMark, cmark, and markdown-it
+  // want a space before a title.
   const linkCases = [
     ["[Foo](https://en.wikipedia.org/wiki/Foo_(bar))", "Foo"],
     ["[Foo](https://x.com \"Title (x)\")", "Foo"],
@@ -435,24 +437,38 @@ describe("inline markdown edge cases (#592)", () => {
     ["`[x](y)` and ``[a](b)``", "`[x](y)` and ``[a](b)``"],
     ["[a [b] c](d)", "a [b] c"],
     ["[a [b](c) d](e)", "[a b d](e)"],
+    ["[x [a](b) ] [c](d)", "[x a ] c"],
     ["![x [a](b) y](c) after", " after"],
     ["[![cover](a.png)](b)", ""],
     ["[a](<b c>) [d](<e\nf>)", "a [d](<e\nf>)"],
+    ["[a](<b<c>) [d](<e>\"t\")", "[a](<b<c>) [d](<e>\"t\")"],
     ["[a](b\n\"title\") [c](d 'e') [f](g (h))", "a c f"],
+    ["[a](b\r\n\"t\")", "a"],
     ["[a](b (t) [c](d ((e)))", "[a](b (t) [c](d ((e)))"],
     ["[a]() [b](<>)", "a b"],
     ["[a](\\(b) [c](d\\))", "a c"],
     ["[a](foo(and(bar)) [b](foo\\(and\\(bar\\))", "[a](foo(and(bar)) b"],
+    ["[a](b(c d)) [e](f(g)h)", "[a](b(c d)) e"],
     ["[a](b 't' x)", "[a](b 't' x)"],
     ["[a]\n(b)", "[a]\n(b)"],
     ["[a\n\nb](c)", "[a\n\nb](c)"],
     ["[a](b \"t\n\nt\")", "[a](b \"t\n\nt\")"],
     ["> [a](b\n> \"t\")", "> a"],
+    ["> [a\n>\n> b](c)", "> [a\n>\n> b](c)"],
+    ["> [a\nb](c)", "> a\nb"],
+    ["[a\n> b](c)", "[a\n> b](c)"],
+    // A scene break and a heading end the paragraph, as in the builds, so
+    // neither a link nor a code span pairs across them.
+    ["It`s [here](x).\n* * *\nShe`d gone.", "It`s here.\n* * *\nShe`d gone."],
+    ["[no](\n***\n) later.", "[no](\n***\n) later."],
+    ["a `b\n# [c](d)\ne` f", "a `b\n# c\ne` f"],
     ["[not a `link](/foo`)", "[not a `link](/foo`)"],
     ["<http://a.com/[x](y)>", "<http://a.com/[x](y)>"],
+    // A scheme has 32 characters at most.
+    [`<${"a".repeat(32)}:[x](y)> <${"a".repeat(33)}:[x](y)>`, `<${"a".repeat(32)}:[x](y)> <${"a".repeat(33)}:x>`],
     ["\\[a](b) [a\\](b) \\![c](d)", "\\[a](b) [a\\](b) \\!c"],
     [`[a](${"(".repeat(32)}x${")".repeat(32)}) [b](${"(".repeat(33)}x${")".repeat(33)})`, `a [b](${"(".repeat(33)}x${")".repeat(33)})`],
-    ["```\n[a](b)\n```\n[c](d)", "```\n[a](b)\n```\nc"]
+    ["```\n[a](b)\n\n[c](d)\n```\n[e](f)", "```\n[a](b)\n\n[c](d)\n```\ne"]
   ];
 
   test("links read as CommonMark reads them: parentheses in pairs, titles, and nothing in code", () => {
@@ -461,14 +477,22 @@ describe("inline markdown edge cases (#592)", () => {
     }
   });
 
-  test("word and character counts read links, code, and character references as builds print them", () => {
+  test("word and character counts read links, code, autolinks, and character references as builds print them", () => {
     // A code span prints as written, and so does text that is not a link.
     expect(splitWords("`[x](y)` [Aside](not a link) [Foo](https://x.com/Foo_(bar))")).toEqual(["x", "y", "Aside", "not", "a", "link", "Foo"]);
+    expect(splitWords("```\n[a](b)\n\n[c](d)\n```\n[e](f)")).toEqual(["a", "b", "c", "d", "e"]);
     expect(splitWords("He left&mdash;then&nbsp;stopped &#8212; &#x2014; &amp; &madeup;")).toEqual(["He", "left", "then", "stopped", "madeup"]);
-    // A reference to U+E000, which word counts use as a placeholder, is a
-    // space like the character itself.
-    expect(splitWords("one &#xE000; two  three https://x.com")).toEqual(["one", "two", "three", "https://x.com"]);
-    expect(characterCount("&mdash;&#x4E00;&nbsp;&#12354;")).toBe(3);
+    // A reference in code, in an autolink, or after a backslash prints as
+    // written, and one is read once: `&amp;mdash;` prints `&mdash;`.
+    expect(splitWords("`&mdash;` x \\&amp; y &amp;mdash; <https://x.com/?a=1&amp;b=2>")).toEqual(["mdash", "x", "amp", "y", "mdash", "https://x.com/?a=1&amp;b=2"]);
+    expect(characterCount("```\n&mdash;\n```")).toBe(7);
+    // An autolink prints as its address; a reference to a marker the counts
+    // use is U+FFFD.
+    expect(characterCount("<https://x/&amp;>")).toBe(15);
+    expect(splitWords("one &#xE000; two \uE000 three https://x.com")).toEqual(["one", "two", "three", "https://x.com"]);
+    expect(characterCount("&mdash;&#x4E00;&nbsp;&#12354;&#xE000;")).toBe(4);
+    // A line is a scene break as written: one made of references prints.
+    expect(characterCount("&#45;&#45;&#45;\n---\n\\* \\* \\*")).toBe(3);
   });
 
   test("finds footnote definitions in the prose, by line", () => {
@@ -489,24 +513,39 @@ describe("inline markdown edge cases (#592)", () => {
       "```",
       "`[^5]: In a code span.`",
       "[^]: Empty.",
+      "",
+      "    [^6]: Indented code.",
+      "   [^7]: Indented three spaces.",
+      "<div>",
+      "[^8]: In an HTML block.",
+      "",
+      "Text",
+      "<custom-tag>",
+      "[^9]: A lone tag cannot interrupt a paragraph.",
       ""
     ].join("\n");
-    expect(footnoteLines(prose)).toEqual([8, 9]);
-    expect(footnoteLines(prose.replace(/\n/g, "\r\n"))).toEqual([8, 9]);
+    expect(footnoteLines(prose)).toEqual([8, 9, 18, 24]);
+    expect(footnoteLines(prose.replace(/\n/g, "\r\n"))).toEqual([8, 9, 18, 24]);
     expectLinearTime(footnoteLines, (n) => `[^${"[^".repeat(n / 2)}`);
-  });
+  }, 15000);
 
-  test("link destinations, titles, and autolinks are read in linear time", () => {
-    // Unclosed parentheses nested in each destination: each `](` once read
-    // them again, up to 32 deep.
-    expectComparableTime(plainLinks, `[a](${"(".repeat(31)}x`.repeat(8000), `[a]x${"(".repeat(31)}x`.repeat(8000));
+  // Sized so that a scan gone quadratic fails in seconds rather than
+  // hanging the suite.
+  test("link destinations, titles, paragraphs, and autolinks are read in linear time", () => {
+    // Destinations that never close, each nested in the last.
+    expectComparableTime(plainLinks, "[a](x".repeat(6400), "[a]xx".repeat(6400));
     // Destinations nested in each other that all close.
-    expectLinearTime(plainLinks, (n) => `${"[a](".repeat(n / 8)}x${")".repeat(n / 8)}`, { length: 256000 });
+    expectLinearTime(plainLinks, (n) => `${"[a](".repeat(n / 8)}x${")".repeat(n / 8)}`);
     // Titles and <destinations> that never close.
-    expectComparableTime(plainLinks, "[a](b \"".repeat(64000), "[a]xb \"".repeat(64000));
-    expectComparableTime(plainLinks, "[a](<".repeat(64000), "[a]x<".repeat(64000));
+    expectComparableTime(plainLinks, "[a](b \"".repeat(4000), "[a]xb \"".repeat(4000));
+    expectComparableTime(plainLinks, "[a](<".repeat(6400), "[a]x<".repeat(6400));
+    // Many lines of one quoted paragraph, and many paragraphs.
+    expectLinearTime(plainLinks, (n) => "> [a\n".repeat(n / 5));
+    expectLinearTime(plainLinks, (n) => "[a\n* * *\n".repeat(n / 9));
+    // Autolinks and tries at one in word counts.
+    expectLinearTime(wordCount, (n) => "<ab:x> `<a:` ".repeat(n / 13));
     // An email autolink's domain that never closes: a pattern repeating its
     // labels backtracked over each of them.
     expectLinearTime(plainLinks, (n) => `<a@${"b.".repeat(n / 2)}`, { length: 256000 });
-  });
+  }, 15000);
 });

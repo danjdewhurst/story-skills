@@ -1010,10 +1010,10 @@ word-count: 0
 
     const epub = readArchiveText(buildBook(created.root, { format: "epub" }).outFile);
     expect(epub).toContain("<p>See Foo and the map, not [x](y) or [Aside](not a link).</p>");
-    expect(epub).toContain("<p>He left—then wrote to https://example.com/a_b.</p>");
+    expect(epub).toContain("<p>He left\u2014then\u00a0wrote to https://example.com/a_b.</p>");
     const docx = readArchiveText(buildBook(created.root, { format: "docx" }).outFile);
     expect(docx).toContain('<w:t xml:space="preserve">See Foo and the map, not [x](y) or [Aside](not a link).</w:t>');
-    expect(docx).toContain('<w:t xml:space="preserve">He left—then wrote to https://example.com/a_b.</w:t>');
+    expect(docx).toContain('<w:t xml:space="preserve">He left\u2014then\u00a0wrote to https://example.com/a_b.</w:t>');
   });
 
   test("validate warns about footnotes, which builds print as written (#592)", () => {

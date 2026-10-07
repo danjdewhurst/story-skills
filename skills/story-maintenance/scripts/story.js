@@ -2274,7 +2274,7 @@ yicy:457 yopf:1d56a yscr:1d4ce yucy:44e yuml:ff zacute:17a zcaron:17e zcy:437 zd
 zfr:1d537 zhcy:436 zigrarr:21dd zopf:1d56b zscr:1d4cf zwj:200d zwnj:200c
 `;
 var REFERENCE = /&(?:#([0-9]{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/y;
-var REFERENCES = new RegExp(REFERENCE.source, "g");
+var UNPRINTABLE = /^[\0-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ue000\ue001]$/;
 var named;
 function namedReference(name) {
   if (named === undefined) {
@@ -2291,7 +2291,8 @@ function referenceValue(decimal, hexadecimal, name) {
     return namedReference(name);
   }
   const code = decimal === undefined ? Number.parseInt(hexadecimal, 16) : Number(decimal);
-  return code === 0 || code > 1114111 || code >= 55296 && code <= 57343 ? "�" : String.fromCodePoint(code);
+  const invalid = code === 0 || code > 1114111 || code >= 55296 && code <= 57343;
+  return invalid || UNPRINTABLE.test(String.fromCodePoint(code)) ? "�" : String.fromCodePoint(code);
 }
 function characterReference(text, index) {
   REFERENCE.lastIndex = index;
@@ -10209,8 +10210,7 @@ function plainLinks(text) {
   return splitFences(String(text)).map((part) => part.fenced ? part.text : withoutLinks(part.text)).join("");
 }
 var ESCAPABLE = /[!-/:-@[-`{-~]/;
-var BLANK_LINE = /\n[ \t\r>]*(?:\n|$)/g;
-var AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
+var AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f\ue000\ue001]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
 var DOMAIN_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 var MAX_DESTINATION_PARENS = 32;
 function autolinkEnd(text, index) {
@@ -10223,59 +10223,50 @@ function autolinkEnd(text, index) {
 }
 function withoutLinks(source) {
   const cuts = [];
-  const openers = [];
-  let inactive = 0;
-  let paragraphStart = 0;
-  let paragraphEnd = -1;
-  let closeSpan = null;
-  let groups = null;
-  for (let index = 0;index < source.length; ) {
-    if (index > paragraphEnd) {
-      BLANK_LINE.lastIndex = index;
-      paragraphStart = index;
-      paragraphEnd = BLANK_LINE.exec(source)?.index ?? source.length;
-      openers.length = 0;
-      inactive = 0;
-      closeSpan = codeSpanCloser(source, paragraphEnd);
-      groups = null;
-    }
-    const character = source[index];
-    const autolink = character === "<" ? autolinkEnd(source, index) : -1;
-    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
-      index += 2;
-    } else if (character === "`") {
-      let run = index;
-      while (source[run] === "`") {
-        run += 1;
-      }
-      const end = closeSpan(index, run - index);
-      index = end === -1 ? run : end;
-    } else if (autolink !== -1) {
-      index = autolink;
-    } else if (character === "[" || character === "!" && source[index + 1] === "[") {
-      inactive = Math.min(inactive, openers.length);
-      openers.push({ start: index, image: character === "!" });
-      index += character === "!" ? 2 : 1;
-    } else if (character === "]" && openers.length > 0) {
-      const opener = openers.pop();
-      let end = -1;
-      if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
-        groups ??= parenGroups(source, paragraphStart, paragraphEnd);
-        end = inlineLinkEnd(source, index + 1, paragraphEnd, groups);
-      }
-      if (end === -1) {
-        index += 1;
-        continue;
-      }
-      if (opener.image) {
-        cuts.push([opener.start, end]);
+  for (const [start, end] of inlineBlocks(source)) {
+    const openers = [];
+    let inactive = 0;
+    const closeSpan = codeSpanCloser(source, end);
+    let groups = null;
+    for (let index = start;index < end; ) {
+      const character = source[index];
+      const autolink = character === "<" ? autolinkEnd(source, index) : -1;
+      if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+        index += 2;
+      } else if (character === "`") {
+        let run = index;
+        while (source[run] === "`") {
+          run += 1;
+        }
+        const close = closeSpan(index, run - index);
+        index = close === -1 ? run : close;
+      } else if (autolink !== -1) {
+        index = autolink;
+      } else if (character === "[" || character === "!" && source[index + 1] === "[") {
+        inactive = Math.min(inactive, openers.length);
+        openers.push({ start: index, image: character === "!" });
+        index += character === "!" ? 2 : 1;
+      } else if (character === "]" && openers.length > 0) {
+        const opener = openers.pop();
+        let linkEnd = -1;
+        if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
+          groups ??= parenGroups(source, start, end);
+          linkEnd = inlineLinkEnd(source, index + 1, end, groups);
+        }
+        if (linkEnd === -1) {
+          index += 1;
+          continue;
+        }
+        if (opener.image) {
+          cuts.push([opener.start, linkEnd]);
+        } else {
+          cuts.push([opener.start, opener.start + 1], [index, linkEnd]);
+          inactive = openers.length;
+        }
+        index = linkEnd;
       } else {
-        cuts.push([opener.start, opener.start + 1], [index, end]);
-        inactive = openers.length;
+        index += 1;
       }
-      index = end;
-    } else {
-      index += 1;
     }
   }
   cuts.sort((left, right) => left[0] - right[0]);
@@ -10288,6 +10279,35 @@ function withoutLinks(source) {
     }
   }
   return result + source.slice(position);
+}
+function inlineBlocks(source) {
+  const blocks = [];
+  let open = null;
+  for (let lineStart = 0;lineStart <= source.length; ) {
+    const newline = source.indexOf(`
+`, lineStart);
+    const lineEnd = newline === -1 ? source.length : newline;
+    const line = source.slice(lineStart, lineEnd).replace(/\r$/, "");
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(line);
+    const content = marker ? line.slice(marker[0].length) : line;
+    const blank = content.trim() === "";
+    const alone = !blank && (breaksParagraph(content) || ATX_HEADING.test(content));
+    if (blank || alone || marker && open !== null && !open.quote) {
+      open = null;
+    }
+    if (!blank) {
+      if (open === null) {
+        open = { quote: Boolean(marker), block: [lineStart, lineEnd] };
+        blocks.push(open.block);
+      }
+      open.block[1] = lineEnd;
+      if (alone) {
+        open = null;
+      }
+    }
+    lineStart = lineEnd + 1;
+  }
+  return blocks;
 }
 function parenGroups(source, start, end) {
   const groups = new Map;
@@ -10566,7 +10586,7 @@ function setextSceneBreakLines(markdownBody) {
   }
   return found;
 }
-var FOOTNOTE_DEFINITION = /^[ \t>]*\[\^[^\]\n]+\]:/;
+var FOOTNOTE_DEFINITION = /^ *\[\^[^\]\n]+\]:/;
 function footnoteLines(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, `
 `);
@@ -10574,8 +10594,29 @@ function footnoteLines(markdownBody) {
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split(`
 `).length - 1;
-  return masked.slice(start).split(`
-`).flatMap((line, index) => FOOTNOTE_DEFINITION.test(line) ? [first + index] : []);
+  const found = [];
+  let html = null;
+  let paragraph = false;
+  for (const [index, line] of masked.slice(start).split(`
+`).entries()) {
+    const content = expandTabs(line.slice(/^(?: {0,3}>[ \t]?)*/.exec(line)[0].length));
+    if (html !== null) {
+      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
+    } else if (content.trim() === "") {
+      paragraph = false;
+    } else if (indentOf(content) <= 3) {
+      const block = htmlBlock(content, paragraph);
+      const footnote = block === null && FOOTNOTE_DEFINITION.test(content);
+      if (block !== null) {
+        html = block.end !== null && block.end.test(content) ? null : block;
+      }
+      if (footnote) {
+        found.push(first + index);
+      }
+      paragraph = block === null && !footnote;
+    }
+  }
+  return found;
 }
 var CJK_CHARACTER2 = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
 var WIDE_PUNCTUATION = /^[\u00b7\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
@@ -10640,9 +10681,10 @@ function wordCount(markdown) {
 }
 var graphemes2;
 function characterCount(markdown) {
-  const text = countedText(plainLinks(String(markdown).replace(/\uE000/g, " "))).split(`
-`).filter((line) => !isSceneBreak(line)).join(`
-`).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
+  const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split(`
+`);
+  const text = countedText(lines.map((line) => isSceneBreak(line) ? "" : line).join(`
+`)).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
   graphemes2 ??= new Intl.Segmenter("en", { granularity: "grapheme" });
   let count = 0;
   for (const _ of graphemes2.segment(text)) {
@@ -10803,7 +10845,7 @@ var DEFINITION_INDENT = /^(?:[ \t]*>)* {0,3}\[/;
 var NO_LABELS = new Set;
 function countedText(markdown) {
   const parts = splitFences(String(markdown));
-  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: codeSpans(part.text) }));
+  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: literalSpans(part.text) }));
   const used = new Set;
   for (const { text, code } of prose) {
     const outsideCode = missesAll(code);
@@ -10853,7 +10895,7 @@ function proseWordSpans(text) {
   copy(source.length);
   return wordSpans(counted, WORD_PATTERN).map(({ word, start, end }) => ({ word, start: starts[start], end: ends[end - 1] }));
 }
-function markupEdits(text, code = codeSpans(text), definitions = [], defined = NO_LABELS) {
+function markupEdits(text, code = literalSpans(text), definitions = [], defined = NO_LABELS) {
   const edits = definitions.map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
   for (const match of defined.size === 0 ? [] : text.matchAll(FULL_REFERENCE_LABELS)) {
     if (defined.has(referenceLabel(match[0].slice(1, -1)))) {
@@ -10872,13 +10914,15 @@ function markupEdits(text, code = codeSpans(text), definitions = [], defined = N
   edits.sort((left, right) => left[0] - right[0]);
   const outsideCode = missesAll(code);
   let position = 0;
-  return edits.filter(([start, end]) => {
+  const kept = edits.filter(([start, end]) => {
     if (start < position || !outsideCode(start, end)) {
       return false;
     }
     position = end;
     return true;
   });
+  const autolinks = code.filter((span) => span[2] === "autolink").map(([start, end]) => [start, end, text.slice(start + 1, end - 1)]);
+  return [...kept, ...autolinks].sort((left, right) => left[0] - right[0]);
 }
 function applyEdits(text, edits) {
   let result = "";
@@ -10917,6 +10961,23 @@ function missesAll(ranges) {
     }
     return next === ranges.length || ranges[next][0] >= end;
   };
+}
+function literalSpans(text) {
+  const code = codeSpans(text);
+  const spans = [];
+  let next = 0;
+  for (let index = text.indexOf("<");index !== -1; index = text.indexOf("<", index + 1)) {
+    while (next < code.length && code[next][1] <= index) {
+      spans.push(code[next]);
+      next += 1;
+    }
+    const end = escaped(text, index) ? -1 : autolinkEnd(text, index);
+    if (end !== -1 && (next === code.length || end <= code[next][0])) {
+      spans.push([index, end, "autolink"]);
+      index = end - 1;
+    }
+  }
+  return [...spans, ...code.slice(next)];
 }
 function codeSpans(text) {
   const spans = [];
@@ -19928,7 +19989,7 @@ function xhtmlParagraphs(body, markup) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
   return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
+    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
 }
 function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
@@ -19952,7 +20013,7 @@ function htmlBook(manuscript, ownIndent = false) {
     if (paragraph.sceneBreak) {
       return null;
     }
-    const runs = inlineRuns(paragraph.text);
+    const runs = inlineRuns(paragraph.text, paragraph.code);
     return {
       html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
       text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
@@ -20009,7 +20070,7 @@ function writeDocx(outFile, manuscript, writeOptions = {}) {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
     }
     for (const paragraph of markdownParagraphs(body, true)) {
-      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text)));
+      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
     }
   };
   const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
@@ -20210,7 +20271,7 @@ function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName 
       paragraphs.push(hash);
     }
     for (const paragraph of body) {
-      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
     }
   }
   const paper = shunnPaper(paperName);
@@ -20265,7 +20326,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
   });
   const body = [];
   let sections = 0;
@@ -20348,7 +20409,10 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
   });
   return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
 }
-function inlineRuns(text) {
+function inlineRuns(text, code = false) {
+  if (code) {
+    return [{ text, strong: false, em: false }];
+  }
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
@@ -20522,8 +20586,9 @@ function markdownParagraphs(markdown, ownIndent = false) {
     const parts = collapseSourceSpace(joined).split(LINE_BREAK3).map(trimSourceSpace);
     const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK3);
     const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
+    const { code } = lines[0];
     lines = [];
-    paragraphs.push(!text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
+    paragraphs.push(!code && !text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote, code });
   };
   const source = splitFences(markdown.replace(/\r\n?/g, `
 `)).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text)).split(`
@@ -20548,7 +20613,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       quote = Boolean(marker);
     }
-    lines.push({ line, heading });
+    lines.push({ line, heading, code });
   }
   flush();
   return paragraphs;
