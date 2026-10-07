@@ -2100,7 +2100,7 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     expect(windows).not.toMatch(/^ {4}if:/m);
     const windowsStep = windows.split(/\n(?= {6}- )/).find((text) => text.includes("run: bun run check:package"));
     expect(windowsStep).toBeDefined();
-    expect(windowsStep).toContain("if: matrix.shard == 1");
+    expect(windowsStep).toMatch(/^ {8}if: matrix\.shard == 1$/m);
   });
 
   test("Windows shards run every test file exactly once (#672)", () => {
@@ -2112,13 +2112,19 @@ describe("the packed tarball is smoke-tested (#136)", () => {
     expect(listed).toEqual(Array.from({ length: count }, (_, index) => index + 1));
     const runStep = windows.split(/\n(?= {6}- )/).find((text) => text.includes("name: Run tests"));
     expect(runStep).toBeDefined();
-    // bun run test keeps the package script's glob. A hand-built file list
-    // makes bun follow plugins/story-skills and exit ELOOP on Windows.
-    expect(runStep).toContain("bun run test -- --shard=");
-    expect(runStep).toContain("--timings=");
+    // bun run test keeps the package script's timeout and ./test/*.test.js
+    // paths. Bun reads a path without ./ as a name filter, scans the whole
+    // repository, follows plugins/story-skills, and exits ELOOP on Windows.
+    // Each leg runs its own index of the matrix's shard count.
+    expect(runStep).toContain('shard="${{ matrix.shard }}"');
+    expect(runStep).toContain('shards="${{ matrix.shards }}"');
+    expect(runStep).toContain('bun run test -- --shard="${shard}/${shards}" --timings="$timings"');
     expect(runStep).not.toContain("bun test --timeout");
     expect(gate).toMatch(/^ {4}name: Tests windows-latest\n/m);
     expect(gate).toContain("needs: test-windows");
+    // A skipped job counts as passed for a required check, so the gate must
+    // run when a shard fails or the workflow is cancelled.
+    expect(gate).toMatch(/^ {4}if: \$\{\{ always\(\) \}\}$/m);
     expect(gate).toContain('"${{ needs.test-windows.result }}" != "success"');
     // test/test-shards.test.js asks bun for four shards.
     expect(count).toBe(4);

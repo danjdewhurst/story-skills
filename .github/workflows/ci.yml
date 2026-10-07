@@ -142,7 +142,10 @@ jobs:
       # Temporary story projects are the slow part on NTFS with Defender
       # scanning each new file. A ReFS Dev Drive skips that scanning; if the
       # runner cannot create one, the normal temp folder is used and Defender
-      # is asked to ignore the workspace and temp paths anyway.
+      # is asked to ignore the workspace and temp paths anyway. The step also
+      # turns off real-time monitoring for the whole machine and never turns
+      # it back on. That is only safe because a GitHub-hosted runner is thrown
+      # away after the job, so do not copy this step to a self-hosted runner.
       - name: Use a Dev Drive for temporary files
         shell: pwsh
         run: |
@@ -207,10 +210,12 @@ jobs:
             Write-Host "DisableRealtimeMonitoring=$($pref.DisableRealtimeMonitoring)"
           }
 
-      # The same 60s per-test timeout as `bun run test`. `--shard` is bun's own
-      # split of that glob, so every test file is in one shard. Passing the
-      # paths ourselves makes bun follow plugins/story-skills and exit ELOOP
-      # on Windows. Timings only balance the shards.
+      # The same 60s per-test timeout and ./test/*.test.js paths as
+      # `bun run test`. `--shard` is bun's own split of those paths, so every
+      # test file is in one shard. Timings only balance the shards. Bun reads
+      # a path without `./`, such as test/a.test.js, as a name filter: it then
+      # scans the whole repository, follows plugins/story-skills, and exits
+      # ELOOP on Windows.
       - name: Run tests
         run: |
           set -euo pipefail
@@ -226,11 +231,13 @@ jobs:
         run: bun run check:package
 
   # Keeps the check name `Tests windows-latest` for branch protection. It
-  # passes only when every shard did.
+  # passes only when every shard did. `always()`, not `!cancelled()`: a
+  # skipped job counts as passed for a required check, so the gate must run,
+  # and fail, when the workflow is cancelled too.
   test-windows-done:
     name: Tests windows-latest
     needs: test-windows
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

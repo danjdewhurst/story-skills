@@ -38,22 +38,22 @@ function shardFilesFromTimings(document) {
   });
 }
 
-// Files bun runs for one shard. `--test-name-pattern '^$'` loads each file
-// and runs nothing, which is enough to read the assignment. Each shard gets
-// its own copy of the timings, since bun rewrites the file it reads.
-function bunShardFiles(shard, shards, timingsPath) {
+// The timings bun writes for one shard. `--test-name-pattern '^$'` loads
+// each file and runs nothing, which is enough to read the assignment. Each
+// shard gets its own copy of the timings, since bun rewrites the file it
+// reads. A file that makes a temp dir as it loads never reaches the afterEach
+// that would remove it, so the child's temp dir is one this test removes.
+function bunShardTimings(shard, shards, timingsPath) {
   const shardTimings = path.join(path.dirname(timingsPath), `shard-${shard}.json`);
   fs.copyFileSync(timingsPath, shardTimings);
+  const tmp = makeTempDir("shards-child-");
   const result = spawnSync(
-    "bun",
+    process.execPath,
     ["run", "test", "--", `--shard=${shard}/${shards}`, `--timings=${shardTimings}`, "--update-timings", "--test-name-pattern", "^$", "--pass-with-no-tests"],
-    { encoding: "utf8", cwd: repoRoot }
+    { encoding: "utf8", cwd: repoRoot, env: { ...process.env, TMPDIR: tmp, TEMP: tmp, TMP: tmp } }
   );
-  expect(result.status, result.stderr).toBe(0);
-  const files = shardFilesFromTimings(JSON.parse(fs.readFileSync(shardTimings, "utf8")));
-  expect(files.length).toBeGreaterThan(0);
-  expect(new Set(files).size).toBe(files.length);
-  return files;
+  expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+  return JSON.parse(fs.readFileSync(shardTimings, "utf8"));
 }
 
 describe("test shards", () => {
@@ -121,15 +121,23 @@ describe("test shards", () => {
     const timingsPath = path.join(makeTempDir("shards-timings-"), "timings.json");
     const written = capture(["--write-timings", timingsPath]);
     expect(written.code).toBe(0);
+    const keys = Object.keys(JSON.parse(fs.readFileSync(timingsPath, "utf8")).files);
     const files = testFiles(testDir);
-    const shards = [1, 2, 3, 4].map((shard) => bunShardFiles(shard, 4, timingsPath));
+    const runs = [1, 2, 3, 4].map((shard) => bunShardTimings(shard, 4, timingsPath));
+    // Bun names each file the way the timings file does, so it finds the
+    // weights. With no weights, it would split the files evenly by count.
+    for (const run of runs) {
+      expect(Object.keys(run.files).filter((key) => !keys.includes(key))).toEqual([]);
+    }
+    const shards = runs.map(shardFilesFromTimings);
+    for (const shard of shards) {
+      expect(shard.length).toBeGreaterThan(0);
+      expect(new Set(shard).size).toBe(shard.length);
+    }
     expect(auditAssignment(files, shards)).toEqual([]);
     const loads = shards.map((shard) => shard.reduce((sum, file) => sum + (FILE_WEIGHT_SECONDS[file] ?? DEFAULT_WEIGHT_SECONDS), 0));
     const total = loads.reduce((sum, load) => sum + load, 0);
     expect(Math.max(...loads)).toBeLessThan(total * 0.4);
-    const slowest = ["split-merge.test.js", "rename-remove.test.js", "undo.test.js", "validate-schema-property.test.js"];
-    const homes = new Set(slowest.map((file) => shards.findIndex((shard) => shard.includes(file))));
-    expect(homes.size).toBeGreaterThan(1);
   });
 
   test("the CLI writes timings for every test file", () => {
