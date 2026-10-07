@@ -34,7 +34,7 @@ A story project must already exist (created via the story-init skill). Verify by
    - Which themes it serves
    - Which MICE threads the arc carries (optional `mice-threads:` frontmatter, written as a block list with one `- event` or `- character` item per line, or as a `[event, character]` flow list; see `references/mice-quotient.md`)
 5. Build the arc through conversation: setup, escalations, climax, resolution
-6. Scaffold the file with `story add arc '{Name}' --type main --character {id} --theme {theme}`, which writes `plot/arcs/{arc-name-kebab}.md` with the sections of `references/arc-template.md` and lists the arc in `plot/_index.md`, then fill in the sections. Without the CLI, write the file from `references/arc-template.md` to `plot/arcs/{arc-name-kebab}.md`
+6. Scaffold the file with `story add arc '{Name}' --type main --character {id} --theme '{theme}'`, which writes `plot/arcs/{arc-name-kebab}.md` with the sections of `references/arc-template.md` and lists the arc in `plot/_index.md`, then fill in the sections. Without the CLI, write the file from `references/arc-template.md` to `plot/arcs/{arc-name-kebab}.md`
 7. Leave the arcs table in `plot/_index.md` to `story reindex .`, which rebuilds it from the arc files; never add a row by hand
 8. Update the hand-written `## Theme Tracking` section in `plot/_index.md`
 9. If characters are referenced, verify they exist in `characters/`

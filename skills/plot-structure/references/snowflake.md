@@ -12,7 +12,7 @@ The whole novel in one sentence of about fifteen words: who, what they want, wha
 
 Five sentences: the setup, the first disaster, the second disaster, the third disaster, and the ending. Each disaster closes a phase and forces the protagonist into a harder course; the ending resolves the third.
 
-**Where it lives:** the rest of `## Synopsis` in `story.md`, after the logline. Three-act is the natural fit: set `structure: three-act` in `plot/_index.md` and map the disasters onto its beats: first disaster at the first plot point (~25%), second at the midpoint (~50%), third at the second plot point (~75%). Record the three disasters as the first rows of the main arc's Plot Points table (scaffold the arc with `story add arc '{Name}' --type main --character {id} --theme {theme}`) and in `plot/timeline.md`.
+**Where it lives:** the rest of `## Synopsis` in `story.md`, after the logline. Three-act is the natural fit: set `structure: three-act` in `plot/_index.md` and map the disasters onto its beats: first disaster at the first plot point (~25%), second at the midpoint (~50%), third at the second plot point (~75%). Record the three disasters as the first rows of the main arc's Plot Points table (scaffold the arc with `story add arc '{Name}' --type main --character {id} --theme '{theme}'`) and in `plot/timeline.md`.
 
 ## Step 3: Character Summaries
 
