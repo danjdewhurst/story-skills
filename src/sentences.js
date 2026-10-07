@@ -44,6 +44,9 @@ const FULL_WIDTH_CLOSERS = "」』）";
 // Closing guillemets, which some languages set after a space.
 const SPACED_CLOSERS = "»›";
 const SPACED_OPENERS = "«‹";
+// Symbols, each with the skin-tone modifiers, variation selectors, and zero-
+// width joiners that finish it (❤️, 👨‍👩‍👧), and the space after them.
+const EMOJI_RUN = "(?:\\p{So}[\\p{Sk}\\p{Mn}\\u200D\\uFE0F]* ?)*";
 const RULES = new WeakMap();
 
 // The patterns built from a pack's word lists and punctuation, once per
@@ -124,8 +127,9 @@ function buildRules(pack) {
     pairs: marks.pairs,
     // The next sentence starts with a capital, digit, or letter without
     // case, after any opening quotes, brackets, or emphasis marks, or with
-    // a capital after a dialogue dash.
-    start: new RegExp(`^(?:${opening}[${startLetter}]|${dashed}\\p{Lu})`, "u"),
+    // a capital after a dialogue dash. Emoji before that word (Yay! 😀 Next)
+    // do not change where the sentence starts.
+    start: new RegExp(`^${EMOJI_RUN}(?:${opening}[${startLetter}]|${dashed}\\p{Lu})`, "u"),
     // A last sentence that already ends with a stop gets no full stop.
     finished: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}(?: ${anyOf(spacedClosers)})?[${closers})\\]${FULL_WIDTH_CLOSERS}]*$`),
     firstWord: new RegExp(`^${dashed}([\\p{L}\\p{N}'’]+)`, "u")
