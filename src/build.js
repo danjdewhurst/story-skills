@@ -599,15 +599,16 @@ function lowercaseCommonStart(text) {
 }
 
 // The longest start of a token, ending after one of its Chinese, Japanese,
-// Thai, Lao, Khmer, or Burmese words, that has at most `room` words; "" if
-// none does. Longer starts never have fewer words, so it is a binary search.
-function longestFittingPrefix(token, room) {
+// Thai, Lao, Khmer, or Burmese words, that has at most `room` words after
+// `lead`, the text kept before it; "" if none does. Longer starts never
+// have fewer words, so it is a binary search.
+function longestFittingPrefix(token, room, lead) {
   const ends = wordSpans(token, /(?!)/gu).map((word) => word.end);
   let low = 0;
   let high = ends.length;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if (wordCount(token.slice(0, ends[middle - 1])) <= room) {
+    if (wordCount(`${lead}${token.slice(0, ends[middle - 1])}`) <= room) {
       low = middle;
     } else {
       high = middle - 1;
@@ -628,20 +629,29 @@ export function truncateWords(text, budget) {
       used += words;
       continue;
     }
-    const tokens = [];
-    for (const token of line.split(/\s+/).filter((part) => part !== "")) {
-      const tokenWords = wordCount(token);
-      if (used + tokenWords > budget) {
-        // Chinese, Japanese, Thai, Lao, Khmer, and Burmese have no spaces
-        // to cut at, so a token in them is cut after its last word that fits.
-        const cut = longestFittingPrefix(token, budget - used);
-        if (cut !== "") {
-          tokens.push(cut);
-        }
-        break;
+    // The most whole tokens whose words, counted together as wordCount
+    // counts them, fit: markup split by a space (`<span class="x">`) counts
+    // as nothing only when whole. A token cut short inside markup can
+    // count more words than the whole, so the search may stop short of
+    // the longest fit, but what it keeps always fits.
+    const all = line.split(/\s+/).filter((part) => part !== "");
+    const room = budget - used;
+    let low = 0;
+    let high = all.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (wordCount(all.slice(0, middle).join(" ")) <= room) {
+        low = middle;
+      } else {
+        high = middle - 1;
       }
-      tokens.push(token);
-      used += tokenWords;
+    }
+    const tokens = all.slice(0, low);
+    // Chinese, Japanese, Thai, Lao, Khmer, and Burmese have no spaces to
+    // cut at, so the next token is cut after its last word that fits.
+    const cut = longestFittingPrefix(all[low], room, low === 0 ? "" : `${tokens.join(" ")} `);
+    if (cut !== "") {
+      tokens.push(cut);
     }
     if (tokens.length > 0 && !/^#/.test(line)) {
       kept.push(tokens.join(" "));

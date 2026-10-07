@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
 import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
@@ -114,29 +114,52 @@ describe("markdown utilities", () => {
 
   test("footnote markers, entities, HTML tags, reference definitions, and task boxes are not words", () => {
     expect(splitWords("The end.[^1] Then[^note] more.\n\n[^1]: A note counts.")).toEqual(["The", "end", "Then", "more", "A", "note", "counts"]);
-    expect(splitWords("Tom &amp; Jerry don&rsquo;t pay caf&eacute; prices&#8202;&mdash;&#X2014;&bogus;today&nbsp;now"))
-      .toEqual(["Tom", "Jerry", "don\u2019t", "pay", "caf\u00e9", "prices", "today", "now"]);
-    expect(wordCount("&#0; &#xD800; &#x110000;")).toBe(0);
-    expect(splitWords("<span class=\"smallcaps\">Lord</span> said <i>un</i>known, line<br/>two <P data-x='1'\nhidden>three</P>"))
-      .toEqual(["Lord", "said", "unknown", "line", "two", "three"]);
-    // Text in angle brackets that is not an HTML tag is prose.
-    expect(splitWords("<Can you hear me?> she thought. <Yes.>")).toEqual(["Can", "you", "hear", "me", "she", "thought", "Yes"]);
-    expect(splitWords("See [the mill][mill] at [dawn][].\n\n[mill]: https://example.com/mill \"The Mill\"\n[dawn]: <dawn.md>"))
-      .toEqual(["See", "the", "mill", "at", "dawn"]);
+    expect(splitWords("Tom &amp; Jerry don&rsquo;t pay caf&eacute; prices&#8202;&mdash;&#X2014;today&nbsp;now &alpha;&AMP;&ast;"))
+      .toEqual(["Tom", "Jerry", "don\u2019t", "pay", "caf\u00e9", "prices", "today", "now", "\u03b1"]);
+    expect(splitWords("<span class=\"smallcaps\">Lord</span> said <i>un</i>known, line<br/>two <p data-x='1'\nhidden>three</p> <book-note class=\"small\">four</book-note> <details open>five</details>"))
+      .toEqual(["Lord", "said", "unknown", "line", "two", "three", "four", "five"]);
+    expect(splitWords("See [the mill][mill] at [dawn][] and [Dusk].\n\n[mill]: https://example.com/mill \"The Mill\"\n[dawn]: <dawn.md>\n[dusk]: dusk.md"))
+      .toEqual(["See", "the", "mill", "at", "dawn", "and", "Dusk"]);
     expect(splitWords("- [x] Done\n- [ ] Todo\n> * [X] Quoted\n\nA [x] in prose.")).toEqual(["Done", "Todo", "Quoted", "A", "x", "in", "prose"]);
     expect(splitWords("snake_case and __init__ but _emphasis_ and a_ b")).toEqual(["snake_case", "and", "init", "but", "emphasis", "and", "a", "b"]);
   });
 
+  test("an entity is its character, an invalid number U+FFFD, and a name HTML does not define, in its case, text", () => {
+    expect(countedText("a&#0;b&#xD800;c&#x110000;d&#x41;")).toBe("a\ufffdb\ufffdc\ufffddA");
+    expect(splitWords("&bogus; Smith&Wesson; &Amp; &amp")).toEqual(["bogus", "Smith", "Wesson", "Amp", "amp"]);
+  });
+
+  test("words a build prints are never dropped as markup", () => {
+    // Speech in angle brackets: not a lowercase element name, or plain words after one.
+    const speech = ["<I hear you>", "<I am here> she thought.", "<A ship comes.>", "<Time is short>", "<Small talk bores me>", "<Head north now>", "<i hear you>", "<Can you hear me?>"];
+    expect(speech.map(wordCount)).toEqual([3, 5, 3, 3, 4, 3, 3, 4]);
+    // A definition whose label no reference uses, as in a chat log, or one
+    // indented as code, is prose, and so is a full reference to a label
+    // that is not defined.
+    expect(splitWords("[Mira]: Hello?\n[10:42]: Here.\n[Mira]: Fine.")).toEqual(["Mira", "Hello", "10:42", "Here", "Mira", "Fine"]);
+    expect(splitWords("Use [x][code].\n\n    [code]: indented.md")).toEqual(["Use", "x", "code", "code", "indented", "md"]);
+    expect(splitWords("[sic][1], See [foo][missing], [a][b][c].")).toEqual(["sic", "1", "See", "foo", "missing", "a", "b", "c"]);
+  });
+
   test("markup in code, or escaped, is printed, so it counts", () => {
     expect(splitWords("Type `<b>&amp;[^1]</b>` here, not <b>there</b>.")).toEqual(["Type", "b", "amp", "1", "b", "here", "not", "there"]);
-    expect(splitWords("```\n<div>&amp;</div>\n```\n<div>x</div> ` <b>tick</b>")).toEqual(["div", "amp", "div", "x", "tick"]);
-    expect(splitWords("\\<b> and \\&amp; and \\[^1]")).toEqual(["b", "and", "amp", "and", "1"]);
+    expect(splitWords("```\n<div>&amp;</div>\n[mill]: mill.md\n```\n<div>x</div> ` <b>tick</b> [the mill][mill]"))
+      .toEqual(["div", "amp", "div", "mill", "mill", "md", "x", "tick", "the", "mill", "mill"]);
+    expect(splitWords("\\<b> and \\&amp; and \\[^1] but \\\\<b>bold</b>")).toEqual(["b", "and", "amp", "and", "1", "but", "bold"]);
+    // An escaped backtick opens no code span; the rest of an escaped run does.
+    expect(splitWords("\\`<b>x</b>`\n\\``<b>y</b>`")).toEqual(["x", "b", "y", "b"]);
+  });
+
+  test("an entity in a link is read after the link is", () => {
+    expect(splitWords("[chapter&#93; two](notes/a-b.md) and [the mill](https://x.org/a&#41;b) ran")).toEqual(["chapter", "two", "and", "the", "mill", "ran"]);
   });
 
   test("markup stays linear on long runs", () => {
     const started = performance.now();
     wordCount(`a${"_".repeat(100000)}b ${"<b x=".repeat(20000)} <i title="${"a".repeat(100000)} ${"[^".repeat(50000)} ${"&a".repeat(50000)}`);
     wordCount(`${"- [".repeat(30000)}\n${" ".repeat(100000)}x\n${"[a]".repeat(30000)}\n${"> ".repeat(50000)}[x]: y`);
+    wordCount(`${Array.from({ length: 400 }, (_, index) => "`".repeat(index + 1)).join(" ")}\n${"\\`".repeat(30000)}\n${"[a]: b\n".repeat(20000)}${"[x][a]".repeat(10000)}`);
+    wordCount(`<b${" hidden".repeat(20000)} ${"<i open ".repeat(20000)}`);
     expect(performance.now() - started).toBeLessThan(2000);
   });
 

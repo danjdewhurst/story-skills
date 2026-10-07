@@ -9763,7 +9763,7 @@ function flattenHeadings(text) {
 }
 function splitWords(markdown) {
   const urls = [];
-  const normalized = plainLinks(countedText(markdown).replace(/\uE000/g, " ")).replace(URL_OR_EMAIL, (match) => {
+  const normalized = countedText(plainLinks(String(markdown))).replace(/\uE000/g, " ").replace(URL_OR_EMAIL, (match) => {
     urls.push(match);
     return ` ${URL_PLACEHOLDER} `;
   }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(EMPHASIS_UNDERSCORES, " ").replace(/[#>*~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
@@ -10007,7 +10007,7 @@ function wordCount(markdown) {
 }
 var graphemes;
 function characterCount(markdown) {
-  const text = plainLinks(countedText(String(markdown).replace(/\uE000/g, " "))).split(`
+  const text = countedText(plainLinks(String(markdown).replace(/\uE000/g, " "))).split(`
 `).filter((line) => !isSceneBreak(line)).join(`
 `).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
   graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
@@ -10084,9 +10084,8 @@ function maskLinkTargets(text, blank = " ") {
   const source = String(text);
   const ranges = [];
   const labels = new Set;
-  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
   for (const [start, end, name] of linkDefinitions(source, blank)) {
-    labels.add(label(name));
+    labels.add(referenceLabel(name));
     ranges.push([start, end]);
   }
   for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
@@ -10114,7 +10113,7 @@ function maskLinkTargets(text, blank = " ") {
     while (next < masked.length && masked[next][1] <= start) {
       next += 1;
     }
-    if (labels.has(label(match[1])) && (next === masked.length || masked[next][0] >= end)) {
+    if (labels.has(referenceLabel(match[1])) && (next === masked.length || masked[next][0] >= end)) {
       references.push([start, end]);
     }
   }
@@ -10149,136 +10148,244 @@ function inlineDestinations(source, blank) {
   }
   return ranges;
 }
-var INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
-var OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress rp rt script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
-var ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")})(?![a-z\\d-])`;
-var ATTRIBUTE = String.raw`\s+[a-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>\x60]+|'[^'<>]{0,1000}'|"[^"<>]{0,1000}"))?`;
+var INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q rp rt ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
+var OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
+var ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")}|[a-z][a-z\\d._]*-[a-z\\d._-]*)(?![\\w.-])`;
+var BOOLEAN_ATTRIBUTES = "allowfullscreen async autofocus autoplay checked controls default defer disabled formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected";
+var ATTRIBUTE = String.raw`\s+(?:[a-zA-Z_:][\w.:-]*\s*=\s*(?:"[^"<>]{0,1000}"|'[^'<>]{0,1000}'|[^\s"'=<>\x60]+)|(?:${BOOLEAN_ATTRIBUTES.replace(/ /g, "|")})(?=[\s/>]))`;
 var HTML_TAG = String.raw`<(?:${ELEMENT}(?:${ATTRIBUTE}){0,100}\s*\/?|\/${ELEMENT}\s*)>`;
 var FOOTNOTE = String.raw`\[\^[^[\]\s]{1,999}\]`;
 var COUNTED_MARKUP = new RegExp([
-  FULL_REFERENCE_LABEL,
   HTML_TAG,
   String.raw`(?<=^[ \t]{0,3})${FOOTNOTE}:`,
   FOOTNOTE,
-  String.raw`&(?:#\d{1,7}|#x[\da-f]{1,6}|[a-z][a-z\d]{1,31});`
-].join("|"), "gim");
+  String.raw`&(?:#\d{1,7}|#[xX][\da-fA-F]{1,6}|[A-Za-z][A-Za-z\d]{1,31});`
+].join("|"), "gm");
+var FULL_REFERENCE_LABELS = new RegExp(FULL_REFERENCE_LABEL, "gm");
 var TASK_BOX = /^((?:[ \t]*>)*[ \t]*(?:[-+*]|\d{1,9}[.)])[ \t]+)\[[ xX]\](?=[ \t]|\r?$)/gm;
-var NAMED_ENTITIES = new Map([
-  ..."nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml".split(" ").map((name, index) => [name, String.fromCharCode(160 + index)]),
-  ...Object.entries({
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    OElig: "Œ",
-    oelig: "œ",
-    Scaron: "Š",
-    scaron: "š",
-    Yuml: "Ÿ",
-    fnof: "ƒ",
-    circ: "ˆ",
-    tilde: "˜",
-    ensp: " ",
-    emsp: " ",
-    thinsp: " ",
-    hairsp: " ",
-    zwnj: "‌",
-    zwj: "‍",
-    lrm: "‎",
-    rlm: "‏",
-    hyphen: "‐",
-    ndash: "–",
-    mdash: "—",
-    lsquo: "‘",
-    rsquo: "’",
-    sbquo: "‚",
-    ldquo: "“",
-    rdquo: "”",
-    bdquo: "„",
-    dagger: "†",
-    Dagger: "‡",
-    bull: "•",
-    hellip: "…",
-    permil: "‰",
-    prime: "′",
-    Prime: "″",
-    lsaquo: "‹",
-    rsaquo: "›",
-    euro: "€",
-    trade: "™",
-    larr: "←",
-    uarr: "↑",
-    rarr: "→",
-    darr: "↓",
-    harr: "↔",
-    minus: "−",
-    spades: "♠",
-    clubs: "♣",
-    hearts: "♥",
-    diams: "♦"
-  })
-]);
-function countedText(markdown) {
-  return splitFences(String(markdown)).map((part) => part.fenced ? withoutFenceMarkers(part.text) : withoutUnseenMarkup(part.text)).join("");
+var DEFINITION_INDENT = /^(?:[ \t]*>)* {0,3}\[/;
+var NO_LABELS = new Set;
+var ENTITY_RUNS = [
+  [9, "Tab NewLine"],
+  [33, "excl quot num dollar percnt amp apos lpar rpar ast plus comma - period sol"],
+  [58, "colon semi lt equals gt quest commat"],
+  [91, "lsqb bsol rsqb Hat lowbar grave"],
+  [123, "lcub verbar rcub"],
+  [160, "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml"],
+  [338, "OElig oelig"],
+  [352, "Scaron scaron"],
+  [376, "Yuml"],
+  [402, "fnof"],
+  [710, "circ caron"],
+  [728, "breve dot ring ogon tilde dblac"],
+  [913, "Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa Lambda Mu Nu Xi Omicron Pi Rho - Sigma Tau Upsilon Phi Chi Psi Omega"],
+  [945, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigmaf sigma tau upsilon phi chi psi omega"],
+  [977, "thetasym upsih"],
+  [982, "piv"],
+  [8194, "ensp emsp"],
+  [8199, "numsp puncsp thinsp hairsp ZeroWidthSpace zwnj zwj lrm rlm hyphen - - ndash mdash horbar - - lsquo rsquo sbquo - ldquo rdquo bdquo - dagger Dagger bull - - nldr hellip"],
+  [8240, "permil - prime Prime"],
+  [8249, "lsaquo rsaquo"],
+  [8254, "oline"],
+  [8260, "frasl"],
+  [8287, "MediumSpace NoBreak"],
+  [8364, "euro"],
+  [8465, "image"],
+  [8472, "weierp"],
+  [8476, "real"],
+  [8482, "trade"],
+  [8501, "alefsym"],
+  [8592, "larr uarr rarr darr harr"],
+  [8629, "crarr"],
+  [8656, "lArr uArr rArr dArr hArr"],
+  [8704, "forall - part exist - empty - nabla isin notin - ni"],
+  [8719, "prod - sum minus"],
+  [8727, "lowast - - radic - - prop infin - ang"],
+  [8743, "and or cap cup int"],
+  [8756, "there4"],
+  [8764, "sim"],
+  [8773, "cong - - asymp"],
+  [8800, "ne equiv - - le ge"],
+  [8834, "sub sup nsub - sube supe"],
+  [8853, "oplus - otimes"],
+  [8869, "perp"],
+  [8901, "sdot"],
+  [8968, "lceil rceil lfloor rfloor"],
+  [9674, "loz"],
+  [9733, "starf star"],
+  [9742, "phone"],
+  [9792, "female - male"],
+  [9824, "spades - - clubs - hearts diams"],
+  [9837, "flat natur sharp"],
+  [10003, "check"],
+  [10007, "cross"],
+  [10216, "lang rang"]
+];
+var ENTITY_ALIASES = {
+  AMP: "amp",
+  COPY: "copy",
+  GT: "gt",
+  LT: "lt",
+  QUOT: "quot",
+  REG: "reg",
+  bullet: "bull",
+  dash: "hyphen",
+  half: "frac12",
+  lbrace: "lcub",
+  lbrack: "lsqb",
+  midast: "ast",
+  mldr: "hellip",
+  rbrace: "rcub",
+  rbrack: "rsqb",
+  rdquor: "rdquo",
+  rsquor: "rsquo",
+  vert: "verbar"
+};
+var NAMED_ENTITIES = new Map(ENTITY_RUNS.flatMap(([first, names]) => names.split(" ").map((name, index) => [name, String.fromCodePoint(first + index)]).filter(([name]) => name !== "-")));
+for (const [alias, name] of Object.entries(ENTITY_ALIASES)) {
+  NAMED_ENTITIES.set(alias, NAMED_ENTITIES.get(name));
 }
-function withoutUnseenMarkup(text) {
-  const edits = linkDefinitions(text).map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+function countedText(markdown) {
+  const parts = splitFences(String(markdown));
+  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: codeSpans(part.text) }));
+  const used = new Set;
+  for (const { text, code } of prose) {
+    const outsideCode = missesAll(code);
+    const outsideDefinitions = missesAll([...text.matchAll(LINK_DEFINITION)].map((match) => [match.index, match.index + match[0].length]));
+    for (const match of text.matchAll(REFERENCE_TEXT)) {
+      const end = match.index + match[0].length;
+      if (outsideCode(match.index, end) && outsideDefinitions(match.index, end)) {
+        used.add(referenceLabel(match[1]));
+      }
+    }
+  }
+  const definitions = prose.map(({ text }) => linkDefinitions(text).filter(([start, end, label]) => used.has(referenceLabel(label)) && DEFINITION_INDENT.test(text.slice(start, end))));
+  const defined = new Set(definitions.flat().map(([, , label]) => referenceLabel(label)));
+  let next = 0;
+  return parts.map((part) => {
+    if (part.fenced) {
+      return withoutFenceMarkers(part.text);
+    }
+    const { text, code } = prose[next];
+    const edits = markupEdits(text, code, definitions[next], defined);
+    next += 1;
+    return applyEdits(text, edits);
+  }).join("");
+}
+function proseWordSpans(text) {
+  const source = String(text);
+  let counted = "";
+  const starts = [];
+  const ends = [];
+  let position = 0;
+  const copy = (end) => {
+    for (let index = position;index < end; index += 1) {
+      starts.push(index);
+      ends.push(index + 1);
+    }
+    counted += source.slice(position, end);
+  };
+  for (const [start, end, replacement] of markupEdits(source)) {
+    copy(start);
+    counted += replacement;
+    for (let index = 0;index < replacement.length; index += 1) {
+      starts.push(start);
+      ends.push(end);
+    }
+    position = end;
+  }
+  copy(source.length);
+  return wordSpans(counted, WORD_PATTERN).map(({ word, start, end }) => ({ word, start: starts[start], end: ends[end - 1] }));
+}
+function markupEdits(text, code = codeSpans(text), definitions = [], defined = NO_LABELS) {
+  const edits = definitions.map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+  for (const match of defined.size === 0 ? [] : text.matchAll(FULL_REFERENCE_LABELS)) {
+    if (defined.has(referenceLabel(match[0].slice(1, -1)))) {
+      edits.push([match.index, match.index + match[0].length, ""]);
+    }
+  }
   for (const match of text.matchAll(TASK_BOX)) {
     const start = match.index + match[1].length;
     edits.push([start, start + 3, ""]);
   }
   for (const match of text.matchAll(COUNTED_MARKUP)) {
-    if (text[match.index - 1] !== "\\") {
+    if (!escaped(text, match.index)) {
       edits.push([match.index, match.index + match[0].length, markupText(match[0])]);
     }
   }
   edits.sort((left, right) => left[0] - right[0]);
-  const code = codeSpans(text);
+  const outsideCode = missesAll(code);
+  let position = 0;
+  return edits.filter(([start, end]) => {
+    if (start < position || !outsideCode(start, end)) {
+      return false;
+    }
+    position = end;
+    return true;
+  });
+}
+function applyEdits(text, edits) {
   let result = "";
   let position = 0;
-  let next = 0;
   for (const [start, end, replacement] of edits) {
-    while (next < code.length && code[next][1] <= start) {
-      next += 1;
-    }
-    if (start >= position && (next === code.length || code[next][0] >= end)) {
-      result += text.slice(position, start) + replacement;
-      position = end;
-    }
+    result += text.slice(position, start) + replacement;
+    position = end;
   }
   return result + text.slice(position);
 }
 function markupText(markup) {
   if (markup[0] === "&") {
-    return entityText(markup.slice(1, -1));
+    return entityText(markup);
   }
-  const tag = /^<\/?([a-z\d]+)/i.exec(markup);
-  return tag !== null && !INLINE_ELEMENTS.has(tag[1].toLowerCase()) ? " " : "";
+  const name = /^<\/?([a-z][\w.-]*)/.exec(markup)?.[1];
+  return name === undefined || INLINE_ELEMENTS.has(name) || name.includes("-") ? "" : " ";
 }
-function entityText(name) {
+function entityText(entity) {
+  const name = entity.slice(1, -1);
   if (name[0] !== "#") {
-    return NAMED_ENTITIES.get(name) ?? "";
+    return NAMED_ENTITIES.get(name) ?? entity;
   }
   const code = /^#x/i.test(name) ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
   return code === 0 || code > 1114111 || code >= 55296 && code <= 57343 ? "�" : String.fromCodePoint(code);
+}
+function referenceLabel(value) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+function escaped(text, index) {
+  let start = index;
+  while (start > 0 && text[start - 1] === "\\") {
+    start -= 1;
+  }
+  return (index - start) % 2 === 1;
+}
+function missesAll(ranges) {
+  let next = 0;
+  return (start, end) => {
+    while (next < ranges.length && ranges[next][1] <= start) {
+      next += 1;
+    }
+    return next === ranges.length || ranges[next][0] >= end;
+  };
 }
 function codeSpans(text) {
   const spans = [];
   let lineStart = 0;
   for (const line of text.split(`
 `)) {
-    const runs = line.includes("`") ? [...line.matchAll(/`+/g)] : [];
+    const runs = line.includes("`") ? [...line.matchAll(/`+/g)].map((match) => {
+      const from = match.index + (escaped(line, match.index) ? 1 : 0);
+      return { from, opens: match.index + match[0].length - from, length: match[0].length, end: match.index + match[0].length };
+    }) : [];
     const closers = [];
     const later = new Map;
     for (let index = runs.length - 1;index >= 0; index -= 1) {
-      closers[index] = later.get(runs[index][0].length);
-      later.set(runs[index][0].length, index);
+      closers[index] = later.get(runs[index].opens);
+      later.set(runs[index].length, index);
     }
     for (let index = 0;index < runs.length; index += 1) {
       const close = closers[index];
       if (close !== undefined) {
-        spans.push([lineStart + runs[index].index, lineStart + runs[close].index + runs[close][0].length]);
+        spans.push([lineStart + runs[index].from, lineStart + runs[close].end]);
         index = close;
       }
     }
@@ -19584,8 +19691,8 @@ function similarityOptions(options = {}) {
 function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
-    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN)) {
-      const folded = word.toLowerCase().replace(/[’ʼ]/g, "'").replace(/[\u2010\u2011]/g, "-").replace(/\u00ad/g, "");
+    for (const { word, start, end } of proseWordSpans(paragraph.text.normalize("NFC"))) {
+      const folded = word.toLowerCase().replace(/[’ʼ\u05f3]/g, "'").replace(/[\u2010\u2011\u05be]/g, "-").replace(/\u05f4/g, '"').replace(/\u00ad/g, "");
       words.push({ word: folded, paragraph: index, start, end });
     }
   });
@@ -27450,13 +27557,13 @@ function lowercaseCommonStart(text) {
   const first = /^[A-Za-z]+(?=\s)/.exec(text)?.[0] ?? "";
   return COMMON_OPENERS.has(first.toLowerCase()) ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }
-function longestFittingPrefix(token, room) {
+function longestFittingPrefix(token, room, lead) {
   const ends = wordSpans(token, /(?!)/gu).map((word) => word.end);
   let low = 0;
   let high = ends.length;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    if (wordCount(token.slice(0, ends[middle - 1])) <= room) {
+    if (wordCount(`${lead}${token.slice(0, ends[middle - 1])}`) <= room) {
       low = middle;
     } else {
       high = middle - 1;
@@ -27475,18 +27582,22 @@ function truncateWords(text, budget) {
       used += words;
       continue;
     }
-    const tokens = [];
-    for (const token of line.split(/\s+/).filter((part) => part !== "")) {
-      const tokenWords = wordCount(token);
-      if (used + tokenWords > budget) {
-        const cut = longestFittingPrefix(token, budget - used);
-        if (cut !== "") {
-          tokens.push(cut);
-        }
-        break;
+    const all = line.split(/\s+/).filter((part) => part !== "");
+    const room = budget - used;
+    let low = 0;
+    let high = all.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (wordCount(all.slice(0, middle).join(" ")) <= room) {
+        low = middle;
+      } else {
+        high = middle - 1;
       }
-      tokens.push(token);
-      used += tokenWords;
+    }
+    const tokens = all.slice(0, low);
+    const cut = longestFittingPrefix(all[low], room, low === 0 ? "" : `${tokens.join(" ")} `);
+    if (cut !== "") {
+      tokens.push(cut);
     }
     if (tokens.length > 0 && !/^#/.test(line)) {
       kept.push(tokens.join(" "));
