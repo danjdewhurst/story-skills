@@ -119,6 +119,9 @@ describe("story split", () => {
     const result = splitChapter(root, { id: "chapter-02", at: "1" });
 
     expect(result).toMatchObject({ id: "chapter-02", newId: "chapter-03", title: "Two (continued)", scenesMoved: 1, renumbered: 2 });
+    // A linear book gets no choice.
+    expect(result.choiceAdded).toBeNull();
+    expect(result.choicesRetargeted).toEqual([]);
     expect(fs.readdirSync(path.join(root, "chapters")).sort()).toEqual(["_index.md", "chapter-01.md", "chapter-02.md", "chapter-03.md", "chapter-04.md", "chapter-05.md"]);
     expect(prose(root, "chapter-02")).toBe("Mara walked to the quay.\n\nThe tide was out.");
     expect(prose(root, "chapter-03")).toBe("The boat was late.\n\n### The Ferry\n\nThe ferry came at noon.");
@@ -666,6 +669,16 @@ describe("split and merge in a branching book", () => {
     expect(unreachable(root)).toEqual([]);
   });
 
+  test("lists a draft choice the renumbering rewrites, and adds no choice to a book whose only choices are drafts (#535)", () => {
+    const root = book();
+    setFields(root, path.join("chapters", "chapter-01.md"), "choices:\n  - to: chapter-03\n");
+    const result = splitChapter(root, { id: "chapter-02", at: "1" });
+    expect(result.choiceAdded).toBeNull();
+    expect(result.choicesRetargeted).toEqual([{ file: "chapters/chapter-01.md", index: 0, text: null, from: "chapter-03", to: "chapter-04" }]);
+    expect(data(root, "chapters", "chapter-01.md").choices).toEqual([{ to: "chapter-04" }]);
+    expect(data(root, "chapters", "chapter-02.md").choices).toBeUndefined();
+  });
+
   test("an empty choices list is no choices, and the split fills it", () => {
     const root = branching();
     setFields(root, path.join("chapters", "chapter-02.md"), "choices: []\n");
@@ -703,14 +716,40 @@ describe("split and merge in a branching book", () => {
     const before = snapshot(root);
     expect(() => splitChapter(root, { id: "chapter-01", at: "Mara" })).toThrow("story split works on a branching book only when the chapter it splits has no choices, since a chapter's choices end it and a split would change the passage they end: chapters/chapter-01.md choices[0] (to chapter-02), chapters/chapter-01.md choices[1] (to chapter-03). Restructure the book by hand with story add chapter, story move, and story remove");
     expect(() => mergeChapters(root, { id: "chapter-02", next: "chapter-03" })).toThrow("story merge works on a branching book only when the chapters it merges have no choices, since a chapter's choices end it and a merge would change the passage they end: chapters/chapter-03.md choices[0] (to chapter-04). Restructure");
-    // A malformed choice counts.
-    setFields(root, path.join("chapters", "chapter-04.md"), "choices: Go home\n");
-    expect(() => splitChapter(root, { id: "chapter-04", at: "They" })).toThrow("would change the passage they end: chapters/chapter-04.md choices[0]. Restructure");
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  test("a malformed choices field counts as choices, and a control character in it is not printed (#535)", () => {
+    const chapter = path.join("chapters", "chapter-04.md");
+    for (const field of ["choices:\n", "choices: \"\"\n", "choices: Go home\n", "choices: null\n"]) {
+      const root = branching();
+      setFields(root, chapter, field);
+      const before = snapshot(root);
+      expect(() => splitChapter(root, { id: "chapter-04", at: "They" })).toThrow("would change the passage they end: chapters/chapter-04.md choices[0]. Restructure");
+      expect(snapshot(root)).toEqual(before);
+    }
+    const root = branching();
+    setFields(root, chapter, "choices:\n  - to: \"chapter-01\\u001b[2J\"\n");
+    const before = snapshot(root);
     const failed = invoke(root, ["merge", "chapter-03", "chapter-04", "--dry-run"]);
     expect(failed.code).toBe(4);
     expect(failed.out).toBe("");
-    expect(failed.err).toContain("chapters/chapter-03.md choices[0] (to chapter-04), chapters/chapter-04.md choices[0]. Restructure");
-    fs.writeFileSync(path.join(root, "chapters", "chapter-04.md"), before["chapters/chapter-04.md"], "utf8");
+    expect(failed.err).toContain("chapters/chapter-03.md choices[0] (to chapter-04), chapters/chapter-04.md choices[0] (to chapter-01\ufffd[2J). Restructure");
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  test("lists at most ten choices in a refusal", () => {
+    const root = branching();
+    setFields(root, path.join("chapters", "chapter-02.md"), `choices:\n${Array.from({ length: 12 }, () => "  - text: Go on\n    to: chapter-03\n").join("")}`);
+    expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-02.md choices[9] (to chapter-03), and 2 more. Restructure");
+  });
+
+  test("refuses a merge that folds away a chapter a draft choice with no text leads to (#535)", () => {
+    const root = book();
+    setChoices(root, { "chapter-01": [["Take the ferry", "chapter-02"], ["Walk the coast", "chapter-04"]] });
+    setFields(root, path.join("chapters", "chapter-04.md"), "choices:\n  - to: chapter-03\n");
+    const before = snapshot(root);
+    expect(() => mergeChapters(root, { id: "chapter-02", next: "chapter-03" })).toThrow("story merge works on a branching book only when no choice leads to the chapter it folds into the one before, since a reader who took it would land at the start of chapter-02 instead: chapters/chapter-04.md choices[0] leads to chapter-03. Point it at another chapter first, or restructure the book by hand with story add chapter, story move, and story remove");
     expect(snapshot(root)).toEqual(before);
   });
 
@@ -737,6 +776,25 @@ describe("split and merge in a branching book", () => {
     expect(() => splitChapter(root, { id: "chapter-02", at: "1" })).toThrow("chapters/chapter-03.md choices[1] names chapter-05, which has no file yet, and this split would renumber chapter-04 to chapter-05, so it would point at that chapter. Point it at the chapter it means first: chapter-04 if it belongs there (the split then carries it to chapter-05), or chapter-06 for the chapter after it; nothing was changed");
     expect(() => splitChapter(root, { id: "chapter-04", at: "The gulls" })).toThrow("chapters/chapter-03.md choices[1] names chapter-05, which has no file yet, and this split would give that id to its new chapter, the rest of chapter-04");
     expect(snapshot(root)).toEqual(before);
+
+    // A link in the same chapter's text names it too, and the message says
+    // so, so pointing the choice elsewhere is not the whole fix.
+    setProse(root, "chapter-03", "The ferry crossed. [Later](chapter-05.md)\n");
+    expect(() => splitChapter(root, { id: "chapter-04", at: "The gulls" })).toThrow("chapters/chapter-03.md choices[1], other references in chapters/chapter-03.md name chapter-05, which has no file yet");
+  });
+
+  test("names the choices that block a split in time linear in the size of the book (#535)", () => {
+    // Chapters 1 to 59 each have 50 choices scheduled for chapter-61, the
+    // id a split of chapter 60 would give its new chapter.
+    const root = createStoryProject({ cwd: makeTempDir(), title: "Wide Book" }).root;
+    const choices = `choices:\n${Array.from({ length: 50 }, () => "  - text: Go on\n    to: chapter-61").join("\n")}`;
+    for (let number = 1; number <= 60; number += 1) {
+      const id = `chapter-${String(number).padStart(2, "0")}`;
+      writeMarkdown(path.join(root, "chapters", `${id}.md`), `title: Part ${number}\nnumber: ${number}\nstatus: draft${number < 60 ? `\n${choices}` : ""}`, `\n# Chapter ${number}: Part ${number}\n\n## Chapter Text\n\nFirst.\n\nSecond.\n`);
+    }
+    const started = performance.now();
+    expect(() => splitChapter(root, { id: "chapter-60", at: "Second." })).toThrow("chapters/chapter-01.md choices[0], chapters/chapter-01.md choices[1], chapters/chapter-01.md choices[2], chapters/chapter-01.md choices[3], chapters/chapter-01.md choices[4], chapters/chapter-01.md choices[5], chapters/chapter-01.md choices[6], chapters/chapter-01.md choices[7], chapters/chapter-01.md choices[8], chapters/chapter-01.md choices[9], and 2940 more name chapter-61");
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("the output lists the choices a split or merge adds or points elsewhere, and so does --dry-run (#535)", () => {
@@ -757,6 +815,12 @@ describe("split and merge in a branching book", () => {
 
     // The first half's new choice is all that keeps the merge back.
     fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), read(root, "chapters", "chapter-02.md").replace(/choices:\n  - text: Continue\n    to: chapter-03\n/, ""), "utf8");
+    const mergeJson = JSON.parse(invoke(root, ["merge", "chapter-02", "chapter-03", "--dry-run", "--json"]).out);
+    expect(mergeJson.data.choiceAdded).toBeUndefined();
+    expect(mergeJson.data.choicesRetargeted).toEqual([
+      { file: "chapters/chapter-01.md", index: 1, text: "Walk the coast", from: "chapter-04", to: "chapter-03" },
+      { file: "chapters/chapter-03.md", index: 0, text: "Go ashore", from: "chapter-05", to: "chapter-04" }
+    ]);
     const mergePreview = invoke(root, ["merge", "chapter-02", "chapter-03", "--dry-run"]);
     expect(mergePreview.out).toStartWith("Would point chapters/chapter-01.md choices[1] at chapter-03, not chapter-04\nWould point chapters/chapter-03.md choices[0] at chapter-04, not chapter-05\nupdate  ");
     const merge = invoke(root, ["merge", "chapter-02", "chapter-03"]);
@@ -767,6 +831,25 @@ describe("split and merge in a branching book", () => {
 });
 
 describe("split and merge on the examples", () => {
+  test("the-gull-rock-light: splitting an ending prints what docs/cli-reference.md shows and leaves no errors (#535)", () => {
+    const root = path.join(makeTempDir(), "the-gull-rock-light");
+    fs.cpSync(path.join(examplesRoot, "the-gull-rock-light"), root, { recursive: true });
+    const argv = ["split", "chapter-05", "--at", "At dawn", "--title", "Dawn"];
+    const reference = fs.readFileSync(path.resolve(import.meta.dir, "..", "docs", "cli-reference.md"), "utf8");
+    const shown = reference.slice(reference.indexOf(`$ story ${argv.slice(0, 3).join(" ")} "At dawn" --title "Dawn" --dry-run\n`)).split("\n```")[0].split("\n").slice(1);
+    const preview = invoke(root, [...argv, "--dry-run"]);
+    expect(preview.code).toBe(0);
+    expect(`${preview.out}${preview.err}`.trimEnd().split("\n")).toEqual(shown);
+
+    const split = invoke(root, argv);
+    expect(split.code).toBe(0);
+    expect(split.out).toEndWith("(renumbered 1 chapter)\nGave chapters/chapter-05.md a choice to chapter-06, the rest of chapter-05: Continue\nPointed chapters/chapter-04.md choices[1] at chapter-07, not chapter-06\n");
+    expect(data(root, "chapters", "chapter-04.md").choices.map((choice) => choice.to)).toEqual(["chapter-05", "chapter-07"]);
+    expect(data(root, "chapters", "chapter-05.md").choices).toEqual([{ text: "Continue", to: "chapter-06" }]);
+    expect(errors(root)).toEqual([]);
+    expect(unreachable(root)).toEqual([]);
+  });
+
   const names = fs.readdirSync(examplesRoot).filter((name) => fs.existsSync(path.join(examplesRoot, name, "chapters", "chapter-02.md")));
 
   for (const name of names) {
