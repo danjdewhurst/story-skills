@@ -77,8 +77,9 @@ Which commands can report findings (exit `1`):
 | `links` | A cross-reference points at a missing file, or a required backlink is missing. |
 | `continuity` | A continuity contract is broken, such as a dead character listed in a later chapter or a payoff before its setup. Findings matched by `continuity/exemptions.md` are dismissed and do not count. |
 | `series` | A linked path is not a story project, the chronology has a cycle, two books share a `book-number`, linked books declare different series, or shared canon contradicts itself, such as a character who died in an earlier book appearing later. A missing series backlink is caught by `links`, not `series`. |
-| `compare`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `mentions`, `diagram`, `grid`, `list` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. `compare` exits 3 instead when a chapter cannot be parsed, because it cannot compare without it. |
-| `names` | A candidate name clashes with an existing one. |
+| `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `mentions`, `diagram`, `grid`, `list` | A project file cannot be parsed and is reported as an `error:` line. Their own findings are advisory, unless `severity` in `story.md` promotes one to an error. |
+| `compare` | `style-sheet.md` or `progress.md` cannot be parsed and is reported as an `error:` line. Any other project file that fails to parse, or any file of the earlier draft, stops it with exit 3 instead, because it cannot compare without it. Its own findings are advisory, unless `severity` in `story.md` promotes one to an error. |
+| `names` | A candidate name clashes with an existing one, or a project file cannot be parsed and is reported as an `error:` line. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
 | `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
@@ -119,8 +120,8 @@ exit=1
 
 By default, output is plain text with stable line prefixes, so you can filter it with standard tools. For a machine-readable result, see [JSON output](#json-output).
 
-- `validate`, `links`, `continuity`, and `check` write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
-- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions`, and `series` write their report to stdout and the same summary and finding lines to stderr.
+- `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
+- `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr and exits 2. An unknown command also prints the full help text after the error.
 - Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 3. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.

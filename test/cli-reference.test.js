@@ -162,13 +162,62 @@ function outputRows(text) {
   return rows;
 }
 
-// The commands a docs/automation.md or cli-reference.md bullet names before
-// "write".
+// The runs a docs/automation.md or cli-reference.md bullet names before
+// "write": each code span that starts with a command, such as `mentions` or
+// `mentions <kind> <id>`.
 function streamList(text, marker) {
   const line = text.split("\n").find((entry) => entry.startsWith("- ") && entry.includes(marker));
   expect(line).toBeDefined();
-  return commandsIn(line.slice(0, line.indexOf(" write")));
+  return sorted(codeSpans(line.slice(0, line.indexOf(" write"))).filter((span) => commandNames.includes(span.split(" ")[0])));
 }
+
+// The rows of the "Which commands can report findings" table in
+// docs/automation.md: the commands each names, and when they exit 1.
+function exitOneRows() {
+  const text = section("### Exit codes", automation);
+  const table = text.slice(text.indexOf("Which commands can report findings")).split("\n\n")[1];
+  return table.split("\n").filter((line) => line.startsWith("| `")).map(cells).map(([commands, when]) => ({ commands: codeSpans(commands), when }));
+}
+
+// A copy of examples/the-last-ember, changed by `edit`.
+function exampleCopy(edit = () => {}) {
+  const root = path.join(makeTempDir(), "the-last-ember");
+  fs.cpSync(path.join(import.meta.dir, "..", "examples", "the-last-ember"), root, { recursive: true });
+  edit(root);
+  return root;
+}
+
+// The arguments each run needs besides its project, by the name the docs
+// give the run: `mentions` audits every chapter, and `mentions <kind> <id>`
+// lists one entity's mentions. compare and similarity read the copy at
+// `clean` and a text taken from its chapter, outside the project.
+function runArgs(clean) {
+  const reference = path.join(path.dirname(clean), "reference.txt");
+  fs.copyFileSync(path.join(clean, "chapters", "chapter-01.md"), reference);
+  return {
+    knowledge: ["kael-voss", "--at", "chapter-01"],
+    context: ["chapter-01"],
+    compare: ["--against", clean],
+    similarity: ["--against", reference],
+    names: ["Zed"],
+    "mentions <kind> <id>": ["character", "kael-voss"],
+    list: ["chapters"],
+    diagram: ["relationships"],
+    snapshot: ["--list"]
+  };
+}
+
+// Runs the command a run name starts with on the project at `root`.
+function runStory(root, name, args, extra = []) {
+  const command = COMMANDS.find((entry) => entry.name === name.split(" ")[0]);
+  const io = memoryIo(root);
+  const where = command.project === "positional" ? [root] : ["--path", root];
+  const code = runCli([command.name, ...where, ...(args[name] ?? []), ...extra], io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+// The commands that read a project and write nothing by default.
+const readOnly = COMMANDS.filter((command) => command.project !== "none" && command.writes !== true).map((command) => command.name);
 
 // GitHub's anchor for a heading.
 function anchor(heading) {
@@ -203,13 +252,14 @@ describe("docs/cli-reference.md", () => {
         expect(line).toStartWith(`story ${command.name} `);
       }
       const shown = sorted([...block.matchAll(/--([a-z-]+)/g)].map((match) => match[1]));
-      const accepted = [...(command.options ?? []), "path"];
+      const accepted = [...(command.options ?? []), ...(command.project === "none" ? [] : ["path"])];
       expect({ command: command.name, unknown: shown.filter((name) => !accepted.includes(name)) }).toEqual({ command: command.name, unknown: [] });
       // `[options]` stands for options the section describes in a table or
-      // in prose instead.
+      // in prose instead, each as `--name`, `--name <value>`, or `--name=value`.
       const expected = documentedOptions(command.options ?? []);
+      const described = (name) => new RegExp(`\`--${name}[\` =]`).test(text);
       const missing = block.includes("[options]")
-        ? expected.filter((name) => !shown.includes(name) && !text.includes(`\`--${name}`))
+        ? expected.filter((name) => !shown.includes(name) && !described(name))
         : expected.filter((name) => !shown.includes(name));
       expect({ command: command.name, missing }).toEqual({ command: command.name, missing: [] });
     }
@@ -378,34 +428,66 @@ describe("docs/automation.md and the CLI reference", () => {
   });
 
   // Each command that reads a project and writes nothing by default runs on
-  // a copy of an example. One that prints only the summary and findings on
-  // stderr must be in the stderr list; one that prints a report on stdout
-  // and the summary on stderr, in the report list.
+  // a copy of an example, and so does each variant runArgs names. One that
+  // prints only the summary and findings on stderr must be in the stderr
+  // list; one that prints a report on stdout and the summary on stderr, in
+  // the report list.
   test("the output stream lists match what each command prints", () => {
-    const root = path.join(makeTempDir(), "the-last-ember");
-    fs.cpSync(path.join(import.meta.dir, "..", "examples", "the-last-ember"), root, { recursive: true });
-    const args = {
-      knowledge: ["kael-voss", "--at", "chapter-01"],
-      context: ["chapter-01"],
-      compare: ["--against", root],
-      similarity: ["--against", "chapters/chapter-01.md"],
-      names: ["Sera"],
-      mentions: ["character", "kael-voss"],
-      list: ["chapters"],
-      diagram: ["relationships"],
-      snapshot: ["--list"]
-    };
+    const root = exampleCopy();
+    const args = runArgs(root);
+    const runs = [...readOnly, ...Object.keys(args).filter((name) => name.includes(" "))];
     const streams = { stderr: [], report: [] };
-    for (const command of COMMANDS.filter((entry) => entry.project !== "none" && entry.writes !== true)) {
-      const io = memoryIo(root);
-      const where = command.project === "positional" ? [root] : ["--path", root];
-      runCli([command.name, ...where, ...(args[command.name] ?? [])], io);
-      if (/^[^\n]+: \d+ errors, \d+ warnings, \d+ dismissed$/m.test(io.error())) {
-        streams[io.output() === "" ? "stderr" : "report"].push(command.name);
+    const results = {};
+    for (const name of runs) {
+      results[name] = runStory(root, name, args);
+      const { code, out, err } = results[name];
+      // A usage or project error prints no summary, which would drop the run
+      // from both lists.
+      expect({ name, error: code > 1 ? err : null }).toEqual({ name, error: null });
+      if (/^[^\n]+: \d+ errors, \d+ warnings, \d+ dismissed$/m.test(err)) {
+        streams[out === "" ? "stderr" : "report"].push(name);
       }
     }
+    expect(results.similarity.out).toContain("1 shared passage");
     expect(streamList(section("### Output streams and exit codes"), "to **stderr**")).toEqual(sorted(streams.stderr));
     expect(streamList(section("### Output streams and exit codes"), "write their report to stdout")).toEqual(sorted(streams.report));
+  });
+
+  test("the exit 1 table's claims about a file that fails to parse hold", () => {
+    const args = runArgs(exampleCopy());
+    const broken = exampleCopy((root) => fs.writeFileSync(path.join(root, "characters", "zz-broken.md"), "---\nname: A\nname: B\n---\n"));
+    const exits = (name, root = broken) => ({ name, code: runStory(root, name, args).code });
+    const row = (start) => exitOneRows().find((entry) => entry.when.startsWith(start)).commands;
+    for (const name of [...row("A project file cannot be parsed"), ...row("A candidate name clashes")]) {
+      expect(exits(name)).toEqual({ name, code: 1 });
+    }
+    for (const name of row("Never, on a readable project")) {
+      expect(exits(name)).toEqual({ name, code: 0 });
+    }
+    for (const name of row("Never:").filter((entry) => readOnly.includes(entry))) {
+      expect(exits(name).code).not.toBe(1);
+    }
+    // compare stops on any file it would compare, but reports a style sheet
+    // or progress log that fails to parse.
+    expect(row("`style-sheet.md` or `progress.md` cannot be parsed")).toEqual(["compare"]);
+    expect(exits("compare")).toEqual({ name: "compare", code: 3 });
+    for (const file of ["style-sheet.md", "progress.md"]) {
+      const root = exampleCopy((copy) => fs.writeFileSync(path.join(copy, file), "---\ntype: a\ntype: b\n---\n"));
+      expect({ file, ...exits("compare", root) }).toEqual({ file, name: "compare", code: 1 });
+    }
+  });
+
+  test("the --dry-run notes name the commands that refuse it where they would write nothing", () => {
+    const root = exampleCopy();
+    const args = runArgs(root);
+    const refused = readOnly.filter((name) => commandsReading("dry-run").includes(name)).filter((name) => {
+      const { code, err } = runStory(root, name, args, ["--dry-run"]);
+      return code === 2 && err.includes("--dry-run");
+    });
+    expect(refused.length).toBeGreaterThan(0);
+    expect(commandsIn(optionRow("dry-run")[3])).toEqual(sorted(refused));
+    const sentence = section("### Previewing changes with --dry-run").match(/`--dry-run` is a usage error where the command would write nothing: ([^.]+)\./)[1];
+    expect(commandsIn(sentence)).toEqual(sorted(refused));
   });
 
   test("the JSON output section names the commands that read --json", () => {
