@@ -5,8 +5,8 @@
  * Checks that every fixture in evals/fixtures/ has an input.md and a
  * checks.json with a brief, at least one check, valid JSON, and compiling
  * regexes, plus a known-good draft in evals/examples/<fixture>.md (and no
- * stray examples). A fixture whose known-good draft opens with frontmatter
- * must set `keep: file`. Run from anywhere; exits non-zero on failure.
+ * stray examples). A fixture whose known-good draft holds frontmatter, at
+ * its start or opening a fenced block, must set `keep: file`. Run from anywhere; exits non-zero on failure.
  */
 
 import fs from "node:fs";
@@ -40,6 +40,12 @@ const OVERLAP_KINDS = ["in_input", "with_required"];
 // What `run-skill.js` scores of a chapter reply: the prose under
 // `## Chapter Text` (the default) or the whole file, frontmatter included.
 const KEEP_VALUES = ["chapter-text", "file"];
+
+// Frontmatter at the start of a draft, or on the line after a fence opens.
+// A `---` line anywhere else is a scene break or a rule.
+function holdsFrontmatter(text) {
+  return /^---\r?\n/.test(text) || /^ {0,3}(?:`{3,}|~{3,})[^\n]*\r?\n---\r?\n/m.test(text);
+}
 
 const trimmed = (s) => String(s).trim();
 const lowered = (s) => String(s).toLowerCase();
@@ -272,14 +278,15 @@ export function checkEvals(root = ROOT, log = console.log) {
         `${name}/checks.json: keep must be one of ${KEEP_VALUES.map((v) => JSON.stringify(v)).join(", ")}`
       );
     }
-    // A known-good draft that opens with frontmatter is a whole file, and
-    // only `keep: file` asks the model for one: under the default prose rule
-    // the brief and the system prompt contradict each other.
+    // A known-good draft that holds frontmatter, at its start or opening a
+    // fenced block, answers a brief that asks for a file, and only
+    // `keep: file` asks the model for one: under the default prose rule the
+    // brief and the system prompt contradict each other.
     const examplePath = path.join(examplesDir, `${name}.md`);
     if (checks.keep !== "file" && fs.existsSync(examplePath)) {
       check(
-        !/^---\r?\n/.test(fs.readFileSync(examplePath, "utf8")),
-        `${name}/checks.json: evals/examples/${name}.md opens with frontmatter, so set "keep": "file"`
+        !holdsFrontmatter(fs.readFileSync(examplePath, "utf8")),
+        `${name}/checks.json: evals/examples/${name}.md holds frontmatter, so set "keep": "file"`
       );
     }
     if ("voice_drift" in checks) {

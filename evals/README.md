@@ -33,24 +33,31 @@ using the skill would. The runner reads them in its place, following the
 skill's paths as the agent would:
 
 - It loads every file `SKILL.md` names as a link or a code span ending in
-  `.md`, resolved from the skill's folder, so another skill's file such as
+  `.md`, so another skill's file such as
   `../feedback-triage/references/feedback-template.md` loads too. The
   `#anchor` of a link is dropped.
-- It then loads the files those references name, resolved from their own
-  folder, breadth-first, while the reference text stays within 48,000
-  characters (`MAX_REFERENCE_CHARS` in `run-skill.js`). A file past that cap
-  is left out, with the files only it names. The files `SKILL.md` names
-  always load.
+- It then loads the files those references name, breadth-first, while the
+  reference text stays within 48,000 characters (`MAX_REFERENCE_CHARS` in
+  `run-skill.js`). The files `SKILL.md` names always load. A file past the
+  cap is left out, and so is every file that only left-out files lead to.
+- A path resolves from the folder of the file that names it, as a link
+  would. If nothing is there, it resolves from that file's skill folder (a
+  reference that names a sibling as `references/x.md`), then from `skills/`
+  (the `chapter-writing/references/writing-guidelines.md` form).
 - It skips paths that do not exist (a project path such as
-  `chapters/chapter-{NN}.md`), paths outside `skills/`, and any `SKILL.md`.
+  `chapters/chapter-{NN}.md`), any `SKILL.md`, and any file whose real path
+  is outside `skills/`, so a symlink cannot bring in a file from elsewhere.
   A file that no path names never loads.
 
 Each reference sits under a comment with its path from the skill's folder
 (`<!-- ../feedback-triage/references/feedback-template.md -->`). The run
-log lists the files each fixture loaded and any left out over the cap.
-Every `SKILL.md` lists its own references, so each skill still gets all of
-them. An agent reads only the files its task needs, so the eval context is
-larger than in real use.
+log lists the files each fixture loaded, the files left out over the cap,
+and each name with a `references/` folder in it that points to no file,
+such as a reference named only in prose (`references/naming-languages.md`
+in the `worldbuilding` skill). Every `SKILL.md` lists its own references,
+and a test checks that each skill's links reach every file in its
+`references/`, so each skill still gets all of them. An agent reads only
+the files its task needs, so the eval context is larger than in real use.
 
 Run provenance is saved next to
 each draft: `<fixture>.prompt.md` (exact prompt sent),
@@ -82,9 +89,17 @@ listed claim fails the fixture, and the list is saved next to the draft as
 cannot see invention: only a reader (human or model) can tell that "Petra
 left the key" resolves the open question. Read a flagged claim before acting
 on it. Pass `--no-judge` to skip the call and `--judge-model` to override
-it. The runner reads the last JSON array in the judge's reply, so prose
-around it, or a bracket in that prose such as `[name needed]`, does not
-fail the fixture.
+it.
+
+The judge is told to reply with one JSON array of strings. Its input holds
+the draft, which a model wrote, so the runner reads the reply strictly: a
+reply it cannot read for certain fails the fixture rather than passing it.
+It passes over prose brackets that are not JSON (`[name needed]`) and
+number-only arrays (a footnote such as `[1]`), and accepts the same array
+given twice. The judge call fails when the reply has no array of strings,
+an array of anything else, two different arrays (`["Mara has a sister"]`,
+then "if there were none I would reply `[]`"), a `[` that never closes, or
+an array inside brackets that do not parse as JSON.
 
 A draft or judge call that fails, after its retries, fails its fixture.
 The summary at the end lists every fixture, with `draft call failed` or
@@ -256,7 +271,7 @@ current when you add a fixture.
 - `banned`: case-insensitive phrases that must not appear (resolutions, inventions, slop). Matching is stem/inflected like `required`, so `delve` also catches `delves` and `delving`, and `tapestry` catches `tapestries`; add 2–3 paraphrase variants per trap phrase (e.g. `told Petra about the key` beside `told her about the key`) for what inflection cannot catch.
 - `required_regex`: regular expressions that must match, matched like `banned_regex` (case-insensitive, Unicode mode, no multiline flag, so `^` is the start of the draft). Use one where a phrase cannot say where the canon must sit: `branch-choices` requires a frontmatter block whose `choices` list has an entry to each ending, quoted or not.
 - `banned_regex`: regular expressions that must not match (for example invented measurements or anachronisms). Matching is case-insensitive and in Unicode mode, so `\b` is an ASCII word boundary: in a fixture whose traps sit next to accented letters, bound a word with `(?<![\p{L}\p{M}])` and `(?![\p{L}\p{M}])` instead, so that `the` does not match inside French *thé*.
-- `keep`: what `run-skill.js` scores of the model's reply. `"chapter-text"`, the default, drops everything above a `## Chapter Text` heading (frontmatter, title, outline) and keeps the prose, and the system prompt asks for the draft prose alone. `"file"` keeps the whole reply, frontmatter included, and the system prompt asks for the file content the brief asks for instead. Use it for every fixture whose brief asks for a file: `branch-choices` (a chapter's `choices`), `character-progression`, `copyright-page`, `location-routes`, `reader-panel`, `research-note`, `style-sheet`, and `triage-synthesis`. Such a fixture's `required`, `required_regex`, and `banned_regex` checks then see the YAML. In a chapter file its length checks (`max_words` and the ratios) count only the prose under `## Chapter Text`, since that is what a brief's word limit is about; a file with no such heading is counted whole. `scripts/check-evals.js` rejects any other value, and fails a fixture whose known-good example opens with frontmatter but does not set `"file"`. The checker (`run-evals.js`) always reads the draft file whole, so a known-good example for a `file` fixture is the whole file.
+- `keep`: what `run-skill.js` scores of the model's reply. `"chapter-text"`, the default, drops everything above a `## Chapter Text` heading (frontmatter, title, outline) and keeps the prose, and the system prompt asks for the draft prose alone. `"file"` keeps the whole reply, frontmatter included, and the system prompt asks for what the brief asks for, in the form it asks for, instead. Use it for every fixture whose brief asks for a file or frontmatter: `branch-choices` (a chapter's `choices`), `character-progression`, `copyright-page`, `init-project` (a command and the `story.md` frontmatter, in two fenced blocks), `location-routes`, `reader-panel`, `research-note`, `style-sheet`, and `triage-synthesis`. Such a fixture's `required`, `required_regex`, and `banned_regex` checks then see the YAML. In a chapter file its length checks (`max_words` and the ratios) count only the prose under `## Chapter Text`, since that is what a brief's word limit is about; a file with no such heading is counted whole. `scripts/check-evals.js` rejects any other value, and fails a fixture whose known-good example holds frontmatter, at its start or on the line after a fence opens, but does not set `"file"`. The checker (`run-evals.js`) always reads the draft file whole, so a known-good example for a `file` fixture is the whole file.
 - `max_words_ratio` / `min_words_ratio`: draft length bounds relative to the input, to catch padding and over-cutting.
 - `max_words`: absolute draft word cap, for briefs that promise one (canon-keeping: under 220 words).
 - Length checks (`max_words` and the ratios) count whitespace-separated tokens, and each Chinese or Japanese character as one word. A fixture whose `language` is Chinese or Japanese (`zh`, `ja`, and their tags) counts characters instead, as `story wordcount` measures a book in those languages: grapheme clusters that are not whitespace, punctuation included. Its caps and ratios are in characters, and the report says so (drafting-ja: `length 317 characters <= 500`).
