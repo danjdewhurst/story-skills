@@ -42,8 +42,21 @@ describe("similarity matching", () => {
   test("words are split as story wordcount splits them, with hyphens and soft hyphens folded", () => {
     const text = "A well-known well\u2011known hyphen\u00adation lamp keeper, בית־ספר, snake_case.";
     const words = tokenizeDocument([{ label: "p1", text }]).map((entry) => entry.word);
-    expect(words).toEqual(["a", "well-known", "well-known", "hyphenation", "lamp", "keeper", "בית־ספר", "snake_case"]);
+    expect(words).toEqual(["a", "well-known", "well-known", "hyphenation", "lamp", "keeper", "בית-ספר", "snake_case"]);
     expect(words).toHaveLength(wordCount(text));
+  });
+
+  test("markup is read as story wordcount reads it, and Hebrew marks match the ASCII typed for them", () => {
+    const words = tokenizeDocument([{ label: "p1", text: "don&rsquo;t <em>go</em>[^1] בית־ספר צה״ל ג׳ירפה" }]);
+    expect(words.map((entry) => entry.word)).toEqual(["don't", "go", "בית-ספר", "צה\"ל", "ג'ירפה"]);
+    expect(words[0]).toMatchObject({ start: 0, end: 11 });
+    expect(tokenizeDocument([{ label: "p1", text: "בית-ספר צה\"ל ג'ירפה" }]).map((entry) => entry.word)).toEqual(["בית-ספר", "צה\"ל", "ג'ירפה"]);
+    const report = compareSimilarity(
+      [doc("c.md", `Fog. The lamp <em>keeper</em> counted the steps twice before he trusted the rail&nbsp;again.`)],
+      [doc("r.txt", `${SHARED}.`)],
+      { minWords: 8, label: "r" }
+    );
+    expect(report.passages.map((passage) => [passage.words, passage.text])).toEqual([[13, "The lamp <em>keeper</em> counted the steps twice before he trusted the rail&nbsp;again"]]);
   });
 
   test("Chinese and Japanese text is compared a character at a time", () => {

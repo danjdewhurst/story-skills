@@ -184,9 +184,8 @@ export function flattenHeadings(text) {
 export function splitWords(markdown) {
   const urls = [];
   // Code is printed by every build, so its words count; only the fence
-  // lines themselves, and markup a reader never sees, are left out (see
-  // countedText).
-  const normalized = plainLinks(countedText(markdown).replace(/\uE000/g, " "))
+  // lines themselves, and markup syntax, are left out (see countedText).
+  const normalized = countedText(plainLinks(String(markdown))).replace(/\uE000/g, " ")
     .replace(URL_OR_EMAIL, (match) => {
       urls.push(match);
       return ` ${URL_PLACEHOLDER} `;
@@ -554,7 +553,7 @@ let graphemes;
 // characters, every underscore among them, are not book text, so they are
 // left out; a full-width space indent is whitespace.
 export function characterCount(markdown) {
-  const text = plainLinks(countedText(String(markdown).replace(/\uE000/g, " ")))
+  const text = countedText(plainLinks(String(markdown).replace(/\uE000/g, " ")))
     .split("\n")
     .filter((line) => !isSceneBreak(line))
     .join("\n")
@@ -688,9 +687,8 @@ export function maskLinkTargets(text, blank = " ") {
   const source = String(text);
   const ranges = [];
   const labels = new Set();
-  const label = (value) => value.trim().replace(/\s+/g, " ").toLowerCase();
   for (const [start, end, name] of linkDefinitions(source, blank)) {
-    labels.add(label(name));
+    labels.add(referenceLabel(name));
     ranges.push([start, end]);
   }
   for (const pattern of [LINK_TARGET, BARE_ADDRESS]) {
@@ -720,7 +718,7 @@ export function maskLinkTargets(text, blank = " ") {
     while (next < masked.length && masked[next][1] <= start) {
       next += 1;
     }
-    if (labels.has(label(match[1])) && (next === masked.length || masked[next][0] >= end)) {
+    if (labels.has(referenceLabel(match[1])) && (next === masked.length || masked[next][0] >= end)) {
       references.push([start, end]);
     }
   }
@@ -761,87 +759,227 @@ function inlineDestinations(source, blank) {
   return ranges;
 }
 
-// HTML elements, so a tag is told from text in angle brackets: `<span
-// class="smallcaps">` is a tag, `<Can you hear me?>` is not. The tags of
-// the inline ones go without a trace, so `<i>un</i>known` is one word; any
-// other tag (`<br>`, `<p>`) parts the words on either side.
-const INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
-const OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress rp rt script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
-const ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")})(?![a-z\\d-])`;
-// An opening or closing tag as CommonMark reads one. Its attributes and
-// their values are bounded, so a long run of unclosed `<` or quotes stays
-// linear.
-const ATTRIBUTE = String.raw`\s+[a-z_:][\w.:-]*(?:\s*=\s*(?:[^\s"'=<>\x60]+|'[^'<>]{0,1000}'|"[^"<>]{0,1000}"))?`;
+// HTML elements, so a tag is told from text in angle brackets. The tags of
+// the inline ones, and of custom elements, go without a trace, so
+// `<i>un</i>known` is one word; any other tag (`<br>`, `<p>`) parts the
+// words on either side.
+const INLINE_ELEMENTS = new Set("a abbr b bdi bdo big cite code data del dfn em font i ins kbd mark q rp rt ruby s samp small span strike strong sub sup time tt u var wbr".split(" "));
+const OTHER_ELEMENTS = "address area article aside audio base blockquote body br button canvas caption center col colgroup datalist dd details dialog div dl dt embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hgroup hr html iframe img input label legend li link main map menu meta meter nav noscript object ol optgroup option output p picture pre progress script search section select slot source style summary table tbody td template textarea tfoot th thead title tr track ul video";
+// A tag name in lower case: a known element, or a custom one, which has a
+// hyphen (`<book-note>`). `<I hear you>` and `<Time is short>` are prose.
+const ELEMENT = `(?:${[...INLINE_ELEMENTS].join("|")}|${OTHER_ELEMENTS.replace(/ /g, "|")}|[a-z][a-z\\d._]*-[a-z\\d._-]*)(?![\\w.-])`;
+// Attributes HTML sets by name alone. Any other word after a tag name must
+// take a value (`class="smallcaps"`), so `<i hear you>` is prose too.
+const BOOLEAN_ATTRIBUTES = "allowfullscreen async autofocus autoplay checked controls default defer disabled formnovalidate hidden inert ismap itemscope loop multiple muted nomodule novalidate open playsinline readonly required reversed selected";
+// An opening or closing tag. Its attributes and their values are bounded,
+// so a long run of unclosed `<` or quotes stays linear.
+const ATTRIBUTE = String.raw`\s+(?:[a-zA-Z_:][\w.:-]*\s*=\s*(?:"[^"<>]{0,1000}"|'[^'<>]{0,1000}'|[^\s"'=<>\x60]+)|(?:${BOOLEAN_ATTRIBUTES.replace(/ /g, "|")})(?=[\s/>]))`;
 const HTML_TAG = String.raw`<(?:${ELEMENT}(?:${ATTRIBUTE}){0,100}\s*\/?|\/${ELEMENT}\s*)>`;
-// Markup a reader never sees, as counts leave it out: a full reference's
-// label, an HTML tag, a footnote marker (`[^1]`, with its colon where it
-// opens the note), and an HTML entity, which counts as the character it
-// stands for.
 const FOOTNOTE = String.raw`\[\^[^[\]\s]{1,999}\]`;
+// Markup syntax that counts leave out: an HTML tag, a footnote marker
+// (`[^1]`, with its colon where it opens the note), and an HTML entity,
+// which counts as the character it stands for.
 const COUNTED_MARKUP = new RegExp([
-  FULL_REFERENCE_LABEL,
   HTML_TAG,
   String.raw`(?<=^[ \t]{0,3})${FOOTNOTE}:`,
   FOOTNOTE,
-  String.raw`&(?:#\d{1,7}|#x[\da-f]{1,6}|[a-z][a-z\d]{1,31});`
-].join("|"), "gim");
+  String.raw`&(?:#\d{1,7}|#[xX][\da-fA-F]{1,6}|[A-Za-z][A-Za-z\d]{1,31});`
+].join("|"), "gm");
+const FULL_REFERENCE_LABELS = new RegExp(FULL_REFERENCE_LABEL, "gm");
 // A task-list box (`- [ ]`, `1. [x]`), after its list marker.
 const TASK_BOX = /^((?:[ \t]*>)*[ \t]*(?:[-+*]|\d{1,9}[.)])[ \t]+)\[[ xX]\](?=[ \t]|\r?$)/gm;
-// The named HTML entities a manuscript is likely to hold: the Latin-1
-// letters and signs, U+00A0 to U+00FF in order, then the common
-// punctuation, spaces, joiners, and symbols.
-const NAMED_ENTITIES = new Map([
-  ..."nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml"
-    .split(" ").map((name, index) => [name, String.fromCharCode(0xa0 + index)]),
-  ...Object.entries({
-    amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", OElig: "\u0152", oelig: "\u0153", Scaron: "\u0160", scaron: "\u0161",
-    Yuml: "\u0178", fnof: "\u0192", circ: "\u02c6", tilde: "\u02dc", ensp: "\u2002", emsp: "\u2003", thinsp: "\u2009",
-    hairsp: "\u200a", zwnj: "\u200c", zwj: "\u200d", lrm: "\u200e", rlm: "\u200f", hyphen: "\u2010", ndash: "\u2013",
-    mdash: "\u2014", lsquo: "\u2018", rsquo: "\u2019", sbquo: "\u201a", ldquo: "\u201c", rdquo: "\u201d", bdquo: "\u201e",
-    dagger: "\u2020", Dagger: "\u2021", bull: "\u2022", hellip: "\u2026", permil: "\u2030", prime: "\u2032", Prime: "\u2033",
-    lsaquo: "\u2039", rsaquo: "\u203a", euro: "\u20ac", trade: "\u2122", larr: "\u2190", uarr: "\u2191", rarr: "\u2192",
-    darr: "\u2193", harr: "\u2194", minus: "\u2212", spades: "\u2660", clubs: "\u2663", hearts: "\u2665", diams: "\u2666"
-  })
-]);
+// A definition indented no more than CommonMark allows; one indented four
+// spaces or a tab could be code.
+const DEFINITION_INDENT = /^(?:[ \t]*>)* {0,3}\[/;
+const NO_LABELS = new Set();
 
-// The text as word and character counts read it: closed code fences
-// without their fence lines, and outside them, without the markup a reader
-// never sees. That is reference definitions (`[label]: url`), the label of
-// a full reference link, HTML tags, footnote markers (`[^1]`, the note's
-// own text counts), and task-list boxes (`- [x]`); an HTML entity is the
-// character it stands for (`&rsquo;`). Markup in a code span is printed as
-// written, so it counts.
-function countedText(markdown) {
-  return splitFences(String(markdown))
-    .map((part) => (part.fenced ? withoutFenceMarkers(part.text) : withoutUnseenMarkup(part.text)))
-    .join("");
+// Named HTML entities a manuscript is likely to hold, taken from the HTML
+// table: HTML 4's set (Latin-1, Greek, punctuation, arrows, maths, card
+// suits), the names of ASCII punctuation, and a few more spaces and
+// symbols. Each run is a first code point and the names of it and the code
+// points after it, `-` where one has no name here.
+const ENTITY_RUNS = [
+  [0x9, "Tab NewLine"],
+  [0x21, "excl quot num dollar percnt amp apos lpar rpar ast plus comma - period sol"],
+  [0x3a, "colon semi lt equals gt quest commat"],
+  [0x5b, "lsqb bsol rsqb Hat lowbar grave"],
+  [0x7b, "lcub verbar rcub"],
+  [0xa0, "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml"],
+  [0x152, "OElig oelig"],
+  [0x160, "Scaron scaron"],
+  [0x178, "Yuml"],
+  [0x192, "fnof"],
+  [0x2c6, "circ caron"],
+  [0x2d8, "breve dot ring ogon tilde dblac"],
+  [0x391, "Alpha Beta Gamma Delta Epsilon Zeta Eta Theta Iota Kappa Lambda Mu Nu Xi Omicron Pi Rho - Sigma Tau Upsilon Phi Chi Psi Omega"],
+  [0x3b1, "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigmaf sigma tau upsilon phi chi psi omega"],
+  [0x3d1, "thetasym upsih"],
+  [0x3d6, "piv"],
+  [0x2002, "ensp emsp"],
+  [0x2007, "numsp puncsp thinsp hairsp ZeroWidthSpace zwnj zwj lrm rlm hyphen - - ndash mdash horbar - - lsquo rsquo sbquo - ldquo rdquo bdquo - dagger Dagger bull - - nldr hellip"],
+  [0x2030, "permil - prime Prime"],
+  [0x2039, "lsaquo rsaquo"],
+  [0x203e, "oline"],
+  [0x2044, "frasl"],
+  [0x205f, "MediumSpace NoBreak"],
+  [0x20ac, "euro"],
+  [0x2111, "image"],
+  [0x2118, "weierp"],
+  [0x211c, "real"],
+  [0x2122, "trade"],
+  [0x2135, "alefsym"],
+  [0x2190, "larr uarr rarr darr harr"],
+  [0x21b5, "crarr"],
+  [0x21d0, "lArr uArr rArr dArr hArr"],
+  [0x2200, "forall - part exist - empty - nabla isin notin - ni"],
+  [0x220f, "prod - sum minus"],
+  [0x2217, "lowast - - radic - - prop infin - ang"],
+  [0x2227, "and or cap cup int"],
+  [0x2234, "there4"],
+  [0x223c, "sim"],
+  [0x2245, "cong - - asymp"],
+  [0x2260, "ne equiv - - le ge"],
+  [0x2282, "sub sup nsub - sube supe"],
+  [0x2295, "oplus - otimes"],
+  [0x22a5, "perp"],
+  [0x22c5, "sdot"],
+  [0x2308, "lceil rceil lfloor rfloor"],
+  [0x25ca, "loz"],
+  [0x2605, "starf star"],
+  [0x260e, "phone"],
+  [0x2640, "female - male"],
+  [0x2660, "spades - - clubs - hearts diams"],
+  [0x266d, "flat natur sharp"],
+  [0x2713, "check"],
+  [0x2717, "cross"],
+  [0x27e8, "lang rang"],
+];
+// Second names HTML gives some of them (`&AMP;` is `&amp;`).
+const ENTITY_ALIASES = {
+  AMP: "amp", COPY: "copy", GT: "gt", LT: "lt", QUOT: "quot", REG: "reg", bullet: "bull", dash: "hyphen", half: "frac12",
+  lbrace: "lcub", lbrack: "lsqb", midast: "ast", mldr: "hellip", rbrace: "rcub", rbrack: "rsqb", rdquor: "rdquo", rsquor: "rsquo",
+  vert: "verbar"
+};
+const NAMED_ENTITIES = new Map(ENTITY_RUNS.flatMap(([first, names]) => names.split(" ")
+  .map((name, index) => [name, String.fromCodePoint(first + index)])
+  .filter(([name]) => name !== "-")));
+for (const [alias, name] of Object.entries(ENTITY_ALIASES)) {
+  NAMED_ENTITIES.set(alias, NAMED_ENTITIES.get(name));
 }
 
-function withoutUnseenMarkup(text) {
-  const edits = linkDefinitions(text).map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+// The text as word and character counts read it: closed code fences
+// without their fence lines, and outside them, without markup syntax that
+// is not prose. Only the syntax goes, never the text it marks up: an HTML
+// tag (`<span class="smallcaps">Lord</span>` keeps `Lord`), a footnote
+// marker (`[^1]`, the note's own text counts), a task-list box (`- [x]`),
+// and a reference definition (`[mill]: mill.md`) whose label a reference
+// link uses, with the label of each full reference to a defined label
+// (`[the mill][mill]` keeps `the mill`). An HTML entity is the character
+// it stands for (`&rsquo;`). The builds print this syntax as written for
+// now, but it is markup, not words. Markup in a code span, or escaped with
+// a backslash, is printed as written, so it counts. Run it after
+// plainLinks, so an entity in a link (`&#41;`) cannot end it early.
+export function countedText(markdown) {
+  const parts = splitFences(String(markdown));
+  const prose = parts.filter((part) => !part.fenced).map((part) => ({ text: part.text, code: codeSpans(part.text) }));
+  // A line shaped like a definition is one only when a reference uses its
+  // label, so a chat log's `[Mira]: Hello?` stays prose. A label in code
+  // or in such a line is not a use.
+  const used = new Set();
+  for (const { text, code } of prose) {
+    const outsideCode = missesAll(code);
+    const outsideDefinitions = missesAll([...text.matchAll(LINK_DEFINITION)].map((match) => [match.index, match.index + match[0].length]));
+    for (const match of text.matchAll(REFERENCE_TEXT)) {
+      const end = match.index + match[0].length;
+      if (outsideCode(match.index, end) && outsideDefinitions(match.index, end)) {
+        used.add(referenceLabel(match[1]));
+      }
+    }
+  }
+  const definitions = prose.map(({ text }) => linkDefinitions(text)
+    .filter(([start, end, label]) => used.has(referenceLabel(label)) && DEFINITION_INDENT.test(text.slice(start, end))));
+  const defined = new Set(definitions.flat().map(([, , label]) => referenceLabel(label)));
+  let next = 0;
+  return parts.map((part) => {
+    if (part.fenced) {
+      return withoutFenceMarkers(part.text);
+    }
+    const { text, code } = prose[next];
+    const edits = markupEdits(text, code, definitions[next], defined);
+    next += 1;
+    return applyEdits(text, edits);
+  }).join("");
+}
+
+// The words of one paragraph of inline markdown, as WORD_PATTERN splits
+// them once countedText's markup is read out, as { word, start, end } with
+// offsets into `text` as written, so a passage can be quoted as written. A
+// reference definition and its labels need the whole chapter, so here
+// they are read as text.
+export function proseWordSpans(text) {
+  const source = String(text);
+  let counted = "";
+  const starts = [];
+  const ends = [];
+  let position = 0;
+  const copy = (end) => {
+    for (let index = position; index < end; index += 1) {
+      starts.push(index);
+      ends.push(index + 1);
+    }
+    counted += source.slice(position, end);
+  };
+  for (const [start, end, replacement] of markupEdits(source)) {
+    copy(start);
+    counted += replacement;
+    for (let index = 0; index < replacement.length; index += 1) {
+      starts.push(start);
+      ends.push(end);
+    }
+    position = end;
+  }
+  copy(source.length);
+  return wordSpans(counted, WORD_PATTERN).map(({ word, start, end }) => ({ word, start: starts[start], end: ends[end - 1] }));
+}
+
+// The markup edits countedText makes in `text`, which holds no closed
+// fence, as [start, end, replacement] in order, none overlapping another
+// or a code span. `definitions` are the reference definitions to drop and
+// `defined` the labels a full reference may name.
+function markupEdits(text, code = codeSpans(text), definitions = [], defined = NO_LABELS) {
+  const edits = definitions.map(([start, end]) => [start, end, text.slice(start, end).replace(/[^\r\n]/g, "")]);
+  for (const match of defined.size === 0 ? [] : text.matchAll(FULL_REFERENCE_LABELS)) {
+    if (defined.has(referenceLabel(match[0].slice(1, -1)))) {
+      edits.push([match.index, match.index + match[0].length, ""]);
+    }
+  }
   for (const match of text.matchAll(TASK_BOX)) {
     const start = match.index + match[1].length;
     edits.push([start, start + 3, ""]);
   }
   for (const match of text.matchAll(COUNTED_MARKUP)) {
-    // A backslash before it (`\<b>`, `\&amp;`) makes it text.
-    if (text[match.index - 1] !== "\\") {
+    if (!escaped(text, match.index)) {
       edits.push([match.index, match.index + match[0].length, markupText(match[0])]);
     }
   }
   edits.sort((left, right) => left[0] - right[0]);
-  const code = codeSpans(text);
+  const outsideCode = missesAll(code);
+  let position = 0;
+  return edits.filter(([start, end]) => {
+    if (start < position || !outsideCode(start, end)) {
+      return false;
+    }
+    position = end;
+    return true;
+  });
+}
+
+function applyEdits(text, edits) {
   let result = "";
   let position = 0;
-  let next = 0;
   for (const [start, end, replacement] of edits) {
-    while (next < code.length && code[next][1] <= start) {
-      next += 1;
-    }
-    if (start >= position && (next === code.length || code[next][0] >= end)) {
-      result += text.slice(position, start) + replacement;
-      position = end;
-    }
+    result += text.slice(position, start) + replacement;
+    position = end;
   }
   return result + text.slice(position);
 }
@@ -849,42 +987,77 @@ function withoutUnseenMarkup(text) {
 // What a match of COUNTED_MARKUP leaves in the text.
 function markupText(markup) {
   if (markup[0] === "&") {
-    return entityText(markup.slice(1, -1));
+    return entityText(markup);
   }
-  const tag = /^<\/?([a-z\d]+)/i.exec(markup);
-  return tag !== null && !INLINE_ELEMENTS.has(tag[1].toLowerCase()) ? " " : "";
+  const name = /^<\/?([a-z][\w.-]*)/.exec(markup)?.[1];
+  return name === undefined || INLINE_ELEMENTS.has(name) || name.includes("-") ? "" : " ";
 }
 
-// The character an entity name (`amp`, `#8217`, `#x2019`) stands for. A
-// name NAMED_ENTITIES lacks stands for nothing, and, as in HTML, a number
-// that is not a character stands for U+FFFD.
-function entityText(name) {
+// The character an entity (`&amp;`, `&#8217;`, `&#x2019;`) stands for. A
+// name NAMED_ENTITIES lacks is left as written, as CommonMark prints a name
+// it does not know, and names are matched in their case, as HTML matches
+// them. As in HTML, a number that is not a character stands for U+FFFD.
+function entityText(entity) {
+  const name = entity.slice(1, -1);
   if (name[0] !== "#") {
-    return NAMED_ENTITIES.get(name) ?? "";
+    return NAMED_ENTITIES.get(name) ?? entity;
   }
   const code = /^#x/i.test(name) ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
-  return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "\ufffd" : String.fromCodePoint(code);
+  return code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? "�" : String.fromCodePoint(code);
 }
 
-// The code spans in `text`, as [start, end] in order, read as scanMarkup
-// reads them: a run of backticks and the next run of the same length on
-// its line. Each run's closer is found in one pass from the end of the
-// line, so many runs of different lengths stay linear.
+// A label as CommonMark matches labels: case and runs of spaces ignored.
+function referenceLabel(value) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+// True when the character at `index` follows an odd run of backslashes,
+// which escapes it; an even run is escaped backslashes.
+function escaped(text, index) {
+  let start = index;
+  while (start > 0 && text[start - 1] === "\\") {
+    start -= 1;
+  }
+  return (index - start) % 2 === 1;
+}
+
+// A test of whether [start, end] misses every one of `ranges`, which are
+// in order and apart, for queries made in order of start.
+function missesAll(ranges) {
+  let next = 0;
+  return (start, end) => {
+    while (next < ranges.length && ranges[next][1] <= start) {
+      next += 1;
+    }
+    return next === ranges.length || ranges[next][0] >= end;
+  };
+}
+
+// The code spans in `text`, as [start, end] in order, read as CommonMark
+// reads them on one line: a run of backticks and the next run of the same
+// length. A backslash before a run outside code escapes its first
+// backtick, so the rest opens it. Each run's closer is found in one pass
+// from the end of the line, so many runs of different lengths stay linear.
 function codeSpans(text) {
   const spans = [];
   let lineStart = 0;
   for (const line of text.split("\n")) {
-    const runs = line.includes("`") ? [...line.matchAll(/`+/g)] : [];
+    const runs = line.includes("`")
+      ? [...line.matchAll(/`+/g)].map((match) => {
+        const from = match.index + (escaped(line, match.index) ? 1 : 0);
+        return { from, opens: match.index + match[0].length - from, length: match[0].length, end: match.index + match[0].length };
+      })
+      : [];
     const closers = [];
     const later = new Map();
     for (let index = runs.length - 1; index >= 0; index -= 1) {
-      closers[index] = later.get(runs[index][0].length);
-      later.set(runs[index][0].length, index);
+      closers[index] = later.get(runs[index].opens);
+      later.set(runs[index].length, index);
     }
     for (let index = 0; index < runs.length; index += 1) {
       const close = closers[index];
       if (close !== undefined) {
-        spans.push([lineStart + runs[index].index, lineStart + runs[close].index + runs[close][0].length]);
+        spans.push([lineStart + runs[index].from, lineStart + runs[close].end]);
         index = close;
       }
     }

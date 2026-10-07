@@ -1,7 +1,7 @@
 import { formatNumber } from "./compare.js";
 import { usageError } from "./exit-codes.js";
 import { warn } from "./findings.js";
-import { WORD_PATTERN, wordSpans } from "./words.js";
+import { proseWordSpans } from "./markdown.js";
 
 // story similarity: passages of chapter prose that share a run of words with
 // reference text (the author's earlier books, a previous draft, a source).
@@ -45,14 +45,16 @@ export function similarityOptions(options = {}) {
 // The words of one document, each with the paragraph it is in and its place
 // in that paragraph's text, so a shared run can be quoted as written.
 // `paragraphs` is a list of { label, text }. Words are split as story
-// wordcount splits them (see WORD_PATTERN and wordSpans), so `well-known`
-// and `don't` are one word each, and compared with apostrophes and hyphens
-// folded to ASCII and soft hyphens dropped.
+// wordcount splits them, with HTML tags, entities, and footnote markers
+// read the same way (see proseWordSpans), so `well-known` and `don't` are
+// one word each. They are compared with soft hyphens dropped and
+// apostrophes, hyphens, and the Hebrew marks typed in their place folded
+// to ASCII: geresh to `'`, maqaf to `-`, and gershayim to `"`.
 export function tokenizeDocument(paragraphs) {
   const words = [];
   paragraphs.forEach((paragraph, index) => {
-    for (const { word, start, end } of wordSpans(paragraph.text.normalize("NFC"), WORD_PATTERN)) {
-      const folded = word.toLowerCase().replace(/[’ʼ]/g, "'").replace(/[\u2010\u2011]/g, "-").replace(/\u00ad/g, "");
+    for (const { word, start, end } of proseWordSpans(paragraph.text.normalize("NFC"))) {
+      const folded = word.toLowerCase().replace(/[’ʼ\u05f3]/g, "'").replace(/[\u2010\u2011\u05be]/g, "-").replace(/\u05f4/g, "\"").replace(/\u00ad/g, "");
       words.push({ word: folded, paragraph: index, start, end });
     }
   });

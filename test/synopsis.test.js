@@ -277,6 +277,9 @@ describe("#438 truncation drops trailing headings and blank lines quickly", () =
   test("a cut synopsis never ends on a heading or a blank line", () => {
     expect(truncateWords("Opening line.\n\n## Act Two\n\nmore words here", 2)).toBe("Opening line.…\n");
     expect(truncateWords("# Only\n\nalpha beta", 1)).toBe("# Only…\n");
+    // Markup split by a space counts as wordCount counts the whole line.
+    expect(truncateWords("<span class=\"smallcaps\">Lord</span> Ash rode north", 2)).toBe("<span class=\"smallcaps\">Lord</span> Ash…\n");
+    expect(truncateWords("A 灯台守 B", 3)).toBe("A 灯台…\n");
     expect(truncateWords("One two\n#\t\n   \nthree four", 3)).toBe("One two\n#\t\n   \nthree…\n");
   });
 
