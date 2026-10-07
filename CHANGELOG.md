@@ -163,6 +163,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - It now restores the empty folders `story init` makes only when it upgrades an older `schema-version`, so it agrees with `story doctor --fix`.
 - `story migrate` now prints the same number of changes that its `--dry-run` and `--json` list. (#567)
   - Before, a registry it created and then reindexed counted twice, and a folder made with its parent counted once.
+- Sentence splitting now ends a sentence at a lone capital before a word that is never a name, opens one at a dialogue dash, and keeps a quotative と with its quote. (#586)
+  - `story prose`, `story voices`, and the synopsis split `So do I. She left.` and `plan B. Nobody agreed.` in two, while initials such as `J. R. Tolkien`, `Anna K. Smith`, and `I. Asimov` still run on.
+  - A dialogue dash before a capital opens a new sentence (`—Vete. —Ella se giró.`), and `「はい。」と言った。` is one sentence.
 
 ### Security
 
