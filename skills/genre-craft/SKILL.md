@@ -1,6 +1,6 @@
 ---
 name: genre-craft
-description: This skill should be used when the user asks about "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "fantasy", "quest", "chosen one", "historical fiction", "period voice", "anachronism", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project. NOT for a clue check as a revision pass (use revision-continuity).
+description: This skill should be used when the user asks about "mystery", "fair play", "clue", "red herring", "romance beats", "HEA", "thriller", "ticking clock", "horror", "dread", "MG", "YA", "middle grade", "young adult", "science fiction", "sci-fi", "fantasy", "quest", "chosen one", "historical fiction", "period voice", "anachronism", "comedy", "humour", "humor", "romcom", "farce", "satire", "running gag", "serial", "episodic", "web serial", "genre conventions", or wants genre-specific structural craft for a story project. NOT for a clue check as a revision pass (use revision-continuity).
 ---
 
 # Genre Craft
@@ -13,9 +13,10 @@ ledger), romance (beats + HEA contract), thriller (ticking clock, power
 imbalance, set pieces), horror (dread/terror ordering, monster rules),
 MG/YA (category constraints), science fiction (load-bearing speculative
 elements), fantasy (quest structure, magic paid off by its rules and costs),
-historical fiction (period voice, anachronisms, real people), and
-serial/episodic structure. Use at story-init (pick the pack,
-set the constraints) and in revision (run the pack's audit).
+historical fiction (period voice, anachronisms, real people), comedy
+(escalation, comic set-ups and payoffs, tone), and serial/episodic
+structure. Use at story-init (pick the pack, set the constraints) and in
+revision (run the pack's audit).
 
 ## Prerequisites
 
@@ -45,6 +46,7 @@ exist or be in progress.
    - Science fiction → `references/scifi-pipeline.md`
    - Fantasy (epic, quest, secondary-world) → `references/fantasy.md`
    - Historical fiction → `references/historical.md`
+   - Comedy (romantic comedy, farce, satire, cosy) → `references/comedy.md`
    - Serial / episodic / web serial → `references/serial-episodic.md`
    - Multi-genre stories: load each applicable pack; where packs conflict
      (e.g. horror's slow dread vs. thriller's cliffhangers), decide with
@@ -81,6 +83,11 @@ exist or be in progress.
      skill) for every fact the plot leans on and every real person; run
      the `editorial-review` real-people pass for anyone living or recently
      dead.
+   - Comedy: record the comic sub-genre and the tone line (where comedy
+     stops) in `story.md`, each comic lead's flaw in their character file,
+     and call-backs and running gags whose payoff is chapters away in
+     `continuity/promises/`. Sentence-level comic timing belongs to the
+     `line-editing` skill.
 3. **Draft against the pack.** Use the pack's beat concepts and rules
    alongside the `chapter-writing` workflow and the `scene-craft`
    scene-grain tools. Cross-link thriller pacing to the Fichtean curve
@@ -116,8 +123,8 @@ exist or be in progress.
 
 Use the Story CLI when it is available. If `story` is not installed, use the bundled fallback `node ../story-maintenance/scripts/story.js` with the same arguments. Use `node <checkout>/bin/story.js` instead only when the user names a Story Skills repository checkout or you are working in one. Write the script as an absolute path (resolve the fallback relative to this skill folder) and run it from the folder you would run `story` from, so `.` and other relative paths keep their meaning. Use Node, not Bun or a package script: Bun would load that folder's `bunfig.toml` (which can run code) and `.env`, and a package script runs from the checkout's root. If no CLI is available, perform the registry, backlink, and word-count checks manually.
 
-After adding or changing genre entities (clues, deadlines, season goals,
-episode questions):
+After adding or changing genre entities (clues, deadlines, comic set-ups,
+season goals, episode questions):
 
 ```shell
 story reindex .
@@ -136,6 +143,7 @@ story clues .     # mystery: fair-play matrix and warnings
 - **`references/scifi-pipeline.md`** - Speculative element must be load-bearing, rules stated before exploited, worldbuilding→plot pipeline
 - **`references/fantasy.md`** - Quest and journey structure, magic rules stated before the climax relies on them, cost and limits, secondary-world exposition, chosen-one pitfalls
 - **`references/historical.md`** - Period voice vs. readability, anachronism checks (things, words, ideas), invented vs. real people, ethics of the real past, the author's note
+- **`references/comedy.md`** - Escalation, reversals, comic set-ups and payoffs (call-backs, rule of three, running gags), character-driven humour (comic flaw, straight man and funny man, want vs. need), tone management and comic sub-genres; sentence-level timing handed to `line-editing`
 - **`references/serial-episodic.md`** - Season/volume goal, per-episode dramatic question, a reward in every installment, recap discipline
 
 ## Shared Conventions

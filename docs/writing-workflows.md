@@ -383,7 +383,7 @@ Design the antagonist as the counter-argument to the premise.
 This is a mystery. Set up the fair-play rules and the clue ledger.
 ```
 
-[`theme-craft`](../skills/theme-craft/SKILL.md) adds `arc-type`, `lie`, `truth`, and `ghost-wound` to character files; see [Theme](#theme) below. [`genre-craft`](../skills/genre-craft/SKILL.md) loads the pack for the genre in `story.md` (mystery, romance, thriller, horror, MG/YA, science fiction, fantasy, historical, or serial) and applies its constraints up front. For a mystery that means ledgering every clue:
+[`theme-craft`](../skills/theme-craft/SKILL.md) adds `arc-type`, `lie`, `truth`, and `ghost-wound` to character files; see [Theme](#theme) below. [`genre-craft`](../skills/genre-craft/SKILL.md) loads the pack for the genre in `story.md` (mystery, romance, thriller, horror, MG/YA, science fiction, fantasy, historical, comedy, or serial) and applies its constraints up front. For a mystery that means ledgering every clue:
 
 ```shell
 story add clue "The wet footprints" --planted chapter-01 --payoff chapter-03 --significance-delayed

@@ -35,6 +35,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Each entry has a kebab-case `name`, a `kind`, and `where: [status=draft, pov=ilse]` in the `--where` syntax, and any `--where` flags add to its filters.
   - `story validate` reports a repeated name (`duplicate-query`) and an unknown kind or an unreadable filter (`invalid-query`), and warns about a key no file of the kind sets (`query-unknown-key`).
   - `rename`, `move`, and `merge` update the query filters that name an id, and `remove` lists the ones that name the removed id (`stale-query`).
+- genre-craft has a comedy pack. `references/comedy.md` covers escalation, reversals, comic set-ups and payoffs (call-backs, the rule of three, running gags), character-driven humour, tone management, and the romantic comedy, farce, satire, and cosy sub-genres, and ends with a revision audit. Sentence-level comic timing goes to the line-editing skill, and the skill now triggers on "comedy", "humour", "romcom", "farce", "satire", and "running gag". ([#534](https://github.com/danjdewhurst/story-skills/issues/534))
 
 ### Changed
 
