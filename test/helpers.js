@@ -328,28 +328,34 @@ export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}
 }
 
 // Asserts that `run` takes about linear time in the size of its input when
-// each run also has a fixed cost, such as making or reading a project,
-// which expectLinearTime would pay once for each of its short inputs: the
-// run on make(size) is timed against the run on make(size / 4), each the
-// fastest of a few runs taken in turn, so a busy spell slows both. A linear
-// scan takes at most four times as long, and less with the fixed cost; a
-// quadratic one takes sixteen times as long once the scan outweighs that
-// cost. Returns what `run` gave on the larger input.
-export function expectLinearGrowth(run, make, size) {
-  const small = make(size / 4);
-  const large = make(size);
-  let smallTime = Infinity;
-  let largeTime = Infinity;
+// each run also has a fixed cost, such as making a project, which
+// expectLinearTime would pay once for each of its short inputs. The runs on
+// make(size) and make(size / 4) are timed less the run on make(0), the fixed
+// cost, each the fastest of a few runs taken in turn, so a busy spell slows
+// all three. A linear scan then takes at most four times as long on the
+// larger input, and a quadratic one sixteen times. The larger run must also
+// take less than `limit` milliseconds in all, far above its usual time:
+// JavaScriptCore gives up on a regex that backtracks too much after a fixed
+// amount of work, whatever the length, so such a regex takes as long on
+// both inputs and only a limit shows it. Returns what `run` gave on the
+// larger input.
+export function expectLinearGrowth(run, make, size, { limit = 2000 } = {}) {
+  const inputs = [make(0), make(size / 4), make(size)];
+  const best = [Infinity, Infinity, Infinity];
   let result;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    let started = performance.now();
-    run(small);
-    smallTime = Math.min(smallTime, performance.now() - started);
-    started = performance.now();
-    result = run(large);
-    largeTime = Math.min(largeTime, performance.now() - started);
+    inputs.forEach((input, index) => {
+      const started = performance.now();
+      const value = run(input);
+      best[index] = Math.min(best[index], performance.now() - started);
+      if (index === 2) {
+        result = value;
+      }
+    });
   }
-  expect(largeTime).toBeLessThan(8 * smallTime + 25);
+  const [fixed, small, large] = best;
+  expect(large).toBeLessThan(limit);
+  expect(large - fixed).toBeLessThan(8 * Math.max(small - fixed, 0) + 25);
   return result;
 }
 
