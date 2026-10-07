@@ -373,8 +373,9 @@ tense: past
 | `deadline` | `YYYY-MM-DD` | no | Due date; `story progress` reports days left and words a day needed. Must be a real calendar day. |
 | `daily-target-words` | integer ≥ 1 | no | Words a writing day aims for. `story progress` reports today's words against it, and a day counts toward the streak only when it reaches it. A book [counted in characters](#counting-in-characters) sets `daily-target-characters` instead. |
 | `writing-days` | list of weekdays | no | The days you plan to write: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`, `sun`, or the full names, in any letter case. A day not listed never breaks the `story progress` streak. Unset or `[]` means every day. |
-| `release-every` | integer ≥ 1 | no | Days between a serial's episodes, such as `7` for weekly or `14` for fortnightly. Needs `release-start`. See [Release schedule](#release-schedule). |
+| `release-every` | integer ≥ 1, or `<n> month` / `<n> months` | no | Days between a serial's episodes, such as `7` for weekly or `14` for fortnightly, or months, such as `1 month` for monthly. Needs `release-start`. See [Release schedule](#release-schedule). |
 | `release-start` | `YYYY-MM-DD` | no | The real-world day episode 1 releases. Needs `release-every`. Always a Gregorian date, even with a `calendar`. |
+| `release-warn-days` | integer ≥ 0 | no | How many days before its release an episode with no prose is warned about. Default `3`. See [Release schedule](#release-schedule). |
 | `calendar` | list of mappings | no | A secondary world's months, weekdays, and eras. Chapter and scene dates are then written in it, such as `3 Thaw 302 AE`. See [Custom calendars](#custom-calendars). |
 | `draft-mode` | string | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
@@ -433,8 +434,9 @@ A serial can record when each episode goes out. Each chapter is an episode, in r
 ```yaml
 # story.md
 form: serial
-release-every: 7          # days between episodes
+release-every: 7          # days between episodes, or months: 1 month
 release-start: 2026-09-04 # episode 1
+release-warn-days: 3      # optional: warn this many days ahead (default 3)
 ```
 
 ```yaml
@@ -442,7 +444,11 @@ release-start: 2026-09-04 # episode 1
 release-date: 2026-10-12  # episode 6, three days late this once; episode 7 stays on 2026-10-16
 ```
 
-Episode *n* is due `release-start` plus (*n* − 1) × `release-every` days, unless its chapter sets `release-date`. A book with no cadence can schedule episodes with `release-date` alone. Release dates are real-world days, so they are always `YYYY-MM-DD` even when the book has a [custom calendar](#custom-calendars), and `story validate` errors on an impossible day such as `2026-02-30`, and on `release-every` or `release-start` set without the other. `story progress` reports the same errors, and leaves an episode whose `release-date` is not a real day out of the schedule rather than put it back on the cadence. A cadence that runs past 9999-12-31 schedules nothing more.
+Episode *n* is due `release-start` plus (*n* − 1) × `release-every` days, unless its chapter sets `release-date`.
+
+A monthly serial sets `release-every` to a number of months instead, such as `1 month` or `3 months`. Each episode then goes out on the same day of the month as `release-start`, or on the month's last day when the month is shorter. Every month counts from `release-start`, so a short month does not move the episodes after it. A serial that starts on 31 January goes out on 28 February, or 29 February in a leap year, then on 31 March and 30 April. To release on the last day of each month, start on the 31st.
+
+A book with no cadence can schedule episodes with `release-date` alone. Release dates are real-world days, so they are always `YYYY-MM-DD` even when the book has a [custom calendar](#custom-calendars), and `story validate` errors on an impossible day such as `2026-02-30`, on a `release-every` that is not a day count or a month count such as `2 weeks`, on a `release-warn-days` that is not a whole number 0 or more, and on `release-every` or `release-start` set without the other. `story progress` reports the same errors, and leaves an episode whose `release-date` is not a real day out of the schedule rather than put it back on the cadence. A cadence that runs past 9999-12-31 schedules nothing more.
 
 [`story progress`](cli-reference.md#progress) and [`story next`](cli-reference.md#next) then print the next release, the first one today or later:
 
@@ -450,7 +456,7 @@ Episode *n* is due `release-start` plus (*n* − 1) × `release-every` days, unl
 Next release: episode 3 (chapter-03) on 2026-09-18, in 4 days (drafted)
 ```
 
-An episode counts as drafted once its chapter has prose. Both commands warn with `release-undrafted` when an episode is due within 3 days, or was due already, and its chapter has no prose. With a cadence, the episodes after the last chapter are scheduled too, so the next release can be one with no chapter yet, and a due episode with no chapter is warned about once, with a count of any more behind it. `--date YYYY-MM-DD` sets "today"; it cannot be a [`cli-defaults`](#cli-defaults-and-severity) entry. `story validate`, `story check`, and `story doctor` never report the warning, since it depends on the day they run.
+An episode counts as drafted once its chapter has prose. Both commands warn with `release-undrafted` when an episode is due within `release-warn-days` days (3 when unset), or was due already, and its chapter has no prose. `release-warn-days: 0` warns only from the release day; a larger window, such as `7` for a monthly serial, warns sooner. The window applies with or without a cadence. With a cadence, the episodes after the last chapter are scheduled too, so the next release can be one with no chapter yet, and a due episode with no chapter is warned about once, with a count of any more behind it. `--date YYYY-MM-DD` sets "today"; it cannot be a [`cli-defaults`](#cli-defaults-and-severity) entry. `story validate`, `story check`, and `story doctor` never report the warning, since it depends on the day they run.
 
 Once `story.md` has `status: complete`, the chapters are every episode there is, so the cadence stops at the last chapter: no episode past it is scheduled or warned about. Chapters whose release dates are still ahead keep them. When every chapter has a release date, the line marks the final release, as in `(drafted, the last episode)`, and after it has gone out says so:
 
