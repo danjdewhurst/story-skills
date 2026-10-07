@@ -605,6 +605,11 @@ function splitChapters(documents, warnings, rules, bylines) {
     const source = document.text.replace(/\r\n?/g, "\n");
     const own = storySkillsChapter(source);
     if (own) {
+      if (own.skipped.length > 0) {
+        const [first] = own.skipped;
+        const count = own.skipped.length === 1 ? "1 line above ## Chapter Text was" : `${own.skipped.length} lines above ## Chapter Text were`;
+        warnings.push({ ...warn("unused-chapter-text", `${document.name}: ${count} not imported (first "${first.text}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
+      }
       // Its own `author` comes first: --bylines reads a by-line only when it has none.
       chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
       continue;
@@ -636,20 +641,34 @@ function splitChapters(documents, warnings, rules, bylines) {
 
 // A chapter file in Story Skills' own layout, copied from another project,
 // keeps its title, `numbered: false`, and `author`, and its prose is the
-// text under `## Chapter Text` (the outline above it is not book text).
+// text under `## Chapter Text` (the outline above it is not book text). Only
+// a file with a `number` is one: a manuscript with frontmatter of its own
+// and a `## Chapter Text` heading is split as markdown. `skipped` lists the
+// lines above the heading that are not used, as { text, line }.
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
   if (!heading) {
     return null;
   }
-  let data;
+  let parsed;
   try {
-    data = parseFrontmatter(text).data;
+    parsed = parseFrontmatter(text);
   } catch {
     return null;
   }
+  const { data } = parsed;
+  if (!Object.hasOwn(data, "number")) {
+    return null;
+  }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).trim() : "";
-  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author) };
+  // The body is the end of the text, so it starts where the frontmatter ends.
+  const bodyStart = text.length - parsed.body.length;
+  const firstLine = text.slice(0, bodyStart).split("\n").length;
+  const skipped = text.slice(bodyStart, heading.index).split("\n")
+    .map((line, index) => ({ text: line.trim(), line: firstLine + index }))
+    // A `# ` line is the chapter's heading, which the chapter takes from its title.
+    .filter((line) => line.text !== "" && !/^#[ \t]/.test(line.text));
+  return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
 }
 
 // A name field's names, each on one line, so a line break in one cannot
