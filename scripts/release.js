@@ -31,9 +31,14 @@ export function isAbsentNpmVersion(error) {
 
 // --atomic makes the remote accept both refs or neither, so a rejected main
 // push (someone pushed during the checks) can never leave a published tag
-// pointing at a commit that is not on main.
+// pointing at a commit that is not on main. Full ref names keep a local
+// branch named like the tag from being pushed in its place.
 export function releasePushArgs(tag) {
-  return ["push", "--atomic", "origin", RELEASE_BRANCH, tag];
+  return ["push", "--atomic", "origin", ...pushTargets(tag).map((ref) => `${ref}:${ref}`)];
+}
+
+function pushTargets(tag) {
+  return [`refs/heads/${RELEASE_BRANCH}`, `refs/tags/${tag}`];
 }
 
 function githubReleaseArgs(tag) {
@@ -121,6 +126,7 @@ export function releaseDeps(overrides = {}) {
     log: console.log,
     error: console.error,
     today: () => new Date().toISOString().slice(0, 10),
+    sleep: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
     ...overrides
   };
 }
@@ -235,19 +241,26 @@ export function changelogProblemFor(text, nextVersion) {
   return null;
 }
 
-export function updateChangelog(root, currentVersion, nextVersion, date) {
+// These rewrites add each file to `written` just before writing it, so after
+// a failure the release knows which files to restore, and only those.
+export function updateChangelog(root, currentVersion, nextVersion, date, written = []) {
   const filePath = path.join(root, CHANGELOG_FILE);
-  fs.writeFileSync(filePath, promoteUnreleased(fs.readFileSync(filePath, "utf8"), currentVersion, nextVersion, date));
+  const text = promoteUnreleased(fs.readFileSync(filePath, "utf8"), currentVersion, nextVersion, date);
+  written.push(CHANGELOG_FILE);
+  fs.writeFileSync(filePath, text);
   return CHANGELOG_FILE;
 }
 
-export function updateVersionFiles(root, nextVersion) {
+export function updateVersionFiles(root, nextVersion, written = []) {
   const updated = [];
+  const write = (relativePath, text) => {
+    written.push(relativePath);
+    fs.writeFileSync(path.join(root, relativePath), text);
+    updated.push(relativePath);
+  };
   const currentVersion = JSON.parse(fs.readFileSync(path.join(root, VERSION_FILES[0]), "utf8")).version;
   for (const relativePath of VERSION_FILES) {
-    const filePath = path.join(root, relativePath);
-    fs.writeFileSync(filePath, replaceVersion(fs.readFileSync(filePath, "utf8"), nextVersion));
-    updated.push(relativePath);
+    write(relativePath, replaceVersion(fs.readFileSync(path.join(root, relativePath), "utf8"), nextVersion));
   }
   const modulePath = path.join(root, VERSION_MODULE);
   const moduleSource = fs.readFileSync(modulePath, "utf8");
@@ -255,46 +268,39 @@ export function updateVersionFiles(root, nextVersion) {
   if (!versionPattern.test(moduleSource)) {
     throw new Error(`No VERSION export found in ${VERSION_MODULE}.`);
   }
-  fs.writeFileSync(modulePath, moduleSource.replace(versionPattern, `$1${nextVersion}$2`));
-  updated.push(VERSION_MODULE);
+  write(VERSION_MODULE, moduleSource.replace(versionPattern, `$1${nextVersion}$2`));
   for (const relativePath of STORY_VERSION_FILES) {
-    const filePath = path.join(root, relativePath);
-    const text = fs.readFileSync(filePath, "utf8");
+    const text = fs.readFileSync(path.join(root, relativePath), "utf8");
     const pattern = /^(\s*STORY_VERSION:\s*")[^"]*(")/m;
     if (!pattern.test(text)) {
       throw new Error(`No STORY_VERSION found in ${relativePath}.`);
     }
-    fs.writeFileSync(filePath, text.replace(pattern, `$1${nextVersion}$2`));
-    updated.push(relativePath);
+    write(relativePath, text.replace(pattern, `$1${nextVersion}$2`));
   }
   // Doc examples name the current release, so bump the ones that still do.
   for (const relativePath of docVersionFiles(root)) {
-    const filePath = path.join(root, relativePath);
-    const text = fs.readFileSync(filePath, "utf8");
+    const text = fs.readFileSync(path.join(root, relativePath), "utf8");
     const bumped = bumpDocVersions(text, currentVersion, nextVersion);
     if (bumped !== text) {
-      fs.writeFileSync(filePath, bumped);
-      updated.push(relativePath);
+      write(relativePath, bumped);
     }
   }
   return updated;
 }
 
-function writeVersions(deps, currentVersion, nextVersion) {
+function writeVersions(deps, currentVersion, nextVersion, written) {
   // The changelog goes first: it is the one rewrite that can refuse, and the
   // preflight has already checked that it will not.
   const date = deps.today();
-  const changelog = updateChangelog(deps.root, currentVersion, nextVersion, date);
+  updateChangelog(deps.root, currentVersion, nextVersion, date, written);
   deps.log(`Moved the Unreleased entries in ${CHANGELOG_FILE} under ${nextVersion} - ${date}`);
-  const updated = updateVersionFiles(deps.root, nextVersion);
-  for (const relativePath of updated) {
+  for (const relativePath of updateVersionFiles(deps.root, nextVersion, written)) {
     deps.log(`Bumped ${relativePath} to ${nextVersion}`);
   }
-  updated.push(changelog);
   // The bundled fallback inlines src/version.js, so rebuild it with the bump.
+  written.push(FALLBACK_FILE);
   runBun(deps, ["run", "build:fallback"], { inherit: true });
   runBun(deps, ["run", "check:metadata"], { inherit: true });
-  return updated;
 }
 
 // Runs the release and returns its exit status. Bad arguments print the usage
@@ -340,17 +346,21 @@ function release(deps, bump, dryRun) {
     return;
   }
 
-  // Until the push everything is local, so a failure puts main and every
-  // file back at `head`, the commit whose clean tree the preflight checked.
+  // Until the push everything is local. `local` records what the release has
+  // done so far, so a failure undoes exactly that and nothing else.
+  const local = { head, written: [], commit: null, tag: null };
   try {
-    const updated = writeVersions(deps, packageJson.version, nextVersion);
-    git(deps, "add", ...updated, FALLBACK_FILE);
+    writeVersions(deps, packageJson.version, nextVersion, local.written);
+    git(deps, "add", ...local.written);
     git(deps, "commit", "-m", `chore: release ${nextVersion}`);
+    local.commit = git(deps, "rev-parse", "HEAD");
     git(deps, "tag", "-a", tag, "-m", tag);
+    local.tag = tag;
+    checkPushTargets(deps, tag);
   } catch (error) {
-    rollBack(deps, head, null, `the release failed before anything was pushed: ${reason(error)}`);
+    rollBack(deps, local, `the release failed before anything was pushed: ${reason(error)}`);
   }
-  pushRelease(deps, head, tag);
+  pushRelease(deps, local, nextVersion);
   deps.log(`Pushed ${RELEASE_BRANCH} and ${tag}`);
 
   // The tag is on origin now, and tag rules stop anyone moving or deleting
@@ -371,25 +381,95 @@ function release(deps, bump, dryRun) {
   deps.log(`The Publish workflow publishes ${packageJson.name}@${nextVersion} to npm once CI passes on ${RELEASE_BRANCH} for the release commit: https://github.com/danjdewhurst/story-skills/actions/workflows/publish.yml`);
 }
 
-// Undoes a release that never reached origin: deletes the local tag, if one
-// was made, and resets main and every file to `head`. The preflight saw a
-// clean tree there, so the reset discards only what the release wrote.
-function rollBack(deps, head, tag, problem) {
-  const steps = [...(tag ? [["tag", "-d", tag]] : []), ["reset", "--hard", head]];
+// The git commands that undo what the release did locally: delete its tag,
+// move main back from its commit (only if main still points at that commit),
+// and restore the files it wrote. Other files and branches are never touched.
+function undoSteps(local) {
+  return [
+    ...(local.tag ? [["tag", "-d", local.tag]] : []),
+    ...(local.commit ? [["update-ref", `refs/heads/${RELEASE_BRANCH}`, local.head, local.commit]] : []),
+    ...(local.written.length > 0 ? [["checkout", local.head, "--", ...local.written]] : [])
+  ];
+}
+
+function byHand(steps) {
+  return steps.map((args) => `\`git ${args.join(" ")}\``).join(", then ");
+}
+
+// Undoes a release that never reached origin, after checking that HEAD is
+// still main at the commit the release left it on. The checks after the
+// preflight take minutes, and if anything moved HEAD meanwhile (a checkout,
+// a commit), the rollback changes nothing and prints the steps instead.
+function rollBack(deps, local, problem) {
+  const steps = undoSteps(local);
+  if (steps.length === 0) {
+    fail(`${problem}\nNothing had changed yet. Fix the problem, then run the release again.`);
+  }
+  const expected = local.commit ?? local.head;
+  let branch = "";
+  let at = "";
+  try {
+    branch = git(deps, "symbolic-ref", "-q", "HEAD");
+    at = git(deps, "rev-parse", "HEAD");
+  } catch {
+    // A detached HEAD, or a git that fails here, counts as moved.
+  }
+  if (branch !== `refs/heads/${RELEASE_BRANCH}` || at !== expected) {
+    fail(
+      `${problem}\nNothing was rolled back: HEAD is no longer ${RELEASE_BRANCH} at ${expected}, so something else changed the repository while the release ran. ` +
+        `Check \`git status\` and \`git log\`, then, with ${RELEASE_BRANCH} checked out, undo the release by hand with ${byHand(steps)}.`
+    );
+  }
+  let done = 0;
   try {
     for (const args of steps) {
       git(deps, ...args);
+      done += 1;
     }
   } catch (error) {
-    fail(`${problem}\nThe rollback failed too: ${reason(error)}\nUndo the release by hand with ${steps.map((args) => `\`git ${args.join(" ")}\``).join(" and ")}, then run the release again.`);
+    fail(`${problem}\nThe rollback failed too: ${reason(error)}\nFinish it by hand with ${byHand(steps.slice(done))}, then run the release again.`);
   }
-  fail(`${problem}\nRolled back: ${RELEASE_BRANCH} is at ${head} again${tag ? `, the local ${tag} tag is deleted,` : ""} and the bumped files are restored. Fix the problem, then run the release again.`);
+  fail(
+    `${problem}\nRolled back: ${RELEASE_BRANCH} is at ${local.head} again${local.tag ? `, the local ${local.tag} tag is deleted,` : ""} and the files the release wrote are restored. Fix the problem, then run the release again.`
+  );
 }
+
+// git push matches even a full destination ref against origin's refs the way
+// rev-parse expands a short name, so a branch named refs/tags/vX.Y.Z
+// (refs/heads/refs/tags/vX.Y.Z), a tag named refs/heads/main, or a
+// refs/remotes/<target>/HEAD on origin would take the push in place of the
+// real ref. ls-remote lists every ref that ends in a target, so refuse while
+// it lists anything else.
+function checkPushTargets(deps, tag) {
+  const targets = pushTargets(tag);
+  const decoys = git(deps, "ls-remote", "origin", ...targets, ...targets.map((ref) => `${ref}/HEAD`))
+    .split("\n")
+    .map((line) => line.split("\t")[1])
+    .filter((ref) => ref && !ref.endsWith("^{}") && !targets.includes(ref));
+  if (decoys.length > 0) {
+    fail(`origin has ${decoys.join(" and ")}, which \`git push\` would update in place of ${targets.join(" or ")}. Ask a repository admin to delete it.`);
+  }
+}
+
+// The object origin's refs/tags/<tag> names, or null when origin has none.
+function remoteTag(deps, tag) {
+  const ref = `refs/tags/${tag}`;
+  const line = git(deps, "ls-remote", "--tags", "origin", ref)
+    .split("\n")
+    .find((entry) => entry.split("\t")[1] === ref);
+  return line ? line.split("\t")[0] : null;
+}
+
+const PUSH_CHECKS = 3;
+const PUSH_CHECK_DELAY_MS = 5000;
 
 // --atomic means origin takes both refs or neither, so a refused push leaves
 // nothing there and is rolled back. A dropped connection can hide a push that
-// landed, though, so ask origin for the tag before undoing anything.
-function pushRelease(deps, head, tag) {
+// landed, or one the server is still applying, so ask origin for the tag a
+// few times before undoing anything.
+function pushRelease(deps, local, version) {
+  const tag = local.tag;
+  const ref = `refs/tags/${tag}`;
   let pushError;
   try {
     git(deps, ...releasePushArgs(tag));
@@ -397,26 +477,43 @@ function pushRelease(deps, head, tag) {
   } catch (error) {
     pushError = error;
   }
-  let remoteTag;
+  let mine;
+  let theirs = null;
   try {
-    remoteTag = git(deps, "ls-remote", "origin", `refs/tags/${tag}`).split(/\s/)[0];
+    mine = git(deps, "rev-parse", ref);
+    for (let check = 1; check <= PUSH_CHECKS && theirs === null; check += 1) {
+      if (check > 1) {
+        deps.sleep(PUSH_CHECK_DELAY_MS);
+      }
+      theirs = remoteTag(deps, tag);
+    }
   } catch (error) {
     fail(
-      `\`git push\` failed: ${reason(pushError)}\nCould not ask origin whether the push landed: ${reason(error)}\n` +
-        `Run \`git ls-remote origin refs/tags/${tag}\`. If it prints nothing, the push did not land: run \`git tag -d ${tag}\` and \`git reset --hard ${head}\`, then run the release again. ` +
-        `If it prints the tag, the push landed: create the GitHub release with \`gh ${githubReleaseArgs(tag).join(" ")}\`.`
+      `\`git push\` failed: ${reason(pushError)}\nCould not check whether the push reached origin: ${reason(error)}\n` +
+        `Run \`git ls-remote --tags origin ${ref}\` and compare the SHA it prints with \`git rev-parse ${ref}\`. ` +
+        `If origin lists no ${tag}, the push did not land: undo the release with ${byHand(undoSteps(local))}, then run it again. ` +
+        `If the SHAs match, the push landed: create the GitHub release with \`gh ${githubReleaseArgs(tag).join(" ")}\`. ` +
+        `If they differ, another release of ${version} reached origin first: undo this one the same way, then fetch ${RELEASE_BRANCH} and the tags and check that release.`
     );
   }
-  if (remoteTag !== "" && remoteTag === git(deps, "rev-parse", tag)) {
+  if (theirs === mine) {
     deps.log(`\`git push\` reported an error, but origin has ${tag}, so the push landed: ${reason(pushError)}`);
     return;
   }
+  if (theirs !== null) {
+    rollBack(
+      deps,
+      local,
+      `origin already has a different ${tag} (${theirs}; this run made ${mine}), so another release of ${version} reached origin first, and the atomic push changed nothing there: ${reason(pushError)}\n` +
+        `Fetch ${RELEASE_BRANCH} and the tags, and check that release before you release again.`
+    );
+  }
   rollBack(
     deps,
-    head,
-    tag,
-    `\`git push\` failed and origin does not have this release's ${tag}, so the atomic push changed nothing there: ${reason(pushError)}\n` +
-      `If origin/${RELEASE_BRANCH} has moved on, pull it first. Only a repository admin can push a v* tag.`
+    local,
+    `\`git push\` failed and origin does not have ${tag}, so the atomic push probably did not land: ${reason(pushError)}\n` +
+      `If origin/${RELEASE_BRANCH} has moved on, pull it first. Only a repository admin can push a v* tag. ` +
+      `If \`git ls-remote --tags origin ${ref}\` lists ${tag} later after all, the push landed: pull ${RELEASE_BRANCH}, then create the GitHub release with \`gh ${githubReleaseArgs(tag).join(" ")}\`.`
   );
 }
 
