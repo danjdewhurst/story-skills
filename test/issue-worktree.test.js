@@ -43,9 +43,12 @@ function sharedCheckout(checkout, root = makeTempDir(TEMP_PREFIX)) {
   return { root, shared };
 }
 
-// Runs the script as an agent whose project checkout is `shared`.
+// Runs the script as an agent whose project checkout is `shared`. Git gets
+// gitEnv(), and bash gets no startup file or exported functions, so nothing
+// from the developer's shell or git setup reaches the script.
 function run(shared, args, env = {}, cwd = shared) {
-  const { ISSUE_WORKTREE_ROOT, ...inherited } = gitEnv();
+  const { ISSUE_WORKTREE_ROOT, BASH_ENV, ENV, ...rest } = gitEnv();
+  const inherited = Object.fromEntries(Object.entries(rest).filter(([key]) => !key.startsWith("BASH_FUNC_")));
   const result = spawnSync("bash", [SCRIPT, ...args], {
     cwd: inTemp(cwd),
     encoding: "utf8",
@@ -114,6 +117,35 @@ describe.skipIf(process.platform === "win32")("scripts/issue-worktree.sh (#572)"
     expect(made).toBe(path.join(worktrees, "agent-1", "story-skills-FOR-6"));
     expect(git(made, "symbolic-ref", "--short", "HEAD")).toBe("work/for-6");
     expect(git(shared, "status", "--porcelain")).toBe("");
+  });
+
+  test("a developer's global git config, hooks and shell startup do not reach the script", () => {
+    const { root, shared } = sharedCheckout(PAPERCLIP);
+    const home = path.join(root, "home");
+    const hooks = path.join(home, "hooks");
+    fs.mkdirSync(hooks, { recursive: true });
+    const marker = path.join(root, "hook-ran");
+    for (const name of ["post-checkout", "reference-transaction"]) {
+      fs.writeFileSync(path.join(hooks, name), `#!/bin/sh\ntouch "${marker}"\nexit 1\n`, { mode: 0o755 });
+    }
+    fs.writeFileSync(path.join(home, ".gitconfig"), `[core]\n\thooksPath = ${hooks}\n[init]\n\tdefaultBranch = trunk\n`);
+    const startup = path.join(home, "startup.sh");
+    fs.writeFileSync(startup, `touch "${marker}"\n`);
+    const made = worktree(shared, [".", "FOR-11"], { HOME: home, XDG_CONFIG_HOME: home });
+    expect(git(made, "symbolic-ref", "--short", "HEAD")).toBe("work/for-11");
+    expect(fs.existsSync(marker)).toBe(false);
+    const saved = { BASH_ENV: process.env.BASH_ENV, GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL };
+    process.env.BASH_ENV = startup;
+    process.env.GIT_CONFIG_GLOBAL = path.join(home, ".gitconfig");
+    try {
+      worktree(shared, [".", "FOR-12"]);
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+    expect(fs.existsSync(marker)).toBe(false);
   });
 
   test("a relative ISSUE_WORKTREE_ROOT is taken from the current folder", () => {
