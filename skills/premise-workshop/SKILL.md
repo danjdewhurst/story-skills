@@ -104,14 +104,12 @@ entities before adopting them:
 story names 'Bell Tower' Bell 'Maren' --path .
 ```
 
-An exact clash exits 1 and must be resolved: the candidate equals an
-existing name, alias, or term, or its given name (first word that is not
-a title such as `Lord` or `The`) equals a character's given name.
-Look-alike warnings (same first four letters, or same initial and one
-letter apart, two for longer words) and a shared initial with a major
-character are the user's call. Multi-word names are only checked for
-exact clashes, so pass a multi-word title's distinctive word separately,
-as `Bell` is above.
+An exact clash exits 1 and must be resolved; look-alike warnings and a
+shared initial with a major character are the user's call. Multi-word
+names are only checked for exact clashes, so pass a multi-word title's
+distinctive word separately, as `Bell` is above. The "Check names
+against the project" section of `references/title-and-comps.md` says what
+each finding means and how to resolve a clash.
 
 ### 8. Sanity-check against comparable books
 
