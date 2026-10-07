@@ -624,8 +624,9 @@ Every job checks out with `persist-credentials: false`, since none pushes. The `
 4. `bun run check:links`
 5. `bun run eval:selftest`
 6. `bun run test:coverage` (the whole suite, then the coverage gate and `check:fallback`)
-7. `bun run test:examples`
-8. `node skills/story-maintenance/scripts/story.js --help`
+7. `bun test test/validate-schema-property.test.js`, once for each `STORY_PROPERTY_SEED` from 1 to 5, so validate and the schema agree on more values than the suite's one seed draws
+8. `bun run test:examples`
+9. `node skills/story-maintenance/scripts/story.js --help`
 
 It runs the suite once: `test:coverage` runs it with the same 60-second test timeout as `bun run test`, so a separate `bun run test` step would only double the job's time.
 
