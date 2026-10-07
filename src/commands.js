@@ -9,7 +9,7 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
-import { currentText, planChanges, recordChanges } from "./files.js";
+import { currentText, ignoresCase, lstatIfExists, planChanges, recordChanges } from "./files.js";
 import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
@@ -1123,9 +1123,11 @@ function runRestore(context, name) {
   }
   const restore = String(parsed.options.restore);
   const projectRoot = context.root();
+  // Returns the folders the restore must not take for empty (see
+  // fullerFolders).
   const seed = (target) => {
     if (target === projectRoot) {
-      return;
+      return new Set();
     }
     // The copy has no nested projects or symlinks to refuse a target.
     restoreSources(projectRoot, restore);
@@ -1146,11 +1148,34 @@ function runRestore(context, name) {
       }
     }
     fs.cpSync(directory, path.join(target, SNAPSHOTS_DIR, path.basename(directory)), { recursive: true });
+    return fullerFolders(projectRoot, target);
   };
+  // The copy sits in the system's temp folder, whose file system may tell
+  // letter case apart where the project's does not, or the other way round.
+  const caseInsensitive = ignoresCase(projectRoot, "story.md");
   return runWrite(context, "snapshot", (target) => {
-    seed(target);
-    return restoreSnapshot(target, { name: restore });
+    const occupied = seed(target);
+    return restoreSnapshot(target, { name: restore, caseInsensitive, occupied });
   }, formatRestore, formatRestorePreview);
+}
+
+// The project's subfolders, as project paths, that hold something the
+// --dry-run copy at `copy` leaves out, such as a hidden folder, dist/, or a
+// nested project. A restore removes only a folder that nothing is left in,
+// so in the copy it keeps these as the real run does.
+function fullerFolders(source, copy, prefix = "", found = new Set()) {
+  for (const entry of fs.readdirSync(copy, { withFileTypes: true })) {
+    if (entry.isDirectory() && !entry.name.startsWith(".")) {
+      const folder = `${prefix}${entry.name}`;
+      const from = path.join(source, entry.name);
+      const to = path.join(copy, entry.name);
+      if (fs.readdirSync(from).some((child) => lstatIfExists(path.join(to, child)) === null)) {
+        found.add(folder);
+      }
+      fullerFolders(from, to, `${folder}/`, found);
+    }
+  }
+  return found;
 }
 
 // Runs a write command: `write(projectRoot)` makes the changes and

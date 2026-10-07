@@ -334,7 +334,7 @@ story continuity examples/the-unraveled-thread --json
 }
 ```
 
-The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, or `mkdir` (a folder made) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
+The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, and `wordcount`) put their result in `data`: `kind`, `id`, and `file` (relative to the project root) for an entity command, plus `oldId` for `rename` and `move` and `prose` for `rename --prose`, `newId`, `title`, `scenesMoved`, and `renumbered` for `split` (whose `file` is the new chapter), `mergedId`, `scenesMoved`, and `renumbered` for `merge`, and `chapters` and `total` for `wordcount`. `data.changes` lists every change the command made, sorted by path, as `{ "action", "path" }`, where `action` is `create`, `update`, `delete`, `mkdir` (a folder made), or `rmdir` (a folder a [snapshot restore](#restoring-a-snapshot) emptied and removed, listed after the files it held) and `path` is relative to the project root. `data.dryRun` says whether it was a [`--dry-run`](#previewing-changes-with---dry-run). The warnings the command prints after its output are its diagnostics.
 
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the envelope and the `data` of each command.
 
@@ -2200,10 +2200,11 @@ With `--json`, a snapshot's `data` holds the manifest fields (`name`, `id`, `cre
 
 1. It first saves the project as it is as a new snapshot, `before-restore-<id>-<n>`, where `<n>` is one more than the highest number a safety snapshot of that id already has (`before-restore-draft-1-1`, then `before-restore-draft-1-2`). This copy is taken even when a chapter does not parse, so nothing is lost.
 2. Every markdown file in the snapshot is written back to the same path. A file that already has the snapshot's text is left alone.
-3. **Every markdown file the project has that the snapshot does not is deleted**, such as a chapter added since the snapshot was taken. Only the files a snapshot copies count: `dist/`, `node_modules/`, `.snapshots/` and other dot-folders, subfolders with their own `story.md`, and files that are not markdown, such as a cover image, are never touched.
-4. The registries are rebuilt, as `story reindex` does. When a restored file does not parse (undoing a restore taken over a broken chapter, say), the files are still restored, and the output says to fix them and run `story reindex`.
+3. **Every markdown file the project has that the snapshot does not is deleted**, such as a chapter added since the snapshot was taken. Only the files a snapshot copies count: `dist/`, `node_modules/`, `.snapshots/` and other dot-folders, subfolders with their own `story.md`, and files that are not markdown, such as a cover image, are never touched. On a file system that ignores letter case (macOS and Windows by default), a file whose name differs from the snapshot's only in case, such as `notes.md` for the snapshot's `Notes.md` or a `Chapters/` folder for `chapters/`, is the snapshot's file: it gets the snapshot's text under the project's spelling and is never deleted. Whether case counts is asked of the project's own folder, not the operating system, so a case-sensitive volume or folder keeps case apart.
+4. A folder those deletes leave empty is removed too, along with any folder above it that this empties. A folder that was already empty stays, as does one that still holds anything (a hidden folder, a nested project, an image), and so do the folders `init` makes, such as `worldbuilding/locations/`.
+5. The registries are rebuilt, as `story reindex` does. When a restored file does not parse (undoing a restore taken over a broken chapter, say), the files are still restored, and the output says to fix them and run `story reindex`.
 
-The output lists every file updated, created, and deleted, and the command that undoes the restore: `story snapshot --restore before-restore-<id>-<n>`. When the project already matches the snapshot, nothing is written and no safety snapshot is taken. `--dry-run` lists every file the restore would create, update, or delete, the safety snapshot's files among them, and changes nothing.
+The output lists every file updated, created, and deleted, every folder removed (`rmdir`), and the command that undoes the restore: `story snapshot --restore before-restore-<id>-<n>`. Restoring the safety snapshot writes the deleted files back, and so makes their folders again. When the project already matches the snapshot, nothing is written and no safety snapshot is taken. `--dry-run` lists every file the restore would create, update, or delete and every folder it would remove, the safety snapshot's files among them, and changes nothing.
 
 Nothing is changed when the snapshot has no `story.md`, or when a file would be written through a symlinked folder or into a folder that now holds its own `story.md`; `--dry-run` refuses these too. The restore runs under the project [lock](#where-commands-write), through the same guarded writes as every other command. If a write fails part way, the command stops with exit 4, says how much of the project was restored, and names the safety snapshot that puts it back.
 
@@ -2213,14 +2214,16 @@ story snapshot --restore draft-1
 
 ```text
 Saved the project as it was in snapshot before-restore-draft-1-1 (.snapshots/before-restore-draft-1-1/)
-Restored snapshot draft-1: 2 updated, 0 created, 1 deleted (not in the snapshot)
+Restored snapshot draft-1: 2 updated, 0 created, 2 deleted (not in the snapshot), 1 folder removed (left empty)
   update  chapters/_index.md
   update  chapters/chapter-01.md
   delete  chapters/chapter-05.md
+  delete  research/ships.md
+  rmdir   research
 Undo it: story snapshot --restore before-restore-draft-1-1
 ```
 
-With `--json`, `data` holds `restored` (the snapshot's `name` and `id`), `safety` (the safety snapshot's `id` and `dir`, or `null` when nothing changed), the `created`, `updated`, and `deleted` paths, `reindexed`, `dryRun`, and `changes`, which also lists the safety snapshot's files and any registry the reindex rebuilt.
+With `--json`, `data` holds `restored` (the snapshot's `name` and `id`), `safety` (the safety snapshot's `id` and `dir`, or `null` when nothing changed), the `created`, `updated`, and `deleted` paths, `removedFolders` (deepest first), `reindexed`, `dryRun`, and `changes`, which also lists the safety snapshot's files and any registry the reindex rebuilt.
 
 `init` does not add `.snapshots/` to the `.gitignore` it writes. A writer without git does not need it, and in a git repository a committed snapshot is a plain copy that git stores compactly; a writer who uses git can tag drafts and use `compare --ref` instead, and add `.snapshots/` to `.gitignore` to keep any snapshots out of commits.
 
@@ -3366,7 +3369,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, a file, folder, or git ref; exclusive with `--snapshot` |
 | `--snapshot` | `<name>` | `compare`, `similarity` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot` |
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
-| `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks |
+| `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks, and the folders that leaves empty |
 | `--path` | `<path>` | Every command except `init` and `import` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
 | `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |
