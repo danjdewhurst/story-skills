@@ -61,4 +61,16 @@ node skills/story-maintenance/scripts/story.js --help
 
 Add an entry under `## [Unreleased]` in [`CHANGELOG.md`](CHANGELOG.md) for any change a user would notice, using the Keep a Changelog headings (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`). Always add one for a change to the project format or to CLI behaviour: people who copy the skills run the bundled fallback CLI and need to know what changed. Internal refactors, tests, and CI changes need no entry.
 
+Write each entry so a reader can scan the list:
+
+- Lead with one short sentence that says what changed for users, not how it was built, and end that line with the issue or pull request link.
+- Put the detail in indented sub-bullets, one idea each: the flags, fields, codes, and messages involved, what happened before, and anything users must do. Leave implementation detail to the linked issue.
+- Keep the first line to 200 characters, not counting link targets. `bun run check:metadata` fails on a longer one.
+
+```markdown
+- `story snapshot --restore` now removes the folders its deletes leave empty. ([#524](https://github.com/danjdewhurst/story-skills/issues/524))
+  - It lists each as `rmdir` in its output, `--dry-run`, and `--json` (`data.removedFolders`).
+  - One that cannot be removed is a `folder-not-removed` warning rather than a failed restore.
+```
+
 `bun run release` refuses to run while `Unreleased` is empty, and moves its entries under the new version when it cuts the release.

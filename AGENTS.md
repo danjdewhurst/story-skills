@@ -66,7 +66,7 @@ CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:c
 - Keep commits focused on one logical change.
 - Update branches by rebasing onto `main`, not by merging `main` in; keep PR history linear.
 - Force-push rebased branches only with `--force-with-lease`.
-- Add a `CHANGELOG.md` entry under `## [Unreleased]` for any user-visible change, and always for project format or CLI behaviour changes. `bun run release` refuses to run while `Unreleased` is empty. `CONTRIBUTING.md` is the short contributor guide.
+- Add a `CHANGELOG.md` entry under `## [Unreleased]` for any user-visible change, and always for project format or CLI behaviour changes. `bun run release` refuses to run while `Unreleased` is empty. Lead each entry with one short sentence of what changed for users, at most 200 characters with link targets not counted (`check:metadata` enforces this), and put the detail in indented sub-bullets; see [Changelog](CONTRIBUTING.md#changelog). `CONTRIBUTING.md` is the short contributor guide.
 
 ## Release Metadata
 
