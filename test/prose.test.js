@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { languagePack } from "../src/languages/index.js";
-import { analyzeChapter, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
+import { analyzeChapter, chapterFindings, proseRules, repeatedPhrases, similarNames } from "../src/prose.js";
+import { splitSentences } from "../src/sentences.js";
 import { createEntity, createStoryProject, proseReport, validateProject } from "../src/story.js";
 import { expectLinearGrowth, expectLinearTime, makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -375,5 +376,96 @@ describe("proseReport", () => {
     expect(result.out).toContain("Spelling: colour 1 (use color)");
     expect(result.out).toContain('"at the edge of" 3');
     expect(result.out).toContain("Similar character names: Mara Quill / Maren Voss");
+  });
+});
+
+function newProject(title = "Analysis", cwd = makeTempDir()) {
+  return createStoryProject({ cwd, title }).root;
+}
+
+function writeChapterWith(root, number, body, extra = "") {
+  const id = `chapter-${String(number).padStart(2, "0")}`;
+  writeMarkdown(path.join(root, "chapters", `${id}.md`), `title: Chapter ${number}\nnumber: ${number}\nstatus: draft${extra ? `\n${extra}` : ""}`, `## Chapter Text\n\n${body}\n`);
+}
+
+function setStyleSheet(root, replace) {
+  const file = path.join(root, "style-sheet.md");
+  let text = fs.readFileSync(file, "utf8");
+  for (const [from, to] of replace) {
+    text = text.replace(from, to);
+  }
+  fs.writeFileSync(file, text, "utf8");
+}
+
+const rules = (style = {}, names = []) => proseRules(style, names);
+
+describe("prose (#81, #126, #210, #211, #212, #213, #216)", () => {
+  test("#81 honorifics are skipped when comparing first names", () => {
+    expect(similarNames([{ id: "a", name: "Captain Mara Dole" }, { id: "b", name: "Captain Theo Quill" }, { id: "c", name: "Lord Ash" }, { id: "d", name: "Lord Wren" }])).toEqual([]);
+  });
+
+  test("#126 a preferred entry whose use equals avoid is skipped", () => {
+    const analysis = analyzeChapter("The sky was grey.", rules({ preferred: [{ use: "grey", avoid: "Grey" }] }));
+    expect(analysis.variants).toEqual([]);
+  });
+
+  test("#210 titles, initials, and stammers do not end sentences", () => {
+    expect(analyzeChapter("Mr. Smith arrived. Dr. Jones left. Mrs. Brown stayed.", rules()).sentences.count).toBe(3);
+    expect(splitSentences("J. R. Hale wrote to St. Mary at 9 a.m. Monday. The U.S. Navy answered.")).toHaveLength(2);
+    expect(splitSentences("I… I don’t know what to say. She waited at 3 p.m. Then she left.")).toHaveLength(3);
+  });
+
+  test("#211 aliases, place names, and possessive names are not adverbs, echoes, or dialect spellings", () => {
+    const cwd = makeTempDir();
+    const root = newProject("E", cwd);
+    createEntity(root, { kind: "character", name: "Katherine Moss" });
+    const katherine = path.join(root, "characters", "katherine-moss.md");
+    fs.writeFileSync(katherine, fs.readFileSync(katherine, "utf8").replace("aliases: []", "aliases:\n  - Kelly"), "utf8");
+    createEntity(root, { kind: "character", name: "Maren" });
+    createEntity(root, { kind: "location", name: "Sicily" });
+    createEntity(root, { kind: "character", name: "Dorian Gray" });
+    createEntity(root, { kind: "location", name: "Center Point" });
+    setStyleSheet(root, [[/^dialect: .*$/m, "dialect: british"]]);
+    writeChapterWith(root, 1, `${Array(25).fill("Kelly went back to Sicily and waited. Maren’s hand shook.").join(" ")}\n\nDorian Gray smiled. Gray walked from Center Point to the harbour. The gray sky.`);
+    const report = proseReport(root);
+    const analysis = report.chapters[0].analysis;
+    expect(analysis.adverbs).toEqual([]);
+    expect(analysis.echoes.map((entry) => entry.word)).not.toContain("kelly");
+    expect(analysis.echoes.map((entry) => entry.word)).not.toContain("maren's");
+    expect(analysis.echoes.map((entry) => entry.word)).not.toContain("sicily");
+    expect(analysis.variants).toEqual([{ use: "grey", avoid: "gray", source: "british dialect", count: 1 }]);
+  });
+
+  test("#212 straight-apostrophe style entries match curly text", () => {
+    const style = { preferred: [{ use: "OK", avoid: "o'clock" }], "watch-words": ["don't"], "allow-words": ["couldn't"] };
+    const analysis = analyzeChapter("I don’t know. I don't. At ten o’clock she left.", rules(style));
+    expect(analysis.watch).toEqual([{ word: "don't", count: 2 }]);
+    expect(analysis.variants.map((entry) => entry.count)).toEqual([1]);
+    const echoes = analyzeChapter(Array(25).fill("She couldn’t move. He wouldn’t stay.").join(" "), rules()).echoes;
+    expect(echoes).toEqual([]);
+    const mixed = analyzeChapter("I don't know what. I don’t know what.", rules());
+    expect(mixed.phraseSentences[0]).toEqual(mixed.phraseSentences[1]);
+  });
+
+  test("#213 action beats are not dialogue tags", () => {
+    const beats = analyzeChapter("\"We leave at dawn.\" She smiled.\n\n\"Fine.\" He sighed and sat down.\n\n\"No!\" Mara laughed.\n\n\"Go.\" He said nothing more.", rules());
+    expect(beats.bookisms).toEqual([]);
+    expect(beats.plainTags).toEqual([]);
+    const tags = analyzeChapter("\"Yes,\" she smiled.\n\n\"Now?\" Mara asked.\n\n\"No!\" she laughed.", rules());
+    expect(tags.bookisms).toEqual([{ word: "laughed", count: 1 }, { word: "smiled", count: 1 }]);
+    expect(tags.plainTags).toEqual([{ word: "asked", count: 1 }]);
+  });
+
+  test("#216 a warning's figure sits on the warned side of its threshold", () => {
+    const findings = chapterFindings("ch", {
+      variants: [], narrationWords: 0, filterWords: [], adverbs: [], bookisms: [],
+      sentences: { count: 20, mean: 5, longest: 12, spread: 4.975 }
+    });
+    expect(messages(findings)[0]).toContain("spread 4.97 words");
+    const rate = chapterFindings("ch", {
+      variants: [], narrationWords: 1000, filterWords: [{ word: "felt", count: 10.04 }], adverbs: [], bookisms: [],
+      sentences: { count: 0, mean: 0, longest: 0, spread: 0 }
+    });
+    expect(messages(rate)[0]).toContain("has 10.04 filter words");
   });
 });

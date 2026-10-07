@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { formatPacing } from "../src/pacing.js";
+import { buildPacing, formatPacing } from "../src/pacing.js";
 import { createEntity, createStoryProject, pacingReport, validateProject } from "../src/story.js";
 import { makeTempDir, memoryIo, writeMarkdown, messages } from "./helpers.js";
 
@@ -142,5 +142,23 @@ describe("story pacing", () => {
     expect(empty.out).toContain("- None: add chapters with story add chapter");
     expect(empty.out).toContain("Outcomes: no outcomes recorded");
     expect(empty.err).toContain("Pacing check complete");
+  });
+});
+
+describe("pacing and clues (#216, #217, #223)", () => {
+  const chapter = (number, words) => ({ id: `chapter-${String(number).padStart(2, "0")}`, number, wordCount: words, hook: "x", status: "draft" });
+
+  test("#217 the median is compared exactly", () => {
+    const pacing = buildPacing({ chapters: [100, 100, 101, 202].map((words, index) => chapter(index + 1, words)), scenes: [] });
+    expect(messages(pacing.warnings).join("\n")).toContain("chapter-04 runs 202 words, over twice the median chapter");
+  });
+
+  test("#216 #223 pacing says 1 scene and keeps wide rows aligned", () => {
+    const pacing = buildPacing({ chapters: [chapter(9, 5), chapter(100, 123456)], scenes: [{ id: "s", chapter: "chapter-09", scene: 1, sequel: true, outcome: "" }] });
+    const text = formatPacing(pacing);
+    expect(text).toContain("Pacing: 0 scenes, 1 sequel, 2 of 2 chapters with hooks");
+    const rows = text.split("\n").filter((line) => /^\s*\d/.test(line));
+    expect(rows[0].indexOf("x")).toBe(rows[1].indexOf("x"));
+    expect(rows[0].length).toBe(rows[1].length);
   });
 });

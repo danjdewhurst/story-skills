@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { formatRuntime } from "../src/narration.js";
+import { formatRuntime, narrationScript } from "../src/narration.js";
 import { buildBook, createEntity, createStoryProject, validateProject } from "../src/story.js";
 import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
@@ -203,5 +203,15 @@ describe("narration build", () => {
   test("formatRuntime rounds to minutes", () => {
     expect(formatRuntime(0)).toBe("0h 00m");
     expect(formatRuntime(155 * 61)).toBe("1h 01m");
+  });
+});
+
+describe("narration section times add up (#216)", () => {
+  test("narration section times add up to the runtime", () => {
+    const chapters = Array.from({ length: 10 }, (_, index) => ({ number: index + 1, title: `C${index + 1}`, body: "word ".repeat(217) }));
+    const script = narrationScript({ title: "N", meta: { authors: [] }, front: [], chapters, back: [] }, []);
+    const minutes = [...script.matchAll(/\[about (\d+) min\]/g)].reduce((sum, match) => sum + Number(match[1]), 0);
+    expect(script).toContain("0h 14m");
+    expect(minutes).toBe(14);
   });
 });
