@@ -26,7 +26,7 @@ See the `publishing` skill.
 
 ## narration
 
-`build --format narration` for an audiobook narration script: a pronunciation guide table from every `pronunciation` field, each chapter with an estimated finished runtime at the language's narration pace (155 words per minute in English), scene breaks as `[pause]`, and a total runtime. In a collection or anthology, each story with its own chapter `author` gets a spoken credit after its heading, and the opening credits name the story authors the book's credit leaves out. See the `adaptation` skill.
+`build --format narration` for an audiobook narration script: a pronunciation guide table from every `pronunciation` field, each chapter with an estimated finished runtime at the language's narration pace (155 words per minute in English), scene breaks as `[pause]`, and a total runtime. In a collection or anthology, each story with its own chapter `author` gets a spoken credit after its heading, and the opening credits name the `editor` and then the story authors the book's credits leave out. See the `adaptation` skill.
 
 ## metadata
 

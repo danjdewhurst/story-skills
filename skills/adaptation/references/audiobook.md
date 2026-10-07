@@ -27,8 +27,9 @@ The opening and closing credits are in the book's language, from the
 pack's build labels; the headings and `[narrator]` marker stay in
 English. In a collection or anthology, each story with its own chapter
 `author` has a spoken credit after its heading (`Written by Ines
-Calder.`), and the opening credits name the story authors the book's
-credit leaves out. Check the credits with the user before recording.
+Calder.`), and the opening credits name the `editor` and then the story
+authors the book's credits leave out. Check the credits with the user
+before recording.
 
 Rebuild after every manuscript or pronunciation change. The file is
 generated; keep narrator notes in `production.md`, not in the script.

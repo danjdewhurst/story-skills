@@ -40,6 +40,7 @@ export default {
     "narration-closing": "النهاية. استمعتم إلى {title}، تأليف {authors}، بصوت {narrator}.",
     "narration-closing-anonymous": "النهاية. استمعتم إلى {title}، بصوت {narrator}.",
     "narration-byline": "تأليف {names}.",
+    "narration-edited-by": "تحرير {names}.",
     "narration-contributors": "بمشاركة {names}.",
     "screenplay-credit": "تأليف",
     "screenplay-source": "مقتبس من عمل {authors}",

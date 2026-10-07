@@ -44,6 +44,7 @@ export default {
     "narration-closing": "Slut. Du har lyssnat på {title}, skriven av {authors}, uppläst av {narrator}.",
     "narration-closing-anonymous": "Slut. Du har lyssnat på {title}, uppläst av {narrator}.",
     "narration-byline": "Skriven av {names}.",
+    "narration-edited-by": "Redigerad av {names}.",
     "narration-contributors": "Med bidrag av {names}.",
     "screenplay-credit": "Skriven av",
     "screenplay-source": "Baserad på verket av {authors}",

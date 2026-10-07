@@ -38,6 +38,7 @@ export default {
     "narration-closing": "Son. {title} adlı kitabı dinlediniz. Yazan: {authors}. Seslendiren: {narrator}.",
     "narration-closing-anonymous": "Son. {title} adlı kitabı dinlediniz. Seslendiren: {narrator}.",
     "narration-byline": "Yazan: {names}.",
+    "narration-edited-by": "Editör: {names}.",
     "narration-contributors": "Katkıda bulunanlar: {names}.",
     "screenplay-credit": "Yazan",
     "screenplay-source": "{authors} tarafından yazılan eserden uyarlanmıştır",

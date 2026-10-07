@@ -99,16 +99,28 @@ describe("narration build", () => {
     expect(text).toContain("[under 1 min]\n\nHe left.\n\n[pause]\n\nShe came\nback.\n\n[pause]\n\nEnd.\n\n## Closing Credits");
   });
 
-  test("#520 an anthology speaks each story's credit after its heading and names its writers in the opening", () => {
-    const root = collection("editor: Cara Editor\nlabels:\n  - chapter-heading: \"{title}\"\n", ["Ben Other", ["Dee Writer", "Eve Poet"], null, "Ben Other"]);
+  test("#520 an anthology speaks each story's credit after its heading and names its editor and writers in the opening", () => {
+    // Reading order is not alphabetical, so the opening's order is the stories'.
+    const root = collection("editor: Cara Editor\nlabels:\n  - chapter-heading: \"{title}\"\n", ["Zoe Quill", ["Dee Writer", "Ben Other"], null, "Zoe Quill"]);
     const text = narration(root);
-    expect(text).toContain("## Opening Credits\n\nTales. Narrated by [narrator].\n\nWith contributions by Ben Other and Dee Writer and Eve Poet.\n\n## Story 1");
-    expect(text).toContain("## Story 1\n\n[under 1 min]\n\nWritten by Ben Other.\n\nThe tide went out.");
-    expect(text).toContain("## Story 2\n\n[under 1 min]\n\nWritten by Dee Writer and Eve Poet.\n\nThe tide went out.");
+    expect(text).toContain("## Opening Credits\n\nTales. Narrated by [narrator].\n\nEdited by Cara Editor.\n\nWith contributions by Zoe Quill and Dee Writer and Ben Other.\n\n## Story 1");
+    expect(text).toContain("## Story 1\n\n[under 1 min]\n\nWritten by Zoe Quill.\n\nThe tide went out.");
+    expect(text).toContain("## Story 2\n\n[under 1 min]\n\nWritten by Dee Writer and Ben Other.\n\nThe tide went out.");
     // A story without `author` has no credit, and no credit is timed.
     expect(text).toContain("## Story 3\n\n[under 1 min]\n\nThe tide went out.");
+    expect(text).toContain("## Story 4\n\n[under 1 min]\n\nWritten by Zoe Quill.\n\nThe tide went out.");
     expect(text).toContain("(16 words)");
     expect(text).toContain("You have been listening to Tales, narrated by [narrator].");
+  });
+
+  test("#520 an editor is credited in the opening, and as a writer only for their own story", () => {
+    // As in the EPUB, an editor who wrote a story is not also a contributor.
+    const text = narration(collection("editor: Ben Other\n", ["Zoe Quill", "Ben Other"]));
+    expect(text).toContain("## Opening Credits\n\nTales. Narrated by [narrator].\n\nEdited by Ben Other.\n\nWith contributions by Zoe Quill.\n\n## Chapter 1");
+    expect(text).toContain("## Chapter 2: Story 2\n\n[under 1 min]\n\nWritten by Ben Other.\n\nThe tide went out.");
+    // An editor alone, with no story authors, is still credited.
+    const edited = narration(collection("author: Ada Writer\neditor: Cara Editor\n", [null]));
+    expect(edited).toContain("## Opening Credits\n\nTales. Written by Ada Writer. Narrated by [narrator].\n\nEdited by Cara Editor.\n\n## Chapter 1: Story 1\n\n[under 1 min]\n\nThe tide went out.");
   });
 
   test("#520 a book whose stories all name its own authors speaks no story credits", () => {
@@ -132,19 +144,54 @@ describe("narration build", () => {
     // Co-writers of a joint book each writing their own stories are
     // credited story by story, but the opening already names them both.
     const joint = narration(collection("authors:\n  - Ada Writer\n  - Ben Other\n", ["Ada Writer", "Ben Other"]));
-    expect(joint).toContain("Written by Ben Other.");
+    expect(joint).toContain("## Chapter 1: Story 1\n\n[under 1 min]\n\nWritten by Ada Writer.\n\nThe tide went out.");
+    expect(joint).toContain("## Chapter 2: Story 2\n\n[under 1 min]\n\nWritten by Ben Other.\n\nThe tide went out.");
     expect(joint).not.toContain("With contributions by");
   });
 
+  test("#520 a name that ends a sentence takes no second full stop in any credit", () => {
+    const text = narration(collection("author: Martin Luther King Jr.\n", ["Martin Luther King Jr.", "Ben Other Jr."]));
+    expect(text).toContain("## Opening Credits\n\nTales. Written by Martin Luther King Jr. Narrated by [narrator].\n\nWith contributions by Ben Other Jr.\n\n");
+    expect(text).toContain("[under 1 min]\n\nWritten by Martin Luther King Jr.\n\nThe tide went out.");
+    expect(text).toContain("[under 1 min]\n\nWritten by Ben Other Jr.\n\nThe tide went out.");
+    expect(text).toContain("You have been listening to Tales, written by Martin Luther King Jr., narrated by [narrator].");
+    expect(text).not.toContain("..");
+    // The stop the label ends on goes in the book's script too.
+    const japanese = narration(collection("language: ja\neditor: Cara Ed.\n", ["山田"]));
+    expect(japanese).toContain("編者、Cara Ed.\n\n");
+  });
+
+  test("#520 a line break in a title or name cannot start a heading in the script", () => {
+    const root = collection("editor: \"Cara\\n## Editor\"\n", ["\"Zoe\\n## Closing Credits\"", "\"Ben Other\""]);
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: \"Three\\n# Four\"\nnumber: 3\nstatus: draft", "## Chapter Text\n\nThe tide went out.\n");
+    const text = narration(root);
+    expect(text.split("\n").filter((line) => line.startsWith("#"))).toEqual([
+      "# Tales: Narration Script",
+      "## Pronunciation Guide",
+      "## Opening Credits",
+      "## Chapter 1: Story 1",
+      "## Chapter 2: Story 2",
+      "## Chapter 3: Three # Four",
+      "## Closing Credits"
+    ]);
+    expect(text).toContain("Edited by Cara ## Editor.\n\nWith contributions by Zoe ## Closing Credits and Ben Other.");
+    expect(text).toContain("Written by Zoe ## Closing Credits.");
+  });
+
   test("#520 story credits follow the book's language and labels", () => {
-    const german = narration(collection("language: de\neditor: Cara Editor\n", ["Ben Other", ["Dee Writer", "Eve Poet"]]));
-    expect(german).toContain("Mit Beiträgen von Ben Other und Dee Writer und Eve Poet.");
-    expect(german).toContain("Geschrieben von Dee Writer und Eve Poet.");
+    const german = narration(collection("language: de\neditor: Cara Editor\n", ["Zoe Quill", ["Dee Writer", "Ben Other"]]));
+    expect(german).toContain("Herausgegeben von Cara Editor.\n\nMit Beiträgen von Zoe Quill und Dee Writer und Ben Other.");
+    expect(german).toContain("Geschrieben von Dee Writer und Ben Other.");
+    // Polish, Russian, and Ukrainian credits read the same for one name or several.
+    const polish = narration(collection("language: pl\n", ["Zoe Quill", ["Dee Writer", "Ben Other"]]));
+    expect(polish).toContain("Opowiadania: Zoe Quill i Dee Writer i Ben Other.");
+    expect(polish).toContain("Tekst: Zoe Quill.");
+    expect(polish).toContain("Tekst: Dee Writer i Ben Other.");
     const japanese = narration(collection("language: ja\n", ["山田", "佐藤"]));
     expect(japanese).toContain("『Tales』。朗読、[narrator]。\n\n寄稿、山田、佐藤。");
     expect(japanese).toContain("作、佐藤。");
-    const custom = narration(collection("labels:\n  - narration-byline: \"A story by {names}.\"\n  - narration-contributors: \"Stories by {names}.\"\n", ["Ben Other"]));
-    expect(custom).toContain("Stories by Ben Other.");
+    const custom = narration(collection("editor: Cara Editor\nlabels:\n  - narration-byline: \"A story by {names}.\"\n  - narration-edited-by: \"Selected by {names}.\"\n  - narration-contributors: \"Stories by {names}.\"\n", ["Ben Other"]));
+    expect(custom).toContain("Selected by Cara Editor.\n\nStories by Ben Other.");
     expect(custom).toContain("A story by Ben Other.");
   });
 
