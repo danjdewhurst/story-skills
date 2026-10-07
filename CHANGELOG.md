@@ -91,6 +91,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - chapter-writing offers the better-writing skill once, when it drafts a project's first chapter, and runs `story progress . --log` only when the project keeps a `progress.md`.
   - Skills pass titles, names, labels, and paths to `story` in single quotes, with a quote inside doubled in PowerShell and never through cmd.exe, so the shell does not run `$(...)` or backticks in them.
   - line-editing renders its proof PDF with `--pdf`, and reader-panel saves its text as `panel-round-N`, a tag or a snapshot, so feedback-triage can map the panel's labels with `story compare`.
+- Skills no longer edit generated `_index.md` tables by hand, and each setup, payoff, and story-time fact has one record. (#553)
+  - Renames use `--prose` where the chapter text should follow, worldbuilding uses `story add system`, and the scene template records character knowledge as `character` + `knowledge`, which `story continuity` checks.
+  - Clues, promises, questions, arc hints, scene dates, and `plot/timeline.md` each have one use, and the docs now say `story add clue` or `promise` with `--planted` on an unwritten chapter records `planned`.
 
 ### Security
 
