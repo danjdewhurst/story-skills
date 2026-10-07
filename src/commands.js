@@ -163,7 +163,7 @@ export const COMMANDS = [
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
       });
-      const { result, changes } = dryRun ? planChanges(base, make) : recordNewProject(base, make);
+      const { result, changes } = dryRun ? planChanges(base, make) : recordWrites(base, make);
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "init", base, {
           data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
@@ -217,7 +217,7 @@ export const COMMANDS = [
       // The changes are listed relative to the folder the import fills, as
       // for init.
       const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
-      const { result, changes } = dryRun ? previewImport(options) : recordNewProject(base, () => importManuscript(options));
+      const { result, changes } = dryRun ? previewImport(options) : recordWrites(base, () => importManuscript(options));
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: importDiagnostics(result), dryRun, changes });
       }
@@ -1267,14 +1267,14 @@ function undoneNote({ command, files }, dryRun) {
 // --dry-run runs it on a copy of the project (previewChanges): for a command
 // that reads back what it writes.
 function runOrPreview(dryRun, projectRoot, write) {
-  return dryRun ? previewChanges(projectRoot, write) : recordChanges(projectRoot, () => write(projectRoot));
+  return dryRun ? previewChanges(projectRoot, write) : recordWrites(projectRoot, () => write(projectRoot));
 }
 
 // Runs `run()`, recording the changes it makes relative to `base`, or with
 // --dry-run plans them without writing (planChanges): for a command that
 // only writes files it never reads back, a build or a new project.
 function runOrPlan(dryRun, base, run) {
-  return dryRun ? planChanges(base, run) : recordChanges(base, run);
+  return dryRun ? planChanges(base, run) : recordWrites(base, run);
 }
 
 // --dry-run for diagram and synopsis, which write only with --out.
@@ -1398,12 +1398,12 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
   return `${lines.join("\n")}\n`;
 }
 
-// Runs init or import for real, recording its changes relative to `base`.
-// One that fails partway may have written files already (init --follows
-// makes the book before its backlink fails; import --force writes chapters
-// before one fails), so its error carries them as `writes`, which the
-// --json error result lists (see runCli).
-function recordNewProject(base, run) {
+// Runs a write for real, recording its changes relative to `base`. One that
+// fails partway may have written files already (init --follows makes the
+// book before its backlink fails; import --force writes chapters before one
+// fails; a reindex writes its registries one at a time), so its error carries
+// them as `writes`, which the --json error result lists (see runCli).
+function recordWrites(base, run) {
   try {
     return recordChanges(base, run);
   } catch (error) {

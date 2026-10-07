@@ -100,6 +100,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - After `около`, `близько`, and `około`, the noun is in the genitive: Russian writes `Около 1 слова`, `Около 523 слов`, and `Около 523 знаков`.
   - Ukrainian and Polish follow the same rule.
   - A book's own `approximate-words` or `approximate-characters` label gives the same wording for every count in these languages, as it does in other languages.
+- `--json` `writes` lists the files a write command changed before it failed, for every write command. ([#722](https://github.com/danjdewhurst/story-skills/issues/722))
+  - Before, `reindex`, `wordcount --write`, `rename`, `split`, `doctor --fix`, and the others reported `"writes": []` even when they had rewritten a file.
 
 ## [0.23.0] - 2026-10-07
 
