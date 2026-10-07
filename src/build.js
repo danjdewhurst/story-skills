@@ -30,7 +30,7 @@ import { wordSpans } from "./words.js";
 import { fillLabel, joinNames } from "./languages/index.js";
 import { endsSentence, splitSentences } from "./sentences.js";
 import { warn } from "./findings.js";
-import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode } from "./exit-codes.js";
+import { EXIT_CODES, projectError, refusedError, usageError, withDefaultExitCode, withFlags } from "./exit-codes.js";
 import {
   scanProject,
   assertProjectParses,
@@ -82,13 +82,13 @@ export function exportManuscript(root, options = {}) {
 export function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
   if (options.trim !== undefined && format !== "print") {
-    throw usageError("--trim applies only to --format print");
+    throw usageError("--trim applies only to --format print", ["trim", "format"]);
   }
   // Like --format, the trim name is case-insensitive (A5, 6X9), and an
   // unknown one fails before the manuscript is assembled.
   const trim = options.trim === undefined ? DEFAULT_TRIM : String(options.trim).trim().toLowerCase();
   if (!TRIM_SIZES.has(trim)) {
-    throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+    throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
   }
   // --paper sets the page of the two Shunn builds that have pages: the PDF
   // and the DOCX. A story.md default waits for one of them, as a default
@@ -96,40 +96,40 @@ export function buildBook(root, options = {}) {
   const shunnPages = (format === "shunn" && Boolean(options.pdf)) || (format === "docx" && Boolean(options.shunn));
   const rawPaper = options.paperDefaulted && !shunnPages ? undefined : options.paper;
   if (rawPaper !== undefined && !shunnPages) {
-    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)");
+    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)", ["paper", "format", "pdf", "shunn"]);
   }
   const paper = rawPaper === undefined ? DEFAULT_PAPER : String(rawPaper).trim().toLowerCase();
   if (!SHUNN_PAPERS.has(paper)) {
-    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`);
+    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`, "paper");
   }
   if (options.stamp !== undefined && format !== "html") {
-    throw usageError("--stamp applies only to --format html");
+    throw usageError("--stamp applies only to --format html", ["stamp", "format"]);
   }
   // A build label printed in the review copy: one line, no control characters.
   const stamp = options.stamp === undefined ? "" : String(options.stamp).replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   if (options.stamp !== undefined && stamp === "") {
-    throw usageError("--stamp needs a label, such as a date, commit, or round name");
+    throw usageError("--stamp needs a label, such as a date, commit, or round name", "stamp");
   }
   if (options.noteUrl !== undefined && format !== "html") {
-    throw usageError("--note-url applies only to --format html");
+    throw usageError("--note-url applies only to --format html", ["note-url", "format"]);
   }
   // The note form each paragraph label links to: an http(s) address, so a
   // label can never carry a script.
   const noteUrl = options.noteUrl === undefined ? "" : String(options.noteUrl).replace(/[\u0000-\u0020\u007f]+/g, "");
   if (options.noteUrl !== undefined && !/^https?:\/\/[^/?#]/i.test(noteUrl)) {
-    throw usageError("--note-url needs an http or https address, such as a GitHub new-issue link");
+    throw usageError("--note-url needs an http or https address, such as a GitHub new-issue link", "note-url");
   }
   if (options.shunn && format !== "docx") {
-    throw usageError("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
+    throw usageError("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)", ["shunn", "format"]);
   }
   if (options.pdf && format !== "print" && format !== "shunn") {
-    throw usageError("--pdf applies only to --format print and --format shunn");
+    throw usageError("--pdf applies only to --format print and --format shunn", ["pdf", "format"]);
   }
   if (options.pdfEngine !== undefined && !options.pdf) {
-    throw usageError("--pdf-engine applies only with --pdf");
+    throw usageError("--pdf-engine applies only with --pdf", ["pdf-engine", "pdf"]);
   }
   if (options.spoilers && format !== "codex") {
-    throw usageError("--spoilers applies only to --format codex");
+    throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
   const project = scanProject(root);
   if (format === "codex") {
@@ -214,14 +214,17 @@ export function buildBook(root, options = {}) {
 // so a machine without one fails fast, and the PDF is written like any other
 // build, only once the engine has made it.
 function buildPdf(project, format, { trim, paper }, output, options) {
-  const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
+  // Finding or running an engine --pdf-engine named is about that flag; the
+  // one --pdf finds by itself, about --pdf.
+  const engineFlag = options.pdfEngine === undefined ? "pdf" : "pdf-engine";
+  const engine = withFlags(engineFlag, () => resolvePdfEngine(options.pdfEngine, { cwd: options.cwd }));
   const manuscript = manuscriptParts(project);
   assertMatterTitles(project);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
   const style = projectBuildStyle(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
   // A --dry-run finds the engine but does not run it.
-  writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
+  writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
 
@@ -256,6 +259,10 @@ function buildCodex(project, out, spoilers) {
 // The codex folder: outside the project's source and not holding the
 // project, and either new, empty, or an earlier codex.
 function resolveOutputDirectory(project, out, defaultRelativePath) {
+  return withFlags("out", () => outputDirectory(project, out, defaultRelativePath));
+}
+
+function outputDirectory(project, out, defaultRelativePath) {
   const rawOut = out ?? defaultRelativePath;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a folder path");
@@ -279,7 +286,7 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
   if (stats !== null && fs.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
     throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
   }
-  return { directory, writeOptions: enforceRoot ? { root: project.root } : {} };
+  return { directory, writeOptions: enforceRoot ? { root: project.root, flags: "out" } : { flags: "out" } };
 }
 
 function isCodexFolder(directory) {
@@ -454,7 +461,7 @@ function screenplayOutline(project, book) {
 export function synopsisBook(root, options = {}) {
   const pages = options.pages === undefined ? 1 : parseDecimalInteger(options.pages);
   if (pages !== 1 && pages !== 3) {
-    throw usageError(`Unsupported synopsis length: ${options.pages}. Supported pages: 1, 3`);
+    throw usageError(`Unsupported synopsis length: ${options.pages}. Supported pages: 1, 3`, "pages");
   }
 
   const project = scanProject(root);
@@ -922,7 +929,13 @@ function assertNotReferencedPath(project, outFile, target, referenced) {
   }
 }
 
+// The file --out names, or the default. Errors here, and from the writes made
+// with writeOptions, are about --out.
 export function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
+  return withFlags("out", () => outputPath(project, out, defaultRelativePath, enforceRoot));
+}
+
+function outputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a file path");
@@ -952,7 +965,7 @@ export function resolveOutputPath(project, out, defaultRelativePath, enforceRoot
   return {
     outFile,
     enforceRoot: shouldEnforceRoot,
-    writeOptions: shouldEnforceRoot ? { root: project.root } : {}
+    writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
 
@@ -994,5 +1007,5 @@ function normalizeBuildFormat(value) {
     return format;
   }
 
-  throw usageError(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
+  throw usageError(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`, "format");
 }

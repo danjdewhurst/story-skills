@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
-import { EXIT_CODES, projectError, refusedError, withExitCode } from "./exit-codes.js";
+import { EXIT_CODES, aboutFlags, projectError, refusedError, withExitCode } from "./exit-codes.js";
 
 export const MAX_READ_BYTES = 5 * 1024 * 1024;
 
@@ -198,7 +198,9 @@ export function writeFile(filePath, contents, options = {}) {
       writeWholeFile(filePath, contents, options);
     }
   } catch (error) {
-    throw withExitCode(error, EXIT_CODES.refused);
+    // `flags` names the option that chose the file (--out), for the hint
+    // runCli adds when a story.md default set it.
+    throw aboutFlags(withExitCode(error, EXIT_CODES.refused), options.flags);
   }
   record(filePath, existed, "write");
 }

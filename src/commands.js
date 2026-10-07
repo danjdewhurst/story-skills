@@ -245,7 +245,7 @@ export const COMMANDS = [
     run(context) {
       const write = isTruthy(context.parsed.options.write);
       if (!write && isTruthy(context.parsed.options["dry-run"])) {
-        throw usageError("--dry-run previews wordcount --write: add --write");
+        throw usageError("--dry-run previews wordcount --write: add --write", "write");
       }
       return runWrite(context, "wordcount", (projectRoot) => computeWordCounts(projectRoot, { write }), (result) => {
         // A project counted in characters prints characters, and says so.
@@ -429,7 +429,7 @@ export const COMMANDS = [
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
       if (!log && dryRun) {
-        throw usageError("--dry-run previews progress --log: add --log");
+        throw usageError("--dry-run previews progress --log: add --log", "log");
       }
       const projectRoot = root();
       const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date, weeks: parsed.options.weeks }));
@@ -705,7 +705,7 @@ export const COMMANDS = [
       const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
       const dryRun = isTruthy(parsed.options["dry-run"]);
       if (dryRun && !change.init && change.start === undefined && change.done === undefined) {
-        throw usageError("--dry-run previews passes --init, --start, or --done: add one");
+        throw usageError("--dry-run previews passes --init, --start, or --done: add one", "init");
       }
       const projectRoot = root();
       const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectPasses(target, change));
@@ -831,7 +831,7 @@ export const COMMANDS = [
         return runDoctorFix(context, options);
       }
       if (isTruthy(parsed.options["dry-run"])) {
-        throw usageError("--dry-run previews doctor --fix: add --fix");
+        throw usageError("--dry-run previews doctor --fix: add --fix", "fix");
       }
       const projectRoot = root();
       const report = withWorkflowPins(projectActions(projectRoot, options), projectRoot, cwd);

@@ -21,7 +21,7 @@ export function buildGrid(project, options = {}) {
   const start = options.from === undefined ? 0 : chapterIndex(all, options.from, "--from");
   const end = options.to === undefined ? all.length - 1 : chapterIndex(all, options.to, "--to");
   if (all.length > 0 && start > end) {
-    throw usageError(`--from ${options.from} comes after --to ${options.to}: give the earlier chapter first`);
+    throw usageError(`--from ${options.from} comes after --to ${options.to}: give the earlier chapter first`, ["from", "to"]);
   }
 
   // Each chapter's arcs, from its own frontmatter and its scenes'.
@@ -78,7 +78,7 @@ function chapterIndex(chapters, value, flag) {
     index = chapters.findIndex((chapter) => chapter.number === Number(text));
   }
   if (index === -1) {
-    throw usageError(`${flag} ${value} is not a chapter in this project: give a chapter id (chapter-03) or number (3)`);
+    throw usageError(`${flag} ${value} is not a chapter in this project: give a chapter id (chapter-03) or number (3)`, flag.slice(2));
   }
   return index;
 }
@@ -86,7 +86,7 @@ function chapterIndex(chapters, value, flag) {
 export function gridFormat(value) {
   const format = value === undefined ? "markdown" : String(value);
   if (!GRID_FORMATS.includes(format)) {
-    throw usageError(`Unknown grid format: ${value} (use ${GRID_FORMATS.join(" or ")})`);
+    throw usageError(`Unknown grid format: ${value} (use ${GRID_FORMATS.join(" or ")})`, "format");
   }
   return format;
 }

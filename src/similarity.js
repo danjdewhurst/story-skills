@@ -41,7 +41,7 @@ export function similarityOptions(options = {}) {
   if (raw !== undefined) {
     const text = String(raw).trim();
     if (!/^\d+$/.test(text) || Number(text) < MIN_SHINGLE || !Number.isSafeInteger(Number(text))) {
-      throw usageError(`--min-words must be a whole number ${MIN_SHINGLE} or more, such as ${SIMILARITY_DEFAULTS.minWords}`);
+      throw usageError(`--min-words must be a whole number ${MIN_SHINGLE} or more, such as ${SIMILARITY_DEFAULTS.minWords}`, "min-words");
     }
     settings.minWords = Number(text);
   }

@@ -296,7 +296,7 @@ function printStyleRules(style, type, fonts, bylines = false) {
 export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
-    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);

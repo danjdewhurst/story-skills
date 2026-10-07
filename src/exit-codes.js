@@ -19,20 +19,43 @@ export const EXIT_CODES = Object.freeze({
   refused: 4
 });
 
-function withCode(message, exitCode) {
-  return Object.assign(new Error(message), { exitCode });
+function withCode(message, exitCode, flags) {
+  return aboutFlags(Object.assign(new Error(message), { exitCode }), flags);
 }
 
-export function usageError(message) {
-  return withCode(message, EXIT_CODES.usage);
+// `flags` names the options the error is about (a name or a list), so the
+// CLI can say when story.md cli-defaults set one of them; see aboutFlags.
+export function usageError(message, flags) {
+  return withCode(message, EXIT_CODES.usage, flags);
 }
 
-export function projectError(message) {
-  return withCode(message, EXIT_CODES.project);
+export function projectError(message, flags) {
+  return withCode(message, EXIT_CODES.project, flags);
 }
 
-export function refusedError(message) {
-  return withCode(message, EXIT_CODES.refused);
+export function refusedError(message, flags) {
+  return withCode(message, EXIT_CODES.refused, flags);
+}
+
+// Marks an error as being about the named options (`flags`, a name or a
+// list), so runCli can add "(story.md cli-defaults set --out x)" when a
+// default filled one in. The code that checks or uses an option marks the
+// errors it raises; an error marked already keeps its options, so the most
+// specific mark wins. An unmarked error gets no hint.
+export function aboutFlags(error, flags) {
+  if (flags !== undefined && error !== null && typeof error === "object" && error.flags === undefined) {
+    error.flags = [].concat(flags);
+  }
+  return error;
+}
+
+// Runs `run`, marking any error it throws as about `flags`.
+export function withFlags(flags, run) {
+  try {
+    return run();
+  } catch (error) {
+    throw aboutFlags(error, flags);
+  }
 }
 
 // Marks an error raised while doing something of a known kind (writing a

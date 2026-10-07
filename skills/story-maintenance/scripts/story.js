@@ -21,17 +21,30 @@ var EXIT_CODES = Object.freeze({
   project: 3,
   refused: 4
 });
-function withCode(message, exitCode) {
-  return Object.assign(new Error(message), { exitCode });
+function withCode(message, exitCode, flags) {
+  return aboutFlags(Object.assign(new Error(message), { exitCode }), flags);
 }
-function usageError(message) {
-  return withCode(message, EXIT_CODES.usage);
+function usageError(message, flags) {
+  return withCode(message, EXIT_CODES.usage, flags);
 }
-function projectError(message) {
-  return withCode(message, EXIT_CODES.project);
+function projectError(message, flags) {
+  return withCode(message, EXIT_CODES.project, flags);
 }
-function refusedError(message) {
-  return withCode(message, EXIT_CODES.refused);
+function refusedError(message, flags) {
+  return withCode(message, EXIT_CODES.refused, flags);
+}
+function aboutFlags(error, flags) {
+  if (flags !== undefined && error !== null && typeof error === "object" && error.flags === undefined) {
+    error.flags = [].concat(flags);
+  }
+  return error;
+}
+function withFlags(flags, run) {
+  try {
+    return run();
+  } catch (error) {
+    throw aboutFlags(error, flags);
+  }
 }
 function withExitCode(error, exitCode) {
   if (error !== null && typeof error === "object") {
@@ -190,7 +203,7 @@ function writeFile(filePath, contents, options = {}) {
       writeWholeFile(filePath, contents, options);
     }
   } catch (error) {
-    throw withExitCode(error, EXIT_CODES.refused);
+    throw aboutFlags(withExitCode(error, EXIT_CODES.refused), options.flags);
   }
   record(filePath, existed, "write");
 }
@@ -10961,7 +10974,7 @@ function proseThresholds(options = {}) {
     }
     const text = String(raw).trim();
     if (!(whole ? /^\d+$/ : /^\d+(?:\.\d+)?$/).test(text) || !Number.isFinite(Number(text))) {
-      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`);
+      throw usageError(`--${flag} must be ${whole ? "a whole number" : "a number"} 0 or more, such as ${PROSE_THRESHOLDS[key]}`, flag);
     }
     thresholds[key] = Number(text);
   }
@@ -12075,7 +12088,7 @@ function historyWeeks(options = {}) {
   }
   const text = String(raw).trim();
   if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_HISTORY_WEEKS) {
-    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`);
+    throw usageError(`--weeks must be a whole number 1 to ${MAX_HISTORY_WEEKS}, such as ${HISTORY_WEEKS}`, "weeks");
   }
   return Number(text);
 }
@@ -16664,7 +16677,7 @@ function buildGrid(project, options = {}) {
   const start = options.from === undefined ? 0 : chapterIndex2(all, options.from, "--from");
   const end = options.to === undefined ? all.length - 1 : chapterIndex2(all, options.to, "--to");
   if (all.length > 0 && start > end) {
-    throw usageError(`--from ${options.from} comes after --to ${options.to}: give the earlier chapter first`);
+    throw usageError(`--from ${options.from} comes after --to ${options.to}: give the earlier chapter first`, ["from", "to"]);
   }
   const advanced = new Map(all.map((chapter) => [chapter.id, new Set(chapter.arcsAdvanced.map(String))]));
   const scenes = new Map(all.map((chapter) => [chapter.id, []]));
@@ -16709,14 +16722,14 @@ function chapterIndex2(chapters, value, flag) {
     index = chapters.findIndex((chapter) => chapter.number === Number(text));
   }
   if (index === -1) {
-    throw usageError(`${flag} ${value} is not a chapter in this project: give a chapter id (chapter-03) or number (3)`);
+    throw usageError(`${flag} ${value} is not a chapter in this project: give a chapter id (chapter-03) or number (3)`, flag.slice(2));
   }
   return index;
 }
 function gridFormat(value) {
   const format = value === undefined ? "markdown" : String(value);
   if (!GRID_FORMATS.includes(format)) {
-    throw usageError(`Unknown grid format: ${value} (use ${GRID_FORMATS.join(" or ")})`);
+    throw usageError(`Unknown grid format: ${value} (use ${GRID_FORMATS.join(" or ")})`, "format");
   }
   return format;
 }
@@ -16860,7 +16873,7 @@ function parseWhere(text) {
   if (comparison) {
     const [, key, operator, value] = comparison;
     if (value === "") {
-      throw usageError(`--where ${filter} needs a value after ${operator}; use --where ${key} for a key that is set, or --where '!${key}' for one that is not`);
+      throw usageError(`--where ${filter} needs a value after ${operator}; use --where ${key} for a key that is set, or --where '!${key}' for one that is not`, "where");
     }
     return { key, op: operator === "=" ? "eq" : "ne", value };
   }
@@ -16868,7 +16881,7 @@ function parseWhere(text) {
   if (presence) {
     return { key: presence[2], op: presence[1] === "!" ? "absent" : "present", value: null };
   }
-  throw usageError(`Cannot read --where ${filter}: expected key=value, key!=value, key, or !key`);
+  throw usageError(`Cannot read --where ${filter}: expected key=value, key!=value, key, or !key`, "where");
 }
 function buildList(project, kindName, whereValues = []) {
   const entry = listKind(kindName);
@@ -16889,7 +16902,7 @@ function buildList(project, kindName, whereValues = []) {
     if (!known.includes(filter.key)) {
       const near = nearMissKeys(filter.key, known);
       const hint = near.length > 0 ? `; did you mean ${near.map((key) => `"${key}"`).join(" or ")}?` : "";
-      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${hint}`);
+      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${hint}`, "where");
     }
   }
   const keys = [...new Set(filters.map((filter) => filter.key))];
@@ -17310,7 +17323,7 @@ function printStyleRules(style, type, fonts, bylines = false) {
 function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
   const trim = TRIM_SIZES.get(trimName);
   if (!trim) {
-    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
   }
   const pages = estimateBookPages(book, trimName);
   const inside = insideMargin(pages);
@@ -19097,7 +19110,7 @@ function similarityOptions(options = {}) {
   if (raw !== undefined) {
     const text = String(raw).trim();
     if (!/^\d+$/.test(text) || Number(text) < MIN_SHINGLE || !Number.isSafeInteger(Number(text))) {
-      throw usageError(`--min-words must be a whole number ${MIN_SHINGLE} or more, such as ${SIMILARITY_DEFAULTS.minWords}`);
+      throw usageError(`--min-words must be a whole number ${MIN_SHINGLE} or more, such as ${SIMILARITY_DEFAULTS.minWords}`, "min-words");
     }
     settings.minWords = Number(text);
   }
@@ -26415,46 +26428,46 @@ function exportManuscript(root, options = {}) {
 function buildBook(root, options = {}) {
   const format = normalizeBuildFormat(options.format ?? "markdown");
   if (options.trim !== undefined && format !== "print") {
-    throw usageError("--trim applies only to --format print");
+    throw usageError("--trim applies only to --format print", ["trim", "format"]);
   }
   const trim = options.trim === undefined ? DEFAULT_TRIM : String(options.trim).trim().toLowerCase();
   if (!TRIM_SIZES.has(trim)) {
-    throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`);
+    throw usageError(`Unsupported trim size: ${options.trim}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
   }
   const shunnPages = format === "shunn" && Boolean(options.pdf) || format === "docx" && Boolean(options.shunn);
   const rawPaper = options.paperDefaulted && !shunnPages ? undefined : options.paper;
   if (rawPaper !== undefined && !shunnPages) {
-    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)");
+    throw usageError("--paper applies only to --format shunn --pdf and --format docx --shunn (use --trim for --format print)", ["paper", "format", "pdf", "shunn"]);
   }
   const paper = rawPaper === undefined ? DEFAULT_PAPER : String(rawPaper).trim().toLowerCase();
   if (!SHUNN_PAPERS.has(paper)) {
-    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`);
+    throw usageError(`Unsupported paper: ${rawPaper}. Supported papers: ${[...SHUNN_PAPERS.keys()].join(", ")}`, "paper");
   }
   if (options.stamp !== undefined && format !== "html") {
-    throw usageError("--stamp applies only to --format html");
+    throw usageError("--stamp applies only to --format html", ["stamp", "format"]);
   }
   const stamp = options.stamp === undefined ? "" : String(options.stamp).replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   if (options.stamp !== undefined && stamp === "") {
-    throw usageError("--stamp needs a label, such as a date, commit, or round name");
+    throw usageError("--stamp needs a label, such as a date, commit, or round name", "stamp");
   }
   if (options.noteUrl !== undefined && format !== "html") {
-    throw usageError("--note-url applies only to --format html");
+    throw usageError("--note-url applies only to --format html", ["note-url", "format"]);
   }
   const noteUrl = options.noteUrl === undefined ? "" : String(options.noteUrl).replace(/[\u0000-\u0020\u007f]+/g, "");
   if (options.noteUrl !== undefined && !/^https?:\/\/[^/?#]/i.test(noteUrl)) {
-    throw usageError("--note-url needs an http or https address, such as a GitHub new-issue link");
+    throw usageError("--note-url needs an http or https address, such as a GitHub new-issue link", "note-url");
   }
   if (options.shunn && format !== "docx") {
-    throw usageError("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)");
+    throw usageError("--shunn applies only to --format docx (use --format shunn for a Shunn markdown manuscript)", ["shunn", "format"]);
   }
   if (options.pdf && format !== "print" && format !== "shunn") {
-    throw usageError("--pdf applies only to --format print and --format shunn");
+    throw usageError("--pdf applies only to --format print and --format shunn", ["pdf", "format"]);
   }
   if (options.pdfEngine !== undefined && !options.pdf) {
-    throw usageError("--pdf-engine applies only with --pdf");
+    throw usageError("--pdf-engine applies only with --pdf", ["pdf-engine", "pdf"]);
   }
   if (options.spoilers && format !== "codex") {
-    throw usageError("--spoilers applies only to --format codex");
+    throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
   const project = scanProject(root);
   if (format === "codex") {
@@ -26522,12 +26535,13 @@ function buildBook(root, options = {}) {
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
 }
 function buildPdf(project, format, { trim, paper }, output, options) {
-  const engine = resolvePdfEngine(options.pdfEngine, { cwd: options.cwd });
+  const engineFlag = options.pdfEngine === undefined ? "pdf" : "pdf-engine";
+  const engine = withFlags(engineFlag, () => resolvePdfEngine(options.pdfEngine, { cwd: options.cwd }));
   const manuscript = manuscriptParts(project);
   assertMatterTitles(project);
   const style = projectBuildStyle(project);
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project), paper);
-  writeFile(output.outFile, isPlanning() ? "" : renderPdf(html, engine), output.writeOptions);
+  writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
   return { outFile: output.outFile, chapters: manuscript.chapters.length, format, pdf: true, engine: engine.name, warnings: manuscript.warnings };
 }
 function buildCodex(project, out, spoilers) {
@@ -26549,6 +26563,9 @@ function buildCodex(project, out, spoilers) {
   return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
 }
 function resolveOutputDirectory(project, out, defaultRelativePath) {
+  return withFlags("out", () => outputDirectory(project, out, defaultRelativePath));
+}
+function outputDirectory(project, out, defaultRelativePath) {
   const rawOut = out ?? defaultRelativePath;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a folder path");
@@ -26572,7 +26589,7 @@ function resolveOutputDirectory(project, out, defaultRelativePath) {
   if (stats !== null && fs10.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
     throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
   }
-  return { directory, writeOptions: enforceRoot ? { root: project.root } : {} };
+  return { directory, writeOptions: enforceRoot ? { root: project.root, flags: "out" } : { flags: "out" } };
 }
 function isCodexFolder(directory) {
   return isCodexPage(path14.join(directory, "index.html"));
@@ -26707,7 +26724,7 @@ function screenplayOutline(project, book) {
 function synopsisBook(root, options = {}) {
   const pages = options.pages === undefined ? 1 : parseDecimalInteger(options.pages);
   if (pages !== 1 && pages !== 3) {
-    throw usageError(`Unsupported synopsis length: ${options.pages}. Supported pages: 1, 3`);
+    throw usageError(`Unsupported synopsis length: ${options.pages}. Supported pages: 1, 3`, "pages");
   }
   const project = scanProject(root);
   assertProjectParses(project, "build a synopsis");
@@ -27094,6 +27111,9 @@ function assertNotReferencedPath(project, outFile, target, referenced) {
   }
 }
 function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
+  return withFlags("out", () => outputPath(project, out, defaultRelativePath, enforceRoot));
+}
+function outputPath(project, out, defaultRelativePath, enforceRoot) {
   const rawOut = out ?? defaultRelativePath;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a file path");
@@ -27117,7 +27137,7 @@ function resolveOutputPath(project, out, defaultRelativePath, enforceRoot) {
   return {
     outFile,
     enforceRoot: shouldEnforceRoot,
-    writeOptions: shouldEnforceRoot ? { root: project.root } : {}
+    writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
 var BUILD_EXTENSIONS = {
@@ -27145,7 +27165,7 @@ function normalizeBuildFormat(value) {
   if (Object.prototype.hasOwnProperty.call(BUILD_EXTENSIONS, format)) {
     return format;
   }
-  throw usageError(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`);
+  throw usageError(`Unsupported build format: ${value === "" ? "(empty)" : value}. Supported formats: ${Object.keys(BUILD_EXTENSIONS).join(", ")}`, "format");
 }
 // src/story.js
 function checkProjectContinuity(root) {
@@ -27206,10 +27226,10 @@ function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }
 function draftingContext(root, targetId, options = {}) {
-  const budget = options.budget === undefined ? DEFAULT_CONTEXT_BUDGET : requirePositiveInteger(options.budget, "Budget");
+  const budget = options.budget === undefined ? DEFAULT_CONTEXT_BUDGET : withFlags("budget", () => requirePositiveInteger(options.budget, "Budget"));
   const scenes = options.scenes === undefined ? DEFAULT_CONTEXT_SCENES : parseDecimalInteger(options.scenes);
   if (scenes === null) {
-    throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`);
+    throw usageError(`Scenes must be 0 or a positive integer, got ${options.scenes}`, "scenes");
   }
   const project = scanProject(root);
   const blocking = project.fileErrors.find((error) => error.file.startsWith("chapters/") || error.file === "continuity/state.md" || error.file === `scenes/${targetId}.md`);
@@ -27228,12 +27248,12 @@ function compareProject(root, options = {}) {
   const hasRef = given(options.ref);
   const sources = [hasRef, given(options.against), given(options.snapshot)].filter(Boolean).length;
   if (sources !== 1) {
-    throw usageError("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>");
+    throw usageError("compare needs exactly one of --ref <git-ref>, --against <project-path>, or --snapshot <name>", ["ref", "against", "snapshot"]);
   }
   const project = scanProject(root);
   assertProjectParses(project, "compare");
-  const snapshot = given(options.snapshot) ? existingSnapshot(project.root, options.snapshot) : null;
-  const other = hasRef ? null : snapshot !== null ? { root: snapshot.directory, label: `snapshot ${snapshot.id}` } : { root: path15.resolve(options.cwd ?? process.cwd(), options.against) };
+  const snapshot = given(options.snapshot) ? withFlags("snapshot", () => existingSnapshot(project.root, options.snapshot)) : null;
+  const other = hasRef ? null : snapshot !== null ? { root: snapshot.directory, label: `snapshot ${snapshot.id}`, flag: "snapshot" } : { root: path15.resolve(options.cwd ?? process.cwd(), options.against), flag: "against" };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
     return mapProjectLabels(project, anchors, { ...options, other });
@@ -27243,14 +27263,16 @@ function compareProject(root, options = {}) {
   let previous;
   let label;
   if (hasRef) {
-    previous = chaptersAtGitRef(project.root, options.ref, warnings);
+    previous = withFlags("ref", () => chaptersAtGitRef(project.root, options.ref, warnings));
     label = `git ref ${options.ref}`;
   } else {
-    const scanned = scanProject(other.root);
-    if (scanned.fileErrors.length > 0) {
-      throw projectError(`Cannot read ${other.label ?? other.root}: ${scanned.fileErrors[0].message}`);
-    }
-    previous = scanned.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, scanned.root)));
+    previous = withFlags(other.flag, () => {
+      const scanned = scanProject(other.root);
+      if (scanned.fileErrors.length > 0) {
+        throw projectError(`Cannot read ${other.label ?? other.root}: ${scanned.fileErrors[0].message}`);
+      }
+      return scanned.chapters.map((chapter) => comparableChapter(chapter.id, readMarkdown(chapter.file, scanned.root)));
+    });
     label = other.label ?? other.root;
   }
   return {
@@ -27264,7 +27286,7 @@ function compareProject(root, options = {}) {
 function normaliseAnchor(value) {
   const anchor = String(value).trim().replace(/^#/, "").toLowerCase();
   if (anchor === "") {
-    throw usageError("--anchor needs a paragraph label from the review copy, such as ch03-p12");
+    throw usageError("--anchor needs a paragraph label from the review copy, such as ch03-p12", "anchor");
   }
   return anchor;
 }
@@ -27275,10 +27297,10 @@ function mapProjectLabels(project, anchors, options) {
   let label;
   if (options.other === null) {
     label = `git ref ${options.ref}`;
-    previous = withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label));
+    previous = withFlags("ref", () => withProjectAtGitRef(project.root, options.ref, (oldRoot) => labelsIn(oldRoot, label)));
   } else {
     label = options.other.label ?? options.other.root;
-    previous = labelsIn(options.other.root, label);
+    previous = withFlags(options.other.flag, () => labelsIn(options.other.root, label));
   }
   return { ok: true, errors: [], warnings: [], label, anchors: mapLabels(previous, current, labels) };
 }
@@ -27392,23 +27414,25 @@ function similarityReport(root, options = {}) {
   const against = typeof options.against === "string" ? options.against.trim() : "";
   const snapshotName = typeof options.snapshot === "string" ? options.snapshot.trim() : "";
   if (against === "" && snapshotName === "") {
-    throw usageError("similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with");
+    throw usageError("similarity needs --against <file|folder|git-ref> or --snapshot <name>: the text to compare the chapters with", ["against", "snapshot"]);
   }
   if (against !== "" && snapshotName !== "") {
-    throw usageError("similarity takes one of --against <file|folder|git-ref> or --snapshot <name>, not both");
+    throw usageError("similarity takes one of --against <file|folder|git-ref> or --snapshot <name>, not both", ["against", "snapshot"]);
   }
   const { minWords } = similarityOptions(options);
   const project = scanProject(root);
   assertProjectParses(project, "check similarity");
   const chapters = labelledChapters(project, (file) => relative(project, file));
   if (snapshotName !== "") {
-    const snapshot = existingSnapshot(project.root, snapshotName);
+    const snapshot = withFlags("snapshot", () => existingSnapshot(project.root, snapshotName));
     const label = `snapshot ${snapshot.id}`;
-    if (lstatIfExists(path15.join(snapshot.directory, "story.md"))?.isFile() !== true) {
-      throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
-    }
     const self = canonicalPath(project.root);
-    const references = referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
+    const references = withFlags("snapshot", () => {
+      if (lstatIfExists(path15.join(snapshot.directory, "story.md"))?.isFile() !== true) {
+        throw projectError(`Cannot check similarity with ${label}: .snapshots/${snapshot.id} has no story.md, so it is not a whole project`);
+      }
+      return referenceDocuments(canonicalPath(snapshot.directory), (file) => projectPath(self, file), self);
+    });
     const report = compareSimilarity(chapters, references, { minWords, label });
     const warnings = report.reference.words === 0 ? [warn("similarity-no-reference-text", `${label} has no chapter text to compare with`)] : [];
     return { ...report, warnings: [...warnings, ...report.warnings] };
@@ -27416,6 +27440,14 @@ function similarityReport(root, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const target = path15.resolve(options.againstFromProject ? project.root : cwd, against);
   const warnings = [];
+  const { references, label } = withFlags("against", () => againstReferences(project, against, target, cwd));
+  const report = compareSimilarity(chapters, references, { minWords, label });
+  if (report.reference.words === 0) {
+    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
+  }
+  return { ...report, warnings: [...warnings, ...report.warnings] };
+}
+function againstReferences(project, against, target, cwd) {
   let references;
   let label;
   if (lstatIfExists(target) !== null) {
@@ -27446,11 +27478,7 @@ function similarityReport(root, options = {}) {
       throw error;
     }
   }
-  const report = compareSimilarity(chapters, references, { minWords, label });
-  if (report.reference.words === 0) {
-    warnings.push(warn("similarity-no-reference-text", `${label} has no text to compare with: check --against names the files you meant`));
-  }
-  return { ...report, warnings: [...warnings, ...report.warnings] };
+  return { references, label };
 }
 function displayPath(cwd, typed, real, file) {
   const inside = path15.relative(real, file);
@@ -27772,7 +27800,7 @@ function proseBaseline(project, rules, options, warnings, sampled = new Set) {
     return null;
   }
   if (listed.length === 0) {
-    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`);
+    throw usageError(`prose --baseline needs samples in ${STYLE_SHEET_FILE}: list files or folders of your own prose, such as samples: [../book-one]`, "baseline");
   }
   const samples = [];
   const self = canonicalPath(project.root);
@@ -29130,7 +29158,7 @@ var COMMANDS = [
     run(context) {
       const write = isTruthy(context.parsed.options.write);
       if (!write && isTruthy(context.parsed.options["dry-run"])) {
-        throw usageError("--dry-run previews wordcount --write: add --write");
+        throw usageError("--dry-run previews wordcount --write: add --write", "write");
       }
       return runWrite(context, "wordcount", (projectRoot) => computeWordCounts(projectRoot, { write }), (result) => {
         const characters = result.unit === "characters";
@@ -29311,7 +29339,7 @@ var COMMANDS = [
       const log = isTruthy(parsed.options.log);
       const dryRun = isTruthy(parsed.options["dry-run"]);
       if (!log && dryRun) {
-        throw usageError("--dry-run previews progress --log: add --log");
+        throw usageError("--dry-run previews progress --log: add --log", "log");
       }
       const projectRoot = root();
       const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectProgress(target, { log, date: parsed.options.date, weeks: parsed.options.weeks }));
@@ -29577,7 +29605,7 @@ var COMMANDS = [
       const change = { init: isTruthy(parsed.options.init), start: parsed.options.start, done: parsed.options.done };
       const dryRun = isTruthy(parsed.options["dry-run"]);
       if (dryRun && !change.init && change.start === undefined && change.done === undefined) {
-        throw usageError("--dry-run previews passes --init, --start, or --done: add one");
+        throw usageError("--dry-run previews passes --init, --start, or --done: add one", "init");
       }
       const projectRoot = root();
       const { result, changes } = runOrPreview(dryRun, projectRoot, (target) => projectPasses(target, change));
@@ -29701,7 +29729,7 @@ var COMMANDS = [
         return runDoctorFix(context, options);
       }
       if (isTruthy(parsed.options["dry-run"])) {
-        throw usageError("--dry-run previews doctor --fix: add --fix");
+        throw usageError("--dry-run previews doctor --fix: add --fix", "fix");
       }
       const projectRoot = root();
       const report = withWorkflowPins(projectActions(projectRoot, options), projectRoot, cwd);
@@ -30315,7 +30343,6 @@ function formatCommandsHelp() {
 var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 function runCli(argv, io) {
   let configured = [];
-  let given = new Set;
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)] }) : null;
   try {
@@ -30367,13 +30394,12 @@ Run story --help to list commands.
     }
     const root = () => resolveRoot(cwd, parsed, name);
     const config = command.project === "none" ? null : projectConfig(command, configRoot(cwd, parsed, root));
-    given = new Set(Object.keys(parsed.options));
     configured = config === null ? [] : applyDefaults(config, name, parsed.options).map((key) => [key, parsed.options[key]]);
     const overrides = config === null ? NO_OVERRIDES : findingOverrides(config);
     const run = () => command.run({ parsed, io, cwd, root, overrides, defaulted: new Set(configured.map(([key]) => key)) });
     return writesInPlace(command, parsed.options) ? withProjectLock(root(), run) : run();
   } catch (error) {
-    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured, given)}`;
+    const message = `${describeError(error, io.cwd ?? process.cwd())}${configuredHint(error, configured)}`;
     const exitCode = exitCodeFor(error);
     if (failJson) {
       return failJson(message, exitCode);
@@ -30400,16 +30426,10 @@ function projectConfig(command, root) {
   }
   throw projectError(`Fix cli-defaults or severity in story.md before running story ${command.name} (story validate lists every problem): ${config.errors.join("; ")}`);
 }
-function configuredHint(error, configured, given) {
-  const message = String(error?.message).replace(/\[--[^\]]*\]/g, "");
-  const flags = [...message.matchAll(/(?<![\w-])--([a-z][a-z0-9-]*)/g)].map((match) => match[1]);
-  const fromCommandLine = flags.some((flag) => optionFamily(flag).some((name) => given.has(name)));
-  const named = configured.filter(([key, value]) => flags.includes(key) || !fromCommandLine && typeof value === "string" && quotesWord(message, value.trim()));
+function configuredHint(error, configured) {
+  const flags = Array.isArray(error?.flags) ? error.flags : [];
+  const named = configured.filter(([key]) => flags.includes(key));
   return named.length === 0 ? "" : ` (story.md cli-defaults set ${named.map(([key, value]) => value === true ? `--${key}` : value === false ? `--${key}=false` : `--${key} ${value}`).join(", ")})`;
-}
-function quotesWord(text, value) {
-  const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(String.raw`(?<![\w./\\-])${escaped}(?![\w/\\-]|\.\w)`).test(text);
 }
 function commandWord(argv) {
   for (let index = 0;index < argv.length; index += 1) {

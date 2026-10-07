@@ -162,8 +162,19 @@ describe("story check", () => {
     const json = invokeJson(root, ["check", "--json"]);
     expect(json.code).toBe(3);
     expect(json.envelope.diagnostics).toEqual([expect.objectContaining({ code: "unusable-project", check: "check" })]);
-    // validate still runs, and lists the problem.
+    // validate, report, and next still run, and validate lists the problem.
     expect(invoke(root, ["validate"]).err).toContain("error: story.md severity[0] names unknown warning not-a-code");
+    expect(invoke(root, ["report"]).code).toBe(0);
+    expect(invoke(root, ["next"]).code).toBe(0);
+  });
+
+  test("refuses to run while a story.md cli-defaults entry is invalid (#566)", () => {
+    const root = project();
+    const storyFile = path.join(root, "story.md");
+    fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: check\n    stirct: true\n"), "utf8");
+    const { code, err: stderr } = invoke(root, ["check"]);
+    expect(code).toBe(3);
+    expect(stderr).toBe("Fix cli-defaults or severity in story.md before running story check (story validate lists every problem): story.md cli-defaults[0] sets stirct, which story check does not accept; did you mean strict?\n");
   });
 
   test("continuity exemptions dismiss findings as story continuity does", () => {
