@@ -181,6 +181,7 @@ On macOS, a binary downloaded in a browser is quarantined and, being unnotarised
 
 Check the installed version:
 
+<!-- replay -->
 ```shell
 story --version
 ```

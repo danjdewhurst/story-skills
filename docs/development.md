@@ -377,6 +377,19 @@ Bundled story-maintenance fallback is up to date.
 
 A failure prints `Coverage is below the gate:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage` or `has no coverage record`) for a 100% folder, or `/path/to/story-skills/scripts/release.js line coverage 80.0% (240/300) is below 85%` for a floor, and exits with status 1. A new script in `scripts/` or `evals/` needs a test that imports it, or it fails with `has no coverage record`. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
 
+### Replayed doc samples
+
+The command output shown in `README.md` and `docs/` drifts as the CLI changes. [`test/doc-samples.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/doc-samples.test.js) replays every sample marked for it and fails when the CLI no longer prints what the page shows. Mark a sample with a comment on its own line, straight before the sample's first fence:
+
+- `<!-- replay: <example> -->` runs the commands in a copy of `examples/<example>`, shown in output as `~/stories/<example>`. The other examples are copied beside it, so a series link such as `follows: ../the-fall-of-the-citadel` resolves.
+- `<!-- replay -->` runs them from a copy of the repository root, shown as `~/story-skills`, for commands that name `examples/<example>` or need no project.
+
+A sample is a `shell` fence of `story` commands, one per line, followed by a `text` fence with their output, or one `text` fence in which each `$ story ...` line is followed by that command's output. Output is stdout and stderr together, in the order the CLI prints them. Blank lines at the end of a command's output are ignored, so a `$` sample may leave one before the next prompt. Each sample runs on fresh copies, so commands that write files are fine. A command must be a plain `story` command with quoted arguments: no pipes, redirects, variables, or `cd`.
+
+Leave a sample unmarked when its output depends on more than the examples: the date (unless `--date` pins it), an installed PDF engine, git history, a project the page builds step by step or edits by hand, or output the page shortens with `...`. Those still need refreshing by hand when the output changes. The test is skipped on Windows, because the samples show POSIX paths.
+
+Each replayed sample is one test, named by its file and line, so a failure says which sample to refresh. Run the commands on a copy of the example and paste the new output.
+
 ## Examples check
 
 ```shell
