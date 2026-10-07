@@ -377,9 +377,9 @@ describe("the publish-gate entry point", () => {
     await expect(main(["verify"], { env: { GITHUB_EVENT_NAME: "push", GITHUB_REF: "refs/tags/v1.0.0", GITHUB_SHA: SHA }, run })).rejects.toThrow("boom");
   });
 
-  test("the default commands run git, wait, and tell the time", async () => {
+  test("the default commands run a program, wait, and tell the time", async () => {
     const deps = gateDeps();
-    expect(deps.run("git", ["--version"])).toStartWith("git version");
+    expect(deps.run(process.execPath, ["-e", "process.stdout.write('ran')"])).toBe("ran");
     await deps.sleep(0);
     expect(deps.now()).toBeGreaterThan(0);
     expect(deps.env).toBe(process.env);

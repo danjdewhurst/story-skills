@@ -51,28 +51,44 @@ export function memoryIo(cwd) {
   };
 }
 
-// Settings for every git a test runs. gitEnv() passes them as GIT_CONFIG_COUNT
-// variables, so they also reach the git that a script or the CLI runs.
-const GIT_SETTINGS = [
-  ["user.name", "Test"],
-  ["user.email", "test@example.com"],
-  ["init.defaultBranch", "main"],
-  ["commit.gpgsign", "false"],
-  ["tag.gpgsign", "false"]
-];
+let emptyFile;
 
-// An environment for git that reads nothing from the developer's machine: no
-// global or system config, so commit signing, hooks, or a pinentry prompt set
-// there cannot fail or stall a test (#561), and no GIT_* variable, such as
-// GIT_DIR from a hook or GIT_CONFIG_PARAMETERS. An override set to undefined
-// leaves that variable out.
+// An empty file for git to read as its global config, excludes, and
+// attributes. It sits in a temp dir, so it is made again once removeTempDirs
+// has deleted it.
+function emptyGitFile() {
+  if (emptyFile === undefined || !fs.existsSync(emptyFile)) {
+    emptyFile = path.join(makeTempDir("story-skills-git-"), "empty");
+    fs.writeFileSync(emptyFile, "");
+  }
+  return emptyFile;
+}
+
+// An environment for git that reads nothing from the developer's machine
+// (#561). GIT_CONFIG_GLOBAL and GIT_CONFIG_NOSYSTEM drop the global and system
+// config, so commit signing, hooks, or a pinentry prompt set there cannot fail
+// or stall a test, and core.excludesFile and core.attributesFile replace
+// ~/.config/git/ignore and attributes, which git reads even then. No GIT_*
+// variable, such as GIT_DIR from a hook, gets through. The settings go in
+// GIT_CONFIG_COUNT variables, so they also reach the git that a script or the
+// CLI runs. An override set to undefined leaves that variable out.
 export function gitEnv(overrides = {}) {
+  const empty = emptyGitFile();
+  const settings = [
+    ["user.name", "Test"],
+    ["user.email", "test@example.com"],
+    ["init.defaultBranch", "main"],
+    ["commit.gpgsign", "false"],
+    ["tag.gpgsign", "false"],
+    ["core.excludesFile", empty],
+    ["core.attributesFile", empty]
+  ];
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)));
-  GIT_SETTINGS.forEach(([key, value], index) => {
+  settings.forEach(([key, value], index) => {
     env[`GIT_CONFIG_KEY_${index}`] = key;
     env[`GIT_CONFIG_VALUE_${index}`] = value;
   });
-  return { ...env, GIT_CONFIG_COUNT: String(GIT_SETTINGS.length), GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", ...overrides };
+  return { ...env, GIT_CONFIG_COUNT: String(settings.length), GIT_CONFIG_GLOBAL: empty, GIT_CONFIG_NOSYSTEM: "1", ...overrides };
 }
 
 // Runs git in cwd with gitEnv() and returns its stdout.
