@@ -613,10 +613,7 @@ describe("add, rename, and scan limits", () => {
 });
 
 describe("interrupted add (#202)", () => {
-  test("rerunning an add whose backlink step failed finishes it", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("rerunning an add whose backlink step failed finishes it", () => {
     const root = safetyProject();
     createEntity(root, { kind: "location", name: "Port Kestrel" });
     const location = path.join(root, "worldbuilding", "locations", "port-kestrel.md");
@@ -629,10 +626,7 @@ describe("interrupted add (#202)", () => {
     expect(() => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" })).toThrow("characters/nia-holt.md already exists");
   });
 
-  test("rerunning an unnumbered scene add does not create a second copy", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("rerunning an unnumbered scene add does not create a second copy", () => {
     const root = safetyProject();
     createEntity(root, { kind: "character", name: "Nessa" });
     createEntity(root, { kind: "chapter", name: "One" });

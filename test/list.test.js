@@ -5,7 +5,7 @@ import { runCli } from "../src/cli.js";
 import { LIST_KINDS, parseWhere, queryFindings } from "../src/list.js";
 import { createStoryProject, scanProject, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
+import { expectLinearGrowthFresh, makeTempDir, memoryIo, messages, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const storySchema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf8"));
@@ -387,21 +387,33 @@ describe("story list reads a filter in linear time", () => {
       const start = performance.now();
       accepts(text);
       pattern.test(text);
+      // A backstop, not a ratio. Bun's regex engine is about a hundred times
+      // slower on the pattern above about 100,000 characters than below it,
+      // so a ratio between a short and a long input would not show growth.
       expect(performance.now() - start).toBeLessThan(1000);
     }
   });
 
   test("checks every query's keys once per kind", () => {
-    const root = sampleProject();
     const keys = Array.from({ length: 5000 }, (_, index) => `custom-${index}: x`).join("\n");
-    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), `title: Wide\nnumber: 3\n${keys}`, "## Chapter Text\n\nWords.\n");
-    configure(root, ["queries:", ...Array.from({ length: 500 }, (_, index) => `  - name: q-${index}\n    kind: chapters\n    where: [custom-${index}=x, missing-${index}]`)].join("\n"));
-    const project = scanProject(root);
-    const start = performance.now();
-    const found = queryFindings(project);
-    expect(performance.now() - start).toBeLessThan(2000);
+    // A project with `count` queries, each on the same 5000 keys.
+    const scannedWith = (count) => {
+      const root = sampleProject();
+      writeMarkdown(path.join(root, "chapters", "chapter-03.md"), `title: Wide\nnumber: 3\n${keys}`, "## Chapter Text\n\nWords.\n");
+      configure(root, ["queries:", ...Array.from({ length: count }, (_, index) => `  - name: q-${index}\n    kind: chapters\n    where: [custom-${index}=x, missing-${index}]`)].join("\n"));
+      return scanProject(root);
+    };
+    const found = queryFindings(scannedWith(500));
     expect(found.errors).toEqual([]);
     expect(found.warnings).toHaveLength(500);
+    // Each query costs about the same, so 500 queries take about four times
+    // as long as 125.
+    expectLinearGrowthFresh((count) => {
+      const project = scannedWith(count);
+      const start = performance.now();
+      queryFindings(project);
+      return performance.now() - start;
+    }, 500);
   });
 });
 

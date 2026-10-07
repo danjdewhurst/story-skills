@@ -1,6 +1,6 @@
 import { expect, spyOn } from "bun:test";
 import { Buffer } from "node:buffer";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +14,35 @@ const tempDirs = [];
 // and is ignored on folders). Tests that make a file or folder unreadable or
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
+
+// Whether a `node` command is on PATH. Tests that run the Node build look it
+// up there, because process.execPath is Bun under `bun test`. Tests that need
+// it skip when it is false.
+export const NODE_ON_PATH = spawnSync("node", ["--version"]).status === 0;
+
+// Whether an `unzip` command is on PATH. Tests that read archives with it skip
+// when it is false.
+export const UNZIP_ON_PATH = spawnSync("unzip", ["-v"]).status === 0;
+
+// Whether this user can make a symlink to a file and to a folder. Windows
+// needs developer mode or administrator rights to make one. Tests that make
+// symlinks skip when it is false.
+export const SYMLINKS_SUPPORTED = (() => {
+  let dir;
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-skills-links-"));
+    fs.mkdirSync(path.join(dir, "target"));
+    fs.symlinkSync(path.join(dir, "target"), path.join(dir, "folder"), "dir");
+    fs.symlinkSync(path.join(dir, "target", "file.md"), path.join(dir, "file.md"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (dir !== undefined) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+})();
 
 // The script of the sleeper otherLivePid starts. Each second it checks that
 // the process whose pid is its first argument, the one that started it, is
@@ -317,8 +346,10 @@ function fastestTime(task) {
 // total. A linear scan takes about as long either way; a quadratic one
 // takes `pieces` times as long on the long input, and one that grows as
 // n^1.5 the square root of `pieces` times as long, so it needs 256 pieces.
-// `make(n)` builds an input of about n characters. The slack covers timer
-// noise when both are quick.
+// The long run may take up to eight times the pieces: a loaded runner
+// slows one of the two more than the other, and the bound still fails
+// a quadratic run. `make(n)` builds an input of about n characters. The
+// slack covers timer noise when both are quick.
 export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}) {
   const short = make(length / pieces);
   const long = make(length);
@@ -328,7 +359,7 @@ export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}
     }
   });
   const longTime = fastestTime(() => run(long));
-  expect(longTime).toBeLessThan(4 * shortTime + 25);
+  expect(longTime).toBeLessThan(8 * shortTime + 25);
 }
 
 // Asserts that `run` takes about linear time in the size of its input when
@@ -361,6 +392,27 @@ export function expectLinearGrowth(run, make, size, { limit = 2000 } = {}) {
   expect(large).toBeLessThan(limit);
   expect(large - fixed).toBeLessThan(8 * Math.max(small - fixed, 0) + 25);
   return result;
+}
+
+// Asserts that an operation takes about linear time in its size, for work
+// that changes its input, so each run needs a fresh one. `timeRun(size)`
+// builds the input of that size, times one run on it, and returns the time in
+// milliseconds; building the input must stay outside the timing. The runs on
+// size / 4 and on size are each the fastest of three taken in turn. A linear
+// run takes about four times as long on the larger input, and a quadratic
+// one sixteen times. The bound is eight times, so a loaded runner does not
+// fail a linear run, and a quadratic one still fails. The larger run must
+// also take less than `limit` milliseconds, as a backstop for a run that
+// never ends.
+export function expectLinearGrowthFresh(timeRun, size, { limit = 2000 } = {}) {
+  let small = Infinity;
+  let large = Infinity;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    small = Math.min(small, timeRun(size / 4));
+    large = Math.min(large, timeRun(size));
+  }
+  expect(large).toBeLessThan(limit);
+  expect(large).toBeLessThan(8 * small + 25);
 }
 
 // Asserts that `run` takes about as long on `input` as on `control`, an

@@ -7,7 +7,7 @@ import { compareImportNames, extractNameCandidates, importManuscript } from "../
 import { lstatIfExists } from "../src/files.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { createStoryProject, exportManuscript, scanProject, validateProject } from "../src/story.js";
-import { CHMOD_IGNORED, otherLivePid, makeTempDir, memoryIo, messages, treeDiff, treeSnapshot, whileWriting, expectLinearGrowth } from "./helpers.js";
+import { CHMOD_IGNORED, otherLivePid, makeTempDir, memoryIo, messages, SYMLINKS_SUPPORTED, treeDiff, treeSnapshot, whileWriting, expectLinearGrowth } from "./helpers.js";
 
 const PROSE = [
   "Mara Quill walked The Long Pier at dawn. The gulls followed Mara Quill past the locked door,",
@@ -247,18 +247,13 @@ describe("manuscript import", () => {
     expect(fs.existsSync(path.join(second.root, "chapters", "chapter-02.md"))).toBe(false);
   });
 
-  test("force import refuses a symlinked destination instead of deleting its chapters", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("force import refuses a symlinked destination instead of deleting its chapters", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "novel.md"), "# Chapter 1\n\nHello there.", "utf8");
     fs.mkdirSync(path.join(cwd, "real", "chapters"), { recursive: true });
     const kept = path.join(cwd, "real", "chapters", "chapter-09.md");
     fs.writeFileSync(kept, "keep", "utf8");
-    try {
-      fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
-    } catch {
-      console.warn("Skipping symlinked destination test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
 
     expect(() => importManuscript({ source: "novel.md", title: "Linked", cwd, dir: "linked", force: true })).toThrow("symlinked project directory");
     expect(fs.readFileSync(kept, "utf8")).toBe("keep");
@@ -366,16 +361,10 @@ describe("manuscript import", () => {
 });
 
 describe("import source hardening", () => {
-  test("rejects symlinked import sources", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("rejects symlinked import sources", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "real.md"), "## Chapter 1: Real\n\nReal body.\n", "utf8");
-    const link = path.join(cwd, "linked.md");
-    try {
-      fs.symlinkSync(path.join(cwd, "real.md"), link);
-    } catch {
-      console.warn("Skipping symlink import test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(path.join(cwd, "real.md"), path.join(cwd, "linked.md"));
     expect(() => importManuscript({ source: "linked.md", title: "Linked", cwd })).toThrow("symlinked source");
 
     const dir = path.join(cwd, "drafts");
@@ -385,7 +374,7 @@ describe("import source hardening", () => {
     expect(() => importManuscript({ source: "drafts", title: "Linked Dir", cwd })).toThrow("symlinked source");
   });
 
-  test("skips directory symlinks instead of aborting the import", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("skips directory symlinks instead of aborting the import", () => {
     const cwd = makeTempDir();
     const dir = path.join(cwd, "drafts");
     fs.mkdirSync(dir);
@@ -393,12 +382,7 @@ describe("import source hardening", () => {
     const realSub = path.join(cwd, "real-sub");
     fs.mkdirSync(realSub);
     fs.writeFileSync(path.join(realSub, "z.md"), "Hidden body.\n", "utf8");
-    try {
-      fs.symlinkSync(realSub, path.join(dir, "sub"));
-    } catch {
-      console.warn("Skipping directory-symlink import test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(realSub, path.join(dir, "sub"));
     fs.symlinkSync(path.join(dir, "missing.md"), path.join(dir, "dead.md"));
     const result = importManuscript({ source: "drafts", title: "Skipped Link", cwd });
     expect(result.chapters).toBe(1);
@@ -672,7 +656,7 @@ describe("import --force into an existing project", () => {
     expect(fs.readFileSync(path.join(cwd, "my book", "b", "chapters", "chapter-01.md"), "utf8")).toContain("One two three.");
   });
 
-  test("takes no snapshot, and reads no .snapshots/, when there is no chapter to replace", () => {
+  test.skipIf(CHMOD_IGNORED)("takes no snapshot, and reads no .snapshots/, when there is no chapter to replace", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: One\n\nOne two three.\n", "utf8");
     expect(invoke(cwd, ["init", "Empty", "--dir", "empty"]).code).toBe(0);
@@ -698,20 +682,15 @@ describe("import --force into an existing project", () => {
     expect(fs.readdirSync(snapshots)).toEqual([]);
   });
 
-  test("refuses a chapter entry the snapshot cannot keep, before changing anything", () => {
-    const entries = [
-      ["chapter-03.MD", (file) => fs.writeFileSync(file, "# Shouting\n"), "does not end in lower-case .md"],
-      ["chapter-03.md", (file) => fs.mkdirSync(file), "is a folder"],
-      ["chapter-03.md", (file) => fs.symlinkSync(path.join(path.dirname(file), "chapter-01.md"), file), "is a symlink"]
-    ];
-    for (const [name, make, problem] of entries) {
+  const UNKEEPABLE_ENTRIES = [
+    ["chapter-03.MD", (file) => fs.writeFileSync(file, "# Shouting\n"), "does not end in lower-case .md", false],
+    ["chapter-03.md", (file) => fs.mkdirSync(file), "is a folder", false],
+    ["chapter-03.md", (file) => fs.symlinkSync(path.join(path.dirname(file), "chapter-01.md"), file), "is a symlink", true]
+  ];
+  for (const [name, make, problem, needsSymlinks] of UNKEEPABLE_ENTRIES) {
+    test.skipIf(needsSymlinks && !SYMLINKS_SUPPORTED)(`refuses a chapter entry the snapshot cannot keep, before changing anything: chapters/${name} ${problem}`, () => {
       const { cwd, root } = importedTwice();
-      try {
-        make(path.join(root, "chapters", name));
-      } catch {
-        console.warn("Skipping a chapter symlink: symlinks unavailable.");
-        continue;
-      }
+      make(path.join(root, "chapters", name));
       const before = treeSnapshot(root);
       for (const argv of [[...REDRAFT, "--dry-run"], REDRAFT]) {
         const result = invoke(cwd, argv);
@@ -719,8 +698,8 @@ describe("import --force into an existing project", () => {
         expect(result.err).toContain(`Cannot import: chapters/${name} ${problem}, so the snapshot import --force takes before replacing the chapters cannot keep it, and --force would delete it. Rename, move, or delete it, then import again. Nothing was changed`);
       }
       expect(treeSnapshot(root)).toEqual(before);
-    }
-  });
+    });
+  }
 
   test("a snapshot it cannot save stops it before anything changes, in a dry run as in the real run", () => {
     const outside = makeTempDir();

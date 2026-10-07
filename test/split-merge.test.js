@@ -15,7 +15,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
@@ -368,10 +368,7 @@ describe("story split", () => {
     expect(() => restructureWrites(root, fail(true))).toThrow(expect.objectContaining({ hint: expect.stringContaining("run the same command again, which puts them back and starts over, or run story doctor --fix to put them back") }));
   });
 
-  test("refuses before writing when a file it would rewrite is read-only", () => {
-    if (process.getuid?.() === 0) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("refuses before writing when a file it would rewrite is read-only", () => {
     const root = book();
     const clue = path.join(root, "continuity", "clues", "the-ticket.md");
     fs.chmodSync(clue, 0o444);
@@ -794,7 +791,9 @@ describe("split and merge in a branching book", () => {
     }
     const started = performance.now();
     expect(() => splitChapter(root, { id: "chapter-60", at: "Second." })).toThrow("chapters/chapter-01.md choices[0], chapters/chapter-01.md choices[1], chapters/chapter-01.md choices[2], chapters/chapter-01.md choices[3], chapters/chapter-01.md choices[4], chapters/chapter-01.md choices[5], chapters/chapter-01.md choices[6], chapters/chapter-01.md choices[7], chapters/chapter-01.md choices[8], chapters/chapter-01.md choices[9], and 2940 more name chapter-61");
-    expect(performance.now() - started).toBeLessThan(2000);
+    // A backstop for a run that never ends. It leaves room for a loaded CI
+    // runner: locally this takes a few milliseconds.
+    expect(performance.now() - started).toBeLessThan(10000);
   });
 
   test("the output lists the choices a split or merge adds or points elsewhere, and so does --dry-run (#535)", () => {

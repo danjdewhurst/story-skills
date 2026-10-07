@@ -24,7 +24,7 @@ import {
   validateProjectOf
 } from "../src/story.js";
 import { CLUE_STATUSES, PROMISE_STATUSES, QUESTION_STATUSES } from "../src/scan.js";
-import { makeTempDir, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
+import { expectLinearGrowthFresh, makeTempDir, readArchiveText, SYMLINKS_SUPPORTED, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function addStoryEntities(root) {
   writeMarkdown(path.join(root, "characters", "sera-voss.md"), `
@@ -1974,6 +1974,7 @@ status: draft
     try {
       const built = buildBook(created.root, { format: "epub" });
       expect(fs.existsSync(built.outFile)).toBe(true);
+      expect(readArchiveText(built.outFile)).toContain('<meta property="dcterms:modified">2000-01-01T00:00:00Z</meta>');
     } finally {
       if (previous === undefined) {
         delete process.env.SOURCE_DATE_EPOCH;
@@ -2033,34 +2034,24 @@ status: draft
 });
 
 describe("review-findings hardening", () => {
-  test("body links that resolve through a symlink to outside the project fail", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("body links that resolve through a symlink to outside the project fail", () => {
     const cwd = makeTempDir();
     const created = createStoryProject({ cwd, title: "Escaping Link", force: false });
     createEntity(created.root, { kind: "character", name: "Mara", role: "protagonist" });
     const outside = path.join(cwd, "mara.md");
     fs.writeFileSync(outside, "# Outside\n", "utf8");
     fs.mkdirSync(path.join(created.root, "plot", "notes"));
-    try {
-      fs.symlinkSync(outside, path.join(created.root, "plot", "notes", "mara.md"));
-    } catch {
-      console.warn("Skipping body-link symlink test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(outside, path.join(created.root, "plot", "notes", "mara.md"));
     fs.appendFileSync(path.join(created.root, "plot", "timeline.md"), "\nSee [Mara](notes/mara.md).\n", "utf8");
 
     const links = validateLinks(created.root);
     expect(messages(links.errors).join("\n")).toContain("plot/timeline.md links to notes/mara.md which resolves outside the project");
   });
 
-  test("init refuses a symlinked project directory even with force", () => {
+  test.skipIf(!SYMLINKS_SUPPORTED)("init refuses a symlinked project directory even with force", () => {
     const cwd = makeTempDir();
     fs.mkdirSync(path.join(cwd, "real"));
-    try {
-      fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
-    } catch {
-      console.warn("Skipping symlinked init test: symlinks unavailable.");
-      return;
-    }
+    fs.symlinkSync(path.join(cwd, "real"), path.join(cwd, "linked"), "dir");
     expect(() => createStoryProject({ cwd, title: "Linked", dir: "linked", force: true })).toThrow("symlinked project directory");
     expect(fs.readdirSync(path.join(cwd, "real"))).toEqual([]);
   });
@@ -2468,11 +2459,15 @@ describe("registry text kept by reindex", () => {
   });
 
   test("long heading, table delimiter, and closing-hash lines reindex in linear time", () => {
-    const root = createStoryProject({ cwd: makeTempDir(), title: "Long Lines", force: false }).root;
-    const lines = [`##${" ".repeat(100000)}\r`, `## a${" ".repeat(100000)}\u2028`, `|${"-".repeat(200000)}x`, `| a |\n|${"-".repeat(200000)}x`, `## ${"#".repeat(200000)}x`, `## a${" #".repeat(100000)}x`];
-    registry(root, "characters/_index.md", (text) => `${text}\n${lines.join("\n\n")}\n`);
-    const started = performance.now();
-    reindexProject(root);
-    expect(performance.now() - started).toBeLessThan(2000);
+    // Each run reindexes a fresh project. Each long line is about n characters.
+    const timeReindex = (n) => {
+      const root = createStoryProject({ cwd: makeTempDir(), title: "Long Lines", force: false }).root;
+      const lines = [`##${" ".repeat(n)}\r`, `## a${" ".repeat(n)}\u2028`, `|${"-".repeat(2 * n)}x`, `| a |\n|${"-".repeat(2 * n)}x`, `## ${"#".repeat(2 * n)}x`, `## a${" #".repeat(n)}x`];
+      registry(root, "characters/_index.md", (text) => `${text}\n${lines.join("\n\n")}\n`);
+      const started = performance.now();
+      reindexProject(root);
+      return performance.now() - started;
+    };
+    expectLinearGrowthFresh(timeReindex, 100000, { limit: 2000 });
   });
 });

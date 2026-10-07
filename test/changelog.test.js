@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { expectLinearTime, makeTempDir } from "./helpers.js";
 import { hasVersionSection, promoteUnreleased, unreleasedEntries } from "../scripts/changelog.js";
 import { CHANGELOG_LEAD_LIMIT, checkChangelogEntries, checkChangelogVersion, shownLength } from "../scripts/check-metadata.js";
 import { changelogProblemFor, updateChangelog } from "../scripts/release.js";
@@ -157,10 +157,15 @@ Intro.
   });
 
   test("measuring a lead stays fast on unmatched brackets, parentheses, and backticks", () => {
-    for (const text of ["[".repeat(80000), "[a](".repeat(20000), "`[".repeat(40000), "(".repeat(80000), "]((".repeat(30000)]) {
-      const started = performance.now();
-      expect(checkChangelogEntries([], fixed(`- ${text}`))).toHaveLength(1);
-      expect(performance.now() - started).toBeLessThan(1000);
+    const leads = [
+      (n) => "[".repeat(n),
+      (n) => "[a](".repeat(n / 4),
+      (n) => "`[".repeat(n / 2),
+      (n) => "(".repeat(n),
+      (n) => "]((".repeat(n / 3),
+    ];
+    for (const make of leads) {
+      expectLinearTime((text) => expect(checkChangelogEntries([], fixed(`- ${text}`))).toHaveLength(1), make, { length: 80000 });
     }
   });
 

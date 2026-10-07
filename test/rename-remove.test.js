@@ -17,7 +17,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { CHMOD_IGNORED, makeTempDir, memoryIo, messages, whileWriting, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, expectLinearGrowthFresh, makeTempDir, memoryIo, messages, whileWriting, writeMarkdown } from "./helpers.js";
 
 function project(title) {
   return createStoryProject({ cwd: makeTempDir(), title, force: false }).root;
@@ -1021,10 +1021,7 @@ describe("interrupted move (#191, #193, #194)", () => {
     });
   });
 
-  test("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("move scene adds the cast before deleting the old scene, so a rerun finishes", () => {
     const root = book();
     readOnly(path.join(root, "chapters", "chapter-03.md"), () => moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }), "Cannot write to chapters/chapter-03.md (permission denied)");
     expect(moveEntity(root, { kind: "scene", id: "chapter-02-scene-02", chapter: "chapter-03" }).id).toBe("chapter-03-scene-01");
@@ -1228,16 +1225,21 @@ describe("move", () => {
 
 describe("sweep fixes", () => {
   test("rename rewrites a long list in linear time", () => {
-    const root = sweepProject();
-    createEntity(root, { kind: "character", name: "Mara" });
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    const chapter = path.join(root, "chapters", "chapter-01.md");
-    const mentions = Array.from({ length: 30000 }, () => "  - mara").join("\n");
-    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("mentions: []", `mentions:\n${mentions}`));
-    const started = performance.now();
-    renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" });
-    expect(performance.now() - started).toBeLessThan(3000);
-    expect(scanProject(root).chapters[0].mentions.every((id) => id === "mara-quill")).toBe(true);
+    // Each run renames a project with `count` mentions of the character.
+    const timeRename = (count) => {
+      const root = sweepProject();
+      createEntity(root, { kind: "character", name: "Mara" });
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      const chapter = path.join(root, "chapters", "chapter-01.md");
+      const mentions = Array.from({ length: count }, () => "  - mara").join("\n");
+      fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("mentions: []", `mentions:\n${mentions}`));
+      const started = performance.now();
+      renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" });
+      const elapsed = performance.now() - started;
+      expect(scanProject(root).chapters[0].mentions.every((id) => id === "mara-quill")).toBe(true);
+      return elapsed;
+    };
+    expectLinearGrowthFresh(timeRename, 30000, { limit: 3000 });
   });
 
   test("rename and remove leave node_modules alone", () => {

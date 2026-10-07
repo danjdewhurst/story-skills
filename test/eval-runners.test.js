@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { makeTempDir } from "./helpers.js";
+import { expectLinearGrowth, expectLinearTime, makeTempDir } from "./helpers.js";
 import { main as compareMain } from "../evals/compare-outputs.js";
 import { MAX_REFERENCE_CHARS, main as runSkillMain, skillReferences, stripPreamble, unwrapFence } from "../evals/run-skill.js";
 import { characterCount, checkDraft, loadFixture, wordCount } from "../evals/run-evals.js";
@@ -136,9 +136,8 @@ describe("run-skill with a stubbed model", () => {
     }
     // One pass over the reply, however many brackets never close.
     logs.length = 0;
-    const started = performance.now();
-    expect(runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge: "[ ".repeat(40_000) }).spawn })).toBe(1);
-    expect(performance.now() - started).toBeLessThan(1000);
+    const judged = (judge) => runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge }).spawn });
+    expect(expectLinearGrowth(judged, (n) => "[ ".repeat(n / 2), 80_000)).toBe(1);
     expect(output()).toContain('FAIL judge: judge reply has a "[" that never closes');
   });
 
@@ -295,10 +294,13 @@ describe("the reference files a skill loads", () => {
   });
 
   test("an unclosed code span full of anchors does not slow the scan", () => {
-    const skillsDir = skillsTree({ "a/SKILL.md": `\`${"a.md#".repeat(50_000)}` });
-    const started = performance.now();
-    expect(skillReferences(path.join(skillsDir, "a"), { skillsDir }).loaded).toEqual([]);
-    expect(performance.now() - started).toBeLessThan(1000);
+    const skillsDir = skillsTree({ "a/SKILL.md": "" });
+    const scan = (text) => {
+      fs.writeFileSync(path.join(skillsDir, "a", "SKILL.md"), text);
+      return skillReferences(path.join(skillsDir, "a"), { skillsDir }).loaded;
+    };
+    expect(scan(`\`${"a.md#".repeat(50_000)}`)).toEqual([]);
+    expectLinearTime(scan, (n) => `\`${"a.md#".repeat(n / 5)}`, { length: 250_000 });
   });
 
   test("every reference file is reachable from its SKILL.md", () => {
@@ -718,22 +720,21 @@ describe("the checker's prose checks", () => {
       "--characters tomas-reyes, --red-herring it was a who opened the inside the a week I took the bell lamp choose ? “ « ' \" " +
       "status: revised answers who learned-in: since: object-state: knowledge-state: fact: romance 1. no ";
     const reps = Math.ceil(100_000 / fragment.length);
-    const drafts = [
-      `## Chapter Text\n${fragment.repeat(reps)}`,
-      `## Chapter Text\n${`${fragment}\n`.repeat(reps)}`,
-      `${"---\nstatus: revised\nnumber: 3\n".repeat(reps * 4)}## Chapter Text\nI took it.`,
-      "object-state:\n  - x: y\nknowledge-state:\n  - fact: z\n---\n".repeat(reps * 3),
-      `## Chapter Text\n${" 'a “b «c \"d ".repeat(reps * 6)}`,
-      `1. ${"no word ".repeat(50)}romance\n`.repeat(reps),
+    // The six draft shapes, each built from `count` repeats of its piece.
+    const draftsOf = (count) => [
+      `## Chapter Text\n${fragment.repeat(count)}`,
+      `## Chapter Text\n${`${fragment}\n`.repeat(count)}`,
+      `${"---\nstatus: revised\nnumber: 3\n".repeat(count * 4)}## Chapter Text\nI took it.`,
+      "object-state:\n  - x: y\nknowledge-state:\n  - fact: z\n---\n".repeat(count * 3),
+      `## Chapter Text\n${" 'a “b «c \"d ".repeat(count * 6)}`,
+      `1. ${"no word ".repeat(50)}romance\n`.repeat(count),
     ];
     const fixturesDir = path.join(repoRoot, "evals", "fixtures");
     for (const name of fs.readdirSync(fixturesDir)) {
       const { checks, inputText } = loadFixture(path.join(fixturesDir, name));
-      for (const draft of drafts) {
-        const started = performance.now();
-        checkDraft(checks, inputText, draft);
-        expect(performance.now() - started).toBeLessThan(2000);
-      }
+      draftsOf(reps).forEach((_, index) => {
+        expectLinearTime((draft) => checkDraft(checks, inputText, draft), (count) => draftsOf(count)[index], { length: reps });
+      });
     }
   });
 });

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { ALL_SKILLS_ZIP, MAX_DESCRIPTION_LENGTH, buildSkillZips, listFiles, parseArgs, skillEntries, skillNames } from "../scripts/build-skill-zips.js";
-import { makeTempDir } from "./helpers.js";
+import { makeTempDir, UNZIP_ON_PATH } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const skillsDir = path.join(repoRoot, "skills");
@@ -93,11 +93,7 @@ describe("skill zips for claude.ai and release downloads (#394)", () => {
     }
   });
 
-  test("unzip accepts the archives when it is installed", () => {
-    const probe = spawnSync("unzip", ["-v"], { encoding: "utf8" });
-    if (probe.error || probe.status !== 0) {
-      return;
-    }
+  test.skipIf(!UNZIP_ON_PATH)("unzip accepts the archives when it is installed", () => {
     const out = makeTempDir();
     buildSkillZips(skillsDir, out);
     for (const file of ["chapter-writing.zip", "story-maintenance.zip", ALL_SKILLS_ZIP]) {

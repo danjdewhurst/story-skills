@@ -129,12 +129,19 @@ describe("issue #279: creating output folders", () => {
     const dir = makeTempDir();
     fs.mkdirSync(path.join(dir, "real"));
     fs.symlinkSync(path.join(dir, "real"), path.join(dir, "link"));
-    withMkdir(() => {
+    const listing = fs.readdirSync(dir).sort();
+    const mkdir = spyOn(fs, "mkdirSync").mockImplementation(() => {
       throw fsError("EACCES");
-    }, () => {
+    });
+    try {
       makeDirectories(dir);
       makeDirectories(path.join(dir, "link"));
-    });
+      // Checked before the restore, which clears the spy's calls.
+      expect(mkdir).not.toHaveBeenCalled();
+    } finally {
+      mkdir.mockRestore();
+    }
+    expect(fs.readdirSync(dir).sort()).toEqual(listing);
   });
 
   test("nearestExistingAncestor splits a path at its nearest existing ancestor", () => {

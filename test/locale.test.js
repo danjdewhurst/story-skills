@@ -11,7 +11,7 @@ import { analyzeChapter, proseRules } from "../src/prose.js";
 import { buildSeries } from "../src/series.js";
 import { buildTimeline } from "../src/timeline.js";
 import { buildBook, createStoryProject, scanProject, validateProject } from "../src/story.js";
-import { makeTempDir, writeMarkdown } from "./helpers.js";
+import { makeTempDir, NODE_ON_PATH, writeMarkdown } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const sorted = (words, tag) => [...words].sort(compareText(languagePack(tag)));
@@ -200,12 +200,7 @@ describe("locale-aware reports and builds", () => {
 
   // Collation can differ between ICU versions, so the bundled fallback under
   // Node must give the same bytes as Bun for these cases.
-  test("the Node fallback writes the same locale-sorted output as Bun", () => {
-    const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
-    if (probe.error || probe.status !== 0) {
-      console.warn("Skipping the Node locale check: node is not on PATH.");
-      return;
-    }
+  test.skipIf(!NODE_ON_PATH)("the Node fallback writes the same locale-sorted output as Bun", () => {
     const root = project("sv");
     for (const name of ["Zorn", "Åsa", "Anna", "Örjan"]) {
       writeMarkdown(path.join(root, "characters", `${name.toLowerCase()}.md`), `name: ${name}\nrole: minor\nstatus: alive\npronunciation: ${name}`, `# ${name}\n`);

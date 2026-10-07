@@ -214,15 +214,18 @@ describe("--dry-run for builds and exports", () => {
     expect(preview.out).toBe("PDF engine: weasyprint (not run)\nmkdir   dist\ncreate  dist/the-unraveled-thread.pdf\nDry run: story build would make 2 changes; nothing was written\n");
     expect(fs.existsSync(marker)).toBe(false);
     expect(treeSnapshot(parent)).toEqual(before);
+  });
 
-    // macOS also finds Chrome in /Applications, whatever PATH says.
-    if (process.platform === "linux") {
-      process.env.PATH = "";
-      try {
-        expect(invoke(root, ["build", "--format", "print", "--pdf", "--dry-run"]).err).toContain("No PDF engine found");
-      } finally {
-        process.env.PATH = savedPath;
-      }
+  // macOS also finds Chrome in /Applications, whatever PATH says, so only
+  // Linux can show that no engine is found.
+  test.skipIf(process.platform !== "linux")("build --pdf --dry-run reports no engine when PATH is empty", () => {
+    const { root } = copyExample();
+    const savedPath = process.env.PATH;
+    process.env.PATH = "";
+    try {
+      expect(invoke(root, ["build", "--format", "print", "--pdf", "--dry-run"]).err).toContain("No PDF engine found");
+    } finally {
+      process.env.PATH = savedPath;
     }
   });
 });

@@ -239,9 +239,6 @@ describe("unreadable files name their path once (#383)", () => {
     fs.appendFileSync(path.join(root, "characters", "_index.md"), Buffer.from([0xff]));
     fs.writeFileSync(path.join(root, "chapters", "chapter-02.md"), "a".repeat(5 * 1024 * 1024 + 1));
     fs.symlinkSync(path.join(root, "story.md"), path.join(root, "continuity", "exemptions.md"));
-    if (!CHMOD_IGNORED) {
-      fs.chmodSync(path.join(root, "characters", "mara.md"), 0o000);
-    }
     const errors = messages(validateProject(root).errors);
     for (const error of errors) {
       const [label] = error.split(": ");
@@ -252,9 +249,17 @@ describe("unreadable files name their path once (#383)", () => {
     expect(errors).toContain(`${"chapters/chapter-02.md"}: Refusing to read oversized file: ${5 * 1024 * 1024 + 1} bytes exceeds the ${5 * 1024 * 1024} byte limit`);
     expect(errors).toContain(`${"continuity/exemptions.md"}: Refusing to read through symlink`);
     expect(errors.filter((error) => error.startsWith(`${"characters/_index.md"}: is not valid UTF-8`))).toHaveLength(1);
-    if (!CHMOD_IGNORED) {
-      expect(errors).toContain(`${"characters/mara.md"}: Cannot read: permission denied`);
+  });
+
+  test.skipIf(CHMOD_IGNORED)("validate names an unreadable file once, by its path", () => {
+    const root = safetyProject();
+    createEntity(root, { kind: "character", name: "Mara" });
+    fs.chmodSync(path.join(root, "characters", "mara.md"), 0o000);
+    const errors = messages(validateProject(root).errors);
+    for (const error of errors) {
+      expect(error).not.toContain(root);
     }
+    expect(errors.filter((error) => error.startsWith("characters/mara.md:"))).toEqual([`${"characters/mara.md"}: Cannot read: permission denied`]);
   });
 
   test("an unreadable optional registry or timeline is reported once", () => {

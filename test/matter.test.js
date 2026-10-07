@@ -247,10 +247,7 @@ describe("matter validation", () => {
     }
   });
 
-  test("an unreadable cover is reported by name, in plain words", () => {
-    if (CHMOD_IGNORED) {
-      return;
-    }
+  test.skipIf(CHMOD_IGNORED)("an unreadable cover is reported by name, in plain words", () => {
     const { root, cwd } = matterProject();
     fs.writeFileSync(path.join(root, "cover.png"), PNG_BYTES);
     setStoryFields(root, "cover: cover.png");

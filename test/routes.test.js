@@ -13,7 +13,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { makeTempDir, writeMarkdown, messages } from "./helpers.js";
+import { expectLinearGrowthFresh, makeTempDir, writeMarkdown, messages } from "./helpers.js";
 
 function writeLocation(root, id, routes) {
   writeMarkdown(path.join(root, "worldbuilding", "locations", `${id}.md`), `
@@ -345,22 +345,26 @@ describe("reports and views", () => {
 
 describe("sweep fixes", () => {
   test("continuity route checks stay fast with a busy character and a big map", () => {
-    const root = sweepProject();
-    createEntity(root, { kind: "character", name: "Mara" });
-    for (let index = 0; index < 60; index += 1) {
-      const routes = index < 59 ? `\nroutes:\n  - to: loc-${index + 1}\n    hours: 1` : "";
-      writeMarkdown(path.join(root, "worldbuilding", "locations", `loc-${index}.md`), `name: Loc ${index}\ntype: city${routes}`);
-    }
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    const scenes = path.join(root, "scenes");
-    for (let index = 0; index < 600; index += 1) {
-      const day = String(1 + Math.floor(index / 24)).padStart(2, "0");
-      const hour = String(index % 24).padStart(2, "0");
-      writeMarkdown(path.join(scenes, `chapter-01-scene-${String(index + 1).padStart(3, "0")}.md`), `title: S${index}\nchapter: chapter-01\nscene: ${index + 1}\nstatus: draft\nlocation: loc-${index % 60}\ncharacters:\n  - mara\ndate: 2024-01-${day}\ntime: "${hour}:00"`);
-    }
-    const started = performance.now();
-    checkProjectContinuity(root);
-    expect(performance.now() - started).toBeLessThan(4000);
+    // Each run checks a fresh project: a 60-place map, and `count` scenes of one character on it.
+    const timeRun = (count) => {
+      const root = sweepProject();
+      createEntity(root, { kind: "character", name: "Mara" });
+      for (let index = 0; index < 60; index += 1) {
+        const routes = index < 59 ? `\nroutes:\n  - to: loc-${index + 1}\n    hours: 1` : "";
+        writeMarkdown(path.join(root, "worldbuilding", "locations", `loc-${index}.md`), `name: Loc ${index}\ntype: city${routes}`);
+      }
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      const scenes = path.join(root, "scenes");
+      for (let index = 0; index < count; index += 1) {
+        const day = String(1 + Math.floor(index / 24)).padStart(2, "0");
+        const hour = String(index % 24).padStart(2, "0");
+        writeMarkdown(path.join(scenes, `chapter-01-scene-${String(index + 1).padStart(3, "0")}.md`), `title: S${index}\nchapter: chapter-01\nscene: ${index + 1}\nstatus: draft\nlocation: loc-${index % 60}\ncharacters:\n  - mara\ndate: 2024-01-${day}\ntime: "${hour}:00"`);
+      }
+      const started = performance.now();
+      checkProjectContinuity(root);
+      return performance.now() - started;
+    };
+    expectLinearGrowthFresh(timeRun, 600, { limit: 4000 });
   });
 
   test("route checks find the shortest path through a branching map", () => {

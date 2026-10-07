@@ -8,7 +8,7 @@ import { importManuscript } from "../src/import.js";
 import { shunnWordCount } from "../src/packaging.js";
 import { textDirection } from "../src/publishing.js";
 import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, readArchiveEntries, writeMarkdown, messages, readArchiveText, memoryIo } from "./helpers.js";
+import { expectLinearGrowthFresh, makeTempDir, readArchiveEntries, writeMarkdown, messages, readArchiveText, memoryIo } from "./helpers.js";
 
 const PNG_BYTES = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
 
@@ -530,12 +530,16 @@ describe("sweep fixes", () => {
   });
 
   test("emphasis stays fast on pathological paragraphs", () => {
-    const root = sweepProject();
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    appendProse(root, "chapters/chapter-01.md", `${"rate 5* and 4* and ".repeat(25000)}\n\n${"*a ".repeat(10000)}b${" c*".repeat(10000)}`);
-    const started = performance.now();
-    buildBook(root, { format: "html" });
-    expect(performance.now() - started).toBeLessThan(3000);
+    // Each run builds a fresh book whose runs of emphasis markers are `units` long.
+    const timeRun = (units) => {
+      const root = sweepProject();
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      appendProse(root, "chapters/chapter-01.md", `${"rate 5* and 4* and ".repeat(units * 2.5)}\n\n${"*a ".repeat(units)}b${" c*".repeat(units)}`);
+      const started = performance.now();
+      buildBook(root, { format: "html" });
+      return performance.now() - started;
+    };
+    expectLinearGrowthFresh(timeRun, 10000, { limit: 3000 });
   });
 
   test("export of a CRLF project uses LF only", () => {

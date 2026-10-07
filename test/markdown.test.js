@@ -26,7 +26,7 @@ import {
   scanComments
 } from "../src/markdown.js";
 import { buildBook, computeWordCounts, createEntity, createStoryProject, exportManuscript, validateProject } from "../src/story.js";
-import { backtickRuns, expectComparableTime, expectLinearTime, makeTempDir, messages, writeMarkdown } from "./helpers.js";
+import { backtickRuns, expectComparableTime, expectLinearGrowthFresh, expectLinearTime, makeTempDir, messages, writeMarkdown } from "./helpers.js";
 
 function newProject(title = "Bugs") {
   return createStoryProject({ cwd: makeTempDir(), title }).root;
@@ -203,12 +203,16 @@ describe("markdown utilities", () => {
   });
 
   test("markup stays linear on long runs", () => {
-    const started = performance.now();
-    wordCount(`a${"_".repeat(100000)}b ${"<b x=".repeat(20000)} <i title="${"a".repeat(100000)} ${"[^".repeat(50000)} ${"&a".repeat(50000)}`);
-    wordCount(`${"- [".repeat(30000)}\n${" ".repeat(100000)}x\n${"[a]".repeat(30000)}\n${"> ".repeat(50000)}[x]: y`);
-    wordCount(`${Array.from({ length: 400 }, (_, index) => "`".repeat(index + 1)).join(" ")}\n${"\\`".repeat(30000)}\n${"[a]: b\n".repeat(20000)}${"[x][a]".repeat(10000)}`);
-    wordCount(`<b${" hidden".repeat(20000)} ${"<i open ".repeat(20000)}`);
-    expect(performance.now() - started).toBeLessThan(2000);
+    // Each input is built from a count m: 100000 is the size of the runs.
+    const inputs = [
+      (m) => `a${"_".repeat(m)}b ${"<b x=".repeat(m / 5)} <i title="${"a".repeat(m)} ${"[^".repeat(m / 2)} ${"&a".repeat(m / 2)}`,
+      (m) => `${"- [".repeat(m * 0.3)}\n${" ".repeat(m)}x\n${"[a]".repeat(m * 0.3)}\n${"> ".repeat(m / 2)}[x]: y`,
+      (m) => `${Array.from({ length: 400 }, (_, index) => "`".repeat(index + 1)).join(" ")}\n${"\\`".repeat(m * 0.3)}\n${"[a]: b\n".repeat(m * 0.2)}${"[x][a]".repeat(m * 0.1)}`,
+      (m) => `<b${" hidden".repeat(m / 5)} ${"<i open ".repeat(m / 5)}`,
+    ];
+    for (const make of inputs) {
+      expectLinearTime(wordCount, make, { length: 100000 });
+    }
   });
 
   test("extracts chapter prose from template, outline, and natural formats", () => {
@@ -405,9 +409,8 @@ describe("scene-break lines (#551)", () => {
   });
 
   test("stays linear on deeply nested list and quote markers", () => {
-    const started = performance.now();
     expect(setextSceneBreakLines(`${"- ".repeat(50000)}x\n---\n\n${"> ".repeat(50000)}x\n---\n`)).toEqual([]);
-    expect(performance.now() - started).toBeLessThan(2000);
+    expectLinearTime((text) => expect(setextSceneBreakLines(text)).toEqual([]), (n) => `${"- ".repeat(n / 2)}x\n---\n\n${"> ".repeat(n / 2)}x\n---\n`, { length: 100000 });
   });
 
   test("counts body lines from the top, past an outline and its divider, and in CRLF files", () => {
@@ -791,15 +794,23 @@ describe("sweep fixes", () => {
   });
 
   test("comment stripping respects code fences and stays linear", () => {
-    const root = sweepProject();
-    createEntity(root, { kind: "chapter", name: "One", number: 1 });
-    appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
+    const withFences = () => {
+      const root = sweepProject();
+      createEntity(root, { kind: "chapter", name: "One", number: 1 });
+      appendProse(root, "chapters/chapter-01.md", "```\n<!-- literal\n```\n\nKept paragraph here.\n\n```\nend -->\n```");
+      return root;
+    };
+    const root = withFences();
     expect(computeWordCounts(root).total).toBe(5);
     expect(messages(validateProject(root).warnings).join("\n")).not.toContain("never closes");
-    const started = performance.now();
-    appendProse(root, "chapters/chapter-01.md", `${"[a](b ".repeat(20000)}${"<!--".repeat(20000)}`);
-    computeWordCounts(root);
-    expect(performance.now() - started).toBeLessThan(3000);
+    // Each run gets a fresh project, and `copies` of each unclosed opener.
+    expectLinearGrowthFresh((copies) => {
+      const project = withFences();
+      const started = performance.now();
+      appendProse(project, "chapters/chapter-01.md", `${"[a](b ".repeat(copies)}${"<!--".repeat(copies)}`);
+      computeWordCounts(project);
+      return performance.now() - started;
+    }, 20000, { limit: 3000 });
   });
 
   test("~~~ separators and unclosed fences never hide text from counts", () => {
