@@ -175,7 +175,7 @@ The CLI is for maintenance only. Agents write story content directly to markdown
 | `story links [path]` | Check character, location, chapter, and arc cross-references and backlinks |
 | `story continuity [path]` | Check deterministic continuity contracts: deaths, promises and payoffs, questions, casts, durable state, and travel times along location routes |
 | `story check [path] --strict` | Run validate, links, and continuity in one scan, listing each finding once; `--strict` fails on warnings too |
-| `story list chapters --where status=draft` | List the chapters, scenes, characters, or other entities whose frontmatter matches every `--where` filter (`key=value`, which also matches inside a list, `key!=value`, `key`, or `!key`), in book order; `--json` for scripts |
+| `story list chapters --where status=draft` | List the chapters, scenes, characters, or other entities whose frontmatter matches every `--where` filter (`key=value`, which also matches inside a list, `key!=value`, `key`, or `!key`), in book order; `--query <name>` runs a filter set saved in `story.md` `queries`; `--json` for scripts |
 | `story series [path]` | Order linked sequels and prequels by chronology and check shared canon: deaths, casts, knowledge fact ids, names, and destroyed artifacts |
 | `story reindex [path]` | Rebuild registry tables from the current markdown files |
 | `story wordcount [path] --write` | Count chapter prose and update chapter frontmatter plus the chapter registry; Chinese and Japanese books count characters (`count-unit`) |

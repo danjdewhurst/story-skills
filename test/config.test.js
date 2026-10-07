@@ -513,6 +513,7 @@ describe("config validation", () => {
     ["cli-defaults:\n  - command: progress\n    date: 2026-01-01", "story.md cli-defaults[0] sets date, which names one target and cannot be a default"],
     ["cli-defaults:\n  - command: snapshot\n    force: true", "story.md cli-defaults[0] sets force, which belongs to one run: pass --force on the command line"],
     ["cli-defaults:\n  - command: snapshot\n    list: true", "story.md cli-defaults[0] sets list, which belongs to one run: pass --list on the command line"],
+    ["cli-defaults:\n  - command: list\n    query: drafts", "story.md cli-defaults[0] sets query, which belongs to one run: pass --query on the command line"],
     ["cli-defaults:\n  - command: wordcount\n    write: sometimes", "story.md cli-defaults[0] write must be true or false"],
     ["cli-defaults:\n  - command: build\n    format: true", "story.md cli-defaults[0] format needs a value, such as format: name"],
     ["cli-defaults:\n  - command: build\n    format:", "story.md cli-defaults[0] format needs a value, such as format: name"],

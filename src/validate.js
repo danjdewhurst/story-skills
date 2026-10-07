@@ -19,6 +19,7 @@ import { validateWritingMode, WRITING_MODES } from "./typesetting.js";
 import { validateBuildStyle } from "./build-style.js";
 import { validateCliConfig } from "./config.js";
 import { validatePasses } from "./passes.js";
+import { queryFindings } from "./list.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
 import { PROGRESS_FILE, WEEKDAYS, cleanSessions, weekdayName } from "./progress.js";
 import { MAX_RELEASE_MONTHS, releaseMonths } from "./release-schedule.js";
@@ -1094,6 +1095,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateBuildStyle(data, errors, project.root);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
+  errors.push(...queryFindings(project));
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
