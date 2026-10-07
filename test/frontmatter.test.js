@@ -1,5 +1,31 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { runCli } from "../src/cli.js";
 import { parseFrontmatter, replaceFrontmatter, stringifyFrontmatter } from "../src/frontmatter.js";
+import { createEntity, createStoryProject } from "../src/story.js";
+import { makeTempDir, memoryIo } from "./helpers.js";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const examplesRoot = path.join(repoRoot, "examples");
+
+function invoke(cwd, argv) {
+  const io = memoryIo(cwd);
+  const code = runCli(argv, io);
+  return { code, out: io.output(), err: io.error() };
+}
+
+function newProject(title = "Bugs") {
+  const cwd = makeTempDir();
+  return createStoryProject({ cwd, title, force: false }).root;
+}
+
+function copyExample(name) {
+  const target = path.join(makeTempDir(), name);
+  fs.cpSync(path.join(examplesRoot, name), target, { recursive: true });
+  return target;
+}
 
 describe("frontmatter utilities", () => {
   test("parses scalars, arrays, object arrays, numbers, floats, comments, and quoted text", () => {
@@ -974,5 +1000,78 @@ describe("frontmatter round trip property", () => {
         throw new Error(`run ${run} (seed ${SEED}) rewrote ${JSON.stringify(markdown)} with ${JSON.stringify(data)}: ${error.message}`);
       }
     }
+  });
+});
+
+describe("#89 frontmatter writer quotes YAML indicator values", () => {
+  test("values another YAML parser would misread are quoted", () => {
+    const values = ["*Star", "[Redacted]", "| Pipe", "No", "yes", "off", "~", "- 1920s", "&anchor", "!tag", "%x", "@at", "`tick", "{x}", ">fold", "?q", ",c", "0x1F", "1e3", "1_000", ".5", "+5", ".inf", "12.", "tab\there"];
+    for (const value of values) {
+      const text = stringifyFrontmatter({ name: value });
+      expect(text).toBe(`---\nname: ${JSON.stringify(value)}\n---\n\n`);
+      expect(parseFrontmatter(text).data.name).toBe(value);
+    }
+  });
+
+  test("ordinary values and dates stay bare", () => {
+    for (const value of ["Mara Quill", "chapter-01", "2026-09-01", "The End", "x-1", "Y", "a*b"]) {
+      expect(stringifyFrontmatter({ name: value })).toBe(`---\nname: ${value}\n---\n\n`);
+    }
+  });
+
+  test("story add writes a quoted name", () => {
+    const root = newProject();
+    createEntity(root, { kind: "character", name: "[Redacted]" });
+    expect(fs.readFileSync(path.join(root, "characters", "redacted.md"), "utf8")).toContain('name: "[Redacted]"\n');
+  });
+});
+
+describe("#90 closing frontmatter delimiter", () => {
+  test("only a line holding exactly --- closes the block", () => {
+    expect(() => parseFrontmatter("---\ntitle: x\n----\nBody\n", "a.md")).toThrow("a.md has unclosed YAML frontmatter");
+    expect(() => parseFrontmatter("---\ntitle: x\n--- # end\nBody\n", "a.md")).toThrow("a.md has unclosed YAML frontmatter");
+    expect(() => parseFrontmatter("---\ntitle: x\n", "a.md")).toThrow("a.md has unclosed YAML frontmatter");
+    expect(() => parseFrontmatter("# Just a body\n", "a.md")).toThrow("a.md is missing YAML frontmatter");
+    expect(parseFrontmatter("---\ntitle: x\n---   \nBody\n").body).toBe("Body\n");
+    expect(parseFrontmatter("---\ntitle: x\n---").body).toBe("");
+    expect(parseFrontmatter("---\r\ntitle: x\r\n---\r\nBody\r\n").body).toBe("Body\r\n");
+  });
+
+  test("an empty frontmatter block parses, and replaceFrontmatter can fill it", () => {
+    expect(parseFrontmatter("---\n---\nBody\n")).toEqual({ data: {}, body: "Body\n", raw: "" });
+    expect(replaceFrontmatter("---\n---\nBody\n", {})).toBe("---\n---\nBody\n");
+    expect(replaceFrontmatter("---\n---\nBody\n", { title: "X" })).toBe("---\ntitle: X\n---\nBody\n");
+  });
+});
+
+describe("#91 frontmatter rewrites keep each line's ending", () => {
+  test("untouched lines keep CRLF or LF in a mixed file", () => {
+    const original = "---\ntitle: One\r\nnumber: 1\r\nstatus: draft\nword-count: 1\r\n---\nBody\n";
+    const { data } = parseFrontmatter(original);
+    expect(replaceFrontmatter(original, { ...data, "word-count": 5 }))
+      .toBe("---\ntitle: One\r\nnumber: 1\r\nstatus: draft\nword-count: 5\r\n---\nBody\n");
+    expect(replaceFrontmatter(original, { ...data, status: "revised" }))
+      .toBe("---\ntitle: One\r\nnumber: 1\r\nstatus: revised\nword-count: 1\r\n---\nBody\n");
+  });
+
+  test("consistent CRLF files stay CRLF when keys are added or lists change", () => {
+    const original = "---\r\ntitle: One\r\ntags:\r\n  - a\r\n---\r\nBody\r\n";
+    const { data } = parseFrontmatter(original);
+    expect(replaceFrontmatter(original, { ...data, tags: ["a", "b"], extra: "x" }))
+      .toBe("---\r\ntitle: One\r\ntags:\r\n  - a\r\n  - b\r\nextra: x\r\n---\r\nBody\r\n");
+    const moved = replaceFrontmatter(original, { tags: ["a"], title: "One" });
+    expect(moved.replace(/\r\n/g, "")).not.toContain("\n");
+  });
+
+  test("wordcount --write changes only the word-count line", () => {
+    const root = copyExample("the-last-ember");
+    const file = path.join(root, "chapters", "chapter-01.md");
+    const lines = fs.readFileSync(file, "utf8").split("\n");
+    const mixed = lines.map((line, index) => (index >= 1 && index <= 4 ? `${line}\r` : line)).join("\n").replace(/^word-count: \d+$/m, "word-count: 1");
+    fs.writeFileSync(file, mixed, "utf8");
+    expect(invoke(root, ["wordcount", "--write", "."]).code).toBe(0);
+    const after = fs.readFileSync(file, "utf8");
+    expect(after.split("\n").slice(1, 5)).toEqual(mixed.split("\n").slice(1, 5));
+    expect(after.replace(/^word-count: \d+$/m, "word-count: 1")).toBe(mixed);
   });
 });
