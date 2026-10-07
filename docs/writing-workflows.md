@@ -265,7 +265,7 @@ How far should I outline before drafting?
 Walk me through the Snowflake Method for this book.
 ```
 
-The fourth uses the [outlining ladder](../skills/plot-structure/references/outlining-ladder.md): premise, beat sheet, step outline, full outline, each with an exit criterion. Most novels stop at the step outline. The last uses the [Snowflake Method reference](../skills/plot-structure/references/snowflake.md), which grows the logline in `story.md` into character sheets, arc synopses, and scene files in ten steps, running `story reindex`, `story links`, and `story validate` as each step adds entities.
+The fourth uses the [outlining ladder](../skills/plot-structure/references/outlining-ladder.md): premise, beat sheet, step outline, full outline, each with an exit criterion. Most novels stop at the step outline. The last uses the [Snowflake Method reference](../skills/plot-structure/references/snowflake.md), which grows the logline in `story.md` into character sheets, arc synopses, and scene files in ten steps, running `story reindex .`, `story wordcount . --write`, and `story check .` as each step adds entities.
 
 When a plot point creates a mystery or a setup that needs a payoff, the skill records it once, in a continuity ledger, and not in the arc's Foreshadowing table, which holds only small hints no ledger tracks:
 

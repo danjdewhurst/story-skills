@@ -1711,7 +1711,8 @@ Projects created before schema v2 lack the scenes, continuity, and glossary laye
 ```shell
 story migrate .
 story reindex .
-story validate .
+story wordcount . --write
+story check .
 ```
 
 Migration:
@@ -1732,15 +1733,16 @@ Project already uses the current schema
 
 A `schema-version` above 2 comes from a newer story-skills, so migrate refuses it rather than downgrading the project: `story.md uses schema-version 3, newer than this CLI (2); upgrade story-skills`. `story validate` reports the same error.
 
-If `story validate` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then reindex:
+If `story check` still reports a missing required path, fill the gaps with `story init --force`, which adds missing starter files and never overwrites existing ones (it also adds `style-sheet.md` if you have none). Use the book's exact title, then run the maintenance block again:
 
 ```shell
 story init "Harbor of Second Light" --dir . --force
 story reindex .
-story validate .
+story wordcount . --write
+story check .
 ```
 
-After migrating, `story validate` warns about each chapter that has no scene records. Add scenes with `story add scene` when you next work on those chapters; the [chapter-writing skill](../skills/chapter-writing/SKILL.md) and [Writing workflows](writing-workflows.md) describe how scene records fit into drafting.
+After migrating, `story check` warns about each chapter that has no scene records. Add scenes with `story add scene` when you next work on those chapters; the [chapter-writing skill](../skills/chapter-writing/SKILL.md) and [Writing workflows](writing-workflows.md) describe how scene records fit into drafting.
 
 ## See also
 
