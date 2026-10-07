@@ -169,7 +169,14 @@ if [ -e "$WT/.git" ]; then
   exit 0
 fi
 
-git -C "$SHARED" worktree prune >&2
+# Clear this worktree's own registration, and only when its folder is gone. A
+# plain `git worktree prune` would also drop the registration of any other
+# worktree whose folder is missing, such as one on an unmounted volume, and
+# that worktree could never find its git folder again.
+registrations=$(git -C "$SHARED" worktree list --porcelain)
+if [ ! -e "$WT" ] && grep -Fqx -e "worktree $WT" -e "worktree $WT_PHYSICAL" <<< "$registrations"; then
+  git -C "$SHARED" worktree remove --force "$WT" >&2
+fi
 git -C "$SHARED" fetch --quiet origin
 
 if [ -z "$BASE" ]; then
@@ -178,7 +185,7 @@ fi
 
 # Git refuses to check out one branch in two worktrees. If another agent
 # holds this branch, say so instead of fighting over it.
-if git -C "$SHARED" worktree list --porcelain | grep -qx "branch refs/heads/$BRANCH"; then
+if git -C "$SHARED" worktree list --porcelain | grep -Fqx -- "branch refs/heads/$BRANCH"; then
   echo "issue-worktree: branch '$BRANCH' is already checked out in another worktree:" >&2
   git -C "$SHARED" worktree list >&2
   echo "issue-worktree: use an issue-specific branch name, or coordinate on the issue." >&2
