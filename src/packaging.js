@@ -364,11 +364,20 @@ function docxScript(meta) {
   };
 }
 
-// The section properties that close the document: an optional page size and
-// margins (`page`, which the schema puts first), then the text direction.
-function docxSection(script, page = "") {
-  const content = `${page}${script.direction}`;
+// The section properties that close the document, in the order the
+// WordprocessingML schema gives them (CT_SectPr): a reference to each of
+// `headers`, an optional page size and margins (`page`), titlePg when a
+// first-page header sets the first page apart, then the text direction.
+function docxSection(script, page = "", headers = []) {
+  const references = headers.map((header, index) => `<w:headerReference w:type="${header.type}" r:id="${docxHeaderId(index)}"/>`).join("");
+  const titlePage = headers.some((header) => header.type === "first") ? "<w:titlePg/>" : "";
+  const content = `${references}${page}${titlePage}${script.direction}`;
   return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
+}
+
+// The document relationship id of the header at `index`: rId1 is the styles.
+function docxHeaderId(index) {
+  return `rId${index + 2}`;
 }
 
 // Paper for the Shunn manuscript builds: US Letter, the default, or A4 for
@@ -389,13 +398,22 @@ function shunnPaper(name) {
   return paper;
 }
 
-function docxPackageEntries(script, body, page = "") {
+// `headers` are the section's headers, as { type, content }: `type` is
+// "default" or "first", and `content` the header part's paragraphs. Each is
+// written as word/headerN.xml, with its content type and relationship.
+function docxPackageEntries(script, body, page = "", headers = []) {
+  const headerName = (index) => `header${index + 1}.xml`;
+  const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
+  const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
+  // The relationships namespace only when a header reference uses it.
+  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
   return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
     { name: "word/styles.xml", content: docxStyles(script) },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${docxSection(script, page)}</w:body></w:document>` }
+    ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
   ];
 }
 
@@ -418,7 +436,8 @@ function docxStyles(script) {
 }
 
 // Shunn manuscript format: Courier New 12pt, double spacing, page break
-// before each chapter heading, and a title page with contact and word count.
+// before each chapter heading, a title page with contact and word count, and
+// a running head on every later page.
 const SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
 const SHUNN_SIZE = `<w:sz w:val="24"/>`;
 const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
@@ -426,8 +445,37 @@ const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
 // `script` is docxScript's settings for the book's language. Run properties
 // keep the order the WordprocessingML schema gives them: font, bold,
 // italic, size, then direction.
-function shunnRunXml(script, text, { strong = false, em = false } = {}) {
-  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
+function shunnRunProperties(script, { strong = false, em = false } = {}) {
+  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
+}
+
+function shunnRunXml(script, text, decoration) {
+  return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
+}
+
+// The running head's parts, as the PDF and DOCX print them before the page
+// number: the author (or, with no author, the editor) and the title, each
+// left out when empty.
+function shunnHeadParts(meta) {
+  return [meta.lead ?? meta.author, meta.title].filter((part) => part !== "");
+}
+
+// The DOCX headers, as the PDF sets them: every page but the first carries
+// the running head, its parts and then a PAGE field that Word and
+// LibreOffice fill in with the page's number, single-spaced at the end of
+// the line (the right, or the left in a right-to-left book). The first page
+// gets an empty header of its own (titlePg sets it apart), as Shunn leaves
+// the title page without a head. A line break in a part would break the
+// head's one line, so each run of them is a space, as in the PDF.
+function shunnHeaders(script, meta) {
+  const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
+  const text = shunnHeadParts(meta).map((part) => `${part.replace(/[\r\n\f]+/g, " ")} / `).join("");
+  const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`]
+    .map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
+  return [
+    { type: "default", content: paragraph(`${shunnRunXml(script, text)}${field}`) },
+    { type: "first", content: paragraph("") }
+  ];
 }
 
 // Body paragraphs indent their first line half an inch; centred lines
@@ -531,7 +579,7 @@ export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, pap
 
   const paper = shunnPaper(paperName);
   const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page), writeOptions);
+  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta)), writeOptions);
 }
 
 export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
@@ -587,7 +635,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const language = manuscript.meta?.language ?? "en";
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = [meta.lead ?? meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),

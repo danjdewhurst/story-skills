@@ -8,6 +8,8 @@ import { makeTempDir, memoryIo, messages, readArchiveEntries, writeMarkdown } fr
 const LETTER = '<w:pgSz w:w="12240" w:h="15840"/>';
 const A4 = '<w:pgSz w:w="11906" w:h="16838"/>';
 const MARGINS = '<w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>';
+// The running head's references, before the page, and titlePg after it.
+const HEADERS = '<w:headerReference w:type="default" r:id="rId2"/><w:headerReference w:type="first" r:id="rId3"/>';
 
 function book(extra = "") {
   const cwd = makeTempDir();
@@ -32,10 +34,10 @@ describe("--paper for the Shunn builds", () => {
   test("the Shunn DOCX is US Letter with 1in margins by default, and A4 with --paper a4", () => {
     const root = book();
     const letter = documentXml(buildBook(root, { format: "docx", shunn: true }).outFile);
-    expect(letter).toContain(`<w:sectPr>${LETTER}${MARGINS}</w:sectPr></w:body>`);
+    expect(letter).toContain(`<w:sectPr>${HEADERS}${LETTER}${MARGINS}<w:titlePg/></w:sectPr></w:body>`);
 
     const a4 = documentXml(buildBook(root, { format: "docx", shunn: true, paper: " A4 ", out: "dist/a4.docx" }).outFile);
-    expect(a4).toContain(`<w:sectPr>${A4}${MARGINS}</w:sectPr></w:body>`);
+    expect(a4).toContain(`<w:sectPr>${HEADERS}${A4}${MARGINS}<w:titlePg/></w:sectPr></w:body>`);
 
     // The plain DOCX keeps Word's own page.
     expect(documentXml(buildBook(root, { format: "docx" }).outFile)).toContain("<w:sectPr/></w:body>");
@@ -43,7 +45,7 @@ describe("--paper for the Shunn builds", () => {
 
   test("the page size comes before a right-to-left section's bidi, as the schema orders them", () => {
     const xml = documentXml(buildBook(book("language: ar\n"), { format: "docx", shunn: true, paper: "a4" }).outFile);
-    expect(xml).toContain(`<w:sectPr>${A4}${MARGINS}<w:bidi/></w:sectPr></w:body>`);
+    expect(xml).toContain(`<w:sectPr>${HEADERS}${A4}${MARGINS}<w:titlePg/><w:bidi/></w:sectPr></w:body>`);
   });
 
   test("--paper is an error outside the Shunn PDF and DOCX, and an unknown paper is rejected", () => {

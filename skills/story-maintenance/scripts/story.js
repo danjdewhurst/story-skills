@@ -19610,9 +19610,14 @@ function docxScript(meta) {
     direction: type.vertical ? `<w:textDirection w:val="tbRl"/>` : type.rtl ? "<w:bidi/>" : ""
   };
 }
-function docxSection(script, page = "") {
-  const content = `${page}${script.direction}`;
+function docxSection(script, page = "", headers = []) {
+  const references = headers.map((header, index) => `<w:headerReference w:type="${header.type}" r:id="${docxHeaderId(index)}"/>`).join("");
+  const titlePage = headers.some((header) => header.type === "first") ? "<w:titlePg/>" : "";
+  const content = `${references}${page}${titlePage}${script.direction}`;
   return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
+}
+function docxHeaderId(index) {
+  return `rId${index + 2}`;
 }
 var SHUNN_PAPERS = new Map([
   ["letter", { css: "letter", width: 12240, height: 15840 }],
@@ -19626,13 +19631,18 @@ function shunnPaper(name) {
   }
   return paper;
 }
-function docxPackageEntries(script, body, page = "") {
+function docxPackageEntries(script, body, page = "", headers = []) {
+  const headerName = (index) => `header${index + 1}.xml`;
+  const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
+  const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
+  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
   return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>` },
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
     { name: "word/styles.xml", content: docxStyles(script) },
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}${docxSection(script, page)}</w:body></w:document>` }
+    ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
   ];
 }
 function docxStyles(script) {
@@ -19641,8 +19651,23 @@ function docxStyles(script) {
 var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
 var SHUNN_SIZE = `<w:sz w:val="24"/>`;
 var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunXml(script, text, { strong = false, em = false } = {}) {
-  return `<w:r><w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>${docxTextXml(text)}</w:r>`;
+function shunnRunProperties(script, { strong = false, em = false } = {}) {
+  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
+}
+function shunnRunXml(script, text, decoration) {
+  return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
+}
+function shunnHeadParts(meta) {
+  return [meta.lead ?? meta.author, meta.title].filter((part) => part !== "");
+}
+function shunnHeaders(script, meta) {
+  const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
+  const text = shunnHeadParts(meta).map((part) => `${part.replace(/[\r\n\f]+/g, " ")} / `).join("");
+  const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`].map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
+  return [
+    { type: "default", content: paragraph(`${shunnRunXml(script, text)}${field}`) },
+    { type: "first", content: paragraph("") }
+  ];
 }
 function shunnParagraphXml(script, runXml, centered, quote = false) {
   const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
@@ -19711,7 +19736,7 @@ function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName 
   }
   const paper = shunnPaper(paperName);
   const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page), writeOptions);
+  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta)), writeOptions);
 }
 function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   const lines = [meta.title];
@@ -19756,7 +19781,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const language = manuscript.meta?.language ?? "en";
   const type = typesetting(language, "horizontal");
   const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = [meta.lead ?? meta.author, meta.title].filter((part) => part !== "").map((part) => `"${cssString(part)} / "`).join(" ");
+  const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
