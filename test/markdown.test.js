@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, setextSceneBreakLines, softBreak, splitAtSceneBreaks, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, extractSection, isSceneBreakLine, kebabCase, maskLinkTargets, separateSceneBreaks, setextSceneBreakLines, softBreak, titleCaseSlug, wordCount } from "../src/markdown.js";
 
 describe("markdown utilities", () => {
   test("normalizes labels and counts prose words", () => {
@@ -129,39 +129,115 @@ describe("scene-break lines (#551)", () => {
     }
   });
 
-  test("splits a paragraph at each scene-break line", () => {
-    expect(splitAtSceneBreaks("He left.\n* * *\nShe came.")).toEqual(["He left.", "* * *", "She came."]);
-    expect(splitAtSceneBreaks("---\nOne\ntwo.\n#\n***")).toEqual(["---", "One\ntwo.", "#", "***"]);
-    expect(splitAtSceneBreaks("One\ntwo.")).toEqual(["One\ntwo."]);
+  test("only a break line indented by fewer than four columns ends a paragraph, as in CommonMark", () => {
+    expect(["---", "   ***", "    ---", "\t---", " \t* * *"].map(breaksParagraph)).toEqual([true, true, false, false, false]);
   });
 
-  test("finds a --- right under a line of text, where CommonMark reads a heading underline", () => {
+  test("sets each break line apart with blank lines, but not one in a code fence", () => {
+    expect(separateSceneBreaks("He left.\n* * *\nShe came.")).toBe("He left.\n\n* * *\n\nShe came.");
+    expect(separateSceneBreaks("---\nOne\ntwo.\n#\n\n***")).toBe("---\n\nOne\ntwo.\n\n#\n\n***");
+    expect(separateSceneBreaks("One\n    ---\ntwo.")).toBe("One\n    ---\ntwo.");
+    expect(separateSceneBreaks("```\nINCOMING\n----------\n```\nOne\r\n---\r\nTwo")).toBe("```\nINCOMING\n----------\n```\nOne\r\n\n---\r\n\nTwo");
+  });
+
+  // Each `---` line pandoc's CommonMark reader (pandoc -f commonmark) takes
+  // for a setext heading underline, counted from the first line of the prose,
+  // where builds print a scene break.
+  const setextCases = [
+      ["He left.\n---\nShe came.\n", [1]],
+      ["One\ntwo.\n  ---  \nThree.\n---\n", [2, 4]],
+      ["> He said.\n> ---\n", [1]],
+      ["He wrote:\n1999. The year it ended.\n---\n", [2]],
+      ["He left.\n\n---\n", []],
+      ["He left.\n* * *\n", []],
+      ["He left.\n- - -\n", []],
+      ["> He said.\n---\n", []],
+      ["> He said.\nlazily.\n---\n", []],
+      ["He left.\n> She said.\n---\n", []],
+      ["- An item\n---\n", []],
+      ["1999. The year it ended.\n---\n", []],
+      ["He left.\n1. An item\n---\n", []],
+      ["### Part Two\n---\n", []],
+      ["Part Two\n===\n---\n", []],
+      ["    indented code\n---\n", []],
+      ["---\n---\n", []],
+      ["```\nHe left.\n---\n```\n", []],
+      ["<!--\nHe left.\n---\n-->\n", []],
+      ["> Outer\n>> ---\n", []],
+      [">> foo\n> ---\n", []],
+      [">> foo\n> bar\n> ---\n", []],
+      ["> foo\nbar\n> ---\n", [2]],
+      ["- item\n  ---\n", [1]],
+      ["- item\n\n  more\n---\n", []],
+      ["- item\n\n  more\n  ---\n", [3]],
+      ["<div>\n---\n", []],
+      ["<div>\n\nHe left.\n---\n", [3]],
+      ["foo\n    ---\n", []],
+      ["foo\n\t---\n", []],
+      ["~~~\nHe left.\n---\n~~~\n", []],
+      ["~~~\nHe left.\n---\n", []],
+      ["Text\n~~~\nHe left.\n---\n~~~\nAfter.\n---\n", [6]],
+      ["- item\n    ---\n", []],
+      ["1. item\n   ---\n", [1]],
+      ["- a\n- b\n  ---\n", [2]],
+      ["* item\n  text\n  ---\n", [2]],
+      ["- item\nlazy\n---\n", []],
+      ["- item\nlazy\n  ---\n", [2]],
+      ["> - item\n>   ---\n", [1]],
+      ["> - item\n> ---\n", []],
+      ["- > quote\n  > ---\n", [1]],
+      ["- > quote\n  ---\n", []],
+      ["<span>text</span>\n---\n", [1]],
+      ["Text <!-- c -->\n---\n", [1]],
+      ["Text\n<!-- c -->\n---\n", []],
+      ["<p>\ntext\n</p>\n---\n", []],
+      ["<p>text</p>\n\nPara\n---\n", [3]],
+      ["Text\n<custom-tag>\n---\n", [2]],
+      ["<custom-tag>\n---\n", []],
+      ["<script>\nx\n</script>\nText\n---\n", [4]],
+      ["Para\n  ---\n", [1]],
+      ["Para\n   ---\n", [1]],
+      ["> > nested\n> > ---\n", [1]],
+      ["> a\n>\n> b\n> ---\n", [3]],
+      ["a\n> b\n> ---\n", [2]],
+      ["1) item\n   para\n   ---\n", [2]],
+      ["2. item\n   ---\n", [1]],
+      ["-\n  foo\n  ---\n", [2]],
+      ["- \n\n  foo\n---\n", [3]],
+      ["``` js\ncode\n```\nText\n---\n", [4]],
+      ["````\n```\n---\n````\nText\n---\n", [5]],
+      ["Text\n```\n---\n", []],
+      ["  > quote\n  > ---\n", [1]],
+      ["    > not quote\n---\n", []],
+      ["Text\n    ---\n    more\n", []],
+      ["*\tx\n ---\n", []],
+      ["- a\n\n\n  b\n  ---\n", [4]],
+      ["-\n\n  foo\n---\n", [3]],
+      ["-\n  foo\n\n  bar\n  ---\n", [4]],
+      ["- \n  foo\n---\n", []],
+      ["-\n\n  foo\n  ---\n", [3]],
+      ["> -\n>\n>   foo\n> ---\n", [3]],
+      ["- a\n  - b\n    ---\n", []],
+      ["- a\n  - b\n  ---\n", []],
+      ["- a\n  - b\n\n    c\n---\n", []],
+      ["10. x\n    y\n    ---\n", []],
+      ["-    code?\n     ---\n", []],
+      ["-     code\n  ---\n", []],
+      ["> foo\n    bar\n> ---\n", [2]],
+      ["- foo\n      bar\n  ---\n", [2]]
+  ];
+
+  test("finds a --- that CommonMark reads as a heading underline and builds as a scene break", () => {
     const lines = (prose) => setextSceneBreakLines(`## Chapter Text\n\n${prose}`).map((index) => index - 2);
-    expect(lines("He left.\n---\nShe came.\n")).toEqual([1]);
-    expect(lines("One\ntwo.\n  ---  \nThree.\n---\n")).toEqual([2, 4]);
-    expect(lines("> He said.\n> ---\n")).toEqual([1]);
-    // A list that does not start at 1 cannot interrupt a paragraph.
-    expect(lines("He wrote:\n1999. The year it ended.\n---\n")).toEqual([2]);
-    // CommonMark reads each of these as a thematic break, as builds do.
-    for (const prose of [
-      "He left.\n\n---\n",
-      "He left.\n* * *\n",
-      "He left.\n- - -\n",
-      "> He said.\n---\n",
-      "> He said.\nlazily.\n---\n",
-      "He left.\n> She said.\n---\n",
-      "- An item\n---\n",
-      "1999. The year it ended.\n---\n",
-      "He left.\n1. An item\n---\n",
-      "### Part Two\n---\n",
-      "Part Two\n===\n---\n",
-      "    indented code\n---\n",
-      "---\n---\n",
-      "```\nHe left.\n---\n```\n",
-      "<!--\nHe left.\n---\n-->\n"
-    ]) {
-      expect({ prose, lines: lines(prose) }).toEqual({ prose, lines: [] });
+    for (const [prose, expected] of setextCases) {
+      expect({ prose, lines: lines(prose) }).toEqual({ prose, lines: expected });
     }
+  });
+
+  test("stays linear on deeply nested list and quote markers", () => {
+    const started = performance.now();
+    expect(setextSceneBreakLines(`${"- ".repeat(50000)}x\n---\n\n${"> ".repeat(50000)}x\n---\n`)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(2000);
   });
 
   test("counts body lines from the top, past an outline and its divider, and in CRLF files", () => {
@@ -178,17 +254,21 @@ describe("soft line breaks (#599)", () => {
     expect(softBreak("他说：", "我来了。")).toBe("");
     expect(softBreak("ｶﾀｶﾅ", "ＡＢＣ")).toBe("");
     expect(softBreak("文。", "\u3000次の段落")).toBe("");
-    // Past emphasis and code markers, and with a character outside the BMP.
-    expect(softBreak("**強調**", "_です_")).toBe("");
-    expect(softBreak("`コード`", "\u{20bb7}野家")).toBe("");
-    expect(softBreak("吉\u{20bb7}", "野家")).toBe("");
+    // Characters outside the BMP, and a trailing variation selector or
+    // combining mark, which belongs to the character before it.
+    expect(softBreak("吉\u{20bb7}", "\u{20bb7}野家")).toBe("");
+    expect(softBreak("葛\u{e0100}", "城")).toBe("");
+    expect(softBreak("神\ufe00", "社")).toBe("");
+    expect(softBreak("か\u3099", "き")).toBe("");
   });
 
-  test("join curly quotes, dashes, and ellipses to a Chinese or Japanese character", () => {
+  test("join curly quotes, dashes, ellipses, and a name's middle dot to a Chinese or Japanese character", () => {
     expect(softBreak("他说：", "\u201c你好。\u201d")).toBe("");
     expect(softBreak("\u201c你好。\u201d", "他说。")).toBe("");
     expect(softBreak("彼は言った", "\u2026\u2026")).toBe("");
     expect(softBreak("\u2014\u2014", "そうか")).toBe("");
+    expect(softBreak("列夫\u00b7", "托尔斯泰")).toBe("");
+    expect(softBreak("列夫", "\u00b7托尔斯泰")).toBe("");
   });
 
   test("keep the space everywhere else", () => {
@@ -196,10 +276,19 @@ describe("soft line breaks (#599)", () => {
     expect(softBreak("東京で", "Alice")).toBe(" ");
     expect(softBreak("Alice", "に会った。")).toBe(" ");
     expect(softBreak("He said\u2014", "\u201cthere.\u201d")).toBe(" ");
+    expect(softBreak("Jean\u00b7", "Paul")).toBe(" ");
     // Korean sets spaces between words, halfwidth Hangul included.
     expect(softBreak("안녕하세요", "반갑습니다")).toBe(" ");
     expect(softBreak("\uffa1", "文")).toBe(" ");
     expect(softBreak("", "文")).toBe(" ");
-    expect(softBreak("**", "文")).toBe(" ");
+    expect(softBreak("文", "")).toBe(" ");
+    expect(softBreak("\u0301", "文")).toBe(" ");
+  });
+
+  test("keep the space beside an emphasis or code marker, so the markup on either side never runs together", () => {
+    expect(softBreak("**強調**", "**次**")).toBe(" ");
+    expect(softBreak("*彼は*", "*言った*")).toBe(" ");
+    expect(softBreak("他说`东京`", "`大阪`很远")).toBe(" ");
+    expect(softBreak("強調", "_です_")).toBe(" ");
   });
 });

@@ -2617,7 +2617,7 @@ Splits a chapter in two. The text before `--at` stays in the chapter; the rest b
 
 `--at` says where to split, in the chapter text (the outline and notes before `## Chapter Text` stay with the first chapter):
 
-- **A number** is a scene break, counted from 1: `--at 2` splits at the second break, and the break itself is dropped. A break is a paragraph of `* * *`, `---`, `***`, `~~~`, or a lone `#`, as the builds read them, with a blank line above and below it; a break line with text right above or below it does not count here, though builds print it as a break.
+- **A number** is a scene break, counted from 1: `--at 2` splits at the second break, and the break itself is dropped. A break is a line of `* * *`, `---`, `***`, `~~~`, or a lone `#`, as the builds read them, with or without blank lines around it.
 - **A heading** splits just before that heading line: `--at "The Ferry"` matches `### The Ferry`.
 - **Any other text** splits at the start of the paragraph holding the one line that contains it: `--at "Ticket was in order"`. A line that is exactly the text wins over lines that only contain it, and text that matches several lines is refused with their line numbers, so quote more of it.
 
@@ -3002,7 +3002,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `stale-word-count` | warning | A chapter's `word-count` is missing or differs from its prose. Run `story wordcount --write`. |
 | `todo-markers` | warning | Chapter prose has `[TODO` markers, which every build prints. |
 | `unclosed-comment` | warning | Chapter prose opens an HTML comment that never closes. |
-| `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
+| `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text, in the same block quote or list item. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
 | `no-scene-records` | warning | A chapter has no scene records. |
 | `empty-chapter` | warning | A chapter has no prose yet, and the book is complete or the chapter claims to be written. |
 | `missing-field` | error | A required field, or a required key of a list entry, is missing or empty. |

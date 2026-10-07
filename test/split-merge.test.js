@@ -201,6 +201,19 @@ describe("story split", () => {
     expect(() => splitChapter(root, { id: "chapter-02", at: "hidden line" })).toThrow("matches no line");
   });
 
+  test("splits at a scene-break line with text right above and below it, as builds read one", () => {
+    const root = book();
+    setProse(root, "chapter-02", "Mara walked to the quay.\n*  *  *\nThe boat was late.\n    ---\nIt came.\n```\n---\n```\n");
+    splitChapter(root, { id: "chapter-02", at: "1" });
+    expect(prose(root, "chapter-02")).toBe("Mara walked to the quay.");
+    expect(prose(root, "chapter-03")).toBe("The boat was late.\n    ---\nIt came.\n```\n---\n```");
+    // A break line indented four columns, or in a code fence, is not one.
+    expect(() => splitChapter(root, { id: "chapter-03", at: "1" })).toThrow("has no scene breaks");
+    // Neither half has a break left, so the merge puts the usual one back.
+    mergeChapters(root, { id: "chapter-02", next: "chapter-03" });
+    expect(prose(root, "chapter-02")).toBe("Mara walked to the quay.\n\n* * *\n\nThe boat was late.\n    ---\nIt came.\n```\n---\n```");
+  });
+
   test("warns when the scene records do not match the scenes of text", () => {
     const root = book();
     createEntity(root, { kind: "scene", name: "Extra", chapter: "chapter-02" });

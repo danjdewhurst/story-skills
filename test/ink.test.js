@@ -167,6 +167,14 @@ describe("ink build", () => {
     expect(text).toContain("=== a ===\nHe left.\n\n\\* * *\n\nShe came back. 一行目の文。二行目の文。\n\n-> END\n");
   });
 
+  test("joins a paragraph of many lines in linear time", () => {
+    const body = "一行目の文。\n".repeat(200000);
+    const started = performance.now();
+    const text = inkSource({ title: "T", author: "", ifid: IFID, branching: false, passages: [{ name: "a", body, links: [] }] });
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(text).toContain(`=== a ===\n${"一行目の文。".repeat(200000)}\n`);
+  });
+
   test("escapes the title and author tags onto one line each", () => {
     const text = inkSource({ title: "Hash # and // slash", author: "Jo {Ann}\nSmith", ifid: IFID.toLowerCase(), branching: false, passages: [{ name: "a", body: "", links: [] }] });
     expect(text).toBe(`# title: Hash \\# and /\\/ slash\n# author: Jo \\{Ann\\} Smith\n# ifid: ${IFID}\n\n-> a\n\n=== a ===\n-> END\n`);

@@ -1,4 +1,4 @@
-import { isSceneBreak, withoutFencedCode } from "./markdown.js";
+import { isSceneBreakLine, separateSceneBreaks, withoutFencedCode } from "./markdown.js";
 import { openingWords } from "./html.js";
 import { formatPercent } from "./progress.js";
 import { wordSpans } from "./words.js";
@@ -46,12 +46,13 @@ export function compareChapters(previous, current) {
 }
 
 // Prose paragraphs without code between closed fences or scene-break lines,
-// which are not prose that can match.
+// which are not prose that can match. A scene-break line ends a paragraph
+// even with no blank line around it, as in builds.
 export function proseParagraphs(prose) {
-  return withoutFencedCode(String(prose))
+  return separateSceneBreaks(withoutFencedCode(String(prose)))
     .split(/\r?\n\s*\r?\n/)
     .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
-    .filter((paragraph) => paragraph !== "" && !isSceneBreak(paragraph));
+    .filter((paragraph) => paragraph !== "" && !isSceneBreakLine(paragraph));
 }
 
 // Pairs old chapters with current ones. The closest content matches go first,

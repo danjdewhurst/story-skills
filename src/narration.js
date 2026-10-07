@@ -1,6 +1,6 @@
 import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { characterCount, flattenHeadings, isSceneBreakLine, plainLinks, splitAtSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
+import { characterCount, flattenHeadings, isSceneBreakLine, plainLinks, separateSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -102,15 +102,15 @@ export function pronunciationGuide(project) {
 function narrationBody(body) {
   // In-prose headings read as paragraphs, so each chapter stays one
   // section, and links read as their text, as in every other build.
-  return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, "\n")))
+  const text = flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, "\n")))
     .replace(/\\\n/g, "\n")
     // A line of nothing but whitespace, typed spaces included, is blank, as
     // in the other builds.
-    .replace(/^[^\S\n]+$/gm, "")
+    .replace(/^[^\S\n]+$/gm, "");
+  // A scene-break line ends a paragraph even with no blank line around it,
+  // as in the other builds.
+  return separateSceneBreaks(text)
     .split(/\n{2,}/)
-    // A scene-break line ends a paragraph even with no blank line around
-    // it, as in the other builds.
-    .flatMap(splitAtSceneBreaks)
     // Typed spaces stay, so a paragraph keeps its ideographic-space indent
     // (see trimSourceSpace): a script has no indent of its own.
     .map(trimSourceSpace)

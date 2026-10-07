@@ -184,118 +184,273 @@ export function isSceneBreak(paragraph) {
 }
 
 // A line (or paragraph) that is a scene break, also one spaced with runs of
-// spaces or typed spaces (`* * *`). Builds end the paragraph above
-// it and start a new one below it even with no blank line between, as
-// CommonMark does at a thematic break.
+// spaces or typed spaces (`*  *\u00a0*`).
 export function isSceneBreakLine(line) {
   return isSceneBreak(collapseSourceSpace(plainSpaces(line)));
 }
 
-// A paragraph's text in pieces at each scene-break line: the text before
-// the break, the break line itself, and the text after it, for the builds
-// that split prose into paragraphs at blank lines themselves.
-export function splitAtSceneBreaks(paragraph) {
-  const pieces = [];
-  let lines = [];
-  for (const line of String(paragraph).split("\n")) {
-    if (!isSceneBreakLine(line)) {
-      lines.push(line);
-      continue;
-    }
-    if (lines.length > 0) {
-      pieces.push(lines.join("\n"));
-    }
-    pieces.push(line);
-    lines = [];
-  }
-  if (lines.length > 0) {
-    pieces.push(lines.join("\n"));
-  }
-  return pieces;
+// A scene-break line that ends the paragraph above it and starts a new one
+// below it in builds, with no blank line between, as a CommonMark thematic
+// break does: one indented by fewer than four columns. A more deeply
+// indented one continues the paragraph, as in CommonMark.
+export function breaksParagraph(line) {
+  return /^ {0,3}[^ \t]/.test(line) && isSceneBreakLine(line);
 }
 
-// Body line indexes (counted from 0) of the `---` scene breaks right under
-// a line of a plain or quoted paragraph. Builds print a scene break there,
-// but CommonMark reads the `---` as a setext heading underline, so a
-// markdown viewer (and the markdown export in one) shows the text above as
-// a heading. A `---` under a list item or a quote line it does not belong
-// to, or under a heading, is a thematic break in CommonMark too. Comments
-// and closed code fences are masked, so a `---` inside one never counts.
+// An ATX heading line, as flattenHeadings reads one.
+export function isHeadingLine(line) {
+  return /^#+(?:[ \t]|$)/.test(line);
+}
+
+// The text with a blank line above and below each line that breaks a
+// paragraph (see breaksParagraph), for the builds and commands that split
+// prose into paragraphs at blank lines themselves. Lines between closed
+// backtick fences are code, never a break.
+export function separateSceneBreaks(text) {
+  const lines = String(text).split("\n");
+  const code = fencedLineIndexes(lines.map((line) => line.replace(/\r$/, "")));
+  const blank = (line) => /^[ \t\r]*$/.test(line);
+  const out = [];
+  for (const [index, line] of lines.entries()) {
+    const breaks = !code.has(index) && breaksParagraph(line);
+    if (breaks && out.length > 0 && !blank(out[out.length - 1])) {
+      out.push("");
+    }
+    out.push(line);
+    if (breaks && index < lines.length - 1 && !blank(lines[index + 1])) {
+      out.push("");
+    }
+  }
+  return out.join("\n");
+}
+
+// The block structure CommonMark reads, for setextSceneBreakLines. Tabs
+// count to the next multiple of four columns.
+const ATX_HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+const FENCE = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/;
+const HTML_BLOCK_TAGS = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
+// The seven kinds of HTML block: the first five end at a line holding their
+// end marker, the last two at a blank line, and the seventh (a lone tag)
+// cannot interrupt a paragraph.
+const HTML_BLOCKS = [
+  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)>/i },
+  { start: /^<!--/, end: /-->/ },
+  { start: /^<\?/, end: /\?>/ },
+  { start: /^<![a-z]/i, end: />/ },
+  { start: /^<!\[CDATA\[/, end: /\]\]>/ },
+  { start: new RegExp(`^</?(?:${HTML_BLOCK_TAGS})(?:[ \\t>]|/>|$)`, "i"), end: null },
+  { start: /^(?:<[a-z][a-z0-9-]*(?:[ \t]+[a-z_:][\w.:-]*(?:[ \t]*=[ \t]*(?:[^ \t"'=<>`]+|'[^']*'|"[^"]*"))?)*[ \t]*\/?>|<\/[a-z][a-z0-9-]*[ \t]*>)[ \t]*$/i, end: null, interrupts: false }
+];
+
+// How deep block quotes and list items nest before a line's further markers
+// read as text. CommonMark sets no limit, but prose never comes near it, and
+// the limit keeps a line of `- - - x` (a list in a list, and so on) linear.
+const MAX_NESTING = 32;
+
+// A thematic break: three or more of one of `-`, `*`, and `_`, with spaces
+// or tabs between, indented by up to three spaces. Read without a
+// backtracking pattern, since a line of `- - - x` comes here once for each
+// list it opens.
+function isThematicBreak(line) {
+  const marker = /^ {0,3}([-*_])/.exec(line);
+  if (marker === null) {
+    return false;
+  }
+  const rest = line.slice(marker[0].length - 1);
+  return rest.split(marker[1]).length > 3 && /^[ \t]*$/.test(rest.replaceAll(marker[1], ""));
+}
+
+function expandTabs(line) {
+  let out = "";
+  for (const character of line) {
+    out += character === "\t" ? " ".repeat(4 - (out.length % 4)) : character;
+  }
+  return out;
+}
+
+function indentOf(line) {
+  return /^ */.exec(line)[0].length;
+}
+
+// The list item a line opens, as { indent, rest } with the column its
+// content starts at, or null. An empty item, or a numbered one that does
+// not start at 1, cannot interrupt a paragraph, so `1999. The year it
+// ended.` inside one is text.
+function listItem(line, interrupting) {
+  const marker = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])(?= |$)/.exec(line);
+  if (!marker || isThematicBreak(line)) {
+    return null;
+  }
+  const after = line.slice(marker[0].length);
+  const empty = after.trim() === "";
+  if (interrupting && (empty || (marker[1] !== undefined && Number(marker[1]) !== 1))) {
+    return null;
+  }
+  const spaces = indentOf(after);
+  const indent = marker[0].length + (empty || spaces > 4 ? 1 : spaces);
+  return { indent, rest: empty ? "" : line.slice(indent) };
+}
+
+function htmlBlock(line, interrupting) {
+  const text = line.slice(indentOf(line));
+  return HTML_BLOCKS.find((block) => block.start.test(text) && !(interrupting && block.interrupts === false)) ?? null;
+}
+
+// Whether a line, past the containers it continues, opens a block, so it
+// cannot continue the open paragraph lazily.
+function opensBlock(line) {
+  if (line.trim() === "") {
+    return true;
+  }
+  if (indentOf(line) > 3) {
+    return false;
+  }
+  return /^ {0,3}>/.test(line) || listItem(line, true) !== null || isThematicBreak(line) || ATX_HEADING.test(line) || FENCE.test(line) || htmlBlock(line, true) !== null;
+}
+
+// Body line indexes (counted from 0) of the `---` lines that builds print as
+// a scene break (see breaksParagraph) but CommonMark reads as a setext
+// heading underline, which makes the paragraph above a heading in a
+// markdown viewer, and in the markdown export opened in one. The prose is
+// read as CommonMark reads its blocks: an underline counts only in the
+// block quote or list item of its paragraph, and never on a lazy line, and
+// nothing in fenced code (backticks or tildes), indented code, or an HTML
+// block underlines. Builds read code in closed backtick fences and HTML
+// comments as no break at all, so a `---` in one never counts.
 export function setextSceneBreakLines(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, "\n");
   const masked = maskMarkup(body);
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split("\n").length - 1;
+  const buildLines = masked.slice(start).split("\n");
+  const printsBreak = (index) => breaksParagraph(buildLines[index].replace(/^(?:[ \t]*>[ \t]?)+/, ""));
   const found = [];
-  // The paragraph the line above belongs to: none, "plain", "quoted", or
-  // "list" (a list item's, which a `---` never underlines).
-  let paragraph = "none";
-  for (const [index, rawLine] of masked.slice(start).split("\n").entries()) {
-    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
-    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
-    // Whether the line is in the same container as the paragraph above: an
-    // underline continues a paragraph in its own container only, so a `---`
-    // with no `>` under a quote's lazy line ends the quote.
-    const inParagraph = paragraph === (marker ? "quoted" : "plain");
-    const item = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])[ \t]/.exec(line);
+  // Open block quotes ({ quote: true }) and list items ({ indent, empty },
+  // where `empty` says it has no content yet), outermost first, and the leaf
+  // block open in the innermost: null, or { kind } of "paragraph", "code",
+  // "fence" (with its `marker`), or "html" (with its `end`, null for a blank
+  // line).
+  const containers = [];
+  let leaf = null;
+  for (const [index, source] of body.slice(start).split("\n").entries()) {
+    let line = expandTabs(source);
+    let matched = 0;
+    for (const container of containers) {
+      const quote = container.quote ? /^ {0,3}> ?/.exec(line) : null;
+      if (quote) {
+        line = line.slice(quote[0].length);
+      } else if (!container.quote && line.trim() === "" && !container.empty) {
+        // A list item goes on over blank lines, unless it opened with one:
+        // an item can start with at most one blank line.
+        line = "";
+      } else if (!container.quote && line.trim() !== "" && indentOf(line) >= container.indent) {
+        line = line.slice(container.indent);
+        container.empty = false;
+      } else {
+        break;
+      }
+      matched += 1;
+    }
+    if (matched === containers.length && leaf?.kind === "fence") {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close && close[1][0] === leaf.marker[0] && close[1].length >= leaf.marker.length) {
+        leaf = null;
+      }
+      continue;
+    }
+    if (matched === containers.length && leaf?.kind === "html") {
+      if (leaf.end === null ? line.trim() === "" : leaf.end.test(line)) {
+        leaf = null;
+      }
+      continue;
+    }
+    if (matched < containers.length) {
+      // A lazy continuation line: the paragraph and its containers go on.
+      if (leaf?.kind === "paragraph" && !opensBlock(line)) {
+        continue;
+      }
+      containers.length = matched;
+      leaf = null;
+    }
+    while (containers.length < MAX_NESTING) {
+      const quote = /^ {0,3}> ?/.exec(line);
+      const item = quote ? null : listItem(line, leaf?.kind === "paragraph");
+      if (!quote && item === null) {
+        break;
+      }
+      containers.push(quote ? { quote: true } : { quote: false, indent: item.indent, empty: item.rest === "" });
+      line = quote ? line.slice(quote[0].length) : item.rest;
+      leaf = null;
+    }
+    const paragraph = leaf?.kind === "paragraph";
     if (line.trim() === "") {
-      paragraph = "none";
-    } else if (isSceneBreakLine(line)) {
-      if (inParagraph && /^ {0,3}-{3,}[ \t]*$/.test(line)) {
+      leaf = paragraph ? null : leaf;
+    } else if (indentOf(line) > 3) {
+      // Indented code, or the open paragraph's text.
+      leaf = paragraph ? leaf : { kind: "code" };
+    } else if (paragraph && /^ {0,3}(?:=+|-+)[ \t]*$/.test(line)) {
+      if (line.includes("-") && printsBreak(index)) {
         found.push(first + index);
       }
-      paragraph = "none";
-    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(line) || (inParagraph && /^ {0,3}=+[ \t]*$/.test(line))) {
-      // A heading, or the `===` underline that makes the text above one.
-      paragraph = "none";
-    } else if (item && !(inParagraph && item[1] !== undefined && Number(item[1]) !== 1)) {
-      // Only a list that starts at 1 interrupts a paragraph, so `1999. The
-      // year it ended.` inside one is text.
-      paragraph = "list";
-    } else if (marker) {
-      // A quote line interrupts a plain paragraph or list.
-      paragraph = "quoted";
-    } else if (paragraph === "none") {
-      // An indented line that starts no paragraph is code in CommonMark.
-      paragraph = /^(?: {4}| {0,3}\t)/.test(line) ? "none" : "plain";
+      leaf = null;
+    } else if (isThematicBreak(line) || ATX_HEADING.test(line)) {
+      leaf = null;
+    } else if (FENCE.test(line)) {
+      leaf = { kind: "fence", marker: FENCE.exec(line)[1] };
+    } else if (htmlBlock(line, paragraph) !== null) {
+      const { end } = htmlBlock(line, paragraph);
+      leaf = end !== null && end.test(line) ? null : { kind: "html", end };
+    } else {
+      leaf = paragraph ? leaf : { kind: "paragraph" };
     }
   }
   return found;
 }
 
-// Chinese and Japanese characters: Han, kana, the CJK symbols and
-// punctuation block (。、「」 and the ideographic space), and the fullwidth
-// and halfwidth forms besides halfwidth Hangul. Korean, set with spaces
-// between words, is not among them.
-const CJK_CHARACTER = /^[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\u3000-\u303f\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee]$/u;
+// Chinese and Japanese characters, as fixed ranges so that every runtime
+// reads them alike (Unicode's script data grows between versions): CJK
+// radicals and ideographic description, the CJK symbols and punctuation
+// block (。、「」 and the ideographic space), kana and its extensions,
+// kanbun, strokes, enclosed and compatibility CJK, Han in every plane, CJK
+// vertical and compatibility forms, and the full-width and halfwidth forms
+// besides halfwidth Hangul. Korean, set with spaces between words, is not
+// among them.
+const CJK_CHARACTER = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
 // Punctuation Chinese and Japanese set at full width though Unicode leaves
-// its width open: dashes, ellipses, and curly quotes.
-const WIDE_PUNCTUATION = /^[\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
-const EDGE_MARKUP = new Set(["*", "_", "`"]);
+// its width open: the middle dot between the parts of a transcribed name
+// (列夫·托尔斯泰), dashes, ellipses, and curly quotes.
+const WIDE_PUNCTUATION = /^[\u00b7\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
+// Combining marks and variation selectors, which belong to the character
+// before them: 葛 with an ideographic variation selector is still 葛.
+const COMBINING = /^[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\u302a-\u302f\u3099\u309a\ufe00-\ufe0f\ufe20-\ufe2f\u{e0100}-\u{e01ef}]$/u;
 
-// The character at the end (or start) of `text`, past any emphasis or code
-// markers, so `**強調**` ends with 調.
-function edgeCharacter(text, atEnd) {
-  let index = atEnd ? text.length - 1 : 0;
-  while (index >= 0 && index < text.length && EDGE_MARKUP.has(text[index])) {
-    index += atEnd ? -1 : 1;
+// The last character of a line, past combining marks and variation
+// selectors, or "" for none.
+function lastCharacter(text) {
+  let end = text.length;
+  while (end > 0) {
+    const pair = end > 1 && /[\udc00-\udfff]/.test(text[end - 1]) && /[\ud800-\udbff]/.test(text[end - 2]);
+    const character = text.slice(end - (pair ? 2 : 1), end);
+    if (!COMBINING.test(character)) {
+      return character;
+    }
+    end -= character.length;
   }
-  if (index < 0 || index >= text.length) {
-    return "";
-  }
-  // From the end, a character outside the BMP is a surrogate pair.
-  const pairStart = atEnd && index > 0 && /[\udc00-\udfff]/.test(text[index]) && /[\ud800-\udbff]/.test(text[index - 1]);
-  return String.fromCodePoint(text.codePointAt(pairStart ? index - 1 : index));
+  return "";
 }
 
 // What a soft line break between two lines of one paragraph becomes:
 // nothing between two Chinese or Japanese characters, which set no space
 // between words, or between one of them and the full-width punctuation
 // beside it, as CSS joins such lines; otherwise a space. `before` and
-// `after` are the lines without the layout whitespace at the break.
+// `after` are the two lines without the layout whitespace at the break. A
+// line that ends or starts with an emphasis or code marker keeps the
+// space, so the markup on either side never runs together (`**強調**` and
+// `**次**` would make `****`).
 export function softBreak(before, after) {
-  const left = edgeCharacter(String(before), true);
-  const right = edgeCharacter(String(after), false);
+  const left = lastCharacter(String(before));
+  const first = String(after).codePointAt(0);
+  const right = first === undefined ? "" : String.fromCodePoint(first);
   const cjkLeft = CJK_CHARACTER.test(left);
   const cjkRight = CJK_CHARACTER.test(right);
   return (cjkLeft && (cjkRight || WIDE_PUNCTUATION.test(right))) || (cjkRight && WIDE_PUNCTUATION.test(left)) ? "" : " ";

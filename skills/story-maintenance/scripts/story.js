@@ -9748,27 +9748,88 @@ function isSceneBreak(paragraph) {
 function isSceneBreakLine(line) {
   return isSceneBreak(collapseSourceSpace(plainSpaces(line)));
 }
-function splitAtSceneBreaks(paragraph) {
-  const pieces = [];
-  let lines = [];
-  for (const line of String(paragraph).split(`
-`)) {
-    if (!isSceneBreakLine(line)) {
-      lines.push(line);
-      continue;
+function breaksParagraph(line) {
+  return /^ {0,3}[^ \t]/.test(line) && isSceneBreakLine(line);
+}
+function isHeadingLine(line) {
+  return /^#+(?:[ \t]|$)/.test(line);
+}
+function separateSceneBreaks(text) {
+  const lines = String(text).split(`
+`);
+  const code = fencedLineIndexes(lines.map((line) => line.replace(/\r$/, "")));
+  const blank = (line) => /^[ \t\r]*$/.test(line);
+  const out = [];
+  for (const [index, line] of lines.entries()) {
+    const breaks = !code.has(index) && breaksParagraph(line);
+    if (breaks && out.length > 0 && !blank(out[out.length - 1])) {
+      out.push("");
     }
-    if (lines.length > 0) {
-      pieces.push(lines.join(`
-`));
+    out.push(line);
+    if (breaks && index < lines.length - 1 && !blank(lines[index + 1])) {
+      out.push("");
     }
-    pieces.push(line);
-    lines = [];
   }
-  if (lines.length > 0) {
-    pieces.push(lines.join(`
-`));
+  return out.join(`
+`);
+}
+var ATX_HEADING = /^ {0,3}#{1,6}(?:[ \t]|$)/;
+var FENCE = /^ {0,3}(`{3,}(?=[^`]*$)|~{3,})/;
+var HTML_BLOCK_TAGS = "address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul";
+var HTML_BLOCKS = [
+  { start: /^<(?:script|pre|style|textarea)(?:[ \t>]|$)/i, end: /<\/(?:script|pre|style|textarea)>/i },
+  { start: /^<!--/, end: /-->/ },
+  { start: /^<\?/, end: /\?>/ },
+  { start: /^<![a-z]/i, end: />/ },
+  { start: /^<!\[CDATA\[/, end: /\]\]>/ },
+  { start: new RegExp(`^</?(?:${HTML_BLOCK_TAGS})(?:[ \\t>]|/>|$)`, "i"), end: null },
+  { start: /^(?:<[a-z][a-z0-9-]*(?:[ \t]+[a-z_:][\w.:-]*(?:[ \t]*=[ \t]*(?:[^ \t"'=<>`]+|'[^']*'|"[^"]*"))?)*[ \t]*\/?>|<\/[a-z][a-z0-9-]*[ \t]*>)[ \t]*$/i, end: null, interrupts: false }
+];
+var MAX_NESTING = 32;
+function isThematicBreak(line) {
+  const marker = /^ {0,3}([-*_])/.exec(line);
+  if (marker === null) {
+    return false;
   }
-  return pieces;
+  const rest = line.slice(marker[0].length - 1);
+  return rest.split(marker[1]).length > 3 && /^[ \t]*$/.test(rest.replaceAll(marker[1], ""));
+}
+function expandTabs(line) {
+  let out = "";
+  for (const character of line) {
+    out += character === "\t" ? " ".repeat(4 - out.length % 4) : character;
+  }
+  return out;
+}
+function indentOf(line) {
+  return /^ */.exec(line)[0].length;
+}
+function listItem(line, interrupting) {
+  const marker = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])(?= |$)/.exec(line);
+  if (!marker || isThematicBreak(line)) {
+    return null;
+  }
+  const after = line.slice(marker[0].length);
+  const empty = after.trim() === "";
+  if (interrupting && (empty || marker[1] !== undefined && Number(marker[1]) !== 1)) {
+    return null;
+  }
+  const spaces = indentOf(after);
+  const indent = marker[0].length + (empty || spaces > 4 ? 1 : spaces);
+  return { indent, rest: empty ? "" : line.slice(indent) };
+}
+function htmlBlock(line, interrupting) {
+  const text = line.slice(indentOf(line));
+  return HTML_BLOCKS.find((block) => block.start.test(text) && !(interrupting && block.interrupts === false)) ?? null;
+}
+function opensBlock(line) {
+  if (line.trim() === "") {
+    return true;
+  }
+  if (indentOf(line) > 3) {
+    return false;
+  }
+  return /^ {0,3}>/.test(line) || listItem(line, true) !== null || isThematicBreak(line) || ATX_HEADING.test(line) || FENCE.test(line) || htmlBlock(line, true) !== null;
 }
 function setextSceneBreakLines(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, `
@@ -9777,50 +9838,102 @@ function setextSceneBreakLines(markdownBody) {
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split(`
 `).length - 1;
+  const buildLines = masked.slice(start).split(`
+`);
+  const printsBreak = (index) => breaksParagraph(buildLines[index].replace(/^(?:[ \t]*>[ \t]?)+/, ""));
   const found = [];
-  let paragraph = "none";
-  for (const [index, rawLine] of masked.slice(start).split(`
+  const containers = [];
+  let leaf = null;
+  for (const [index, source] of body.slice(start).split(`
 `).entries()) {
-    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
-    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
-    const inParagraph = paragraph === (marker ? "quoted" : "plain");
-    const item = /^ {0,3}(?:[-+*]|(\d{1,9})[.)])[ \t]/.exec(line);
+    let line = expandTabs(source);
+    let matched = 0;
+    for (const container of containers) {
+      const quote = container.quote ? /^ {0,3}> ?/.exec(line) : null;
+      if (quote) {
+        line = line.slice(quote[0].length);
+      } else if (!container.quote && line.trim() === "" && !container.empty) {
+        line = "";
+      } else if (!container.quote && line.trim() !== "" && indentOf(line) >= container.indent) {
+        line = line.slice(container.indent);
+        container.empty = false;
+      } else {
+        break;
+      }
+      matched += 1;
+    }
+    if (matched === containers.length && leaf?.kind === "fence") {
+      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (close && close[1][0] === leaf.marker[0] && close[1].length >= leaf.marker.length) {
+        leaf = null;
+      }
+      continue;
+    }
+    if (matched === containers.length && leaf?.kind === "html") {
+      if (leaf.end === null ? line.trim() === "" : leaf.end.test(line)) {
+        leaf = null;
+      }
+      continue;
+    }
+    if (matched < containers.length) {
+      if (leaf?.kind === "paragraph" && !opensBlock(line)) {
+        continue;
+      }
+      containers.length = matched;
+      leaf = null;
+    }
+    while (containers.length < MAX_NESTING) {
+      const quote = /^ {0,3}> ?/.exec(line);
+      const item = quote ? null : listItem(line, leaf?.kind === "paragraph");
+      if (!quote && item === null) {
+        break;
+      }
+      containers.push(quote ? { quote: true } : { quote: false, indent: item.indent, empty: item.rest === "" });
+      line = quote ? line.slice(quote[0].length) : item.rest;
+      leaf = null;
+    }
+    const paragraph = leaf?.kind === "paragraph";
     if (line.trim() === "") {
-      paragraph = "none";
-    } else if (isSceneBreakLine(line)) {
-      if (inParagraph && /^ {0,3}-{3,}[ \t]*$/.test(line)) {
+      leaf = paragraph ? null : leaf;
+    } else if (indentOf(line) > 3) {
+      leaf = paragraph ? leaf : { kind: "code" };
+    } else if (paragraph && /^ {0,3}(?:=+|-+)[ \t]*$/.test(line)) {
+      if (line.includes("-") && printsBreak(index)) {
         found.push(first + index);
       }
-      paragraph = "none";
-    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(line) || inParagraph && /^ {0,3}=+[ \t]*$/.test(line)) {
-      paragraph = "none";
-    } else if (item && !(inParagraph && item[1] !== undefined && Number(item[1]) !== 1)) {
-      paragraph = "list";
-    } else if (marker) {
-      paragraph = "quoted";
-    } else if (paragraph === "none") {
-      paragraph = /^(?: {4}| {0,3}\t)/.test(line) ? "none" : "plain";
+      leaf = null;
+    } else if (isThematicBreak(line) || ATX_HEADING.test(line)) {
+      leaf = null;
+    } else if (FENCE.test(line)) {
+      leaf = { kind: "fence", marker: FENCE.exec(line)[1] };
+    } else if (htmlBlock(line, paragraph) !== null) {
+      const { end } = htmlBlock(line, paragraph);
+      leaf = end !== null && end.test(line) ? null : { kind: "html", end };
+    } else {
+      leaf = paragraph ? leaf : { kind: "paragraph" };
     }
   }
   return found;
 }
-var CJK_CHARACTER2 = /^[\p{scx=Han}\p{scx=Hira}\p{scx=Kana}\u3000-\u303f\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee]$/u;
-var WIDE_PUNCTUATION = /^[\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
-var EDGE_MARKUP = new Set(["*", "_", "`"]);
-function edgeCharacter(text, atEnd) {
-  let index = atEnd ? text.length - 1 : 0;
-  while (index >= 0 && index < text.length && EDGE_MARKUP.has(text[index])) {
-    index += atEnd ? -1 : 1;
+var CJK_CHARACTER2 = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
+var WIDE_PUNCTUATION = /^[\u00b7\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
+var COMBINING = /^[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\u302a-\u302f\u3099\u309a\ufe00-\ufe0f\ufe20-\ufe2f\u{e0100}-\u{e01ef}]$/u;
+function lastCharacter(text) {
+  let end = text.length;
+  while (end > 0) {
+    const pair = end > 1 && /[\udc00-\udfff]/.test(text[end - 1]) && /[\ud800-\udbff]/.test(text[end - 2]);
+    const character = text.slice(end - (pair ? 2 : 1), end);
+    if (!COMBINING.test(character)) {
+      return character;
+    }
+    end -= character.length;
   }
-  if (index < 0 || index >= text.length) {
-    return "";
-  }
-  const pairStart = atEnd && index > 0 && /[\udc00-\udfff]/.test(text[index]) && /[\ud800-\udbff]/.test(text[index - 1]);
-  return String.fromCodePoint(text.codePointAt(pairStart ? index - 1 : index));
+  return "";
 }
 function softBreak(before, after) {
-  const left = edgeCharacter(String(before), true);
-  const right = edgeCharacter(String(after), false);
+  const left = lastCharacter(String(before));
+  const first = String(after).codePointAt(0);
+  const right = first === undefined ? "" : String.fromCodePoint(first);
   const cjkLeft = CJK_CHARACTER2.test(left);
   const cjkRight = CJK_CHARACTER2.test(right);
   return cjkLeft && (cjkRight || WIDE_PUNCTUATION.test(right)) || cjkRight && WIDE_PUNCTUATION.test(left) ? "" : " ";
@@ -17614,7 +17727,7 @@ function compareChapters(previous, current) {
   };
 }
 function proseParagraphs2(prose) {
-  return withoutFencedCode(String(prose)).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !isSceneBreak(paragraph));
+  return separateSceneBreaks(withoutFencedCode(String(prose))).split(/\r?\n\s*\r?\n/).map((paragraph) => paragraph.replace(/\s+/g, " ").trim()).filter((paragraph) => paragraph !== "" && !isSceneBreakLine(paragraph));
 }
 function pairChapters(previous, current) {
   const candidates = [];
@@ -19064,12 +19177,15 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       return;
     }
-    const texts = lines.map((line, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
+    const texts = lines.map(({ line }, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
     const joined = texts.map((text, index) => {
       if (index === texts.length - 1) {
         return text;
       }
-      return /\\$| {2,}$/.test(lines[index]) ? `${text}${LINE_BREAK}` : `${text}${softBreak(text, texts[index + 1])}`;
+      if (/\\$| {2,}$/.test(lines[index].line)) {
+        return `${text}${LINE_BREAK}`;
+      }
+      return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
     }).join("");
     const parts = collapseSourceSpace(joined).split(LINE_BREAK).map(trimSourceSpace);
     const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK);
@@ -19077,17 +19193,19 @@ function markdownParagraphs(markdown, ownIndent = false) {
     lines = [];
     paragraphs.push(!text.includes(LINE_BREAK) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote });
   };
-  const source = flattenHeadings(plainLinks(withoutFenceMarkers(markdown.replace(/\r\n?/g, `
-`))));
-  for (const rawLine of source.split(`
-`)) {
+  const source = splitFences(markdown.replace(/\r\n?/g, `
+`)).flatMap((part) => plainLinks(part.fenced ? withoutFenceMarkers(part.text) : part.text).split(`
+`).map((line) => ({ line, code: part.fenced })));
+  for (const { line: sourceLine, code } of source) {
+    const heading = isHeadingLine(sourceLine);
+    const rawLine = flattenHeadings(sourceLine);
     const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
     const line = marker ? rawLine.slice(marker[0].length) : rawLine;
     if (line.trim() === "") {
       flush();
       continue;
     }
-    if (isSceneBreakLine(line)) {
+    if (!code && breaksParagraph(line)) {
       flush();
       paragraphs.push({ sceneBreak: true });
       continue;
@@ -19098,7 +19216,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
     if (lines.length === 0) {
       quote = Boolean(marker);
     }
-    lines.push(line);
+    lines.push({ line, heading });
   }
   flush();
   return paragraphs;
@@ -24276,7 +24394,13 @@ function proseParagraphs3(body) {
 `)) {
     const lineStart = offset;
     offset += text.length + 1;
-    if (lineStart >= start && text.trim() !== "") {
+    if (lineStart >= start && text.trim() !== "" && breaksParagraph(text)) {
+      if (current) {
+        paragraphs.push(current);
+      }
+      paragraphs.push({ start: lineStart, line, lines: [{ text, line }], end: lineStart + text.length });
+      current = null;
+    } else if (lineStart >= start && text.trim() !== "") {
       current ??= { start: lineStart, line, lines: [] };
       current.lines.push({ text, line });
       current.end = lineStart + text.length;
@@ -24290,7 +24414,7 @@ function proseParagraphs3(body) {
     paragraphs.push(current);
   }
   for (const paragraph of paragraphs) {
-    paragraph.sceneBreak = isSceneBreak(paragraph.lines.map((entry) => entry.text).join(`
+    paragraph.sceneBreak = isSceneBreakLine(paragraph.lines.map((entry) => entry.text).join(`
 `));
   }
   return paragraphs;
@@ -26420,9 +26544,10 @@ function pronunciationGuide(project) {
   return guide.sort((left, right) => compare(left.name, right.name) || left.kind.localeCompare(right.kind, "en"));
 }
 function narrationBody(body) {
-  return flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
+  const text = flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
 `))).replace(/\\\n/g, `
-`).replace(/^[^\S\n]+$/gm, "").split(/\n{2,}/).flatMap(splitAtSceneBreaks).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreakLine(paragraph) ? "[pause]" : paragraph).join(`
+`).replace(/^[^\S\n]+$/gm, "");
+  return separateSceneBreaks(text).split(/\n{2,}/).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreakLine(paragraph) ? "[pause]" : paragraph).join(`
 
 `);
 }
@@ -26450,17 +26575,23 @@ function inkLine(line) {
 var HARD_BREAK = /(?: {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 function inkProse(body) {
   const out = [];
-  for (const paragraph of body.split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/).flatMap(splitAtSceneBreaks)) {
+  for (const paragraph of separateSceneBreaks(body).split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
     const lines = paragraph.split(/\r?\n/);
-    let current = "";
+    let pieces = [];
+    let previous = null;
     lines.forEach((line, index) => {
       const last = index === lines.length - 1;
       const broken = !last && HARD_BREAK.test(line);
       const text = (broken ? line.replace(/\\$/, "") : line).trim();
-      current = current === "" ? text : `${current}${softBreak(current, text)}${text}`;
+      if (previous !== null) {
+        pieces.push(isHeadingLine(previous.line) || isHeadingLine(line) ? " " : softBreak(previous.text, text));
+      }
+      pieces.push(text);
+      previous = { line, text };
       if (broken || last) {
-        out.push(inkLine(current));
-        current = "";
+        out.push(inkLine(pieces.join("")));
+        pieces = [];
+        previous = null;
       }
     });
     out.push("");

@@ -29,12 +29,13 @@ import {
 import { withProjectLocks } from "./lock.js";
 import { optionValues } from "./options.js";
 import {
+  breaksParagraph,
   chapterHeading,
   chapterProse,
   characterCount,
   escapeRegExp,
   extractSection,
-  isSceneBreak,
+  isSceneBreakLine,
   kebabCase,
   maskMarkup,
   proseStart,
@@ -2098,8 +2099,10 @@ function withLineEndings(text, sample) {
 
 // The paragraphs of a chapter's prose: runs of lines that are not blank once
 // comments and code fences are masked, so a scene break or a marker inside
-// either never counts. Each has its offsets in the body, its first line's
-// index in the body, its masked lines, and whether it is a scene break.
+// either never counts, and each scene-break line on its own, as builds read
+// one even with text right above or below it (see breaksParagraph). Each
+// has its offsets in the body, its first line's index in the body, its
+// masked lines, and whether it is a scene break.
 function proseParagraphs(body) {
   const masked = maskMarkup(body);
   const start = proseStart(body, masked);
@@ -2110,7 +2113,13 @@ function proseParagraphs(body) {
   for (const text of masked.split("\n")) {
     const lineStart = offset;
     offset += text.length + 1;
-    if (lineStart >= start && text.trim() !== "") {
+    if (lineStart >= start && text.trim() !== "" && breaksParagraph(text)) {
+      if (current) {
+        paragraphs.push(current);
+      }
+      paragraphs.push({ start: lineStart, line, lines: [{ text, line }], end: lineStart + text.length });
+      current = null;
+    } else if (lineStart >= start && text.trim() !== "") {
       current ??= { start: lineStart, line, lines: [] };
       current.lines.push({ text, line });
       current.end = lineStart + text.length;
@@ -2124,7 +2133,7 @@ function proseParagraphs(body) {
     paragraphs.push(current);
   }
   for (const paragraph of paragraphs) {
-    paragraph.sceneBreak = isSceneBreak(paragraph.lines.map((entry) => entry.text).join("\n"));
+    paragraph.sceneBreak = isSceneBreakLine(paragraph.lines.map((entry) => entry.text).join("\n"));
   }
   return paragraphs;
 }
