@@ -38,6 +38,9 @@ const CONTEXT_WINDOW = 64;
 // open one before its first word.
 const CLOSING_MARKS = ")\\]*_";
 const OPENING_MARKS = "(\\[*_";
+// A stop that ends an abbreviation: one full stop, with any closing marks
+// after it (*Mr.*, [Dr.], (Mr.)).
+const ABBREVIATION_STOP = new RegExp(`^\\.[${CLOSING_MARKS}]*$`);
 // Brackets that close a sentence after a full-width stop (。」), in any
 // language.
 const FULL_WIDTH_CLOSERS = "」』）";
@@ -102,8 +105,8 @@ function buildRules(pack) {
   // are left out, since May, Mayo, and Mai are surnames too.
   const nonNames = either(words("candidateStopwords"));
   return {
-    title: new RegExp(`(?:^|[\\s${openers}(])(?:${either(words("titleAbbreviations"))})$`),
-    initial: new RegExp(`(?:^|[\\s${openers}(])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
+    title: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${either(words("titleAbbreviations"))})$`),
+    initial: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${INITIALS}${pack.capitalInitials === true ? `|${CAPITAL_INITIALS}` : ""})$`, "u"),
     // The next word is an initial too (I. M. Pei).
     nextInitial: new RegExp(`^${dashed}\\p{Lu}\\.`, "u"),
     // The next word is never a name, whole or before a contraction (It's),
@@ -115,7 +118,7 @@ function buildRules(pack) {
     dash: new RegExp(`^${anyOf(marks.dashes)}`),
     // In a pack with `ordinalStop`, a number before the stop is an ordinal
     // (am 3. Mai) and is read like a context abbreviation.
-    context: new RegExp(`(?:^|[\\s${openers}(])(?:${either([...words("contextAbbreviations"), ...(pack.ordinalStop === true ? ["\\d+"] : [])])})$`),
+    context: new RegExp(`(?:^|[\\s${openers}${OPENING_MARKS}])(?:${either([...words("contextAbbreviations"), ...(pack.ordinalStop === true ? ["\\d+"] : [])])})$`),
     calendar: new RegExp(`^(?:${either(words("calendarWords"))})(?![\\p{L}\\p{N}])`, "u"),
     // A sentence ends at a run of stops plus any closing quotes, brackets,
     // or emphasis marks, before a space or the end of the text. A
@@ -221,7 +224,7 @@ export function splitSentences(text, { capitalStart = true, pack = languagePack(
     // as whole.
     const from = Math.max(start, match.index - CONTEXT_WINDOW);
     const before = `${from > start ? "x" : ""}${normalized.slice(from, match.index)}`;
-    const abbreviation = match[0] === "." && (rules.context.test(before)
+    const abbreviation = ABBREVIATION_STOP.test(match[0]) && (rules.context.test(before)
       ? /^[\p{Ll}\p{N}]/u.test(next) || rules.calendar.test(next) || rules.dash.test(next)
       : rules.title.test(before) || (rules.initial.test(before) && !loneCapitalEnds(before, next, rules, pack)));
     const stammer = /^(?:…|\.\.\.)/.test(match[0]) && isStammer(before, next, rules);

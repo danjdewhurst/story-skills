@@ -155,6 +155,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Before, the publish job refused the whole draft, because git quotes such a name in its log and the check then found no `.md` ending.
 - A line that starts with three backticks and closes them on the same line is prose, not a code fence, so its words count. ([#704](https://github.com/danjdewhurst/story-skills/issues/704))
   - Before, the line started a fence, so its words left the counts and the next line of backticks closed it.
+- An abbreviation in emphasis or in a link no longer ends a sentence, as in `*Mr. Darcy*` or `[Dr. Hale](hale.md)`. ([#705](https://github.com/danjdewhurst/story-skills/issues/705))
+  - Sentence counts and the checks that use them now read `She reread *Mr. Darcy* twice.` as one sentence.
 - A backslash-escaped backtick no longer opens a code span, so an HTML comment after it is removed from builds and counts. ([#706](https://github.com/danjdewhurst/story-skills/issues/706))
   - The rest of an escaped run still opens a span, as CommonMark reads it.
 
