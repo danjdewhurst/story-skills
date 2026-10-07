@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { extractNameCandidates, importManuscript } from "../src/import.js";
 import { createStoryProject, exportManuscript, scanProject, synopsisBook, validateProject } from "../src/story.js";
-import { makeTempDir, memoryIo, messages } from "./helpers.js";
+import { expectLinearGrowth, makeTempDir, memoryIo, messages } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -29,21 +29,20 @@ function chapterText(root, number) {
 
 describe("import performance (#92)", () => {
   test("a long line of spaced hyphens imports in linear time", () => {
-    const started = Date.now();
-    const { chapters } = importText(`# Chapter 1\n\nHello.\n\n${" -".repeat(100000)}x\n`);
+    const chapters = expectLinearGrowth((text) => importText(text).chapters, (n) => `# Chapter 1\n\nHello.\n\n${" -".repeat(n / 2)}x\n`, 64000);
     expect(chapters).toHaveLength(1);
-    expect(Date.now() - started).toBeLessThan(2000);
   });
 
   test("a synopsis made of initials splits in linear time", () => {
-    const cwd = makeTempDir();
-    const { root } = createStoryProject({ cwd, title: "Initials" });
-    const storyPath = path.join(root, "story.md");
-    const raw = fs.readFileSync(storyPath, "utf8");
-    fs.writeFileSync(storyPath, raw.replace("# Synopsis", `# Synopsis\n\n${"A. ".repeat(30000)}\n\nThe end came.`), "utf8");
-    const started = Date.now();
-    synopsisBook(root);
-    expect(Date.now() - started).toBeLessThan(2000);
+    const project = (n) => {
+      const cwd = makeTempDir();
+      const { root } = createStoryProject({ cwd, title: "Initials" });
+      const storyPath = path.join(root, "story.md");
+      const raw = fs.readFileSync(storyPath, "utf8");
+      fs.writeFileSync(storyPath, raw.replace("# Synopsis", `# Synopsis\n\n${"A. ".repeat(n / 3)}\n\nThe end came.`), "utf8");
+      return root;
+    };
+    expectLinearGrowth(synopsisBook, project, 24000);
   });
 });
 
