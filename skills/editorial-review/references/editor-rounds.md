@@ -98,5 +98,7 @@ the build to give every label a **Note** link that prefills the issue form.
 For a GitHub-hosted project, the `feedback-triage` skill sets up the
 review-copy workflow, which republishes the HTML copy to GitHub Pages on
 every push to `main`, and the issue form readers file notes with (step 1
-of its workflow). Collect those issues into a `feedback/round-{N}/` file
-per reader and triage them with `feedback-triage`.
+of its workflow). Pages sites can be public: confirm visibility with the
+user before enabling it, and ask before creating any file in `.github/`.
+Collect those issues into a `feedback/round-{N}/` file per reader and
+triage them with `feedback-triage`.

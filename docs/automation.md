@@ -456,7 +456,7 @@ A GitHub Pages site is public, even when the repository is private, unless your 
 - delete the `deploy` job and the **Upload the Pages site** step, and
 - share the `review-copy` workflow artifact instead. Anyone with read access to the repository can download it from the run page; readers then open `index.html` in a browser.
 
-The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill sets this up for a round of reader notes. It asks before creating files in `.github/` and warns about Pages visibility first.
+The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill sets this up for a round of reader notes. It warns about Pages visibility and confirms it with you first, then asks before creating files in `.github/`.
 
 ### Review rounds and changing labels
 

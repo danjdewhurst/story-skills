@@ -11,8 +11,8 @@ What each `story build` format writes, and the flags and `story.md` fields it re
 `build --format html` when the user wants a review or reading copy for people who never open a terminal: a single HTML file with a table of contents and a paragraph label on every paragraph, shown faintly in the margin as a link labelled `ch03-p12` (chapter 3, paragraph 12), that reviewers cite in notes.
 
 - A label is the paragraph's position in that build, so any earlier edit renumbers it; add `--stamp <round or date>` so notes can name the build, and ask reviewers to quote each paragraph's first few words.
-- `--note-url <url>` adds a Note link beside each label, prefilled with `title`, `anchor`, `build`, and `quote` query parameters for the `manuscript-note.yml` issue form.
-- `templates/github/review-copy.yml` publishes it to GitHub Pages; see the `feedback-triage` skill.
+- `--note-url <url>` adds a Note link beside each label, prefilled with `title`, `anchor`, `build`, and `quote` query parameters for the reader-note issue form.
+- The `feedback-triage` skill sets up the GitHub Pages workflow that publishes it, and the issue form.
 
 ## print
 

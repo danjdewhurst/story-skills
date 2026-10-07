@@ -1,6 +1,6 @@
 ---
 name: interactive-fiction
-description: This skill should be used when the user asks to "write a branching story", "interactive fiction", "choose your own adventure", "plan the branches", "choice graph", "add a choice", "gamebook", "draft a branch", "where the branches rejoin", "add an ending", "unreachable chapter", "path continuity", "state-differs-by-path", or wants to plan, draft, or revise a story project whose chapters carry `choices`. NOT for turning a finished linear book into an interactive edition in Ink or Twine (use adaptation).
+description: This skill should be used when the user asks to "write a branching story", "interactive fiction", "choose your own adventure", "plan the branches", "choice graph", "add a choice", "gamebook", "Twine", "Ink", "draft a branch", "where the branches rejoin", "add an ending", "unreachable chapter", "path continuity", "state-differs-by-path", or wants to plan, draft, or revise a story project whose chapters carry `choices`. NOT for turning a finished linear book into an interactive edition in Ink or Twine (use adaptation).
 ---
 
 # Interactive Fiction
