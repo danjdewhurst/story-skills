@@ -618,7 +618,7 @@ export function checkDraft(checks, inputText, draftText) {
   if (checks.requires_first_person === true) {
     FIRST_PERSON_RE.lastIndex = 0;
     results.push([
-      FIRST_PERSON_RE.test(proseOnly),
+      FIRST_PERSON_RE.test(narration(proseOnly)),
       `structure: first-person voice present`,
     ]);
   }

@@ -589,6 +589,13 @@ describe("the checker's prose checks", () => {
     ]);
   });
 
+  test("the top-level first-person check reads narration, so dialogue alone does not count", () => {
+    const firstPerson = (draft) =>
+      checkDraft({ requires_first_person: true }, "", draft).find(([, desc]) => desc === "structure: first-person voice present");
+    expect(firstPerson('"I can wait," he said. Petra walked on.\n')).toEqual([false, "structure: first-person voice present"]);
+    expect(firstPerson('"I can wait," he said. I walked on.\n')).toEqual([true, "structure: first-person voice present"]);
+  });
+
   test("a misspelled top-level field fails the draft instead of being ignored", () => {
     const results = checkDraft({ required: ["Petra"], banned_regx: ["Thursday"] }, "", "Petra came on Thursday.\n");
     expect(results).toContainEqual([false, 'checks.json: unknown key "banned_regx"']);
