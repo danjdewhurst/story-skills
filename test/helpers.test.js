@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { git, gitEnv, makeTempDir } from "./helpers.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
@@ -132,5 +133,40 @@ describe("git for tests (#561)", () => {
     }
     // Calls known to start git, so a scan that matches nothing fails.
     expect(found).toEqual(expect.arrayContaining(["helpers.js", "release.test.js"]));
+  });
+});
+
+describe("otherLivePid", () => {
+  test("its sleeper exits once the process that started it is gone, though no exit handler runs", () => {
+    const helpers = pathToFileURL(path.join(import.meta.dir, "helpers.js")).href;
+    const pidFile = path.join(makeTempDir(), "sleeper.pid");
+    // The parent waits past the sleeper's first check, makes sure it is
+    // still running, and is killed, as bun test ends without running exit
+    // handlers.
+    const parent = spawnSync(process.execPath, ["-e", `Promise.all([import(${JSON.stringify(helpers)}), import("node:fs")]).then(([{ otherLivePid }, fs]) => {
+      const pid = otherLivePid();
+      Bun.sleepSync(1500);
+      process.kill(pid, 0);
+      fs.writeFileSync(${JSON.stringify(pidFile)}, String(pid));
+      process.kill(process.pid, "SIGKILL");
+    })`], { encoding: "utf8" });
+    expect(fs.existsSync(pidFile), parent.stderr).toBe(true);
+    const pid = Number(fs.readFileSync(pidFile, "utf8"));
+    let alive = true;
+    try {
+      for (let tries = 0; tries < 100 && alive; tries += 1) {
+        try {
+          process.kill(pid, 0);
+          Bun.sleepSync(100);
+        } catch {
+          alive = false;
+        }
+      }
+      expect(alive).toBe(false);
+    } finally {
+      if (alive) {
+        process.kill(pid);
+      }
+    }
   });
 });

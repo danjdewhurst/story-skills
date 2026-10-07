@@ -18,11 +18,24 @@ export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "w
 // The pid of a live process other than this one, standing in for another
 // story command that holds a project lock. It is a child that sleeps until
 // the test run ends (the runner's parent is no use: in a container where
-// bun is pid 1 it has pid 0), started on first use.
+// bun is pid 1 it has pid 0), started on first use. bun test runs no exit
+// handlers, so the child checks each second that this process is still
+// there and exits once it is gone, rather than outliving the run. EPERM
+// means a process has the pid but this user may not signal it, as in
+// src/lock.js.
 let sleeper = null;
 export function otherLivePid() {
   if (sleeper === null) {
-    sleeper = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30 * 60 * 1000)"], { stdio: "ignore" });
+    const script = `setInterval(() => {
+      try {
+        process.kill(${process.pid}, 0);
+      } catch (error) {
+        if (error.code !== "EPERM") {
+          process.exit();
+        }
+      }
+    }, 1000);`;
+    sleeper = spawn(process.execPath, ["-e", script], { stdio: "ignore" });
     sleeper.unref();
     process.on("exit", () => sleeper.kill());
   }
