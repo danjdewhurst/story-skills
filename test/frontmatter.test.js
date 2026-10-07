@@ -151,6 +151,17 @@ Body`);
     expect(parsed.body).toBe("Body");
   });
 
+  // #727: trailing spaces on a list item's first key line do not shift the
+  // indent its other keys must line up with.
+  test("reads a list item's other keys after a first key line with trailing spaces (#727)", () => {
+    expect(parseFrontmatter("---\nrelationships:\n  - character: sera-voss   \n    type: sibling\n---\nBody").data)
+      .toEqual({ relationships: [{ character: "sera-voss", type: "sibling" }] });
+    expect(parseFrontmatter("---\nrelationships:\n  - character: sera-voss\t \n    type: sibling\n---\nBody").data)
+      .toEqual({ relationships: [{ character: "sera-voss", type: "sibling" }] });
+    expect(parseFrontmatter("---\r\nrelationships:\r\n  - character: sera-voss   \r\n    type: sibling\r\n---\r\nBody").data)
+      .toEqual({ relationships: [{ character: "sera-voss", type: "sibling" }] });
+  });
+
   test("tolerates trailing spaces and tabs after frontmatter delimiters", () => {
     const parsed = parseFrontmatter("---   \ntitle: Spaced\n---\t \nBody");
 

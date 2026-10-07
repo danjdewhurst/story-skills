@@ -1834,7 +1834,7 @@ function parseYamlBlocks(source, firstLine = 2) {
       const before = rawLines.slice(gap, itemStart);
       const rest = match[2] ?? "";
       const itemText = trimSpaces(rest);
-      const childIndent = indent + 1 + rest.length - itemText.length;
+      const childIndent = indent + 1 + /^[ \t]*/.exec(rest)[0].length;
       const objectMatch = ITEM_KEY_PATTERN.exec(itemText);
       if (!objectMatch) {
         if (/^-([ \t]|$)/.test(itemText)) {
