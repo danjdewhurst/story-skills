@@ -40,7 +40,8 @@ law applies elsewhere; say what to check.
 
 - Filling retailer metadata: ISBN, publisher, date, description, keywords,
   BISAC and Thema subjects, language, cover alt text, AI disclosure
-- Writing the copyright page or checking epigraph and lyric permissions
+- Writing the copyright page and recording the permission status of quoted
+  matter (clearance questions go to `editorial-review`)
 - Building and checking the EPUB or the print interior; choosing trim size
 - Choosing retailers and exclusivity, setting prices, planning a launch
 - Recording rights, reviewing a contract offer, drafting a rights one-sheet
@@ -82,9 +83,9 @@ story build . --format metadata
 The metadata sheet lists every missing field in its readiness checklist,
 including a `Permissions cleared for quoted matter` row that names each
 matter page still at `permission: pending`, whatever the story status,
-a `No [TODO markers in chapter prose` row that names each chapter still
+a ``No `[TODO` markers in chapter prose`` row that names each chapter still
 holding a `[TODO` marker, which every build would print, and a
-`No [TODO markers on matter pages` row that names each matter page still
+``No `[TODO` markers on matter pages`` row that names each matter page still
 holding one, such as a `[TODO: author to supply]` ISBN line. Report the
 checklist with the validate findings, and any `has no prose yet` warning from the build: that
 chapter would ship as a heading-only page, so ask whether to write it or
@@ -163,9 +164,11 @@ story build . --format metadata
    for each such line, and tell them not to upload a file built while
    that warning shows. Promote the code to `level: error` under `severity`
    in `story.md` only when the author asks for release builds to fail on it.
-3. For each epigraph, lyric, or quoted page in `matter/`, set `permission`
-   (`not-needed`, `pending`, `granted`, `public-domain`), `rights-holder`,
-   and `credit`. Quoting song lyrics almost always needs permission.
+3. For each epigraph, lyric, or quoted page in `matter/`, record its
+   `permission` state (`not-needed`, `pending`, `granted`, `public-domain`),
+   `rights-holder`, and `credit` as the author reports them. Whether a
+   quotation needs permission, and how to ask, is a clearance question for
+   the `editorial-review` skill.
 
 ### 4. Ebook
 
