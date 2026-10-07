@@ -9121,6 +9121,13 @@ function normalizeIsbn(value) {
   }
   return "";
 }
+function isCopyrightMatter(entry) {
+  return entry.id === "copyright" || /copyright/i.test(entry.title);
+}
+var COPYRIGHT_PAGE_FIELDS = [["copyright", "copyright"], ["publisher", "publisher"], ["ai-disclosure", "aiDisclosure"]];
+function copyrightPageTodos(meta) {
+  return COPYRIGHT_PAGE_FIELDS.map(([field, key]) => ({ field, markers: countTodoMarkers(meta[key]) })).filter((entry) => entry.markers > 0);
+}
 function copyrightPage(meta) {
   const lines = [meta.copyright, "", fillLabel(meta.labels, "all-rights-reserved")];
   if (meta.publisher !== "") {
@@ -10025,8 +10032,11 @@ function chapterProse(markdownBody, commentReplacement = "") {
 function hasUnclosedComment(prose) {
   return scanComments(String(prose)).unclosed;
 }
+var TODO_MARKER = /\[TODO\b/i;
+var TODO_MARKERS = /\[TODO\b/gi;
 function countTodoMarkers(prose) {
-  return (String(prose).match(/\[TODO\b/gi) ?? []).length;
+  const text = String(prose);
+  return TODO_MARKER.test(text) ? (maskLinkTargets(text).text.match(TODO_MARKERS) ?? []).length : 0;
 }
 function scanComments(text, replacement = "") {
   const source = String(text);
@@ -13312,17 +13322,22 @@ function scanProject(root) {
       risk: asArray(data.risk),
       reviewedBy: asArray(data["reviewed-by"])
     }), scanErrors),
-    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => ({
-      id,
-      file,
-      title: String(data.title ?? titleCaseSlug(id)),
-      placement: String(data.placement ?? ""),
-      order: Number.isInteger(data.order) ? data.order : 0,
-      heading: data.heading !== false,
-      permission: typeof data.permission === "string" ? data.permission : "",
-      empty: chapterProse(markdown.body).trim() === "",
-      todoMarkers: countTodoMarkers(chapterProse(markdown.body))
-    }), scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
+    matter: readEntityFiles(projectRoot, MATTER_DIR, (id, file, data, markdown) => {
+      const title = String(data.title ?? titleCaseSlug(id));
+      const prose = chapterProse(markdown.body);
+      const empty = prose.trim() === "";
+      return {
+        id,
+        file,
+        title,
+        placement: String(data.placement ?? ""),
+        order: Number.isInteger(data.order) ? data.order : 0,
+        heading: data.heading !== false,
+        permission: typeof data.permission === "string" ? data.permission : "",
+        empty,
+        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title)
+      };
+    }, scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
     styleSheet: readStyleSheet(projectRoot, scanErrors),
     progressLog: readOptionalRootFile(projectRoot, PROGRESS_FILE, scanErrors),
@@ -22718,8 +22733,7 @@ function validateMatter(project, errors, warnings) {
       warnings.push(warn("empty-matter", `${label} has no text and is left out of export and build`, label));
     }
     if (matter.todoMarkers > 0) {
-      const them = matter.todoMarkers === 1 ? "it" : "them";
-      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: fill ${them} in or move ${them} into an HTML comment`, label));
+      warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: ask the author to supply the text`, label));
     }
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
@@ -22743,6 +22757,12 @@ function validateMatter(project, errors, warnings) {
     }
     if (data.permission === "granted" && (typeof data["rights-holder"] !== "string" || data["rights-holder"].trim() === "")) {
       warnings.push(warn("permission-no-rights-holder", `${label} permission is granted but no rights-holder is recorded`, label));
+    }
+  }
+  const meta = publishingMeta(project.story.data);
+  if (meta.copyright !== "" && !project.matter.some((matter) => !matter.empty && MATTER_PLACEMENTS.has(matter.placement) && isCopyrightMatter(matter))) {
+    for (const { field, markers } of copyrightPageTodos(meta)) {
+      warnings.push(warn("matter-todo-markers", `story.md ${field} has ${plural(markers, "[TODO marker")}, which export and build print on the generated copyright page: ask the author to supply the text`, "story.md"));
     }
   }
 }
@@ -27208,19 +27228,19 @@ function buildBook(root, options = {}) {
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true }));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true, titles: true }));
   } else if (format === "html" || format === "print") {
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: format === "html" }));
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
@@ -27725,16 +27745,18 @@ function manuscriptParts(project, action = "build") {
     warnings
   };
 }
-function matterTodoWarnings(project, manuscript, { action = "build", narration = false } = {}) {
+function matterTodoWarnings(project, manuscript, { action = "build", narration = false, titles = false } = {}) {
   const printed = [...manuscript.front.filter((entry) => !(narration && entry.copyright)), ...manuscript.back];
   return printed.flatMap((entry) => {
-    const markers = entry.file === undefined ? 0 : countTodoMarkers(entry.body);
+    if (entry.file === undefined) {
+      return copyrightPageTodos(manuscript.meta).map(({ field, markers }) => warn("matter-todo-markers", `story.md ${field} still has ${plural(markers, "[TODO marker")}, which this ${action} prints on the generated copyright page: ask the author to supply the text before you publish`, "story.md"));
+    }
+    const markers = countTodoMarkers(entry.body) + (titles || entry.heading ? countTodoMarkers(entry.title) : 0);
     if (markers === 0) {
       return [];
     }
     const file = relative(project, entry.file);
-    const them = markers === 1 ? "it" : "them";
-    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: fill ${them} in before you publish`, file)];
+    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: ask the author to supply the text before you publish`, file)];
   });
 }
 function assertMatterTitles(project) {
@@ -27754,9 +27776,6 @@ function chapterKey(chapter, keys) {
   }
   keys.add(key);
   return key;
-}
-function isCopyrightMatter(entry) {
-  return entry.id === "copyright" || /copyright/i.test(entry.title);
 }
 var HAND_EDITED_DIRECTORIES = ["feedback", "submission", "publishing", "adaptations"];
 function assertNotProjectSource(project, outFile) {

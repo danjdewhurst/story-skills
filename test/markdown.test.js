@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { breaksParagraph, chapterHeading, chapterProse, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
+import { breaksParagraph, chapterHeading, chapterProse, countTodoMarkers, countedText, extractSection, flattenHeadings, isSceneBreakLine, kebabCase, maskLinkTargets, maskMarkup, plainLinks, separateSceneBreaks, setextSceneBreakLines, softBreak, splitWords, titleCaseSlug, wordCount } from "../src/markdown.js";
 import { backtickRuns, expectComparableTime, expectLinearTime } from "./helpers.js";
 
 describe("markdown utilities", () => {
@@ -411,5 +411,15 @@ describe("soft line breaks (#599)", () => {
     expect(softBreak("*彼は*", "*言った*")).toBe(" ");
     expect(softBreak("他说`东京`", "`大阪`很远")).toBe(" ");
     expect(softBreak("強調", "_です_")).toBe(" ");
+  });
+});
+
+describe("countTodoMarkers", () => {
+  test("counts only the [TODO markers a reader sees (#557)", () => {
+    expect(countTodoMarkers("ISBN [TODO: author to supply], [todo: later], [TODO check]")).toBe(3);
+    expect(countTodoMarkers("No markers, not even TODO or [TODOS].")).toBe(0);
+    // Link text is printed; a destination, link title, URL, or tag is not.
+    expect(countTodoMarkers("[TODO: the sequel](https://example.com) and [TODO: notes][ref]\n\n[ref]: https://example.com/[TODO]")).toBe(2);
+    expect(countTodoMarkers("[notes](notes.md \"[TODO: title]\") [site](https://example.com/[TODO]) https://example.com/[TODO] <span title=\"[TODO]\">x</span>")).toBe(0);
   });
 });

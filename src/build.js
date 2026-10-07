@@ -18,7 +18,7 @@ import {
   trimBlankLines,
   wordCount
 } from "./markdown.js";
-import { chapterByline, copyrightPage, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
+import { chapterByline, copyrightPage, copyrightPageTodos, isCopyrightMatter, leadNames, metadataSheet, nameList, publishingMeta } from "./publishing.js";
 import { DEFAULT_TRIM, estimateBookPages, indentsFirstLines, printHtml, reviewHtml, TRIM_SIZES } from "./html.js";
 import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
@@ -194,19 +194,19 @@ export function buildBook(root, options = {}) {
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true }));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true, titles: true }));
   } else if (format === "html" || format === "print") {
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
     writeFile(output.outFile, text, output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: format === "html" }));
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project), output.writeOptions);
   } else if (format === "epub") {
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
-    manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
+    manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project), output.writeOptions, paper);
   } else {
@@ -813,17 +813,22 @@ export function manuscriptParts(project, action = "build") {
 // the `[TODO: author to supply]` the publishing skill leaves on a copyright
 // page's ISBN line. Only the builds that print matter ask: the Shunn,
 // metadata, Fountain, Twee, and ink builds print none, and narration skips a
-// front-matter copyright page. The page generated from story.md has no file.
-function matterTodoWarnings(project, manuscript, { action = "build", narration = false } = {}) {
+// front-matter copyright page. `titles` is set by the builds that name a
+// page without a heading too (the EPUB and review copy contents, the
+// narration script). The page generated from story.md has no file: its
+// markers are in the story.md fields it prints.
+function matterTodoWarnings(project, manuscript, { action = "build", narration = false, titles = false } = {}) {
   const printed = [...manuscript.front.filter((entry) => !(narration && entry.copyright)), ...manuscript.back];
   return printed.flatMap((entry) => {
-    const markers = entry.file === undefined ? 0 : countTodoMarkers(entry.body);
+    if (entry.file === undefined) {
+      return copyrightPageTodos(manuscript.meta).map(({ field, markers }) => warn("matter-todo-markers", `story.md ${field} still has ${plural(markers, "[TODO marker")}, which this ${action} prints on the generated copyright page: ask the author to supply the text before you publish`, "story.md"));
+    }
+    const markers = countTodoMarkers(entry.body) + (titles || entry.heading ? countTodoMarkers(entry.title) : 0);
     if (markers === 0) {
       return [];
     }
     const file = relative(project, entry.file);
-    const them = markers === 1 ? "it" : "them";
-    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: fill ${them} in before you publish`, file)];
+    return [warn("matter-todo-markers", `${file} still has ${plural(markers, "[TODO marker")}, which this ${action} prints: ask the author to supply the text before you publish`, file)];
   });
 }
 
@@ -855,12 +860,6 @@ function chapterKey(chapter, keys) {
   }
   keys.add(key);
   return key;
-}
-
-// A copyright page is found by its id or its title, once, and every build
-// format reads the flag.
-function isCopyrightMatter(entry) {
-  return entry.id === "copyright" || /copyright/i.test(entry.title);
 }
 
 // Skill-owned folders: generated drafts start here (a synopsis in

@@ -125,7 +125,7 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
 
     const print = runWith(env, ["build", root, "--format", "print", "--pdf"], root);
     expect(print.code).toBe(0);
-    expect(print.err).toBe("warning: matter/copyright.md still has 1 [TODO marker, which this build prints: fill it in before you publish [matter-todo-markers]\n");
+    expect(print.err).toBe("warning: matter/copyright.md still has 1 [TODO marker, which this build prints: ask the author to supply the text before you publish [matter-todo-markers]\n");
     const shunn = runWith(env, ["build", root, "--format", "shunn", "--pdf"], root);
     expect(shunn.code).toBe(0);
     expect(shunn.err).toBe("");

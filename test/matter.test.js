@@ -429,18 +429,22 @@ describe("[TODO markers on matter pages (#557)", () => {
 
   const placeholders = (result) => result.warnings.filter((finding) => finding.code === "matter-todo-markers");
   const printed = (action) => [
-    `matter/copyright.md still has 1 [TODO marker, which this ${action} prints: fill it in before you publish`,
-    `matter/afterword.md still has 2 [TODO markers, which this ${action} prints: fill them in before you publish`
+    `matter/copyright.md still has 1 [TODO marker, which this ${action} prints: ask the author to supply the text before you publish`,
+    `matter/afterword.md still has 2 [TODO markers, which this ${action} prints: ask the author to supply the text before you publish`
   ];
+  // Every build that prints matter, and those that print none.
+  const MATTER_BUILDS = ["markdown", "epub", "docx", "html", "print", "narration"];
+  const QUIET_BUILDS = [{ format: "shunn" }, { format: "docx", shunn: true }, { format: "metadata" }, { format: "fountain" }, { format: "twee" }, { format: "ink" }, { format: "codex" }];
+  const warningsByBuild = (root, formats) => Object.fromEntries(formats.map((format) => [format, messages(placeholders(buildBook(root, { format })))]));
 
-  test("validate warns about each page with a marker outside an HTML comment", () => {
+  test("validate warns about each page with a marker outside an HTML comment, and asks for the author's text", () => {
     const { root } = matterProject();
     withPlaceholders(root);
     const found = placeholders(validateProject(root));
 
     expect(messages(found)).toEqual([
-      "matter/copyright.md has 1 [TODO marker, which export and build print: fill it in or move it into an HTML comment",
-      "matter/afterword.md has 2 [TODO markers, which export and build print: fill them in or move them into an HTML comment"
+      "matter/copyright.md has 1 [TODO marker, which export and build print: ask the author to supply the text",
+      "matter/afterword.md has 2 [TODO markers, which export and build print: ask the author to supply the text"
     ]);
     expect(found.map((finding) => finding.file)).toEqual(["matter/copyright.md", "matter/afterword.md"]);
   });
@@ -452,15 +456,45 @@ describe("[TODO markers on matter pages (#557)", () => {
     const exported = exportManuscript(root);
     expect(messages(placeholders(exported))).toEqual(printed("export"));
     expect(fs.readFileSync(exported.outFile, "utf8")).toContain("ISBN [TODO: author to supply] (ebook)");
-    for (const format of ["markdown", "epub", "docx", "html", "print"]) {
-      expect({ format, warnings: messages(placeholders(buildBook(root, { format }))) }).toEqual({ format, warnings: printed("build") });
-    }
-    // Narration skips a front-matter copyright page.
-    expect(messages(placeholders(buildBook(root, { format: "narration" })))).toEqual([printed("build")[1]]);
-    // These print no matter page.
-    for (const options of [{ format: "shunn" }, { format: "docx", shunn: true }, { format: "metadata" }, { format: "fountain" }, { format: "twee" }, { format: "ink" }]) {
+    expect(warningsByBuild(root, MATTER_BUILDS)).toEqual({
+      markdown: printed("build"),
+      epub: printed("build"),
+      docx: printed("build"),
+      html: printed("build"),
+      print: printed("build"),
+      // Narration skips a front-matter copyright page.
+      narration: [printed("build")[1]]
+    });
+    for (const options of QUIET_BUILDS) {
       expect({ options, warnings: placeholders(buildBook(root, options)) }).toEqual({ options, warnings: [] });
     }
+  });
+
+  test("a marker in a title counts wherever the build prints the title", () => {
+    const { root } = matterProject();
+    writeMatter(root, "dedication", "title: \"[TODO: dedication title]\"\nplacement: front\norder: 1\nheading: false", "For Mara.\n");
+    // An empty page is left out of every build, title and all.
+    writeMatter(root, "unwritten", "title: \"[TODO: later]\"\nplacement: back\norder: 1", "# Later\n\n");
+    expect(messages(placeholders(validateProject(root)))).toEqual(["matter/dedication.md has 1 [TODO marker, which export and build print: ask the author to supply the text"]);
+
+    // Without a heading, the title still names the page in the EPUB and
+    // review-copy contents and in the narration script.
+    const named = ["matter/dedication.md still has 1 [TODO marker, which this build prints: ask the author to supply the text before you publish"];
+    expect(warningsByBuild(root, MATTER_BUILDS)).toEqual({ markdown: [], epub: named, docx: [], html: named, print: [], narration: named });
+    expect(messages(placeholders(exportManuscript(root)))).toEqual([]);
+
+    writeMatter(root, "dedication", "title: \"[TODO: dedication title]\"\nplacement: front\norder: 1\nheading: true", "For Mara.\n");
+    expect(warningsByBuild(root, MATTER_BUILDS)).toEqual(Object.fromEntries(MATTER_BUILDS.map((format) => [format, named])));
+  });
+
+  test("a marker no reader sees, in a link destination or title, a URL, or an HTML tag, does not count", () => {
+    const { root } = matterProject();
+    writeMatter(root, "also-by", "title: Also By\nplacement: back\norder: 1", "See [the notes](notes.md \"[TODO: title]\"), [the site](https://example.com/[TODO]), <span title=\"[TODO: x]\">this</span>, and https://example.com/[TODO]/more.\n");
+    expect(placeholders(validateProject(root))).toEqual([]);
+    expect(placeholders(buildBook(root, { format: "epub" }))).toEqual([]);
+
+    writeMatter(root, "also-by", "title: Also By\nplacement: back\norder: 1", "See [TODO: the sequel](https://example.com).\n");
+    expect(messages(placeholders(validateProject(root)))).toEqual(["matter/also-by.md has 1 [TODO marker, which export and build print: ask the author to supply the text"]);
   });
 
   test("the metadata sheet names each page until its markers are gone", () => {
@@ -476,12 +510,27 @@ describe("[TODO markers on matter pages (#557)", () => {
     expect(placeholders(buildBook(root, { format: "epub" }))).toEqual([]);
   });
 
-  test("the copyright page generated from story.md never warns", () => {
+  test("a marker inside a story.md field the generated copyright page prints is named by its field", () => {
     const { root } = matterProject();
-    setStoryFields(root, "copyright: \"© 2026 Ada Writer\"\nisbn: \"[TODO: author to supply]\"");
-    const result = buildBook(root, { format: "epub" });
-    expect(placeholders(result)).toEqual([]);
-    expect(readArchiveEntries(result.outFile).some((entry) => entry.name.includes("copyright"))).toBe(true);
+    // A value that is only a placeholder (isbn) is left out of the page.
+    setStoryFields(root, "copyright: \"© 2026 [TODO: author to supply]\"\npublisher: \"Ada Press [TODO: confirm imprint]\"\nisbn: \"[TODO: author to supply]\"");
+    expect(messages(placeholders(validateProject(root)))).toEqual([
+      "story.md copyright has 1 [TODO marker, which export and build print on the generated copyright page: ask the author to supply the text",
+      "story.md publisher has 1 [TODO marker, which export and build print on the generated copyright page: ask the author to supply the text"
+    ]);
+    const fields = (action) => ["copyright", "publisher"].map((field) => `story.md ${field} still has 1 [TODO marker, which this ${action} prints on the generated copyright page: ask the author to supply the text before you publish`);
+    const epub = buildBook(root, { format: "epub" });
+    expect(placeholders(epub).map((finding) => [finding.file, finding.message])).toEqual(fields("build").map((message) => ["story.md", message]));
+    expect(readArchiveText(epub.outFile)).toContain("© 2026 [TODO: author to supply]");
+    expect(messages(placeholders(exportManuscript(root)))).toEqual(fields("export"));
+    // Narration skips the copyright page; Shunn prints no matter.
+    expect(placeholders(buildBook(root, { format: "narration" }))).toEqual([]);
+    expect(placeholders(buildBook(root, { format: "shunn" }))).toEqual([]);
+
+    // A written copyright page replaces the generated one.
+    writeMatter(root, "copyright", "title: Copyright\nplacement: front\norder: 0\nheading: false", "Copyright © 2026 Ada Writer\n");
+    expect(placeholders(validateProject(root))).toEqual([]);
+    expect(placeholders(buildBook(root, { format: "epub" }))).toEqual([]);
   });
 
   test("story.md severity can make a release build fail while a placeholder remains", () => {

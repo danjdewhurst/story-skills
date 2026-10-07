@@ -1208,7 +1208,7 @@ heading: false
 | `rights-holder` | string | no | Who granted the permission. |
 | `credit` | string | no | The credit line the grant requires. |
 
-The body is the page text; a leading `# Heading` line is dropped, as for a chapter. Matter ids become EPUB file names, so builds refuse ids that are not kebab-case. A matter file with no text is left out of export and build, and `story validate` warns about it. A `[TODO` marker in the text outside an HTML comment, such as a `[TODO: author to supply]` ISBN line, prints as written, so `story validate`, export, and every build that includes the page warn about it (`matter-todo-markers`). [Import, export, and builds](manuscripts.md) explains where each format places matter.
+The body is the page text; a leading `# Heading` line is dropped, as for a chapter. Matter ids become EPUB file names, so builds refuse ids that are not kebab-case. A matter file with no text is left out of export and build, and `story validate` warns about it. A `[TODO` marker in the text or `title`, such as a `[TODO: author to supply]` ISBN line, prints as written, so `story validate`, export, and every build that includes the page warn about it (`matter-todo-markers`); one inside an HTML comment or a link destination does not count. [Import, export, and builds](manuscripts.md) explains where each format places matter.
 
 `story validate` errors on an unsupported `permission` and when `rights-holder` or `credit` is a list or mapping rather than a single value. It warns when `permission` is `pending` and the story `status` is `complete`, and when `permission` is `granted` with no `rights-holder`. The [editorial-review skill](../skills/editorial-review/SKILL.md) covers permissions.
 
