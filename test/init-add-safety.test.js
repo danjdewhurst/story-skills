@@ -7,7 +7,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
-import { buildBook, createEntity, createStoryProject, scanProject, validateProject } from "../src/story.js";
+import { buildBook, createEntity, createStoryProject, scanProject, validateLinks, validateProject } from "../src/story.js";
 import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -23,6 +23,21 @@ function frontmatter(file) {
 function setFrontmatterLine(file, pattern, replacement) {
   const text = fs.readFileSync(file, "utf8");
   fs.writeFileSync(file, text.replace(pattern, replacement), "utf8");
+}
+
+function newProject(title = "Refs") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function read(root, ...parts) {
+  return fs.readFileSync(path.join(root, ...parts), "utf8");
+}
+
+function edit(root, relativePath, from, to) {
+  const file = path.join(root, relativePath);
+  const text = fs.readFileSync(file, "utf8");
+  expect(text).toContain(from);
+  fs.writeFileSync(file, text.replace(from, to));
 }
 
 describe("init", () => {
@@ -417,5 +432,65 @@ describe("portable folder names (#204)", () => {
   test("accepts an ordinary dotted folder name", () => {
     const cwd = makeTempDir();
     expect(createStoryProject({ cwd, title: "Book", dir: "book.v2" }).storyId).toBe("book");
+  });
+});
+
+describe("reference handling in add and init", () => {
+  test("#68 add refuses a resolved or status chapter that is not written yet", () => {
+    const root = newProject();
+    createEntity(root, { kind: "chapter", name: "One" });
+    expect(() => createEntity(root, { kind: "question", name: "Who", introduced: "chapter-01", resolved: "chapter-05" })).toThrow("--resolved chapter-05 is not written yet");
+    expect(() => createEntity(root, { kind: "question", name: "Why", introduced: "chapter-04", status: "dropped" })).toThrow("--introduced chapter-04 is not written yet");
+    expect(() => createEntity(root, { kind: "promise", name: "P", planted: "chapter-01", payoff: "chapter-05", status: "paid-off" })).toThrow("--payoff chapter-05 is not written yet");
+    expect(() => createEntity(root, { kind: "clue", name: "C", planted: "chapter-05", status: "planted" })).toThrow("--planted chapter-05 is not written yet");
+    expect(fs.readdirSync(path.join(root, "continuity", "questions"))).toEqual(["_index.md"]);
+    createEntity(root, { kind: "question", name: "When", introduced: "chapter-01", resolved: "chapter-01" });
+    createEntity(root, { kind: "promise", name: "Q", planted: "chapter-01", payoff: "chapter-05" });
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+
+  test("#100 add refuses several ids for one-id fields and merges singular and plural flags", () => {
+    const root = newProject();
+    createEntity(root, { kind: "location", name: "Port Kestrel" });
+    createEntity(root, { kind: "location", name: "Salt Market" });
+    createEntity(root, { kind: "chapter", name: "One" });
+    expect(() => createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for a scene, got port-kestrel, salt-market");
+    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: ["port-kestrel", "salt-market"] })).toThrow("--location takes one id for an artifact");
+    expect(() => createEntity(root, { kind: "location", name: "Keep", "controlled-by": ["ann", "bo"] })).toThrow("--controlled-by takes one id");
+    // A singular flag keeps a comma, so a comma list is not an id.
+    expect(() => createEntity(root, { kind: "artifact", name: "Key", location: "port-kestrel,salt-market" })).toThrow('--location "port-kestrel,salt-market" must be a kebab-case id');
+    createEntity(root, { kind: "scene", name: "Docks", chapter: "chapter-01", location: ["port-kestrel"] });
+    expect(read(root, "scenes", "chapter-01-scene-01.md")).toContain("location: port-kestrel\n");
+
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    createEntity(root, { kind: "character", name: "Ivo Pell" });
+    createEntity(root, { kind: "chapter", name: "Mix", character: ["ivo-pell", "ivo-pell"], characters: "mara-quill", location: ["port-kestrel", "port-kestrel"] });
+    const chapter = scanProject(root).chapters.find((entry) => entry.id === "chapter-02");
+    expect(chapter.characters).toEqual(["mara-quill", "ivo-pell"]);
+    expect(chapter.locations).toEqual(["port-kestrel"]);
+    createEntity(root, { kind: "research", name: "R", risk: ["legal", "legal"], "used-in": ["chapter-01", "chapter-01"] });
+    expect(read(root, "research", "r.md")).toContain("used-in:\n  - chapter-01\n");
+    expect(messages(validateProject(root).errors)).toEqual([]);
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+  });
+
+  test("#175 add refuses unpadded scheduled chapter ids, and links reports them", () => {
+    const root = newProject();
+    expect(() => createEntity(root, { kind: "clue", name: "Ledger", planted: "chapter-1" })).toThrow("--planted chapter-1: did you mean chapter-01?");
+    expect(() => createEntity(root, { kind: "research", name: "R", "used-in": "chapter-003" })).toThrow("did you mean chapter-03?");
+    createEntity(root, { kind: "promise", name: "P", payoff: "chapter-03" });
+    edit(root, "continuity/promises/p.md", "payoff: chapter-03", "payoff: chapter-3");
+    expect(messages(validateLinks(root).errors)).toContain("continuity/promises/p.md references missing chapter chapter-3");
+  });
+
+  test("#180 init and add refuse empty tense, pov, genre, and type", () => {
+    const cwd = makeTempDir();
+    for (const option of ["tense", "pov", "genre"]) {
+      expect(() => createStoryProject({ cwd, title: "T", dir: option, [option]: "" })).toThrow(`--${option} cannot be empty`);
+      expect(fs.existsSync(path.join(cwd, option))).toBe(false);
+    }
+    const root = newProject();
+    expect(() => createEntity(root, { kind: "location", name: "L", type: "" })).toThrow("--type cannot be empty");
+    expect(() => createEntity(root, { kind: "system", name: "S", type: " " })).toThrow("--type cannot be empty");
   });
 });
