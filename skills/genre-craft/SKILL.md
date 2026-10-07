@@ -87,10 +87,9 @@ exist or be in progress.
      dead.
    - Comedy: record the comic sub-genre in `story.md`, the tone line (where
      comedy stops) in its `## Tone & Style` section, each comic lead's flaw
-     in their character file,
-     and call-backs and running gags whose payoff is chapters away in
-     `continuity/promises/`. Sentence-level comic timing belongs to the
-     `line-editing` skill.
+     in their character file, and each running gag or call-back the reader
+     is owed a payoff on as one promise in `continuity/promises/`.
+     Sentence-level comic timing belongs to the `line-editing` skill.
 3. **Draft against the pack.** Use the pack's beat concepts and rules
    alongside the `chapter-writing` workflow and the `scene-craft`
    scene-grain tools. Cross-link thriller pacing to the Fichtean curve

@@ -395,7 +395,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
    - **Science fiction:** writes the speculative element's rules, costs, and limits in `worldbuilding/systems/` before the climax relies on them.
    - **Fantasy:** writes the magic's rules, costs, and limits in `worldbuilding/systems/` (designed with [worldbuilding](#worldbuilding)) and logs the quest goal and any prophecy in `continuity/promises/`.
    - **Historical:** records `setting-era` in `story.md`, the period register in the style sheet, and a [research](#research) note for every fact the plot leans on and every real person. Anyone living or recently dead goes through the [editorial-review](#editorial-review) real-people pass.
-   - **Comedy:** records the comic sub-genre in `story.md` and the tone line (where comedy stops) in its `## Tone & Style` section, each comic lead's flaw in their character file, and call-backs and running gags whose payoff is chapters away in `continuity/promises/`. Sentence-level comic timing goes to [line-editing](#line-editing).
+   - **Comedy:** records the comic sub-genre in `story.md` and the tone line (where comedy stops) in its `## Tone & Style` section, each comic lead's flaw in their character file, and each running gag or call-back the reader is owed a payoff on as one promise in `continuity/promises/`. Sentence-level comic timing goes to [line-editing](#line-editing).
 3. Drafts alongside [chapter-writing](#chapter-writing) and [scene-craft](#scene-craft).
 4. Runs the pack's audit checklist during a developmental revision pass.
 5. Records any deliberate departure from the pack in `story.md` with the reason, so a later audit doesn't undo it.

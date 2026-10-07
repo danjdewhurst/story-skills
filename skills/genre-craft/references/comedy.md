@@ -67,12 +67,25 @@ later, and never abandon a plant the reader is waiting on.
 - **Running gags must move.** A gag repeated unchanged dies by its third
   outing. Escalate, vary, or invert it each time, and end it: its last
   appearance pays off, ideally at the climax, where it can change the plot.
-- **Ledger the long ones.** Log a call-back, running gag, or comic set-up
-  whose payoff is several chapters from its plant in `continuity/promises/`
-  (`story add promise "The borrowed dog" --planted chapter-03 --payoff
-  chapter-19`). `story continuity` then reports a payoff before its plant
-  and warns about a set-up left unpaid. After adding promises, run
-  `story reindex .`, `story wordcount . --write`, and `story check .`.
+- **Give each set-up one record.** Pick it by use, as the shared
+  conventions (`story-maintenance/references/conventions.md`) set out, and
+  never copy a set-up into a second place:
+  - A running gag, or a call-back or comic set-up the reader is owed a
+    payoff on (the borrowed dog that must come back), is a promise in
+    `continuity/promises/`:
+    `story add promise 'The borrowed dog' --planted chapter-03 --payoff chapter-19`.
+    `--planted` records `status: planted` when that chapter has a file,
+    even an outline, and `planned` when it has none yet. Pass
+    `--status planned` when the chapter has a file but the set-up is not on
+    the page yet, and set `status: planted` once it is. `story continuity`
+    then reports a payoff before its plant and warns about a planted
+    set-up left unpaid. After adding promises, run `story reindex .`,
+    `story wordcount . --write`, and `story check .`.
+  - A small echo inside one arc that needs no checked payoff (a phrase that
+    comes back two scenes later) is a row of that arc's `## Foreshadowing`
+    table, which no command reads.
+  - In a comic mystery, a clue stays a clue in `continuity/clues/`
+    (`mystery-fair-play.md`), even when it is also a joke.
 - **The climax pays off the plants.** Each element of the comic climax (the
   prop, the misunderstanding, the person in the wrong room) traces to a
   plant. An element that first appears there is a comic deus ex machina.
@@ -200,7 +213,7 @@ up.
 - [ ] Every comic scene has a straight reaction (a character or the narrator) that marks the abnormal.
 - [ ] Reversals are planted; none depends on new information or coincidence.
 - [ ] Call-backs and running gags change on each return, and every running gag ends in a payoff.
-- [ ] Long-range comic set-ups are logged in `continuity/promises/`, and nothing in the climax first appears there.
+- [ ] Each comic set-up the reader is owed a payoff on has one promise record, and nothing in the climax first appears there.
 - [ ] The stakes matter to the characters, the threat survives the jokes, and earned sincere beats play straight.
 - [ ] The tone line is recorded in `story.md` `## Tone & Style` and holds across the book.
 - [ ] The sub-genre's contract holds (the romcom's HEA, farce's collision, satire's target, cosy's comfort).
