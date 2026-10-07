@@ -358,6 +358,17 @@ describe("build --anonymous for a market that reads blind", () => {
     expect(shunn.err).toBe("");
     expect(shunn.code).toBe(0);
 
+    // With --json, the build and the refusal are JSON results.
+    const json = invoke(root, ["build", root, "--format", "shunn", "--anonymous", "--json"]);
+    expect(json.code).toBe(0);
+    const result = JSON.parse(json.out);
+    expect(result.ok).toBe(true);
+    expect(result.data.format).toBe("shunn");
+    expect(fs.readFileSync(result.data.outFile, "utf8")).not.toContain("Ada");
+    const refused = invoke(root, ["build", root, "--format", "epub", "--anonymous", "--json"]);
+    expect(refused.code).toBe(2);
+    expect(JSON.parse(refused.out).diagnostics[0].message).toBe("--anonymous applies only to --format shunn and --format docx --shunn");
+
     const defaulted = lampProject(`${fields}cli-defaults:\n  - command: build\n    anonymous: true\n`);
     expect(messages(validateProject(defaulted).errors)).toContain("story.md cli-defaults[0] sets anonymous, which belongs to one run: pass --anonymous on the command line");
   });
