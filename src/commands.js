@@ -10,7 +10,7 @@ import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { currentText, planChanges, recordChanges } from "./files.js";
-import { diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
+import { diagnostic, diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { workflowPinActions } from "./workflows.js";
 import { isTruthy, optionValues } from "./options.js";
@@ -141,7 +141,7 @@ export const COMMANDS = [
       // writes nothing it reads back, so a --dry-run plans the writes
       // without making them (planChanges).
       const base = newProjectRoot({ title, cwd, dir: parsed.options.dir }) ?? cwd;
-      const { result, changes } = runOrPlan(dryRun, base, () => createStoryProject({
+      const make = () => createStoryProject({
         title,
         cwd,
         dir: parsed.options.dir,
@@ -158,7 +158,8 @@ export const COMMANDS = [
         follows: parsed.options.follows,
         precedes: parsed.options.precedes,
         force: isTruthy(parsed.options.force)
-      }));
+      });
+      const { result, changes } = dryRun ? planChanges(base, make) : recordNewProject(base, make);
       if (wantsJson(parsed)) {
         return writeFilesJson(io, "init", base, {
           data: { ...newProjectData(result), linkedBooks: result.linkedBooks },
@@ -211,9 +212,9 @@ export const COMMANDS = [
       // The changes are listed relative to the folder the import fills, as
       // for init.
       const base = newProjectRoot({ title: options.title, cwd, dir: options.dir }) ?? cwd;
-      const { result, changes } = dryRun ? previewImport(options) : recordChanges(base, () => importManuscript(options));
+      const { result, changes } = dryRun ? previewImport(options) : recordNewProject(base, () => importManuscript(options));
       if (wantsJson(parsed)) {
-        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: diagnosticsFrom({ warnings: importWarnings(result) }, "import"), dryRun, changes });
+        return writeFilesJson(io, "import", base, { data: importData(result), diagnostics: importDiagnostics(result), dryRun, changes });
       }
       if (dryRun) {
         io.stdout.write(formatPreview("import", changes));
@@ -1347,6 +1348,22 @@ function formatRepairs(repairs, stopped, changes, dryRun) {
   return `${lines.join("\n")}\n`;
 }
 
+// Runs init or import for real, recording its changes relative to `base`.
+// One that fails partway may have written files already (init --follows
+// makes the book before its backlink fails; import --force writes chapters
+// before one fails), so its error carries them as `writes`, which the
+// --json error result lists (see runCli).
+function recordNewProject(base, run) {
+  try {
+    return recordChanges(base, run);
+  } catch (error) {
+    if (Array.isArray(error?.changes)) {
+      error.writes = writtenFiles(base, error.changes);
+    }
+    throw error;
+  }
+}
+
 // --json for export, build, init, and import: their data with dryRun and
 // changes (relative to `base`, the project or the folder a new one fills),
 // and the files the run created or updated in writes, none for a --dry-run.
@@ -1418,10 +1435,15 @@ function keptStoryWarnings(result, titleLabel) {
   return [warn("kept-story-options", `story.md already exists and was kept, so ${list} ${names.length === 1 ? "was" : "were"} not applied. Edit story.md to change ${names.length === 1 ? "it" : "them"}.`, "story.md")];
 }
 
-// The warnings import prints: the options a kept story.md did not take,
-// then those it found in the manuscript.
-function importWarnings(result) {
-  return [...keptStoryWarnings(result, "--title"), ...result.warnings];
+// import --json's diagnostics: the options a kept story.md did not take,
+// then the warnings it found in the manuscript. A finding about the
+// manuscript names no project file, so its file is null and its source is
+// the manuscript file's absolute path, or stdin.
+function importDiagnostics(result) {
+  return [...keptStoryWarnings(result, "--title"), ...result.warnings].map((finding) => {
+    const entry = diagnostic("warning", finding, "import");
+    return finding.source === undefined ? entry : { ...entry, source: finding.source };
+  });
 }
 
 // init and import --json: the project made or filled (its absolute root and

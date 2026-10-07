@@ -25,14 +25,18 @@ function copyExample(name = "the-unraveled-thread") {
   return { parent, root };
 }
 
-function invoke(cwd, argv) {
+// `stdin`, when given, stands in for text piped to `story <command> -`.
+function invoke(cwd, argv, stdin) {
   const io = memoryIo(cwd);
+  if (stdin !== undefined) {
+    io.readStdin = () => Buffer.from(stdin);
+  }
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
 }
 
-function invokeJson(cwd, argv) {
-  const result = invoke(cwd, argv);
+function invokeJson(cwd, argv, stdin) {
+  const result = invoke(cwd, argv, stdin);
   const envelope = JSON.parse(result.out);
   expect(validateAgainstSchema(envelope, schema)).toEqual([]);
   return { ...result, envelope };
@@ -419,21 +423,23 @@ describe("--dry-run for init and import", () => {
 });
 
 describe("--dry-run --json for builds, exports, init, and import", () => {
-  // The preview changes nothing and reports the real run's data and
-  // diagnostics, with dryRun true and writes empty. The real run's changes
+  // The preview changes nothing and reports the real run's data, diagnostics,
+  // and exit code, with dryRun true and writes empty. The real run's changes
   // are what it changed, and its writes are the files it created or updated.
-  function expectJsonParity({ parent, cwd, base, argv }) {
+  // Neither prints anything on stderr.
+  function expectJsonParity({ parent, cwd, base, argv, stdin, code = 0 }) {
     const before = treeSnapshot(parent);
-    const preview = invokeJson(cwd, [...argv, "--dry-run", "--json"]);
-    expect(preview.code).toBe(0);
+    const preview = invokeJson(cwd, [...argv, "--dry-run", "--json"], stdin);
+    expect(preview.code).toBe(code);
     expect(preview.err).toBe("");
     expect(treeSnapshot(parent)).toEqual(before);
-    expect(preview.envelope).toMatchObject({ command: argv[0], ok: true, writes: [] });
+    expect(preview.envelope).toMatchObject({ command: argv[0], ok: code === 0, writes: [] });
     expect(preview.envelope.data.dryRun).toBe(true);
     expect(preview.envelope.data.changes.length).toBeGreaterThan(0);
 
-    const real = invokeJson(cwd, [...argv, "--json"]);
-    expect(real.code).toBe(0);
+    const real = invokeJson(cwd, [...argv, "--json"], stdin);
+    expect(real.code).toBe(code);
+    expect(real.err).toBe("");
     expect(underParent(real.envelope.data.changes, base, parent)).toEqual(treeDiff(before, treeSnapshot(parent)));
     expect(preview.envelope.data).toEqual({ ...real.envelope.data, dryRun: true });
     expect(preview.envelope.diagnostics).toEqual(real.envelope.diagnostics);
@@ -452,6 +458,16 @@ describe("--dry-run --json for builds, exports, init, and import", () => {
     });
   }
 
+  test("build with a warning story.md severity promotes: ok false and exit 1 in both", () => {
+    const { parent, root } = copyExample();
+    const storyPath = path.join(root, "story.md");
+    const text = fs.readFileSync(storyPath, "utf8");
+    const end = text.indexOf("\n---\n", 4);
+    fs.writeFileSync(storyPath, `${text.slice(0, end)}\nseverity:\n  - warning: derived-ifid\n    level: error${text.slice(end)}`, "utf8");
+    const { diagnostics } = expectJsonParity({ parent, cwd: root, base: root, argv: ["build", "--format", "twee"], code: 1 });
+    expect(diagnostics.map((entry) => [entry.severity, entry.code])).toEqual([["error", "derived-ifid"]]);
+  });
+
   test("export, to an --out outside the project", () => {
     const { parent, root } = copyExample();
     const out = path.join(parent, "outbox", "book.md");
@@ -460,20 +476,28 @@ describe("--dry-run --json for builds, exports, init, and import", () => {
     expect(data.changes).toEqual([{ action: "mkdir", path: "../outbox" }, { action: "create", path: "../outbox/book.md" }]);
   });
 
-  test("init, alone and in a series", () => {
+  test("init, alone, in a series, and with --force over a kept story.md", () => {
     const { parent, root } = copyExample();
     expectJsonParity({ parent, cwd: parent, base: path.join(parent, "paper-lanterns"), argv: ["init", "Paper Lanterns"] });
     const sequel = expectJsonParity({ parent, cwd: parent, base: path.join(parent, "the-sequel"), argv: ["init", "The Sequel", "--follows", "the-unraveled-thread"] });
     expect(sequel.data.linkedBooks).toEqual([root]);
+
+    fs.rmSync(path.join(root, "glossary"), { recursive: true });
+    const forced = expectJsonParity({ parent, cwd: parent, base: root, argv: ["init", "Other Title", "--dir", "the-unraveled-thread", "--force", "--genre", "mystery"] });
+    expect(forced.data).toMatchObject({ keptStory: true, ignoredOptions: ["title", "--genre"] });
+    expect(forced.diagnostics.map((entry) => [entry.code, entry.message])).toEqual([["kept-story-options", "story.md already exists and was kept, so the title and --genre were not applied. Edit story.md to change them."]]);
   });
 
-  test("import, into a new project and with --force into an existing one", () => {
+  test("import, into a new project, from stdin, and with --force into an existing one", () => {
     const { parent, root } = copyExample();
     fs.writeFileSync(path.join(parent, "draft.md"), "# Chapter One\n\nMira Holt walked in.\n\n# Chapter Two\n\nMira Holt walked out.\n");
     expectJsonParity({ parent, cwd: parent, base: path.join(parent, "the-draft"), argv: ["import", "draft.md", "--title", "The Draft"] });
-    const forced = expectJsonParity({ parent, cwd: parent, base: root, argv: ["import", "draft.md", "--title", "The Unraveled Thread", "--dir", "the-unraveled-thread", "--force"] });
-    expect(forced.data).toMatchObject({ root, keptStory: true, chapters: 2 });
+    const piped = expectJsonParity({ parent, cwd: parent, base: path.join(parent, "piped"), argv: ["import", "-", "--title", "Piped"], stdin: "# One\n\nText.\n\nChapter 2\nMore.\n" });
+    expect(piped.diagnostics).toEqual([expect.objectContaining({ code: "unsplit-chapter-lines", file: null, source: "stdin" })]);
+    const forced = expectJsonParity({ parent, cwd: parent, base: root, argv: ["import", "draft.md", "--title", "The Unraveled Thread", "--dir", "the-unraveled-thread", "--force", "--genre", "mystery"] });
+    expect(forced.data).toMatchObject({ root, keptStory: true, ignoredOptions: ["--genre"], chapters: 2 });
     expect(forced.data.changes).toContainEqual({ action: "delete", path: "chapters/chapter-03.md" });
+    expect(forced.diagnostics.map((entry) => [entry.code, entry.message])).toEqual([["kept-story-options", "story.md already exists and was kept, so --genre was not applied. Edit story.md to change it."]]);
   });
 });
 

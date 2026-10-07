@@ -297,14 +297,22 @@ function record(target, existed, action) {
 // path } entries sorted by path, where action is create, update, delete,
 // mkdir (a folder made), or rmdir (a folder removed, listed after what it
 // held) and path is relative to `root` with / separators. A file created and
-// then deleted by the same run is left out. Calls nest:
-// an inner call's changes are recorded in the outer one too.
+// then deleted by the same run is left out. Calls nest: an inner call's
+// changes are recorded in the outer one too. A run that fails partway may
+// have changed files already, so the error it throws carries those changes
+// as error.changes (an outer call's, made last, win), for a command to
+// report.
 export function recordChanges(root, run) {
   const journal = new Map();
   journals.push(journal);
   let result;
   try {
     result = run();
+  } catch (error) {
+    if (error !== null && typeof error === "object") {
+      error.changes = summarizeJournal(root, journal);
+    }
+    throw error;
   } finally {
     journals.splice(journals.indexOf(journal), 1);
   }
