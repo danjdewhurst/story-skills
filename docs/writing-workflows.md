@@ -180,7 +180,7 @@ error: "Nell" clashes with character nell-carrow (Nell)
 error: "Silas Carrow" clashes with character silas-carrow (Silas Carrow)
 ```
 
-Look-alike checks compare single words only: a one-word candidate against one-word names and character given names. Multi-word names are only checked for exact clashes, and a word inside an existing multi-word name is never matched, which is why `Gannet` is clear even though the book has a location called Gannet Point Light.
+A candidate's given name, its first word that is not a title, is checked against each character's given name, so `Silos Carrow` gets a `name-look-alike` warning against Silas Carrow. Other names are compared whole, and only two one-word names are checked for look-alikes. So a word inside an existing multi-word name is never matched, unless it is a character's given name. That is why `Gannet` is clear even though the book has a location called Gannet Point Light.
 
 ### Checks
 
@@ -470,14 +470,14 @@ warning: 6 scene units in a row with no sequel (chapter-01-scene-01 to chapter-0
 
 Nell has been getting what she wants too easily since chapter 2, and she never stops to react. The warnings are prompts to reread, not rules; [Scene-level craft](#scene-level-craft) is where they get fixed.
 
-`story next .` summarises continuity warnings as a single action. Run `story continuity .` to see them in full, because that is where most first-draft slips show up. Here is what it reported on the example chapter straight after the scaffold commands above:
+`story next .` summarises continuity warnings as a single action. Run `story continuity .` to see them in full, because that is where most first-draft slips show up. The scaffold commands above leave nothing to report: `--pov` put `nell-carrow` in both `characters` lists, and `story add scene --location` added `gannet-point-light` to the chapter's `locations`. Here is what it reported on the example chapter once its prose was saved with `status: draft`, before the state was brought forward:
 
 ```text
 Continuity is consistent: 0 errors, 1 warnings, 0 dismissed
-warning: scenes/chapter-01-scene-01.md is set in gannet-point-light but chapters/chapter-01.md does not list that location [scene-location-not-in-chapter]
+warning: continuity/state.md current-chapter 0 is behind the latest chapter 1; update continuity state after drafting [current-chapter-behind]
 ```
 
-`--pov` already put `nell-carrow` in both `characters` lists, so only the location is missing. Adding `gannet-point-light` to the chapter's `locations` clears it. `story continuity` also warns when `current-chapter` in `continuity/state.md` falls behind the latest drafted chapter, but it cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
+Setting `current-chapter: 1` in `continuity/state.md` clears it. `story continuity` cannot tell whether the state entries themselves are complete, so bringing the state forward stays part of step 5.
 
 `--form novel` already set `target-words: 80000` in `story.md`; add a `deadline` and `story progress` measures pace against both. When you keep a session log (the project has a `progress.md`) or ask to log the session, the skill runs `story progress . --log` instead, which also appends the session to `progress.md`:
 
