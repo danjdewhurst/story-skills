@@ -250,4 +250,35 @@ describe.skipIf(process.platform === "win32")("scripts/issue-worktree.sh (#572)"
     expect(rerun.out).toBe("");
     expect(rerun.err).toContain("has a detached HEAD, not branch 'fix/14-detached'");
   });
+
+  test("a branch name with regex characters is matched literally (#685)", () => {
+    const { shared } = sharedCheckout(PAPERCLIP);
+    worktree(shared, [".", "FOR-15", "feat/aXb"]);
+    // The dot is not a wildcard, so feat/a.b is free even though feat/aXb is taken.
+    const second = worktree(shared, [".", "FOR-16", "feat/a.b"]);
+    expect(git(second, "symbolic-ref", "--short", "HEAD")).toBe("feat/a.b");
+    const duplicate = run(shared, [".", "FOR-17", "feat/a.b"]);
+    expect(duplicate.status).toBe(1);
+    expect(duplicate.err).toContain("branch 'feat/a.b' is already checked out in another worktree");
+  });
+
+  test("a worktree whose folder is moved away keeps its registration (#686)", () => {
+    const { root, shared } = sharedCheckout(PAPERCLIP);
+    const away = worktree(shared, [".", "FOR-18", "fix/18-away"]);
+    // What an unmounted ISSUE_WORKTREE_ROOT does to a worktree's folder.
+    const parked = path.join(root, "unmounted-18");
+    fs.renameSync(away, parked);
+    expect(worktree(shared, [".", "FOR-19", "fix/19-other"])).toBeTruthy();
+    fs.renameSync(parked, away);
+    expect(git(away, "symbolic-ref", "--short", "HEAD")).toBe("fix/18-away");
+    expect(git(away, "status", "--porcelain")).toBe("");
+  });
+
+  test("a rerun clears the registration of a worktree whose folder was deleted (#686)", () => {
+    const { shared } = sharedCheckout(PAPERCLIP);
+    const made = worktree(shared, [".", "FOR-20", "fix/20-deleted"]);
+    fs.rmSync(made, { recursive: true, force: true });
+    expect(run(shared, [".", "FOR-20", "fix/20-deleted"])).toMatchObject({ status: 0, out: made });
+    expect(git(made, "symbolic-ref", "--short", "HEAD")).toBe("fix/20-deleted");
+  });
 });
