@@ -122,8 +122,9 @@ readers have read. Verify `story.md` exists in the project root.
    and map the form's "How much did it affect your reading?" answer to the
    template's severity: `Made me want to stop reading` is `major` (`blocking`
    when several readers stopped at the same place), `Pulled me out for a
-   moment` is `minor`, `Barely noticed` is `nit`, and no answer is left
-   blank. A `Typo or wording` note is a `nit` unless the reader says more.
+   moment` is `minor`, `Barely noticed` is `nit`, and a blank answer is
+   `minor`. A `Typo or wording` note with a blank answer is a `nit` unless
+   the reader says more.
 2. **Map old labels to the current text.** When a note's build is older
    than the manuscript, its label may point at a different paragraph now.
    Resolve every label from the round in one run against the text the
