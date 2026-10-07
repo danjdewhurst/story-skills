@@ -85,13 +85,16 @@ story prose .
 story report .
 ```
 
-Then check what the CLI cannot:
+Review the output of the commands above:
 
 1. `story check .` (validate, links, and continuity) has no errors. List
    warnings for the user to accept or fix.
 2. `story prose .` shows no avoided spellings, and the user has reviewed
    the other findings. If `style-sheet.md` is missing or still the
    scaffold, suggest the `voice-style` skill first.
+
+Then check what the CLI does not report:
+
 3. Every chapter has `status: revised`, `final`, or `complete`. List any
    still at `outline` or `draft`.
 4. The total word count sits inside the range for the category in
@@ -114,9 +117,10 @@ Then check what the CLI cannot:
    for a sequel (check `story.md` `precedes`). Once `story.md` is
    `status: complete`, every open question and planned or planted promise
    or clue is a `story continuity` error, which fails the story-checks CI.
-   No status means "pays off in the next book", so for each thread the
-   user confirms is left for a sequel, add an entry to
-   `continuity/exemptions.md` rather than changing its status:
+   An undecided thread stays open: a promise or clue at `planned` or
+   `planted`, or a question at `open`. Once the user confirms that a thread
+   pays off in the next book, record that decision in
+   `continuity/exemptions.md` rather than changing the thread's status:
 
    ```yaml
    ---
@@ -272,9 +276,12 @@ the acknowledgements from the publication history.
 
 - Package files: `submission/query.md`, `submission/comps.md`,
   `submission/synopsis-1-page.md`, `submission/synopsis-3-page.md`,
-  `submission/blurb.md`, `submission/tracker.md`.
+  `submission/blurb.md`, `submission/tracker.md`. The `series-continuity`
+  skill owns `submission/series-pitch.md`, the series overview saved in
+  book one; this skill does not draft it.
 - Each file has YAML frontmatter with a `type` (`query`, `comps`,
-  `synopsis`, `blurb`, `submission-tracker`) and `updated: YYYY-MM-DD`.
+  `synopsis`, `blurb`, `submission-tracker`, and `series-pitch` for the
+  file `series-continuity` writes) and `updated: YYYY-MM-DD`.
 - `submission/` is outside the story model: the CLI does not validate it
   and builds never include it.
 - Word counts in submission copy come from `story wordcount .`, rounded to
