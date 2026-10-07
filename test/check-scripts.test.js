@@ -48,15 +48,23 @@ function usesRefs(text) {
   return refs;
 }
 
-// Each job's lines, keyed by job id, from a workflow's `jobs:` block.
+// Each job's lines, keyed by job id, from a workflow's `jobs:` block. A
+// comment or blank line at column 0 does not end the block, and a job id may
+// carry a trailing comment.
 function workflowJobs(text) {
   const jobs = {};
+  const start = /^jobs:[ \t]*(?:#.*)?$/m.exec(text);
+  if (!start) {
+    return jobs;
+  }
   let current = null;
-  for (const line of text.slice(text.indexOf("\njobs:\n") + 7).split(/\r?\n/)) {
-    const id = /^ {2}([\w-]+):\s*$/.exec(line);
+  for (const line of text.slice(start.index + start[0].length).split(/\r?\n/)) {
+    const id = /^ {2}([\w-]+):[ \t]*(?:#.*)?$/.exec(line);
     if (id) {
       current = id[1];
       jobs[current] = "";
+    } else if (/^#/.test(line)) {
+      continue;
     } else if (/^\S/.test(line)) {
       break;
     } else if (current) {
@@ -66,11 +74,96 @@ function workflowJobs(text) {
   return jobs;
 }
 
+// The jobs a job names in `needs:`, as one id, a flow list, or a block list.
+function directNeeds(job = "") {
+  const inline = /^ {4}needs:[ \t]*(?:\[([^\]]*)\]|([^\s#]+))[ \t]*(?:#.*)?$/m.exec(job);
+  if (inline) {
+    return (inline[1] ?? inline[2]).split(",").map((need) => need.trim()).filter(Boolean);
+  }
+  const block = /^ {4}needs:[ \t]*(?:#.*)?\n((?: {6}- .*(?:\n|$))+)/m.exec(job);
+  return block ? block[1].trim().split("\n").map((line) => line.replace(/^\s*- /, "").replace(/\s+#.*$/, "").trim()) : [];
+}
+
 // Every job a job waits for, directly or through the jobs it needs.
 function allNeeds(jobs, id) {
-  const match = /^ {4}needs: (?:\[([^\]]*)\]|(\S+))$/m.exec(jobs[id]);
-  const direct = match ? (match[1] ?? match[2]).split(",").map((need) => need.trim()) : [];
-  return [...new Set(direct.flatMap((need) => [need, ...allNeeds(jobs, need)]))].sort();
+  return [...new Set(directNeeds(jobs[id]).flatMap((need) => [need, ...allNeeds(jobs, need)]))].sort();
+}
+
+// A job's `timeout-minutes`, or null when it sets none (or 0, or an
+// expression this check cannot read).
+function jobTimeout(job = "") {
+  const match = /^ {4}timeout-minutes:[ \t]*([1-9]\d*)[ \t]*(?:#.*)?$/m.exec(job);
+  return match ? Number(match[1]) : null;
+}
+
+// The jobs in a workflow with no timeout, or with one over maxMinutes. A job
+// that calls a reusable workflow cannot set one; the called workflow's jobs do.
+function timeoutProblems(text, maxMinutes = Infinity) {
+  const problems = [];
+  for (const [id, job] of Object.entries(workflowJobs(text))) {
+    const minutes = jobTimeout(job);
+    if (/^ {4}uses:/m.test(job)) {
+      continue;
+    } else if (minutes === null) {
+      problems.push(`${id} has no timeout-minutes`);
+    } else if (minutes > maxMinutes) {
+      problems.push(`${id} has timeout-minutes: ${minutes}, over ${maxMinutes}`);
+    }
+  }
+  return problems;
+}
+
+// The most minutes a job can end after its workflow starts: its own timeout
+// plus the longest chain of jobs it waits for. No timeout counts as Infinity.
+function longestRunMinutes(jobs, id, seen = []) {
+  if (seen.includes(id)) {
+    return Infinity;
+  }
+  const waits = directNeeds(jobs[id]).map((need) => longestRunMinutes(jobs, need, [...seen, id]));
+  return (jobTimeout(jobs[id]) ?? Infinity) + Math.max(0, ...waits);
+}
+
+// Each step's `run:` script in a job, inline or as a block scalar.
+function runScripts(job = "") {
+  const scripts = [];
+  const lines = job.split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^(\s*(?:- )?)run:[ \t]*(.*)$/.exec(lines[index]);
+    if (!match) {
+      continue;
+    }
+    const [, key, value] = match;
+    if (/^[|>][+-]?\d*[ \t]*(?:#.*)?$/.test(value)) {
+      const body = [];
+      while (index + 1 < lines.length && (!lines[index + 1].trim() || lines[index + 1].search(/\S/) > key.length)) {
+        index += 1;
+        body.push(lines[index]);
+      }
+      scripts.push(body.join(value.startsWith(">") ? " " : "\n"));
+    } else {
+      scripts.push(value.replace(/^(["'])(.*)\1$/, "$2"));
+    }
+  }
+  return scripts;
+}
+
+// How many commands in a job's steps run the whole test suite:
+// `bun run test`, `bun run test:coverage`, `npm test`, or a `bun test` that
+// names no single test file and no test-name filter.
+function suiteRuns(job) {
+  let runs = 0;
+  for (const script of runScripts(job)) {
+    const code = script.split("\n").map((line) => line.replace(/(^|\s)#.*$/, "")).join("\n");
+    for (const part of code.split(/&&|\|\||[;|&\n]/)) {
+      const command = part.trim().replace(/^(?:(?:do|then|else|time|exec)\s+|\w+=\S*\s+)+/, "");
+      if (/^(?:(?:bun|npm|pnpm|yarn)\s+run\s+test(?::coverage)?|(?:npm|pnpm|yarn)\s+test)(?:\s|$)/.test(command)) {
+        runs += 1;
+      } else if (/^bun\s+test(?:\s|$)/.test(command) && !/(?:^|\s)(?:-t|--test-name-pattern)(?:\s|=)|(?:^|\s)[^\s*]+\.test\.[cm]?[jt]sx?(?=\s|$)/.test(command)) {
+        runs += 1;
+      }
+    }
+  }
+  return runs;
 }
 
 // What would let publish.yml reach npm around the gate, one line per problem.
@@ -902,7 +995,15 @@ describe("check-links", () => {
 });
 
 describe("github workflows", () => {
-  const workflowFiles = [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
+  // The workflow templates users copy into their story repositories.
+  const templateWorkflowFiles = fs
+    .readdirSync(path.join(repoRoot, "templates/github"))
+    .filter((name) => /\.ya?ml$/.test(name))
+    .sort()
+    .map((name) => `templates/github/${name}`);
+  const workflowFiles = [".github/workflows/ci.yml", ...templateWorkflowFiles];
+  // A template job runs on users' pull requests, so it gets an hour at most.
+  const TEMPLATE_TIMEOUT_CAP = 60;
   // Every workflow this repository runs, including publish, CodeQL, and
   // Scorecard, which run with write tokens.
   const repoWorkflowFiles = fs
@@ -970,37 +1071,130 @@ describe("github workflows", () => {
     expect(drift).toEqual([]);
   });
 
+  test("the workflow templates are read from templates/github", () => {
+    expect(templateWorkflowFiles).toEqual(expect.arrayContaining(["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"]));
+  });
+
   test("every workflow job has a timeout (#575)", () => {
     // Story checks run on pull requests, so a hostile or huge project must
     // not hold a runner for GitHub's six-hour default, and a hung step in
     // this repository's own CI or release must fail in minutes too.
-    const missing = [];
+    const problems = [];
     for (const relativePath of pinnedFiles) {
-      const jobs = workflowJobs(readRepo(relativePath));
-      expect(Object.keys(jobs).length, relativePath).toBeGreaterThan(0);
-      for (const [id, job] of Object.entries(jobs)) {
-        if (!/^ {4}timeout-minutes: [1-9]\d*$/m.test(job)) {
-          missing.push(`${relativePath}: ${id}`);
-        }
-      }
+      const text = readRepo(relativePath);
+      expect(Object.keys(workflowJobs(text)).length, relativePath).toBeGreaterThan(0);
+      const cap = templateWorkflowFiles.includes(relativePath) ? TEMPLATE_TIMEOUT_CAP : Infinity;
+      problems.push(...timeoutProblems(text, cap).map((problem) => `${relativePath}: ${problem}`));
     }
-    expect(missing).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  test("the timeout check sees every job and caps template jobs (#575)", () => {
+    const text = [
+      "on: push",
+      "jobs: # every job",
+      "  a:",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 10 # plenty",
+      "# A comment at column 0 does not end the jobs block.",
+      "",
+      "  b: # no timeout",
+      "    runs-on: ubuntu-latest",
+      "  reusable:",
+      "    uses: ./.github/workflows/called.yml",
+      "  d:",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 360",
+      "  e:",
+      "    runs-on: ubuntu-latest",
+      "    timeout-minutes: 0",
+      ""
+    ].join("\n");
+    expect(Object.keys(workflowJobs(text))).toEqual(["a", "b", "reusable", "d", "e"]);
+    expect(timeoutProblems(text, TEMPLATE_TIMEOUT_CAP)).toEqual(["b has no timeout-minutes", "d has timeout-minutes: 360, over 60", "e has no timeout-minutes"]);
+    expect(timeoutProblems(text)).toEqual(["b has no timeout-minutes", "e has no timeout-minutes"]);
   });
 
   test("the publish gate waits longer than any CI job can run (#575)", () => {
     // The gate's ci job waits for the whole ci.yml run on the release commit,
-    // so a CI job allowed to run past that wait would fail the release.
-    const timeouts = Object.values(workflowJobs(readRepo(".github/workflows/ci.yml"))).map((job) => Number(/^ {4}timeout-minutes: (\d+)$/m.exec(job)?.[1] ?? Infinity));
-    expect(Math.max(...timeouts) * 60_000).toBeLessThan(CI_WAIT.timeoutMs);
+    // so a CI job, with the jobs it waits for, that could run past that wait
+    // would fail the release.
+    const jobs = workflowJobs(readRepo(".github/workflows/ci.yml"));
+    const longest = Math.max(...Object.keys(jobs).map((id) => longestRunMinutes(jobs, id)));
+    expect(longest * 60_000).toBeLessThan(CI_WAIT.timeoutMs);
+  });
+
+  test("a chain of needs adds up its timeouts (#575)", () => {
+    const jobs = workflowJobs(
+      [
+        "jobs:",
+        "  a:",
+        "    timeout-minutes: 45",
+        "  b:",
+        "    needs: a",
+        "    timeout-minutes: 20",
+        "  c:",
+        "    needs:",
+        "      - b",
+        "      - d",
+        "    timeout-minutes: 5",
+        "  d:",
+        "    needs: [a]",
+        "    timeout-minutes: 1",
+        "  e:",
+        "    needs: [a]",
+        "  f:",
+        "    needs: f",
+        "    timeout-minutes: 1",
+        ""
+      ].join("\n")
+    );
+    expect(longestRunMinutes(jobs, "b")).toBe(65);
+    expect(longestRunMinutes(jobs, "c")).toBe(70);
+    expect(longestRunMinutes(jobs, "e")).toBe(Infinity);
+    expect(longestRunMinutes(jobs, "f")).toBe(Infinity);
+    expect(allNeeds(jobs, "c")).toEqual(["a", "b", "d"]);
   });
 
   test("no CI job runs the suite twice (#575)", () => {
-    // test:coverage runs the whole suite, so a plain `bun run test` beside it
+    // test:coverage runs the whole suite, so another suite run beside it
     // only doubles the job's time.
-    for (const [id, job] of Object.entries(workflowJobs(readRepo(".github/workflows/ci.yml")))) {
-      const runs = job.match(/^\s+run: bun run test(?::coverage)?$/gm) || [];
-      expect(runs.length, id).toBeLessThanOrEqual(1);
+    for (const relativePath of repoWorkflowFiles) {
+      for (const [id, job] of Object.entries(workflowJobs(readRepo(relativePath)))) {
+        expect(suiteRuns(job), `${relativePath}: ${id}`).toBeLessThanOrEqual(1);
+      }
     }
+    expect(suiteRuns(workflowJobs(readRepo(".github/workflows/ci.yml")).test)).toBe(1);
+  });
+
+  test("the suite-run count reads every way a step can run the suite (#575)", () => {
+    const job = (...steps) => steps.map((step) => `      - name: Step\n${step}`).join("\n");
+    expect(suiteRuns(job("        run: bun run test", "        run: bun run test:coverage"))).toBe(2);
+    expect(suiteRuns(job("        run: |\n          bun run test\n          bun run test:coverage\n"))).toBe(2);
+    expect(suiteRuns(job("        run: >-\n          bun run test &&\n          bun run test:coverage\n"))).toBe(2);
+    expect(suiteRuns(job("        run: bun run test && bun run test:coverage"))).toBe(2);
+    expect(suiteRuns(job("        run: bun test --timeout 60000 ./test/*.test.js", "        run: bun run test:coverage # with coverage"))).toBe(2);
+    expect(suiteRuns(job("        run: bun run test # the whole suite"))).toBe(1);
+    expect(suiteRuns(job('        run: "npm test"', "      - run: bun test"))).toBe(2);
+    // One test file, a name filter, or another script is not the suite.
+    expect(
+      suiteRuns(
+        job(
+          "        run: |\n          for seed in 1 2 3; do\n            STORY_PROPERTY_SEED=$seed bun test test/validate-schema-property.test.js || exit 1\n          done\n",
+          '        run: bun test -t "repeated"',
+          "        run: bun run test:examples",
+          "        # run: bun run test"
+        )
+      )
+    ).toBe(0);
+  });
+
+  test("test:coverage runs the same suite as test (#575)", () => {
+    // CI runs only test:coverage, so it must run every file test does, with
+    // the same per-test timeout.
+    const { scripts } = JSON.parse(readRepo("package.json"));
+    const [suite] = scripts["test:coverage"].split(" && ");
+    expect(suite.split(" ").filter((arg) => !arg.startsWith("--coverage")).join(" ")).toBe(scripts.test);
   });
 
   test("publish reaches npm only behind the gate, the binaries, and the npm environment (#544)", () => {
