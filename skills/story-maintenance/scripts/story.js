@@ -24337,7 +24337,7 @@ function moveChapter(project, oldId, options, action = "move") {
   }
   const taken = project.chapters.find((entry) => entry.number === number && entry.id !== oldId);
   const markdown = readMarkdown(chapter.file, project.root);
-  const renumbered = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, number }).replace(/^(#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|$))/m, `$1${number}`);
+  const renumbered = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, number }, renumberedHeading(markdown.body, number));
   const scenes = project.scenes.filter((scene) => scene.chapter === oldId);
   const sceneMoves = scenes.map((scene) => ({
     oldFile: scene.file,
@@ -24368,6 +24368,17 @@ function moveChapter(project, oldId, options, action = "move") {
   commitMoves(project.root, plan, moves);
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
+}
+function renumberedHeading(body, number) {
+  const heading = /^ {0,3}#{1,6}(?:[ \t]|\r?$)/m.exec(maskMarkup(body));
+  if (!heading) {
+    return body;
+  }
+  const lineEnd = body.indexOf(`
+`, heading.index);
+  const end = lineEnd === -1 ? body.length : lineEnd;
+  const line = body.slice(heading.index, end).replace(/^( {0,3}#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|\r?$))/, `$1${number}`);
+  return `${body.slice(0, heading.index)}${line}${body.slice(end)}`;
 }
 function reorderProgressions(project, plan, chronology) {
   const dirs = PROGRESSION_KINDS.map((kind) => entityConfig(kind).dir);
@@ -24472,6 +24483,18 @@ function followingRun(project, number) {
     run.push(chapters[0]);
   }
   return run;
+}
+function refuseRenumberedAdoption(project, run) {
+  const last = run.at(-1);
+  if (last === undefined) {
+    return;
+  }
+  const target = canonicalChapterId(last.number + 1);
+  const files = adoptedReferenceFiles(project.root, "chapter", target, last.file).filter((file) => !REGISTRY_FILES.has(file));
+  if (files.length > 0) {
+    const one = files.length === 1;
+    throw refusedError(`${files.join(", ")} ${one ? "names" : "name"} ${target}, which has no file yet, and this split would renumber ${last.id} to ${target}, so ${one ? "it" : "they"} would point at that chapter. Point ${one ? "it" : "them"} at the chapter ${one ? "it means" : "they mean"} first: ${last.id} if ${one ? "it belongs" : "they belong"} there (the split then carries ${one ? "it" : "them"} to ${target}), or ${canonicalChapterId(last.number + 2)} for the chapter after it; nothing was changed`);
+  }
 }
 function shiftChapters(root, run, step, warnings, action) {
   for (const chapter of step > 0 ? [...run].reverse() : run) {
@@ -24662,6 +24685,7 @@ function splitChapter(root, options) {
     created: [...chapterTargets, ...moving.map((scene, index) => path12.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
     chapterTargets
   });
+  refuseRenumberedAdoption(project, run);
   const dead = new Set(project.characters.filter((character) => character.diedIn === chapter.id).map((character) => character.id));
   restructureWrites(project.root, () => {
     shiftChapters(project.root, run, 1, warnings, "split");
@@ -24850,7 +24874,7 @@ var BLANK_VALUES = [undefined, null, ""];
 function isBlankValue(value) {
   return BLANK_VALUES.includes(value) || Array.isArray(value) && value.length === 0;
 }
-var MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook"]);
+var MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered"]);
 var MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
 function mergedChapterData(firstData, secondData) {
   const data = { ...firstData };
@@ -24884,9 +24908,14 @@ function mergedChapterData(firstData, secondData) {
 }
 var CHAPTER_TEXT_HEADING = /^ {0,3}##[ \t]+Chapter Text(?:[ \t]+#+)?[ \t]*\r?$/i;
 var NOTE_SECTION_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?$/gm;
+function closesNotes(line) {
+  const text = line.trim();
+  return text === "---" || CHAPTER_TEXT_HEADING.test(text);
+}
 function chapterNotesRange(body, masked, proseOffset) {
-  const heading = /^(?:[ \t]*\r?\n)*[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/.exec(masked.slice(0, proseOffset));
-  const start = heading ? heading[0].length : 0;
+  const heading = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/m.exec(masked.slice(0, proseOffset));
+  const lead = heading ? heading.index : 0;
+  const start = heading ? heading.index + heading[0].length : 0;
   const lines = masked.slice(start, proseOffset).split(`
 `);
   let offset = start;
@@ -24897,13 +24926,30 @@ function chapterNotesRange(body, masked, proseOffset) {
   });
   let end = proseOffset;
   for (let index = lines.length - 1;index >= 0; index -= 1) {
-    const text = lines[index].trim();
-    if (text !== "" && text !== "---" && !CHAPTER_TEXT_HEADING.test(text)) {
+    if (lines[index].trim() !== "" && !closesNotes(lines[index])) {
       break;
     }
     end = starts[index];
   }
-  return { start, end: start + masked.slice(start, end).trimEnd().length };
+  return { lead, start, end: start + body.slice(start, end).trimEnd().length };
+}
+function foldedNotes(body, masked, proseOffset) {
+  const range = chapterNotesRange(body, masked, proseOffset);
+  const lines = body.slice(range.end, proseOffset).split(`
+`);
+  const closing = masked.slice(range.end, proseOffset).split(`
+`).map(closesNotes);
+  const dropped = lines.map((line, index) => closing[index] || index > 0 && closing[index - 1] && line.trim() === "");
+  const after = (text) => text.slice(range.end, proseOffset).split(`
+`).filter((line, index) => !dropped[index]).join(`
+`);
+  const tail = after(body);
+  const from = tail.length - tail.trimStart().length;
+  const to = tail.trimEnd().length;
+  const notes = (text) => `${text.slice(0, range.lead)}${text.slice(range.start, range.end)}${to > from ? `
+
+${after(text).slice(from, to)}` : ""}`;
+  return { text: notes(body), masked: notes(masked) };
 }
 function noteSections(text, masked) {
   const headings = [...masked.matchAll(NOTE_SECTION_HEADING)];
@@ -24938,11 +24984,11 @@ function mergedChapterBody(firstBody, secondBody) {
   const secondStart = proseStart(secondBody, secondMasked);
   let head = firstBody.slice(0, firstStart);
   let firstProse = firstBody.slice(firstStart);
-  const secondRange = chapterNotesRange(secondBody, secondMasked, secondStart);
-  if (secondRange.end > secondRange.start) {
+  const secondNotes = foldedNotes(secondBody, secondMasked, secondStart);
+  if (secondNotes.text.trim() !== "") {
     const firstRange = chapterNotesRange(firstBody, firstMasked, firstStart);
     const notes = noteSections(firstBody.slice(firstRange.start, firstRange.end), firstMasked.slice(firstRange.start, firstRange.end));
-    const added = noteSections(secondBody.slice(secondRange.start, secondRange.end), secondMasked.slice(secondRange.start, secondRange.end));
+    const added = noteSections(secondNotes.text, secondNotes.masked);
     notes.preamble = joinNotes(notes.preamble, added.preamble);
     for (const section of added.sections) {
       const match = notes.sections.find((entry) => entry.key === section.key);
@@ -25001,10 +25047,14 @@ function mergedChapter(first, second, unit, firstId, secondId) {
   if (droppedHook !== null) {
     warnings.push(warn("merge-conflicts", `${firstId}'s hook ${JSON.stringify(droppedHook)} was dropped: the merged chapter ends where ${secondId} did, and ${secondId} had no hook. Set one if it needs it`, label));
   }
+  const numbered = (data) => data.numbered !== false;
+  if (numbered(first.data) !== numbered(second.data)) {
+    warnings.push(warn("merge-conflicts", numbered(first.data) ? `${secondId} is unnumbered (numbered: false) but ${firstId} is not: the merged ${firstId} stays numbered. Set numbered: false on it if it should not be` : `${firstId} is unnumbered (numbered: false) but ${secondId} is not: the merged ${firstId} stays unnumbered. Remove numbered: false from it if it should be numbered`, label));
+  }
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }
 var BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
-function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
+function adoptedReferenceFiles(root, kind, id, excludedFile) {
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
@@ -25012,10 +25062,13 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
     const relinked = renameLinkTargets(root, file, body, context, probe);
     return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
   });
-  if (plan.size === 0) {
+  return [...plan.keys()].map((file) => projectPath(root, file)).sort();
+}
+function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
+  const files = adoptedReferenceFiles(root, kind, id, excludedFile);
+  if (files.length === 0) {
     return [];
   }
-  const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "rename" ? "renamed" : "moved"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 function abandonedThreadWarnings(project, chapterId) {

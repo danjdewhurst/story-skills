@@ -1880,8 +1880,7 @@ function moveChapter(project, oldId, options, action = "move") {
   const taken = project.chapters.find((entry) => entry.number === number && entry.id !== oldId);
 
   const markdown = readMarkdown(chapter.file, project.root);
-  const renumbered = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, number })
-    .replace(/^(#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|$))/m, `$1${number}`);
+  const renumbered = replaceFrontmatter(markdown.rawMarkdown, { ...markdown.data, number }, renumberedHeading(markdown.body, number));
   const scenes = project.scenes.filter((scene) => scene.chapter === oldId);
   const sceneMoves = scenes.map((scene) => ({
     oldFile: scene.file,
@@ -1921,6 +1920,22 @@ function moveChapter(project, oldId, options, action = "move") {
   commitMoves(project.root, plan, moves);
   const reindexed = reindexProject(project.root);
   return { kind: "chapter", oldId, id: newId, file: newFile, moved: moves.length, changed: moves.map((move) => move.newFile).concat(reindexed.changed), warnings };
+}
+
+// The chapter body with its heading renumbered: the body's first ATX
+// heading, when it reads `# Chapter N` with or without a title after a
+// colon. A heading in a comment or code fence never counts, and the
+// frontmatter is never touched, so a `# Chapter 1: ...` comment line there
+// stays as it is.
+function renumberedHeading(body, number) {
+  const heading = /^ {0,3}#{1,6}(?:[ \t]|\r?$)/m.exec(maskMarkup(body));
+  if (!heading) {
+    return body;
+  }
+  const lineEnd = body.indexOf("\n", heading.index);
+  const end = lineEnd === -1 ? body.length : lineEnd;
+  const line = body.slice(heading.index, end).replace(/^( {0,3}#[ \t]+Chapter[ \t]+)\d+(?=[ \t]*(?::|\r?$))/, `$1${number}`);
+  return `${body.slice(0, heading.index)}${line}${body.slice(end)}`;
 }
 
 // A renumbered chapter can move past another progression's chapter, so the
@@ -2069,6 +2084,28 @@ function followingRun(project, number) {
     run.push(chapters[0]);
   }
   return run;
+}
+
+// The last chapter of the run a split renumbers moves onto a number no
+// chapter has, whose id may already be named: a payoff scheduled for a
+// chapter not written yet, say. Those references were planned for another
+// chapter, not this one, and once they named it a later merge would carry
+// them back with it. A split cannot tell what they mean, so it refuses and
+// the writer points them at the chapter they mean first. Split's own new
+// chapter, which takes a number no chapter had when nothing follows it,
+// warns instead, as add chapter does.
+function refuseRenumberedAdoption(project, run) {
+  const last = run.at(-1);
+  if (last === undefined) {
+    return;
+  }
+  const target = canonicalChapterId(last.number + 1);
+  // Registries are left out, since reindex rewrites them.
+  const files = adoptedReferenceFiles(project.root, "chapter", target, last.file).filter((file) => !REGISTRY_FILES.has(file));
+  if (files.length > 0) {
+    const one = files.length === 1;
+    throw refusedError(`${files.join(", ")} ${one ? "names" : "name"} ${target}, which has no file yet, and this split would renumber ${last.id} to ${target}, so ${one ? "it" : "they"} would point at that chapter. Point ${one ? "it" : "them"} at the chapter ${one ? "it means" : "they mean"} first: ${last.id} if ${one ? "it belongs" : "they belong"} there (the split then carries ${one ? "it" : "them"} to ${target}), or ${canonicalChapterId(last.number + 2)} for the chapter after it; nothing was changed`);
+  }
 }
 
 // Renumbers each chapter of `run` by `step` with move chapter: from the
@@ -2317,6 +2354,7 @@ export function splitChapter(root, options) {
     created: [...chapterTargets, ...moving.map((scene, index) => path.join(project.root, "scenes", `${newId}-scene-${String(index + 1).padStart(2, "0")}.md`))],
     chapterTargets
   });
+  refuseRenumberedAdoption(project, run);
   // A character who dies in the chapter cannot be in the cast of a later
   // one, so the new chapter only mentions them; split-references lists the
   // death to check.
@@ -2530,8 +2568,10 @@ function isBlankValue(value) {
   return BLANK_VALUES.includes(value) || (Array.isArray(value) && value.length === 0);
 }
 
-// Chapter fields a merge works out rather than takes from the first chapter.
-const MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook"]);
+// Chapter fields a merge never takes from the second chapter: it works them
+// out, or keeps the first chapter's `numbered`, since a missing one means
+// true (mergedChapter warns when the two differ).
+const MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered"]);
 const MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
 
 // The frontmatter of two merged chapters: the first chapter's, with lists
@@ -2573,13 +2613,21 @@ function mergedChapterData(firstData, secondData) {
 const CHAPTER_TEXT_HEADING = /^ {0,3}##[ \t]+Chapter Text(?:[ \t]+#+)?[ \t]*\r?$/i;
 const NOTE_SECTION_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*\r?$/gm;
 
-// The planning notes of a chapter body: what lies between its leading
-// `# heading` and its prose (the outline and any other `##` sections), as
-// offsets in the body, without the outline divider and the `## Chapter
-// Text` heading that close them.
+// The lines that close a chapter's notes: the outline divider and the
+// `## Chapter Text` heading, as masked text.
+function closesNotes(line) {
+  const text = line.trim();
+  return text === "---" || CHAPTER_TEXT_HEADING.test(text);
+}
+
+// The planning notes of a chapter body: what lies between its `# heading`
+// and its prose (the outline and any other `##` sections), as offsets in the
+// body, without the blank lines, comments, outline divider, and `## Chapter
+// Text` heading that close them. `lead` is where the heading starts.
 function chapterNotesRange(body, masked, proseOffset) {
-  const heading = /^(?:[ \t]*\r?\n)*[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/.exec(masked.slice(0, proseOffset));
-  const start = heading ? heading[0].length : 0;
+  const heading = /^[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n|$)/m.exec(masked.slice(0, proseOffset));
+  const lead = heading ? heading.index : 0;
+  const start = heading ? heading.index + heading[0].length : 0;
   const lines = masked.slice(start, proseOffset).split("\n");
   let offset = start;
   const starts = lines.map((line) => {
@@ -2589,13 +2637,31 @@ function chapterNotesRange(body, masked, proseOffset) {
   });
   let end = proseOffset;
   for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const text = lines[index].trim();
-    if (text !== "" && text !== "---" && !CHAPTER_TEXT_HEADING.test(text)) {
+    if (lines[index].trim() !== "" && !closesNotes(lines[index])) {
       break;
     }
     end = starts[index];
   }
-  return { start, end: start + masked.slice(start, end).trimEnd().length };
+  // A comment at the end of the last line stays on it.
+  return { lead, start, end: start + body.slice(start, end).trimEnd().length };
+}
+
+// The notes of the chapter a merge folds in, as its text and masked text:
+// everything before its prose but its `# heading`, the outline divider, and
+// the `## Chapter Text` heading. So text above the heading and a comment
+// after the notes, which masked text shows as blank, are kept.
+function foldedNotes(body, masked, proseOffset) {
+  const range = chapterNotesRange(body, masked, proseOffset);
+  const lines = body.slice(range.end, proseOffset).split("\n");
+  const closing = masked.slice(range.end, proseOffset).split("\n").map(closesNotes);
+  // A closing line goes with the blank line after it.
+  const dropped = lines.map((line, index) => closing[index] || (index > 0 && closing[index - 1] && line.trim() === ""));
+  const after = (text) => text.slice(range.end, proseOffset).split("\n").filter((line, index) => !dropped[index]).join("\n");
+  const tail = after(body);
+  const from = tail.length - tail.trimStart().length;
+  const to = tail.trimEnd().length;
+  const notes = (text) => `${text.slice(0, range.lead)}${text.slice(range.start, range.end)}${to > from ? `\n\n${after(text).slice(from, to)}` : ""}`;
+  return { text: notes(body), masked: notes(masked) };
 }
 
 // Notes as a preamble and `##` sections, each { key, heading, body }.
@@ -2629,6 +2695,8 @@ function joinNotes(first, second) {
 // beats after the first one's, a section only it has at the end), then the
 // first chapter's prose, a scene break, and the second chapter's prose. The
 // scene break is the first one either chapter already uses, else `* * *`.
+// Of the second chapter's text, only its heading, outline divider, and
+// `## Chapter Text` heading are dropped.
 function mergedChapterBody(firstBody, secondBody) {
   const firstMasked = maskMarkup(firstBody);
   const secondMasked = maskMarkup(secondBody);
@@ -2636,11 +2704,11 @@ function mergedChapterBody(firstBody, secondBody) {
   const secondStart = proseStart(secondBody, secondMasked);
   let head = firstBody.slice(0, firstStart);
   let firstProse = firstBody.slice(firstStart);
-  const secondRange = chapterNotesRange(secondBody, secondMasked, secondStart);
-  if (secondRange.end > secondRange.start) {
+  const secondNotes = foldedNotes(secondBody, secondMasked, secondStart);
+  if (secondNotes.text.trim() !== "") {
     const firstRange = chapterNotesRange(firstBody, firstMasked, firstStart);
     const notes = noteSections(firstBody.slice(firstRange.start, firstRange.end), firstMasked.slice(firstRange.start, firstRange.end));
-    const added = noteSections(secondBody.slice(secondRange.start, secondRange.end), secondMasked.slice(secondRange.start, secondRange.end));
+    const added = noteSections(secondNotes.text, secondNotes.masked);
     notes.preamble = joinNotes(notes.preamble, added.preamble);
     for (const section of added.sections) {
       const match = notes.sections.find((entry) => entry.key === section.key);
@@ -2691,18 +2759,24 @@ function mergedChapter(first, second, unit, firstId, secondId) {
   if (droppedHook !== null) {
     warnings.push(warn("merge-conflicts", `${firstId}'s hook ${JSON.stringify(droppedHook)} was dropped: the merged chapter ends where ${secondId} did, and ${secondId} had no hook. Set one if it needs it`, label));
   }
+  // The merged chapter keeps the first chapter's numbering, so a merge with
+  // an unnumbered chapter (a prologue, an interlude) never changes which
+  // chapters the builds number without saying so.
+  const numbered = (data) => data.numbered !== false;
+  if (numbered(first.data) !== numbered(second.data)) {
+    warnings.push(warn("merge-conflicts", numbered(first.data)
+      ? `${secondId} is unnumbered (numbered: false) but ${firstId} is not: the merged ${firstId} stays numbered. Set numbered: false on it if it should not be`
+      : `${firstId} is unnumbered (numbered: false) but ${secondId} is not: the merged ${firstId} stays unnumbered. Remove numbered: false from it if it should be numbered`, label));
+  }
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }
 
 const BEFORE_STORY_FIELDS = ["died-in", "since", "learned-in"];
 
-// Before a rename or move gives an entity `id`, lists the files that already
-// reference that id (a scheduled chapter, a planned character, a link left
-// by remove): after the command they point at the entity. `action` names the
-// command: rename, move, or split or merge, which move chapters and scenes
-// as move does. Only a warning, since an interrupted run that is rerun
-// leaves the same references.
-function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
+// The files besides `excludedFile` that already reference `id` (a scheduled
+// chapter, a planned character, a link left by remove): an entity given that
+// id takes them over.
+function adoptedReferenceFiles(root, kind, id, excludedFile) {
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-adopted-probe`;
   const numbered = kind === "chapter" || kind === "scene";
@@ -2710,17 +2784,25 @@ function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
     const relinked = renameLinkTargets(root, file, body, context, probe);
     return numbered ? renameIdTokens(root, file, relinked, id, probe) : relinked;
   });
-  if (plan.size === 0) {
+  return [...plan.keys()].map((file) => projectPath(root, file)).sort();
+}
+
+// Before a rename or move gives an entity `id`, warns about the references
+// it takes over. `action` names the command: rename, move, or split or merge,
+// which move chapters and scenes as move does. Only a warning, since an
+// interrupted run that is rerun leaves the same references.
+function adoptedReferenceWarnings(root, kind, id, excludedFile, action) {
+  const files = adoptedReferenceFiles(root, kind, id, excludedFile);
+  if (files.length === 0) {
     return [];
   }
-  const files = [...plan.keys()].map((file) => projectPath(root, file)).sort();
   return [warn("adopted-references", `${id} was already referenced before this ${action}, and those references now point at the ${action === "rename" ? "renamed" : "moved"} ${kind}: ${files.join(", ")}. Check them`)];
 }
 
 // links lets an abandoned promise, clue, or question keep the chapter-NN it
 // was planned for, so a new chapter with that id adopts the cut thread. move
-// and rename report every adopted reference; add chapter and split report
-// these.
+// and rename report every adopted reference; add chapter and split's new
+// chapter report these (split refuses to renumber a chapter onto a named id).
 function abandonedThreadWarnings(project, chapterId) {
   const files = [...project.promises, ...project.clues, ...project.questions]
     .filter((entry) => entry.status === "abandoned" && [entry.planted, entry.payoff, entry.introduced].includes(chapterId))

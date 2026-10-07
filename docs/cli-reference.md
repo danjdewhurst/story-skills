@@ -2544,7 +2544,7 @@ story move scene <id> [--chapter <chapter-id>] [--scene <n>] [--dry-run] [--json
 
 Chapter and scene ids come from their numbers, so reordering the book changes ids. `move` renames the files and rewrites every reference to the old id, so you never renumber by hand. It works only on chapters and scenes; use [`rename`](#rename) to change any other id.
 
-**`move chapter`** gives a chapter a new number. It renames `chapters/<id>.md` to `chapter-NN.md` and each of its scene files from `<id>-scene-MM.md` to `chapter-NN-scene-MM.md`, and sets the chapter's `number` and the number in its `# Chapter N:` (or bare `# Chapter N`) heading. It then rewrites every reference to the old chapter id:
+**`move chapter`** gives a chapter a new number. It renames `chapters/<id>.md` to `chapter-NN.md` and each of its scene files from `<id>-scene-MM.md` to `chapter-NN-scene-MM.md`, and sets the chapter's `number` and the number in its `# Chapter N:` (or bare `# Chapter N`) heading: the first heading of the body, outside comments and code fences. A heading later in the text, and a `# Chapter N` comment line in the frontmatter, keep their numbers. It then rewrites every reference to the old chapter id:
 
 - `chapter` on each of the chapter's scenes
 - `planted` and `payoff` on promises and clues, and `introduced` and `resolved` on questions
@@ -2625,24 +2625,24 @@ A scene break or marker inside an HTML comment or a code fence never counts, and
 
 The new chapter is titled `<title> (continued)` unless `--title` names it. It gets the chapter's `pov`, `locations`, `characters`, `mentions`, `status`, `mode`, `date`, `time`, `strand`, `numbered`, and `author`, and its `hook`, which moves to the new chapter because that is where the old chapter now ends, so [`pacing`](#pacing) reports the first chapter as having no hook until you give it one. A character whose `died-in` is the split chapter goes in the new chapter's `mentions` rather than its `characters`, since a later chapter cannot cast them. `arcs-advanced` and every other field stay on the first chapter, as do the outline and any notes; the new chapter starts with a `# Chapter N: Title` heading (the title alone when it is `numbered: false`) and a `## Chapter Text` section. Both chapters get fresh word counts (and character counts in a book counted in characters). When `continuity/state.md` `current-chapter` was the split chapter, it moves to the new one.
 
-Scene records have no position in the chapter text, so they follow it in order: the records of the scenes before the split stay, and the rest move to the new chapter with [`move scene`](#move), numbered from 1. When the split falls inside a scene, that scene's record stays with the first chapter. `split` warns (`split-scenes`) when the number of scene records differs from the number of scenes the breaks mark out, since it then assigned them by order, and when it split inside a scene. A scene it moves onto an id that a file already names gets the `adopted-references` warning of `move scene`, which names the split: `warning: chapter-05-scene-01 was already referenced before this split, ...`.
+Scene records have no position in the chapter text, so they follow it in order: the records of the scenes before the split stay, and the rest move to the new chapter with [`move scene`](#move), numbered from 1. When the split falls inside a scene, that scene's record stays with the first chapter. `split` warns (`split-scenes`) when the number of scene records differs from the number of scenes the breaks mark out, since it then assigned them by order, and when it split inside a scene (`warning: --at "Ticket was in order" falls inside the text of chapter-03-scene-01, whose record stays in chapter-03; if the scene now belongs to chapter-04, or needs a record in each, use story move scene and story add scene`). A scene it moves onto an id that a file already names gets the `adopted-references` warning of `move scene`, which names the split: `warning: chapter-05-scene-01 was already referenced before this split, ...`.
 
 References to the split chapter keep pointing at it, which now holds only the first part. A clue planted, a question introduced, a death, or a progression in the split chapter may now happen in the new one, and `split` cannot tell, so it lists the files that still name the chapter (`split-references`) for you to check. Registries are left out, since `split` reindexes. When the new chapter takes a number no chapter had, `split` also warns (`adopted-references`) if an abandoned promise, clue, or question still names that id, as `add chapter` does.
 
-On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
+The last chapter the renumbering moves goes to a number no chapter has. When a file already names that id (a payoff scheduled for a chapter not written yet, say), `split` refuses. Those references were planned for another chapter, but the moved chapter would take them over, and a later `merge` would carry them back with it. Point them at the chapter they mean first: at the moved chapter's current id if they belong to it, since the split carries them along, or at the next id if they mean the chapter after it. On a copy of [`the-left-luggage-office`](../examples/the-left-luggage-office/), whose chapter 2 has one scene break and two scene records:
+
+```text
+$ story split chapter-02 --at 1 --title "Shelf Nine"
+continuity/promises/sallis-comes-back.md, plot/arcs/folas-suitcase.md name chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so they would point at that chapter. Point them at the chapter they mean first: chapter-03 if they belong there (the split then carries them to chapter-04), or chapter-05 for the chapter after it; nothing was changed
+```
+
+The promise pays off in an episode not drafted yet, the one after chapter 3, so its `payoff` and the arc's Foreshadowing row now say `chapter-05`, and the split runs:
 
 ```text
 $ story split chapter-02 --at 1 --title "Shelf Nine"
 Split chapter chapter-02: the rest is chapter-03 "Shelf Nine": ~/stories/the-left-luggage-office/chapters/chapter-03.md (moved 1 scene, renumbered 1 chapter)
 warning: continuity/questions/who-collected-the-suitcase.md, continuity/questions/who-wrote-her-name.md, continuity/state.md, plot/arcs/folas-suitcase.md still name chapter-02, which now holds only the text before the split: check whether any of them should name chapter-03 instead [split-references]
-warning: chapter-04 was already referenced before this move, and those references now point at the moved chapter: continuity/promises/sallis-comes-back.md, plot/arcs/folas-suitcase.md. Check them [adopted-references]
-
-$ story split chapter-03 --at "Ticket was in order"
-Split chapter chapter-03: the rest is chapter-04 "Shelf Nine (continued)": ~/stories/the-left-luggage-office/chapters/chapter-04.md (renumbered 1 chapter)
-warning: --at "Ticket was in order" falls inside the text of chapter-03-scene-01, whose record stays in chapter-03; if the scene now belongs to chapter-04, or needs a record in each, use story move scene and story add scene [split-scenes]
 ```
-
-The `adopted-references` warning comes from the renumbering: the promise was scheduled to pay off in chapter 4, which did not exist yet, and that id now names the old chapter 3 (see [move](#move)).
 
 `split` refuses, and changes nothing, when:
 
@@ -2659,6 +2659,7 @@ The `adopted-references` warning comes from the renumbering: the promise was sch
 | Nothing would be left on one side | `--at "..." is at the start of the chapter text of chapter-02, so nothing would stay in it: split at a later point` (or `at the end ..., so the new chapter would be empty`) |
 | Two chapters after it share a number | `chapters/chapter-03.md and chapters/chapter-3.md share chapter number 3: give each its own number first (story validate reports it)` |
 | A file is where the renumbering would write a chapter | `chapters/chapter-04.md already exists and is not a chapter this command renumbers: fix it first (story validate reports it)` |
+| A file names the id the renumbering would give its last chapter | `continuity/promises/sallis-comes-back.md names chapter-04, which has no file yet, and this split would renumber chapter-03 to chapter-04, so it would point at that chapter. Point it at the chapter it means first: ...` |
 | A scene file is not named for its `chapter` and `scene` fields | `scenes/chapter-03-scene-01.md is scene 1 of chapter-09 by its frontmatter but not by its file name, so renumbering could collide with it: rename it to scenes/chapter-09-scene-01.md, or fix its chapter and scene fields, first` |
 | A file it would rewrite is read-only | `Cannot write to continuity/clues/the-ticket.md (permission denied); nothing was changed. Fix it and run the command again` |
 
@@ -2677,14 +2678,14 @@ Merges a chapter into the one before it. The two must be neighbours in chapter o
 The merged chapter keeps the first chapter's heading, title, and frontmatter, and gains:
 
 - the second chapter's prose after its own, with a scene break between them: the first break either chapter already uses, else `* * *`
-- the second chapter's notes, section by section: its `## Outline` beats after the first chapter's, its text under any other `##` heading the first chapter has (`## Episode Notes`, say) after that section's, and a section only it has at the end of the notes
+- the second chapter's notes, section by section: its `## Outline` beats after the first chapter's, its text under any other `##` heading the first chapter has (`## Episode Notes`, say) after that section's, and a section only it has at the end of the notes. Text above the second chapter's heading, such as an HTML comment, and comments after its notes join them too: of the second chapter's text, only its `# heading`, outline divider, and `## Chapter Text` heading are dropped
 - every item of the second chapter's list fields (`characters`, `locations`, `mentions`, `arcs-advanced`, and any other list) that the first lacks
 - any field only the second chapter sets, the sum of `target-words` (and `target-characters`), the earlier `status` of the two, and the second chapter's `hook`, since the merged chapter ends where the second did
 - a fresh word count (and character count)
 
 The second chapter's scenes move to the end of the first chapter with [`move scene`](#move), numbered after its own; one that takes an id a file already names gets the `adopted-references` warning of `move scene`, which names the merge (`warning: chapter-02-scene-03 was already referenced before this merge, ...`). Then every reference to the second chapter is rewritten to the first, as `move` rewrites references: clue and promise `planted` and `payoff`, question `introduced` and `resolved`, research `used-in`, `died-in`, `revived-in`, progressions' `from`, `since` and `learned-in` in `continuity/state.md` (and `current-chapter` when it held the second chapter's number), markdown links, bare ids in the timeline and arc files, and `continuity/exemptions.md` entries. The second chapter's file is then deleted.
 
-`merge` warns (`merge-conflicts`) about what it could not combine: a single-value field both chapters set differently (`pov`, `date`, `time`, and so on), where it keeps the first chapter's value; the first chapter's `hook` when the second has none, which it drops; and two progressions of the same field that now both start in the merged chapter, where it keeps the later one, the value the chapter ends with, and drops the earlier, which validate would reject as a repeat. On a copy of `the-left-luggage-office`:
+`merge` warns (`merge-conflicts`) about what it could not combine: a single-value field both chapters set differently (`pov`, `date`, `time`, and so on), where it keeps the first chapter's value; `numbered: false` on only one of the two, where the merged chapter keeps the first chapter's numbering (no `numbered` means numbered), so a merge with an unnumbered interlude never makes a numbered chapter unnumbered; the first chapter's `hook` when the second has none, which it drops; and two progressions of the same field that now both start in the merged chapter, where it keeps the later one, the value the chapter ends with, and drops the earlier, which validate would reject as a repeat. On a copy of `the-left-luggage-office`:
 
 ```text
 $ story merge chapter-02 chapter-03
