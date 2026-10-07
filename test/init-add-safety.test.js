@@ -8,7 +8,7 @@ import { importManuscript } from "../src/import.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { buildSeries } from "../src/series.js";
 import { buildBook, createEntity, createStoryProject, renameEntity, scanProject, validateLinks, validateProject } from "../src/story.js";
-import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting } from "./helpers.js";
+import { otherLivePid, makeTempDir, memoryIo, readArchiveText, writeMarkdown, messages, whileWriting, CHMOD_IGNORED } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -53,6 +53,23 @@ function initProject() {
 function gapProject(title = "Gap Story") {
   const cwd = makeTempDir();
   return createStoryProject({ cwd, title }).root;
+}
+
+function safetyProject(title = "Safety") {
+  return createStoryProject({ cwd: makeTempDir(), title }).root;
+}
+
+function listDir(root, dir) {
+  return fs.readdirSync(path.join(root, dir)).sort();
+}
+
+function readOnly(file, run) {
+  fs.chmodSync(file, 0o444);
+  try {
+    expect(run).toThrow();
+  } finally {
+    fs.chmodSync(file, 0o644);
+  }
 }
 
 describe("init", () => {
@@ -578,5 +595,39 @@ describe("add, rename, and scan limits", () => {
     expect(second.resumed).toBe(true);
     expect(second.id).toBe(first.id);
     expect(fs.existsSync(path.join(root, "characters", "_index.md"))).toBe(true);
+  });
+});
+
+describe("interrupted add (#202)", () => {
+  test("rerunning an add whose backlink step failed finishes it", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const root = safetyProject();
+    createEntity(root, { kind: "location", name: "Port Kestrel" });
+    const location = path.join(root, "worldbuilding", "locations", "port-kestrel.md");
+    readOnly(location, () => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" }));
+    expect(fs.existsSync(path.join(root, "characters", "nia-holt.md"))).toBe(true);
+    const rerun = invoke(root, ["add", "character", "Nia Holt", "--location", "port-kestrel"]);
+    expect(rerun.out).toContain("Finished an interrupted add of character nia-holt");
+    expect(messages(validateLinks(root).errors)).toEqual([]);
+    // A finished add is listed in the registry, so adding it again is refused.
+    expect(() => createEntity(root, { kind: "character", name: "Nia Holt", location: "port-kestrel" })).toThrow("already exists");
+  });
+
+  test("rerunning an unnumbered scene add does not create a second copy", () => {
+    if (CHMOD_IGNORED) {
+      return;
+    }
+    const root = safetyProject();
+    createEntity(root, { kind: "character", name: "Nessa" });
+    createEntity(root, { kind: "chapter", name: "One" });
+    createEntity(root, { kind: "scene", name: "Opening", chapter: "chapter-01" });
+    readOnly(path.join(root, "chapters", "chapter-01.md"), () => createEntity(root, { kind: "scene", name: "Extra Beat", chapter: "chapter-01", character: "nessa" }));
+    expect(createEntity(root, { kind: "scene", name: "Extra Beat", chapter: "chapter-01", character: "nessa" })).toMatchObject({ id: "chapter-01-scene-02", resumed: true });
+    expect(listDir(root, "scenes")).toEqual(["_index.md", "chapter-01-scene-01.md", "chapter-01-scene-02.md"]);
+    expect(scanProject(root).chapters[0].characters).toContain("nessa");
+    // Once finished, the same add is a new scene again.
+    expect(createEntity(root, { kind: "scene", name: "Extra Beat", chapter: "chapter-01", character: "nessa" }).id).toBe("chapter-01-scene-03");
   });
 });
