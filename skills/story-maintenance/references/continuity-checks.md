@@ -209,7 +209,7 @@ See the `revision-continuity` skill.
 
 ## compare
 
-Run `story compare . --ref <git-ref>` or `story compare . --against '<project-path>'` after a revision pass, or when the user asks what changed since a draft. It needs exactly one of the two.
+Run `story compare . --ref <git-ref>` or `story compare . --against '<project-path>'` after a revision pass, or when the user asks what changed since a draft. It needs exactly one of `--ref`, `--against`, or `--snapshot`.
 
 - `--ref` reads chapters at a git branch, tag, or commit with `git show` (it never writes to the repository), and `--against` reads another copy of the project.
 - It reports per-chapter word changes, added and removed chapters, and the share of paragraphs unchanged.
