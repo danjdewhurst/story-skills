@@ -406,9 +406,9 @@ Write matter text yourself. The `story-maintenance` skill will not invent acknow
 
 | Field | Type | Used by |
 |-------|------|---------|
-| `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, and the byline in both Shunn builds. The plain DOCX build does not use it. |
+| `author` | Text | The author in the EPUB (`dc:creator`), HTML, print, narration, and metadata builds, the credit under the title in the plain DOCX build, and the byline in both Shunn builds. |
 | `authors` | List of text | Replaces `author` for co-authored books in every build, including the Shunn byline. `validate` warns when both are set. |
-| `editor` | Text, or a list of text | The editor of a collection or anthology. The EPUB names them as creators with the `edt` role; the HTML, print, codex, and Shunn title pages credit them under the authors as `Edited by` (the `edited-by` label); the print and Shunn running heads use the editor's name when no author is set; the metadata sheet lists them. Each story's own writer goes in its chapter's `author` field: see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies). |
+| `editor` | Text, or a list of text | The editor of a collection or anthology. The EPUB names them as creators with the `edt` role; the HTML, print, codex, and Shunn title pages and the plain DOCX title block credit them under the authors as `Edited by` (the `edited-by` label); the print and Shunn running heads use the editor's name when no author is set; the metadata sheet lists them. Each story's own writer goes in its chapter's `author` field: see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies). |
 | `language` | BCP 47 tag, such as `en`, `en-GB`, or `fr` | EPUB `dc:language` and the `lang` attribute of every EPUB document; the `lang` attribute of the HTML and print builds; the metadata sheet; the language of all generated text (see [Build labels](#build-labels)). Defaults to `en`. A right-to-left language (such as `he`, `ar`, `fa`, or `ur`, or any tag with an Arabic or Hebrew script subtag) also sets `dir="rtl"` on every EPUB, HTML, and print document and `page-progression-direction="rtl"` on the EPUB spine, and the print interior opens from the right: chapters start on left-hand pages and the running heads swap sides. The language's script also picks the fonts and layout of the HTML, print, EPUB, and DOCX builds, and the DOCX build's Word language for any tag but `en`; see [Typesetting other scripts](#typesetting-other-scripts). |
 | `isbn` | ISBN-13 or ISBN-10, hyphens and spaces allowed | The EPUB identifier (`urn:isbn:...`) in place of the story id; the generated copyright page; the metadata sheet. `validate` checks the checksum. Quote it, so a leading zero survives. |
 | `publisher` | Text | EPUB `dc:publisher`, the generated copyright page, the metadata sheet. |
@@ -469,7 +469,7 @@ labels:
 | `anchor-title` | `Link to {label}` | A paragraph label's tooltip. |
 | `by` | `by` | The line before the author in the Shunn title block. Empty leaves the line out. |
 | `byline` | `by {names}` | A story's own author under its heading, from chapter `author`. |
-| `edited-by` | `Edited by {names}` | The editor's credit from story.md `editor` on the HTML, print, codex, and Shunn title pages. |
+| `edited-by` | `Edited by {names}` | The editor's credit from story.md `editor` on the HTML, print, codex, and Shunn title pages and under the plain DOCX build's title. |
 | `approximate-words` | `Approximately {words} words` | The Shunn title block. |
 | `approximate-characters` | `Approximately {characters} characters` | The Shunn title block of a book [counted in characters](project-format.md#counting-in-characters). |
 | `narration-opening`, `narration-opening-anonymous` | `{title}. Written by {authors}. Narrated by {narrator}.` | The narration script's opening credits, with and without an author. |
@@ -777,11 +777,14 @@ The copy of *The Last Ember* with the fields from [The generated copyright page]
 The DOCX build is a Word document with:
 
 - the book title in a centred `Title` style,
+- the book's credits under the title in a centred 14 pt `Credit` style,
 - each chapter, and each matter page with `heading: true`, under a `Heading 1` style,
 - one Word paragraph per prose paragraph, with bold and italic carried over, in a `Normal` style of 12 pt Times New Roman at 1.5 line spacing with a half-inch first-line indent,
 - scene breaks centred in a `Scene Break` style.
 
-The `author` and `authors` fields are not used. For page layout, headers, and other fonts, open the file in a word processor and change the styles.
+The credits match the HTML and print title pages: a line with the `author` or `authors` names, joined with the `and` label, then a line with the `editor` names as `Edited by` (the `edited-by` label), in the book's language. A line is left out when its field is not set. A story's own `author` stays in the `Byline` paragraph under its heading; see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies).
+
+The title and its credits open the first page, and the text after them follows on the same page. For a title page of its own, page layout, headers, and other fonts, open the file in a word processor and add a page break or change the styles.
 
 For a `language` other than `en`, the document declares it, so Word spell-checks and lays out the text in that language, and picks East Asian or complex-script fonts for the book's script. A right-to-left book has every paragraph and run marked right to left. See [Typesetting other scripts](#typesetting-other-scripts).
 

@@ -4,7 +4,7 @@ import path from "node:path";
 import { shunnHtml } from "../src/packaging.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, computeWordCounts, createStoryProject, exportManuscript, splitChapter, validateProject } from "../src/story.js";
-import { makeTempDir, messages, readArchiveText, writeMarkdown } from "./helpers.js";
+import { makeTempDir, messages, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
 
 // Collections and anthologies (#473): a chapter's own `author` and the
 // book's `editor`.
@@ -33,6 +33,20 @@ function build(root, format, options = {}) {
   const { outFile } = buildBook(root, { format, ...options });
   return format === "epub" || format === "docx" ? readArchiveText(outFile) : fs.readFileSync(outFile, "utf8");
 }
+
+// The plain DOCX build's entries by name, decoded.
+function docx(root, options = {}) {
+  const entries = readArchiveEntries(buildBook(root, { format: "docx", ...options }).outFile);
+  return Object.fromEntries(entries.map((entry) => [entry.name, entry.content.toString("utf8")]));
+}
+
+// A credit line in the DOCX title block.
+function credit(text) {
+  return `<w:p><w:pPr><w:pStyle w:val="Credit"/></w:pPr><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+}
+
+const DOCX_TITLE = `<w:body><w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t xml:space="preserve">Salt Roads</w:t></w:r></w:p>`;
+const DOCX_HEADING = `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>`;
 
 describe("collection and anthology authors (#473)", () => {
   test("validate accepts a name or a list and rejects anything else", () => {
@@ -102,6 +116,42 @@ describe("collection and anthology authors (#473)", () => {
     const text = build(anthology(), "docx");
     expect(text).toContain(`w:styleId="Byline"`);
     expect(text).toMatch(/Low Tide<\/w:t><\/w:r><\/w:p><w:p><w:pPr><w:pStyle w:val="Byline"\/><\/w:pPr><w:r><w:t xml:space="preserve">by Ben Other<\/w:t>/);
+  });
+
+  test("the DOCX title block credits the authors, then the editor (#518)", () => {
+    const root = anthology("author: Ada Writer\neditor: Cara Editor\n");
+    const entries = docx(root);
+    expect(entries["word/document.xml"]).toContain(`${DOCX_TITLE}${credit("Ada Writer")}${credit("Edited by Cara Editor")}${DOCX_HEADING}`);
+    // Each story's own author stays in its byline under the heading.
+    expect(entries["word/document.xml"].match(/w:val="Credit"/g)).toHaveLength(2);
+    expect(entries["word/document.xml"]).toContain(`<w:pStyle w:val="Byline"/></w:pPr><w:r><w:t xml:space="preserve">by Ben Other</w:t>`);
+    expect(entries["word/styles.xml"]).toContain(`<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/></w:rPr></w:style>`);
+    // The credits keep the build byte for byte the same each time.
+    const first = buildBook(root, { format: "docx", out: "dist/first.docx" }).outFile;
+    const second = buildBook(root, { format: "docx", out: "dist/second.docx" }).outFile;
+    expect(fs.readFileSync(first).equals(fs.readFileSync(second))).toBe(true);
+  });
+
+  test("an anthology's DOCX credits its editor alone, and an uncredited book has no credit line (#518)", () => {
+    expect(docx(anthology())["word/document.xml"]).toContain(`${DOCX_TITLE}${credit("Edited by Cara Editor")}${DOCX_HEADING}`);
+    const plain = project();
+    chapter(plain, 1, "One", "Text here.");
+    expect(docx(plain)["word/document.xml"]).toContain(`${DOCX_TITLE}${DOCX_HEADING}`);
+    const placeholder = project("author: \"[TODO: author to supply]\"\n");
+    chapter(placeholder, 1, "One", "Text here.");
+    expect(docx(placeholder)["word/document.xml"]).not.toContain(`w:val="Credit"`);
+  });
+
+  test("the DOCX credits join co-authors and follow the book's language and labels (#518)", () => {
+    const coAuthors = project("authors:\n  - Ada Writer\n  - \"Bo & <Two>\"\n");
+    chapter(coAuthors, 1, "One", "Text here.");
+    expect(docx(coAuthors)["word/document.xml"]).toContain(`${DOCX_TITLE}${credit("Ada Writer and Bo &amp; &lt;Two&gt;")}${DOCX_HEADING}`);
+    const german = anthology("language: de\nauthors:\n  - Ada Writer\n  - Bo Two\neditor: Cara Editor\n");
+    expect(docx(german)["word/document.xml"]).toContain(`${credit("Ada Writer und Bo Two")}${credit("Herausgegeben von Cara Editor")}`);
+    const japanese = anthology("language: ja\neditor: Cara Editor\n");
+    expect(docx(japanese)["word/document.xml"]).toContain(credit("Cara Editor 編"));
+    const custom = anthology("editor: Cara Editor\nlabels:\n  - edited-by: \"Selected by {names}\"\n");
+    expect(docx(custom)["word/document.xml"]).toContain(credit("Selected by Cara Editor"));
   });
 
   test("the HTML review copy and print interior credit the editor and each story", () => {

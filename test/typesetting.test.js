@@ -49,7 +49,7 @@ function expectWellFormed(xml) {
 // The order WordprocessingML's schema gives these paragraph and run
 // properties (CT_PPrBase, CT_RPr): each pPr and rPr must list its children
 // in it.
-const PPR_ORDER = ["pStyle", "keepNext", "bidi", "spacing", "ind", "jc", "textDirection", "outlineLvl"];
+const PPR_ORDER = ["pStyle", "keepNext", "bidi", "spacing", "ind", "contextualSpacing", "jc", "textDirection", "outlineLvl"];
 const RPR_ORDER = ["rFonts", "b", "bCs", "i", "iCs", "sz", "szCs", "rtl", "lang"];
 
 function expectSchemaOrder(xml, element, order) {
@@ -269,6 +269,9 @@ describe("script-aware typesetting", () => {
     expect(styles).toContain('<w:lang w:val="ar" w:bidi="ar"/>');
     expect(styles).toContain('<w:rPr><w:b/><w:bCs/><w:sz w:val="56"/><w:szCs w:val="56"/></w:rPr>');
     expect(document).toContain('<w:p><w:pPr><w:pStyle w:val="Title"/><w:bidi/></w:pPr><w:r><w:rPr><w:rtl/></w:rPr>');
+    // The title block's credit line too (#518).
+    expect(document).toContain('<w:p><w:pPr><w:pStyle w:val="Credit"/><w:bidi/></w:pPr><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve">Ada</w:t></w:r></w:p>');
+    expect(styles).toContain('<w:rPr><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>');
     expect(document).toContain('<w:p><w:pPr><w:bidi/></w:pPr><w:r><w:rPr><w:rtl/></w:rPr><w:t xml:space="preserve">First </w:t></w:r><w:r><w:rPr><w:b/><w:bCs/><w:rtl/></w:rPr>');
     expect(document).toContain("<w:rPr><w:i/><w:iCs/><w:rtl/></w:rPr>");
     expect(document).toContain("<w:sectPr><w:bidi/></w:sectPr></w:body>");
