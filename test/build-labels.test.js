@@ -210,6 +210,15 @@ describe("build labels", () => {
     expect(joinNames(["A", "B"], buildLabels({ labels: [{ and: "{a} & {b}" }] }))).toBe("A & B");
   });
 
+  test("an and label fills a repeated placeholder once, so a long list of names grows linearly", () => {
+    expect(joinNames(["A", "B", "C"], { and: "{a}{a} & {b}{b}" })).toBe("A & B & C");
+    expect(joinNames(["A", "B"], { and: "{b}{b} {a}" })).toBe("B A");
+    expect(joinNames(["A", "B"], { and: "{a}{a} &" })).toBe("A, B");
+    // Doubling {a} for each of 40 names would need 4^40 characters.
+    const names = Array.from({ length: 40 }, (_, index) => `Name ${index}`);
+    expect(joinNames(names, buildLabels({ labels: [{ and: "{a}{a}{a}{a} {b}" }] }))).toBe(names.join(" "));
+  });
+
   test("Traditional Chinese tags get Traditional labels", () => {
     for (const tag of ["zh-Hant", "zh-TW", "zh-HK", "zh-Hant-TW", "zh-yue", "yue", "lzh"]) {
       expect(publishingMeta({ language: tag }).labels.contents).toBe("目錄");

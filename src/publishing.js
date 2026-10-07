@@ -48,14 +48,17 @@ export function nameList(value) {
 
 // The title page's credit lines: the authors' names, then the editors'
 // with the `edited-by` label. A collection by one writer has the first, an
-// anthology the second, and either can be missing.
+// anthology the second, and either can be missing, from the book or from
+// metadata a caller built without that list.
 export function creditLines(meta) {
+  const authors = meta.authors ?? [];
+  const editors = meta.editors ?? [];
   const lines = [];
-  if (meta.authors.length > 0) {
-    lines.push(joinNames(meta.authors, meta.labels));
+  if (authors.length > 0) {
+    lines.push(joinNames(authors, meta.labels));
   }
-  if (meta.editors.length > 0) {
-    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }));
+  if (editors.length > 0) {
+    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(editors, meta.labels) }));
   }
   return lines;
 }

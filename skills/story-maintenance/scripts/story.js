@@ -8062,8 +8062,9 @@ function fillLabel(labels, key, values = {}, escape = (text) => text) {
   return `${text}${escape(template.slice(last))}`;
 }
 function joinNames(names, labels) {
-  const template = String(labels?.and ?? en_default.labels.and);
-  const joiner = template.includes("{a}") && template.includes("{b}") ? labels : { and: "{a}, {b}" };
+  const filled = new Set;
+  const template = String(labels?.and ?? en_default.labels.and).replace(/\{([ab])\}/g, (placeholder, key) => filled.has(key) ? "" : (filled.add(key), placeholder));
+  const joiner = { and: filled.size === 2 ? template : "{a}, {b}" };
   return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
 }
 
@@ -8970,12 +8971,14 @@ function nameList(value) {
   return names.filter((name) => typeof name === "string" && name.trim() !== "" && !isPlaceholder(name)).map((name) => name.trim());
 }
 function creditLines(meta) {
+  const authors = meta.authors ?? [];
+  const editors = meta.editors ?? [];
   const lines = [];
-  if (meta.authors.length > 0) {
-    lines.push(joinNames(meta.authors, meta.labels));
+  if (authors.length > 0) {
+    lines.push(joinNames(authors, meta.labels));
   }
-  if (meta.editors.length > 0) {
-    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(meta.editors, meta.labels) }));
+  if (editors.length > 0) {
+    lines.push(fillLabel(meta.labels, "edited-by", { names: joinNames(editors, meta.labels) }));
   }
   return lines;
 }

@@ -1,13 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { shunnHtml } from "../src/packaging.js";
+import { shunnHtml, writeDocx } from "../src/packaging.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
 import { buildBook, computeWordCounts, createStoryProject, exportManuscript, splitChapter, validateProject } from "../src/story.js";
 import { makeTempDir, messages, readArchiveEntries, readArchiveText, writeMarkdown } from "./helpers.js";
 
 // Collections and anthologies (#473): a chapter's own `author` and the
 // book's `editor`.
+
+const repoRoot = path.resolve(import.meta.dir, "..");
 
 function project(storyFields = "", title = "Salt Roads") {
   const cwd = makeTempDir();
@@ -126,10 +129,37 @@ describe("collection and anthology authors (#473)", () => {
     expect(entries["word/document.xml"].match(/w:val="Credit"/g)).toHaveLength(2);
     expect(entries["word/document.xml"]).toContain(`<w:pStyle w:val="Byline"/></w:pPr><w:r><w:t xml:space="preserve">by Ben Other</w:t>`);
     expect(entries["word/styles.xml"]).toContain(`<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/></w:rPr></w:style>`);
-    // The credits keep the build byte for byte the same each time.
-    const first = buildBook(root, { format: "docx", out: "dist/first.docx" }).outFile;
-    const second = buildBook(root, { format: "docx", out: "dist/second.docx" }).outFile;
-    expect(fs.readFileSync(first).equals(fs.readFileSync(second))).toBe(true);
+  });
+
+  test("a credited DOCX is byte for byte the same from Bun, Node, and the Node fallback (#518)", () => {
+    // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+    if (spawnSync("node", ["--version"]).status !== 0) {
+      console.warn("Skipping the cross-runtime DOCX credit test: node is not on PATH.");
+      return;
+    }
+    const root = anthology("language: de\nauthors:\n  - Ada Writer\n  - Bo Two\neditor: Cara Editor\n");
+    const built = fs.readFileSync(buildBook(root, { format: "docx", out: "dist/bun.docx" }).outFile);
+    expect(built.length).toBeGreaterThan(0);
+    for (const [runner, script] of [["node", path.join(repoRoot, "bin", "story.js")], ["fallback", path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js")]]) {
+      const out = path.join(root, "dist", `${runner}.docx`);
+      const result = spawnSync("node", [script, "build", root, "--format", "docx", "--out", out], { encoding: "utf8" });
+      expect(result.status).toBe(0);
+      expect({ runner, same: fs.readFileSync(out).equals(built) }).toEqual({ runner, same: true });
+    }
+  });
+
+  test("writeDocx credits only the names its metadata holds (#518)", () => {
+    const dir = makeTempDir();
+    const book = { title: "Salt Roads", front: [], chapters: [{ heading: "One", body: "Text here." }], back: [] };
+    const document = (name, meta) => {
+      const outFile = path.join(dir, `${name}.docx`);
+      writeDocx(outFile, { ...book, meta });
+      return readArchiveEntries(outFile).find((entry) => entry.name === "word/document.xml").content.toString("utf8");
+    };
+    expect(document("none", undefined)).toContain(`${DOCX_TITLE}${DOCX_HEADING}`);
+    expect(document("partial", { language: "en" })).toContain(`${DOCX_TITLE}${DOCX_HEADING}`);
+    expect(document("editors", { language: "en", editors: ["Cara Editor"] })).toContain(`${DOCX_TITLE}${credit("Edited by Cara Editor")}${DOCX_HEADING}`);
+    expect(document("authors", { language: "en", authors: ["Ada Writer", "Bo Two"] })).toContain(`${DOCX_TITLE}${credit("Ada Writer and Bo Two")}${DOCX_HEADING}`);
   });
 
   test("an anthology's DOCX credits its editor alone, and an uncredited book has no credit line (#518)", () => {
