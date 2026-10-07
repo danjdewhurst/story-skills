@@ -48,8 +48,9 @@ function setProse(root, id, text) {
 }
 
 // Three chapters with a character in each, two scenes in chapter 2 with a
-// scene break between their text, and a clue planted in chapter 2 and paid
-// off in chapter 3, so each command changes several files.
+// scene break between their text, a clue planted in chapter 2 and paid off
+// in chapter 3, and story.md queries that name the character and a
+// chapter, so each command changes several files.
 function book() {
   const root = createStoryProject({ cwd: makeTempDir(), title: "Undo Book" }).root;
   createEntity(root, { kind: "character", name: "Mara Quill" });
@@ -62,6 +63,24 @@ function book() {
   createEntity(root, { kind: "scene", name: "The Quay", chapter: "chapter-02", characters: ["mara-quill"] });
   createEntity(root, { kind: "scene", name: "The Boat", chapter: "chapter-02", characters: ["mara-quill"] });
   createEntity(root, { kind: "clue", name: "The Ticket", planted: "chapter-02", payoff: "chapter-03", status: "paid-off", characters: ["mara-quill"] });
+  const story = path.join(root, "story.md");
+  const text = fs.readFileSync(story, "utf8");
+  const end = text.indexOf("\n---\n", 4);
+  const queries = ["queries:", "  - name: with-mara", "    kind: chapters", "    where: [characters=mara-quill]", "  - name: quay", "    kind: scenes", "    where: [chapter=chapter-02]"];
+  fs.writeFileSync(story, `${text.slice(0, end)}\n${queries.join("\n")}${text.slice(end)}`, "utf8");
+  expect(runCli(["wordcount", "--write", "--path", root], memoryIo(root))).toBe(0);
+  return root;
+}
+
+// book() with a fourth chapter, made branching: chapter 1 leads to chapter
+// 2 or chapter 4, so a split of chapter 2 adds a choice to it and a split
+// or merge rewrites the choice into chapter 4.
+function branching() {
+  const root = book();
+  createEntity(root, { kind: "chapter", name: "Four", status: "draft", characters: ["mara-quill"] });
+  setProse(root, "chapter-04", "They landed.\n");
+  const file = path.join(root, "chapters", "chapter-01.md");
+  fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/\nstatus: /, "\nchoices:\n  - text: Take the ferry\n    to: chapter-02\n  - text: Walk the coast\n    to: chapter-04\nstatus: "), "utf8");
   expect(runCli(["wordcount", "--write", "--path", root], memoryIo(root))).toBe(0);
   return root;
 }
@@ -73,7 +92,9 @@ const COMMANDS = {
   merge: { run: (root) => mergeChapters(root, { id: "chapter-01", next: "chapter-02" }), argv: ["merge", "chapter-01", "chapter-02"], name: "story merge chapter-01 chapter-02" },
   move: { run: (root) => moveEntity(root, { kind: "chapter", id: "chapter-02", number: "5" }), argv: ["move", "chapter", "chapter-02", "--number", "5"], name: "story move chapter chapter-02 --number 5" },
   rename: { run: (root) => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }), argv: ["rename", "character", "mara-quill", "Mara Tide"], name: "story rename character mara-quill 'Mara Tide'" },
-  remove: { run: (root) => removeEntity(root, { kind: "character", id: "mara-quill" }), argv: ["remove", "character", "mara-quill"], name: "story remove character mara-quill" }
+  remove: { run: (root) => removeEntity(root, { kind: "character", id: "mara-quill" }), argv: ["remove", "character", "mara-quill"], name: "story remove character mara-quill" },
+  "split in a branching book": { run: (root) => splitChapter(root, { id: "chapter-02", at: "1" }), name: "story split chapter-02 --at 1", fixture: branching },
+  "merge in a branching book": { run: (root) => mergeChapters(root, { id: "chapter-02", next: "chapter-03" }), name: "story merge chapter-02 chapter-03", fixture: branching }
 };
 
 const POSIX = process.platform !== "win32";
@@ -166,17 +187,27 @@ function withoutTemporary(files) {
 }
 
 describe("undo logs (#604)", () => {
-  for (const [command, { run, name }] of Object.entries(COMMANDS)) {
+  for (const [command, { run, name, fixture: make = book }] of Object.entries(COMMANDS)) {
     // Split and merge, several steps each, are stopped at every change; the
     // others at the first, the second, a middle, and the last.
     test(`${command} stopped at any change is put back whole`, () => {
-      const fixture = book();
+      const fixture = make();
       const original = snapshot(fixture);
       const clean = copy(fixture);
       const total = stoppedAt(clean, 0, () => run(clean));
       expect(total).toBeGreaterThan(2);
       expect(fs.existsSync(path.join(clean, UNDO_LOG))).toBe(false);
-      const points = command === "split" || command === "merge" ? Array.from({ length: total }, (_, index) => index + 1) : [1, 2, Math.ceil(total / 2), total];
+      // The run changed the files that name what it changed: the saved
+      // queries, which name the character and chapter 2, and a branching
+      // book's choices.
+      const changed = Object.entries(snapshot(clean)).filter(([file, text]) => original[file] !== text).map(([file]) => file);
+      if (["rename", "move", "merge"].includes(command)) {
+        expect(changed).toContain("story.md");
+      }
+      if (make === branching) {
+        expect(changed).toContain("chapters/chapter-01.md");
+      }
+      const points = /^(split|merge)/.test(command) ? Array.from({ length: total }, (_, index) => index + 1) : [1, 2, Math.ceil(total / 2), total];
       for (const at of points) {
         const root = copy(fixture);
         stoppedAt(root, at, () => run(root));
@@ -344,6 +375,13 @@ describe("undo logs (#604)", () => {
     // A command that writes only with a flag is refused with it.
     expect(invoke(root, ["wordcount", "--write"])).toEqual({ code: 4, out: "", err: refusal("wordcount") });
     expect(invoke(root, ["snapshot", "--restore", "first"])).toEqual({ code: 4, out: "", err: refusal("snapshot") });
+    // init --force and import --force into the folder are refused too.
+    const parent = path.dirname(root);
+    const folder = path.basename(root);
+    expect(invoke(parent, ["init", "Undo Book", "--dir", folder, "--force"])).toEqual({ code: 4, out: "", err: refusal("init --force") });
+    const manuscript = path.join(makeTempDir(), "draft.md");
+    fs.writeFileSync(manuscript, "# Undo Book\n\n## Chapter 1\n\nNew words.\n");
+    expect(invoke(parent, ["import", manuscript, "--title", "Undo Book", "--dir", folder, "--force"])).toEqual({ code: 4, out: "", err: refusal("import --force") });
     // Reading commands still run.
     expect(invoke(root, ["wordcount"]).code).toBe(0);
     expect(invoke(root, ["doctor"]).out).toContain("Fix validation errors");
