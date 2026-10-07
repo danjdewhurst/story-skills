@@ -3243,6 +3243,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `id-not-kebab` | error | A file name, id, or id reference is not kebab-case. |
 | `shared-id` | warning | A character shares its id with a faction (both can be an `owner` or `controlled-by`) or an artifact (both can be in `mentions`), so those references could mean either, and `rename` and `remove` leave them alone. `story add` refuses such an id, so only a file made by hand has one. Give one of them another id with `story rename`. |
 | `near-miss-key` | warning | A frontmatter key is a near miss for one its file's kind defines, such as `died_in` for `died-in`, `arcs_advanced` for `arcs-advanced`, or `stauts` for `status`, so its value would be ignored. |
+| `frontmatter-id` | warning | An entity file sets `id` in its frontmatter. The id comes from the file name, so the value is ignored: remove the `id` line. |
 | `wrong-type` | error | A registry or project file has the wrong `type`. |
 | `story-id-mismatch` | error | A registry's `story` does not match the project's story id. |
 | `substitute-story-id` | warning | Neither the `story.md` title nor the project folder name has ASCII letters or digits, so the story id is `story-` and a hash of the title. `build` reports it too. See [Identifiers and filenames](project-format.md#identifiers-and-filenames). |
