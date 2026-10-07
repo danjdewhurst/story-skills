@@ -416,16 +416,18 @@ function sourceFiles(dir) {
   });
 }
 
-// The trimmed lines on which `pattern` matches `source`, once each, in
-// order. Whole-line comments are blanked first, keeping the line numbers.
+// The trimmed text of each line on which `pattern` matches `source`, in
+// order, once per line. Two identical lines are two entries, since each is a
+// line of its own; a line that matches twice is still one. Whole-line
+// comments are blanked first, keeping the line numbers.
 function matchingLines(source, pattern) {
   const lines = source.split("\n").map((line) => (line.trim().startsWith("//") ? "" : line));
   const code = lines.join("\n");
-  const found = new Set();
+  const numbers = new Set();
   for (const match of code.matchAll(pattern)) {
-    found.add(lines[code.slice(0, match.index).split("\n").length - 1].trim());
+    numbers.add(code.slice(0, match.index).split("\n").length - 1);
   }
-  return [...found];
+  return [...numbers].map((index) => lines[index].trim());
 }
 
 describe("raw reads (#548)", () => {
@@ -462,6 +464,11 @@ describe("raw reads (#548)", () => {
     }
     // Comments, and names that only start like one, are not reads.
     expect(matchingLines("// fs.readFileSync(0)\nfs.readdirSync(dir);\nfs.readlinkSync(link);\nproject.promises;", RAW_READ)).toEqual([]);
+  });
+
+  test("the scan counts two identical reads as two, so an allowed line cannot hide a second read (#749)", () => {
+    const read = 'const text = fs.readFileSync(file, "utf8");';
+    expect(matchingLines(`${read}\n${read}`, RAW_READ)).toEqual([read, read]);
   });
 });
 
