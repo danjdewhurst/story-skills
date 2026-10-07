@@ -453,6 +453,13 @@ export function currentText(target) {
 // process id, which the pattern still matches.
 export const TEMPORARY_FILE_PATTERN = /^\.(.+)\.story-[0-9a-f]+\.tmp$/;
 
+// At the project root while a rename that moves a file runs: written before
+// its first change and deleted after its reindex, it names the rename, so a
+// rerun can tell a rename killed after deleting its old file from an id that
+// never existed. Hidden, never scanned, and in the starter .gitignore as a
+// `.story-*.tmp` file.
+export const RENAME_MARKER = ".story-rename.tmp";
+
 // The most of the target's name the temporary name keeps, in UTF-8 bytes:
 // with the leading dot, `.story-`, the 16-character suffix, and `.tmp`, it
 // stays within the 255-byte name limit of common file systems.

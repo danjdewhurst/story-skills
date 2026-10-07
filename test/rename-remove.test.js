@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { createEntity, createStoryProject, moveEntity, removeEntity, renameEntity } from "../src/story.js";
+import { createEntity, createStoryProject, moveEntity, reindexProject, removeEntity, renameEntity } from "../src/story.js";
 import { makeTempDir, whileWriting, writeMarkdown } from "./helpers.js";
 
 function project(title) {
@@ -93,14 +93,17 @@ describe("rename and remove reference rewriting", () => {
     writeMarkdown(path.join(root, "characters", "vale.md"), "name: Vale\nrole: supporting\nstatus: alive", "\n# Vale\n");
     createEntity(root, { kind: "artifact", name: "Ring", owner: "vale" });
 
+    createEntity(root, { kind: "location", name: "Keep", "controlled-by": "vale" });
+
     const result = renameEntity(root, { kind: "character", id: "vale", name: "Vale Two" });
 
     expect(read(root, "worldbuilding", "artifacts", "ring.md")).toContain("owner: vale");
-    // ...but not silently (#579).
+    expect(read(root, "worldbuilding", "locations", "keep.md")).toContain("controlled-by: vale");
+    // ...but not silently, and each file lists the fields it uses (#579).
     expect(result.warnings).toEqual([{
       code: "ambiguous-references",
-      message: "controlled-by and owner references to vale in worldbuilding/artifacts/ring.md could mean the character or faction vale, and rename left them alone, so they now name the faction: change any that meant the character to vale-two",
-      file: "worldbuilding/artifacts/ring.md",
+      message: "references to vale in worldbuilding/artifacts/ring.md (owner), worldbuilding/locations/keep.md (controlled-by) could mean the character or faction vale, and rename left them alone, so they now name the faction: change any that meant the character to vale-two",
+      file: null,
       chapter: null
     }]);
   });
@@ -291,50 +294,92 @@ describe("edits saved while rename, remove, or move runs", () => {
 });
 
 describe("interrupted renames and ids two kinds share (#579)", () => {
+  const MARKER = ".story-rename.tmp";
+
   // Runs a rename that is killed once it has deleted the old file, at the
-  // first registry write of its reindex.
-  function killedBeforeReindex(oldFile, run) {
-    const original = fs.renameSync;
-    fs.renameSync = (from, to) => {
-      if (!fs.existsSync(oldFile) && path.basename(String(to)) === "_index.md") {
-        throw new Error("killed before the reindex");
+  // first write to `target` (a registry the reindex rewrites) or, for the
+  // marker, at its delete.
+  function killedAfterDelete(oldFile, target, run) {
+    const { renameSync, rmSync } = fs;
+    const kill = (file) => {
+      if (!fs.existsSync(oldFile) && path.resolve(String(file)) === target) {
+        throw new Error("killed");
       }
-      return original(from, to);
+    };
+    fs.renameSync = (from, to) => {
+      kill(to);
+      return renameSync(from, to);
+    };
+    fs.rmSync = (file, options) => {
+      kill(file);
+      return rmSync(file, options);
     };
     try {
-      expect(run).toThrow("killed before the reindex");
+      expect(run).toThrow("killed");
     } finally {
-      fs.renameSync = original;
+      fs.renameSync = renameSync;
+      fs.rmSync = rmSync;
     }
   }
 
   test("rename refuses an id that never existed, though an entity has the new name", () => {
     const root = project("No Such Person");
-    createEntity(root, { kind: "character", name: "Sera Voss" });
+    // Indexed as Sera, then renamed by hand, so its registry row is stale.
+    writeMarkdown(path.join(root, "characters", "sera-voss.md"), "name: Sera\nrole: supporting\nstatus: alive", "# Sera\n");
+    reindexProject(root);
+    const file = path.join(root, "characters", "sera-voss.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("name: Sera", "name: Sera Voss"));
     const before = snapshot(root);
-    expect(() => renameEntity(root, { kind: "character", id: "no-such-person", name: "Sera Voss" })).toThrow("character no-such-person does not exist");
-    fs.rmSync(path.join(root, "characters", "_index.md"));
-    expect(() => renameEntity(root, { kind: "character", id: "no-such-person", name: "Sera Voss" })).toThrow("character no-such-person does not exist");
-    fs.writeFileSync(path.join(root, "characters", "_index.md"), before[path.join("characters", "_index.md")]);
+    const rename = () => renameEntity(root, { kind: "character", id: "no-such-person", name: "Sera Voss" });
+    expect(rename).toThrow("character no-such-person does not exist");
+    // A marker for another rename, or one that does not parse, is no evidence.
+    fs.writeFileSync(path.join(root, MARKER), JSON.stringify({ kind: "character", id: "someone-else", newId: "sera-voss", name: "Sera Voss" }));
+    expect(rename).toThrow("character no-such-person does not exist");
+    fs.writeFileSync(path.join(root, MARKER), "{");
+    expect(rename).toThrow("character no-such-person does not exist");
+    fs.rmSync(path.join(root, MARKER));
     expect(snapshot(root)).toEqual(before);
   });
 
-  test("a rename killed after deleting the old file is finished by a rerun, once", () => {
-    const root = project("Stopped Rename");
-    createEntity(root, { kind: "character", name: "Mara Quill" });
-    createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara-quill" });
-    killedBeforeReindex(path.join(root, "characters", "mara-quill.md"), () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }));
-    expect(read(root, "characters", "_index.md")).toContain("| Mara Quill | supporting | alive | [mara-tide](mara-tide.md) |");
+  test("a rename killed at any write after deleting the old file is finished by a rerun, once", () => {
+    for (const target of [["characters", "_index.md"], ["chapters", "_index.md"], [MARKER]]) {
+      const root = project("Stopped Rename");
+      createEntity(root, { kind: "character", name: "Mara Quill" });
+      createEntity(root, { kind: "chapter", name: "One", number: 1, character: "mara-quill", pov: "mara-quill" });
+      const rename = () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" });
+      killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, ...target), rename);
+      expect(fs.existsSync(path.join(root, MARKER))).toBe(true);
 
-    expect(renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toMatchObject({ id: "mara-tide", resumed: true, warnings: [] });
-    expect(read(root, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
-    // Finished, the rename leaves no evidence, so a rerun is refused.
-    expect(() => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" })).toThrow("character mara-quill does not exist");
+      expect(rename()).toMatchObject({ id: "mara-tide", resumed: true, warnings: [] });
+      expect(read(root, "characters", "_index.md")).toContain("| Mara Tide | supporting | alive | [mara-tide](mara-tide.md) |");
+      expect(read(root, "chapters", "_index.md")).toContain("| 1 | One | mara-tide |");
+      expect(fs.existsSync(path.join(root, MARKER))).toBe(false);
+      // Finished, so a rerun is refused.
+      expect(rename).toThrow("character mara-quill does not exist");
+    }
+  });
+
+  test("an id-only rename and a rename of a file no reindex listed resume too", () => {
+    const root = project("Id Only");
+    createEntity(root, { kind: "character", name: "Mara Quill" });
+    // The name does not change, so the reindex has nothing to rewrite.
+    const idOnly = () => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Quill", newId: "mara" });
+    killedAfterDelete(path.join(root, "characters", "mara-quill.md"), path.join(root, MARKER), idOnly);
+    expect(idOnly()).toMatchObject({ id: "mara", resumed: true });
+    expect(idOnly).toThrow("character mara-quill does not exist");
+
+    writeMarkdown(path.join(root, "characters", "ilse.md"), "name: Ilse\nrole: supporting\nstatus: alive", "# Ilse\n");
+    const unlisted = () => renameEntity(root, { kind: "character", id: "ilse", name: "Ilse Varrow" });
+    killedAfterDelete(path.join(root, "characters", "ilse.md"), path.join(root, "characters", "_index.md"), unlisted);
+    expect(read(root, "characters", "_index.md")).not.toContain("ilse");
+    expect(unlisted()).toMatchObject({ id: "ilse-varrow", resumed: true });
+    expect(read(root, "characters", "_index.md")).toContain("| Ilse Varrow | supporting | alive | [ilse-varrow](ilse-varrow.md) |");
   });
 
   test("rename and remove say which mentions they left on an id a character and an artifact share", () => {
     const root = project("Shared Mentions");
     const handMade = () => writeMarkdown(path.join(root, "characters", "blackened-crown.md"), "name: Blackened Crown\nrole: supporting\nstatus: alive", "# Blackened Crown\n");
+    const left = (action, fix) => `references to blackened-crown in chapters/chapter-01.md (mentions) could mean the character or artifact blackened-crown, and ${action} left them alone, so they now name the artifact: ${fix}`;
     createEntity(root, { kind: "artifact", name: "Blackened Crown" });
     handMade();
     // Nothing references the shared id yet, so there is nothing to warn about.
@@ -346,16 +391,36 @@ describe("interrupted renames and ids two kinds share (#579)", () => {
     expect(read(root, "chapters", "chapter-01.md")).toContain("mentions:\n  - blackened-crown\n");
     expect(renamed.warnings).toEqual([{
       code: "ambiguous-references",
-      message: "mentions references to blackened-crown in chapters/chapter-01.md could mean the character or artifact blackened-crown, and rename left them alone, so they now name the artifact: change any that meant the character to black-knight",
+      message: left("rename", "change any that meant the character to black-knight"),
       file: "chapters/chapter-01.md",
       chapter: null
     }]);
+
+    // A resumed rename gives the warning the killed run never printed.
+    handMade();
+    const rename = () => renameEntity(root, { kind: "character", id: "blackened-crown", name: "Dark Knight" });
+    killedAfterDelete(path.join(root, "characters", "blackened-crown.md"), path.join(root, MARKER), rename);
+    expect(rename()).toMatchObject({ resumed: true, warnings: [{ code: "ambiguous-references", message: left("rename", "change any that meant the character to dark-knight") }] });
 
     handMade();
     const removed = removeEntity(root, { kind: "character", id: "blackened-crown" });
     expect(read(root, "chapters", "chapter-01.md")).toContain("mentions:\n  - blackened-crown\n");
     expect(removed.warnings.filter((finding) => finding.code === "ambiguous-references").map((finding) => finding.message)).toEqual([
-      "mentions references to blackened-crown in chapters/chapter-01.md could mean the character or artifact blackened-crown, and remove left them alone, so they now name the artifact: delete any that meant the character"
+      left("remove", "delete any that meant the character")
+    ]);
+  });
+
+  test("an unquoted number id counts as the same id", () => {
+    const root = project("Number Ids");
+    writeMarkdown(path.join(root, "worldbuilding", "factions", "1984.md"), "name: \"1984\"\ntype: political\nstatus: active", "# 1984\n");
+    writeMarkdown(path.join(root, "characters", "1984.md"), "name: \"1984\"\nrole: supporting\nstatus: alive", "# 1984\n");
+    writeMarkdown(path.join(root, "worldbuilding", "artifacts", "ring.md"), "name: Ring\ntype: other\nstatus: intact\nowner: 1984", "# Ring\n");
+    reindexProject(root);
+
+    const result = renameEntity(root, { kind: "character", id: "1984", name: "Orwell" });
+    expect(read(root, "worldbuilding", "artifacts", "ring.md")).toContain("owner: 1984");
+    expect(result.warnings.map((finding) => finding.message)).toEqual([
+      "references to 1984 in worldbuilding/artifacts/ring.md (owner) could mean the character or faction 1984, and rename left them alone, so they now name the faction: change any that meant the character to orwell"
     ]);
   });
 });
