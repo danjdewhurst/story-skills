@@ -207,7 +207,11 @@ describe("files that fail to parse", () => {
   test("a broken style sheet does not block reindex", () => {
     const root = sweepProject();
     fs.writeFileSync(path.join(root, "style-sheet.md"), "---\n: bad\n---\n");
-    expect(() => reindexProject(root)).not.toThrow();
+    // A new character is not in the registry until reindex rebuilds it.
+    fs.writeFileSync(path.join(root, "characters", "rowan.md"), "---\nname: Rowan\nrole: supporting\nstatus: alive\nrelationships: []\n---\n# Rowan\n", "utf8");
+    const { changed } = reindexProject(root);
+    expect(changed).toContain(path.join(root, "characters", "_index.md"));
+    expect(fs.readFileSync(path.join(root, "characters", "_index.md"), "utf8")).toContain("Rowan");
   });
 
   test("rename aborts when an entity file or registry has no frontmatter", () => {
