@@ -622,6 +622,8 @@ var FINDING_CODES = {
   "progression-duplicate": "error",
   "progression-out-of-order": "error",
   "duplicate-pass": "error",
+  "duplicate-query": "error",
+  "invalid-query": "error",
   "exemption-pattern-too-short": "error",
   "exemption-unknown-code": "error",
   "exemption-code-not-dismissible": "error",
@@ -12156,6 +12158,7 @@ var OPTIONS = [
   { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
   { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },
+  { name: "query", value: "<name>", help: ["Run a story.md query for list: its kind and", "filters, and any --where as well"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them; for", "split, where to split: a scene break number, a", "heading, or a line of the text"] },
   { name: "budget", value: "<tokens>", help: ["Token budget for context (default 6000)"] },
   { name: "scenes", value: "<n>", help: ["Earlier scenes to summarise for context", "(default 5)"] },
@@ -17549,7 +17552,7 @@ import path6 from "node:path";
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity", "queries"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
   location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
@@ -17635,9 +17638,12 @@ var LIST_KINDS = [
   { kind: "matter", singular: "matter", collection: "matter", schema: "matter", title: "title" }
 ];
 var KIND_NAMES = LIST_KINDS.map((entry) => entry.kind);
+var QUERY_KINDS = new Set(LIST_KINDS.flatMap((entry) => [entry.kind, entry.singular]));
+var QUERY_KEYS = ["name", "kind", "where"];
+var KEBAB_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 function listKind(name) {
   if (typeof name !== "string" || name.trim() === "") {
-    throw usageError(`Usage: story list <kind> [--where <filter>]... [--path <project>]; kinds: ${KIND_NAMES.join(", ")}`);
+    throw usageError(`Usage: story list <kind> [--where <filter>]... or story list --query <name> [--where <filter>]... [--path <project>]; kinds: ${KIND_NAMES.join(", ")}`);
   }
   const text = name.trim().toLowerCase();
   const entry = LIST_KINDS.find((candidate) => candidate.kind === text || candidate.singular === text);
@@ -17647,12 +17653,22 @@ function listKind(name) {
   return entry;
 }
 function parseWhere(text) {
+  const filter = readWhere(text);
+  if (filter.problem === "value") {
+    throw usageError(`--where ${filter.text} needs a value after ${filter.operator}; use --where ${filter.key} for a key that is set, or --where '!${filter.key}' for one that is not`, "where");
+  }
+  if (filter.problem === "shape") {
+    throw usageError(`Cannot read --where ${filter.text}: expected key=value, key!=value, key, or !key`, "where");
+  }
+  return filter;
+}
+function readWhere(text) {
   const filter = String(text).trim();
   const comparison = /^([^=!]+?)\s*(!=|=)\s*(.*)$/.exec(filter);
   if (comparison) {
     const [, key, operator, value] = comparison;
     if (value === "") {
-      throw usageError(`--where ${filter} needs a value after ${operator}; use --where ${key} for a key that is set, or --where '!${key}' for one that is not`, "where");
+      return { problem: "value", text: filter, key, operator };
     }
     return { key, op: operator === "=" ? "eq" : "ne", value };
   }
@@ -17660,28 +17676,22 @@ function parseWhere(text) {
   if (presence) {
     return { key: presence[2], op: presence[1] === "!" ? "absent" : "present", value: null };
   }
-  throw usageError(`Cannot read --where ${filter}: expected key=value, key!=value, key, or !key`, "where");
+  return { problem: "shape", text: filter };
 }
-function buildList(project, kindName, whereValues = []) {
-  const entry = listKind(kindName);
-  const filters = [whereValues].flat().filter((value) => value !== undefined && value !== true).map(parseWhere);
+function buildList(project, kindName, whereValues = [], queryName = undefined) {
+  const query = queryName === undefined ? null : savedQuery(project, queryName);
+  const entry = query === null ? listKind(kindName) : queryKind(query, kindName);
+  const given = [whereValues].flat().filter((value) => value !== undefined && value !== true);
+  const filters = [...query?.where ?? [], ...given].map(parseWhere);
   const entities = project[entry.collection];
+  const queryField = query?.name ?? null;
   if ((project.fileErrors ?? []).length > 0) {
-    return { kind: entry.kind, where: filters, total: entities.length, items: [] };
+    return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items: [] };
   }
-  const known = [...FRONTMATTER_KEYS[entry.schema]];
-  for (const entity of entities) {
-    for (const key of Object.keys(entity.frontmatter ?? {})) {
-      if (!known.includes(key)) {
-        known.push(key);
-      }
-    }
-  }
+  const known = knownKeys(project, entry);
   for (const filter of filters) {
     if (!known.includes(filter.key)) {
-      const near = nearMissKeys(filter.key, known);
-      const hint = near.length > 0 ? `; did you mean ${near.map((key) => `"${key}"`).join(" or ")}?` : "";
-      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${hint}`, "where");
+      throw usageError(`Unknown key "${filter.key}" for ${entry.kind}: no ${entry.singular} file sets it and the schema does not define it${keyHint(filter.key, known)}`, "where");
     }
   }
   const keys = [...new Set(filters.map((filter) => filter.key))];
@@ -17691,7 +17701,127 @@ function buildList(project, kindName, whereValues = []) {
     title: String(entity[entry.title]),
     fields: Object.fromEntries(keys.map((key) => [key, entity.frontmatter?.[key] ?? null]))
   }));
-  return { kind: entry.kind, where: filters, total: entities.length, items };
+  return { kind: entry.kind, query: queryField, where: filters, total: entities.length, items };
+}
+function knownKeys(project, entry) {
+  const known = [...FRONTMATTER_KEYS[entry.schema]];
+  for (const entity of project[entry.collection]) {
+    for (const key of Object.keys(entity.frontmatter ?? {})) {
+      if (!known.includes(key)) {
+        known.push(key);
+      }
+    }
+  }
+  return known;
+}
+function keyHint(key, known) {
+  const near = nearMissKeys(key, known);
+  return near.length > 0 ? `; did you mean ${near.map((candidate) => `"${candidate}"`).join(" or ")}?` : "";
+}
+function savedQuery(project, name) {
+  const wanted = String(name).trim();
+  if (wanted === "") {
+    throw usageError("--query needs the name of a story.md query");
+  }
+  if (project.story.unreadable) {
+    throw projectError(`story.md cannot be parsed; fix it before running story list --query ${wanted}`);
+  }
+  const raw = project.story.data.queries;
+  if (raw !== undefined && !Array.isArray(raw)) {
+    throw projectError(`story.md frontmatter field queries must be a list; fix it before running story list --query ${wanted}`);
+  }
+  const entries = (raw ?? []).map((item, index) => ({ item, index })).filter(({ item }) => isMapping2(item));
+  const named = entries.filter(({ item }) => item.name === wanted);
+  if (named.length === 0) {
+    const names = [...new Set(entries.map(({ item }) => item.name).filter((candidate) => typeof candidate === "string" && candidate !== ""))];
+    throw usageError(names.length === 0 ? `Unknown query "${wanted}": story.md has no queries` : `Unknown query "${wanted}" (story.md queries: ${names.join(", ")})${suggestion(wanted, names)}`);
+  }
+  const problems = named.length > 1 ? [`story.md lists query ${wanted} more than once`] : queryProblems(project, named[0].item, named[0].index).map((finding) => finding.message);
+  if (problems.length > 0) {
+    throw projectError(`Fix story.md query ${wanted} before running it: ${problems.join("; ")}`);
+  }
+  return named[0].item;
+}
+function queryKind(query, kindName) {
+  const entry = listKind(query.kind);
+  if (kindName !== undefined && listKind(kindName) !== entry) {
+    throw usageError(`Query ${query.name} lists ${entry.kind}, not ${listKind(kindName).kind}: drop the kind, or give ${entry.kind}`);
+  }
+  return entry;
+}
+function queryFindings(project) {
+  const raw = project.story.data.queries;
+  if (raw === undefined) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    return [err("field-not-list", "story.md frontmatter field queries must be a list", "story.md")];
+  }
+  const findings = [];
+  const seen = new Set;
+  raw.forEach((item, index) => {
+    if (!isMapping2(item)) {
+      findings.push(err("field-invalid-items", "story.md frontmatter field queries must contain mappings, such as - name: mara-drafts", "story.md"));
+      return;
+    }
+    findings.push(...queryProblems(project, item, index));
+    if (typeof item.name === "string" && seen.has(item.name)) {
+      findings.push(err("duplicate-query", `story.md lists query ${item.name} more than once`, "story.md"));
+    }
+    seen.add(item.name);
+  });
+  return findings;
+}
+function queryProblems(project, item, index) {
+  const findings = [];
+  const label = typeof item.name === "string" && KEBAB_NAME.test(item.name) ? `story.md query ${item.name}` : `story.md queries[${index}]`;
+  const extra = Object.keys(item).filter((key) => !QUERY_KEYS.includes(key));
+  if (extra.length > 0) {
+    findings.push(err("invalid-query", `${label} has ${extra.join(", ")}: a query takes only name, kind, and where`, "story.md"));
+  }
+  if (item.name === undefined) {
+    findings.push(err("missing-field", `${label} is missing name`, "story.md"));
+  } else if (typeof item.name !== "string" || !KEBAB_NAME.test(item.name)) {
+    findings.push(err("id-not-kebab", `${label} name ${JSON.stringify(item.name)} must be kebab-case, such as mara-drafts`, "story.md"));
+  }
+  let entry = null;
+  if (item.kind === undefined) {
+    findings.push(err("missing-field", `${label} is missing kind`, "story.md"));
+  } else if (QUERY_KINDS.has(item.kind)) {
+    entry = listKind(item.kind);
+  } else {
+    const near = typeof item.kind === "string" ? suggestion(item.kind, KIND_NAMES) : "";
+    findings.push(err("invalid-query", `${label} kind ${JSON.stringify(item.kind)} is not a kind story list takes (${KIND_NAMES.join(", ")}, or the singular)${near}`, "story.md"));
+  }
+  if (item.where === undefined) {
+    findings.push(err("missing-field", `${label} is missing where`, "story.md"));
+    return findings;
+  }
+  if (!Array.isArray(item.where) || item.where.length === 0 || !item.where.every((filter) => typeof filter === "string")) {
+    findings.push(err("invalid-query", `${label} where must be a list of one or more filters, such as where: [status=draft, pov=mara-quill]`, "story.md"));
+    return findings;
+  }
+  const filters = [];
+  for (const text of item.where) {
+    const filter = readWhere(text);
+    if (filter.problem === "value") {
+      findings.push(err("invalid-query", `${label} where filter ${JSON.stringify(filter.text)} needs a value after ${filter.operator}; write ${filter.key} for a key that is set, or "!${filter.key}" for one that is not`, "story.md"));
+    } else if (filter.problem === "shape") {
+      findings.push(err("invalid-query", `${label} cannot read where filter ${JSON.stringify(filter.text)}: expected key=value, key!=value, key, or "!key"`, "story.md"));
+    } else {
+      filters.push(filter);
+    }
+  }
+  if (entry !== null && (project.fileErrors ?? []).length === 0) {
+    const known = knownKeys(project, entry);
+    for (const filter of filters.filter((candidate) => !known.includes(candidate.key))) {
+      findings.push(err("invalid-query", `${label} filters on ${filter.key}, which no ${entry.singular} file sets and the schema does not define${keyHint(filter.key, known)}`, "story.md"));
+    }
+  }
+  return findings;
+}
+function isMapping2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function matches(frontmatter, filter) {
   const value = frontmatter[filter.key];
@@ -20077,7 +20207,7 @@ function formatSimilarity(report) {
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
-var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending"], list: ["query"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]],
@@ -22116,6 +22246,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateBuildStyle(data, errors, project.root);
   validatePasses(data, "story.md", errors);
   validateCliConfig(data, errors);
+  errors.push(...queryFindings(project));
   validateDeadline(data, errors);
   validateDailyTarget(data, errors);
   validateReleaseCadence(data, errors);
@@ -28631,9 +28762,9 @@ function gridReport(root, options = {}) {
   const ok = project.fileErrors.length === 0;
   return { ok, errors: [...project.fileErrors], warnings: [], ...buildGrid(project, ok ? options : {}) };
 }
-function listReport(root, kind, where = []) {
+function listReport(root, kind, where = [], query = undefined) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where) };
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where, query) };
 }
 function diagramProject(root, options = {}) {
   const project = scanProject(root);
@@ -30676,17 +30807,17 @@ var COMMANDS = [
   },
   {
     name: "list",
-    usage: "list <kind>",
+    usage: "list [kind]",
     summary: [
       "List the chapters, scenes, characters, or other",
       "entities whose frontmatter matches every --where",
-      "filter, in book order"
+      "filter, or a story.md query, in book order"
     ],
     project: "flag",
     args: 1,
-    options: ["where", "json"],
+    options: ["where", "query", "json"],
     run({ parsed, io, root }) {
-      const report = listReport(root(), parsed.positionals[1], parsed.options.where);
+      const report = listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query);
       if (wantsJson(parsed)) {
         return reportJson(io, "list", report);
       }

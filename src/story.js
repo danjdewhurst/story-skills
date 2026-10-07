@@ -791,9 +791,9 @@ export function gridReport(root, options = {}) {
 
 // The files of one entity kind whose frontmatter matches every --where
 // filter.
-export function listReport(root, kind, where = []) {
+export function listReport(root, kind, where = [], query = undefined) {
   const project = scanProject(root);
-  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where) };
+  return { ok: project.fileErrors.length === 0, errors: [...project.fileErrors], warnings: [], ...buildList(project, kind, where, query) };
 }
 
 // Mermaid source for one diagram kind, printed or written to --out, with

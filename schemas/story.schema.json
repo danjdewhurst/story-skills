@@ -156,6 +156,19 @@
               "level": { "enum": ["error", "warning", "off"] }
             }
           }
+        },
+        "queries": {
+          "type": "array",
+          "description": "Saved filters that story list --query <name> runs. Each entry gives a kebab-case name, unique in the list; the kind it lists, plural or singular as story list takes it; and where, a flow list of one or more --where filters (key=value, key!=value, key, or \"!key\"), all of which must match, such as where: [status=draft, pov=mara-quill]. story validate also rejects any other key, an empty where, and a filter on a key the kind neither defines nor any of its files sets.",
+          "items": {
+            "type": "object",
+            "required": ["name", "kind", "where"],
+            "properties": {
+              "name": { "$ref": "#/$defs/id" },
+              "kind": { "enum": ["chapters", "chapter", "scenes", "scene", "characters", "character", "locations", "location", "systems", "system", "factions", "faction", "artifacts", "artifact", "arcs", "arc", "questions", "question", "promises", "promise", "clues", "clue", "terms", "term", "research", "matter"] },
+              "where": { "type": "array", "items": { "type": "string", "pattern": "^\\s*(?:[^=!\\s][^=!]*?\\s*!?=\\s*\\S.*|!?[^=!\\s]+)\\s*$" } }
+            }
+          }
         }
       }
     },

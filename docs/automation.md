@@ -173,6 +173,8 @@ To act on a set of files without parsing their YAML, ask [`story list`](cli-refe
 story list chapters --where status=draft --where pov=ilse --json | jq -r '.data.items[].file'
 ```
 
+To keep the filters with the manuscript rather than in the script, save them in `story.md` as a [query](project-format.md#saved-queries) and run it by name: `story list --query ilse-drafts --json`. `story validate` checks saved queries, so a broken one fails the CI job that checks the project.
+
 A build job can read the file it made from `writes`, or from `data.outFile`, rather than work out its name from the story id. With `--pdf`, `data.engine` names the engine that rendered it:
 
 ```shell

@@ -34,6 +34,13 @@ cli-defaults:
 severity:
   - warning: todo-markers
     level: error
+queries:
+  - name: mara-drafts
+    kind: chapters
+    where: [status=draft, pov=mara-quill]
+  - name: open-questions
+    kind: questions
+    where: [status=open]
 ---
 
 

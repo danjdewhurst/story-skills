@@ -646,17 +646,17 @@ export const COMMANDS = [
   },
   {
     name: "list",
-    usage: "list <kind>",
+    usage: "list [kind]",
     summary: [
       "List the chapters, scenes, characters, or other",
       "entities whose frontmatter matches every --where",
-      "filter, in book order"
+      "filter, or a story.md query, in book order"
     ],
     project: "flag",
     args: 1,
-    options: ["where", "json"],
+    options: ["where", "query", "json"],
     run({ parsed, io, root }) {
-      const report = listReport(root(), parsed.positionals[1], parsed.options.where);
+      const report = listReport(root(), parsed.positionals[1], parsed.options.where, parsed.options.query);
       if (wantsJson(parsed)) {
         return reportJson(io, "list", report);
       }

@@ -31,6 +31,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The result lists the files they wrote, or with `--dry-run` would write, and gives their warnings as diagnostics.
   - A build adds its output path and, with `--pdf`, the PDF engine; `import` adds the project, chapters, and entity candidates.
   - A failure is the JSON error result, which lists any files a failed `init` or `import` had already written.
+- `story list --query <name>` runs a filter set saved under `queries` in `story.md`. (#532)
+  - Each entry has a kebab-case `name`, a `kind`, and `where: [status=draft, pov=ilse]` in the `--where` syntax, and any `--where` flags add to its filters.
+  - `story validate` reports a repeated name (`duplicate-query`) and an unknown kind, an unreadable filter, or a key the kind does not have (`invalid-query`).
 
 ### Changed
 

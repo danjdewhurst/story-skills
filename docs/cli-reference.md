@@ -51,7 +51,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`wordcount [path]`](#wordcount) | Count chapter prose words | With `--write` |
 | | [`links [path]`](#links) | Check cross-references and backlinks | No |
 | | [`check [path]`](#check) | Run `validate`, `links`, and `continuity` in one scan | No |
-| | [`list <kind>`](#list) | List the chapters, scenes, characters, or other entities whose frontmatter matches every `--where` filter | No |
+| | [`list [kind]`](#list) | List the chapters, scenes, characters, or other entities whose frontmatter matches every `--where` filter, or a query saved in `story.md` | No |
 | Analysis | [`continuity [path]`](#continuity) | Check deaths, casts, promises, questions, clues, prop custody, clock and travel time, routes, and state | No |
 | | [`knowledge <id>`](#knowledge) | List what a character knew at a chapter, marked reader-knowledge or character-knowledge | No |
 | | [`context <id>`](#context) | Pack drafting context for a chapter or scene; unread flashback facts are marked do not reveal | No |
@@ -847,6 +847,7 @@ With `--json`, each diagnostic's `check` names the check that raised it, and `da
 
 ```text
 story list <kind> [--where <filter>]... [--json] [--path <path>]
+story list [kind] --query <name> [--where <filter>]... [--json] [--path <path>]
 ```
 
 Lists the files of one entity kind whose frontmatter matches every `--where` filter, so a script or agent can pick out "the draft chapters Ilse narrates" without parsing YAML itself. The kinds are `chapters`, `scenes`, `characters`, `locations`, `systems`, `factions`, `artifacts`, `arcs`, `questions`, `promises`, `clues`, `terms`, `research`, and `matter`; the singular (`chapter`) works too.
@@ -865,7 +866,8 @@ Repeat `--where` for more filters: a file must match every one. A key must be on
 | Option | Effect | Default |
 |---|---|---|
 | `--where <filter>` | A filter from the table above; repeatable | None: every file of the kind |
-| `--json` | Print a JSON result: `data.kind` (the plural kind), `data.where` (each filter's `key`, `op` (`eq`, `ne`, `present`, or `absent`), and `value`), `data.total` (files of the kind), and `data.items` (each match's `id`, `file`, `title`, and `fields`, the frontmatter value of each filtered key, `null` when unset) (see [JSON output](#json-output)) | Off |
+| `--query <name>` | Run the query of that name from `story.md` `queries` (see below) | None |
+| `--json` | Print a JSON result: `data.kind` (the plural kind), `data.query` (the `--query` name, or `null`), `data.where` (each filter's `key`, `op` (`eq`, `ne`, `present`, or `absent`), and `value`, the query's filters first), `data.total` (files of the kind), and `data.items` (each match's `id`, `file`, `title`, and `fields`, the frontmatter value of each filtered key, `null` when unset) (see [JSON output](#json-output)) | Off |
 | `--path <path>` | Project root | Current directory |
 
 Using [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
@@ -880,7 +882,19 @@ chapter-02-scene-01  The Millpond            scenes/chapter-02-scene-01.md  pov=
 2 of 4 scenes matched
 ```
 
-To keep a query you run often, give it a name in a shell alias or a CI step, or read `data.items[].file` from `story list chapters --where status=draft --json` in a script.
+To keep a query you run often, save it in `story.md` under `queries`, with a kebab-case `name`, the `kind` to list, and its `where` filters as a flow list (quote a `!key` filter, which YAML would otherwise read as a tag):
+
+```yaml
+queries:
+  - name: jonas-with-edran
+    kind: scenes
+    where: [pov=jonas-reed, characters=edran-vale]
+  - name: unhooked-drafts
+    kind: chapters
+    where: [status=draft, "!hook"]
+```
+
+Then `story list --query jonas-with-edran` prints the two scenes above. The query sets the kind, so no kind is needed; one given as well must be the query's kind, in either form (`story list scene --query jonas-with-edran`), and any other kind is a usage error (exit 2): `Query jonas-with-edran lists scenes, not chapters: drop the kind, or give scenes`. `--where` filters add to the query's filters, so `story list --query unhooked-drafts --where pov=nessa-thorn` lists the draft chapters with no hook that Nessa narrates. A name no query has is a usage error (exit 2) with the nearest name, and `cli-defaults` cannot set `--query`. `story validate` checks every query (see [Saved queries](project-format.md#saved-queries)), and `--query` refuses to run a query it would reject, or any query while `story.md` does not parse, and exits 3 with the problems. In a script, read `data.items[].file` from `story list --query unhooked-drafts --json`.
 
 ## Analysis commands
 
@@ -3098,6 +3112,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `progression-duplicate` | error | Two progressions change the same field from the same chapter. |
 | `progression-out-of-order` | error | Progressions are not listed in story order. |
 | `duplicate-pass` | error | `revision-passes` lists a pass twice. |
+| `duplicate-query` | error | `story.md` `queries` lists a query name twice. |
+| `invalid-query` | error | A `story.md` `queries` entry has an unknown kind, a `where` that is not a list of one or more filters, a filter `--where` could not read, a key its kind neither defines nor any of its files sets, or a key other than `name`, `kind`, and `where`. See [Saved queries](project-format.md#saved-queries). |
 | `exemption-pattern-too-short` | error | A continuity exemption pattern is under 4 characters. |
 | `exemption-unknown-code` | error | A continuity exemption's `code` is not a finding code. |
 | `exemption-code-not-dismissible` | error | A continuity exemption's `code` names an error that `continuity` does not report, or a warning `init` or `import` reports: neither can be exempted. |
@@ -3442,6 +3458,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
+| `--query` | `<name>` | `list` | A query from `story.md` `queries`; any `--where` adds to its filters |
 | `--at` | `<chapter-id>` | `knowledge`, `split` | Required for both; for `split`, where to split: a scene break number, a heading, or a line of the chapter text |
 | `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
 | `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |

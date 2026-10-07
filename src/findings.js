@@ -82,6 +82,8 @@ export const FINDING_CODES = {
   "progression-duplicate": "error",
   "progression-out-of-order": "error",
   "duplicate-pass": "error",
+  "duplicate-query": "error",
+  "invalid-query": "error",
   "exemption-pattern-too-short": "error",
   "exemption-unknown-code": "error",
   "exemption-code-not-dismissible": "error",
