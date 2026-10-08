@@ -237,24 +237,40 @@ describe("story timeline", () => {
     const text = formatTimeline(timeline, timeline.totalChapters);
 
     expect(text).toContain("Timeline: 0 dated, 0 undated");
-    expect(text).toContain("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
+    expect(timeline.hasCalendar).toBe(false);
+    expect(text).toContain("- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them");
+    expect(text).not.toContain("story calendar");
     expect(text).toContain("POV balance:\n- None");
     expect(text).toContain("Character presence:\n- None");
     expect(text).not.toContain("Undated");
   });
 
-  test("an empty project with a story calendar says a calendar date works too (#703)", () => {
+  // An empty project whose story.md carries the given calendar lines.
+  function emptyCalendarTimeline(calendarLines) {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Calendar Timeline", force: false });
     const file = path.join(root, "story.md");
     const storyText = fs.readFileSync(file, "utf8");
     const end = storyText.indexOf("\n---\n", 4);
-    fs.writeFileSync(file, `${storyText.slice(0, end)}\ncalendar:\n  - month: Frostwane\n    days: 30\n  - month: Thaw\n    days: 30${storyText.slice(end)}`, "utf8");
+    fs.writeFileSync(file, `${storyText.slice(0, end)}\n${calendarLines}${storyText.slice(end)}`, "utf8");
     const timeline = storyTimeline(root);
-    const text = formatTimeline(timeline, timeline.totalChapters);
+    return { timeline, text: formatTimeline(timeline, timeline.totalChapters) };
+  }
 
+  test("an empty project with a story calendar says a calendar date works too (#703)", () => {
+    const { timeline, text } = emptyCalendarTimeline("calendar:\n  - month: Frostwane\n    days: 30\n  - month: Thaw\n    days: 30");
+
+    expect(timeline.hasCalendar).toBe(true);
     expect(timeline.chronology).toEqual([]);
     expect(text).toContain("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
+  });
+
+  test("a story calendar that does not read keeps the YYYY-MM-DD hint, since its dates are not read (#703)", () => {
+    const { timeline, text } = emptyCalendarTimeline("calendar:\n  - month: Frostwane\n    days: 0");
+
+    expect(timeline.hasCalendar).toBe(false);
+    expect(text).toContain("- None: add date (YYYY-MM-DD) and time to scenes or chapters to order them");
+    expect(text).not.toContain("story calendar");
   });
 
   test("a chapter present in one chapter shows a single-chapter span, and big numbers get commas", () => {

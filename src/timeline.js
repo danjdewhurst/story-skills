@@ -23,6 +23,8 @@ export function buildTimeline(project) {
 
   return {
     unit,
+    // True when the book has a valid story calendar, so its dates may use it.
+    hasCalendar: project.calendar?.invalid === false,
     chronology: dated,
     undated: entries.filter((entry) => entry.days === undefined),
     pov: povBalance(chapters, unit),
@@ -221,7 +223,8 @@ export function formatTimeline(timeline, totalChapters) {
 
   lines.push("", "Chronology (story order):");
   if (timeline.chronology.length === 0) {
-    lines.push("- None: add date (YYYY-MM-DD, or a story calendar date) and time to scenes or chapters to order them");
+    const dates = timeline.hasCalendar ? "YYYY-MM-DD, or a story calendar date" : "YYYY-MM-DD";
+    lines.push(`- None: add date (${dates}) and time to scenes or chapters to order them`);
   }
   for (const entry of timeline.chronology) {
     const when = [entry.date, entry.time].filter(Boolean).join(" ");
