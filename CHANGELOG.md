@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-08
+
 ### Changed
 
 - CI runs the full Windows test suite as four parallel shards. ([#672](https://github.com/danjdewhurst/story-skills/issues/672))
@@ -1416,7 +1418,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.23.1...HEAD
+[0.23.1]: https://github.com/danjdewhurst/story-skills/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/danjdewhurst/story-skills/compare/v0.22.1...v0.23.0
 [0.22.1]: https://github.com/danjdewhurst/story-skills/compare/v0.22.0...v0.22.1
 [0.22.0]: https://github.com/danjdewhurst/story-skills/compare/v0.21.0...v0.22.0
