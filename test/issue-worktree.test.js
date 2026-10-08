@@ -274,10 +274,31 @@ describe.skipIf(process.platform === "win32")("scripts/issue-worktree.sh (#572)"
     expect(git(away, "status", "--porcelain")).toBe("");
   });
 
-  test("a rerun clears the registration of a worktree whose folder was deleted (#686)", () => {
+  test("a rerun stops when this issue's folder is missing, so a moved folder keeps its git folder (#686)", () => {
+    const { root, shared } = sharedCheckout(PAPERCLIP);
+    const made = worktree(shared, [".", "FOR-21", "fix/21-moved"]);
+    fs.writeFileSync(path.join(made, "wip.txt"), "unsaved\n");
+    // What an unmounted ISSUE_WORKTREE_ROOT does to the folder of this issue.
+    const parked = path.join(root, "unmounted-21");
+    fs.renameSync(made, parked);
+    const rerun = run(shared, [".", "FOR-21", "fix/21-moved"]);
+    expect(rerun.status).toBe(1);
+    expect(rerun.err).toContain(`${made} is registered as a worktree of ${shared}, but its folder is missing`);
+    // Nothing is made at the path, so the moved folder still has its own git folder.
+    expect(fs.existsSync(made)).toBe(false);
+    fs.renameSync(parked, made);
+    expect(git(made, "symbolic-ref", "--short", "HEAD")).toBe("fix/21-moved");
+    expect(git(made, "status", "--porcelain")).toBe("?? wip.txt");
+  });
+
+  test("a rerun after a deleted folder works once the stale registration is removed (#686)", () => {
     const { shared } = sharedCheckout(PAPERCLIP);
     const made = worktree(shared, [".", "FOR-20", "fix/20-deleted"]);
     fs.rmSync(made, { recursive: true, force: true });
+    const rerun = run(shared, [".", "FOR-20", "fix/20-deleted"]);
+    expect(rerun.status).toBe(1);
+    expect(rerun.err).toContain(`git -C ${shared} worktree remove --force ${made}`);
+    git(shared, "worktree", "remove", "--force", made);
     expect(run(shared, [".", "FOR-20", "fix/20-deleted"])).toMatchObject({ status: 0, out: made });
     expect(git(made, "symbolic-ref", "--short", "HEAD")).toBe("fix/20-deleted");
   });
