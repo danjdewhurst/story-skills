@@ -161,6 +161,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The rest of an escaped run still opens a span, as CommonMark reads it.
 - `story similarity` compares the text of a link, not its target, and counts a bare URL as one word, as `story wordcount` does. ([#707](https://github.com/danjdewhurst/story-skills/issues/707))
   - Before, the parts of a link target and of a URL were compared as separate words.
+  - A backslash escape such as `snake\_case` is one word, as in `story wordcount`.
 
 ## [0.23.0] - 2026-10-07
 

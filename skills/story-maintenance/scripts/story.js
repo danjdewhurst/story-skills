@@ -10462,6 +10462,7 @@ function plainLinks(text) {
   return splitFences(String(text)).map((part) => part.fenced ? part.text : withoutLinks(part.text)).join("");
 }
 var ESCAPABLE = /[!-/:-@[-`{-~]/;
+var BACKSLASH_ESCAPE = /\\([!-/:-@[-`{-~])/g;
 var AUTOLINK = /<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\0- <>\x7f\ue000\ue001]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Za-z0-9.-]+))>/y;
 var DOMAIN_LABEL = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
 var MAX_DESTINATION_PARENS = 32;
@@ -10669,7 +10670,7 @@ function splitWords(markdown) {
   const normalized = countedText(plainLinks(String(markdown))).replace(/\uE000/g, " ").replace(URL_OR_EMAIL, (match) => {
     urls.push(match);
     return ` ${URL_PLACEHOLDER} `;
-  }).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(EMPHASIS_UNDERSCORES, " ").replace(/[#>*~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
+  }).replace(BACKSLASH_ESCAPE, "$1").replace(EMPHASIS_UNDERSCORES, " ").replace(/[#>*~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
   let next = 0;
   return wordSpans(normalized, COUNTED_WORD).map(({ word }) => word === URL_PLACEHOLDER ? urls[next++] : word);
 }
@@ -10945,7 +10946,7 @@ function characterCount(markdown) {
   const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split(`
 `);
   const text = countedText(lines.map((line) => isSceneBreak(line) ? "" : line).join(`
-`)).replace(/\\([!-/:-@[-`{-~])/g, "$1").replace(/[#>*_~|`\s]+/gu, "");
+`)).replace(BACKSLASH_ESCAPE, "$1").replace(/[#>*_~|`\s]+/gu, "");
   graphemes2 ??= new Intl.Segmenter("en", { granularity: "grapheme" });
   let count = 0;
   for (const _ of graphemes2.segment(text)) {
@@ -11137,8 +11138,10 @@ function proseWordSpans(text) {
   const links = editedText(source, cuts.map(([start, end]) => [start, end, ""]));
   const markup = editedText(links.text, markupEdits(links.text));
   const urls = editedText(markup.text, urlEdits(markup.text));
-  return wordSpans(urls.text, COUNTED_WORD).map(({ word, start, end }) => {
-    const [inMarkup, markupEnd] = urls.back(start, end);
+  const escapes = editedText(urls.text, escapeEdits(urls.text));
+  return wordSpans(escapes.text, COUNTED_WORD).map(({ word, start, end }) => {
+    const [inUrls, urlsEnd] = escapes.back(start, end);
+    const [inMarkup, markupEnd] = urls.back(inUrls, urlsEnd);
     const [inLinks, linksEnd] = markup.back(inMarkup, markupEnd);
     const [from, to] = links.back(inLinks, linksEnd);
     return { word: word === URL_PLACEHOLDER ? markup.text.slice(inMarkup, markupEnd) : word, start: from, end: to };
@@ -11184,6 +11187,9 @@ function editedText(text, edits) {
   };
   return { text: result, back: (start, end) => [startIn(start), endIn(end - 1)] };
 }
+function escapeEdits(text) {
+  return [...text.matchAll(BACKSLASH_ESCAPE)].map((match) => [match.index, match.index + 2, match[1]]);
+}
 function urlEdits(text) {
   const edits = [];
   for (const match of text.matchAll(/\uE000/g)) {
@@ -11222,7 +11228,7 @@ function markupEdits(text, code = literalSpans(text), definitions = [], defined 
     position = end;
     return true;
   });
-  const autolinks = code.filter((span) => span[2] === "autolink").map(([start, end]) => [start, end, text.slice(start + 1, end - 1)]);
+  const autolinks = code.filter((span) => span[2] === "autolink").flatMap(([start, end]) => [[start, start + 1, ""], [end - 1, end, ""]]);
   return [...kept, ...autolinks].sort((left, right) => left[0] - right[0]);
 }
 function applyEdits(text, edits) {

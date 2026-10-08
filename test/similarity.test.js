@@ -68,6 +68,39 @@ describe("similarity matching", () => {
     expect(words[5]).toMatchObject({ start: text.indexOf(url), end: text.indexOf(url) + url.length });
   });
 
+  test("a backslash escape is the mark it escapes, so snake\\_case and don\\'t are one word each, as in wordcount", () => {
+    const text = "The lamp keeper counted the snake\\_case steps and don\\'t stop.";
+    const words = tokenizeDocument([{ label: "p1", text }]);
+    expect(words.map((entry) => entry.word)).toEqual(["the", "lamp", "keeper", "counted", "the", "snake_case", "steps", "and", "don't", "stop"]);
+    expect(words).toHaveLength(wordCount(text));
+  });
+
+  test("an autolink after an email address keeps each word at its own place in the paragraph (#707)", () => {
+    const text = "Mail me@x.org<https://auto.link/x> now.";
+    const words = tokenizeDocument([{ label: "p1", text }]);
+    expect(words).toHaveLength(wordCount(text));
+    for (let index = 1; index < words.length; index += 1) {
+      expect(words[index].start).toBeGreaterThanOrEqual(words[index - 1].end);
+    }
+    expect(words.find((entry) => entry.word === "auto")).toMatchObject({ start: text.indexOf("auto"), end: text.indexOf("auto") + 4 });
+  });
+
+  test("two URLs in one paragraph each count as one word, and a stray placeholder character is a space (#707)", () => {
+    const text = "See https://a.example/x and www.b.example/ytoday.";
+    const words = tokenizeDocument([{ label: "p1", text }]).map((entry) => entry.word);
+    expect(words).toEqual(["see", "https://a.example/x", "and", "www.b.example/y", "today"]);
+    expect(words).toHaveLength(wordCount(text));
+  });
+
+  test("an email address is one word, and an image is dropped, as wordcount counts them (#707)", () => {
+    const email = "Write to dd@example.org today.";
+    expect(tokenizeDocument([{ label: "p1", text: email }]).map((entry) => entry.word)).toEqual(["write", "to", "dd@example.org", "today"]);
+    expect(wordCount(email)).toBe(4);
+    const image = "A map ![harbor chart](map.png) hung there.";
+    expect(tokenizeDocument([{ label: "p1", text: image }]).map((entry) => entry.word)).toEqual(["a", "map", "hung", "there"]);
+    expect(wordCount(image)).toBe(4);
+  });
+
   test("Chinese and Japanese text is compared a character at a time", () => {
     const words = tokenizeDocument([{ label: "p1", text: "灯台守は、階段を数えた。" }]).map((entry) => entry.word);
     expect(words).toEqual(["灯", "台", "守", "は", "階", "段", "を", "数", "え", "た"]);
