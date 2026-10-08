@@ -139,6 +139,8 @@ export function plainLinks(text) {
 
 // ASCII punctuation, which a backslash escapes.
 const ESCAPABLE = /[!-/:-@[-`{-~]/;
+// A backslash and the ASCII punctuation mark it escapes, which is read as that mark.
+const BACKSLASH_ESCAPE = /\\([!-/:-@[-`{-~])/g;
 // An autolink: a scheme of 2 to 32 characters, `:`, and no space, control
 // character, `<`, or `>`; or an email address, as CommonMark reads them,
 // with the labels of its domain (group 1) checked apart (see autolinkEnd).
@@ -417,7 +419,7 @@ export function splitWords(markdown) {
       return ` ${URL_PLACEHOLDER} `;
     })
     // A backslash escape (`didn\'t`) is the character it escapes.
-    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(BACKSLASH_ESCAPE, "$1")
     .replace(EMPHASIS_UNDERSCORES, " ")
     .replace(/[#>*~|`]/g, " ")
     .replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
@@ -825,7 +827,7 @@ export function characterCount(markdown) {
   // A line is a scene break as written: `&#45;&#45;&#45;` prints as text.
   const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split("\n");
   const text = countedText(lines.map((line) => (isSceneBreak(line) ? "" : line)).join("\n"))
-    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(BACKSLASH_ESCAPE, "$1")
     .replace(/[#>*_~|`\s]+/gu, "");
   graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
   let count = 0;
@@ -1112,11 +1114,11 @@ export function countedText(markdown) {
 }
 
 // The words of one paragraph of inline markdown, as splitWords counts them
-// (a link keeps its text and loses its target, a URL is one word, and
-// countedText's markup is read out), as { word, start, end } with offsets
-// into `text` as written, so a passage can be quoted as written. A
-// reference definition and its labels need the whole chapter, so here
-// they are read as text.
+// (a link keeps its text and loses its target, a URL is one word, a
+// backslash escape is the mark it escapes, and countedText's markup is read
+// out), as { word, start, end } with offsets into `text` as written, so a
+// passage can be quoted as written. A reference definition and its labels
+// need the whole chapter, so here they are read as text.
 export function proseWordSpans(text) {
   const source = String(text);
   // Each stage edits the text of the one before. Offsets map back through
@@ -1127,8 +1129,11 @@ export function proseWordSpans(text) {
   const links = editedText(source, cuts.map(([start, end]) => [start, end, ""]));
   const markup = editedText(links.text, markupEdits(links.text));
   const urls = editedText(markup.text, urlEdits(markup.text));
-  return wordSpans(urls.text, COUNTED_WORD).map(({ word, start, end }) => {
-    const [inMarkup, markupEnd] = urls.back(start, end);
+  // A backslash escape is the mark it escapes, as splitWords reads it.
+  const escapes = editedText(urls.text, escapeEdits(urls.text));
+  return wordSpans(escapes.text, COUNTED_WORD).map(({ word, start, end }) => {
+    const [inUrls, urlsEnd] = escapes.back(start, end);
+    const [inMarkup, markupEnd] = urls.back(inUrls, urlsEnd);
     const [inLinks, linksEnd] = markup.back(inMarkup, markupEnd);
     const [from, to] = links.back(inLinks, linksEnd);
     return { word: word === URL_PLACEHOLDER ? markup.text.slice(inMarkup, markupEnd) : word, start: from, end: to };
@@ -1186,6 +1191,11 @@ function editedText(text, edits) {
   return { text: result, back: (start, end) => [startIn(start), endIn(end - 1)] };
 }
 
+// Each backslash escape of `text`, as the one mark it stands for.
+function escapeEdits(text) {
+  return [...text.matchAll(BACKSLASH_ESCAPE)].map((match) => [match.index, match.index + 2, match[1]]);
+}
+
 // The URLs and email addresses of `text`, each set aside as one word as
 // splitWords sets them aside, and a stray placeholder character as a space.
 function urlEdits(text) {
@@ -1234,8 +1244,9 @@ function markupEdits(text, code = literalSpans(text), definitions = [], defined 
     return true;
   });
   // An autolink is its address, as builds print it, and nothing in it is
-  // read as markup.
-  const autolinks = code.filter((span) => span[2] === "autolink").map(([start, end]) => [start, end, text.slice(start + 1, end - 1)]);
+  // read as markup. Its brackets are dropped one by one, not replaced by
+  // the address, so each word in it keeps its own place in the source.
+  const autolinks = code.filter((span) => span[2] === "autolink").flatMap(([start, end]) => [[start, start + 1, ""], [end - 1, end, ""]]);
   return [...kept, ...autolinks].sort((left, right) => left[0] - right[0]);
 }
 
