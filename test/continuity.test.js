@@ -1534,6 +1534,15 @@ describe("continuity help lists every check (#168)", () => {
       expect(help).toContain(phrase);
     }
   });
+
+  test("names the chapter numbering and open promise checks by code", () => {
+    const io = memoryIo(makeTempDir());
+    runCli(["continuity", "--help"], io);
+    const help = (io.output() + io.error()).replace(/\s+/g, " ");
+    for (const code of ["chapter-numbering-start", "chapter-numbering-gap", "complete-with-open-promise"]) {
+      expect(help).toContain(code);
+    }
+  });
 });
 
 describe("continuity ledger", () => {
