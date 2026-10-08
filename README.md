@@ -117,7 +117,7 @@ Without Node, install the standalone binary with Homebrew on macOS or Linux. Rel
 brew install danjdewhurst/tap/story-skills   # then: story --help
 ```
 
-[Getting started](docs/getting-started.md#install-the-story-cli) covers every install route, including running the CLI from a clone.
+Check a downloaded archive against the release's checksums file before you run it. [Getting started](docs/getting-started.md#install-the-story-cli) covers every install route, the checksum steps, and running the CLI from a clone.
 
 These are the commands writers use most:
 
@@ -126,7 +126,7 @@ These are the commands writers use most:
 | `story init "The Last Ember"` | Scaffold a story project |
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a project and list its recurring names |
 | `story add character "Sera Voss"` | Create a file for a character, place, scene, promise, clue, or other entity |
-| `story rename character sera-voss "Sera Vale"` | Rename an entity and update every reference to it |
+| `story rename character sera-voss "Sera Vale"` | Rename an entity and update its references in frontmatter and links |
 | `story check [path] --strict` | Run validation, link checks, and continuity in one scan; `--strict` also fails on warnings |
 | `story list chapters --where status=draft` | List the entities whose frontmatter matches a filter |
 | `story wordcount [path] --write` | Count chapter words and update the chapter registry |
@@ -198,7 +198,7 @@ Some files appear only when needed: `matter/` for front and back matter, `resear
 Every story element is a markdown file with YAML frontmatter. The skills cross-reference those files to keep the project consistent.
 
 - **`story.md`** is the bible that every skill reads. Its `schema-version: 2` field lets the CLI reject incompatible formats.
-- Entity files use **kebab-case identifiers**, such as `sera-voss` or `chapter-01`. The CLI takes the id from the name. Names can use any script. Cyrillic and Greek names are transliterated, and `story add --id` sets an id by hand.
+- Entity files use **kebab-case identifiers**, such as `sera-voss` or `chapter-01`. The CLI takes the id from the name, and transliterates Cyrillic and Greek names. A name in a script with no transliteration, such as `李明`, needs an id from `story add --id`. Names themselves can use any script.
 - **`_index.md`** files are the registries for each domain.
 - Relationships are **bidirectional**.
 - Scene records and continuity state keep character knowledge, object ownership, and setups and payoffs in files, so they carry over between sessions.
@@ -232,11 +232,11 @@ Examples in this repository:
 
 A story project with deterministic checks is one an agent can advance unattended. The [`templates/github/`](templates/github/) workflows turn a story repository into a self-drafting book:
 
-- [`story-checks.yml`](templates/github/story-checks.yml) runs `story check` and `story report --actionable` on every push to `main` and every pull request, so a chapter PR cannot merge with a continuity contradiction.
+- [`story-checks.yml`](templates/github/story-checks.yml) runs `story check` and `story report --actionable` on every push to `main` and every pull request, so a chapter PR with a continuity contradiction fails its checks. Mark the `story-checks` job as a required status check to block the merge.
 - [`draft-next-chapter.yml`](templates/github/draft-next-chapter.yml) runs [Claude Code](https://github.com/anthropics/claude-code-action) on a schedule. It drafts the next chapter within word, turn, and spend budgets, then opens a pull request for review. The agent cannot push.
 - [`review-copy.yml`](templates/github/review-copy.yml) publishes an HTML review copy to GitHub Pages, and [`manuscript-note.yml`](templates/github/ISSUE_TEMPLATE/manuscript-note.yml) gives readers an issue form for notes on exact paragraphs.
 
-Copy the workflows into `.github/workflows/` and add an `ANTHROPIC_API_KEY` secret. [Automation and CI](docs/automation.md) covers setup, budgets, and keeping a manuscript private.
+Copy the workflows into `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret for the drafting workflow, and set **Settings > Pages > Source** to GitHub Actions for the review copy. GitHub Pages sites are public unless your plan supports private Pages. For a private manuscript, see [keeping the manuscript private](docs/automation.md#keeping-the-manuscript-private). [Automation and CI](docs/automation.md) covers the rest, including the note form's label.
 
 ## Development and releasing
 
