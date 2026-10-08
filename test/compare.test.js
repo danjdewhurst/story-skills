@@ -307,3 +307,25 @@ describe("compare --ref git failures", () => {
     expect(messages(result.warnings)).toContain("story.md does not exist at git ref early: the project may not have existed then");
   });
 });
+
+describe("compare reads a relative cli-defaults against from the project folder (#841)", () => {
+  test("a relative against in cli-defaults works when compare runs from outside the project", () => {
+    const parent = makeTempDir();
+    const before = newProject("Before", parent);
+    const after = newProject("After", parent);
+    writeChapterWith(before, 1, "The first paragraph.");
+    writeChapterWith(after, 1, "The first paragraph.\n\nA second paragraph.");
+    const story = path.join(after, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, "---\ncli-defaults:\n  - command: compare\n    against: ../before\n"));
+    // Run from the parent folder: ../before from there is not a project.
+    const result = invoke(parent, ["compare", path.basename(after)]);
+    expect(result.err).not.toContain("not a story project");
+    expect(result.code).toBe(0);
+    // The earlier draft has 3 words; the current one has 6.
+    expect(result.out).toContain("Words: 3 then, 6 now (+3)");
+    // On the command line, --against is still read from the current directory.
+    const commandLine = invoke(parent, ["compare", path.basename(after), "--against", path.basename(before)]);
+    expect(commandLine.code).toBe(0);
+    expect(commandLine.out).toContain("Words: 3 then, 6 now (+3)");
+  });
+});

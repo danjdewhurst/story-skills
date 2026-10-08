@@ -1213,7 +1213,7 @@ Compares the current chapters with an earlier draft and reports word changes per
 | Option | Effect |
 |---|---|
 | `--ref <git-ref>` | Read the earlier chapters from a git branch, tag, or commit (with `~` and `^` suffixes); any name git accepts works, except one starting with `-`. The project must be inside a git repository, and its folder must exist at the ref. It reads with `git show` and never writes to the repository |
-| `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory. It must be a story project with a `story.md` |
+| `--against <path>` | Read the earlier chapters from another copy of the project on disk, resolved against the current directory; set in `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd), against the project folder. It must be a story project with a `story.md` |
 | `--snapshot <name>` | Read the earlier chapters from a snapshot saved with [`snapshot`](#snapshot), in the project's `.snapshots/` folder. It matches the name the snapshot was taken with, its id, or a name with that id, so `"Draft 1"` and `draft-1` find the same snapshot. `--ref` is always a git ref and `--snapshot` always a snapshot, so a tag and a snapshot that share a name are never confused |
 | `--anchor <label>` | A paragraph label from a review copy of the earlier draft, such as `ch03-p12` (repeatable). Prints where each paragraph is in the current text instead of the chapter comparison |
 | `--json` | Print the comparison as a JSON result (see below) |
