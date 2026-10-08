@@ -199,6 +199,14 @@ describe("#709 a combining mark stays in its word, and NFD and NFC give the same
     expect(splitWords("東́京")).toEqual(["東́", "京"]);
   });
 
+  test("a Hangul jamo after a kana is a word of its own, and its span does not overlap the kana's", () => {
+    const nfd = "がᅡ";
+    expect(wordSpans(nfd, WORD_PATTERN)).toEqual([
+      { word: "が", start: 0, end: 2 },
+      { word: "ᅡ", start: 2, end: 3 },
+    ]);
+  });
+
   test("a Latin letter with a combining accent is one word in NFC form", () => {
     expect(splitWords("café au lait")).toEqual(["café", "au", "lait"]);
   });
