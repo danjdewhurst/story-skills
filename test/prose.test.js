@@ -561,12 +561,11 @@ describe("sweep fixes", () => {
 });
 
 describe("#708 long chapters", () => {
-  test("a chapter with 200,000 sentences reports its longest sentence without overflowing the stack", () => {
-    const probe = spawnSync("node", ["--version"], { encoding: "utf8" });
-    if (probe.error || probe.status !== 0) {
-      console.warn("Skipping the Node sentence statistics check: node is not on PATH.");
-      return;
-    }
+  // process.execPath is Bun under `bun test`, so Node is looked up on PATH.
+  // A missing Node shows as a skipped test, not as a pass.
+  const nodeMissing = spawnSync("node", ["--version"], { encoding: "utf8" }).status !== 0;
+
+  test.skipIf(nodeMissing)("a chapter with 200,000 sentences reports its longest sentence without overflowing the stack", () => {
     // Bun's stack takes far more spread arguments than Node's, so this runs
     // the analysis under Node, where Math.max over 200,000 values threw.
     const prose = pathToFileURL(path.join(import.meta.dirname, "..", "src", "prose.js")).href;
