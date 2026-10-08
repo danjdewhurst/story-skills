@@ -208,6 +208,14 @@ describe("markdown utilities", () => {
     expect(scanComments("```x``` <!-- c --> y").text).toBe("```x```  y");
   });
 
+  test("a line with a backtick after its run is not a fence, even before a closing fence (#704)", () => {
+    // Without the check, the first line opens a fence that the bare line
+    // closes, and the comment on the first line stays in the chapter.
+    const text = "```x``` The lamp <!-- draft note: rewrite this --> flickered.\n\n```\nsome code\n```\n\nend words";
+    expect(chapterProse(text)).not.toContain("draft note");
+    expect(wordCount(chapterProse(text))).toBe(8);
+  });
+
   test("a backslash-escaped backtick opens no code span, so a comment after it is still a comment (#706)", () => {
     expect(scanComments("\\`a <!-- c --> b` tail").text).toBe("\\`a  b` tail");
     expect(scanComments("\\``a <!-- c --> b``").text).toBe("\\``a  b``");
