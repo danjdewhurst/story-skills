@@ -824,7 +824,10 @@ export function manuscriptParts(project, action = "build", { includePending = fa
   const unplaced = project.matter.filter((entry) => !entry.empty && entry.placement !== "front" && entry.placement !== "back");
   for (const entry of warnLeftOut ? unplaced : []) {
     const label = relative(project, entry.file);
-    warnings.push(warn("matter-placement-left-out", `${label} placement is ${entry.placement ?? "missing"}, which is neither front nor back, so it is left out`, label));
+    // The scan stores a missing placement as "". The value is page text, so
+    // control characters print as U+FFFD, as other frontmatter text does.
+    const placement = entry.placement === "" ? "missing" : entry.placement.replace(/[\u0000-\u001f\u007f-\u009f]/g, "\ufffd");
+    warnings.push(warn("matter-placement-left-out", `${label} placement is ${placement}, which is neither front nor back, so it is left out`, label));
   }
   const matterPages = written.filter((entry) => !leftOutMatter.includes(entry));
   const matter = (placement) => matterPages
