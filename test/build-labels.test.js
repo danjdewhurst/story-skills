@@ -300,12 +300,25 @@ describe("build labels", () => {
   });
 
   test("text direction reads language aliases as the packs do", () => {
-    for (const tag of ["fas", "per", "heb", "iw", "ara", "ar-arz", "urd", "yid", "kur", "snd", "pus", "div", "uig"]) {
+    for (const tag of ["fas", "per", "heb", "iw", "ara", "ar-arz", "urd", "yid", "snd", "pus", "div", "uig"]) {
       expect({ tag, direction: textDirection(tag) }).toEqual({ tag, direction: "rtl" });
     }
     expect(textDirection("fa-Latn")).toBe("ltr");
     expect(textDirection("dan")).toBe("ltr");
     expect(textDirection("")).toBe("ltr");
+  });
+
+  // Kurmanji is written in Latin script by default, so it reads left to right.
+  // Arabic-script Kurdish needs its script subtag. Sorani (ckb) stays right to left.
+  test("Kurmanji reads left to right unless its script subtag is Arabic", () => {
+    for (const tag of ["ku", "kur", "ku-Latn", "kur-Latn"]) {
+      expect({ tag, direction: textDirection(tag) }).toEqual({ tag, direction: "ltr" });
+    }
+    for (const tag of ["ku-Arab", "kur-Arab", "ckb", "ckb-Arab"]) {
+      expect({ tag, direction: textDirection(tag) }).toEqual({ tag, direction: "rtl" });
+    }
+    expect(typesetting("ku").rtl).toBe(false);
+    expect(typesetting("ku-Arab").rtl).toBe(true);
   });
 
   // A script subtag counts only right after the language, so an extension
