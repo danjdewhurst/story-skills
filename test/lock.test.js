@@ -239,6 +239,30 @@ describe("lock edge cases", () => {
     expect(fs.existsSync(lockPath)).toBe(true);
   });
 
+  test.skipIf(IDENTITY === null)("a lock whose live pid has no readable start time is still held (#732)", () => {
+    // /proc does not give the start time of the live pid (a hidepid mount),
+    // so the pid's running is all there is to go by, and the lock stays held
+    // rather than being taken over while its owner may still write.
+    const root = newProject();
+    const live = otherLivePid();
+    const lockPath = path.join(root, LOCK_FILE);
+    fs.writeFileSync(lockPath, `${live}\n${os.hostname()}\n${new Date().toISOString()}\n${BOOT} ${NAMESPACE} ${startTimeOf(live)}\n`);
+    process.env.STORY_LOCK_WAIT_MS = "0";
+    const open = fs.openSync;
+    const spy = spyOn(fs, "openSync").mockImplementation((file, ...rest) => {
+      if (file === `/proc/${live}/stat`) {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      }
+      return open(file, ...rest);
+    });
+    try {
+      expect(() => addLocked(root, "Bo")).toThrow(`another story command (process ${live}) is modifying this project`);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fs.existsSync(lockPath)).toBe(true);
+  });
+
   test("a lock with this pid and no record of the process goes by age", () => {
     // Written by an older story, or where /proc gives no record.
     const root = newProject();
