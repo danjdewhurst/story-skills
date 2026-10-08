@@ -60,7 +60,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 Most commands take the project as an optional positional path or `--path`. `knowledge`, `names`, `mentions`, and `diagram` take only `--path`, because their positional arguments are a character id, candidate names, an entity kind and id, and a diagram kind.
 
-Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, `voices`, and `similarity` findings are always warnings, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
+Only `continuity` and `names` fail because of what the story says: `continuity` on a contradiction, `names` on a candidate that is already taken. The others exit 1 only on files that do not parse, and 2 on bad arguments. `pacing`, `clues`, `prose`, and `voices` exit 1 only when a file they read fails to read or parse, or when a `severity` entry in `story.md` promotes one of their warnings to an error. `similarity` findings are warnings unless `severity` promotes them, and `report`, `next`, and `doctor` exit 0 whatever the checks find. For when each command exits 1, see [Output streams and exit codes](cli-reference.md#output-streams-and-exit-codes).
 
 ## Find your message
 
@@ -712,7 +712,7 @@ To draw the chronology as a picture, run [`story diagram timeline`](#story-diagr
 story pacing .
 ```
 
-`story pacing` is a dashboard of how each chapter moves. It reads frontmatter only, never prose meaning, and every finding is a warning, so it exits 0 on any readable project. Three optional fields drive it:
+`story pacing` is a dashboard of how each chapter moves. It reads frontmatter only, never prose meaning, and every finding is a warning, so it exits 0 on any readable project unless a `severity` entry in `story.md` promotes one to an error. Three optional fields drive it:
 
 | Field | On | Values | Meaning |
 |-------|----|--------|---------|
@@ -778,7 +778,7 @@ The thresholds are rules of thumb, not rules. The [`scene-craft`](../skills/scen
 story clues .
 ```
 
-`story clues` is the fair-play view of the clue ledger (`continuity/clues/`). It draws a grid of which chapter plants each clue and which reveals it, and warns about what a mystery reader would call cheating. `story continuity` still owns the hard errors, such as a clue revealed before it is planted; everything here is a warning, so the command exits 0 on any readable project.
+`story clues` is the fair-play view of the clue ledger (`continuity/clues/`). It draws a grid of which chapter plants each clue and which reveals it, and warns about what a mystery reader would call cheating. `story continuity` still owns the hard errors, such as a clue revealed before it is planted; everything here is a warning, so the command exits 0 on any readable project unless a `severity` entry in `story.md` promotes one to an error.
 
 It reads these clue fields:
 
@@ -1006,7 +1006,7 @@ Treat the counts as a list of places to reread, not a list of errors. Filter wor
 story voices .
 ```
 
-`story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project. Its speech verbs, contractions, and stopwords are English; see [Books not in English](#books-not-in-english) for other languages.
+`story voices` fingerprints each character's dialogue from the chapter prose, so you can see whether characters sound different from each other and from how you described them. It is advisory: every finding is a warning, and it exits 0 on any readable project unless a `severity` entry in `story.md` promotes one to an error. Its speech verbs, contractions, and stopwords are English; see [Books not in English](#books-not-in-english) for other languages.
 
 `story voices - < draft-scene.md` checks the dialogue in a piped passage instead, against the characters of the project in the current directory (or `--path`). See [Reading from stdin](cli-reference.md#reading-from-stdin).
 
