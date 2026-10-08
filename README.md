@@ -148,32 +148,32 @@ Most books move through the skills in this order. `story-maintenance` runs under
 
 The table lists the skills in the same order, with what each one does and a request that starts it.
 
-| Skill | What it does | Try saying |
-|-------|--------------|------------|
-| **premise-workshop** | Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
-| **story-init** | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
-| **character-management** | Builds character profiles, relationships, and arcs | *"Create a character"* |
-| **worldbuilding** | Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
-| **plot-structure** | Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
-| **theme-craft** | Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
-| **genre-craft** | Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
-| **research** | Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
-| **chapter-writing** | Drafts chapters from an outline and the story context | *"Write the next chapter"* |
-| **discovery-drafting** | Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
-| **scene-craft** | Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
-| **voice-style** | Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
-| **verse-craft** | Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
-| **interactive-fiction** | Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
-| **revision-continuity** | Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
-| **line-editing** | Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
-| **reader-panel** | Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
-| **feedback-triage** | Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
-| **editorial-review** | Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
-| **submission** | Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
-| **publishing** | Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
-| **adaptation** | Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
-| **series-continuity** | Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
-| **story-maintenance** | Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
+| Skill | Try saying |
+|-------|------------|
+| **premise-workshop**<br>Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
+| **story-init**<br>Scaffolds the story bible, folders, and registries | *"Start a new story"* |
+| **character-management**<br>Builds character profiles, relationships, and arcs | *"Create a character"* |
+| **worldbuilding**<br>Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
+| **plot-structure**<br>Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
+| **theme-craft**<br>Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
+| **genre-craft**<br>Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
+| **research**<br>Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
+| **chapter-writing**<br>Drafts chapters from an outline and the story context | *"Write the next chapter"* |
+| **discovery-drafting**<br>Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
+| **scene-craft**<br>Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
+| **voice-style**<br>Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
+| **verse-craft**<br>Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
+| **interactive-fiction**<br>Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
+| **revision-continuity**<br>Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
+| **line-editing**<br>Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
+| **reader-panel**<br>Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
+| **feedback-triage**<br>Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
+| **editorial-review**<br>Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
+| **submission**<br>Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
+| **publishing**<br>Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
+| **adaptation**<br>Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
+| **series-continuity**<br>Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
+| **story-maintenance**<br>Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
 
 **line-editing** owns the prose pass. For general writing checks as well, add [**better-writing**](https://github.com/forjd/better-writing) with `npx skills add forjd/better-writing`.
 
@@ -288,19 +288,32 @@ Complete books made with Story Skills:
 
 Example projects in this repository:
 
-| Example | Shows |
-|---------|-------|
-| [`the-last-ember/`](examples/the-last-ember/) | A fantasy with a magic system, a plot arc with foreshadowing, and a drafted chapter |
-| [`the-fall-of-the-citadel/`](examples/the-fall-of-the-citadel/) | A prequel to The Last Ember, linked with `series`. Run `story series examples/the-last-ember` for the chronology |
-| [`harbor-of-second-light/`](examples/harbor-of-second-light/) | A near-future mystery with memory technology and populated continuity state |
-| [`the-gull-rock-light/`](examples/the-gull-rock-light/) | A short branching story, built to Twine and ink |
-| [`bo-and-the-missing-moon/`](examples/bo-and-the-missing-moon/) | A 32-page picture book with spread briefs |
-| [`the-left-luggage-office/`](examples/the-left-luggage-office/) | A weekly serial with episode questions and cliffhangers |
-| [`salt-and-lantern/`](examples/salt-and-lantern/) | An anthology of three stories by different writers |
-| [`the-unraveled-thread/`](examples/the-unraveled-thread/) | A deliberately broken project that shows the continuity findings |
-| [`quatre-heures-dix-sept/`](examples/quatre-heures-dix-sept/) | A short story in French |
-| [`kirimi-eki-no-wasuremono/`](examples/kirimi-eki-no-wasuremono/) | A short story in Japanese, set in vertical columns |
-| [`laysat-lil-bay/`](examples/laysat-lil-bay/) | A short story in Arabic, built right to left |
+<table>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/the-last-ember/"><b>the-last-ember</b></a><br>A fantasy with a magic system, a plot arc with foreshadowing, and a drafted chapter</td>
+    <td width="50%" valign="top"><a href="examples/the-fall-of-the-citadel/"><b>the-fall-of-the-citadel</b></a><br>A prequel to The Last Ember, linked with <code>series</code>. Run <code>story series examples/the-last-ember</code> for the chronology</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/harbor-of-second-light/"><b>harbor-of-second-light</b></a><br>A near-future mystery with memory technology and populated continuity state</td>
+    <td width="50%" valign="top"><a href="examples/the-gull-rock-light/"><b>the-gull-rock-light</b></a><br>A short branching story, built to Twine and ink</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/bo-and-the-missing-moon/"><b>bo-and-the-missing-moon</b></a><br>A 32-page picture book with spread briefs</td>
+    <td width="50%" valign="top"><a href="examples/the-left-luggage-office/"><b>the-left-luggage-office</b></a><br>A weekly serial with episode questions and cliffhangers</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/salt-and-lantern/"><b>salt-and-lantern</b></a><br>An anthology of three stories by different writers</td>
+    <td width="50%" valign="top"><a href="examples/the-unraveled-thread/"><b>the-unraveled-thread</b></a><br>A deliberately broken project that shows the continuity findings</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/quatre-heures-dix-sept/"><b>quatre-heures-dix-sept</b></a><br>A short story in French</td>
+    <td width="50%" valign="top"><a href="examples/kirimi-eki-no-wasuremono/"><b>kirimi-eki-no-wasuremono</b></a><br>A short story in Japanese, set in vertical columns</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><a href="examples/laysat-lil-bay/"><b>laysat-lil-bay</b></a><br>A short story in Arabic, built right to left</td>
+    <td width="50%" valign="top"></td>
+  </tr>
+</table>
 
 [Writing in other languages](docs/languages.md) covers what works in each language and script.
 
