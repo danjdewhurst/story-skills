@@ -513,16 +513,17 @@ describe("--dry-run", () => {
     const root = makeTempDir();
     const secret = path.join(root, "secret.txt");
     fs.writeFileSync(secret, "aaaa");
+    // Open for writing before the mode drops, so the rewrite needs no chmod.
+    const fd = fs.openSync(secret, "r+");
     fs.chmodSync(secret, 0o000);
     const before = snapshot(root);
-    fs.chmodSync(secret, 0o600);
     // File times are coarse, so wait for the clock to move on before the rewrite.
     const until = Date.now() + 10;
     while (Date.now() < until) {
       // Spin until the clock has moved on.
     }
-    fs.writeFileSync(secret, "bbbb");
-    fs.chmodSync(secret, 0o000);
+    fs.writeSync(fd, "bbbb", 0);
+    fs.closeSync(fd);
     expect(diff(before, snapshot(root))).toEqual([{ action: "update", path: "secret.txt" }]);
   });
 
