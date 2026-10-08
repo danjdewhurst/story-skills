@@ -128,8 +128,8 @@ describe("language packs", () => {
     }
   });
 
-  // ISO 639-3 codes that have a two-letter code, as Danish, Finnish, and the
-  // right-to-left languages written with one (Urdu, Yiddish, Kurdish).
+  // ISO 639-3 codes that have a two-letter code, as Danish, Finnish, Urdu,
+  // Yiddish, and Kurdish.
   test("ISO 639-3 codes resolve to the two-letter code's pack or language", () => {
     const codes = { dan: "da", fin: "fi", urd: "ur", yid: "yi", kur: "ku", snd: "sd", pus: "ps", div: "dv", uig: "ug" };
     for (const [alias, code] of Object.entries(codes)) {
