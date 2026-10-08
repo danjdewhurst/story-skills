@@ -8748,7 +8748,7 @@ function nfc(value) {
   return String(value).normalize("NFC");
 }
 var SAME = (start, end) => [start, end];
-var CLUSTER = /\P{M}?[\p{M}\u1160-\u11FF\uD7B0-\uD7FF]+/gu;
+var CLUSTER = /\P{M}?\p{M}+|[\u1100-\u11FF\uA960-\uA97F\uAC00-\uD7A3\uD7B0-\uD7FF]+/gu;
 function composedText(text) {
   const source = String(text);
   if (nfc(source) === source) {
@@ -9865,6 +9865,7 @@ function copyrightPage(meta) {
 var DESCRIPTION_LIMIT = 4000;
 function metadataSheet(input) {
   const { title, data, meta, words, characters, pages } = input;
+  const descriptionLength = [...meta.description].length;
   const seriesName = seriesDisplayName(data);
   const series = typeof seriesName === "string" ? `${seriesName}${isBookNumber(data["book-number"]) ? `, book ${data["book-number"]}` : ""}` : "";
   const rows = [
@@ -9880,7 +9881,7 @@ function metadataSheet(input) {
     ["Form", typeof data.form === "string" ? data.form : ""],
     characters === undefined ? ["Word count", String(words)] : ["Character count", String(characters)],
     ["Estimated print pages", Object.entries(pages).map(([trim, count]) => `${count} at ${trim}`).join(", ")],
-    ["Description", meta.description === "" ? "" : `${meta.description.length} characters (limit ${DESCRIPTION_LIMIT})`],
+    ["Description", meta.description === "" ? "" : `${descriptionLength} characters (limit ${DESCRIPTION_LIMIT})`],
     ["Keywords", meta.keywords.length === 0 ? "" : `${meta.keywords.length} of ${MAX_KEYWORDS}: ${meta.keywords.join("; ")}`],
     ["BISAC subjects", meta.subjects.join("; ")],
     ["Copyright", meta.copyright],
@@ -9893,7 +9894,7 @@ function metadataSheet(input) {
     ["ISBN for this edition (`isbn`), or a retailer-assigned identifier", meta.isbn !== ""],
     ["Publisher or imprint (`publisher`)", meta.publisher !== ""],
     ["Publication date (`publication-date`)", meta.publicationDate !== ""],
-    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && meta.description.length <= DESCRIPTION_LIMIT],
+    [`Description under ${DESCRIPTION_LIMIT} characters (\`description\`)`, meta.description !== "" && descriptionLength <= DESCRIPTION_LIMIT],
     [`Keywords, up to ${MAX_KEYWORDS} (\`keywords\`)`, meta.keywords.length > 0 && meta.keywords.length <= MAX_KEYWORDS],
     ["BISAC subjects (`subjects`)", meta.subjects.length > 0],
     [`Copyright line (\`copyright\`) or copyright matter page${(input.pendingCopyright ?? []).length > 0 ? ` (pending permission: ${input.pendingCopyright.join(", ")})` : ""}`, meta.copyright !== "" || input.hasCopyrightPage],
@@ -10200,8 +10201,8 @@ var CJK = "\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\u30FC";
 var SOUTHEAST_ASIAN = "\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}";
 var JOINER = "\\u00AD\\u200C\\u200D";
 var UNSPACED_LETTERS = `${CJK}${SOUTHEAST_ASIAN}`;
-var UNSPACED = new RegExp(`[${CJK}]|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
-var CJK_CHARACTER = new RegExp(`^[${CJK}]$`, "u");
+var UNSPACED = new RegExp(`[${CJK}]\\p{M}*|[${SOUTHEAST_ASIAN}](?:[${SOUTHEAST_ASIAN}]|[${JOINER}]+(?=[${SOUTHEAST_ASIAN}]))*`, "gu");
+var CJK_START = new RegExp(`^[${CJK}]`, "u");
 var WINDOW = 1e4;
 var RESTART_WORDS = 4;
 var segmenter;
@@ -10228,23 +10229,28 @@ function segmentRun(run, window = WINDOW) {
   return words;
 }
 function wordSpans(text, pattern) {
-  const source = String(text);
+  const view = composedText(text);
+  const source = view.text;
   const spans = [];
+  const add = (word, start, end) => {
+    const [from, to] = view.original(start, end);
+    spans.push({ word, start: from, end: to });
+  };
   let last = 0;
   const between = (end) => {
     if (end > last) {
       for (const match of source.slice(last, end).matchAll(pattern)) {
-        spans.push({ word: match[0], start: last + match.index, end: last + match.index + match[0].length });
+        add(match[0], last + match.index, last + match.index + match[0].length);
       }
     }
   };
   for (const match of source.matchAll(UNSPACED)) {
     between(match.index);
-    if (CJK_CHARACTER.test(match[0])) {
-      spans.push({ word: match[0], start: match.index, end: match.index + match[0].length });
+    if (CJK_START.test(match[0])) {
+      add(match[0], match.index, match.index + match[0].length);
     } else {
       for (const [word, offset] of segmentRun(match[0])) {
-        spans.push({ word, start: match.index + offset, end: match.index + offset + word.length });
+        add(word, match.index + offset, match.index + offset + word.length);
       }
     }
     last = match.index + match[0].length;
@@ -10864,7 +10870,7 @@ function footnoteLines(markdownBody) {
   }
   return found;
 }
-var CJK_CHARACTER2 = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
+var CJK_CHARACTER = /^[\u2e80-\u2fff\u3000-\u30ff\u3190-\u319f\u31c0-\u31ff\u3220-\u325f\u3280-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\ufe10-\ufe1f\ufe30-\ufe4f\uff01-\uff9f\uffe0-\uffee\u{1b000}-\u{1b16f}\u{20000}-\u{3ffff}]$/u;
 var WIDE_PUNCTUATION = /^[\u00b7\u2014\u2015\u2018\u2019\u201c\u201d\u2025\u2026]$/u;
 var COMBINING = /^[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\u302a-\u302f\u3099\u309a\ufe00-\ufe0f\ufe20-\ufe2f\u{e0100}-\u{e01ef}]$/u;
 function lastCharacter(text) {
@@ -10883,8 +10889,8 @@ function softBreak(before, after) {
   const left = lastCharacter(String(before));
   const first = String(after).codePointAt(0);
   const right = first === undefined ? "" : String.fromCodePoint(first);
-  const cjkLeft = CJK_CHARACTER2.test(left);
-  const cjkRight = CJK_CHARACTER2.test(right);
+  const cjkLeft = CJK_CHARACTER.test(left);
+  const cjkRight = CJK_CHARACTER.test(right);
   return cjkLeft && (cjkRight || WIDE_PUNCTUATION.test(right)) || cjkRight && WIDE_PUNCTUATION.test(left) ? "" : " ";
 }
 var SOURCE_SPACE = new Set([" ", "\t", `
@@ -11702,6 +11708,7 @@ var OPENING_MARKS = "(\\[*_";
 var FULL_WIDTH_CLOSERS = "」』）";
 var SPACED_CLOSERS = "»›";
 var SPACED_OPENERS = "«‹";
+var EMOJI_RUN = "(?:\\p{So}[\\p{Sk}\\p{Mn}\\u200D\\uFE0F\\u{E0020}-\\u{E007F}]* ?)*";
 var RULES = new WeakMap;
 function sentenceRules(pack) {
   if (!RULES.has(pack)) {
@@ -11741,7 +11748,7 @@ function buildRules(pack) {
     fullWidthCloser: new RegExp(`[${plainClosers}${CLOSING_MARKS}${FULL_WIDTH_CLOSERS}]`),
     ambiguous,
     pairs: marks.pairs,
-    start: new RegExp(`^(?:${opening}[${startLetter}]|${dashed}\\p{Lu})`, "u"),
+    start: new RegExp(`^${EMOJI_RUN}(?:${opening}[${startLetter}]|${dashed}\\p{Lu})`, "u"),
     finished: new RegExp(`${anyOf(marks.spacedEnds + marks.fullWidthEnds)}(?: ${anyOf(spacedClosers)})?[${closers})\\]${FULL_WIDTH_CLOSERS}]*$`),
     firstWord: new RegExp(`^${dashed}([\\p{L}\\p{N}'’]+)`, "u")
   };
@@ -12837,7 +12844,8 @@ function sentenceStats(lengths) {
   }
   const mean = lengths.reduce((sum, value) => sum + value, 0) / lengths.length;
   const variance = lengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / lengths.length;
-  return { count: lengths.length, mean, longest: Math.max(...lengths), spread: Math.sqrt(variance) };
+  const longest = lengths.reduce((most, value) => Math.max(most, value));
+  return { count: lengths.length, mean, longest, spread: Math.sqrt(variance) };
 }
 function countMatching(words, predicate, pack) {
   const counts = new Map;
@@ -19243,6 +19251,9 @@ function formatPercent(percent, places) {
   let value = Math.round(percent * scale) / scale;
   if (value >= 100 && percent < 100) {
     value = Math.floor(percent * scale) / scale;
+  }
+  if (value <= 0 && percent > 0) {
+    value = 1 / scale;
   }
   return value.toFixed(places);
 }
