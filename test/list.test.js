@@ -217,7 +217,11 @@ describe("story list --query (#532)", () => {
   test("a query on a name every object inherits, such as constructor, matches only files that set it (#734)", () => {
     const root = sampleProject();
     configure(root, "queries:\n  - name: inherited\n    kind: chapters\n    where: [constructor]\n  - name: not-inherited\n    kind: chapters\n    where: [\"!constructor\"]");
-    expect(JSON.parse(invoke(root, ["list", "--query", "inherited", "--json"]).out).data.items).toEqual([]);
+    const inherited = JSON.parse(invoke(root, ["list", "--query", "inherited", "--json"]).out);
+    expect(inherited.data.items).toEqual([]);
+    // Not a field, so the query warns that it matches as unset, as for any unknown key.
+    expect(inherited.diagnostics).toMatchObject([{ severity: "warning", code: "query-unknown-key", file: "story.md" }]);
+    expect(inherited.diagnostics[0].message).toContain('filters on "constructor"');
     const unset = JSON.parse(invoke(root, ["list", "--query", "not-inherited", "--json"]).out).data;
     expect(unset.items.map((item) => item.id)).toEqual(["chapter-01", "chapter-02", "chapter-09", "chapter-10"]);
     expect(unset.items[0].fields).toEqual({ constructor: null });
