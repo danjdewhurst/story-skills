@@ -85,11 +85,10 @@ Body`);
     const parsed = parseFrontmatter(`---
 bad: "a\\qb"
 single: 'The Lost Heir'
-tiny: "
 ---
 Body`);
 
-    expect(parsed.data).toEqual({ bad: "a\\qb", single: "The Lost Heir", tiny: '"' });
+    expect(parsed.data).toEqual({ bad: "a\\qb", single: "The Lost Heir" });
   });
 
   test("stringifies and replaces frontmatter", () => {
@@ -181,14 +180,45 @@ Body`);
       return null;
     };
 
-    expect(failure('title: "The Last Ember')).toBe('Unclosed quoted value (line 2). Add a closing " at the end of the value, such as title: "The Last Ember"');
+    expect(failure('title: "The Last Ember')).toBe('Unclosed quoted value (line 2). Add a closing " at the end of the value, such as title: "The Last Ember", or write a value over several lines as a block scalar, such as summary: | then the text on indented lines');
     expect(failure('relationships:\n  - "Sera Voss')).toContain("Unclosed quoted value (line 3)");
     expect(failure('title: "a\\"')).toContain("Unclosed quoted value (line 2)");
-    // A comment after the closing quote is still a comment, and a lone quote
-    // mark stays text, as the hand-written-value test expects.
+    // A lone quote mark is an unclosed value too.
+    expect(failure('title: "')).toContain("Unclosed quoted value (line 2)");
+    // A comment after the closing quote is still a comment.
     expect(parseFrontmatter('---\ntitle: "Hello" # draft\n---\nBody').data).toEqual({ title: "Hello" });
     expect(parseFrontmatter('---\ntitle: "say \\"hi\\""\n---\nBody').data).toEqual({ title: 'say "hi"' });
-    expect(parseFrontmatter('---\ntitle: "\n---\nBody').data).toEqual({ title: '"' });
+  });
+
+  test("reads a # inside a closed double-quoted value as text, not as an unclosed value (#728)", () => {
+    const failure = (yaml) => {
+      try {
+        parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md");
+      } catch (error) {
+        return error.message;
+      }
+      return null;
+    };
+
+    expect(parseFrontmatter('---\ntitle: "Issue #5"\n---\nBody').data).toEqual({ title: "Issue #5" });
+    expect(parseFrontmatter('---\ntitle: "Issue #5" # draft\n---\nBody').data).toEqual({ title: "Issue #5" });
+    // Text after the closing quote is not a comment. Its value is read as it
+    // was before, but the error must not blame a missing quote.
+    expect(failure('title: "Issue #5" and more') ?? "").not.toContain("Unclosed quoted value");
+  });
+
+  test("names the block scalar form for a double-quoted value over several lines (#728)", () => {
+    const failure = (yaml) => {
+      try {
+        parseFrontmatter(`---\n${yaml}\n---\nBody`, "story.md");
+      } catch (error) {
+        return error.message;
+      }
+      return null;
+    };
+
+    expect(failure('summary: "First line\n  second"')).toContain("Unclosed quoted value (line 2)");
+    expect(failure('summary: "First line\n  second"')).toContain("or write a value over several lines as a block scalar, such as summary: |");
   });
 
   test("tolerates trailing spaces and tabs after frontmatter delimiters", () => {
