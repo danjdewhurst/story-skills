@@ -146,34 +146,34 @@ Most books move through the skills in this order. `story-maintenance` runs under
   </picture>
 </p>
 
-The table lists what each skill does and a request that starts it.
+The table lists the skills in the same order, with what each one does and a request that starts it.
 
-| Stage | Skill | What it does | Try saying |
-|-------|-------|--------------|------------|
-| **Set up** | `premise-workshop` | Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
-| | `story-init` | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
-| **Plan** | `character-management` | Builds character profiles, relationships, and arcs | *"Create a character"* |
-| | `worldbuilding` | Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
-| | `plot-structure` | Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
-| | `theme-craft` | Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
-| | `genre-craft` | Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
-| | `research` | Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
-| **Draft** | `chapter-writing` | Drafts chapters from an outline and the story context | *"Write the next chapter"* |
-| | `discovery-drafting` | Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
-| | `scene-craft` | Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
-| | `voice-style` | Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
-| | `verse-craft` | Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
-| | `interactive-fiction` | Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
-| **Revise** | `revision-continuity` | Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
-| | `line-editing` | Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
-| | `reader-panel` | Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
-| | `feedback-triage` | Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
-| | `editorial-review` | Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
-| **Send it out** | `submission` | Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
-| | `publishing` | Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
-| | `adaptation` | Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
-| **Series** | `series-continuity` | Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
-| **Always** | `story-maintenance` | Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
+| Skill | What it does | Try saying |
+|-------|--------------|------------|
+| **premise-workshop** | Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
+| **story-init** | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
+| **character-management** | Builds character profiles, relationships, and arcs | *"Create a character"* |
+| **worldbuilding** | Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
+| **plot-structure** | Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
+| **theme-craft** | Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
+| **genre-craft** | Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
+| **research** | Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
+| **chapter-writing** | Drafts chapters from an outline and the story context | *"Write the next chapter"* |
+| **discovery-drafting** | Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
+| **scene-craft** | Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
+| **voice-style** | Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
+| **verse-craft** | Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
+| **interactive-fiction** | Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
+| **revision-continuity** | Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
+| **line-editing** | Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
+| **reader-panel** | Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
+| **feedback-triage** | Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
+| **editorial-review** | Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
+| **submission** | Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
+| **publishing** | Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
+| **adaptation** | Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
+| **series-continuity** | Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
+| **story-maintenance** | Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
 
 **line-editing** owns the prose pass. For general writing checks as well, add [**better-writing**](https://github.com/forjd/better-writing) with `npx skills add forjd/better-writing`.
 
