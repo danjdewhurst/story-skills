@@ -19,6 +19,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 - Kurmanji (`ku`) now reads left to right by default, and Arabic-script books should be tagged `ku-Arab`.
   - Before, `ku` and `kur` built right to left. `ku-Arab` and `kur-Arab` still build right to left, `ku-Latn` is unchanged, and Sorani (`ckb`) stays right to left.
+  - A tag with no script subtag and an Iraq, Iran, or Lebanon region (`ku-IQ`, `ku-IR`, `ku-LB`) still builds right to left, so those books do not change. Tag Latin-script Kurmanji there `ku-Latn` to build left to right.
   - `docs/languages.md` says so under the builds' right-to-left rule.
 - `story compare` reads a relative `against` from `story.md` `cli-defaults` from the project folder, as `similarity` does. ([#841](https://github.com/danjdewhurst/story-skills/issues/841))
   - Before, it read the path from the folder the command ran in, so running `story compare` from outside the project failed with `not a story project`.
