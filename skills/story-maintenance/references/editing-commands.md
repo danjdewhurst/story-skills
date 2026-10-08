@@ -2,7 +2,7 @@
 
 How the commands that create, rename, move, split, merge, and remove entity files, and the `import` that builds a project from a manuscript, behave, and what to check after them. `SKILL.md` says when to run each command; read the matching section here before running one or explaining its result. Run any of them with `--dry-run` first when the change touches many files. `docs/cli-reference.md` lists every flag.
 
-After a command changes files, run `story reindex .`, `story wordcount . --write`, and `story check .`.
+After a command changes files, run `story reindex .`, `story wordcount . --write`, and `story check .` in that project. After `import`, run them in the new project folder that the output names, not in the folder you ran it from: `story reindex <folder>`, `story wordcount <folder> --write`, and `story check <folder>`.
 
 ## add, rename, and remove
 
