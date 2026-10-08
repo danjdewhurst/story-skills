@@ -19,12 +19,15 @@ import { COMMANDS } from "../src/commands.js";
 //
 // Outside fences, an inline maintenance run is two or more inline-code
 // maintenance commands (`story links .`, `story check`, `story wordcount
-// --write`) with nothing between them but punctuation, line breaks, and the
-// words "and", "or", "nor", or "then" (see isSeparator). Any other word ends
-// the run, so "`story links .` reports unknown ids, and `story validate`
-// warns" is two runs of one command. A run that gives a run order (see
-// runOrder) must be exactly `story reindex P`, `story wordcount P --write`,
-// and `story check P`, in that order, on one path; `check` may take flags.
+// --write`) with nothing between them but punctuation, list markers (bullets,
+// numbers, bold), line breaks, and the words "and", "then", "followed by",
+// "before", "after", or "also" (see isSeparator). A blank line joins items of
+// a list only. Any other word ends the run, so "`story links .` reports
+// unknown ids, and `story validate` warns" is two runs of one command. "or"
+// and "nor" end a run too: they name alternatives, not an order. A run that
+// gives a run order (see givesOrder and runOrder) must be exactly `story
+// reindex P`, `story wordcount P --write`, and `story check P`, in that order,
+// on one path; `check` may take flags.
 //
 // The docs, the README, the contributor guides, the eval reference answers,
 // and the workflow templates describe the same block, but they also show one
@@ -88,8 +91,8 @@ function storyCommands(line) {
     .map((part) => part
       .replace(/^bun\s+run\s+story(?:\s+--)?(?=\s|$)/, "story")
       .replace(/^(?:npx|bunx)\s+(?:(?:--yes|-y)\s+)?story-skills(?:@\S+)?(?=\s|$)/, "story")
-      .replace(/^(?:node|bun(?:\s+run)?)\s+\S*story\.js(?=\s|$)/, "story")
-      .replace(/^(?:\.\/)?bin\/story\.js(?=\s|$)/, "story")
+      .replace(/^(?:node|bun(?:\s+run)?)\s+\S*story\.js(?:\s+--)?(?=\s|$)/, "story")
+      .replace(/^(?:\.\/)?bin\/story\.js(?:\s+--)?(?=\s|$)/, "story")
       .trim())
     .filter((part) => COMMAND_NAMES.has(/^story ([a-z-]+)(?:\s|$)/.exec(part)?.[1]));
 }
@@ -147,13 +150,20 @@ const INLINE_COMMAND = /`(story [^`]+)`/g;
 // Any maintenance command in inline code: with or without a path, with flags
 // (`story check . --strict`), or as a plain `story wordcount`.
 const INLINE_MAINTENANCE = /^story (?:reindex|check|links|validate|continuity|wordcount)(?:\s|$)/;
-const SEPARATOR_WORD = /\b(?:and|or|nor|then)\b/g;
-const SEPARATOR_MARK = /[\s,;:()&|\/+>\u2192\u2014\u2013-]/g;
+const SEPARATOR_WORD = /\b(?:and|then|followed|by|before|after|also)\b/g;
+const SEPARATOR_MARK = /[\s,;:()&|\/+>\u2192\u2014\u2013*_\u2022-]/g;
+// A bullet, or a number with a full stop or a parenthesis, starting a line.
+const LIST_ITEM = /(?:^|\n)[ \t]*(?:[-*+\u2022]|\d+[.)])[ \t]/;
+const LIST_NUMBER = /(?:^|\s)\d+[.)](?=\s|$)/g;
 
 // Whether the text between two inline commands joins them into one run: only
-// punctuation, line breaks (not a blank line), and the separator words.
+// punctuation, list markers, line breaks, and the separator words. A blank
+// line breaks a run unless it sits between two list items.
 function isSeparator(text) {
-  return !/\n\s*\n/.test(text) && text.replace(SEPARATOR_WORD, "").replace(SEPARATOR_MARK, "") === "";
+  if (/\n\s*\n/.test(text) && !LIST_ITEM.test(text)) {
+    return false;
+  }
+  return text.replace(SEPARATOR_WORD, " ").replace(LIST_NUMBER, " ").replace(SEPARATOR_MARK, "") === "";
 }
 
 // The inline lists of two or more commands that `maintenance` matches in
@@ -207,18 +217,30 @@ function inlineProblems(text) {
     .map(({ line, commands }) => `line ${line}: inline list ${formatList(commands)}`);
 }
 
-// Whether an inline list gives a run order rather than naming commands in
-// passing ("`story reindex` and `story wordcount --write`
-// rewrite registry tables"): every command names its project path, "then"
-// joins it or follows it, or its sentence or table cell says "run" before
-// it. Code spans are masked so the dots in them do not end a sentence.
-function runOrder(prose, list) {
-  if (list.then || /^\s*,?\s*then\b/.test(prose.slice(list.end)) || list.commands.every((command) => projectArgument(command) !== "")) {
+// The words that tell an agent to do an inline list, in the sentence, table
+// cell, or list lead-in before its first command.
+const RUN_CUE = /\b(?:run|runs|running|ran|then|finish|finishes|finishing|finished)\b/i;
+
+// Whether an inline list gives its order through its words rather than its
+// paths: "then" joins it or follows it, or its sentence, table cell, or list
+// lead-in says "run" or "finish" before it. Code spans are masked so the dots
+// in them do not end a sentence. A bullet does not end the sentence, so a
+// lead-in such as "Run:" still covers the bulleted commands below it.
+function givesOrder(prose, list) {
+  if (list.then || /^\s*,?\s*then\b/.test(prose.slice(list.end))) {
     return true;
   }
   const before = prose.slice(0, list.start).replace(/`[^`\n]*`/g, (span) => "x".repeat(span.length));
-  const sentence = before.split(/[.!?]\s|\n\s*\n|\||\n\s*(?:[-*]|\d+\.)\s/).pop();
-  return /\b(?:run|runs|running|ran)\b/i.test(sentence);
+  const sentence = before.split(/[.!?]\s|\n\s*\n|\|/).pop();
+  return RUN_CUE.test(sentence);
+}
+
+// Whether an inline list is a run order rather than commands named in passing
+// ("`story reindex` and `story wordcount --write` rewrite registry tables"):
+// it gives its order in its words (see givesOrder), or every command names its
+// project path.
+function runOrder(prose, list) {
+  return givesOrder(prose, list) || list.commands.every((command) => projectArgument(command) !== "");
 }
 
 function commandKind(command) {
@@ -326,14 +348,19 @@ function maintenanceProblem(block) {
   const projectPath = first[1];
   const expected = [`story reindex ${projectPath}`, `story wordcount ${projectPath} --write`, `story check ${projectPath}`];
   for (const [offset, command] of expected.entries()) {
-    if (block.commands[offset] !== command) {
-      return `line ${offset + 1} is \`${block.commands[offset] ?? "(missing)"}\`, expected \`${command}\``;
+    // `check` may take flags, as in `story check . --strict`.
+    const actual = block.commands[offset];
+    const matches = offset === 2 ? actual === command || actual?.startsWith(`${command} --`) : actual === command;
+    if (!matches) {
+      return `line ${offset + 1} is \`${actual ?? "(missing)"}\`, expected \`${command}\``;
     }
   }
   const repeated = block.commands.slice(expected.length).find((command) => REPEATED.test(command));
   return repeated ? `repeats \`${repeated}\` after the canonical block` : null;
 }
 
+// `import` is not listed: it builds a new project and reindexes it when it
+// finishes, and editing-commands.md names the block for the folder it prints.
 const ENTITY_COMMAND = /^story (?:add|rename|remove|move|split|merge)(?:\s|$)/;
 
 // Whether a page tells an agent to add, rename, remove, move, split, or merge
@@ -347,14 +374,20 @@ function changesEntities(text) {
   return commands.some((command) => ENTITY_COMMAND.test(command));
 }
 
+// Whether commands hold the canonical three, in order, on one path, in a row.
+function holdsBlock(commands) {
+  return commands.some((_, index) => index + 3 <= commands.length && isCanonicalRun(commands.slice(index, index + 3)));
+}
+
 // Whether a page names the maintenance block: reindex, wordcount --write, and
-// check together in one fenced block or one inline list.
+// check, in order and on one path, in a fenced block (not a command catalogue)
+// or in an inline list that gives its order (see givesOrder). A passing
+// mention of the three does not count.
 function namesBlock(text) {
-  const runs = [
-    ...fencedBlocks(text).filter((block) => !block.reference).map((block) => block.commands),
-    ...inlineLists(text, INLINE_MAINTENANCE).map((list) => list.commands)
-  ];
-  return runs.some((commands) => BLOCK_KINDS.every((kind) => commands.some((command) => commandKind(command) === kind)));
+  const prose = proseOnly(text);
+  const fenced = fencedBlocks(text).filter((block) => !block.reference).some((block) => holdsBlock(block.commands));
+  const inline = inlineLists(text, INLINE_MAINTENANCE).some((list) => holdsBlock(list.commands) && givesOrder(prose, list));
+  return fenced || inline;
 }
 
 describe("maintenance block order", () => {
@@ -370,6 +403,9 @@ describe("maintenance block order", () => {
     expect(check("story validate .\nstory links .", `${REFERENCE_MARKER}\n`)).toBeNull();
     expect(check("bun run story -- reindex .\nbun run story -- wordcount . --write\nbun run story -- check .")).toBeNull();
     expect(check("bun run story -- wordcount . --write\nbun run story -- reindex .\nbun run story -- check .")).toContain("not `story reindex <path>`");
+    expect(check("bun run story -- reindex .\nbun run story -- check .")).toContain("expected `story wordcount . --write`");
+    expect(check("bun ./bin/story.js -- reindex .\nbun ./bin/story.js -- check .")).toContain("expected `story wordcount . --write`");
+    expect(check("story reindex .\nstory wordcount . --write\nstory check . --strict")).toBeNull();
   });
 
   test("detects inline maintenance lists and accepts only the canonical three", () => {
@@ -388,6 +424,25 @@ describe("maintenance block order", () => {
     expect(inlineProblems("Run `story reindex .`; `story wordcount . --write`; `story check . --strict`.")).toEqual([]);
     expect(inlineProblems("Run `story reindex .` (`story check .`) with `story pacing .`.")).toHaveLength(1);
     expect(inlineProblems("Run `story reindex .`. `story check .` is the last step.")).toEqual([]);
+    // Other separators: list markers, bold, loose lists, and the words "followed by", "before", and "after".
+    expect(inlineProblems("* `story wordcount . --write`\n* `story reindex .`\n* `story check .`")).toHaveLength(1);
+    expect(inlineProblems("1. `story wordcount . --write`\n2. `story reindex .`\n3. `story check .`")).toHaveLength(1);
+    expect(inlineProblems("**`story check .`**, then **`story reindex .`**")).toHaveLength(1);
+    expect(inlineProblems("- `story reindex .`\n\n- `story wordcount . --write`\n\n- `story check .`")).toEqual([]);
+    expect(inlineProblems("- `story check .`\n\n- `story reindex .`")).toHaveLength(1);
+    expect(inlineProblems("Run `story check .` followed by `story reindex .`.")).toHaveLength(1);
+    expect(inlineProblems("Run `story check .` before `story reindex .`.")).toHaveLength(1);
+    expect(inlineProblems("Run `story check .` after `story reindex .`.")).toHaveLength(1);
+    expect(inlineProblems("Run `story check .`/`story reindex .`.")).toHaveLength(1);
+    // A paragraph break ends a run, and so do "or" and "nor", which name alternatives.
+    expect(inlineProblems("Run `story check .`.\n\n`story reindex .`")).toEqual([]);
+    expect(inlineProblems("Run `story reindex .` or `story check .`.")).toEqual([]);
+    expect(inlineProblems("Run `story reindex .`, nor `story check .`.")).toEqual([]);
+    // A list with no paths still gives an order when its words do: "then", "finish", or a lead-in that says "run".
+    expect(inlineProblems("Then `story check`, `story reindex`, and `story wordcount --write`.")).toHaveLength(1);
+    expect(inlineProblems("Finish with `story check`, `story reindex`, and `story wordcount --write`.")).toHaveLength(1);
+    expect(inlineProblems("Run:\n- `story check`\n- `story reindex`")).toHaveLength(1);
+    expect(inlineProblems("Then `story reindex`, `story wordcount --write`, and `story check`.")).toEqual([]);
     // Commands named in passing, with no run order, are not runs.
     expect(inlineProblems("`story validate` and `story links` report the same problems.")).toEqual([]);
     expect(inlineProblems("`story links`, `story continuity`, and `story timeline` line up across editions.")).toEqual([]);
@@ -430,6 +485,31 @@ describe("maintenance block order", () => {
     expect(storyCommands("bun ./bin/story.js wordcount . --write")).toEqual(["story wordcount . --write"]);
     expect(storyCommands("./bin/story.js reindex .")).toEqual(["story reindex ."]);
     expect(storyCommands("bunx story-skills@0.22.1 reindex .")).toEqual(["story reindex ."]);
+    expect(storyCommands("bun ./bin/story.js -- wordcount . --write")).toEqual(["story wordcount . --write"]);
+    expect(storyCommands("bun run ./bin/story.js -- check .")).toEqual(["story check ."]);
+    expect(storyCommands("node skills/story-maintenance/scripts/story.js -- reindex .")).toEqual(["story reindex ."]);
+  });
+
+  test("entity verbs and the named block read the same commands as the order check", () => {
+    const fence = (body) => `\`\`\`shell\n${body}\n\`\`\`\n`;
+    // Each entity verb is a change to an entity; read-only and project commands are not.
+    for (const verb of ["add", "rename", "remove", "move", "split", "merge"]) {
+      expect(changesEntities(`Run \`story ${verb} chapter 'X'\`.`)).toBe(true);
+      expect(changesEntities(fence(`story ${verb} chapter 'X'`))).toBe(true);
+    }
+    expect(changesEntities("Run `story reindex .`, then `story check .`.")).toBe(false);
+    expect(changesEntities("Run `story migrate .`.")).toBe(false);
+    expect(changesEntities("Run `story names 'Ada'`.")).toBe(false);
+    // A passing mention of the three commands does not name the block.
+    expect(namesBlock("Run `story add character 'Ada'`. The `story reindex .`, `story wordcount . --write`, and `story check .` commands rebuild the registries.")).toBe(false);
+    expect(namesBlock("Run `story reindex .`, `story wordcount . --write`, and `story check .`.")).toBe(true);
+    expect(namesBlock("Then run `story reindex .`, `story wordcount . --write`, and `story check . --strict`.")).toBe(true);
+    expect(namesBlock("Run `story check .`, `story wordcount . --write`, and `story reindex .`.")).toBe(false);
+    expect(namesBlock("Run `story reindex ../a`, `story wordcount . --write`, and `story check .`.")).toBe(false);
+    expect(namesBlock(fence("story reindex .\nstory wordcount . --write\nstory check ."))).toBe(true);
+    expect(namesBlock(fence("story check .\nstory reindex .\nstory wordcount . --write"))).toBe(false);
+    // A command-reference catalogue does not name the block.
+    expect(namesBlock(`${REFERENCE_MARKER}\n${fence("story reindex .\nstory wordcount . --write\nstory check .")}`)).toBe(false);
   });
 
   test("detects maintenance runs in the docs that break the block", () => {
