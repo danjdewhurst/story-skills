@@ -9668,7 +9668,7 @@ var SCALAR_FIELDS = ["author", "surname", "short-title", "language", "isbn", "pu
 function isPlaceholder(value) {
   return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
 }
-var RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
+var RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ps", "sd", "syr", "ug", "ur", "yi"]);
 var RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
 function textDirection(language) {
   const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);

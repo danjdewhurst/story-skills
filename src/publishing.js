@@ -21,10 +21,12 @@ export function isPlaceholder(value) {
   return typeof value === "string" && /^\[TODO\b/i.test(value.trim());
 }
 
-// Languages written right to left, by primary subtag, and the scripts that
-// make any language right to left (az-Arab, pa-Arab). A Latin or other script
-// subtag makes a listed language left to right (ku-Latn).
-const RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ku", "ps", "sd", "syr", "ug", "ur", "yi"]);
+// Languages written right to left by default, by primary subtag, and the
+// scripts that make any language right to left (az-Arab, ku-Arab). A script
+// subtag decides the direction: a Latin subtag makes a listed language left
+// to right (fa-Latn). Kurmanji (ku) is written in Latin script by default, so
+// it reads left to right, and Arabic-script Kurdish is tagged ku-Arab.
+const RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ps", "sd", "syr", "ug", "ur", "yi"]);
 const RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
 
 // The tag is read as the language packs read it (lookupTag), so an alias
