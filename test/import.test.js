@@ -1245,6 +1245,22 @@ describe("frontmatter without a chapter number (#718)", () => {
     const { result, chapters } = importText("---\ntitle: Arrival\nstatus: draft\n---\n\n## Outline\n\n1. Opening beat\n2. Turn\n\n---\n\n## Chapter Text\n\nShip came in.\n", { name: "chapter-01.md" });
     expect(chapters.map((chapter) => chapter.title)).toEqual(["Arrival"]);
     expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
+    expect(result.warnings).toEqual([]);
+  });
+
+  test("a note above the outline is still reported as unused", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: outline\n---\n\nA note to self.\n\n## Outline\n\n1. Opening beat\n\n---\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["unused-chapter-text"]);
+    expect(result.warnings[0].message).toContain("1 line above ## Chapter Text was not imported (first \"A note to self.\" at line 7)");
+  });
+
+  test("the outline story add chapter writes above Chapter Text prints no warning", () => {
+    const { result, chapters } = importText("---\ntitle: Arrival\nnumber: 1\nstatus: outline\n---\n\n# Chapter 1: Arrival\n\n## Outline\n\n1. Opening beat\n2. Escalation\n3. Turn or decision\n\n---\n\n## Chapter Text\n\nShip came in.\n", { name: "chapter-01.md" });
+    expect(chapters.map((chapter) => chapter.title)).toEqual(["Arrival"]);
+    expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
+    expect(result.warnings).toEqual([]);
   });
 
   test("a chapter file with text above its Chapter Text heading warns about the text it does not use", () => {
