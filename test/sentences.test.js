@@ -121,6 +121,11 @@ describe("#208 Chinese and Japanese count per character", () => {
     // The stop can sit inside the emphasis, before its closing mark.
     expect(splitSentences("She met *Mr.* Darcy. Then she slept.")).toEqual(["She met *Mr.* Darcy.", "Then she slept."]);
   });
+
+  test("an initial or a context abbreviation inside emphasis does not end the sentence (#705)", () => {
+    expect(splitSentences("She read *J. Smith* in May. Then she slept.")).toEqual(["She read *J. Smith* in May.", "Then she slept."]);
+    expect(splitSentences("She read *No. 5* twice. Then she slept.")).toEqual(["She read *No. 5* twice.", "Then she slept."]);
+  });
 });
 
 describe("#710 a sentence that starts with an emoji is split", () => {
