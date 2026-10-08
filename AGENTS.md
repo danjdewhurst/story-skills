@@ -16,7 +16,7 @@ Primary paths:
 - `examples/` - sample Story Skills projects
 - `scripts/` - CI check scripts, the release script, and `issue-worktree.sh` (see Git Workspace Hygiene For Automated Agents)
 - `docs/` - user and contributor documentation, indexed by `docs/README.md`: getting started, core concepts, the project format (schema v2) reference, the CLI reference, the skills catalogue, writing workflows, continuity and analysis, series, import/export/builds, automation and CI, and the development guide
-- `assets/` - plugin logo, screenshot, social preview, and the README demo GIF (regenerate the GIF with `vhs assets/demo.tape`)
+- `assets/` - plugin logo, screenshot, social preview, the README demo GIF (regenerate the GIF with `vhs assets/demo.tape`), and the README banner, feature icons, and skills diagram under `assets/readme/`
 - `schemas/story.schema.json` - JSON schema for story project frontmatter; `test:examples` validates every example against it, so update both together. Its date and language-tag patterns are generated: run `bun run build:schema-patterns` after changing how validate reads them
 - `templates/github/` - files users copy into a story repository: GitHub Actions workflows for checks (`story-checks.yml`), scheduled chapter drafting (`draft-next-chapter.yml`), and an HTML review copy on GitHub Pages (`review-copy.yml`), plus the `ISSUE_TEMPLATE/manuscript-note.yml` reader-note form. The release script and `check:metadata` keep `STORY_VERSION` in all three workflows at the package version
 - `.codex-plugin/`, `.claude-plugin/`, `.agents/` - plugin and marketplace metadata

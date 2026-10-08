@@ -1,42 +1,108 @@
+<a id="readme-top"></a>
+
 <div align="center">
 
-<h1><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/banner.svg" alt="Story Skills" width="508"></h1>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/hero-light.svg" alt="Story Skills" width="560">
+</picture>
 
-**Agent Skills for planning, tracking, and drafting fiction in markdown.**
+<p><b>Plan, track, and draft fiction in markdown,<br>with a continuity checker that catches mistakes before readers do.</b></p>
 
-Story Skills gives agents a shared project format for fiction: the story bible, characters, worldbuilding, plot arcs, scenes, continuity state, promises and payoffs, and chapter drafts. Everything is plain markdown with YAML frontmatter, packaged as Agent Skills and as Codex and Claude Code plugins. A book can be written in any language ([Writing in other languages](docs/languages.md)).
+<p>
+  <a href="https://www.npmjs.com/package/story-skills"><img src="https://img.shields.io/npm/v/story-skills?style=flat-square&color=7c3aed&label=npm" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/story-skills"><img src="https://img.shields.io/npm/dm/story-skills?style=flat-square&color=7c3aed&label=downloads" alt="npm downloads a month"></a>
+  <a href="https://github.com/danjdewhurst/story-skills/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/danjdewhurst/story-skills/ci.yml?branch=main&style=flat-square&label=CI" alt="CI status"></a>
+  <a href="docs/getting-started.md#install-the-story-cli"><img src="https://img.shields.io/node/v/story-skills?style=flat-square&color=7c3aed" alt="Node version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-7c3aed?style=flat-square" alt="MIT license"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/danjdewhurst/story-skills"><img src="https://img.shields.io/ossf-scorecard/github.com/danjdewhurst/story-skills?style=flat-square&label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard"></a>
+  <a href="https://github.com/danjdewhurst/story-skills/stargazers"><img src="https://img.shields.io/github/stars/danjdewhurst/story-skills?style=flat-square&color=7c3aed" alt="GitHub stars"></a>
+</p>
 
-The companion `story` CLI treats the story bible as a checkable contract. Its continuity engine finds dead characters who reappear, payoffs that land before their setup, and stale story state, before a reader does.
+<p>
+  <a href="#quick-start"><b>Quick start</b></a>
+  &nbsp;·&nbsp;
+  <a href="#the-continuity-engine"><b>Continuity engine</b></a>
+  &nbsp;·&nbsp;
+  <a href="#skills"><b>Skills</b></a>
+  &nbsp;·&nbsp;
+  <a href="#companion-cli"><b>CLI</b></a>
+  &nbsp;·&nbsp;
+  <a href="#examples"><b>Examples</b></a>
+  &nbsp;·&nbsp;
+  <a href="docs/README.md"><b>Docs</b></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md"><b>Contributing</b></a>
+</p>
+
+<br>
 
 <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/demo.gif" alt="story continuity flags a character who died in chapter 2 but appears in chapter 4, a payoff that lands before its setup, and a question resolved before it is asked" width="900">
 
-[Why it works this way](https://ddewhurst.com/blog/story-skills-continuity-compiler-for-ai-fiction/)
-
-[![npm](https://img.shields.io/npm/v/story-skills)](https://www.npmjs.com/package/story-skills)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/danjdewhurst/story-skills/badge)](https://scorecard.dev/viewer/?uri=github.com/danjdewhurst/story-skills)
-
 </div>
 
----
+<br>
+
+Story Skills gives agents a shared project format for fiction: the story bible, characters, worldbuilding, plot arcs, scenes, continuity state, promises and payoffs, and chapter drafts. Everything is plain markdown with YAML frontmatter, packaged as Agent Skills and as Codex and Claude Code plugins.
+
+The companion `story` CLI treats the story bible as a checkable contract. Its continuity engine finds dead characters who reappear, payoffs that land before their setup, and stale story state, before a reader does. Read [why it works this way](https://ddewhurst.com/blog/story-skills-continuity-compiler-for-ai-fiction/).
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-markdown.svg" width="40" height="40" alt=""></p>
+      <p><b>Plain markdown</b><br>
+      Every character, place, scene, and chapter is a markdown file with YAML frontmatter. Diff it, branch it, and open it in any editor.</p>
+    </td>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-skills.svg" width="40" height="40" alt=""></p>
+      <p><b>24 skills, premise to print</b><br>
+      From testing a spark of an idea to the query letter and the print interior, in Claude Code, Codex, or any agent that reads <code>SKILL.md</code>.</p>
+    </td>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-continuity.svg" width="40" height="40" alt=""></p>
+      <p><b>A continuity compiler</b><br>
+      Deaths, promises, open questions, and object and knowledge state live in frontmatter, so contradictions show up like type errors.</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-languages.svg" width="40" height="40" alt=""></p>
+      <p><b>Any language</b><br>
+      Write in any language and script. Builds set right-to-left scripts and vertical Chinese, Japanese, and Korean text.</p>
+    </td>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-builds.svg" width="40" height="40" alt=""></p>
+      <p><b>Builds for every reader</b><br>
+      EPUB, DOCX, a Shunn manuscript, a print interior, an HTML review copy, a screenplay, and Twine and ink, all from one project.</p>
+    </td>
+    <td width="33%" valign="top">
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-pull-requests.svg" width="40" height="40" alt=""></p>
+      <p><b>A book by pull request</b><br>
+      GitHub Actions templates draft the next chapter on a schedule and fail a pull request that breaks continuity.</p>
+    </td>
+  </tr>
+</table>
 
 ## Quick start
 
-Writing in claude.ai without a terminal? [Writers: start here](docs/writers-start-here.md) shows how to upload a skill as a zip.
+> **Writing in claude.ai without a terminal?** [Writers: start here](docs/writers-start-here.md) shows how to upload a skill as a zip.
 
-Install the plugin in **Codex** or **Claude Code**:
+**Claude Code.** Type these inside a Claude Code session, not a shell:
 
 ```shell
-# Codex
-codex plugin marketplace add danjdewhurst/story-skills
-codex plugin add story-skills@story-skills
-
-# Claude Code (type these inside a Claude Code session, not a shell)
 /plugin marketplace add danjdewhurst/story-skills
 /plugin install story-skills@story-skills
 ```
 
-Any other agent that supports `SKILL.md` can use the Agent Skills CLI:
+**Codex**
+
+```shell
+codex plugin marketplace add danjdewhurst/story-skills
+codex plugin add story-skills@story-skills
+```
+
+**Any other agent that supports `SKILL.md`** can use the Agent Skills CLI:
 
 ```shell
 npx skills add danjdewhurst/story-skills   # or: bunx skills add danjdewhurst/story-skills
@@ -71,34 +137,43 @@ Each finding names its file and reproduces exactly, and CI asserts this output o
 
 ## Skills
 
-The table lists what each skill does and a request that starts it. [Skills catalogue](docs/skills.md) has the full details and how the skills fit together.
+Most books move through the skills in this order. `story-maintenance` runs underneath all of them, and `series-continuity` starts the next book. The [Skills catalogue](docs/skills.md) has the full details and how the skills hand work to each other.
 
-| Skill | What it does | Try saying |
-|-------|--------------|------------|
-| **premise-workshop** | Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
-| **story-init** | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
-| **character-management** | Builds character profiles, relationships, and arcs | *"Create a character"* |
-| **worldbuilding** | Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
-| **plot-structure** | Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
-| **theme-craft** | Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
-| **genre-craft** | Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
-| **research** | Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
-| **chapter-writing** | Drafts chapters from an outline and the story context | *"Write the next chapter"* |
-| **discovery-drafting** | Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
-| **scene-craft** | Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
-| **voice-style** | Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
-| **verse-craft** | Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
-| **interactive-fiction** | Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
-| **line-editing** | Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
-| **revision-continuity** | Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
-| **reader-panel** | Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
-| **feedback-triage** | Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
-| **editorial-review** | Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
-| **series-continuity** | Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
-| **submission** | Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
-| **publishing** | Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
-| **adaptation** | Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
-| **story-maintenance** | Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/skills-dark.svg">
+    <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/skills-light.svg" alt="The skills in five stages: set up, plan, draft, revise, and send it out. series-continuity loops back to start the next book, and story-maintenance runs the CLI checks under every stage." width="100%">
+  </picture>
+</p>
+
+The table lists what each skill does and a request that starts it.
+
+| Stage | Skill | What it does | Try saying |
+|-------|-------|--------------|------------|
+| **Set up** | `premise-workshop` | Tests a spark as a premise, then hands off to `story init` | *"Is there a novel in this idea?"* |
+| | `story-init` | Scaffolds the story bible, folders, and registries | *"Start a new story"* |
+| **Plan** | `character-management` | Builds character profiles, relationships, and arcs | *"Create a character"* |
+| | `worldbuilding` | Builds locations, systems, factions, and invented terms | *"Design a magic system"* |
+| | `plot-structure` | Plans arcs with three-act, hero's journey, Save the Cat, and other structures | *"Create a plot arc"* |
+| | `theme-craft` | Finds the controlling idea, the moral argument, and the motifs | *"What's my story really about?"* |
+| | `genre-craft` | Checks genre conventions, such as mystery fair play, romance beats, and horror | *"Plan a fair-play mystery"* |
+| | `research` | Checks the real-world facts a story relies on, with sources and confidence | *"Fact-check the sailing in chapter 4"* |
+| **Draft** | `chapter-writing` | Drafts chapters from an outline and the story context | *"Write the next chapter"* |
+| | `discovery-drafting` | Drafts from a story kernel, then reconciles the bible after each chapter | *"I want to discovery-write"* |
+| | `scene-craft` | Checks scene structure, dialogue, POV, and chapter openings | *"Does this chapter breathe?"* |
+| | `voice-style` | Keeps the style sheet: spellings, dialogue punctuation, and character voices | *"Set up a style sheet for this book"* |
+| | `verse-craft` | Writes and scans verse, with stresses and rhyme schemes shown | *"Does this limerick scan?"* |
+| | `interactive-fiction` | Plans branching books: choice graphs, endings, and Twine and ink builds | *"Plan where the branches rejoin"* |
+| **Revise** | `revision-continuity` | Revises drafts and audits continuity and character state | *"Continuity-check chapter 3"* |
+| | `line-editing` | Edits lines with a reason for each change, and checks that character voices differ | *"Line edit chapter 3. Everyone sounds the same."* |
+| | `reader-panel` | Runs simulated persona reads before human readers see a chapter | *"Give me a simulated beta read of chapters 1 to 5"* |
+| | `feedback-triage` | Turns alpha and beta reader feedback into a revision plan | *"Triage the beta feedback"* |
+| | `editorial-review` | Handles sensitivity reads, permissions, the AI-use statement, and editor rounds | *"I'm quoting a song lyric as my epigraph. What do I need?"* |
+| **Send it out** | `submission` | Checks submission readiness and drafts the query letter, synopsis, and comp titles | *"Help me query agents"* |
+| | `publishing` | Self-publishing production: retailer metadata, ISBNs, EPUB and print interiors, and pricing | *"Get my book ready for KDP and IngramSpark in 6x9"* |
+| | `adaptation` | Carries the story into audiobook, screenplay, picture-book, comics, and translated editions | *"Make a narration script so I can audition narrators"* |
+| **Series** | `series-continuity` | Starts sequels and prequels, and checks shared canon across books | *"Start a prequel to The Last Ember"* |
+| **Always** | `story-maintenance` | Runs the deterministic CLI checks: validation, continuity, reports, and exports | *"Validate my story project"* |
 
 **line-editing** owns the prose pass. For general writing checks as well, add [**better-writing**](https://github.com/forjd/better-writing) with `npx skills add forjd/better-writing`.
 
@@ -154,9 +229,18 @@ story import brouillon.md --title "La Côte perdue" --language fr
 
 It splits the manuscript on chapter headings, or imports a folder of chapter files, and builds the full project with word counts and registries. [Import, export, and builds](docs/manuscripts.md#import-an-existing-manuscript) covers the options, including `--force`.
 
-## Project structure
+## How it works
 
-Running **story-init** creates this layout:
+Every story element is a markdown file with YAML frontmatter. The skills cross-reference those files to keep the project consistent.
+
+- **`story.md`** is the bible that every skill reads. Its `schema-version: 2` field lets the CLI reject incompatible formats.
+- Entity files use **kebab-case identifiers**, such as `sera-voss` or `chapter-01`. The CLI takes the id from the name, and transliterates Cyrillic and Greek names. A name in a script with no transliteration, such as `李明`, needs an id from `story add --id`. Names themselves can use any script.
+- **`_index.md`** files are the registries for each domain.
+- Relationships are **bidirectional**.
+- Scene records and continuity state keep character knowledge, object ownership, and setups and payoffs in files, so they carry over between sessions.
+
+<details>
+<summary><b>The project layout that <code>story-init</code> creates</b></summary>
 
 ```
 my-story/
@@ -191,26 +275,18 @@ my-story/
     └── _index.md             # Chapter registry
 ```
 
+</details>
+
 Some files appear only when needed: `matter/` for front and back matter, `research/` for research notes, `progress.md` for the session log, and `continuity/exemptions.md` for dismissed findings. The [Project format reference](docs/project-format.md) and [`schemas/story.schema.json`](schemas/story.schema.json) define the contract.
-
-## How it works
-
-Every story element is a markdown file with YAML frontmatter. The skills cross-reference those files to keep the project consistent.
-
-- **`story.md`** is the bible that every skill reads. Its `schema-version: 2` field lets the CLI reject incompatible formats.
-- Entity files use **kebab-case identifiers**, such as `sera-voss` or `chapter-01`. The CLI takes the id from the name, and transliterates Cyrillic and Greek names. A name in a script with no transliteration, such as `李明`, needs an id from `story add --id`. Names themselves can use any script.
-- **`_index.md`** files are the registries for each domain.
-- Relationships are **bidirectional**.
-- Scene records and continuity state keep character knowledge, object ownership, and setups and payoffs in files, so they carry over between sessions.
 
 ## Examples
 
-Complete projects made with Story Skills:
+Complete books made with Story Skills:
 
 - [**The Cormorant Tide**](https://github.com/danjdewhurst/the-cormorant-tide)
 - [**Pippa and the Borrowed Star**](https://github.com/danjdewhurst/christmas-childrens-story), a children's Christmas story
 
-Examples in this repository:
+Example projects in this repository:
 
 | Example | Shows |
 |---------|-------|
@@ -238,9 +314,9 @@ A story project with deterministic checks is one an agent can advance unattended
 
 Copy the workflows into `.github/workflows/`, add an `ANTHROPIC_API_KEY` secret for the drafting workflow, and set **Settings > Pages > Source** to GitHub Actions for the review copy. GitHub Pages sites are public unless your plan supports private Pages. For a private manuscript, see [keeping the manuscript private](docs/automation.md#keeping-the-manuscript-private). [Automation and CI](docs/automation.md) covers the rest, including the note form's label.
 
-## Development and releasing
+## Contributing
 
-To contribute, start with [CONTRIBUTING.md](https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md) and the [Code of Conduct](https://github.com/danjdewhurst/story-skills/blob/main/CODE_OF_CONDUCT.md). User-visible changes are listed in the [changelog](CHANGELOG.md). The [development guide](docs/development.md) covers the repository layout, the CLI, tests, and releases.
+Contributions are welcome. Start with [CONTRIBUTING.md](https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md) and the [Code of Conduct](https://github.com/danjdewhurst/story-skills/blob/main/CODE_OF_CONDUCT.md). User-visible changes are listed in the [changelog](CHANGELOG.md). The [development guide](docs/development.md) covers the repository layout, the CLI, tests, and releases.
 
 ```shell
 bun install
@@ -250,6 +326,18 @@ bun run check:metadata
 
 The `evals/` harness regression-tests the writing skills against seeded briefs and known traps. See [`evals/README.md`](https://github.com/danjdewhurst/story-skills/blob/main/evals/README.md).
 
+<a href="https://star-history.com/#danjdewhurst/story-skills&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=danjdewhurst/story-skills&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=danjdewhurst/story-skills&type=Date" alt="Star history of danjdewhurst/story-skills" width="600">
+  </picture>
+</a>
+
 ## License
 
-[MIT](LICENSE)
+Story Skills is released under the [MIT License](LICENSE).
+
+<div align="center">
+<br>
+<sub><a href="#readme-top">Back to top</a></sub>
+</div>

@@ -19,7 +19,7 @@ bun run story -- --help
 2. Write the instructions for the agent: what to read, what to edit, which checks to run, and when to ask the user. Put long templates and craft material under `skills/<skill-name>/references/`.
 3. After any step that adds, removes, renames, or revises story entities, tell the agent to run the maintenance block, in this order: `story reindex .`, `story wordcount . --write`, `story check .`. `story check` runs `validate`, `links`, and `continuity`, so do not list those separately. Skill-specific checks such as `story clues .` go after the block. `test/maintenance-order.test.js` checks the order.
 4. Run `bun run check:metadata`.
-5. Add the skill to the [Skills catalogue](docs/skills.md) and the skills table in the [README](README.md#skills).
+5. Add the skill to the [Skills catalogue](docs/skills.md), the skills table in the [README](README.md#skills), and the skills diagram in `assets/readme/skills-light.svg` and `skills-dark.svg`.
 6. If the skill changes drafting behaviour, run the model evals before and after, and consider an eval fixture. See [`evals/README.md`](evals/README.md).
 
 [Authoring a skill](docs/development.md#authoring-a-skill) has the conventions the existing skills follow.
