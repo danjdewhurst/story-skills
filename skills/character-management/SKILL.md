@@ -168,7 +168,7 @@ Use the Story CLI when it is available. If `story` is not installed, use the bun
 
 ## Reference Files
 
-- **`references/character-template.md`** - Full blank template for character profiles, including arc-type, lie/truth/ghost-wound fields and the Antagonist Design section
+- **`references/character-template.md`** - Full blank template for character profiles, including the Antagonist Design section. The lie, truth, ghost-wound, and arc-type fields belong to `theme-craft`
 - **`references/relationship-types.md`** - Complete relationship type reference with inverse pairs
 - **`references/ensemble-cast.md`** - Managing multi-character casts: anchor character, A/B/C story braiding, thematic relevance, merge-characters discipline
 - **`references/supporting-characters.md`** - Role vocabulary (mentor, foil, confidant, love interest, comic relief, threshold guardian) and requirements for supporting roles
