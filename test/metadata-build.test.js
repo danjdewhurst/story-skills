@@ -57,6 +57,15 @@ ai-disclosure: No AI was used.`);
     expect(text).toContain("- [x] Description under 4000 characters (`description`)");
   });
 
+  test("#737 a description of exactly 4000 characters meets the limit, and 4001 misses it", () => {
+    const atLimit = fs.readFileSync(buildBook(project(`description: ${"\u{1F600}".repeat(4000)}`), { format: "metadata" }).outFile, "utf8");
+    expect(atLimit).toContain("| Description | 4000 characters (limit 4000) |");
+    expect(atLimit).toContain("- [x] Description under 4000 characters (`description`)");
+    const overLimit = fs.readFileSync(buildBook(project(`description: ${"\u{1F600}".repeat(4001)}`), { format: "metadata" }).outFile, "utf8");
+    expect(overLimit).toContain("| Description | 4001 characters (limit 4000) |");
+    expect(overLimit).toContain("- [ ] Description under 4000 characters (`description`)");
+  });
+
   test("#438 a backslash before a pipe in a table cell is escaped too", () => {
     const root = project("publisher: Back\\| Slash \\*one\\*");
     const text = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
