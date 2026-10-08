@@ -108,7 +108,25 @@ On claude.ai, upload each skill's zip from the release page under **Customize > 
 
 ### Let your agent install it
 
-The [README](../README.md#or-let-your-agent-install-it) has a prompt you can paste into any coding agent. It works out which agent it is running in and uses the matching method above.
+Paste this prompt into any coding agent. It works out which agent it is and uses the matching install method.
+
+```text
+Install the Story Skills bundle from https://github.com/danjdewhurst/story-skills.
+
+First, work out which agent you are, then use the matching method below. If a command fails or you can't run it, tell me the exact command to run myself.
+
+- Claude Code: run `claude plugin marketplace add danjdewhurst/story-skills`, then `claude plugin install story-skills@story-skills`. If the `claude` CLI isn't available, tell me to type `/plugin marketplace add danjdewhurst/story-skills` and then `/plugin install story-skills@story-skills` in this session.
+- Codex: run `codex plugin marketplace add danjdewhurst/story-skills`, then `codex plugin add story-skills@story-skills`.
+- Gemini CLI: run `gemini skills install https://github.com/danjdewhurst/story-skills.git`.
+- Any other agent that supports SKILL.md (GitHub Copilot, Cursor, Windsurf, OpenCode, and others): run `npx skills add danjdewhurst/story-skills`, or `bunx skills add danjdewhurst/story-skills` if only Bun is installed. If that doesn't support you, clone the repository to a temporary directory and copy every folder in its `skills/` directory into your skills directory:
+  - GitHub Copilot: `.github/skills/` in this project, or `~/.copilot/skills/` globally
+  - Cursor: `.agents/skills/` in this project
+  - Windsurf: `.windsurf/skills/` in this project, or `~/.codeium/windsurf/skills/` globally
+  - OpenCode: `.opencode/skills/` in this project, or `~/.config/opencode/skills/` globally
+  - Anything else: your documented skills directory, or `.agents/skills/` in this project
+
+Prefer a project install unless I asked for a global one. If you can't tell which agent you are, ask me before installing. When you're done, tell me what you installed, where it went, and whether I need to restart or reload you for the skills to show up.
+```
 
 ### Check the skills are loaded
 
