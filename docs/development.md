@@ -712,6 +712,8 @@ After the preflight, a failed step prints `Release aborted:`, what failed, and w
   - If origin cannot be reached, or the local tag cannot be read, the script undoes nothing and prints the commands to check and finish by hand.
 - **The GitHub release.** Once the tag is on origin it stays there. The [tag rulesets](#release-tags) forbid moving or deleting it, and recovery never needs to. If `gh release create` fails, do not run the release again. The Publish workflow runs for the tag anyway: once CI and the binaries pass, its release-assets job waits five minutes for the GitHub release, and npm publishes only after that job passes. Create the release with the command the script prints, `gh release create vX.Y.Z --title vX.Y.Z --generate-notes --verify-tag`. If release-assets has already failed, find the Publish run with `gh run list --workflow publish.yml` and re-run its failed jobs with `gh run rerun <run-id> --failed`.
 
+A signal that arrives during the local phase (from the bump to the push) is handled like a failed step. SIGINT, SIGTERM and SIGHUP roll back; SIGKILL, a crash, or power loss during the local phase do not. In those cases nothing has been pushed, but the bump, the commit, or the tag can stay on your machine. Check `git status`, `git log`, and `git tag` before you run the release again.
+
 ### Publishing to npm
 
 The tag push triggers [`.github/workflows/publish.yml`](https://github.com/danjdewhurst/story-skills/blob/main/.github/workflows/publish.yml), which publishes the package through npm trusted publishing (OIDC). No npm token is stored anywhere and no local `npm login` is needed; npmjs.com trusts that workflow file by name, and provenance is attached automatically.
