@@ -166,6 +166,27 @@ describe("html and print builds", () => {
       .toEqual(["Before.", "*a* `b` \\*c &amp;amp; &lt;https://x&gt;", "&amp;mdash; [c](d)", "e \u2014", "***", null]);
   });
 
+  test("a comment after a stray fence prints escaped in the review copy, never as markup", () => {
+    // A ``` line that a later ``` line closes is a CommonMark fence, so the
+    // comment inside it is code, and the review copy prints that code as
+    // text. The page holds the comment as escaped text, and no raw HTML from
+    // the manuscript appears anywhere.
+    const { root } = createStoryProject({ cwd: makeTempDir(), title: "Lamp", force: false });
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Arrival\nnumber: 1\nstatus: draft", "## Chapter Text\n\nThe lamps came on.\n\n```\nStray fence.\n\n<!-- TODO: cut the reveal -->\n\nMore <img src=x onerror=alert(1)> prose.\n\n```\n\nAfter the fence.\n");
+    const html = fs.readFileSync(buildBook(root, { format: "html" }).outFile, "utf8");
+    expect(html).toContain("&lt;!-- TODO: cut the reveal --&gt;");
+    expect(html).toContain("More &lt;img src=x onerror=alert(1)&gt; prose.");
+    expect(html).not.toContain("<!--");
+    expect(html).not.toContain("<img");
+    // A fence that no line closes is not a fence in a build, so the comment
+    // after it is still a comment, and the review copy removes it.
+    const unclosed = createStoryProject({ cwd: makeTempDir(), title: "Lamp", force: false }).root;
+    writeMarkdown(path.join(unclosed, "chapters", "chapter-01.md"), "title: Arrival\nnumber: 1\nstatus: draft", "## Chapter Text\n\nThe lamps came on.\n\n```\n<!-- TODO: cut the reveal -->\n\nAfter the fence.\n");
+    const unclosedHtml = fs.readFileSync(buildBook(unclosed, { format: "html" }).outFile, "utf8");
+    expect(unclosedHtml).not.toContain("TODO");
+    expect(unclosedHtml).not.toContain("<!--");
+  });
+
   test("backtick runs of many lengths build in linear time (#587)", () => {
     const html = (body) => htmlBook({ title: "T", meta: { authors: [], language: "en", labels: {} }, front: [], back: [], chapters: [{ key: "ch01", heading: "One", body }] }).parts[0].paragraphs.map((paragraph) => paragraph.html);
     expect(html("```x `y` *z* `` *w*")).toEqual(["```x y <em>z</em> `` <em>w</em>"]);
