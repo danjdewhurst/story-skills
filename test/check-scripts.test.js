@@ -1324,8 +1324,10 @@ describe("github workflows", () => {
 
   test("each action is pinned at one SHA across repo workflows and templates", () => {
     // Users copy the templates, so a stale pin there spreads to every story
-    // repository. Dependabot bumps both directories in one pull request; this
-    // catches a hand edit, or a partial bump, that moves only some files.
+    // repository. Dependabot bumps only .github/workflows (see
+    // .github/dependabot.yml), so a bump of an action the templates also use
+    // needs the templates edited too. This catches a hand edit, or a partial
+    // bump, that moves only some files.
     const files = Object.fromEntries(pinnedFiles.map((relativePath) => [relativePath, readRepo(relativePath)]));
     expect(actionPinConflicts(files)).toEqual([]);
   });
