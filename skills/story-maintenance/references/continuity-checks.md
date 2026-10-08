@@ -156,7 +156,7 @@ Run `story prose .` when the user asks for a prose check or before sharing a dra
 
 - Per chapter it counts sentence length and spread, filter words and -ly adverbs per 1,000 narration words, plain and said-bookism dialogue tags, echoed words, watch words, and avoided spellings from `style-sheet.md` (`dialect`, `preferred`, `watch-words`, `allow-words`).
 - Across the manuscript it lists repeated 4-word phrases and similar character first names.
-- Findings are advisory warnings and the command exits 0 unless `story.md` `severity` promotes one.
+- Findings are advisory warnings. The command exits 0 unless `story.md` `severity` promotes one, or the command line is wrong, such as `--baseline` with no `samples` (exit 2).
 - `--max-filter-words <n>` (default 10), `--max-adverbs <n>` (default 12), and `--max-bookisms <n>` (default 2) change the warning thresholds.
 
 See the `voice-style` skill for acting on them.

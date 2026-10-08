@@ -34,7 +34,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `feedback-triage` says a blank severity answer on a manuscript note is `minor`.
   - `reader-panel` takes `language` only from `story context`, and gives the line editor `style-sheet.md` and the prose findings for its chapters.
   - The `reader-panel` sensitivity persona records the Canon check as `not checked (simulated read)`.
-  - `voice-style` says when `story prose` exits non-zero: a `story.md` `severity` entry can make it exit 1, and a usage error such as `--baseline` with no `samples` exits 2.
+  - `voice-style` and the `story-maintenance` prose reference say when `story prose` exits non-zero: a `story.md` `severity` entry can make it exit 1, and a usage error such as `--baseline` with no `samples` exits 2.
   - The `story-maintenance` compare reference names `--ref`, `--against`, and `--snapshot`.
   - `query-letter` rounds the word count in "complete at" to the nearest thousand.
 
