@@ -1248,6 +1248,15 @@ describe("frontmatter without a chapter number (#718)", () => {
     expect(result.warnings).toEqual([]);
   });
 
+  test("control characters in a reported line are shown as escapes, not sent to the terminal", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n\x1b]0;SPOOF\x07A note.\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0].message).toContain("(first \"\\u001b]0;SPOOF\\u0007A note.\" at line 7)");
+    expect(result.warnings[0].message).not.toMatch(/[\u0000-\u001f\u007f]/u);
+  });
+
   test("a note above the outline is still reported as unused", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: outline\n---\n\nA note to self.\n\n## Outline\n\n1. Opening beat\n\n---\n\n## Chapter Text\n\nShip came in.\n", "utf8");

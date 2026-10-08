@@ -31051,7 +31051,7 @@ function splitChapters(documents, warnings, rules, bylines) {
       if (own.skipped.length > 0) {
         const [first] = own.skipped;
         const count = own.skipped.length === 1 ? "1 line above ## Chapter Text was" : `${own.skipped.length} lines above ## Chapter Text were`;
-        warnings.push({ ...warn("unused-chapter-text", `${document.name}: ${count} not imported (first "${first.text}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
+        warnings.push({ ...warn("unused-chapter-text", `${shownText2(document.name)}: ${count} not imported (first "${shownText2(first.text)}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
       }
       chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
       continue;
@@ -31064,12 +31064,15 @@ function splitChapters(documents, warnings, rules, bylines) {
     if (unused.length > 0) {
       const count = unused.length === 1 ? "1 plain-text chapter line was" : `${unused.length} plain-text chapter lines were`;
       const why = markdown ? "the file has markdown chapter headings, which take precedence, so make these headings too (## Chapter 1)" : "a chapter line splits only when it stands alone between blank lines, so add a blank line after each";
-      warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
+      warnings.push({ ...warn("unsplit-chapter-lines", `${shownText2(document.name)}: ${count} not used to split chapters (first "${shownText2(unused[0].text)}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     const found = sections.length > 0 ? sections : [singleChapter(text, document)];
     chapters.push(...bylines === null ? found : withBylines(found, authors.length > 0 ? authors : frontmatterAuthors(source, body), bylines));
   }
   return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
+}
+function shownText2(text) {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 var CHAPTER_KEYS = ["number", "numbered", "pov", "locations", "characters", "arcs-advanced", "status"];
 function storySkillsChapter(text) {

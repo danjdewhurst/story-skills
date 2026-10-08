@@ -616,7 +616,7 @@ function splitChapters(documents, warnings, rules, bylines) {
       if (own.skipped.length > 0) {
         const [first] = own.skipped;
         const count = own.skipped.length === 1 ? "1 line above ## Chapter Text was" : `${own.skipped.length} lines above ## Chapter Text were`;
-        warnings.push({ ...warn("unused-chapter-text", `${document.name}: ${count} not imported (first "${first.text}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
+        warnings.push({ ...warn("unused-chapter-text", `${shownText(document.name)}: ${count} not imported (first "${shownText(first.text)}" at line ${first.line}): a chapter file's prose is only the text under ## Chapter Text. Keep any other text below that heading`), source: document.path });
       }
       // Its own `author` comes first: --bylines reads a by-line only when it has none.
       chapters.push(bylines === null || own.authors.length > 0 ? own : withBylines([own], [], bylines)[0]);
@@ -636,7 +636,7 @@ function splitChapters(documents, warnings, rules, bylines) {
       // The finding is about the manuscript, not a project file, so it
       // names the manuscript file as its source: its absolute path, or
       // stdin.
-      warnings.push({ ...warn("unsplit-chapter-lines", `${document.name}: ${count} not used to split chapters (first "${unused[0].text}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
+      warnings.push({ ...warn("unsplit-chapter-lines", `${shownText(document.name)}: ${count} not used to split chapters (first "${shownText(unused[0].text)}" at line ${unused[0].index + 1 + offset}): ${why}. See "How chapters are split" in docs/manuscripts.md`), source: document.path });
     }
     const found = sections.length > 0 ? sections : [singleChapter(text, document)];
     chapters.push(...(bylines === null ? found : withBylines(found, authors.length > 0 ? authors : frontmatterAuthors(source, body), bylines)));
@@ -645,6 +645,13 @@ function splitChapters(documents, warnings, rules, bylines) {
   // A chapter whose prose was only its by-line is still a story, such as an
   // exported chapter with no text yet.
   return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
+}
+
+// Manuscript text in a warning, with control characters and bidirectional
+// marks shown as \uXXXX escapes, so a terminal cannot read them as commands
+// and the text cannot read as another.
+function shownText(text) {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 // The frontmatter keys a Story Skills chapter file has. `title` and `author`
