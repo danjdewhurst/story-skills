@@ -11402,30 +11402,39 @@ function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
     return leadingHeadingLength(masked);
   }
   const start = outlineMatch.index + outlineMatch[0].length;
-  return outlineEnd(masked, start).offset;
+  return outlineEnd(markdownBody, masked, start).offset;
 }
-function outlineEnd(masked, start) {
+function outlineEnd(body, masked, start) {
   const lines = masked.slice(start).split(`
+`);
+  const written = body.slice(start).split(`
 `);
   let offset = start + lines[0].length + 1;
   let previous = "blank";
+  let inItem = false;
   let last = start;
-  for (const line of lines.slice(1)) {
+  for (let index = 1;index < lines.length; index += 1) {
     const lineStart = offset;
-    offset += line.length + 1;
-    const text = line.replace(/\r$/, "");
+    offset += lines[index].length + 1;
+    const text = lines[index].replace(/\r$/, "");
+    const source = written[index].replace(/\r$/, "");
     if (text.trim() === "") {
       previous = "blank";
     } else if (text.trim() === "---") {
-      return { divider: true, offset: lineStart + line.length };
-    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
+      return { divider: true, offset: lineStart + lines[index].length };
+    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text)) {
       previous = "item";
-      last = lineStart + line.length;
-    } else if (/^ {0,3}#{2,}(?:[ \t]|$)/.test(text)) {
+      inItem = true;
+      last = lineStart + lines[index].length;
+    } else if (inItem && /^[ \t]+\S/.test(source)) {
+      previous = "item";
+      last = lineStart + lines[index].length;
+    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(text)) {
       previous = "heading";
-      last = lineStart + line.length;
+      inItem = false;
+      last = lineStart + lines[index].length;
     } else if (previous === "item") {
-      last = lineStart + line.length;
+      last = lineStart + lines[index].length;
     } else {
       break;
     }
@@ -11440,7 +11449,7 @@ function outlineRunsIntoProse(markdownBody) {
     return false;
   }
   const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
-  if (!outlineMatch || outlineEnd(masked, outlineMatch.index + outlineMatch[0].length).divider) {
+  if (!outlineMatch || outlineEnd(body, masked, outlineMatch.index + outlineMatch[0].length).divider) {
     return false;
   }
   return chapterProse(body).trim() !== "";
@@ -14156,6 +14165,7 @@ function scanProject(root) {
       title: data.title ?? titleCaseSlug(id),
       number: chapterNumber(data.number, file),
       numberValid: data.number === undefined || isPositiveIntegerValue(data.number),
+      numbered: data.numbered !== false,
       pov: scanId(data.pov),
       status: data.status ?? "",
       characters: asIdArray(data.characters),
@@ -27984,6 +27994,14 @@ function renderTimeline({ title, nodes }) {
 }
 var UNREVEALED = "unrevealed";
 var UNREVEALED_NODE = "clue__unrevealed";
+function unrevealedNodeId(nodes) {
+  const taken = new Set(nodes.filter((node) => node.kind === "chapter").map((node) => nodeId(node.id)));
+  let id = UNREVEALED_NODE;
+  while (taken.has(id)) {
+    id += "_";
+  }
+  return id;
+}
 function clueModel(project) {
   const chapters = sortedChapters(project);
   const known = new Set(chapters.map((chapter) => chapter.id));
@@ -28013,6 +28031,7 @@ function clueModel(project) {
 }
 function renderClues({ nodes, edges }) {
   const lines = ["flowchart LR"];
+  const open = unrevealedNodeId(nodes);
   for (const node of nodes) {
     if (node.kind === "chapter") {
       lines.push(chapterLine(node));
@@ -28025,11 +28044,11 @@ function renderClues({ nodes, edges }) {
     }
     const herring = edge.kind === "red-herring";
     const text = edgeLabel(herring ? `${edge.label} (red herring)` : edge.label);
-    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED_NODE}(("not yet revealed"))`;
+    const to = edge.revealed ? nodeId(edge.to) : `${open}(("not yet revealed"))`;
     lines.push(`  ${nodeId(edge.from)} ${herring ? "-.->" : "-->"}${text} ${to}`);
   }
   if (nodes.some((node) => node.kind === "unrevealed")) {
-    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED_NODE} open`);
+    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${open} open`);
   }
   return mermaid(lines);
 }
@@ -28113,9 +28132,8 @@ function printedChapterNumbers(project) {
   const printed = new Map;
   let unnumberedSoFar = 0;
   for (const chapter of project.chapters) {
-    const numbered = readMarkdown(chapter.file, project.root).data.numbered !== false;
-    unnumberedSoFar += numbered ? 0 : 1;
-    printed.set(chapter.id, numbered ? chapter.number - unnumberedSoFar : null);
+    unnumberedSoFar += chapter.numbered ? 0 : 1;
+    printed.set(chapter.id, chapter.numbered ? chapter.number - unnumberedSoFar : null);
   }
   return printed;
 }
@@ -28453,7 +28471,7 @@ ${promises.map((promise) => `<tr><td>${escapeHtml(String(promise.title))}</td><t
       const clues = new Map(project.clues.map((clue) => [clue.id, clue]));
       const totals = { planted: matrix.totals.planted, total: matrix.totals.clues, revealed: matrix.totals.revealed, herrings: matrix.totals.redHerrings };
       body.push(`<p class="note">${label2(site, "codex-clues-note", { command: "<code>story clues</code>" })} ${label2(site, matrix.totals.redHerrings === 1 ? "codex-clue-totals-one" : "codex-clue-totals", totals)}</p>`);
-      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${columnHead(site, chapter)}</th>`).join("")}</tr>`;
       const rows = matrix.rows.map((row) => {
         const tags = [row.redHerring ? label2(site, "codex-red-herring") : "", row.significanceDelayed ? label2(site, "codex-significance-delayed") : ""].filter(Boolean).join(", ");
         const who = characters(clues.get(row.id)?.characters);
@@ -28513,7 +28531,7 @@ ${rows.join(`
 </tbody></table></div>`);
   }
   if (site.grid.chapters.length > 0 && (site.grid.rows.length > 0 || site.spoilers && site.grid.beats)) {
-    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${columnHead(site, chapter)}</th>`).join("")}</tr>`;
     const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label2(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
       if (site.grid.beats) {
@@ -28664,6 +28682,10 @@ function chapterLabel(site, id) {
     return escapeHtml(fillLabel(site.labels, "chapter", { n: printed ?? chapter.number }));
   }
   return escapeHtml(printed === null ? title : `${printed}. ${title}`);
+}
+function columnHead(site, chapter) {
+  const printed = site.printedNumbers.get(chapter.id);
+  return printed === null ? chapterLabel(site, chapter.id) : String(printed ?? chapter.number);
 }
 function chapterIdOf(site, number) {
   return site.chapters.find((chapter) => chapter.number === number)?.id ?? String(number);
@@ -29679,7 +29701,8 @@ function manuscriptParts(project, action = "build", { includePending = false, wa
   const unplaced = project.matter.filter((entry) => !entry.empty && entry.placement !== "front" && entry.placement !== "back");
   for (const entry of warnLeftOut ? unplaced : []) {
     const label = relative(project, entry.file);
-    warnings.push(warn("matter-placement-left-out", `${label} placement is ${entry.placement ?? "missing"}, which is neither front nor back, so it is left out`, label));
+    const placement = entry.placement === "" ? "missing" : entry.placement.replace(/[\u0000-\u001f\u007f-\u009f]/g, "�");
+    warnings.push(warn("matter-placement-left-out", `${label} placement is ${placement}, which is neither front nor back, so it is left out`, label));
   }
   const matterPages = written.filter((entry) => !leftOutMatter.includes(entry));
   const matter = (placement) => matterPages.filter((entry) => entry.placement === placement).map((entry) => ({
