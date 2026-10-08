@@ -785,6 +785,10 @@ describe("review skill instructions match the CLI", () => {
     expect(read("story-maintenance/references/continuity-checks.md")).toContain("It needs exactly one of `--ref`, `--against`, or `--snapshot`.");
   });
 
+  test("the prose reference names the usage exit that story prose can take", () => {
+    expect(read("story-maintenance/references/continuity-checks.md")).toContain("or the command line is wrong, such as `--baseline` with no `samples` (exit 2)");
+  });
+
   test("the query letter rounds the complete-at word count", () => {
     expect(read("submission/references/query-letter.md")).toContain("complete at {word count rounded to the nearest thousand}, that will appeal to readers of {Comp A} and {Comp B}.");
   });
