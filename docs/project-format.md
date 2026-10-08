@@ -825,7 +825,7 @@ Files: `plot/arcs/<arc-id>.md`. Created with `story add arc 'Name'`.
 | `characters` | list of character ids | no | Characters the arc involves. |
 | `themes` | list of strings | no | Themes the arc carries. |
 | `acts` | list of strings | no | Acts the arc spans, for example `act-1`. |
-| `mice-threads` | list of strings | no | MICE threads the arc carries: `milieu`, `inquiry`, `character`, `event`. Not read by the CLI. |
+| `mice-threads` | list of strings | no | MICE threads the arc carries: `milieu`, `inquiry`, `character`, `event`. `story validate` checks that it is a list, not which threads it names. `story continuity` does not read it. |
 
 The arc body's `## Setup`, `## Rising Action`, `## Climax`, and `## Resolution` sections feed `story synopsis`. Any `chapter-NN` token in the body must name an existing chapter or a scheduled one with no file yet, and any `chapter-NN-scene-MM` token an existing scene (a token is a whole word: `chapter-01-draft` and `pre-chapter-01` are not ids; see [References and backlinks](#references-and-backlinks)). Any relative `.md` link must point at an existing entity file (one named by a kebab-case entity id) inside the project. Links to other files, such as `story.md` or `style-sheet.md`, are reported as missing; `_index.md` and `*` wildcard targets are skipped (see [References and backlinks](#references-and-backlinks)). The [plot-structure skill](../skills/plot-structure/SKILL.md) covers arc design and MICE threading.
 
