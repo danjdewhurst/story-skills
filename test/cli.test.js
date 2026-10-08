@@ -768,6 +768,10 @@ word-count: 9
 
       const wordcount = runBundle(["wordcount", fixture]);
       expect(wordcount.status).toBe(0);
+      // The bundle must print the same counts as the primary command for the same fixture.
+      const primary = invoke(repoRoot, ["wordcount", fixture]);
+      expect(primary.code).toBe(0);
+      expect(wordcount.stdout).toBe(primary.out);
       expect(wordcount.stdout).toMatch(/^Total: \d+$/m);
 
       const reindex = runBundle(["reindex", fixture]);
