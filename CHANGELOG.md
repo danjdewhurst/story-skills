@@ -137,6 +137,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The CLI reference and the writing guide give the full exit codes of `story prose`, `pacing`, `clues`, and `voices`.
   - Exit `2` is a usage error, and exit `3` is a folder that is not a usable story project or a `story.md` with an invalid `severity` or `cli-defaults` entry.
   - A file that fails to read or parse still exits `1`, as before.
+- The CLI reference, the core concepts page, and the writing guide name both causes of exit `1` for `story prose`, `pacing`, `clues`, and `voices`, in the same words. ([#842](https://github.com/danjdewhurst/story-skills/issues/842))
+  - A file the command reads that fails to read or parse exits `1`, and so does a `severity` entry in `story.md` that promotes one of its warnings to an error.
+  - With `prose -` or `voices -`, a broken chapter or scene file does not exit `1`, since the passage stands in for those files.
 - `story timeline` names story calendar dates in its empty-state line, for a book with a valid `calendar`. ([#703](https://github.com/danjdewhurst/story-skills/issues/703))
   - A book with a valid `calendar` reads `add date (YYYY-MM-DD, or a story calendar date) and time`. Other books keep `add date (YYYY-MM-DD) and time`.
   - `story timeline --json` gains a `hasCalendar` field.
