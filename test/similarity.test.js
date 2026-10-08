@@ -6,7 +6,7 @@ import { compareSimilarity, formatSimilarity, similarityOptions, tokenizeDocumen
 import { wordCount } from "../src/markdown.js";
 import { createStoryProject, similarityReport, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { expectLinearTime, git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { expectLinearGrowth, expectLinearTime, git, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 const schema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
@@ -381,17 +381,7 @@ describe("story similarity", () => {
   });
 
   test("stays fast on a 150,000-word manuscript against 300,000 words of reference", () => {
-    // A seeded generator, so the text and the result are the same every run.
-    // mulberry32
-    let seed = 20260928;
-    const random = () => {
-      seed = (seed + 0x6d2b79f5) | 0;
-      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
     const vocabulary = Array.from({ length: 5000 }, (_, index) => `w${index.toString(36)}`);
-    const words = (count) => Array.from({ length: count }, () => vocabulary[Math.floor(random() * vocabulary.length)]);
     const paragraphs = (list, size = 100) => {
       const out = [];
       for (let at = 0; at < list.length; at += size) {
@@ -399,31 +389,44 @@ describe("story similarity", () => {
       }
       return out;
     };
-    const planted = words(30);
-    const chapters = Array.from({ length: 30 }, (_, index) => {
-      const text = words(5000);
-      if (index === 17) {
-        text.splice(2500, 30, ...planted);
-      }
-      return { file: `chapters/chapter-${index + 1}.md`, paragraphs: paragraphs(text) };
-    });
-    const references = Array.from({ length: 3 }, (_, index) => {
-      const text = words(100000);
-      if (index === 1) {
-        text.splice(40000, 30, ...planted);
-      }
-      return { file: `book-${index + 1}.txt`, paragraphs: paragraphs(text) };
-    });
+    // The manuscript at size n: each chapter has n / 20 words and each
+    // reference has n, so n = 100000 is the full size. The same seed starts
+    // every size, and the planted passage sits in chapter 18 and in book 2.
+    const manuscript = (n) => {
+      let seed = 20260928;
+      const random = () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+      const words = (count) => Array.from({ length: count }, () => vocabulary[Math.floor(random() * vocabulary.length)]);
+      const planted = words(30);
+      const chapterWords = n / 20;
+      const chapters = Array.from({ length: 30 }, (_, index) => {
+        const text = words(chapterWords);
+        if (index === 17) {
+          text.splice(chapterWords / 2, 30, ...planted);
+        }
+        return { file: `chapters/chapter-${index + 1}.md`, paragraphs: paragraphs(text) };
+      });
+      const references = Array.from({ length: 3 }, (_, index) => {
+        const text = words(n);
+        if (index === 1) {
+          text.splice(n * 0.4, 30, ...planted);
+        }
+        return { file: `book-${index + 1}.txt`, paragraphs: paragraphs(text) };
+      });
+      return { chapters, references };
+    };
 
-    const started = performance.now();
-    const report = compareSimilarity(chapters, references, { minWords: 8, label: "books" });
-    const elapsed = performance.now() - started;
+    // Timed at a quarter of the size and at full size: a linear comparison
+    // takes about four times as long at full size. expectLinearGrowth returns
+    // the report for the full manuscript.
+    const report = expectLinearGrowth(({ chapters, references }) => compareSimilarity(chapters, references, { minWords: 8, label: "books" }), manuscript, 100000, { limit: 20000 });
 
     expect(report.words).toBe(150000);
     expect(report.reference.words).toBe(300000);
     expect(report.passages.map((passage) => [passage.file, passage.words, passage.reference.file])).toEqual([["chapters/chapter-18.md", 30, "book-2.txt"]]);
-    // A backstop for a run that never ends. It leaves room for a loaded CI
-    // runner: locally this takes well under a second.
-    expect(elapsed).toBeLessThan(20000);
   });
 });
