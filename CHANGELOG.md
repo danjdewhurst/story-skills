@@ -79,7 +79,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Before, every write refused until `.story.lock` was deleted by hand.
   - The lock records the start time of its process, so a different start time means the pid was reused.
 - `import` splits a manuscript with its own frontmatter and a `## Chapter Text` heading on its chapter headings. ([#718](https://github.com/danjdewhurst/story-skills/issues/718))
-  - Only a file with a `number` in its frontmatter is read as a Story Skills chapter file.
+  - Only a file with a chapter key in its frontmatter, such as `number` or `status`, is read as a Story Skills chapter file. A `title` and `author` alone do not make one.
   - Before, the text above `## Chapter Text` was dropped without a warning, and every later `# Chapter` heading stayed in the prose.
   - Text above the heading that a chapter file does not import is reported as an `unused-chapter-text` warning.
 - `import` keeps a chapter's multi-line `title` on one line of its heading. ([#719](https://github.com/danjdewhurst/story-skills/issues/719))
