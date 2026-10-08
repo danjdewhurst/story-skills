@@ -353,4 +353,14 @@ describe("codex chapter labels (#712)", () => {
     expect(site["progress.html"]).not.toContain("3. The Lantern Room");
     expect(site["timeline.html"]).not.toContain("2. Low Water");
   });
+
+  test("the plot grid and the clue matrix head their columns with the printed numbers and the unnumbered chapter's title", () => {
+    const { root } = project();
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Low Water\nnumber: 2\nnumbered: false\nstatus: draft\npov: mara\ncharacters: [mara]", "## Chapter Text\n\nThe tide went out without Tobias.\n");
+    writeMarkdown(path.join(root, "chapters", "chapter-03.md"), "title: The Lantern Room\nnumber: 3\nstatus: draft\npov: mara\ncharacters: [mara]", "## Chapter Text\n\nMara lit the lamp.\n");
+    const site = readSite(buildBook(root, { format: "codex", spoilers: true }).outFile);
+    expect(site["progress.html"]).toContain("<th>1</th><th>Low Water</th><th>2</th>");
+    expect(site["progress.html"]).not.toContain("<th>3</th>");
+    expect(site["threads.html"]).toContain("<th>1</th><th>Low Water</th><th>2</th>");
+  });
 });

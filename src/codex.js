@@ -346,7 +346,7 @@ function threadsPage(site) {
       const clues = new Map(project.clues.map((clue) => [clue.id, clue]));
       const totals = { planted: matrix.totals.planted, total: matrix.totals.clues, revealed: matrix.totals.revealed, herrings: matrix.totals.redHerrings };
       body.push(`<p class="note">${label(site, "codex-clues-note", { command: "<code>story clues</code>" })} ${label(site, matrix.totals.redHerrings === 1 ? "codex-clue-totals-one" : "codex-clue-totals", totals)}</p>`);
-      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+      const head = `<tr>${columns(site, ["codex-clue", "codex-status"])}${matrix.chapters.map((chapter) => `<th>${columnHead(site, chapter)}</th>`).join("")}</tr>`;
       const rows = matrix.rows.map((row) => {
         const tags = [row.redHerring ? label(site, "codex-red-herring") : "", row.significanceDelayed ? label(site, "codex-significance-delayed") : ""].filter(Boolean).join(", ");
         const who = characters(clues.get(row.id)?.characters);
@@ -404,7 +404,7 @@ function progressPage(site) {
   // codex shows them, as story grid does below the arcs. A spoiler codex of
   // a book with beats shows the grid even when no chapter advances an arc.
   if (site.grid.chapters.length > 0 && (site.grid.rows.length > 0 || (site.spoilers && site.grid.beats))) {
-    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${chapter.number}</th>`).join("")}</tr>`;
+    const head = `<tr>${columns(site, ["codex-arc"])}${site.grid.chapters.map((chapter) => `<th>${columnHead(site, chapter)}</th>`).join("")}</tr>`;
     const rows = site.grid.rows.map((row) => `<tr><td>${row.known ? entityLink(site, "arc", row.id, 0) : `${escapeHtml(row.id)} <span class="muted">${label(site, "codex-unknown")}</span>`}</td>${row.cells.map((cell) => `<td class="cell">${cell ? "x" : ""}</td>`).join("")}</tr>`);
     if (site.spoilers) {
       if (site.grid.beats) {
@@ -574,6 +574,14 @@ function chapterLabel(site, id) {
     return escapeHtml(fillLabel(site.labels, "chapter", { n: printed ?? chapter.number }));
   }
   return escapeHtml(printed === null ? title : `${printed}. ${title}`);
+}
+
+// The head of a chapter's column in the plot grid and the clue matrix: the
+// number the book prints, as the chapter labels on the same page show it. An
+// unnumbered chapter has no number, so its column takes its label.
+function columnHead(site, chapter) {
+  const printed = site.printedNumbers.get(chapter.id);
+  return printed === null ? chapterLabel(site, chapter.id) : String(printed ?? chapter.number);
 }
 
 // The timeline names a chapter by number (or its id when it has none).
