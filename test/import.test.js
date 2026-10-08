@@ -1272,6 +1272,15 @@ describe("frontmatter without a chapter number (#718)", () => {
     expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
   });
 
+  test("another top-level heading above Chapter Text is reported, and the chapter's own heading is not", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\n# Extra heading\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["unused-chapter-text"]);
+    expect(result.warnings[0].message).toContain("1 line above ## Chapter Text was not imported (first \"# Extra heading\" at line 9)");
+    expect(chapterFile(result.root, 1)).not.toContain("Extra heading");
+  });
+
   test("a chapter file whose only text above the heading is its title prints no warning", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\n## Chapter Text\n\nShip came in.\n", "utf8");

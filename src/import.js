@@ -681,9 +681,22 @@ function storySkillsChapter(text) {
     .map((line, index) => ({ text: line.trim(), line: firstLine + index }))
     .filter((line) => line.text !== "");
   const outline = outlineLines(lines);
-  // A `# ` line is the chapter's heading, which the chapter takes from its title.
-  const skipped = lines.filter((line) => !outline.has(line) && !/^#[ \t]/.test(line.text));
+  // The chapter's own heading is taken from its title, so it is not unused.
+  // Any other top-level heading above the text is reported.
+  const own = lines.find((line) => isOwnHeading(line.text, title));
+  const skipped = lines.filter((line) => line !== own && !outline.has(line));
   return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
+}
+
+// Whether a line is a `# ` heading that names the chapter's title, as Story
+// Skills writes it (`# Chapter 1: Arrival`, or `# Arrival` when unnumbered).
+// A chapter with no title has a heading with a number in it.
+function isOwnHeading(text, title) {
+  if (!/^#[ \t]/.test(text)) {
+    return false;
+  }
+  const heading = text.replace(/^#+[ \t]*/, "").replace(/\s+/g, " ");
+  return title === "" ? /\d/.test(heading) : heading.includes(title);
 }
 
 // The outline that story add chapter writes above `## Chapter Text`: its

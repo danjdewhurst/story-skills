@@ -3568,7 +3568,7 @@ These commands run before there is a `story.md` to read, so `severity` rejects a
 |---|---|---|
 | `kept-story-options` | warning | `--force` kept an existing `story.md`, so some options were not applied. |
 | `unsplit-chapter-lines` | warning | `import` found chapter lines it did not split on. |
-| `unused-chapter-text` | warning | `import` read a chapter file and found text above its `## Chapter Text` heading, other than frontmatter, its `# ` heading, and its `## Outline` section, that it does not import. |
+| `unused-chapter-text` | warning | `import` read a chapter file and found text above its `## Chapter Text` heading, other than frontmatter, the `# ` heading that names the chapter's title, and its `## Outline` section, that it does not import. |
 
 ### Codes: JSON failures
 
