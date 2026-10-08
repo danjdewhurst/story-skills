@@ -27,15 +27,27 @@ const repoDir = path.join(import.meta.dir, "..");
 const skillsDir = path.join(repoDir, "skills");
 const FENCE = /^\s*(```|~~~)/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
-const REMOVE = /story\s+remove\s+(?:chapter|scene)\s+[<{a-z]/g;
+const REMOVE = /story\s+remove\s+(?:chapter|scene)\s+[<{a-zA-Z$"']/g;
 const TAG = /git\s+tag\s+[<{a-z]/g;
 
-// The command that starts at `index`: its text up to the next code span or
-// the next `story` word, with whitespace folded so a wrapped line still counts.
+// Where a command ends: a line break, a code span, a shell separator or a
+// comment, or the next `story` command word. The word must have spaces on both
+// sides, so a path such as ../story-skills-book does not end the command.
+const COMMAND_END = /\n|`|&&|\|\||[;|]|\s#|(?<=\s)story(?=\s)/;
+
+// The command that starts at `index`, read to COMMAND_END. A backslash before a
+// line break continues the command onto the next line.
 function commandAt(text, index) {
-  const rest = text.slice(index);
-  const end = rest.slice(1).search(/`|\bstory\b/);
-  return (end === -1 ? rest : rest.slice(0, end + 1)).replace(/\s+/g, " ");
+  const rest = text.slice(index).replace(/\\\n/g, " ");
+  const end = rest.search(COMMAND_END);
+  return (end === -1 ? rest : rest.slice(0, end)).replace(/\s+/g, " ").trim();
+}
+
+// Each `story remove chapter` or `story remove scene` command in a text. Inline
+// code that wraps onto a new line is read as one line first.
+function removals(text) {
+  const flat = unwrapInlineCode(text);
+  return [...flat.matchAll(REMOVE)].map((match) => commandAt(flat, match.index));
 }
 
 // Every git add, stage, or commit, with any options before the subcommand
@@ -157,14 +169,30 @@ describe("skills guard commands that delete or freeze prose (#543)", () => {
   });
 
   test("every story remove chapter or scene instruction has a --dry-run on the same command", () => {
-    const instructions = skillSteps.flatMap((step) => [...step.text.matchAll(REMOVE)].map((match) => ({
-      where: step.where,
-      command: commandAt(step.text, match.index)
-    })));
+    const instructions = skillSteps.flatMap((step) => removals(step.text).map((command) => ({ where: step.where, command })));
     expect(instructions.length).toBeGreaterThan(0);
     for (const { where, command } of instructions) {
       expect(command, `${where} removes without --dry-run`).toMatch(/--dry-run/);
     }
+  });
+
+  test("the removal guard reads each command to its end", () => {
+    // A line break ends the command, so a dry run on a later line does not count.
+    expect(removals("story remove chapter chapter-01\necho --dry-run")).toEqual(["story remove chapter chapter-01"]);
+    // A backslash continues the command onto the next line.
+    expect(removals("story remove chapter chapter-01 \\\n  --path . --dry-run")).toEqual(["story remove chapter chapter-01 --path . --dry-run"]);
+    // Inline code that wraps is one command.
+    expect(removals("Run `story remove scene\n  chapter-01-scene-01 --dry-run` first.")).toEqual(["story remove scene chapter-01-scene-01 --dry-run"]);
+    // A separator or a comment ends the command, so text after it does not count.
+    expect(removals("story remove chapter chapter-01 && echo --dry-run")).toEqual(["story remove chapter chapter-01"]);
+    expect(removals("story remove chapter chapter-01 # --dry-run")).toEqual(["story remove chapter chapter-01"]);
+    // A path that contains "story" does not end the command.
+    expect(removals("story remove chapter chapter-01 --path ../story-skills-book --dry-run"))
+      .toEqual(["story remove chapter chapter-01 --path ../story-skills-book --dry-run"]);
+    // Quoted, uppercase, and variable ids are removals too.
+    expect(removals('story remove scene "$SCENE"')).toEqual(['story remove scene "$SCENE"']);
+    expect(removals("story remove chapter CH01")).toEqual(["story remove chapter CH01"]);
+    expect(removals("story remove chapter $CHAPTER")).toEqual(["story remove chapter $CHAPTER"]);
   });
 
   test("every git tag comes after a git commit in the same step", () => {
