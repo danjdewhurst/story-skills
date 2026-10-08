@@ -1065,7 +1065,10 @@ describe("sweep fixes", () => {
     const dir = makeTempDir();
     fs.mkdirSync(path.join(dir, "target"));
     fs.writeFileSync(path.join(dir, "target", "keep.md"), "x");
-    expect(() => writeFile(path.join(dir, "target"), "text")).toThrow(`${path.join(dir, "target")}: EISDIR`);
+    // A write onto a folder fails with EISDIR on POSIX. On Windows the rename
+    // of the temporary file over the folder fails with EPERM instead.
+    const code = process.platform === "win32" ? "EPERM" : "EISDIR";
+    expect(() => writeFile(path.join(dir, "target"), "text")).toThrow(`${path.join(dir, "target")}: ${code}`);
     expect(fs.readdirSync(dir)).toEqual(["target"]);
   });
 
