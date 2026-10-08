@@ -22,7 +22,7 @@ The `story` CLI is deterministic: the same project always produces the same find
 
 | Goal | How |
 |---|---|
-| Stop a broken chapter from merging | Run `story check`, which runs `validate`, `links`, and `continuity`, on every push and pull request. [`templates/github/story-checks.yml`](../templates/github/story-checks.yml) does this. |
+| Stop a broken chapter from merging | Run `story check`, which runs `validate`, `links`, and `continuity`, on every push to `main` and every pull request. [`templates/github/story-checks.yml`](../templates/github/story-checks.yml) does this. |
 | Draft chapters on a schedule | Let Claude Code draft the next chapter and open a pull request for you to review. [`templates/github/draft-next-chapter.yml`](../templates/github/draft-next-chapter.yml) does this. |
 | Give reviewers a current, citable copy of the book | Build the HTML review copy on every push to `main` and publish it to GitHub Pages; readers file notes through an issue form. [`templates/github/review-copy.yml`](../templates/github/review-copy.yml) and [`templates/github/ISSUE_TEMPLATE/manuscript-note.yml`](../templates/github/ISSUE_TEMPLATE/manuscript-note.yml) do this. |
 | Catch problems before they are committed | Run the same checks from a git pre-commit hook. See [Checking before each commit](#checking-before-each-commit). |
