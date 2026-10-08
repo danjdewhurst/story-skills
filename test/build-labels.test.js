@@ -201,6 +201,16 @@ describe("build labels", () => {
     expect(buildLabels({ labels: [{ chapter: " " }, { contents: "[TODO: later]" }] })).toMatchObject({ chapter: "Chapter {n}", contents: "Contents" });
   });
 
+  test("a labels entry in a chapter's frontmatter does nothing; story.md labels set the heading", () => {
+    const chapterOnly = project("Pieces");
+    writeMarkdown(path.join(chapterOnly, "chapters", "chapter-01.md"), "number: 1\nstatus: final\ntitle: Arrival\nlabels:\n  - chapter-heading: \"{title}\"", "## Chapter Text\n\nThe lamps came on.\n");
+    expect(build(chapterOnly, "markdown")).toContain("# Chapter 1: Arrival\n");
+
+    const bookLabels = project("Pieces Book", "labels:\n  - chapter-heading: \"{title}\"\n");
+    writeMarkdown(path.join(bookLabels, "chapters", "chapter-01.md"), "number: 1\nstatus: final\ntitle: Arrival", "## Chapter Text\n\nThe lamps came on.\n");
+    expect(build(bookLabels, "markdown")).toContain("# Arrival\n");
+  });
+
   test("validate checks the labels list", () => {
     const shape = project("Shape", "labels: Kapitel\n");
     expect(messages(validateProject(shape).errors)).toContain("story.md frontmatter field labels must be a list of label: text entries, such as - chapter: Teil {n}");
