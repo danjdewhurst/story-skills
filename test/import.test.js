@@ -710,29 +710,30 @@ describe("import --force into an existing project", () => {
     });
   }
 
-  test("refuses a chapters entry that is a symlink or not a folder, before changing anything (#721)", () => {
-    const entries = [
-      ["is a symlink", (chapters, root) => fs.symlinkSync(path.join(root, "manuscript"), chapters, "dir")],
-      ["is not a folder", (chapters) => fs.writeFileSync(chapters, "not a folder\n", "utf8")]
-    ];
-    for (const [problem, make] of entries) {
-      const { cwd, root } = importedTwice();
-      fs.mkdirSync(path.join(root, "manuscript"));
-      fs.writeFileSync(path.join(root, "manuscript", "chapter-01.md"), "---\ntitle: Old\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Old\n\n## Chapter Text\n\nOld prose.\n", "utf8");
-      fs.rmSync(path.join(root, "chapters"), { recursive: true });
-      try {
-        make(path.join(root, "chapters"), root);
-      } catch {
-        console.warn("Skipping a chapters symlink: symlinks unavailable.");
-        continue;
-      }
-      const before = treeSnapshot(root);
-      const result = invoke(cwd, REDRAFT);
-      expect(result.code).toBe(4);
-      expect(result.err).toContain(`Cannot import: chapters ${problem}, so --force cannot save its chapters in a snapshot before replacing them.`);
-      expect(result.err).toContain("Nothing was changed");
-      expect(treeSnapshot(root)).toEqual(before);
-    }
+  // Replaces the project's chapters folder with what `make` creates, then
+  // checks that import --force refuses it before it changes anything.
+  function refusesChaptersEntry(problem, make) {
+    const { cwd, root } = importedTwice();
+    fs.mkdirSync(path.join(root, "manuscript"));
+    fs.writeFileSync(path.join(root, "manuscript", "chapter-01.md"), "---\ntitle: Old\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Old\n\n## Chapter Text\n\nOld prose.\n", "utf8");
+    fs.rmSync(path.join(root, "chapters"), { recursive: true });
+    make(path.join(root, "chapters"), root);
+    const before = treeSnapshot(root);
+    const result = invoke(cwd, REDRAFT);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain(`Cannot import: chapters ${problem}, so --force cannot save its chapters in a snapshot before replacing them.`);
+    expect(result.err).toContain("Nothing was changed");
+    expect(treeSnapshot(root)).toEqual(before);
+  }
+
+  // Creating a symlink needs a privilege Windows runners often lack, so the
+  // case is skipped there by name rather than passing without checking.
+  test.skipIf(process.platform === "win32")("refuses a chapters entry that is a symlink, before changing anything (#721)", () => {
+    refusesChaptersEntry("is a symlink", (chapters, root) => fs.symlinkSync(path.join(root, "manuscript"), chapters, "dir"));
+  });
+
+  test("refuses a chapters entry that is not a folder, before changing anything (#721)", () => {
+    refusesChaptersEntry("is not a folder", (chapters) => fs.writeFileSync(chapters, "not a folder\n", "utf8"));
   });
 
   test("a snapshot it cannot save stops it before anything changes, in a dry run as in the real run", () => {
@@ -1246,6 +1247,14 @@ describe("frontmatter without a chapter number (#718)", () => {
     expect(chapters.map((chapter) => chapter.title)).toEqual(["Arrival"]);
     expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
     expect(result.warnings).toEqual([]);
+  });
+
+  test("several lines above Chapter Text are counted in the plural, and the first one is named", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\nFirst note.\n\nSecond note.\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const result = importManuscript({ source: "chapter-01.md", title: "Notes", cwd, dir: "out" });
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0].message).toContain("chapter-01.md: 2 lines above ## Chapter Text were not imported (first \"First note.\" at line 9)");
   });
 
   test("control characters in a reported line are shown as escapes, not sent to the terminal", () => {

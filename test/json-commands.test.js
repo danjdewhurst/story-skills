@@ -334,6 +334,21 @@ describe("--json on export, build, init, and import", () => {
     expect(zh.data).toMatchObject({ unit: "characters", chapters: 1, characterCount: 9 });
   });
 
+  test("import names the chapter file in an unused-chapter-text diagnostic", () => {
+    const cwd = makeTempDir();
+    fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\nA note to self.\n\n## Chapter Text\n\nShip came in.\n", "utf8");
+    const { envelope } = invokeJsonOnce(cwd, ["import", "chapter-01.md", "--title", "Notes", "--json"]);
+    expect(envelope.diagnostics).toEqual([{
+      severity: "warning",
+      file: null,
+      chapter: null,
+      message: expect.stringContaining("chapter-01.md: 1 line above ## Chapter Text was not imported (first \"A note to self.\" at line 9)"),
+      code: "unused-chapter-text",
+      check: "import",
+      source: path.join(cwd, "chapter-01.md")
+    }]);
+  });
+
   test("import --force lists the chapters it deleted, and names the options the kept story.md did not take", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Kept Book", force: false });
