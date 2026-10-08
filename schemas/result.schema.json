@@ -400,9 +400,10 @@
     },
     "data-timeline": {
       "type": "object",
-      "required": ["unit", "totalChapters", "chronology", "undated", "pov", "presence"],
+      "required": ["unit", "hasCalendar", "totalChapters", "chronology", "undated", "pov", "presence"],
       "properties": {
         "unit": { "enum": ["words", "characters"], "description": "The book's count unit: characters for Chinese and Japanese, or story.md count-unit; words otherwise. POV totals, shares, and order use it." },
+        "hasCalendar": { "type": "boolean", "description": "True when story.md has a valid calendar, so chapter and scene dates may be calendar dates." },
         "totalChapters": { "$ref": "#/$defs/count" },
         "chronology": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
         "undated": { "type": "array", "items": { "$ref": "#/$defs/timeline-scene" } },
