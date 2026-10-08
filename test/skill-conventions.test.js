@@ -662,6 +662,21 @@ describe("skill triggers", () => {
     }
   });
 
+  // The README lists the skills three times by hand: the count on a feature
+  // card, the skills table, and the light and dark diagrams in assets/readme/.
+  test("the README skill count, table, and diagrams name every skill", () => {
+    const readme = fs.readFileSync(path.join(repoRoot, "README.md"), "utf8");
+    expect(readme).toContain(`<b>${skills.length} skills, premise to print</b>`);
+    const table = [...readme.matchAll(/^\| \*\*([a-z-]+)\*\*<br>/gm)].map((match) => match[1]);
+    expect(table.toSorted()).toEqual(skills);
+    const diagram = (theme) => fs.readFileSync(path.join(repoRoot, "assets", "readme", `skills-${theme}.svg`), "utf8");
+    const texts = (svg) => [...svg.matchAll(/>([^<>]*\S[^<>]*)</g)].map((match) => match[1].trim());
+    for (const name of skills) {
+      expect(texts(diagram("light")), `the skills diagram does not name ${name}`).toContain(name);
+    }
+    expect(texts(diagram("dark"))).toEqual(texts(diagram("light")));
+  });
+
   test("only feedback-triage explains how to set up the GitHub review copy", () => {
     expect(explainsReviewCopySetup("the Story Skills repository's\n`templates/github/review-copy.yml` workflow rebuilds the HTML copy")).toBe(true);
     expect(explainsReviewCopySetup("copy the review copy workflow from `templates/github/`")).toBe(true);
