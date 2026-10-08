@@ -1,8 +1,8 @@
 # Story checks - CI for a Story Skills project repository.
 #
 # Copy this file to .github/workflows/story-checks.yml in the repository that
-# holds your story project. Every push and pull request then runs the
-# deterministic Story CLI checks, so a chapter PR cannot merge with broken
+# holds your story project. Every push to main and every pull request then runs
+# the deterministic Story CLI checks, so a chapter PR cannot merge with broken
 # registries, dangling references, or continuity contradictions.
 #
 # If your story project lives in a subdirectory, change STORY_DIR.
