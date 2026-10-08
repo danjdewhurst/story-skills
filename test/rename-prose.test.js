@@ -79,6 +79,15 @@ describe("story rename --prose", () => {
     expect(out).toContain("chapters/chapter-01.md:10:7: Edran Vale → Mara Holt (wraps to line 11)\n");
   });
 
+  test("a name wrapped after spaces keeps the spaces and the line break (#731)", () => {
+    const root = project();
+    const file = chapter(root, 1, "Later Edran  \nVale slept.");
+    const { code, out } = invoke(root, ["rename", "character", "edran-vale", "Mara Holt", "--prose"]);
+    expect(code).toBe(0);
+    expect(prose(file)).toBe("Later Mara  \nHolt slept.\n");
+    expect(out).toContain("chapters/chapter-01.md:10:7: Edran Vale → Mara Holt (wraps to line 11)\n");
+  });
+
   test("without --prose the text is left alone, and outline chapters are never changed", () => {
     const root = project();
     const drafted = chapter(root, 1, "Edran waited.");
