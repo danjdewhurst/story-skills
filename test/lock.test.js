@@ -11,6 +11,20 @@ import { CHMOD_IGNORED, makeTempDir, memoryIo, messages, otherLivePid } from "./
 
 const EXAMPLES = path.join(import.meta.dir, "..", "examples");
 
+// Preloaded into a rename, this writes a file named for the process into the
+// folder in STORY_TEST_SIGNALS just before the rename tries to create the
+// project lock, so a test can see that the rename has reached the lock.
+const LOCK_SIGNAL_PRELOAD = `import fs from "node:fs";
+import path from "node:path";
+const open = fs.openSync;
+fs.openSync = (file, flags, ...rest) => {
+  if (flags === "wx" && path.basename(String(file)) === ${JSON.stringify(LOCK_FILE)}) {
+    fs.writeFileSync(path.join(process.env.STORY_TEST_SIGNALS, String(process.pid)), "");
+  }
+  return open(file, flags, ...rest);
+};
+`;
+
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
   const code = runCli(argv, io);
@@ -101,14 +115,21 @@ describe("project lock (#196)", () => {
     const root = copyExample("harbor-of-second-light");
     const bin = path.join(import.meta.dir, "..", "bin", "story.js");
     // A live command holds the project lock, so both renames start while it
-    // is held and must wait for it. Without the lock they would not overlap
-    // at all, and the test would pass anyway.
+    // is held and must wait for it. Each rename writes a signal just before
+    // it first tries the lock, so the lock is released only after both have
+    // tried it. Without the lock they would not overlap at all, and the test
+    // would pass anyway.
+    const scratch = makeTempDir();
+    const preload = path.join(scratch, "signal-lock.mjs");
+    const signals = path.join(scratch, "signals");
+    fs.writeFileSync(preload, LOCK_SIGNAL_PRELOAD);
+    fs.mkdirSync(signals);
     const lockPath = path.join(root, LOCK_FILE);
     fs.writeFileSync(lockPath, `${otherLivePid()}\n${os.hostname()}\n${new Date().toISOString()}\n`);
     const exited = [];
     const runs = [["theo-quill", "Theo Brand"], ["ilya-venn", "Ilya Stone"]].map(([id, name]) => new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [bin, "rename", "character", id, name, "--path", root], {
-        env: { ...process.env, STORY_LOCK_WAIT_MS: "20000" },
+      const child = spawn(process.execPath, ["--preload", preload, bin, "rename", "character", id, name, "--path", root], {
+        env: { ...process.env, STORY_LOCK_WAIT_MS: "20000", STORY_TEST_SIGNALS: signals },
         stdio: "ignore"
       });
       child.on("error", reject);
@@ -117,8 +138,13 @@ describe("project lock (#196)", () => {
         resolve(code);
       });
     }));
-    // Both renames wait on the held lock, so neither has finished.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Wait, for at most 15 seconds, until both renames have tried the held
+    // lock. Neither has finished, since the lock is still held.
+    const deadline = Date.now() + 15000;
+    while (fs.readdirSync(signals).length < 2 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(fs.readdirSync(signals)).toHaveLength(2);
     expect(exited).toEqual([]);
     expect(fs.existsSync(path.join(root, "characters", "theo-quill.md"))).toBe(true);
     expect(fs.existsSync(path.join(root, "characters", "ilya-venn.md"))).toBe(true);
@@ -127,7 +153,7 @@ describe("project lock (#196)", () => {
     expect(await Promise.all(runs)).toEqual([0, 0]);
     expect(fs.readdirSync(path.join(root, "characters")).sort()).toEqual(["_index.md", "ilya-stone.md", "mara-quill.md", "theo-brand.md"]);
     expect(messages(validateLinks(root).errors)).toEqual([]);
-  });
+  }, 30000);
 
   test("writeFile refuses to overwrite a file saved since it was read", () => {
     const root = newProject();
