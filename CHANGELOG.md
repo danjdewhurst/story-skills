@@ -128,6 +128,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The README, the `story-checks.yml` template comment, and `docs/automation.md` say the checks run on every push to `main` and every pull request, not on every push.
   - The README says the release script sets the version at each release, not on every change.
   - The `SECURITY.md` verification example uses `<archive>`, and names the `.zip` that Windows downloads use.
+- The CLI reference and the writing guide give the full exit codes of `story prose`, `pacing`, `clues`, and `voices`.
+  - Exit `2` is a usage error, and exit `3` is a folder that is not a usable story project or a `story.md` with an invalid `severity` or `cli-defaults` entry.
+  - A file that fails to read or parse still exits `1`, as before.
 
 ## [0.23.0] - 2026-10-07
 
