@@ -1,6 +1,7 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
 import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, joinNames, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { COUNT_LABELS, dropCountForms } from "./languages/locale.js";
 import { countTodoMarkers } from "./markdown.js";
 import { chapterNumerals } from "./numerals.js";
 import { isBookNumber, seriesDisplayName } from "./series.js";
@@ -119,20 +120,23 @@ export function publishingMeta(data) {
 // story.md's `chapter-label` and `contents-label`, then its `labels:` list.
 // A chapter label without `{n}` takes the number after it ("Teil 3"). A
 // blank label is unset, so no title, heading, or landmark comes out empty,
-// except `by`, where blank leaves the Shunn byline's "by" line out.
+// except `by`, where blank leaves the Shunn byline's "by" line out. A book's
+// own `labels:` entry for a length label also replaces the pack's count
+// forms of it, so the book's wording holds for every count (see COUNT_LABELS).
 export function buildLabels(data, pack = languagePack(projectLanguage(data))) {
   const labels = { ...languagePack("en").labels, ...pack.labels };
   const set = (key, value) => {
     if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
-      return;
+      return false;
     }
     labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
+    return true;
   };
   set("chapter", data["chapter-label"]);
   set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
   for (const [key, value] of labelEntries(data.labels)) {
-    if (LABEL_KEYS.includes(key)) {
-      set(key, value);
+    if (LABEL_KEYS.includes(key) && set(key, value) && COUNT_LABELS.includes(key)) {
+      dropCountForms(labels, key);
     }
   }
   return labels;

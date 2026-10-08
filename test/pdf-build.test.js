@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { findCommand, PDF_ENGINES, renderPdf, resolvePdfEngine, windowsScriptCommand } from "../src/pdf.js";
 import { languagePack } from "../src/languages/index.js";
+import { formatNumber } from "../src/languages/locale.js";
 import { shunnHtml } from "../src/packaging.js";
 import { buildLabels } from "../src/publishing.js";
 import { createStoryProject } from "../src/story.js";
@@ -477,29 +478,43 @@ describe("Shunn manuscript HTML", () => {
     expect(html).toContain("<div class=\"short-form\">");
   });
 
-  // The length line's noun takes the plural form its rounded count needs:
-  // Russian and Ukrainian (and Polish) have one form for 1, another for 2 to
-  // 4 (and 22 to 24), and another for the rest.
-  test("the length line takes the plural form its count needs", () => {
+  // The length line follows "около", "близько", and "około" with the genitive:
+  // the singular for 1 (and 21 in Russian and Ukrainian), and the plural for
+  // the rest. The noun follows the rounded count, so 1,001 words print as
+  // 1 000 and take the plural.
+  test("the length line takes the genitive its count needs", () => {
     const lengthLine = (language, counts) => {
       const html = shunnHtml({ meta: { language }, chapters: [] }, { ...meta, ...counts, pack: languagePack(language), labels: buildLabels({ language }) });
       return /<p class="length">([^<]*)<\/p>/.exec(html)[1];
     };
-    expect(lengthLine("ru", { words: 1 })).toBe("Около 1 слово");
-    expect(lengthLine("ru", { words: 2 })).toBe("Около 2 слова");
+    expect(lengthLine("ru", { words: 1 })).toBe("Около 1 слова");
+    expect(lengthLine("ru", { words: 2 })).toBe("Около 2 слов");
     expect(lengthLine("ru", { words: 11 })).toBe("Около 11 слов");
-    expect(lengthLine("ru", { words: 21 })).toBe("Около 21 слово");
-    expect(lengthLine("ru", { words: 523 })).toBe("Около 523 слова");
-    expect(lengthLine("ru", { characters: 523 })).toBe("Около 523 знака");
-    expect(lengthLine("ru", { characters: 5 })).toBe("Около 5 знаков");
-    expect(lengthLine("uk", { words: 4 })).toBe("Близько 4 слова");
+    expect(lengthLine("ru", { words: 21 })).toBe("Около 21 слова");
+    expect(lengthLine("ru", { words: 523 })).toBe("Около 523 слов");
+    expect(lengthLine("ru", { words: 1001 })).toBe(`Около ${formatNumber(1000, languagePack("ru"))} слов`);
+    expect(lengthLine("ru", { characters: 1 })).toBe("Около 1 знака");
+    expect(lengthLine("ru", { characters: 523 })).toBe("Около 523 знаков");
+    expect(lengthLine("ru", { characters: 1001 })).toBe(`Около ${formatNumber(1000, languagePack("ru"))} знаков`);
+    expect(lengthLine("uk", { words: 4 })).toBe("Близько 4 слів");
     expect(lengthLine("uk", { words: 14 })).toBe("Близько 14 слів");
-    expect(lengthLine("uk", { characters: 2 })).toBe("Близько 2 знаки");
-    expect(lengthLine("pl", { words: 1 })).toBe("Około 1 słowo");
-    expect(lengthLine("pl", { words: 3 })).toBe("Około 3 słowa");
+    expect(lengthLine("uk", { words: 21 })).toBe("Близько 21 слова");
+    expect(lengthLine("uk", { characters: 2 })).toBe("Близько 2 знаків");
+    expect(lengthLine("pl", { words: 1 })).toBe("Około 1 słowa");
+    expect(lengthLine("pl", { words: 3 })).toBe("Około 3 słów");
     expect(lengthLine("pl", { words: 12 })).toBe("Około 12 słów");
-    expect(lengthLine("pl", { words: 22 })).toBe("Około 22 słowa");
-    expect(lengthLine("pl", { characters: 3 })).toBe("Około 3 znaki");
+    expect(lengthLine("pl", { words: 22 })).toBe("Około 22 słów");
+    expect(lengthLine("pl", { characters: 1 })).toBe("Około 1 znaku");
+    expect(lengthLine("pl", { characters: 3 })).toBe("Około 3 znaków");
+  });
+
+  test("a book's own length label gives the same wording for every count", () => {
+    const labels = buildLabels({ language: "ru", labels: [{ "approximate-words": "Roughly {words} words" }] });
+    const lines = [2, 21, 523, 700].map((words) => {
+      const html = shunnHtml({ meta: { language: "ru" }, chapters: [] }, { ...meta, words, pack: languagePack("ru"), labels });
+      return /<p class="length">([^<]*)<\/p>/.exec(html)[1];
+    });
+    expect(lines).toEqual(["Roughly 2 words", "Roughly 21 words", "Roughly 523 words", "Roughly 700 words"]);
   });
 
   test("the page is US Letter by default and A4 on request, with 1in margins on both", () => {

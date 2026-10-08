@@ -7304,11 +7304,9 @@ var pl_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Redakcja: {names}",
-    "approximate-words-one": "Około {words} słowo",
-    "approximate-words-few": "Około {words} słowa",
+    "approximate-words-one": "Około {words} słowa",
     "approximate-words": "Około {words} słów",
-    "approximate-characters-one": "Około {characters} znak",
-    "approximate-characters-few": "Około {characters} znaki",
+    "approximate-characters-one": "Około {characters} znaku",
     "approximate-characters": "Około {characters} znaków",
     "narration-opening": "{title}. Autor: {authors}. Czyta: {narrator}.",
     "narration-opening-anonymous": "{title}. Czyta: {narrator}.",
@@ -7634,11 +7632,9 @@ var ru_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Составление: {names}",
-    "approximate-words-one": "Около {words} слово",
-    "approximate-words-few": "Около {words} слова",
+    "approximate-words-one": "Около {words} слова",
     "approximate-words": "Около {words} слов",
-    "approximate-characters-one": "Около {characters} знак",
-    "approximate-characters-few": "Около {characters} знака",
+    "approximate-characters-one": "Около {characters} знака",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
     "narration-opening-anonymous": "{title}. Читает {narrator}.",
@@ -8087,11 +8083,9 @@ var uk_default = {
     by: "",
     byline: "{names}",
     "edited-by": "Упорядкування: {names}",
-    "approximate-words-one": "Близько {words} слово",
-    "approximate-words-few": "Близько {words} слова",
+    "approximate-words-one": "Близько {words} слова",
     "approximate-words": "Близько {words} слів",
-    "approximate-characters-one": "Близько {characters} знак",
-    "approximate-characters-few": "Близько {characters} знаки",
+    "approximate-characters-one": "Близько {characters} знака",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
     "narration-opening-anonymous": "{title}. Читає {narrator}.",
@@ -8730,6 +8724,150 @@ function joinNames(names, labels) {
   return names.length === 0 ? "" : names.reduce((joined, name) => fillLabel(joiner, "and", { a: joined, b: name }));
 }
 
+// src/unicode.js
+function nfc(value) {
+  return String(value).normalize("NFC");
+}
+var SAME = (start, end) => [start, end];
+var CLUSTER = /\P{M}?[\p{M}\u1160-\u11FF\uD7B0-\uD7FF]+/gu;
+function composedText(text) {
+  const source = String(text);
+  if (nfc(source) === source) {
+    return { text: source, original: SAME };
+  }
+  let composed = "";
+  const starts = [];
+  const sources = [];
+  const add = (from, value) => {
+    starts.push(composed.length);
+    sources.push(from);
+    composed += value;
+  };
+  const addRun = (from, run) => {
+    const value = nfc(run);
+    if (value === run || value.length === run.length && Array.from(run).every((character) => nfc(character).length === character.length)) {
+      add(from, value);
+      return;
+    }
+    let offset = from;
+    for (const character of run) {
+      add(offset, nfc(character));
+      offset += character.length;
+    }
+  };
+  let last = 0;
+  for (const match of source.matchAll(CLUSTER)) {
+    if (match.index > last) {
+      addRun(last, source.slice(last, match.index));
+    }
+    add(match.index, nfc(match[0]));
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) {
+    addRun(last, source.slice(last));
+  }
+  starts.push(composed.length);
+  sources.push(source.length);
+  const piece = (offset) => {
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = low + high + 1 >> 1;
+      if (starts[middle] <= offset) {
+        low = middle;
+      } else {
+        high = middle - 1;
+      }
+    }
+    return low;
+  };
+  const at = (offset, end) => {
+    const index = piece(offset);
+    const inside = offset - starts[index];
+    if (inside === 0) {
+      return sources[index];
+    }
+    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
+      return sources[index] + inside;
+    }
+    return sources[end ? index + 1 : index];
+  };
+  return { text: composed, original: (start, end) => [at(start, false), at(end, true)] };
+}
+var LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/;
+function oneLine(text) {
+  return String(text).replace(/[\s\u0085]+/g, (space) => LINE_BREAK.test(space) ? " " : space).trim();
+}
+var graphemes;
+function graphemeSegments(text) {
+  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
+  return graphemes.segment(text);
+}
+function graphemeCount(text) {
+  let count = 0;
+  for (const _ of graphemeSegments(nfc(text))) {
+    count += 1;
+  }
+  return count;
+}
+var WIDE = /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{16fe0}-\u{16fe4}\u{17000}-\u{18cff}\u{1b000}-\u{1b2ff}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}]|\p{Emoji_Presentation})|\ufe0f/u;
+var ZERO_WIDTH = /^[\p{M}\p{Cc}\p{Cf}\u1160-\u11ff\ud7b0-\ud7ff]/u;
+function displayWidth(text) {
+  let width = 0;
+  for (const { segment } of graphemeSegments(String(text))) {
+    width += WIDE.test(segment) ? 2 : ZERO_WIDTH.test(segment) ? 0 : 1;
+  }
+  return width;
+}
+
+// src/languages/locale.js
+var COMPARERS = new Map;
+function compareText(pack = languagePack()) {
+  if (!COMPARERS.has(pack.locale)) {
+    const collator = new Intl.Collator(pack.locale);
+    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
+  }
+  return COMPARERS.get(pack.locale);
+}
+function lowerCase(text, pack = languagePack()) {
+  return String(text).toLocaleLowerCase(pack.locale);
+}
+function upperCase(text, pack = languagePack()) {
+  return String(text).toLocaleUpperCase(pack.locale);
+}
+var DOTLESS_I = new Set(["tr", "az"]);
+function casesDotlessI(pack) {
+  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
+}
+function matchingCase(phrase, pack = languagePack()) {
+  const composed = nfc(phrase);
+  return casesDotlessI(pack) ? lowerCase(composed, pack) : composed;
+}
+function matchingText(text, pack = languagePack()) {
+  const composed = composedText(text);
+  return casesDotlessI(pack) ? { ...composed, text: lowerCase(composed.text, pack) } : composed;
+}
+var NUMBER_FORMATS = new Map;
+function formatNumber2(value, pack = languagePack()) {
+  if (!NUMBER_FORMATS.has(pack.locale)) {
+    NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
+  }
+  return NUMBER_FORMATS.get(pack.locale).format(value);
+}
+function pluralLabelKey(labels, key, count, pack = languagePack()) {
+  const form = `${key}-${new Intl.PluralRules(pack.locale).select(count)}`;
+  return labels?.[form] !== undefined ? form : key;
+}
+var COUNT_LABELS = Object.freeze(["approximate-words", "approximate-characters"]);
+var PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"]);
+function dropCountForms(labels, key) {
+  for (const name of Object.keys(labels)) {
+    if (name.startsWith(`${key}-`) && PLURAL_CATEGORIES.has(name.slice(key.length + 1))) {
+      delete labels[name];
+    }
+  }
+}
+
 // src/series.js
 import fs2 from "node:fs";
 import path2 from "node:path";
@@ -8972,141 +9110,6 @@ function diesAgainIn(lifeline, chapterId, bookChronology) {
 function revivedBy(lifeline, chapterId, bookChronology) {
   const chronology = orderedChronology(bookChronology);
   return chronology.numbers.has(chapterId) && lifeline.events.some((event) => event.type === "revival" && !happensAfter(chronology, event.chapter, chapterId));
-}
-
-// src/unicode.js
-function nfc(value) {
-  return String(value).normalize("NFC");
-}
-var SAME = (start, end) => [start, end];
-var CLUSTER = /\P{M}?[\p{M}\u1160-\u11FF\uD7B0-\uD7FF]+/gu;
-function composedText(text) {
-  const source = String(text);
-  if (nfc(source) === source) {
-    return { text: source, original: SAME };
-  }
-  let composed = "";
-  const starts = [];
-  const sources = [];
-  const add = (from, value) => {
-    starts.push(composed.length);
-    sources.push(from);
-    composed += value;
-  };
-  const addRun = (from, run) => {
-    const value = nfc(run);
-    if (value === run || value.length === run.length && Array.from(run).every((character) => nfc(character).length === character.length)) {
-      add(from, value);
-      return;
-    }
-    let offset = from;
-    for (const character of run) {
-      add(offset, nfc(character));
-      offset += character.length;
-    }
-  };
-  let last = 0;
-  for (const match of source.matchAll(CLUSTER)) {
-    if (match.index > last) {
-      addRun(last, source.slice(last, match.index));
-    }
-    add(match.index, nfc(match[0]));
-    last = match.index + match[0].length;
-  }
-  if (last < source.length) {
-    addRun(last, source.slice(last));
-  }
-  starts.push(composed.length);
-  sources.push(source.length);
-  const piece = (offset) => {
-    let low = 0;
-    let high = starts.length - 1;
-    while (low < high) {
-      const middle = low + high + 1 >> 1;
-      if (starts[middle] <= offset) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-    return low;
-  };
-  const at = (offset, end) => {
-    const index = piece(offset);
-    const inside = offset - starts[index];
-    if (inside === 0) {
-      return sources[index];
-    }
-    if (starts[index + 1] - starts[index] === sources[index + 1] - sources[index]) {
-      return sources[index] + inside;
-    }
-    return sources[end ? index + 1 : index];
-  };
-  return { text: composed, original: (start, end) => [at(start, false), at(end, true)] };
-}
-var LINE_BREAK = /[\n\v\f\r\u0085\u2028\u2029]/;
-function oneLine(text) {
-  return String(text).replace(/[\s\u0085]+/g, (space) => LINE_BREAK.test(space) ? " " : space).trim();
-}
-var graphemes;
-function graphemeSegments(text) {
-  graphemes ??= new Intl.Segmenter("en", { granularity: "grapheme" });
-  return graphemes.segment(text);
-}
-function graphemeCount(text) {
-  let count = 0;
-  for (const _ of graphemeSegments(nfc(text))) {
-    count += 1;
-  }
-  return count;
-}
-var WIDE = /^(?:[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\ua960-\ua97f\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{16fe0}-\u{16fe4}\u{17000}-\u{18cff}\u{1b000}-\u{1b2ff}\u{20000}-\u{2fffd}\u{30000}-\u{3fffd}]|\p{Emoji_Presentation})|\ufe0f/u;
-var ZERO_WIDTH = /^[\p{M}\p{Cc}\p{Cf}\u1160-\u11ff\ud7b0-\ud7ff]/u;
-function displayWidth(text) {
-  let width = 0;
-  for (const { segment } of graphemeSegments(String(text))) {
-    width += WIDE.test(segment) ? 2 : ZERO_WIDTH.test(segment) ? 0 : 1;
-  }
-  return width;
-}
-
-// src/languages/locale.js
-var COMPARERS = new Map;
-function compareText(pack = languagePack()) {
-  if (!COMPARERS.has(pack.locale)) {
-    const collator = new Intl.Collator(pack.locale);
-    COMPARERS.set(pack.locale, (left, right) => collator.compare(left, right) || (left < right ? -1 : left > right ? 1 : 0));
-  }
-  return COMPARERS.get(pack.locale);
-}
-function lowerCase(text, pack = languagePack()) {
-  return String(text).toLocaleLowerCase(pack.locale);
-}
-function upperCase(text, pack = languagePack()) {
-  return String(text).toLocaleUpperCase(pack.locale);
-}
-var DOTLESS_I = new Set(["tr", "az"]);
-function casesDotlessI(pack) {
-  return DOTLESS_I.has(pack.locale.split("-")[0].toLowerCase());
-}
-function matchingCase(phrase, pack = languagePack()) {
-  const composed = nfc(phrase);
-  return casesDotlessI(pack) ? lowerCase(composed, pack) : composed;
-}
-function matchingText(text, pack = languagePack()) {
-  const composed = composedText(text);
-  return casesDotlessI(pack) ? { ...composed, text: lowerCase(composed.text, pack) } : composed;
-}
-var NUMBER_FORMATS = new Map;
-function formatNumber2(value, pack = languagePack()) {
-  if (!NUMBER_FORMATS.has(pack.locale)) {
-    NUMBER_FORMATS.set(pack.locale, new Intl.NumberFormat(pack.locale, { numberingSystem: "latn", maximumFractionDigits: 0 }));
-  }
-  return NUMBER_FORMATS.get(pack.locale).format(value);
-}
-function pluralLabelKey(labels, key, count, pack = languagePack()) {
-  const form = `${key}-${new Intl.PluralRules(pack.locale).select(count)}`;
-  return labels?.[form] !== undefined ? form : key;
 }
 
 // src/series.js
@@ -9711,15 +9714,16 @@ function buildLabels(data, pack = languagePack(projectLanguage(data))) {
   const labels = { ...languagePack("en").labels, ...pack.labels };
   const set = (key, value) => {
     if (typeof value !== "string" || isPlaceholder(value) || isBlankLabel(key, value)) {
-      return;
+      return false;
     }
     labels[key] = key !== "chapter" ? value : value.includes("{n}") ? value.trim() : `${value.trim()} {n}`;
+    return true;
   };
   set("chapter", data["chapter-label"]);
   set("contents", typeof data["contents-label"] === "string" ? data["contents-label"].trim() : undefined);
   for (const [key, value] of labelEntries(data.labels)) {
-    if (LABEL_KEYS.includes(key)) {
-      set(key, value);
+    if (LABEL_KEYS.includes(key) && set(key, value) && COUNT_LABELS.includes(key)) {
+      dropCountForms(labels, key);
     }
   }
   return labels;

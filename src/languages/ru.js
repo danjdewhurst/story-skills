@@ -34,13 +34,12 @@ export default {
     by: "",
     byline: "{names}",
     "edited-by": "Составление: {names}",
-    // A count's noun takes the form for 1 (-one), for 2 to 4 and 22 to 24
-    // (-few), or the base key's form for the rest.
-    "approximate-words-one": "Около {words} слово",
-    "approximate-words-few": "Около {words} слова",
+    // After "около" the count's noun is in the genitive: the singular for 1
+    // (-one, and 21, 31, ...), and the plural, which the base key holds, for
+    // 2 to 4 and the rest.
+    "approximate-words-one": "Около {words} слова",
     "approximate-words": "Около {words} слов",
-    "approximate-characters-one": "Около {characters} знак",
-    "approximate-characters-few": "Около {characters} знака",
+    "approximate-characters-one": "Около {characters} знака",
     "approximate-characters": "Около {characters} знаков",
     "narration-opening": "{title}. Автор: {authors}. Читает {narrator}.",
     "narration-opening-anonymous": "{title}. Читает {narrator}.",
