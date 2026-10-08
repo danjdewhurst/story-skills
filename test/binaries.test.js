@@ -102,6 +102,17 @@ describe("standalone binaries (#296)", () => {
     expect(() => formula("v1.2.3", sums)).toThrow("version must be X.Y.Z");
   });
 
+  test("SECURITY.md names the archive extensions the release writes (#680)", () => {
+    // The extension follows the architecture: .tar.gz, or .zip for Windows.
+    const extensionOf = (name) => name.slice(name.indexOf(".", name.lastIndexOf("_")));
+    const security = readRepo("SECURITY.md");
+    const windows = archiveName("1.2.3", TARGETS.find((target) => target.os === "windows"));
+    const unix = archiveName("1.2.3", TARGETS.find((target) => target.os === "linux"));
+    expect(extensionOf(windows)).toBe(".zip");
+    expect(security).toContain(`\`${extensionOf(windows)}\``);
+    expect(security).toContain(extensionOf(unix));
+  });
+
   test("CI and the publish workflow build and smoke-test each target on its own OS", () => {
     for (const file of [".github/workflows/ci.yml", ".github/workflows/publish.yml"]) {
       const workflow = readRepo(file);
