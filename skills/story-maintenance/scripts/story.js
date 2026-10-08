@@ -31094,8 +31094,16 @@ function storySkillsChapter(text) {
   const lines = text.slice(bodyStart, heading.index).split(`
 `).map((line, index) => ({ text: line.trim(), line: firstLine + index })).filter((line) => line.text !== "");
   const outline = outlineLines(lines);
-  const skipped = lines.filter((line) => !outline.has(line) && !/^#[ \t]/.test(line.text));
+  const own = lines.find((line) => isOwnHeading(line.text, title));
+  const skipped = lines.filter((line) => line !== own && !outline.has(line));
   return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
+}
+function isOwnHeading(text, title) {
+  if (!/^#[ \t]/.test(text)) {
+    return false;
+  }
+  const heading = text.replace(/^#+[ \t]*/, "").replace(/\s+/g, " ");
+  return title === "" ? /\d/.test(heading) : heading.includes(title);
 }
 function outlineLines(lines) {
   const start = lines.findIndex((line) => /^##[ \t]+Outline$/i.test(line.text));
