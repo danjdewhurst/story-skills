@@ -425,11 +425,14 @@ const SCOPES = [
 ];
 
 // Quoted speech, so the narration checks can leave it out: an "I" in a line
-// of dialogue is not first-person narration. Single quotes count only away
-// from letters, so an apostrophe (didn't, Tomas') is not one. Each quote is
-// bounded so an unclosed one cannot make the scan quadratic.
+// of dialogue is not first-person narration. A quote closed on its line is
+// dialogue. A double quote that opens after a space or a bracket and never
+// closes runs to the end of its line, as the first paragraph of a long speech
+// does, and so does a line that opens with a dash. Single quotes count only
+// away from letters, so an apostrophe (didn't, Tomas') is not one. Each quote
+// is bounded so an unclosed one cannot make the scan quadratic.
 const DIALOGUE_RE =
-  /"[^"\n]{0,2000}"|“[^”\n]{0,2000}”|«[^»\n]{0,2000}»|(?<![\p{L}\p{N}])'(?:[^'\n]|'(?=\p{L})){0,2000}?'(?![\p{L}\p{N}])/gu;
+  /"[^"\n]{0,2000}"|“[^”\n]{0,2000}”|«[^»\n]{0,2000}»|(?<![\p{L}\p{N}])'(?:[^'\n]|'(?=\p{L})){0,2000}?'(?![\p{L}\p{N}])|(?<=^|[\s([—–])"[^"\n]*|(?<=^|[\s([—–])“[^”\n]*|(?<=^|\n)[ \t]*[—–][^\n]*/gu;
 
 function narration(text) {
   return text.replace(DIALOGUE_RE, " ");

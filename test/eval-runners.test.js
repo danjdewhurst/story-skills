@@ -596,6 +596,35 @@ describe("the checker's prose checks", () => {
     expect(firstPerson('"I can wait," he said. I walked on.\n')).toEqual([true, "structure: first-person voice present"]);
   });
 
+  test("dialogue in each quote style and in a dash line is not first-person narration", () => {
+    const firstPerson = (draft) =>
+      checkDraft({ requires_first_person: true }, "", draft).find(([, desc]) => desc === "structure: first-person voice present")[0];
+    for (const speech of ['"I can wait," he said.', "“I can wait,” he said.", "'I can wait,' he said.", "‘I can wait,’ he said.", "—I can wait, he said."]) {
+      expect([speech, firstPerson(`${speech} Petra walked on.\n`)]).toEqual([speech, false]);
+    }
+    // Narration after a closed quote still counts.
+    expect(firstPerson('“I can wait,” he said. I walked on.\n')).toBe(true);
+  });
+
+  test("a dash line, or a quote left open across paragraphs, is dialogue for the past-tense checks", () => {
+    const top = (draft) =>
+      checkDraft({ requires_past_tense: true }, "", draft).find(([, desc]) => desc.startsWith("structure: past-tense voice present"));
+    const chapter = (text) =>
+      checkDraft({ chapter_text: { requires_past_tense: true } }, "", `## Chapter Text\n\n${text}\n`).find(([, desc]) =>
+        desc.startsWith("chapter text: past-tense narration")
+      );
+    const dashLine = "Petra turned to the chest. The key was gone.\n—I take the key from you, Tomas, she said. Tomas said nothing and sat down.\n";
+    const longSpeech = "Petra turned to the chest. The key was gone.\n\n“I take the key from you, Tomas.\n\nHe said nothing and sat down. It was late.”\n";
+    expect(top(dashLine)[0]).toBe(true);
+    expect(top(longSpeech)[0]).toBe(true);
+    expect(chapter(longSpeech)[0]).toBe(true);
+    // A closing quote opens no speech, so the narration after it still counts.
+    expect(top('She said nothing." I take the lamp. Petra said it was late.\n')).toEqual([
+      false,
+      'structure: past-tense voice present (3 marker(s), need 2; present tense: "I take")',
+    ]);
+  });
+
   test("the top-level past-tense check fails first-person present-tense action, as the chapter check does", () => {
     const pastTense = (draft) =>
       checkDraft({ requires_past_tense: true }, "", draft).find(([, desc]) => desc.startsWith("structure: past-tense voice present"));
