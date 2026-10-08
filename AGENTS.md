@@ -51,6 +51,7 @@ CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:c
 - Register new CLI commands in `src/commands.js` (with `project: "positional"` when they take `[path]`) and new flags in `src/options.js`; never hand-edit help text or add a separate dispatch branch.
 - Add or update focused Bun tests for behavior changes.
 - Keep examples realistic and valid; if you change the story project format, update examples and tests together.
+- A Dependabot bump of an action that a workflow in `templates/github/` also uses needs the same SHA edited by hand in the same pull request. Dependabot does not scan `templates/github/`, and `test/check-scripts.test.js` fails until every pin matches.
 
 ## Skill Authoring
 
