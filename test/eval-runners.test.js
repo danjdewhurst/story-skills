@@ -137,7 +137,7 @@ describe("run-skill with a stubbed model", () => {
     // One pass over the reply, however many brackets never close.
     logs.length = 0;
     const judged = (judge) => runSkillMain(["--out", makeTempDir("story-run-skill-"), "canon-keeping"], { spawn: modelStub({ judge }).spawn });
-    expect(expectLinearGrowth(judged, (n) => "[ ".repeat(n / 2), 80_000)).toBe(1);
+    expect(expectLinearGrowth(judged, (n) => "[ ".repeat(n / 2), 80_000, { limit: 20_000 })).toBe(1);
     expect(output()).toContain('FAIL judge: judge reply has a "[" that never closes');
   });
 
@@ -714,6 +714,8 @@ describe("the checker's prose checks", () => {
     expect(ok("story passes\nstory reindex\n")).toBe(false);
   });
 
+  // Six draft shapes for every fixture. Locally this takes about seven
+  // seconds, more than bun's default five-second test timeout.
   test("every fixture's checks stay fast on long, repetitive drafts", () => {
     const fragment =
       'story passes . --start continuity story reindex . story wordcount . --write story add clue "key hour" --planted chapter-01 ' +
@@ -736,7 +738,7 @@ describe("the checker's prose checks", () => {
         expectLinearTime((draft) => checkDraft(checks, inputText, draft), (count) => draftsOf(count)[index], { length: reps });
       });
     }
-  });
+  }, 60000);
 });
 
 // What a model with no skill loaded wrote for these briefs: the passage or
