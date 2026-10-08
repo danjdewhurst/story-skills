@@ -1027,15 +1027,16 @@ describe("sweep fixes", () => {
     fs.rmSync(path.join(root, "plot", "timeline.md"));
     fs.symlinkSync("/dev/zero", path.join(root, "plot", "timeline.md"));
     // In a child, so a read that never ends fails the test rather than
-    // stalling the suite. The timeout is the bound the test relies on.
+    // stalling the suite. The child times its own calls, so the 5 s bound
+    // covers the work and not the child's start-up.
     const script = `
       const story = await import(${JSON.stringify(pathToFileURL(path.join(SRC, "story.js")).href)});
       const root = process.argv[1];
-      console.log(JSON.stringify({
-        total: story.computeWordCounts(root).total,
-        linksOk: story.validateLinks(root).ok,
-        errors: story.validateProject(root).errors.map((finding) => finding.message)
-      }));
+      const started = performance.now();
+      const total = story.computeWordCounts(root).total;
+      const linksOk = story.validateLinks(root).ok;
+      const errors = story.validateProject(root).errors.map((finding) => finding.message);
+      console.log(JSON.stringify({ total, linksOk, errors, elapsed: performance.now() - started }));
     `;
     const result = spawnSync(process.execPath, ["-e", script, root], { encoding: "utf8", timeout: 20000 });
     expect(result.signal).toBeNull();
@@ -1044,6 +1045,7 @@ describe("sweep fixes", () => {
     expect(outcome.total).toBe(0);
     expect(outcome.linksOk).toBe(false);
     expect(outcome.errors.join("\n")).toContain("through symlink");
+    expect(outcome.elapsed).toBeLessThan(5000);
   });
 
   test("--out through a hard link replaces the link instead of the chapter", () => {
