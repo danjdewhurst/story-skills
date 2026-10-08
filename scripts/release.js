@@ -15,8 +15,9 @@ const FALLBACK_FILE = "skills/story-maintenance/scripts/story.js";
 const STORY_VERSION_FILES = ["templates/github/story-checks.yml", "templates/github/draft-next-chapter.yml", "templates/github/review-copy.yml"];
 const RELEASE_BRANCH = "main";
 // A signal that arrives during the local phase rolls the release back instead
-// of ending the process with the bumped files in place.
-const INTERRUPT_SIGNALS = ["SIGINT", "SIGTERM"];
+// of ending the process with the bumped files in place. SIGHUP is the signal a
+// dropped terminal session sends.
+const INTERRUPT_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
 // test:coverage gates src line and function coverage (not branches, which
 // Bun's lcov report does not record), then the fallback bundle.
 export const PREFLIGHT = ["check:metadata", "check:evals", "check:links", "eval:selftest", "test:coverage", "test:examples", "check:node-help"];
@@ -330,11 +331,11 @@ function writeVersions(deps, currentVersion, nextVersion, written) {
   runBun(deps, ["run", "check:metadata"], { inherit: true });
 }
 
-// Runs the release and returns its exit status. Bad arguments print the usage
-// and a refused check or a failed release step prints "Release aborted: ..."
-// with what to do next; both return 1. Any other error, such as a failing
-// preflight check whose output is already on the terminal, propagates.
-export function runRelease(argv, overrides = {}) {
+// Runs the release and resolves to its exit status. Bad arguments print the
+// usage and a refused check or a failed release step prints "Release aborted:
+// ..." with what to do next; both resolve to 1. Any other error, such as a
+// failing preflight check whose output is already on the terminal, rejects.
+export async function runRelease(argv, overrides = {}) {
   const deps = releaseDeps(overrides);
   let bump;
   let dryRun;
@@ -345,7 +346,7 @@ export function runRelease(argv, overrides = {}) {
     return 1;
   }
   try {
-    release(deps, bump, dryRun);
+    await release(deps, bump, dryRun);
   } catch (error) {
     if (!(error instanceof ReleaseAbort)) {
       throw error;
@@ -356,7 +357,13 @@ export function runRelease(argv, overrides = {}) {
   return 0;
 }
 
-function release(deps, bump, dryRun) {
+// Node runs a signal's listener only when the event loop turns. The commands of
+// the local phase block the loop, so the release yields before each check.
+// Without the yield, a signal sent during a command would be seen only after
+// the listeners were removed, and the release would go on to push.
+const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+async function release(deps, bump, dryRun) {
   const packageJson = JSON.parse(fs.readFileSync(path.join(deps.root, "package.json"), "utf8"));
   let nextVersion;
   try {
@@ -380,7 +387,8 @@ function release(deps, bump, dryRun) {
   // A command the terminal interrupts fails on its own and is undone the same way.
   const interrupts = [];
   const listeners = INTERRUPT_SIGNALS.map((signal) => [signal, () => interrupts.push(signal)]);
-  const stopIfInterrupted = () => {
+  const stopIfInterrupted = async () => {
+    await yieldToEventLoop();
     if (interrupts.length > 0) {
       throw new Error(`interrupted by ${interrupts[0]}`);
     }
@@ -390,15 +398,16 @@ function release(deps, bump, dryRun) {
   }
   try {
     writeVersions(deps, packageJson.version, nextVersion, local.written);
-    stopIfInterrupted();
+    await stopIfInterrupted();
     git(deps, "add", ...local.written);
     git(deps, "commit", "-m", `chore: release ${nextVersion}`);
     local.commit = git(deps, "rev-parse", "HEAD");
-    stopIfInterrupted();
+    await stopIfInterrupted();
     git(deps, "tag", "-a", tag, "-m", tag);
     local.tag = tag;
-    stopIfInterrupted();
+    await stopIfInterrupted();
     checkPushTargets(deps, tag);
+    await stopIfInterrupted();
   } catch (error) {
     rollBack(deps, local, `the release failed before anything was pushed: ${reason(error)}`);
   } finally {
@@ -564,5 +573,7 @@ function pushRelease(deps, local, version) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = runRelease(process.argv.slice(2));
+  runRelease(process.argv.slice(2)).then((status) => {
+    process.exitCode = status;
+  });
 }
