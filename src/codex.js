@@ -655,7 +655,9 @@ function notesHtml(site, entity) {
       }
       continue;
     }
-    const fenceOpen = /^\s*(`{3,}|~{3,})/.exec(line);
+    // A backtick opener has no backtick after its run on the line, as in
+    // CommonMark, so ```x``` is a code span and not a fence.
+    const fenceOpen = /^\s*(`{3,}(?=[^`]*$)|~{3,})/.exec(line);
     if (fenceOpen) {
       flush();
       fence = { marker: fenceOpen[1], lines: [] };
