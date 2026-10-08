@@ -28912,7 +28912,7 @@ ${body.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`
       }
       continue;
     }
-    const fenceOpen = /^\s*(`{3,}|~{3,})/.exec(line);
+    const fenceOpen = /^\s*(`{3,}(?=[^`]*$)|~{3,})/.exec(line);
     if (fenceOpen) {
       flush();
       fence = { marker: fenceOpen[1], lines: [] };

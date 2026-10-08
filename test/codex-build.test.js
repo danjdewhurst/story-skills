@@ -247,6 +247,15 @@ describe("build --format codex", () => {
     expectLinearTime(notes, (n) => `\n# Mara\n\na${" ".repeat(n)}b\nc\n`, { length: 128000 });
   });
 
+  test("a notes line that opens with a backtick run closed on that line is prose, not a fence (#704)", () => {
+    const { root } = createStoryProject({ cwd: makeTempDir(), title: "Lamp", force: false });
+    const file = path.join(root, "characters", "mara.md");
+    fs.writeFileSync(file, "---\nname: Mara\nrole: protagonist\nstatus: alive\n---\n```x``` is the sigil.\n\nNext paragraph.\n", "utf8");
+    const html = codexPages(scanProject(root), { spoilers: true }).find((page) => page.path === "characters/mara.html").html;
+    expect(html).toContain("<p>Next paragraph.</p>");
+    expect(html).not.toContain("<pre><code>");
+  });
+
   test("says when there are no threads, entities, or dated scenes", () => {
     const cwd = makeTempDir();
     const { root } = createStoryProject({ cwd, title: "Empty Shelf", force: false });
