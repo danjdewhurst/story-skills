@@ -567,3 +567,102 @@ describe("exitCodeFor", () => {
     expect(withDefaultExitCode(null, refused)).toBe(null);
   });
 });
+
+describe("exit 1 for the craft commands", () => {
+  const CRAFT = ["prose", "pacing", "clues", "voices"];
+  const PASSAGE = "\"Go,\" Mara said. The tide came in slowly.\n";
+
+  for (const name of CRAFT) {
+    test.skipIf(CHMOD_IGNORED)(`${name} exits 1 for a chapter it cannot read`, () => {
+      const root = newProject();
+      const chapter = path.join(root, "chapters", "chapter-01.md");
+      fs.chmodSync(chapter, 0o000);
+      try {
+        const result = invoke(root, [name]);
+        expect(result.err).toContain("chapters/chapter-01.md: Cannot read: permission denied");
+        expect(result.code).toBe(findings);
+      } finally {
+        fs.chmodSync(chapter, 0o644);
+      }
+    });
+  }
+
+  test("prose - and voices - exit 0 for a broken chapter or scene, since the passage stands in for them", () => {
+    const root = newProject();
+    breakChapter(root);
+    fs.mkdirSync(path.join(root, "scenes"), { recursive: true });
+    fs.writeFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "---\na: 1\na: 2\n---\n", "utf8");
+    expect(invoke(root, ["prose", "-"], PASSAGE).code).toBe(ok);
+    expect(invokeJson(root, ["voices", "-"], PASSAGE).code).toBe(ok);
+  });
+
+  test("prose - and voices - exit 1 for a broken character file, which the passage does not replace", () => {
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "characters", "zz-broken.md"), "---\nname: A\nname: B\n---\n", "utf8");
+    expect(invoke(root, ["prose", "-"], PASSAGE).code).toBe(findings);
+    expect(invoke(root, ["voices", "-"], PASSAGE).code).toBe(findings);
+  });
+
+  test("a broken registry does not change the exit code of the craft commands", () => {
+    // Registries are generated, and these commands do not read them;
+    // validate, links, and reindex are the ones that report them.
+    const root = newProject();
+    fs.writeFileSync(path.join(root, "chapters", "_index.md"), "---\na: 1\na: 2\n---\n", "utf8");
+    for (const name of CRAFT) {
+      expect({ name, code: invoke(root, [name]).code }).toEqual({ name, code: ok });
+    }
+    expect(invoke(root, ["validate"]).code).toBe(findings);
+  });
+});
+
+describe("exit 1 for a story.md severity that promotes a craft warning", () => {
+  // Each command and the warning its fixture makes. The fixture's one
+  // said-bookism, "hissed", only counts against a limit of 0.
+  const WARNINGS = [
+    ["prose", ["--max-bookisms", "0"], "prose-bookisms"],
+    ["pacing", [], "pacing-no-hook"],
+    ["clues", [], "clue-herring-unresolved"],
+    ["voices", [], "voice-avoid"]
+  ];
+
+  // A project where each craft command warns once and none errs.
+  function warnedProject() {
+    const root = newProject();
+    expect(invoke(root, ["add", "clue", "Torn map", "--red-herring"]).code).toBe(ok);
+    const chapter = path.join(root, "chapters", "chapter-01.md");
+    const text = fs.readFileSync(chapter, "utf8");
+    // A drafted chapter with no hook, and dialogue for the voice checks.
+    fs.writeFileSync(chapter, `${text.replace("status: outline", "status: draft")}\n"I reckon we go," Mara said.\n\n"Go," Mara hissed.\n`, "utf8");
+    const character = path.join(root, "characters", "mara-quill.md");
+    fs.writeFileSync(character, fs.readFileSync(character, "utf8").replace('arc: ""', 'arc: ""\nvoice-avoid:\n  - reckon'), "utf8");
+    return root;
+  }
+
+  // Puts a severity entry at the top of story.md's frontmatter.
+  function promote(root, code) {
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, `---\nseverity:\n  - warning: ${code}\n    level: error\n`), "utf8");
+  }
+
+  for (const [name, extra, code] of WARNINGS) {
+    test(`${name} exits 0 with a ${code} warning, and 1 once story.md promotes it`, () => {
+      const root = warnedProject();
+      const argv = [name, ...extra];
+      const plain = invoke(root, argv);
+      expect(plain.err).toMatch(new RegExp(`^warning: .*\\[${code}\\]$`, "m"));
+      expect(plain.code).toBe(ok);
+      promote(root, code);
+      const promoted = invoke(root, argv);
+      expect(promoted.err).toMatch(new RegExp(`^error: .*\\[${code}\\]$`, "m"));
+      expect(promoted.code).toBe(findings);
+    });
+
+    test(`${name} exits 3 when story.md severity names an unknown warning`, () => {
+      const root = newProject();
+      promote(root, "no-such-warning");
+      const result = invoke(root, [name, ...extra]);
+      expect(result.err).toContain("story.md severity[0] names unknown warning no-such-warning");
+      expect(result.code).toBe(project);
+    });
+  }
+});
