@@ -382,6 +382,22 @@ describe("exit codes", () => {
     expect(invoke(root, ["migrate"]).code).toBe(project);
   });
 
+  test("a newer schema-version exits 3 only for migrate; validate and check exit 1", () => {
+    const root = newProject();
+    const storyPath = path.join(root, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2", "schema-version: 99"), "utf8");
+    for (const args of [["validate"], ["check"]]) {
+      const result = invoke(root, args);
+      expect(`${result.out}${result.err}`).toContain("story.md uses schema-version 99, newer than this CLI (2)");
+      expect(result.code).toBe(findings);
+    }
+    expect(invoke(root, ["migrate"]).code).toBe(project);
+    // report, next, and doctor count the validate error but exit 0, as do the commands that read or build the project.
+    for (const args of [["report"], ["next"], ["doctor"], ["synopsis"], ["export"], ["build"]]) {
+      expect(invoke(root, args).code).toBe(ok);
+    }
+  });
+
   test("a bad value or an unknown id is a usage error", () => {
     const root = newProject();
     for (const args of [
