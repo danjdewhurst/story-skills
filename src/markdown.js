@@ -1521,7 +1521,7 @@ export function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
   }
 
   const start = outlineMatch.index + outlineMatch[0].length;
-  return outlineEnd(masked, start).offset;
+  return outlineEnd(markdownBody, masked, start).offset;
 }
 
 // Where the outline that starts at `start` (just past its heading) ends. It
@@ -1530,30 +1530,43 @@ export function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
 // after the outline when no divider follows. Only a `---` directly after the
 // outline counts: the outline runs over list items, their indented or lazy
 // continuation lines, headings, and blank lines, so a `---` scene break after
-// the first paragraph of prose is never taken for the divider.
-function outlineEnd(masked, start) {
+// the first paragraph of prose is never taken for the divider. Indentation is
+// read from the body, not the masked text, since a masked comment turns into
+// spaces that would look like indentation.
+function outlineEnd(body, masked, start) {
   const lines = masked.slice(start).split("\n");
+  const written = body.slice(start).split("\n");
   let offset = start + lines[0].length + 1;
   let previous = "blank";
+  // Whether the outline is inside a list item, which a blank line does not end.
+  let inItem = false;
   let last = start;
-  for (const line of lines.slice(1)) {
+  for (let index = 1; index < lines.length; index += 1) {
     const lineStart = offset;
-    offset += line.length + 1;
-    const text = line.replace(/\r$/, "");
+    offset += lines[index].length + 1;
+    const text = lines[index].replace(/\r$/, "");
+    const source = written[index].replace(/\r$/, "");
     if (text.trim() === "") {
       previous = "blank";
     } else if (text.trim() === "---") {
-      return { divider: true, offset: lineStart + line.length };
-    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
+      return { divider: true, offset: lineStart + lines[index].length };
+    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text)) {
       previous = "item";
-      last = lineStart + line.length;
-    } else if (/^ {0,3}#{2,}(?:[ \t]|$)/.test(text)) {
+      inItem = true;
+      last = lineStart + lines[index].length;
+    } else if (inItem && /^[ \t]+\S/.test(source)) {
+      // An indented paragraph under a list item is part of that item, after a
+      // blank line or not. Indented prose under a heading is not.
+      previous = "item";
+      last = lineStart + lines[index].length;
+    } else if (/^ {0,3}#{1,6}(?:[ \t]|$)/.test(text)) {
       previous = "heading";
-      last = lineStart + line.length;
+      inItem = false;
+      last = lineStart + lines[index].length;
     } else if (previous === "item") {
-      // A line that runs on from a list item belongs to it, as in markdown.
-      // Prose under a heading with no blank line between does not.
-      last = lineStart + line.length;
+      // A line that runs on from a list item, with no blank line, belongs to
+      // it, as in markdown. Prose under a heading with no blank line does not.
+      last = lineStart + lines[index].length;
     } else {
       break;
     }
@@ -1572,7 +1585,7 @@ export function outlineRunsIntoProse(markdownBody) {
     return false;
   }
   const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
-  if (!outlineMatch || outlineEnd(masked, outlineMatch.index + outlineMatch[0].length).divider) {
+  if (!outlineMatch || outlineEnd(body, masked, outlineMatch.index + outlineMatch[0].length).divider) {
     return false;
   }
   return chapterProse(body).trim() !== "";

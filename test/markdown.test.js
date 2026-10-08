@@ -677,7 +677,34 @@ describe("#225 an outline without its divider", () => {
 
   test("prose right under an outline heading, with no blank line, is prose and not outline", () => {
     const body = "\n## Outline\n\n- Beat\n### Scene\nThe bell was ringing.\n";
-    expect(chapterProse(body)).toContain("The bell was ringing.");
+    const prose = chapterProse(body);
+    expect(prose).toContain("The bell was ringing.");
+    expect(prose).not.toContain("- Beat");
+    expect(prose).not.toContain("### Scene");
+    expect(outlineRunsIntoProse(body)).toBe(true);
+  });
+
+  test("a level-one heading inside an outline is an outline heading, not the start of prose", () => {
+    const prose = chapterProse("\n## Outline\n\n- Beat\n\n# Second Scene\n- Beat two\n\nThe bell was ringing.\n");
+    expect(prose).toContain("The bell was ringing.");
+    expect(prose).not.toContain("Beat two");
+    expect(prose).not.toContain("Second Scene");
+    expect(prose).not.toContain("- Beat");
+  });
+
+  test("an indented paragraph under a list item stays in the outline, but indented prose under a heading is prose", () => {
+    const under = chapterProse("\n## Outline\n\n- Beat\n\n\tMore beat detail.\n\nThe bell was ringing.\n");
+    expect(under).not.toContain("More beat detail.");
+    expect(under).toContain("The bell was ringing.");
+
+    const underHeading = chapterProse("\n## Outline\n\n### Scene\n\n\tIndented prose.\n");
+    expect(underHeading).toContain("Indented prose.");
+  });
+
+  test("prose that opens with a comment after a blank line is prose, not an indented outline line", () => {
+    const body = "\n## Outline\n\n- Beat\n\n<!-- note -->Actual prose.\n";
+    expect(chapterProse(body)).toContain("Actual prose.");
+    expect(chapterProse(body)).not.toContain("- Beat");
     expect(outlineRunsIntoProse(body)).toBe(true);
   });
 

@@ -67,6 +67,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - An unnumbered chapter, such as a prologue, shows its title alone, as the book does.
 - A chapter with `## Outline` and no `---` line no longer prints or counts its outline list. ([#713](https://github.com/danjdewhurst/story-skills/issues/713))
   - The outline now ends at its last list item or heading, so the prose after it is what builds print and word counts measure.
+  - A line with no blank line under the last list item stays in the outline, as markdown reads it. Indented prose under a heading is prose.
   - `story validate` warns with `outline-without-chapter-text` when such a chapter has prose after its outline and no `## Chapter Text` heading.
   - Word counts can fall for chapters that have no `---` line and no `## Chapter Text` heading.
 
