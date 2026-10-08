@@ -1241,6 +1241,12 @@ describe("frontmatter without a chapter number (#718)", () => {
     expect(chapterFile(result.root, 1)).toContain("Preface text before the heading.");
   });
 
+  test("a chapter file with Story Skills keys but no number is read as a chapter, not split as markdown", () => {
+    const { result, chapters } = importText("---\ntitle: Arrival\nstatus: draft\n---\n\n## Outline\n\n1. Opening beat\n2. Turn\n\n---\n\n## Chapter Text\n\nShip came in.\n", { name: "chapter-01.md" });
+    expect(chapters.map((chapter) => chapter.title)).toEqual(["Arrival"]);
+    expect(chapterText(result.root, 1).trim()).toBe("Ship came in.");
+  });
+
   test("a chapter file with text above its Chapter Text heading warns about the text it does not use", () => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "chapter-01.md"), "---\ntitle: Arrival\nnumber: 1\nstatus: draft\n---\n\n# Chapter 1: Arrival\n\nA note to self.\n\n## Chapter Text\n\nShip came in.\n", "utf8");

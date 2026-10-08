@@ -31071,6 +31071,7 @@ function splitChapters(documents, warnings, rules, bylines) {
   }
   return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
 }
+var CHAPTER_KEYS = ["number", "numbered", "pov", "locations", "characters", "arcs-advanced", "status"];
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
   if (!heading) {
@@ -31083,7 +31084,7 @@ function storySkillsChapter(text) {
     return null;
   }
   const { data } = parsed;
-  if (!Object.hasOwn(data, "number")) {
+  if (!CHAPTER_KEYS.some((key) => Object.hasOwn(data, key))) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).replace(/\s+/g, " ").trim() : "";

@@ -647,12 +647,17 @@ function splitChapters(documents, warnings, rules, bylines) {
   return chapters.filter((chapter) => chapter.prose !== "" || chapter.bylined);
 }
 
+// The frontmatter keys a Story Skills chapter file has. `title` and `author`
+// are not among them, since a manuscript has them too.
+const CHAPTER_KEYS = ["number", "numbered", "pov", "locations", "characters", "arcs-advanced", "status"];
+
 // A chapter file in Story Skills' own layout, copied from another project,
 // keeps its title, `numbered: false`, and `author`, and its prose is the
 // text under `## Chapter Text` (the outline above it is not book text). Only
-// a file with a `number` is one: a manuscript with frontmatter of its own
-// and a `## Chapter Text` heading is split as markdown. `skipped` lists the
-// lines above the heading that are not used, as { text, line }.
+// a file with a chapter key such as `number` is one: a manuscript with
+// frontmatter of its own and a `## Chapter Text` heading is split as
+// markdown. `skipped` lists the lines above the heading that are not used,
+// as { text, line }.
 function storySkillsChapter(text) {
   const heading = /^## Chapter Text[ \t]*$/m.exec(text);
   if (!heading) {
@@ -665,7 +670,7 @@ function storySkillsChapter(text) {
     return null;
   }
   const { data } = parsed;
-  if (!Object.hasOwn(data, "number")) {
+  if (!CHAPTER_KEYS.some((key) => Object.hasOwn(data, key))) {
     return null;
   }
   const title = typeof data.title === "string" || typeof data.title === "number" ? String(data.title).replace(/\s+/g, " ").trim() : "";
