@@ -204,6 +204,23 @@ describe("series init", () => {
     expect(parseFrontmatter(fs.readFileSync(path.join(unnumbered, "story.md"), "utf8")).data["book-number"]).toBeUndefined();
   });
 
+  test("a companion takes no genre, pov, or tense from book one, and writes nothing to it", () => {
+    const cwd = makeTempDir();
+    book(cwd, "Book One", { genre: "fantasy", pov: "first-person", tense: "present" });
+    const bookOne = path.join(cwd, "book-one", "story.md");
+    const before = fs.readFileSync(bookOne, "utf8");
+
+    const result = invoke(cwd, ["init", "Companion", "--series", "the-saga", "--synopsis", "A side story"]);
+    expect(result.code, result.err).toBe(0);
+    expect(fs.readFileSync(bookOne, "utf8")).toBe(before);
+
+    const companion = frontmatter(path.join(cwd, "companion", "story.md"));
+    expect(companion).toMatchObject({ series: "the-saga", genre: "fiction", pov: "third-person-limited", tense: "past" });
+    expect(companion.follows).toBeUndefined();
+    expect(companion.precedes).toBeUndefined();
+    expect(companion["book-number"]).toBeUndefined();
+  });
+
   test("rejects invalid series options before creating files", () => {
     const cwd = makeTempDir();
     book(cwd, "Book One");
