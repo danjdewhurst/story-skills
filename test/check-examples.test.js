@@ -103,3 +103,18 @@ describe("#99 shipped examples have current registries", () => {
     }
   });
 });
+
+// The docs say how many sample projects ship. Count the folders with a story.md
+// so that adding or removing one fails here until the docs say the new number.
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+
+describe("the docs count the sample projects", () => {
+  test("development guide and README name the number of examples", () => {
+    const count = fs.readdirSync(examplesRoot).filter((name) => fs.existsSync(path.join(examplesRoot, name, "story.md"))).length;
+    const docsRoot = path.resolve(import.meta.dir, "..", "docs");
+    const development = fs.readFileSync(path.join(docsRoot, "development.md"), "utf8").match(/# (\w+) sample story projects/);
+    const readme = fs.readFileSync(path.join(docsRoot, "README.md"), "utf8").match(/includes (\w+) sample projects in/);
+    expect(development?.[1]).toBe(NUMBER_WORDS[count]);
+    expect(readme?.[1]).toBe(NUMBER_WORDS[count]);
+  });
+});
