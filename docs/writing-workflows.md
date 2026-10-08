@@ -884,7 +884,7 @@ How the skill handles findings:
 - Similar character names are raised with you first. If you agree to a rename, it checks the replacement with `story names '<Candidate>'`, then uses `story rename character <id> '<New Name>'` so every reference follows.
 - For `story voices` warnings, it revises the dialogue, or, when the draft has found a better voice, asks you before updating the character's `voice-words` or `voice-avoid`. Here, either Nell starts saying "reckon" or the word comes off her list.
 
-`story prose` and `story voices` exit 0 when no file fails to read or parse and no `story.md` `severity` entry promotes one of their warnings. A warning alone does not fail them, so by default only a file that fails to read or parse blocks them, with exit 1. A usage error, such as an unknown option, exits 2. A folder that is not a usable story project, or a `story.md` with an invalid `severity` or `cli-defaults` entry, exits 3. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
+`story prose` and `story voices` exit 0 when no file fails to read or parse and no `story.md` `severity` entry promotes one of their warnings. A warning alone does not fail them, so by default only a file that fails to read or parse blocks them, with exit 1. A `severity` entry that promotes a warning also makes them exit 1. A usage error, such as an unknown option or empty stdin, exits 2. A folder with no `story.md`, or a `story.md` with an invalid `severity` or `cli-defaults` entry, exits 3. The one exception is `story prose -` with no `--path` in a folder without `story.md`: it runs with the default rules. See [Continuity and analysis](continuity.md#what-each-line-measures) for what each count measures.
 
 ### Checks
 
