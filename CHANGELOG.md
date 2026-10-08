@@ -41,7 +41,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - The entry stops taking effect. Validate reports `exemption-misspelled-key` for a key one typo away from a known key, and `exemption-unknown-key` for any other key. `story continuity` no longer dismisses findings with that entry.
 
 - `story continuity` no longer lets an exemption dismiss an unreadable file, so a chapter it cannot read stays an error. ([#697](https://github.com/danjdewhurst/story-skills/issues/697))
-  - An entry with `code: unreadable-file` is rejected by `story validate` as `exemption-code-not-dismissible`. An entry with only a `file` and `pattern` no longer dismisses that error either.
+  - An entry with `code: unreadable-file` is rejected by `story validate` as `exemption-code-not-dismissible`, which says that `story continuity` reports the code and the error stays. An entry with only a `file` and `pattern` no longer dismisses that error either.
   - `docs/continuity.md` states the exception.
 
 - `story validate` reports a numeric or true/false `pronunciation` once, not twice. ([#698](https://github.com/danjdewhurst/story-skills/issues/698))

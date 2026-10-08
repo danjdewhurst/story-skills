@@ -13197,7 +13197,12 @@ function codeError(code, label) {
     return err("exemption-unknown-code", `${label} code ${code} is not a finding code${suggestion(code, Object.keys(FINDING_CODES))}`, EXEMPTIONS_FILE);
   }
   if (!exemptionCodes().includes(code)) {
-    const why = PROJECTLESS_CODES.includes(code) ? "story init or story import reports it before there is an exemption log to read" : "it is an error outside story continuity, which means the project is broken: only continuity errors and warnings can be exempted";
+    let why = "it is an error outside story continuity, which means the project is broken: only continuity errors and warnings can be exempted";
+    if (PROJECTLESS_CODES.includes(code)) {
+      why = "story init or story import reports it before there is an exemption log to read";
+    } else if (code === "unreadable-file") {
+      why = "story continuity reports it, but it stays an error: the checker cannot read the file it would dismiss";
+    }
     return err("exemption-code-not-dismissible", `${label} code ${code} cannot be exempted: ${why}`, EXEMPTIONS_FILE);
   }
   return null;

@@ -266,7 +266,9 @@ describe("exemption keys (#284)", () => {
     expect(unreadable(checkContinuity(scanProject(root)))).toEqual([CH2]);
 
     writeLog(root, "  - code: unreadable-file\n    file: chapters/chapter-02.md\n    reason: broken on purpose");
-    expect(validateProject(root).errors.map((error) => error.code)).toContain("exemption-code-not-dismissible");
+    expect(validateProject(root).errors.filter((error) => error.code === "exemption-code-not-dismissible").map((error) => error.message)).toEqual([
+      "continuity/exemptions.md exemptions[0] code unreadable-file cannot be exempted: story continuity reports it, but it stays an error: the checker cannot read the file it would dismiss"
+    ]);
     let result = checkContinuity(scanProject(root));
     expect(unreadable(result)).toEqual([CH2]);
     expect(result.dismissed).toEqual([]);
