@@ -169,13 +169,18 @@ if [ -e "$WT/.git" ]; then
   exit 0
 fi
 
-# Clear this worktree's own registration, and only when its folder is gone. A
-# plain `git worktree prune` would also drop the registration of any other
-# worktree whose folder is missing, such as one on an unmounted volume, and
-# that worktree could never find its git folder again.
+# This worktree is registered, but its folder is not there. The folder may
+# have moved, for instance onto an unmounted volume. A new worktree at the same
+# path would then share the git folder of the moved one, so stop and let a
+# person decide. A plain `git worktree prune` would also drop the registration
+# of any other worktree whose folder is missing, and that worktree could never
+# find its git folder again.
 registrations=$(git -C "$SHARED" worktree list --porcelain)
 if [ ! -e "$WT" ] && grep -Fqx -e "worktree $WT" -e "worktree $WT_PHYSICAL" <<< "$registrations"; then
-  git -C "$SHARED" worktree remove --force "$WT" >&2
+  echo "issue-worktree: $WT is registered as a worktree of $SHARED, but its folder is missing" >&2
+  echo "issue-worktree: if the folder was moved, move it back and run this script again" >&2
+  echo "issue-worktree: if the folder was deleted, run: git -C $SHARED worktree remove --force $WT" >&2
+  exit 1
 fi
 git -C "$SHARED" fetch --quiet origin
 
