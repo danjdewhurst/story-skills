@@ -183,6 +183,18 @@ function renderTimeline({ title, nodes }) {
 const UNREVEALED = "unrevealed";
 const UNREVEALED_NODE = "clue__unrevealed";
 
+// The Mermaid id of the not-yet-revealed node. A chapter whose id is not
+// kebab-case, such as clue--unrevealed, can sanitize to the same id, so the
+// node takes an underscore more for each chapter id that already has it.
+function unrevealedNodeId(nodes) {
+  const taken = new Set(nodes.filter((node) => node.kind === "chapter").map((node) => nodeId(node.id)));
+  let id = UNREVEALED_NODE;
+  while (taken.has(id)) {
+    id += "_";
+  }
+  return id;
+}
+
 function clueModel(project) {
   const chapters = sortedChapters(project);
   const known = new Set(chapters.map((chapter) => chapter.id));
@@ -215,6 +227,7 @@ function clueModel(project) {
 
 function renderClues({ nodes, edges }) {
   const lines = ["flowchart LR"];
+  const open = unrevealedNodeId(nodes);
   for (const node of nodes) {
     if (node.kind === "chapter") {
       lines.push(chapterLine(node));
@@ -227,11 +240,11 @@ function renderClues({ nodes, edges }) {
     }
     const herring = edge.kind === "red-herring";
     const text = edgeLabel(herring ? `${edge.label} (red herring)` : edge.label);
-    const to = edge.revealed ? nodeId(edge.to) : `${UNREVEALED_NODE}(("not yet revealed"))`;
+    const to = edge.revealed ? nodeId(edge.to) : `${open}(("not yet revealed"))`;
     lines.push(`  ${nodeId(edge.from)} ${herring ? "-.->" : "-->"}${text} ${to}`);
   }
   if (nodes.some((node) => node.kind === "unrevealed")) {
-    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${UNREVEALED_NODE} open`);
+    lines.push("  classDef open stroke-dasharray: 4 4", `  class ${open} open`);
   }
   return mermaid(lines);
 }

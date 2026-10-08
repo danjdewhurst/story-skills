@@ -417,6 +417,17 @@ describe("review fixes", () => {
     expect(text).toContain("class clue__unrevealed open");
     expect(text).not.toContain(' unrevealed((');
   });
+
+  test("a chapter whose id sanitizes to the not-yet-revealed node id keeps its own node", () => {
+    const { root } = reviewProject();
+    writeMarkdown(path.join(root, "chapters", "clue--unrevealed.md"), "title: Odd\nnumber: 2\nstatus: draft", "## Chapter Text\n\nWords.\n");
+    writeMarkdown(path.join(root, "continuity", "clues", "glove.md"), "title: Glove\nstatus: planted\nplanted: clue--unrevealed", "# Glove\n");
+    const text = diagramProject(root, { kind: "clues" }).text;
+    expect(text).toContain('  clue__unrevealed["2. Odd"]\n');
+    expect(text).toContain('  clue__unrevealed -->|"Glove"| clue__unrevealed_(("not yet revealed"))\n');
+    expect(text).toContain("class clue__unrevealed_ open");
+    expect(text).not.toContain("class clue__unrevealed open");
+  });
 });
 
 describe("reports and views", () => {
