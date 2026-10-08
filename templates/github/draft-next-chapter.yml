@@ -366,9 +366,11 @@ jobs:
           prefix="${project:+$project/}"
           # Every commit, not just the end result, so a file added and then
           # removed again is refused too; -m lists a merge's changes as well.
-          # core.quotePath=false keeps a non-ASCII name as written; git would
-          # otherwise quote it, and the *.md test below would refuse it.
-          refused=$(git -c core.quotePath=false log --format= --raw --no-renames -m "$BASE..$BRANCH" | while IFS=$'\t' read -r meta file; do
+          # -z prints each change as two NUL-ended fields, its metadata and its
+          # path, so a name is read as written, even one with a quote, a tab,
+          # or non-ASCII letters. Without it git quotes such a name, and the
+          # *.md test below would refuse it.
+          refused=$(git log --format= --raw --no-renames -m -z "$BASE..$BRANCH" | while IFS= read -r -d '' meta && IFS= read -r -d '' file; do
             [ -n "$file" ] || continue
             mode=$(echo "$meta" | awk '{ print $2 }')
             inside="${file#"$prefix"}"
