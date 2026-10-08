@@ -291,15 +291,25 @@ export function extractLinks(text) {
 // the host, owner, and repository name in any case, but not the rest.
 const REPO_URL = /^https:\/\/github\.com\/danjdewhurst\/story-skills\/(blob|tree)\/([^/?#]+)/i;
 
+// A file in this repository on GitHub's raw host, as the README's images are,
+// since the package leaves assets/ out.
+const RAW_URL = /^https:\/\/raw\.githubusercontent\.com\/danjdewhurst\/story-skills\/([^/?#]+)/i;
+
 // What a link to this repository's main branch on GitHub names: { path } with
 // the root-relative path (/docs/cli.md#check), or { problem } when GitHub
-// would not serve it. Null for any other link, another branch or tag included.
+// would not serve it. Null for any other link, another branch or tag included,
+// except a raw URL, which must name main: a pull request's branch is deleted
+// when it merges, and the images it served go with it.
 export function repoPath(target) {
-  const match = REPO_URL.exec(target);
-  if (!match || match[2].toLowerCase() !== "main") {
+  const raw = RAW_URL.exec(target);
+  const match = raw ?? REPO_URL.exec(target);
+  if (raw && raw[1] !== "main") {
+    return { problem: "is not on main; a raw URL breaks when its branch is deleted, so name main" };
+  }
+  if (!raw && (!match || match[2].toLowerCase() !== "main")) {
     return null;
   }
-  if (!/^(?:blob|tree)$/.test(match[1]) || match[2] !== "main") {
+  if (!raw && (!/^(?:blob|tree)$/.test(match[1]) || match[2] !== "main")) {
     return { problem: `names ${match[1]}/${match[2]}, but GitHub paths are case-sensitive; write blob/main or tree/main` };
   }
   const rest = target.slice(match[0].length).replace(/^\//, "");
