@@ -3,8 +3,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/hero-dark.svg">
-  <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/hero-light.svg" alt="Story Skills" width="560">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/hero-light.svg" alt="Story Skills" width="560">
 </picture>
 
 <p><b>Plan, track, and draft fiction in markdown,<br>with a continuity checker that catches mistakes before readers do.</b></p>
@@ -50,34 +50,34 @@ The companion `story` CLI treats the story bible as a checkable contract. Its co
 <table>
   <tr>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-markdown.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-markdown.svg" width="40" height="40" alt=""></p>
       <p><b>Plain markdown</b><br>
       Every character, place, scene, and chapter is a markdown file with YAML frontmatter. Diff it, branch it, and open it in any editor.</p>
     </td>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-skills.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-skills.svg" width="40" height="40" alt=""></p>
       <p><b>24 skills, premise to print</b><br>
       From testing a spark of an idea to the query letter and the print interior, in Claude Code, Codex, or any agent that reads <code>SKILL.md</code>.</p>
     </td>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-continuity.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-continuity.svg" width="40" height="40" alt=""></p>
       <p><b>A continuity compiler</b><br>
       Deaths, promises, open questions, and object and knowledge state live in frontmatter, so contradictions show up like type errors.</p>
     </td>
   </tr>
   <tr>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-languages.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-languages.svg" width="40" height="40" alt=""></p>
       <p><b>Any language</b><br>
       Write in any language and script. Builds set right-to-left scripts and vertical Chinese, Japanese, and Korean text.</p>
     </td>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-builds.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-builds.svg" width="40" height="40" alt=""></p>
       <p><b>Builds for every reader</b><br>
       EPUB, DOCX, a Shunn manuscript, a print interior, an HTML review copy, a screenplay, and Twine and ink, all from one project.</p>
     </td>
     <td width="33%" valign="top">
-      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/icon-pull-requests.svg" width="40" height="40" alt=""></p>
+      <p><img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/icon-pull-requests.svg" width="40" height="40" alt=""></p>
       <p><b>A book by pull request</b><br>
       GitHub Actions templates draft the next chapter on a schedule and fail a pull request that breaks continuity.</p>
     </td>
@@ -137,12 +137,12 @@ Each finding names its file and reproduces exactly, and CI asserts this output o
 
 ## Skills
 
-Most books move through the skills in this order. `story-maintenance` runs underneath all of them, and `series-continuity` starts the next book. The [Skills catalogue](docs/skills.md) has the full details and how the skills hand work to each other.
+Most books move through the skills roughly in this order. `research`, `scene-craft`, `voice-style`, `verse-craft`, and `editorial-review` are used whenever they are needed rather than at one fixed point. `story-maintenance` runs underneath all of them, and `series-continuity` starts the next book. The [Skills catalogue](docs/skills.md) has the full details and how the skills hand work to each other.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/skills-dark.svg">
-    <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/docs/readme-redesign/assets/readme/skills-light.svg" alt="The skills in five stages: set up, plan, draft, revise, and send it out. series-continuity loops back to start the next book, and story-maintenance runs the CLI checks under every stage." width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/skills-dark.svg">
+    <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/skills-light.svg" alt="The skills in five stages: set up, plan, draft, revise, and send it out. series-continuity loops back to start the next book, and story-maintenance runs the CLI checks under every stage." width="100%">
   </picture>
 </p>
 
@@ -289,30 +289,85 @@ Complete books made with Story Skills:
 Example projects in this repository:
 
 <table>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/the-last-ember/"><b>the-last-ember</b></a><br>A fantasy with a magic system, a plot arc with foreshadowing, and a drafted chapter</td>
-    <td width="50%" valign="top"><a href="examples/the-fall-of-the-citadel/"><b>the-fall-of-the-citadel</b></a><br>A prequel to The Last Ember, linked with <code>series</code>. Run <code>story series examples/the-last-ember</code> for the chronology</td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/harbor-of-second-light/"><b>harbor-of-second-light</b></a><br>A near-future mystery with memory technology and populated continuity state</td>
-    <td width="50%" valign="top"><a href="examples/the-gull-rock-light/"><b>the-gull-rock-light</b></a><br>A short branching story, built to Twine and ink</td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/bo-and-the-missing-moon/"><b>bo-and-the-missing-moon</b></a><br>A 32-page picture book with spread briefs</td>
-    <td width="50%" valign="top"><a href="examples/the-left-luggage-office/"><b>the-left-luggage-office</b></a><br>A weekly serial with episode questions and cliffhangers</td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/salt-and-lantern/"><b>salt-and-lantern</b></a><br>An anthology of three stories by different writers</td>
-    <td width="50%" valign="top"><a href="examples/the-unraveled-thread/"><b>the-unraveled-thread</b></a><br>A deliberately broken project that shows the continuity findings</td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/quatre-heures-dix-sept/"><b>quatre-heures-dix-sept</b></a><br>A short story in French</td>
-    <td width="50%" valign="top"><a href="examples/kirimi-eki-no-wasuremono/"><b>kirimi-eki-no-wasuremono</b></a><br>A short story in Japanese, set in vertical columns</td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top"><a href="examples/laysat-lil-bay/"><b>laysat-lil-bay</b></a><br>A short story in Arabic, built right to left</td>
-    <td width="50%" valign="top"></td>
-  </tr>
+<tr>
+<td width="50%" valign="top">
+
+**[the-last-ember](examples/the-last-ember/)**<br>
+A fantasy with a magic system, a plot arc with foreshadowing, and a drafted chapter
+
+</td>
+<td width="50%" valign="top">
+
+**[the-fall-of-the-citadel](examples/the-fall-of-the-citadel/)**<br>
+A prequel to The Last Ember, linked with `series`. Run `story series examples/the-last-ember` for the chronology
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**[harbor-of-second-light](examples/harbor-of-second-light/)**<br>
+A near-future mystery with memory technology and populated continuity state
+
+</td>
+<td width="50%" valign="top">
+
+**[the-gull-rock-light](examples/the-gull-rock-light/)**<br>
+A short branching story, built to Twine and ink
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**[bo-and-the-missing-moon](examples/bo-and-the-missing-moon/)**<br>
+A 32-page picture book with spread briefs
+
+</td>
+<td width="50%" valign="top">
+
+**[the-left-luggage-office](examples/the-left-luggage-office/)**<br>
+A weekly serial with episode questions and cliffhangers
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**[salt-and-lantern](examples/salt-and-lantern/)**<br>
+An anthology of three stories by different writers
+
+</td>
+<td width="50%" valign="top">
+
+**[the-unraveled-thread](examples/the-unraveled-thread/)**<br>
+A deliberately broken project that shows the continuity findings
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**[quatre-heures-dix-sept](examples/quatre-heures-dix-sept/)**<br>
+A short story in French
+
+</td>
+<td width="50%" valign="top">
+
+**[kirimi-eki-no-wasuremono](examples/kirimi-eki-no-wasuremono/)**<br>
+A short story in Japanese, set in vertical columns
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**[laysat-lil-bay](examples/laysat-lil-bay/)**<br>
+A short story in Arabic, built right to left
+
+</td>
+<td width="50%" valign="top"></td>
+</tr>
 </table>
 
 [Writing in other languages](docs/languages.md) covers what works in each language and script.
