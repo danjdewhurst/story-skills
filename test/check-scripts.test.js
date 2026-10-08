@@ -1260,6 +1260,28 @@ describe("check-links", () => {
     }
   });
 
+  // The README's images are raw URLs, because the package leaves assets/ out.
+  // One on a pull request's branch breaks when the branch is deleted (#849).
+  test("checks raw.githubusercontent.com links to this repository against main", () => {
+    const raw = "https://raw.githubusercontent.com/danjdewhurst/story-skills";
+    const root = linkRepo({
+      "assets/logo.svg": "<svg/>",
+      "README.md": [
+        `<img src="${raw}/main/assets/logo.svg"> <img src="https://RAW.githubusercontent.com/DanJDewhurst/Story-Skills/main/assets/logo.svg">`,
+        `<img src="${raw}/main/assets/gone.svg"> <img src="${raw}/docs/readme-redesign/assets/logo.svg"> <img src="${raw}/Main/assets/logo.svg">`,
+        `<img src="${raw}/main//assets/logo.svg"> <img src="https://raw.githubusercontent.com/someone/story-skills/docs/x/logo.svg">`
+      ].join("\n")
+    });
+    const offMain = "is not on main; a raw URL breaks when its branch is deleted, so name main";
+    expect(checkLinks(root).failures).toEqual([
+      `README.md:2: ${raw}/main/assets/gone.svg points at a missing file`,
+      `README.md:2: ${raw}/docs/readme-redesign/assets/logo.svg ${offMain}`,
+      `README.md:2: ${raw}/Main/assets/logo.svg ${offMain}`,
+      `README.md:3: ${raw}/main//assets/logo.svg has an empty path segment (//), which GitHub does not serve`
+    ]);
+    expect(repoPath(`${raw}/main/assets/demo.gif`)).toEqual({ path: "/assets/demo.gif" });
+  });
+
   test("the repository's own markdown links resolve", () => {
     expect(checkLinks().failures).toEqual([]);
   });
