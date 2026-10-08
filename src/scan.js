@@ -409,6 +409,9 @@ export function scanProject(root) {
       // the file name's number instead of printing NaN, and builds refuse.
       number: chapterNumber(data.number, file),
       numberValid: data.number === undefined || isPositiveIntegerValue(data.number),
+      // False for an unnumbered chapter (a prologue), which takes no printed
+      // number (see printedChapterNumbers).
+      numbered: data.numbered !== false,
       pov: scanId(data.pov),
       status: data.status ?? "",
       characters: asIdArray(data.characters),
