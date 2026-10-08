@@ -1521,18 +1521,21 @@ export function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
   }
 
   const start = outlineMatch.index + outlineMatch[0].length;
-  return outlineDivider(masked, start) ?? start;
+  return outlineEnd(masked, start).offset;
 }
 
-// The offset just past the `---` that closes the outline, or null. Only a
-// `---` directly after the outline counts: the outline runs over list items,
-// their indented or lazy continuation lines, headings, and blank
-// lines, so a `---` scene break after the first paragraph of prose is never
-// taken for the divider.
-function outlineDivider(masked, start) {
+// Where the outline that starts at `start` (just past its heading) ends. It
+// ends just past the `---` that closes it (`divider` is true), or else just
+// past its last list item, heading, or indented line, so the prose starts
+// after the outline when no divider follows. Only a `---` directly after the
+// outline counts: the outline runs over list items, their indented or lazy
+// continuation lines, headings, and blank lines, so a `---` scene break after
+// the first paragraph of prose is never taken for the divider.
+function outlineEnd(masked, start) {
   const lines = masked.slice(start).split("\n");
   let offset = start + lines[0].length + 1;
   let previous = "blank";
+  let last = start;
   for (const line of lines.slice(1)) {
     const lineStart = offset;
     offset += line.length + 1;
@@ -1540,14 +1543,39 @@ function outlineDivider(masked, start) {
     if (text.trim() === "") {
       previous = "blank";
     } else if (text.trim() === "---") {
-      return lineStart + line.length;
-    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^ {0,3}#{2,}(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
-      previous = "outline";
-    } else if (previous !== "outline") {
-      return null;
+      return { divider: true, offset: lineStart + line.length };
+    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
+      previous = "item";
+      last = lineStart + line.length;
+    } else if (/^ {0,3}#{2,}(?:[ \t]|$)/.test(text)) {
+      previous = "heading";
+      last = lineStart + line.length;
+    } else if (previous === "item") {
+      // A line that runs on from a list item belongs to it, as in markdown.
+      // Prose under a heading with no blank line between does not.
+      last = lineStart + line.length;
+    } else {
+      break;
     }
   }
-  return null;
+  return { divider: false, offset: last };
+}
+
+// Whether a chapter body has an outline that runs into its prose: an `## Outline`
+// with no `## Chapter Text` heading, no `---` divider below it, and prose after
+// it. Its prose start is then read from the outline's own lines (see
+// proseStart), so validate warns about it.
+export function outlineRunsIntoProse(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, "\n");
+  const masked = maskMarkup(body);
+  if (sectionHeadingPattern("Chapter Text").test(masked)) {
+    return false;
+  }
+  const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
+  if (!outlineMatch || outlineEnd(masked, outlineMatch.index + outlineMatch[0].length).divider) {
+    return false;
+  }
+  return chapterProse(body).trim() !== "";
 }
 
 export function extractSection(markdown, heading) {

@@ -273,6 +273,10 @@ export function validateProjectOf(project) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
     }
 
+    if (chapter.outlineRunsOn) {
+      warnings.push(warn("outline-without-chapter-text", `${file} has an ## Outline with no ## Chapter Text heading and no --- line below it, so builds read the prose as starting after the outline's last list item: put ## Chapter Text above the prose`, file));
+    }
+
     if (chapter.setextBreaks.length > 0) {
       const one = chapter.setextBreaks.length === 1;
       warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
