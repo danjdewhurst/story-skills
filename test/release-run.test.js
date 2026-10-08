@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { git as gitIn, makeTempDir } from "./helpers.js";
 import { MISSING_BUN_MESSAGE } from "../scripts/bun-missing.js";
 import { PREFLIGHT, USAGE, parseReleaseArgs, releaseDeps, runRelease } from "../scripts/release.js";
@@ -97,12 +99,12 @@ function stubRun(overrides = {}, git = null) {
   return { run, calls, keys: () => calls.map((call) => call.key) };
 }
 
-function releaseWith(argv, { root = releaseFixture(), replies, git, deps = {} } = {}) {
+async function releaseWith(argv, { root = releaseFixture(), replies, git, deps = {} } = {}) {
   const stub = stubRun(replies, git);
   const logs = [];
   const errors = [];
   const sleeps = [];
-  const status = runRelease(argv, {
+  const status = await runRelease(argv, {
     root,
     run: stub.run,
     log: (line) => logs.push(line),
@@ -133,7 +135,7 @@ const PUBLISHING = /^(git (add|commit|tag -a|push)|gh release create)/;
 const read = (root, relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 describe("release arguments", () => {
-  test("parses exactly one bump plus an optional --dry-run", () => {
+  test("parses exactly one bump plus an optional --dry-run", async () => {
     expect(parseReleaseArgs(["patch"])).toEqual({ bump: "patch", dryRun: false });
     expect(parseReleaseArgs(["--dry-run", "1.2.3"])).toEqual({ bump: "1.2.3", dryRun: true });
     expect(() => parseReleaseArgs([])).toThrow(`Missing version bump. ${USAGE}`);
@@ -141,9 +143,9 @@ describe("release arguments", () => {
     expect(() => parseReleaseArgs(["patch", "--dryrun"])).toThrow("Unknown option --dryrun.");
   });
 
-  test("bad arguments print the usage and run nothing", () => {
+  test("bad arguments print the usage and run nothing", async () => {
     for (const argv of [[], ["patch", "--dryrun"], ["patch", "minor"]]) {
-      const result = releaseWith(argv);
+      const result = await releaseWith(argv);
       expect(result.status).toBe(1);
       expect(result.err).toContain(USAGE);
       expect(result.err).not.toContain("Release aborted");
@@ -151,8 +153,8 @@ describe("release arguments", () => {
     }
   });
 
-  test("a bump that does not move forward aborts before any command runs", () => {
-    const result = releaseWith(["0.5.0"]);
+  test("a bump that does not move forward aborts before any command runs", async () => {
+    const result = await releaseWith(["0.5.0"]);
     expect(result.status).toBe(1);
     expect(result.err).toBe("Release aborted: Version 0.5.0 is not greater than the current version 0.5.0.");
     expect(result.stub.calls).toEqual([]);
@@ -160,11 +162,11 @@ describe("release arguments", () => {
 });
 
 describe("release run with stubbed commands", () => {
-  test("--dry-run runs every preflight check and changes nothing", () => {
+  test("--dry-run runs every preflight check and changes nothing", async () => {
     const root = releaseFixture();
     const before = read(root, "package.json");
     const changelog = read(root, "CHANGELOG.md");
-    const result = releaseWith(["minor", "--dry-run"], { root });
+    const result = await releaseWith(["minor", "--dry-run"], { root });
     expect(result.err).toBe("");
     expect(result.status).toBe(0);
     expect(result.out).toContain("Releasing 0.5.0 -> 0.6.0 (v0.6.0)");
@@ -178,16 +180,16 @@ describe("release run with stubbed commands", () => {
     expect(read(root, "CHANGELOG.md")).toBe(changelog);
   });
 
-  test("a dry run fetches nothing and reads origin with ls-remote (#683)", () => {
-    const result = releaseWith(["patch", "--dry-run"]);
+  test("a dry run fetches nothing and reads origin with ls-remote (#683)", async () => {
+    const result = await releaseWith(["patch", "--dry-run"]);
     expect(result.status).toBe(0);
     expect(result.stub.keys().filter((key) => key.startsWith("git fetch"))).toEqual([]);
     expect(result.stub.keys()).toContain("git ls-remote origin refs/heads/main");
   });
 
-  test("a SIGTERM during the local phase rolls the release back before it commits (#684)", () => {
+  test("a SIGTERM during the local phase rolls the release back before it commits (#684)", async () => {
     const listeners = process.listenerCount("SIGTERM");
-    const result = releaseWith(["patch"], {
+    const result = await releaseWith(["patch"], {
       replies: {
         "bun run build:fallback": () => {
           // The signal arrives while the build runs, as a kill would deliver it.
@@ -203,8 +205,61 @@ describe("release run with stubbed commands", () => {
     expect(process.listenerCount("SIGTERM")).toBe(listeners);
   });
 
-  test("a full run bumps every file, then commits, tags, pushes, and releases in order", () => {
-    const result = releaseWith(["patch"]);
+  test("a SIGTERM during the commit rolls back before the tag is made (#684)", async () => {
+    const result = await releaseWith(["patch"], {
+      replies: {
+        "git commit -m chore: release 0.5.1": () => {
+          process.emit("SIGTERM");
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toContain("interrupted by SIGTERM");
+    expect(result.stub.keys().filter((key) => /^(git tag -a|git push|gh release create)/.test(key))).toEqual([]);
+  });
+
+  test("a SIGTERM during the tag rolls back before the origin check (#684)", async () => {
+    const result = await releaseWith(["patch"], {
+      replies: {
+        "git tag -a v0.5.1 -m v0.5.1": () => {
+          process.emit("SIGTERM");
+          return "";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toContain("interrupted by SIGTERM");
+    expect(result.stub.keys()).not.toContain(PUSH_TARGETS);
+    expect(result.stub.keys().filter((key) => /^(git push|gh release create)/.test(key))).toEqual([]);
+  });
+
+  test("a SIGTERM during the origin check rolls back before anything is pushed (#684)", async () => {
+    const result = await releaseWith(["patch"], {
+      replies: {
+        [PUSH_TARGETS]: () => {
+          process.emit("SIGTERM");
+          return "abc123\trefs/heads/main\n";
+        }
+      }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toContain("interrupted by SIGTERM");
+    expect(result.stub.keys()).toContain("git tag -d v0.5.1");
+    expect(result.stub.keys().filter((key) => /^(git push|gh release create)/.test(key))).toEqual([]);
+  });
+
+  test("a dry run refuses a tag that only origin has (#683)", async () => {
+    const result = await releaseWith(["patch", "--dry-run"], {
+      replies: { "git ls-remote origin refs/tags/v0.5.1": "tag789\trefs/tags/v0.5.1\n" }
+    });
+    expect(result.status).toBe(1);
+    expect(result.err).toBe("Release aborted: tag v0.5.1 already exists.");
+    expect(result.stub.keys().some((key) => key.startsWith("bun run"))).toBe(false);
+  });
+
+  test("a full run bumps every file, then commits, tags, pushes, and releases in order", async () => {
+    const result = await releaseWith(["patch"]);
     expect(result.err).toBe("");
     expect(result.status).toBe(0);
     for (const relativePath of ["package.json", ".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
@@ -236,8 +291,8 @@ describe("release run with stubbed commands", () => {
     expect(result.out).toContain("publishes story-skills@0.5.1 to npm once CI passes on main for the release commit");
   });
 
-  test("refuses an empty Unreleased section before any slow check", () => {
-    const result = releaseWith(["patch"], { root: releaseFixture({ unreleased: "" }) });
+  test("refuses an empty Unreleased section before any slow check", async () => {
+    const result = await releaseWith(["patch"], { root: releaseFixture({ unreleased: "" }) });
     expect(result.status).toBe(1);
     expect(result.err).toBe(
       'Release aborted: CHANGELOG.md has no entries under "## [Unreleased]". Add the user-visible changes first.'
@@ -271,10 +326,10 @@ describe("release run with stubbed commands", () => {
   ];
 
   for (const [name, replies, message] of refusals) {
-    test(`refuses ${name} and never publishes`, () => {
+    test(`refuses ${name} and never publishes`, async () => {
       const root = releaseFixture();
       const before = read(root, "package.json");
-      const result = releaseWith(["patch"], { root, replies });
+      const result = await releaseWith(["patch"], { root, replies });
       expect(result.status).toBe(1);
       expect(result.err).toBe(`Release aborted: ${message}`);
       expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
@@ -282,17 +337,15 @@ describe("release run with stubbed commands", () => {
     });
   }
 
-  test("a failing preflight check propagates instead of releasing", () => {
+  test("a failing preflight check propagates instead of releasing", async () => {
     const root = releaseFixture();
     const before = read(root, "package.json");
-    expect(() =>
-      releaseWith(["patch"], { root, replies: { "bun run test:coverage": throws(commandError("1 fail", { status: 1 })) } })
-    ).toThrow("1 fail");
+    await expect(releaseWith(["patch"], { root, replies: { "bun run test:coverage": throws(commandError("1 fail", { status: 1 })) } })).rejects.toThrow("1 fail");
     expect(read(root, "package.json")).toBe(before);
   });
 
   for (const argv of [["patch"], ["patch", "--dry-run"]]) {
-    test(`a changelog that already has the new section stops ${argv.join(" ")} before any slow check`, () => {
+    test(`a changelog that already has the new section stops ${argv.join(" ")} before any slow check`, async () => {
       const root = releaseFixture();
       const changelogPath = path.join(root, "CHANGELOG.md");
       fs.writeFileSync(
@@ -301,7 +354,7 @@ describe("release run with stubbed commands", () => {
       );
       const before = read(root, "package.json");
       const changelog = read(root, "CHANGELOG.md");
-      const result = releaseWith(argv, { root });
+      const result = await releaseWith(argv, { root });
       expect(result.status).toBe(1);
       expect(result.err).toBe(
         'Release aborted: CHANGELOG.md already has a section for 0.5.1. Move its entries back under "## [Unreleased]" and remove its heading, or release a later version.'
@@ -312,8 +365,8 @@ describe("release run with stubbed commands", () => {
     });
   }
 
-  test("a failed `gh release create` after the push says how to finish, and undoes nothing", () => {
-    const result = releaseWith(["patch"], { replies: { [GH_RELEASE]: throws(commandError("HTTP 502: Bad Gateway")) } });
+  test("a failed `gh release create` after the push says how to finish, and undoes nothing", async () => {
+    const result = await releaseWith(["patch"], { replies: { [GH_RELEASE]: throws(commandError("HTTP 502: Bad Gateway")) } });
     expect(result.status).toBe(1);
     expect(result.err).toBe(
       [
@@ -333,8 +386,8 @@ describe("release run with stubbed commands", () => {
     ["origin cannot be reached", { [REMOTE_TAG]: throws(unreachable) }, unreachable.stderr],
     ["the local tag cannot be read", { "git rev-parse refs/tags/v0.5.1": throws(commandError("fatal: bad object")) }, "fatal: bad object"]
   ]) {
-    test(`a failed push is left for the maintainer to check when ${name}`, () => {
-      const result = releaseWith(["patch"], { replies: { [PUSH]: throws(unreachable), ...replies } });
+    test(`a failed push is left for the maintainer to check when ${name}`, async () => {
+      const result = await releaseWith(["patch"], { replies: { [PUSH]: throws(unreachable), ...replies } });
       expect(result.status).toBe(1);
       expect(result.err).toBe(
         [
@@ -350,8 +403,8 @@ describe("release run with stubbed commands", () => {
     });
   }
 
-  test("a missing bun after the bump restores the files the release wrote", () => {
-    const result = releaseWith(["patch"], {
+  test("a missing bun after the bump restores the files the release wrote", async () => {
+    const result = await releaseWith(["patch"], {
       replies: { "bun run build:fallback": throws(Object.assign(new Error("spawnSync bun ENOENT"), { code: "ENOENT" })) }
     });
     expect(result.status).toBe(1);
@@ -367,8 +420,8 @@ describe("release run with stubbed commands", () => {
     ]);
   });
 
-  test("a failure before the release writes anything has nothing to roll back", () => {
-    const result = releaseWith(["patch"], {
+  test("a failure before the release writes anything has nothing to roll back", async () => {
+    const result = await releaseWith(["patch"], {
       deps: {
         today: () => {
           throw new Error("no clock");
@@ -382,7 +435,7 @@ describe("release run with stubbed commands", () => {
     expect(result.stub.keys().filter((key) => /^git (update-ref|checkout|tag -d|symbolic-ref)/.test(key))).toEqual([]);
   });
 
-  test("the default runner executes commands in the release root", () => {
+  test("the default runner executes commands in the release root", async () => {
     const root = makeTempDir("story-release-root-");
     const deps = releaseDeps({ root });
     expect(deps.root).toBe(root);
@@ -429,7 +482,7 @@ function gitFixture() {
 
 // Runs the release in a git fixture. `fail` names git commands (their first
 // arguments, such as "commit" or "tag -a") that throw instead of running.
-function gitRelease(repo, { replies, fail = [] } = {}) {
+async function gitRelease(repo, { replies, fail = [] } = {}) {
   const git = (...args) => {
     const command = args.join(" ");
     const failing = fail.find((prefix) => command.startsWith(prefix));
@@ -456,20 +509,20 @@ const rolledBack = (repo, tag = false) =>
   `Rolled back: main is at ${repo.head} again${tag ? ", the local v0.5.1 tag is deleted," : ""} and the files the release wrote are restored. Fix the problem, then run the release again.`;
 
 describe("release run against a throwaway git origin", () => {
-  test("a dry run leaves origin's refs as they were, even when origin has moved (#683)", () => {
+  test("a dry run leaves origin's refs as they were, even when origin has moved (#683)", async () => {
     const repo = gitFixture();
     repo.advanceOrigin();
     const refs = repo.git("for-each-ref", "--format=%(refname) %(objectname)");
-    const result = releaseWith(["patch", "--dry-run"], { root: repo.root, git: (...args) => repo.git(...args) });
+    const result = await releaseWith(["patch", "--dry-run"], { root: repo.root, git: (...args) => repo.git(...args) });
     expect(result.status).toBe(1);
     expect(result.err).toBe("Release aborted: local main does not match origin/main. Pull or push first.");
     expect(repo.git("for-each-ref", "--format=%(refname) %(objectname)")).toBe(refs);
     expect(result.stub.keys().some((key) => key.startsWith("bun run"))).toBe(false);
   });
 
-  test("a SIGINT during the build rolls back the files the release wrote (#684)", () => {
+  test("a SIGINT during the build rolls back the files the release wrote (#684)", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           process.emit("SIGINT");
@@ -483,9 +536,9 @@ describe("release run against a throwaway git origin", () => {
     expectUntouched(repo);
   });
 
-  test("a failed step before the commit restores only the files the release wrote", () => {
+  test("a failed step before the commit restores only the files the release wrote", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           fs.writeFileSync(path.join(repo.root, FALLBACK), "half built\n");
@@ -504,26 +557,26 @@ describe("release run against a throwaway git origin", () => {
     expect(result.stub.keys().filter((key) => PUBLISHING.test(key))).toEqual([]);
   });
 
-  test("a failed commit unstages and restores the files the release wrote", () => {
+  test("a failed commit unstages and restores the files the release wrote", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, { fail: ["commit"] });
+    const result = await gitRelease(repo, { fail: ["commit"] });
     expect(result.status).toBe(1);
     expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: fatal: commit failed in test\n${rolledBack(repo)}`);
     expectUntouched(repo);
   });
 
-  test("a failed tag after the commit moves main back off the release commit", () => {
+  test("a failed tag after the commit moves main back off the release commit", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, { fail: ["tag -a"] });
+    const result = await gitRelease(repo, { fail: ["tag -a"] });
     expect(result.status).toBe(1);
     expect(result.err).toBe(`Release aborted: the release failed before anything was pushed: fatal: tag -a failed in test\n${rolledBack(repo)}`);
     expect(result.stub.keys()).toContain(`git update-ref refs/heads/main ${repo.head} ${repo.git("rev-parse", "HEAD@{1}").trim()}`);
     expectUntouched(repo);
   });
 
-  test("a rollback changes nothing once something else has moved HEAD", () => {
+  test("a rollback changes nothing once something else has moved HEAD", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           repo.git("checkout", "-q", "-b", "other");
@@ -545,9 +598,9 @@ describe("release run against a throwaway git origin", () => {
     expect(JSON.parse(read(repo.root, "package.json")).version).toBe("0.5.1");
   });
 
-  test("a push origin refuses rolls back the release commit and the local tag", () => {
+  test("a push origin refuses rolls back the release commit and the local tag", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           repo.advanceOrigin();
@@ -573,10 +626,10 @@ describe("release run against a throwaway git origin", () => {
     expect(result.stub.keys()).not.toContain(GH_RELEASE);
   });
 
-  test("another release's tag on origin is reported as such, and this release is rolled back", () => {
+  test("another release's tag on origin is reported as such, and this release is rolled back", async () => {
     const repo = gitFixture();
     let theirs;
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         "bun run build:fallback": () => {
           gitIn(repo.origin, "tag", "-a", "v0.5.1", "-m", "another releaser", repo.head);
@@ -601,9 +654,9 @@ describe("release run against a throwaway git origin", () => {
     ["tag -d", (repo, release) => `\`git tag -d v0.5.1\`, then \`git update-ref refs/heads/main ${repo.head} ${release}\`, then \`git checkout ${repo.head} -- ${WRITTEN}\``],
     ["update-ref", (repo, release) => `\`git update-ref refs/heads/main ${repo.head} ${release}\`, then \`git checkout ${repo.head} -- ${WRITTEN}\``]
   ]) {
-    test(`a rollback whose ${failing} fails lists only the steps still to do`, () => {
+    test(`a rollback whose ${failing} fails lists only the steps still to do`, async () => {
       const repo = gitFixture();
-      const result = gitRelease(repo, {
+      const result = await gitRelease(repo, {
         fail: [failing],
         replies: {
           "bun run build:fallback": () => {
@@ -621,10 +674,10 @@ describe("release run against a throwaway git origin", () => {
     });
   }
 
-  test("a ref on origin that git push would take for main or the tag stops the release before the push", () => {
+  test("a ref on origin that git push would take for main or the tag stops the release before the push", async () => {
     const repo = gitFixture();
     gitIn(repo.origin, "update-ref", "refs/heads/refs/tags/v0.5.1", repo.head);
-    const result = gitRelease(repo);
+    const result = await gitRelease(repo);
     expect(result.status).toBe(1);
     expect(result.err).toBe(
       "Release aborted: the release failed before anything was pushed: origin has refs/heads/refs/tags/v0.5.1, which `git push` would update in place of refs/heads/main or refs/tags/v0.5.1. Ask a repository admin to delete it.\n" +
@@ -637,9 +690,9 @@ describe("release run against a throwaway git origin", () => {
     ]);
   });
 
-  test("a push that lands but reports an error goes on to the GitHub release", () => {
+  test("a push that lands but reports an error goes on to the GitHub release", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo, {
+    const result = await gitRelease(repo, {
       replies: {
         [PUSH]: () => {
           repo.git("push", "-q", "--atomic", "origin", "refs/heads/main:refs/heads/main", "refs/tags/v0.5.1:refs/tags/v0.5.1");
@@ -656,9 +709,9 @@ describe("release run against a throwaway git origin", () => {
     expect(gitIn(repo.origin, "rev-parse", "main", "v0.5.1^{commit}").trim().split("\n")).toEqual([release, release]);
   });
 
-  test("a full release pushes main and the tag to origin", () => {
+  test("a full release pushes main and the tag to origin", async () => {
     const repo = gitFixture();
-    const result = gitRelease(repo);
+    const result = await gitRelease(repo);
     expect(result.err).toBe("");
     expect(result.status).toBe(0);
     const release = repo.git("rev-parse", "HEAD").trim();
@@ -666,4 +719,85 @@ describe("release run against a throwaway git origin", () => {
     expect(repo.git("status", "--porcelain")).toBe("");
     expect(gitIn(repo.origin, "rev-parse", "main", "v0.5.1^{commit}").trim().split("\n")).toEqual([release, release]);
   });
+});
+
+// A release run in a child process, so a real signal reaches it. The child
+// stops in the build (`build`) or in the origin check (`origin`) for a moment,
+// and reports READY first. Only the child gets the signal, as a kill would.
+const RELEASE_CHILD = `import { execFileSync } from "node:child_process";
+import { git } from ${JSON.stringify(pathToFileURL(path.join(import.meta.dir, "helpers.js")).href)};
+import { runRelease } from ${JSON.stringify(pathToFileURL(path.join(import.meta.dir, "..", "scripts", "release.js")).href)};
+
+const [root, pausedAt] = process.argv.slice(2);
+const pause = () => {
+  process.stdout.write("READY\\n");
+  execFileSync(process.execPath, ["-e", "Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500)"]);
+};
+const refused = (stderr) => Object.assign(new Error(\`Command failed\\n\${stderr}\`), { stderr });
+
+process.exitCode = await runRelease(["patch"], {
+  root,
+  log: () => {},
+  today: () => "2026-10-06",
+  run: (command, args) => {
+    if (command === "git") {
+      if (pausedAt === "origin" && args[0] === "ls-remote" && args.includes("refs/heads/main/HEAD")) pause();
+      return git(root, ...args);
+    }
+    if (command === "bun" && pausedAt === "build" && args.join(" ") === "run build:fallback") pause();
+    if (command === "gh" && args[0] === "release") throw refused("release not found");
+    if (command === "npm") throw refused("npm error code E404");
+    return "";
+  }
+});
+`;
+
+async function releaseSignalled(repo, signal, pausedAt) {
+  const script = path.join(makeTempDir("story-release-child-"), "release-child.mjs");
+  fs.writeFileSync(script, RELEASE_CHILD);
+  const child = spawn(process.execPath, [script, repo.root, pausedAt], { stdio: ["ignore", "pipe", "pipe"] });
+  let stdout = "";
+  let stderr = "";
+  let sent = false;
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+    if (!sent && stdout.includes("READY")) {
+      sent = true;
+      child.kill(signal);
+    }
+  });
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const code = await new Promise((resolve, reject) => {
+    child.on("error", reject);
+    child.on("close", (exitCode, exitSignal) => resolve(exitCode ?? exitSignal));
+  });
+  return { code, stderr, sent };
+}
+
+describe("release run killed by a real signal", () => {
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    test.skipIf(process.platform === "win32")(`a ${signal} during the build rolls back and pushes nothing (#684)`, async () => {
+      const repo = gitFixture();
+      const result = await releaseSignalled(repo, signal, "build");
+      expect(result.sent).toBe(true);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`interrupted by ${signal}`);
+      expect(result.stderr).toContain("Rolled back:");
+      expectUntouched(repo);
+    }, 30000);
+  }
+
+  test.skipIf(process.platform === "win32")("a SIGTERM during the origin check rolls back before the push (#684)", async () => {
+    const repo = gitFixture();
+    const result = await releaseSignalled(repo, "SIGTERM", "origin");
+    expect(result.sent).toBe(true);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("interrupted by SIGTERM");
+    expect(result.stderr).toContain("Rolled back:");
+    expectUntouched(repo);
+  }, 30000);
 });
