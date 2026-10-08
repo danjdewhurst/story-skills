@@ -1626,6 +1626,15 @@ describe("github workflows", () => {
     expect(draft).toContain("for check in validate links continuity; do");
   });
 
+  test("the story-checks triggers match the README, the template comment, and the automation guide (#679)", () => {
+    const template = readRepo("templates/github/story-checks.yml");
+    const triggers = /^on:\n([\s\S]*?)\n\S/m.exec(template)[1];
+    expect(triggers).toBe("  push:\n    branches: [main]\n  pull_request:\n");
+    expect(template).toContain("Every push to main and every pull request");
+    expect(readRepo("README.md")).toContain("on every push to `main` and every pull request");
+    expect(readRepo("docs/automation.md")).toContain("on every push to `main` and every pull request");
+  });
+
   test("story templates install the CLI from npm once per job (#402)", () => {
     const templates = ["templates/github/story-checks.yml", "templates/github/review-copy.yml", "templates/github/draft-next-chapter.yml"];
     // Every "Install the Story CLI" step body, unindented.
