@@ -28,8 +28,8 @@ start — arcs get built during reconciliation.
 - Starting a project from a situation/character rather than a plot
 - NOT for mysteries or other clue-dependent genres where setup must precede
   payoff (use chapter-writing; see `genre-craft`)
-- NOT for revising existing chapters, including a reverse outline of the
-  draft or cutting a subplot as a revision pass (use `revision-continuity`).
+- NOT for revising existing chapters, including a reverse outline of an
+  existing linear draft or cutting a subplot as a revision pass (use `revision-continuity`).
   The reverse outline inside the reconcile loop, and cutting dead ends in a
   batch review, stay here
 - The user can switch modes per project or per chapter; record the mode so
