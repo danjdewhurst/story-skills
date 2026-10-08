@@ -71,10 +71,11 @@ describe("chapter numerals", () => {
   });
 
   test("each language gets its script's numerals, or none", () => {
-    const table = Object.fromEntries(["ja", "jpn", "ja-Hani", "zh", "cmn", "zh-Hant", "zh-TW", "yue", "yue-CN", "zh-Hani", "zh-Bopo", "ar", "ckb", "fa", "ur", "ps", "pa", "pa-Arab", "hi", "mr", "ne", "bn", "th", "lo", "km", "my", "bo", "mn-Mong", "en", "ko", "he", "ru", "mn", "ar-Latn"].map((tag) => [tag, nativeNumerals(tag)]));
+    const table = Object.fromEntries(["ja", "jpn", "ja-Hani", "zh", "cmn", "zh-Hant", "zh-TW", "yue", "yue-CN", "zh-Hani", "zh-Bopo", "ar", "ckb", "fa", "ur", "urd", "ps", "pus", "sd", "snd", "ug", "uig", "pa", "pa-Arab", "hi", "mr", "ne", "bn", "th", "lo", "km", "my", "bo", "mn-Mong", "en", "ko", "he", "ru", "mn", "ar-Latn"].map((tag) => [tag, nativeNumerals(tag)]));
     expect(table).toEqual({
       ja: "jpan", jpn: "jpan", "ja-Hani": "jpan", zh: "hans", cmn: "hans", "zh-Hant": "hant", "zh-TW": "hant", yue: "hant", "yue-CN": "hans", "zh-Hani": "hans", "zh-Bopo": "hant",
-      ar: "arab", ckb: "arab", fa: "arabext", ur: "arabext", ps: "arabext", pa: "guru", "pa-Arab": "arabext", hi: "deva", mr: "deva", ne: "deva", bn: "beng",
+      ar: "arab", ckb: "arab", fa: "arabext", ur: "arabext", urd: "arabext", ps: "arabext", pus: "arabext", sd: "arab", snd: "arab", ug: "arab", uig: "arab",
+      "pa-Arab": "arabext", pa: "guru", hi: "deva", mr: "deva", ne: "deva", bn: "beng",
       th: "thai", lo: "laoo", km: "khmr", my: "mymr", bo: "tibt", "mn-Mong": "mong", en: null, ko: null, he: null, ru: null, mn: null, "ar-Latn": null
     });
     // Tags whose script the typesetting table does not name: N'Ko and

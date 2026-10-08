@@ -229,7 +229,7 @@ status: alive
       expect(accepts(vertical, language), language).toBe(false);
     }
     const native = { "chapter-numerals": "native" };
-    for (const language of ["ar", "fa-IR", "hi", "th", "ja", "zh-TW", "az-IR", "uz-AF", "az-Arab", "prs", "zh-yue", "ko-abc-Hani", "mn-Mong", " NQO "]) {
+    for (const language of ["ar", "fa-IR", "hi", "th", "ja", "zh-TW", "az-IR", "uz-AF", "az-Arab", "prs", "zh-yue", "ko-abc-Hani", "mn-Mong", " NQO ", "urd", "pus", "snd", "uig"]) {
       expect(accepts(native, language), language).toBe(true);
     }
     for (const language of ["en", "ko", "ko-Hani", "kor-Hani", "he", "ru", "az", "az-Latn-IR", "ar-Latn", "ar-syr", "[TODO]"]) {
