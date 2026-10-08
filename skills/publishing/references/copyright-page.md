@@ -101,8 +101,8 @@ Edited by {name}
   on the copyright page or in back matter as the permission specifies.
 - Whether a quotation needs permission is a clearance question for the
   `editorial-review` skill, which covers short lyric quotes and public
-  domain status (`references/real-people-and-permissions.md` there). Record
-  the answer in `permission`.
+  domain status (`editorial-review/references/real-people-and-permissions.md`).
+  Record the answer in `permission`.
 - Titles of songs and books are generally not copyrightable, so quoting a
   title alone needs no copyright permission. A title can still be a
   trademark, or part of a protected series name or brand, so check before
