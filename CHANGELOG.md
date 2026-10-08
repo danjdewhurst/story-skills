@@ -17,6 +17,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
+- `story continuity --help` names the chapter numbering and open promise checks by their finding codes.
+  - The help lists `chapter-numbering-start` and `chapter-numbering-gap`, which warn when chapter numbers do not start at 1 or skip a number.
+  - The help lists `complete-with-open-promise`, which errors when `story.md` is `complete` and a promise is still planned or planted.
 - The craft skills now describe the CLI and the edit-note format correctly. ([#794](https://github.com/danjdewhurst/story-skills/issues/794), [#795](https://github.com/danjdewhurst/story-skills/issues/795), [#797](https://github.com/danjdewhurst/story-skills/issues/797), [#800](https://github.com/danjdewhurst/story-skills/issues/800), [#801](https://github.com/danjdewhurst/story-skills/issues/801))
   - `scene-craft` says a scene with `travel-hours` above 0 and no `date` warns, as `story continuity` does.
   - `plot-structure` says `story validate` checks that `mice-threads` is a list, not its thread types.

@@ -32019,7 +32019,10 @@ var COMMANDS = [
       "Check deterministic continuity contracts: deaths,",
       "casts and cut characters, promises, questions,",
       "clues, prop custody, clock and travel time,",
-      "location routes, and durable state.",
+      "location routes, durable state, chapter numbering",
+      "(chapter-numbering-start, chapter-numbering-gap), and",
+      "open promises in a complete story",
+      "(complete-with-open-promise).",
       "Findings matching continuity/exemptions.md are",
       "reported as dismissed"
     ],
