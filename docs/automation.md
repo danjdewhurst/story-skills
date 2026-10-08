@@ -424,6 +424,8 @@ If you want `story-checks.yml` to run on drafted PRs as well, for example becaus
 
 [`review-copy.yml`](../templates/github/review-copy.yml) gives beta readers, critique partners, and editors a link instead of a terminal. On every push to `main` it checks the project, builds the [HTML review copy](manuscripts.md#html-review-copy) with `story build --format html`, and publishes it to GitHub Pages. Every paragraph in the copy carries a label such as `ch03-p12` (chapter 3, paragraph 12), and the [manuscript note issue form](#manuscript-note-issue-form) asks readers for that label, so each note points at an exact paragraph.
 
+The published page prints raw HTML in the manuscript as text. A comment between a stray fence line and the next fence line can therefore show on the Pages site, so close or remove that fence line before you push. See [HTML review copy](manuscripts.md#html-review-copy).
+
 ### Install it
 
 1. Copy `templates/github/review-copy.yml` to `.github/workflows/` in your story repository.
