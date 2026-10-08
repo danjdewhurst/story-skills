@@ -779,7 +779,7 @@ After a complete draft, the audit asks: does the ending answer the opening's val
 
 ### Checks
 
-The CLI has no theme-specific checks: the premise and arc fields are for you and the agent, and the CLI does not read `continuity/motifs.md` or `continuity/theme-audit.md`. The maintenance pass still keeps the edited `story.md` and character files valid:
+The CLI has no theme-specific checks: the premise and arc fields are for you and the agent, and no CLI check reads the status of a motif in `continuity/motifs.md` or the verdict in `continuity/theme-audit.md`. The maintenance pass still keeps the edited `story.md` and character files valid:
 
 ```shell
 story reindex .
@@ -789,7 +789,7 @@ story check .
 
 ### Result
 
-`story.md` has `premise` and `counter-premise` (or `premise: tbd-discovery`). The protagonist, the antagonist, and any character whose arc touches the theme carry `arc-type`, `lie`, `truth`, and `ghost-wound`. Motifs are tracked in `continuity/motifs.md` or an arc file, and after a full draft `continuity/theme-audit.md` holds the verdict.
+`story.md` has `premise` and `counter-premise` (or `premise: tbd-discovery`). The protagonist, the antagonist, and any character whose arc touches the theme carry `arc-type`, `lie`, `truth`, and `ghost-wound`. Motifs are tracked in `continuity/motifs.md`, and after a full draft `continuity/theme-audit.md` holds the verdict.
 
 ## Voice and house style
 
