@@ -93,6 +93,7 @@ export const FINDING_CODES = {
   "exemption-file-not-relative": "error",
   "exemption-too-broad": "error",
   "exemption-misspelled-key": "error",
+  "exemption-unknown-key": "error",
   "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",

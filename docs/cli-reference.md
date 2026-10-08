@@ -3278,6 +3278,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `exemption-file-not-relative` | error | A continuity exemption's `file` is absolute or has a `..` segment. |
 | `exemption-too-broad` | error | A continuity exemption sets only `code`, which would dismiss every finding of that rule, or sets `file` or `chapter` with neither `code` nor `pattern`, which would dismiss every finding about that file or chapter. |
 | `exemption-misspelled-key` | error | A continuity exemption has a key that looks like a misspelled one, such as `Code` or `files`. |
+| `exemption-unknown-key` | error | A continuity exemption has a key that is not `pattern`, `code`, `file`, `chapter`, or `reason`, such as `file_path` or `scene`. Such a key would be ignored and widen the entry. |
 | `exemption-chapter-not-carried` | error | A continuity exemption sets `chapter` with a `code` whose findings carry no chapter, so it could never match. |
 | `stale-exemption` | warning | A continuity exemption's `file` is not a file in the project, or its `chapter` is not a chapter, so it matches nothing. |
 | `style-use-equals-avoid` | error | A style-sheet `preferred` entry uses and avoids the same word. |

@@ -37,8 +37,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `voice-style` and the `story-maintenance` prose reference say when `story prose` exits non-zero: a `story.md` `severity` entry can make it exit 1, and a usage error such as `--baseline` with no `samples` exits 2.
   - The `story-maintenance` compare reference names `--ref`, `--against`, and `--snapshot`.
   - `query-letter` rounds the word count in "complete at" to the nearest thousand.
-- `story validate` rejects an exemption key one typo away from a known key, such as `patern` or `chapterr`, so a typo no longer widens the entry. ([#695](https://github.com/danjdewhurst/story-skills/issues/695))
-  - The entry stops taking effect, and validate reports `exemption-misspelled-key`. `story continuity` no longer dismisses findings with that entry.
+- `story validate` rejects an exemption key that is not an entry key, such as `patern`, `chapterr`, or `file_path`, so a typo no longer widens the entry. ([#695](https://github.com/danjdewhurst/story-skills/issues/695))
+  - The entry stops taking effect. Validate reports `exemption-misspelled-key` for a key one typo away from a known key, and `exemption-unknown-key` for any other key. `story continuity` no longer dismisses findings with that entry.
 
 - `story continuity` no longer lets an exemption dismiss an unreadable file, so a chapter it cannot read stays an error. ([#697](https://github.com/danjdewhurst/story-skills/issues/697))
   - An entry with `code: unreadable-file` is rejected by `story validate` as `exemption-code-not-dismissible`. An entry with only a `file` and `pattern` no longer dismisses that error either.

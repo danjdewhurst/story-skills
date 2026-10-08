@@ -1137,7 +1137,7 @@ exemptions:
 | `exemptions[].pattern` | string, at least 4 characters | no | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |
 | `exemptions[].reason` | string | yes | Why the finding is intentional. |
 
-`story validate` rejects an entry with none of the matching keys, one that is too broad, an unknown or non-exemptable `code`, a `file` outside the project, a `chapter` that is not a kebab-case id or that its `code` never carries, or a misspelled key, and an entry it rejects never takes effect. It warns when a `file` or `chapter` names nothing in the project. [Exemptions](continuity.md#exemptions) has the full rules.
+`story validate` rejects an entry with none of the matching keys, one that is too broad, an unknown or non-exemptable `code`, a `file` outside the project, a `chapter` that is not a kebab-case id or that its `code` never carries, or a key other than `pattern`, `code`, `file`, `chapter`, and `reason`, and an entry it rejects never takes effect. It warns when a `file` or `chapter` names nothing in the project. [Exemptions](continuity.md#exemptions) has the full rules.
 
 ## Glossary
 

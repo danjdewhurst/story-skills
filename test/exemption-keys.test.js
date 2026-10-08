@@ -237,6 +237,27 @@ describe("exemption keys (#284)", () => {
     expect(result.warnings.map((finding) => finding.file)).toEqual([CH1, CH2]);
   });
 
+  test("a key that is not an exemption key stops the entry, so it cannot widen it", () => {
+    const { root } = povProject();
+    writeLog(root, [
+      "  - pattern: \"POV character ann\"\n    file_path: chapters/chapter-01.md\n    reason: wrong key name",
+      "  - pattern: \"POV character ann\"\n    scene: scene-01\n    reason: scene is not an entry key",
+      "  - pattern: \"POV character ann\"\n    cde: pov-not-in-cast\n    reason: short typo",
+      "  - pattern: \"POV character ann\"\n    mode: chapter\n    reason: a chapter key"
+    ].join("\n"));
+    const label = "continuity/exemptions.md exemptions";
+    const unknown = (index, key) => ["exemption-unknown-key", `${label}[${index}] has ${key}, which is not an exemption key: use pattern, code, file, chapter, reason`];
+    expect(validateProject(root).errors.map((error) => [error.code, error.message])).toEqual([
+      unknown(0, "file_path"),
+      unknown(1, "scene"),
+      unknown(2, "cde"),
+      unknown(3, "mode")
+    ]);
+    const result = checkContinuity(scanProject(root));
+    expect(result.dismissed).toEqual([]);
+    expect(result.warnings.map((finding) => finding.file)).toEqual([CH1, CH2]);
+  });
+
   test("an exemption cannot dismiss an unreadable file, by code or by pattern", () => {
     const { root } = povProject();
     const chapter = path.join(root, CH2);
