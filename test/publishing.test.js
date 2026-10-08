@@ -158,3 +158,17 @@ describe("review fixes", () => {
     expect(messages(validateProject(root).errors)).toContain("story.md isbn 4006381333931 is not a valid ISBN-13 or ISBN-10 (check the digits and checksum)");
   });
 });
+
+describe("publishing skill checklist rows", () => {
+  test("the checklist rows the skill quotes are rows the metadata sheet prints", () => {
+    const root = project();
+    writeMarkdown(path.join(root, "chapters", "chapter-01.md"), "title: Arrival\nnumber: 1\nstatus: final", "The lamps [TODO: fix] came on.\n");
+    writeMarkdown(path.join(root, "matter", "epigraph.md"), "title: Epigraph\nplacement: front\npermission: pending", "[TODO: author to supply]\n");
+    const sheet = fs.readFileSync(buildBook(root, { format: "metadata" }).outFile, "utf8");
+    const skill = fs.readFileSync(path.join(import.meta.dir, "..", "skills", "publishing", "SKILL.md"), "utf8");
+    for (const row of ["Permissions cleared for quoted matter", "No `[TODO` markers in chapter prose", "No `[TODO` markers on matter pages"]) {
+      expect(sheet, row).toContain(row);
+      expect(skill, row).toContain(row);
+    }
+  });
+});
