@@ -60,6 +60,12 @@ export function interruptedChange(root) {
 // holds the undo log of another, unless that is `command` itself, which
 // puts it back first.
 export function assertNoInterruptedChange(root, command) {
+  // A link or other non-file at the log's path was not made by a stopped
+  // command, and doctor --fix cannot read it, so it refuses nothing here.
+  // validate still reports it.
+  if (!isLogFile(path.resolve(root))) {
+    return;
+  }
   const interrupted = interruptedChange(root);
   if (interrupted !== null && interrupted.command !== command) {
     throw refusedError(`${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed, so ${command} would build on a change made only in part; nothing was changed. Run story doctor --fix to put those files back first, or run ${interrupted.command} again to finish it`);
@@ -134,6 +140,11 @@ function logExists(file) {
   } catch {
     return false;
   }
+}
+
+// True when the project's undo log is a regular file (not a link or folder).
+function isLogFile(projectRoot) {
+  return lstatIfExists(path.join(projectRoot, UNDO_LOG))?.isFile() === true;
 }
 
 // Calls visit(entry, first) for each change the log records, as { path,

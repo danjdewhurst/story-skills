@@ -5,7 +5,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { codexPages } from "../src/codex.js";
 import { buildBook, createStoryProject, scanProject } from "../src/story.js";
-import { expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+import { CHMOD_IGNORED, expectLinearTime, makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
   const io = memoryIo(cwd);
@@ -362,5 +362,32 @@ describe("codex chapter labels (#712)", () => {
     expect(site["progress.html"]).toContain("<th>1</th><th>Low Water</th><th>2</th>");
     expect(site["progress.html"]).not.toContain("<th>3</th>");
     expect(site["threads.html"]).toContain("<th>1</th><th>Low Water</th><th>2</th>");
+  });
+});
+
+describe("a refused build lists the pages it wrote (#722)", () => {
+  test.skipIf(CHMOD_IGNORED)("build --json lists the pages rewritten before a read-only one refused the run", () => {
+    const { root } = project();
+    expect(invoke(root, ["build", "--format", "codex"]).code).toBe(0);
+    const timeline = path.join(root, "dist", "codex", "timeline.html");
+    fs.chmodSync(timeline, 0o444);
+    try {
+      const result = invoke(root, ["build", "--format", "codex", "--json"]);
+      expect(result.code).toBe(4);
+      // Every page sorted before timeline.html was rewritten, and is listed.
+      const written = JSON.parse(result.out).writes.map((file) => path.relative(root, file));
+      expect(written).toEqual([
+        "dist/codex/arcs/the-keeper.html",
+        "dist/codex/artifacts/brass-key.html",
+        "dist/codex/characters/mara.html",
+        "dist/codex/characters/tobias.html",
+        "dist/codex/index.html",
+        "dist/codex/locations/lamp-house.html",
+        "dist/codex/progress.html",
+        "dist/codex/threads.html"
+      ].map((file) => file.split("/").join(path.sep)));
+    } finally {
+      fs.chmodSync(timeline, 0o644);
+    }
   });
 });

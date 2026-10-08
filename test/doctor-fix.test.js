@@ -254,6 +254,22 @@ describe("story doctor --fix", () => {
     }
   });
 
+  test.skipIf(process.getuid?.() === 0)("a refused write under --json prints only the error envelope, and lists the repair before it (#725)", () => {
+    const root = newProject();
+    fs.rmSync(path.join(root, "glossary", "_index.md"));
+    const registry = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(registry, fs.readFileSync(registry, "utf8").replace("| Mara Quill |", "| Stale Name |"));
+    fs.chmodSync(registry, 0o444);
+    try {
+      const result = invoke(root, ["doctor", "--fix", "--json"]);
+      expect(result.code).toBe(4);
+      expect(JSON.parse(result.out).writes).toEqual([path.join(root, "glossary", "_index.md")]);
+      expect(fs.existsSync(path.join(root, "glossary", "_index.md"))).toBe(true);
+    } finally {
+      fs.chmodSync(registry, 0o644);
+    }
+  });
+
   test("--dry-run without --fix is a usage error", () => {
     const root = newProject();
     const result = invoke(root, ["doctor", "--dry-run"]);

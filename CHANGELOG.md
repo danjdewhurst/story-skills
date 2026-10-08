@@ -102,8 +102,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A book's own `approximate-words` or `approximate-characters` label gives the same wording for every count in these languages, as it does in other languages.
 - `--json` `writes` lists the files a write command changed before it failed, for every write command. ([#722](https://github.com/danjdewhurst/story-skills/issues/722))
   - Before, `reindex`, `wordcount --write`, `rename`, `split`, `doctor --fix`, and the others reported `"writes": []` even when they had rewritten a file.
-- `story export`, `story build`, and `story synopsis` are refused while `.story-undo.tmp` holds a change a stopped command made, as `validate` already reports it. ([#723](https://github.com/danjdewhurst/story-skills/issues/723))
+- `story export`, `story build`, `story synopsis`, and `story diagram --out` are refused while `.story-undo.tmp` holds a change a stopped command made, as `validate` already reports it. ([#723](https://github.com/danjdewhurst/story-skills/issues/723))
   - The refusal exits `4`, and `--dry-run` is refused too. Run `story doctor --fix` to put the change back first.
+  - A link or folder named `.story-undo.tmp` refuses nothing, as before. `validate` still reports it.
 - `story wordcount --write` checks every chapter and registry it rewrites before it changes any, so a read-only file no longer leaves earlier chapters rewritten. ([#724](https://github.com/danjdewhurst/story-skills/issues/724))
 - `story doctor --fix` lists the repairs made before a refused write stopped the run, in the text output. ([#725](https://github.com/danjdewhurst/story-skills/issues/725))
 

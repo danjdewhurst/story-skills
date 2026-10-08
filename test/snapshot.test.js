@@ -184,6 +184,17 @@ describe("story snapshot", () => {
     expect(fs.readdirSync(path.join(root, ".snapshots")).sort()).toEqual([".gitignore", "draft"]);
   });
 
+  test("a snapshot that fails part way lists no file in --json writes, since it puts back what it wrote (#722)", () => {
+    const { cwd, root } = project();
+    // Sorted after chapters/, so the copy fails after the files before it are written.
+    fs.mkdirSync(path.join(root, "notes"));
+    fs.writeFileSync(path.join(root, "notes", "latin1.md"), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+    const failed = invoke(cwd, ["snapshot", "fresh", "--json", "--path", root]);
+    expect(failed.code).toBe(3);
+    expect(JSON.parse(failed.out).writes).toEqual([]);
+    expect(fs.existsSync(path.join(root, ".snapshots"))).toBe(false);
+  });
+
   test.skipIf(CHMOD_IGNORED)("keeps each file's permissions in a snapshot", () => {
     const { cwd, root } = project();
     const notes = path.join(root, "research", "private.md");

@@ -537,6 +537,11 @@ export const COMMANDS = [
       const kind = parsed.positionals[1];
       const dryRun = outputDryRun(parsed, "diagram");
       const projectRoot = root();
+      // Only --out writes a file, which would publish a half-applied project,
+      // so only then is it refused (as export and synopsis are).
+      if (parsed.options.out !== undefined) {
+        assertNoInterruptedChange(projectRoot, "story diagram");
+      }
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => diagramProject(projectRoot, { kind, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;

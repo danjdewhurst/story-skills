@@ -932,6 +932,26 @@ describe("write preflight (#198)", () => {
     expect(invoke(root, ["wordcount", "--write"]).code).toBe(0);
   });
 
+  test.skipIf(CHMOD_IGNORED)("a wordcount --write refused by a read-only registry lists no file as written (#722)", () => {
+    const root = baseProject(2);
+    // The characters registry is planned first and is stale, so the plan
+    // reaches it before the chapters registry, which is read-only, refuses.
+    const characters = path.join(root, "characters", "_index.md");
+    fs.writeFileSync(characters, fs.readFileSync(characters, "utf8").replaceAll("Ann", "Stale"));
+    const chapters = path.join(root, "chapters", "_index.md");
+    fs.appendFileSync(chapters, "\nStale line.\n");
+    fs.chmodSync(chapters, 0o444);
+    const before = snapshot(root);
+    try {
+      const result = invoke(root, ["wordcount", "--write", "--json"]);
+      expect(result.code).toBe(4);
+      expect(JSON.parse(result.out).writes).toEqual([]);
+      expect(snapshot(root)).toEqual(before);
+    } finally {
+      fs.chmodSync(chapters, 0o644);
+    }
+  });
+
   test("a write that fails partway says the same command finishes the job", () => {
     const root = copyExample("harbor-of-second-light");
     const original = fs.renameSync;
