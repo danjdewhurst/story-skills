@@ -12,10 +12,12 @@ export function nfc(value) {
 
 const SAME = (start, end) => [start, end];
 
-// A letter with the combining marks after it, or a Hangul syllable with the
-// conjoining vowels and finals after it: the runs NFC may compose. Every
-// other code point is composed on its own.
-const CLUSTER = /\P{M}?[\p{M}\u1160-\u11FF\uD7B0-\uD7FF]+/gu;
+// A letter with the combining marks after it, or a run of Hangul jamo and
+// syllables that NFC may compose (a leading consonant, vowel, and final, or
+// a syllable and a final). A jamo after a kana or Han character is a run of
+// its own, so it never joins that character. Every other code point is
+// composed on its own.
+const CLUSTER = /\P{M}?\p{M}+|[\u1100-\u11FF\uA960-\uA97F\uAC00-\uD7A3\uD7B0-\uD7FF]+/gu;
 
 // `text` in NFC, with `original(start, end)` mapping a span of it back to
 // the text as written, so offsets, line and column numbers, and excerpts
