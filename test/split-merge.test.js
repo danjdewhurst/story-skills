@@ -15,7 +15,7 @@ import {
   validateLinks,
   validateProject
 } from "../src/story.js";
-import { CHMOD_IGNORED, makeTempDir, memoryIo, whileWriting, writeMarkdown } from "./helpers.js";
+import { makeTempDir, memoryIo, READONLY_IGNORED, whileWriting, writeMarkdown } from "./helpers.js";
 
 const examplesRoot = path.resolve(import.meta.dir, "..", "examples");
 
@@ -368,7 +368,7 @@ describe("story split", () => {
     expect(() => restructureWrites(root, fail(true))).toThrow(expect.objectContaining({ hint: expect.stringContaining("run the same command again, which puts them back and starts over, or run story doctor --fix to put them back") }));
   });
 
-  test.skipIf(CHMOD_IGNORED)("refuses before writing when a file it would rewrite is read-only", () => {
+  test.skipIf(READONLY_IGNORED)("refuses before writing when a file it would rewrite is read-only", () => {
     const root = book();
     const clue = path.join(root, "continuity", "clues", "the-ticket.md");
     fs.chmodSync(clue, 0o444);

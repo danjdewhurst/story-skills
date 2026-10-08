@@ -656,15 +656,14 @@ describe("import --force into an existing project", () => {
     expect(fs.readFileSync(path.join(cwd, "my book", "b", "chapters", "chapter-01.md"), "utf8")).toContain("One two three.");
   });
 
-  test.skipIf(CHMOD_IGNORED)("takes no snapshot, and reads no .snapshots/, when there is no chapter to replace", () => {
+  // Imports --force into an empty project whose .snapshots/ folder has `mode`.
+  const forceIntoEmptyProject = (mode) => {
     const cwd = makeTempDir();
     fs.writeFileSync(path.join(cwd, "draft.md"), "# Chapter 1: One\n\nOne two three.\n", "utf8");
     expect(invoke(cwd, ["init", "Empty", "--dir", "empty"]).code).toBe(0);
     const snapshots = path.join(cwd, "empty", ".snapshots");
     fs.mkdirSync(snapshots);
-    // A .snapshots/ no one can read: only an import that takes a snapshot
-    // reads it.
-    fs.chmodSync(snapshots, 0o000);
+    fs.chmodSync(snapshots, mode);
     try {
       const argv = ["import", "draft.md", "--title", "Empty", "--dir", "empty"];
       const refused = invoke(cwd, [...argv, "--dry-run"]);
@@ -680,6 +679,16 @@ describe("import --force into an existing project", () => {
       fs.chmodSync(snapshots, 0o755);
     }
     expect(fs.readdirSync(snapshots)).toEqual([]);
+  };
+
+  test("takes no snapshot when there is no chapter to replace", () => {
+    forceIntoEmptyProject(0o755);
+  });
+
+  // Only an import that takes a snapshot reads .snapshots/, so this needs a
+  // folder that no one can read. Root and Windows ignore chmod.
+  test.skipIf(CHMOD_IGNORED)("reads no unreadable .snapshots/ when there is no chapter to replace", () => {
+    forceIntoEmptyProject(0o000);
   });
 
   const UNKEEPABLE_ENTRIES = [
