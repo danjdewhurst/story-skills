@@ -296,7 +296,7 @@ Each chapter's `word-count` frontmatter field is a stored copy of a count the CL
 The count covers chapter prose only:
 
 - If the body has a `## Chapter Text` heading, only the text after it counts. The `chapter-writing` skill keeps the outline above that heading so the outline never inflates the count.
-- Otherwise, if the body has a `## Outline` heading, only the text after the `---` line directly below the outline counts. If there is no `---` line, everything after the heading counts.
+- Otherwise, if the body has a `## Outline` heading, only the text after the `---` line directly below the outline counts. If there is no `---` line, the outline ends at its last list item or heading, and the text after it counts.
 - Otherwise the whole body counts, minus a leading `# Heading` line.
 
 A word is a run of letters or digits in any script, with its combining marks. Each Chinese or Japanese character (Han, Hiragana, Katakana) counts as one word, and Thai, Lao, Khmer, and Burmese, which are also written without spaces, are split into words with the runtime's dictionary. Straight or curly apostrophes and hyphens join a word, so `don’t` and `well-known` each count once, and `3.14`, `9:30`, a URL, or an email address is one word. HTML comments, images, and link targets are skipped; a link's visible text still counts, as does code, which every build prints, a backslash escape counts as the character it escapes (`didn\'t` is one word), and a character reference as the character it names (`&mdash;` is a dash). A comment or `` ``` `` fence that never closes hides nothing, and `story validate` warns about the comment. A `~~~` line is a scene break, not a code fence. [How words are counted](project-format.md#how-words-are-counted) has the exact rules.

@@ -713,6 +713,7 @@ var FINDING_CODES = {
   "todo-markers": "warning",
   "unclosed-comment": "warning",
   "ambiguous-scene-break": "warning",
+  "outline-without-chapter-text": "warning",
   "unsupported-footnote": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
@@ -11401,13 +11402,14 @@ function proseStart(markdownBody, masked = maskMarkup(markdownBody)) {
     return leadingHeadingLength(masked);
   }
   const start = outlineMatch.index + outlineMatch[0].length;
-  return outlineDivider(masked, start) ?? start;
+  return outlineEnd(masked, start).offset;
 }
-function outlineDivider(masked, start) {
+function outlineEnd(masked, start) {
   const lines = masked.slice(start).split(`
 `);
   let offset = start + lines[0].length + 1;
   let previous = "blank";
+  let last = start;
   for (const line of lines.slice(1)) {
     const lineStart = offset;
     offset += line.length + 1;
@@ -11415,14 +11417,33 @@ function outlineDivider(masked, start) {
     if (text.trim() === "") {
       previous = "blank";
     } else if (text.trim() === "---") {
-      return lineStart + line.length;
-    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^ {0,3}#{2,}(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
-      previous = "outline";
-    } else if (previous !== "outline") {
-      return null;
+      return { divider: true, offset: lineStart + line.length };
+    } else if (/^\s*(?:[-*+]|\d+[.)])(?:[ \t]|$)/.test(text) || /^[ \t]+\S/.test(text)) {
+      previous = "item";
+      last = lineStart + line.length;
+    } else if (/^ {0,3}#{2,}(?:[ \t]|$)/.test(text)) {
+      previous = "heading";
+      last = lineStart + line.length;
+    } else if (previous === "item") {
+      last = lineStart + line.length;
+    } else {
+      break;
     }
   }
-  return null;
+  return { divider: false, offset: last };
+}
+function outlineRunsIntoProse(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, `
+`);
+  const masked = maskMarkup(body);
+  if (sectionHeadingPattern("Chapter Text").test(masked)) {
+    return false;
+  }
+  const outlineMatch = sectionHeadingPattern("Outline").exec(masked);
+  if (!outlineMatch || outlineEnd(masked, outlineMatch.index + outlineMatch[0].length).divider) {
+    return false;
+  }
+  return chapterProse(body).trim() !== "";
 }
 function extractSection(markdown, heading) {
   const masked = maskMarkup(markdown);
@@ -14146,6 +14167,7 @@ function scanProject(root) {
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
       ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
+      outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       setextBreaks: fileLines(markdown, setextSceneBreakLines(markdown.body)),
       footnotes: fileLines(markdown, footnoteLines(markdown.body)),
@@ -22346,6 +22368,9 @@ function validateProjectOf(project) {
     }
     if (chapter.unclosedComment) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
+    }
+    if (chapter.outlineRunsOn) {
+      warnings.push(warn("outline-without-chapter-text", `${file} has an ## Outline with no ## Chapter Text heading and no --- line below it, so builds read the prose as starting after the outline's last list item: put ## Chapter Text above the prose`, file));
     }
     if (chapter.setextBreaks.length > 0) {
       const one = chapter.setextBreaks.length === 1;

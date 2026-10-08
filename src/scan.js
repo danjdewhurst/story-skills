@@ -26,6 +26,7 @@ import {
   footnoteLines,
   hasUnclosedComment,
   kebabCase,
+  outlineRunsIntoProse,
   setextSceneBreakLines,
   titleCaseSlug,
   wordCount
@@ -423,6 +424,7 @@ export function scanProject(root) {
       // measure (progress, pacing, form ranges, registries) uses.
       ...chapterLength(unit, data, markdown),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
+      outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       setextBreaks: fileLines(markdown, setextSceneBreakLines(markdown.body)),
       footnotes: fileLines(markdown, footnoteLines(markdown.body)),

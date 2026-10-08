@@ -40,6 +40,7 @@ export const FINDING_CODES = {
   "todo-markers": "warning",
   "unclosed-comment": "warning",
   "ambiguous-scene-break": "warning",
+  "outline-without-chapter-text": "warning",
   "unsupported-footnote": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",

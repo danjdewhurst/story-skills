@@ -312,7 +312,7 @@ Export and the book formats assemble the book from the same parts, in this order
 Only chapter prose goes in. Scene files, outlines, notes, and the bible do not. The CLI finds a chapter's prose this way:
 
 - If the chapter has a `## Chapter Text` heading, the prose is everything after it.
-- Otherwise, if it has a `## Outline` section, the prose is everything after the `---` line directly below the outline's list. A `---` after prose is a scene break, not the divider. With no divider, it is everything after `## Outline`.
+- Otherwise, if it has a `## Outline` section, the prose is everything after the `---` line directly below the outline's list. A `---` after prose is a scene break, not the divider. With no divider, it is everything after the outline's last list item or heading.
 - Otherwise, the prose is the whole body with a leading `# ` heading removed.
 
 HTML comments (`<!-- ... -->`) in the prose are left out of the word count and of every build format, so they are a safe place for notes to yourself. Close each one: `story validate` warns about a chapter whose `<!--` never closes, because the text after it then shows in builds. A `<!--` or `-->` inside a closed `` ``` `` code fence or an inline code span (`` `<!-- x -->` ``) is literal text: it neither opens nor closes a comment, and the validate warning ignores it.

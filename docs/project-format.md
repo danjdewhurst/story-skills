@@ -267,7 +267,7 @@ Section lookups match a `## Heading` line without regard to case and run to the 
 `story wordcount`, `story export`, `story build`, and `story prose` all find the prose in a chapter body the same way:
 
 1. If the body has a `## Chapter Text` heading, the prose is everything after it.
-2. Otherwise, if it has a `## Outline` heading, the prose is everything after a `---` line directly below the outline: only list items, their indented continuation lines, headings, and blank lines may come between. A `---` further down, after prose, is a scene break, not the divider. With no such divider, everything after the `## Outline` heading counts.
+2. Otherwise, if it has a `## Outline` heading, the prose is everything after a `---` line directly below the outline: only list items, their indented continuation lines, headings, and blank lines may come between. A `---` further down, after prose, is a scene break, not the divider. With no such divider, the outline ends at its last list item or heading, and everything after it counts.
 3. Otherwise the prose is the whole body, minus a leading `# Heading` line (or a heading underlined with `===`).
 
 The headings may be indented up to three spaces and have extra spaces or closing hashes (`##  Chapter Text ##`). A heading or `---` inside an HTML comment or a closed `` ``` `` fence does not count.

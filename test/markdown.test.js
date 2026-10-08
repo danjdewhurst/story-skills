@@ -15,6 +15,7 @@ import {
   kebabCase,
   maskLinkTargets,
   maskMarkup,
+  outlineRunsIntoProse,
   plainLinks,
   separateSceneBreaks,
   setextSceneBreakLines,
@@ -213,7 +214,8 @@ describe("markdown utilities", () => {
   test("extracts chapter prose from template, outline, and natural formats", () => {
     expect(chapterProse("# Chapter\n\n## Chapter Text\n\nActual prose.").trim()).toBe("Actual prose.");
     expect(chapterProse("# Chapter\n\n## Outline\n\n1. Beat\n\n---\n\nActual prose.").trim()).toBe("Actual prose.");
-    expect(chapterProse("# Chapter\n\n## Outline\n\n1. Beat").trim()).toBe("1. Beat");
+    // With no divider, the outline's list is not prose (#713).
+    expect(chapterProse("# Chapter\n\n## Outline\n\n1. Beat").trim()).toBe("");
     expect(chapterProse("# Chapter\n\nNo outline.").trim()).toBe("No outline.");
     expect(chapterProse("No leading heading.").trim()).toBe("No leading heading.");
   });
@@ -652,6 +654,43 @@ describe("#225 an outline without its divider", () => {
     expect(prose).not.toContain("Opening beat");
     expect(prose).toContain("The bell was ringing.");
     expect(prose).toContain("Later.");
+  });
+
+  test("with no divider, the outline ends at its last list item, and the prose after it counts", () => {
+    const body = "\n# Chapter 1: One\n\n## Outline\n\n- Opening beat\n- Second beat\n\nThe bell was ringing.\n\nLater.\n";
+    const prose = chapterProse(body);
+    expect(prose).not.toContain("Opening beat");
+    expect(prose).not.toContain("Second beat");
+    expect(prose).toContain("The bell was ringing.");
+    expect(prose).toContain("Later.");
+  });
+
+  test("an outline with no divider and no prose after it leaves the chapter with no prose", () => {
+    expect(chapterProse("\n# Chapter 1: One\n\n## Outline\n\n- Opening beat\n- Second beat\n").trim()).toBe("");
+  });
+
+  test("a line that runs on from a list item, with no blank line, stays in the outline", () => {
+    const prose = chapterProse("\n## Outline\n\n- Beat\nThe beat runs on.\n\nThe bell was ringing.\n");
+    expect(prose).not.toContain("The beat runs on.");
+    expect(prose).toContain("The bell was ringing.");
+  });
+
+  test("prose right under an outline heading, with no blank line, is prose and not outline", () => {
+    const body = "\n## Outline\n\n- Beat\n### Scene\nThe bell was ringing.\n";
+    expect(chapterProse(body)).toContain("The bell was ringing.");
+    expect(outlineRunsIntoProse(body)).toBe(true);
+  });
+
+  test("validate warns about an outline that runs into prose with no Chapter Text or divider", () => {
+    expect(outlineRunsIntoProse("\n## Outline\n\n- Beat\n\nProse.\n")).toBe(true);
+    expect(outlineRunsIntoProse("\n## Outline\n\n- Beat\n\n---\n\nProse.\n")).toBe(false);
+    expect(outlineRunsIntoProse("\n## Outline\n\n- Beat\n\n## Chapter Text\n\nProse.\n")).toBe(false);
+    expect(outlineRunsIntoProse("\n## Outline\n\n- Beat\n")).toBe(false);
+
+    const root = newProject();
+    writeChapter(root, "\n## Outline\n\n- Beat\n\nProse.\n");
+    const warned = validateProject(root).warnings.filter((finding) => finding.code === "outline-without-chapter-text");
+    expect(warned.map((finding) => finding.file)).toEqual(["chapters/chapter-01.md"]);
   });
 });
 
