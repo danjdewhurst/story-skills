@@ -92,28 +92,9 @@ Review the output of the commands above:
 2. `story prose .` shows no avoided spellings, and the user has reviewed
    the other findings. If `style-sheet.md` is missing or still the
    scaffold, suggest the `voice-style` skill first.
-
-Then check what the CLI does not report:
-
-3. Every chapter has `status: revised`, `final`, or `complete`. List any
-   still at `outline` or `draft`.
-4. The total word count sits inside the range for the category in
-   `references/word-count-norms.md`. Those ranges are rough conventions
-   for the English-language market only: state the number and the range,
-   and ask the user to confirm current norms for their market. For a book
-   in another language, report the count and ask for that market's norms
-   instead. A Chinese or Japanese book is counted in characters: report
-   `story wordcount .`'s character total, and `story validate .` checks
-   `target-characters` against per-form character ranges where a source
-   sets one. Never pad or cut to hit a number without the user's direction.
-   When the count is well outside the range and the user wants to change
-   it, hand the book to `revision-continuity`'s length pass
-   ([`../revision-continuity/references/pass-checklists.md#length-pass`](../revision-continuity/references/pass-checklists.md#length-pass)),
-   which budgets the cut or expansion by chapter and arc instead of
-   trimming every chapter evenly.
-5. No `[TODO` markers remain in chapter prose. `story validate` warns about
+3. No `[TODO` markers remain in chapter prose. `story validate` warns about
    each chapter that still has one.
-6. Open questions and planted promises are resolved, or deliberately left
+4. Open questions and planted promises are resolved, or deliberately left
    for a sequel (check `story.md` `precedes`). Once `story.md` is
    `status: complete`, every open question and planned or planted promise
    or clue is a `story continuity` error, which fails the story-checks CI.
@@ -133,6 +114,25 @@ Then check what the CLI does not report:
    ```
 
    Rerun `story continuity .` and confirm the finding shows as `dismissed`.
+
+Then check what the CLI does not report:
+
+5. Every chapter has `status: revised`, `final`, or `complete`. List any
+   still at `outline` or `draft`.
+6. The total word count sits inside the range for the category in
+   `references/word-count-norms.md`. Those ranges are rough conventions
+   for the English-language market only: state the number and the range,
+   and ask the user to confirm current norms for their market. For a book
+   in another language, report the count and ask for that market's norms
+   instead. A Chinese or Japanese book is counted in characters: report
+   `story wordcount .`'s character total, and `story validate .` checks
+   `target-characters` against per-form character ranges where a source
+   sets one. Never pad or cut to hit a number without the user's direction.
+   When the count is well outside the range and the user wants to change
+   it, hand the book to `revision-continuity`'s length pass
+   ([`../revision-continuity/references/pass-checklists.md#length-pass`](../revision-continuity/references/pass-checklists.md#length-pass)),
+   which budgets the cut or expansion by chapter and arc instead of
+   trimming every chapter evenly.
 
 Give a verdict: `ready`, `ready-with-caveats` (list them), or `not-ready`
 (list the blockers and hand them to `revision-continuity`).
