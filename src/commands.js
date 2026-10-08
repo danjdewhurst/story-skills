@@ -413,13 +413,14 @@ export const COMMANDS = [
     ],
     project: "positional",
     options: ["ref", "against", "snapshot", "anchor", "json"],
-    run({ parsed, io, cwd, root, overrides }) {
+    run({ parsed, io, cwd, root, overrides, defaulted }) {
       const comparison = applySeverity(compareProject(root(), {
         ref: parsed.options.ref,
         against: parsed.options.against,
         snapshot: parsed.options.snapshot,
         anchors: parsed.options.anchor,
-        cwd
+        cwd,
+        againstFromProject: defaulted.has("against")
       }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "compare", compareData(comparison));

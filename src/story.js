@@ -250,7 +250,9 @@ export function seriesReport(root) {
 // --ref is always a git ref and --snapshot always a snapshot, so a branch and
 // a snapshot with the same name are never confused. With `anchors`, maps
 // those review-copy labels from the earlier draft to the current text
-// instead.
+// instead. A relative --against from story.md cli-defaults is read from the
+// project folder, as similarityReport reads it; one on the command line from
+// the current directory.
 export function compareProject(root, options = {}) {
   const given = (value) => typeof value === "string" && value !== "";
   const hasRef = given(options.ref);
@@ -264,9 +266,10 @@ export function compareProject(root, options = {}) {
   // The earlier draft on disk, for --against and --snapshot. Errors reading
   // it are about the flag that named it (`flag`).
   const snapshot = given(options.snapshot) ? withFlags("snapshot", () => existingSnapshot(project.root, options.snapshot)) : null;
+  const againstBase = options.againstFromProject ? project.root : (options.cwd ?? process.cwd());
   const other = hasRef ? null : snapshot !== null
     ? { root: snapshot.directory, label: `snapshot ${snapshot.id}`, flag: "snapshot" }
-    : { root: path.resolve(options.cwd ?? process.cwd(), options.against), flag: "against" };
+    : { root: path.resolve(againstBase, options.against), flag: "against" };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
     return mapProjectLabels(project, anchors, { ...options, other });

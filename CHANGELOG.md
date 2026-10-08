@@ -17,6 +17,9 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Fixed
 
+- `story compare` reads a relative `against` from `story.md` `cli-defaults` from the project folder, as `similarity` does. ([#841](https://github.com/danjdewhurst/story-skills/issues/841))
+  - Before, it read the path from the folder the command ran in, so running `story compare` from outside the project failed with `not a story project`.
+  - A relative `--against` on the command line is still read from the current directory.
 - `story continuity --help` names the chapter numbering and open promise checks by their finding codes.
   - The help lists `chapter-numbering-start` and `chapter-numbering-gap`, which warn when chapter numbers do not start at 1 or skip a number.
   - The help lists `complete-with-open-promise`, which errors when `story.md` is `complete` and a promise is still planned or planted.

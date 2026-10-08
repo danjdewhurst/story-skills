@@ -30141,7 +30141,8 @@ function compareProject(root, options = {}) {
   const project = scanProject(root);
   assertProjectParses(project, "compare");
   const snapshot = given(options.snapshot) ? withFlags("snapshot", () => existingSnapshot(project.root, options.snapshot)) : null;
-  const other = hasRef ? null : snapshot !== null ? { root: snapshot.directory, label: `snapshot ${snapshot.id}`, flag: "snapshot" } : { root: path17.resolve(options.cwd ?? process.cwd(), options.against), flag: "against" };
+  const againstBase = options.againstFromProject ? project.root : options.cwd ?? process.cwd();
+  const other = hasRef ? null : snapshot !== null ? { root: snapshot.directory, label: `snapshot ${snapshot.id}`, flag: "snapshot" } : { root: path17.resolve(againstBase, options.against), flag: "against" };
   const anchors = [].concat(options.anchors ?? []);
   if (anchors.length > 0) {
     return mapProjectLabels(project, anchors, { ...options, other });
@@ -32187,13 +32188,14 @@ var COMMANDS = [
     ],
     project: "positional",
     options: ["ref", "against", "snapshot", "anchor", "json"],
-    run({ parsed, io, cwd, root, overrides }) {
+    run({ parsed, io, cwd, root, overrides, defaulted }) {
       const comparison = applySeverity(compareProject(root(), {
         ref: parsed.options.ref,
         against: parsed.options.against,
         snapshot: parsed.options.snapshot,
         anchors: parsed.options.anchor,
-        cwd
+        cwd,
+        againstFromProject: defaulted.has("against")
       }), overrides);
       if (wantsJson(parsed)) {
         return reportJson(io, "compare", compareData(comparison));
