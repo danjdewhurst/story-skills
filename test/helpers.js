@@ -15,6 +15,15 @@ const tempDirs = [];
 // unwritable skip when it is true.
 export const CHMOD_IGNORED = process.getuid?.() === 0 || process.platform === "win32";
 
+// Whether a read-only file can still be written. Root writes one anyway, but
+// Windows enforces the read-only flag, so a test of a read-only file runs there.
+export const READONLY_IGNORED = process.getuid?.() === 0;
+
+// The longest a linear-time check lets its largest run take, in milliseconds.
+// The ratio does the checking; this backstop only stops a run that never ends,
+// so it leaves room for a loaded CI runner.
+const HANG_LIMIT_MS = 20000;
+
 // Whether a `node` command is on PATH. Tests that run the Node build look it
 // up there, because process.execPath is Bun under `bun test`. Tests that need
 // it skip when it is false.
@@ -348,8 +357,9 @@ function fastestTime(task) {
 // n^1.5 the square root of `pieces` times as long, so it needs 256 pieces.
 // The long run may take up to eight times the pieces: a loaded runner
 // slows one of the two more than the other, and the bound still fails
-// a quadratic run. `make(n)` builds an input of about n characters. The
-// slack covers timer noise when both are quick.
+// a quadratic run. The long run must also take less than HANG_LIMIT_MS, a
+// backstop for a run that never ends. `make(n)` builds an input of about n
+// characters. The slack covers timer noise when both are quick.
 export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}) {
   const short = make(length / pieces);
   const long = make(length);
@@ -360,6 +370,7 @@ export function expectLinearTime(run, make, { length = 32000, pieces = 16 } = {}
   });
   const longTime = fastestTime(() => run(long));
   expect(longTime).toBeLessThan(8 * shortTime + 25);
+  expect(longTime).toBeLessThan(HANG_LIMIT_MS);
 }
 
 // Asserts that `run` takes about linear time in the size of its input when
@@ -397,32 +408,38 @@ export function expectLinearGrowth(run, make, size, { limit = 2000 } = {}) {
 // Asserts that an operation takes about linear time in its size, for work
 // that changes its input, so each run needs a fresh one. `timeRun(size)`
 // builds the input of that size, times one run on it, and returns the time in
-// milliseconds; building the input must stay outside the timing. The runs on
-// size / 4 and on size are each the fastest of three taken in turn. A linear
-// run takes about four times as long on the larger input, and a quadratic
-// one sixteen times. The bound is eight times, so a loaded runner does not
-// fail a linear run, and a quadratic one still fails. The larger run must
-// also take less than `limit` milliseconds, as a backstop for a run that
-// never ends.
-export function expectLinearGrowthFresh(timeRun, size, { limit = 2000 } = {}) {
+// milliseconds; building the input must stay outside the timing. As in
+// expectLinearGrowth, `timeRun(0)` gives the fixed cost, such as making a
+// project. The fixed cost and the runs on size / 4 and on size are each the
+// fastest of three taken in turn, and the fixed cost is taken away from the
+// two larger runs. A linear run takes about four times as long on the larger
+// input, and a quadratic one sixteen times. The bound is eight times, so a
+// loaded runner does not fail a linear run, and a quadratic one still fails.
+// The larger run must also take less than `limit` milliseconds, as a backstop
+// for a run that never ends.
+export function expectLinearGrowthFresh(timeRun, size, { limit = HANG_LIMIT_MS } = {}) {
+  let fixed = Infinity;
   let small = Infinity;
   let large = Infinity;
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    fixed = Math.min(fixed, timeRun(0));
     small = Math.min(small, timeRun(size / 4));
     large = Math.min(large, timeRun(size));
   }
   expect(large).toBeLessThan(limit);
-  expect(large).toBeLessThan(8 * small + 25);
+  expect(large - fixed).toBeLessThan(8 * Math.max(small - fixed, 0) + 25);
 }
 
 // Asserts that `run` takes about as long on `input` as on `control`, an
 // input of the same length that it passes over at once, again with no
-// wall-clock limit. A scan that is linear but does up to a thousand steps
-// at each character of `input` takes hundreds of times as long on it.
+// wall-clock limit beyond HANG_LIMIT_MS. A scan that is linear but does up to
+// a thousand steps at each character of `input` takes hundreds of times as
+// long on it.
 export function expectComparableTime(run, input, control) {
   const controlTime = fastestTime(() => run(control));
   const inputTime = fastestTime(() => run(input));
   expect(inputTime).toBeLessThan(4 * controlTime + 25);
+  expect(inputTime).toBeLessThan(HANG_LIMIT_MS);
 }
 
 // About n characters of backtick runs of every length from 1 up, each
