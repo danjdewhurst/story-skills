@@ -125,6 +125,17 @@ describe("#710 a sentence that starts with an emoji is split", () => {
   test("an emoji before a lower-case word still runs on", () => {
     expect(splitSentences("Yay! \u{1F600} and so on.")).toEqual(["Yay! \u{1F600} and so on."]);
   });
+
+  test("a flag, with its tag characters, before a capital starts the next sentence", () => {
+    const scotland = "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}";
+    expect(splitSentences(`Yay! ${scotland} Next one here.`)).toEqual(["Yay!", `${scotland} Next one here.`]);
+  });
+
+  test("other symbols before a capital start the next sentence too", () => {
+    expect(splitSentences("It cost 5. ★ Dan Hale wrote it.")).toEqual(["It cost 5.", "★ Dan Hale wrote it."]);
+    expect(splitSentences("It cost 5. ° Dan Hale wrote it.")).toEqual(["It cost 5.", "° Dan Hale wrote it."]);
+    expect(splitSentences("It cost 5. © Dan Hale wrote it.")).toEqual(["It cost 5.", "© Dan Hale wrote it."]);
+  });
 });
 
 describe("sentence and speech edge cases", () => {

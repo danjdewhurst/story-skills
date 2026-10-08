@@ -141,6 +141,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A combining mark after a Chinese, Japanese, or kana character stays with that character in its word.
   - Word counts of NFC text do not change. NFD text now counts as its NFC form does, so some Myanmar NFD text counts differently: `ဦမာ` written as U+1025 U+102E U+1019 U+102C is one word, not two.
 - A sentence that starts with an emoji is split from the sentence before it, so `Yay! 😀 Next one here.` gives two sentences. ([#710](https://github.com/danjdewhurst/story-skills/issues/710))
+  - A flag, such as a Scottish flag, and symbols such as ★, °, and © before a capital start the next sentence too.
   - An emoji before a lower-case word still runs on, as before.
 - A share above zero no longer prints as `0%`, so `story progress`, `story report`, and `story compare` print `1%` for 0.3%. ([#736](https://github.com/danjdewhurst/story-skills/issues/736))
 - The metadata sheet's description length counts characters, not UTF-16 units, so an emoji counts once. ([#737](https://github.com/danjdewhurst/story-skills/issues/737))

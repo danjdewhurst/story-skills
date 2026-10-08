@@ -44,9 +44,10 @@ const FULL_WIDTH_CLOSERS = "」』）";
 // Closing guillemets, which some languages set after a space.
 const SPACED_CLOSERS = "»›";
 const SPACED_OPENERS = "«‹";
-// Symbols, each with the skin-tone modifiers, variation selectors, and zero-
-// width joiners that finish it (❤️, 👨‍👩‍👧), and the space after them.
-const EMOJI_RUN = "(?:\\p{So}[\\p{Sk}\\p{Mn}\\u200D\\uFE0F]* ?)*";
+// Symbols, each with the skin-tone modifiers, variation selectors, zero-width
+// joiners, and tag characters that finish it (❤️, 👨‍👩‍👧, the 🏴 of a flag),
+// and the space after them.
+const EMOJI_RUN = "(?:\\p{So}[\\p{Sk}\\p{Mn}\\u200D\\uFE0F\\u{E0020}-\\u{E007F}]* ?)*";
 const RULES = new WeakMap();
 
 // The patterns built from a pack's word lists and punctuation, once per
