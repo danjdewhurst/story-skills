@@ -496,3 +496,27 @@ describe("docs/automation.md and the CLI reference", () => {
     expect(commandsIn(paragraph.slice(0, paragraph.indexOf(" It prints")))).toEqual(commandsReading("json"));
   });
 });
+
+describe("exit 1 for prose, voices, pacing, and clues in the docs", () => {
+  // Each place that says when these commands exit 1 names both causes in the
+  // same words: a file the command reads that fails to read or parse, and a
+  // story.md severity entry that promotes one of its warnings to an error.
+  const sites = [
+    ["cli-reference.md", "`report`, `next`, and `doctor` summarise check results"],
+    ["cli-reference.md", "Style findings are warnings, so `prose` exits 1"],
+    ["cli-reference.md", "`pacing` exits 1 only when"],
+    ["cli-reference.md", "`clues` exits 1 only when"],
+    ["cli-reference.md", "`voices` exits 1 only when"],
+    ["concepts.md", "| Output | Changes to markdown files"],
+    ["writing-workflows.md", "`story prose` and `story voices` exit 0"]
+  ];
+
+  for (const [file, start] of sites) {
+    test(`${file} names both causes of exit 1 where it says "${start}"`, () => {
+      const line = readDoc(file).split("\n").find((entry) => entry.includes(start));
+      expect(line).toBeDefined();
+      expect(line).toMatch(/file (?:they read|it reads) fails to read or parse/);
+      expect(line).toMatch(/entry in `story\.md` promotes one of (?:their|its) warnings to an error/);
+    });
+  }
+});

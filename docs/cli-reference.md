@@ -296,7 +296,7 @@ Only `migrate` exits `3` for a newer `schema-version`. `validate` and `check` re
 
 Findings keep `1`, so `story validate || exit 1` fails on errors as it always has. Before these codes were split, every failure exited `1`; a script that tested for `1` to catch a usage error, a missing project, or a refused write should test for `2`, `3`, or `4` instead, or for any non-zero code. The codes are exported as `EXIT_CODES` from `src/exit-codes.js`.
 
-`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `doctor --fix` is the exception: after its repairs it exits 1 while any check still reports an error. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file fails to read or parse or a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. They exit `2` for a usage error, such as an unknown option, `prose --baseline` with no `samples`, or empty stdin to `prose -` or `voices -`. They exit `3` when the folder is not a story project, or when `story.md` has an invalid `severity` or `cli-defaults` entry, since they then refuse to run. The one exception is `prose -` with no `--path` in a folder without `story.md`: it runs with the default rules and does not exit `3`. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `check` (or `validate`, `links`, and `continuity` one at a time) when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
+`report`, `next`, and `doctor` summarise check results but always exit 0 on a readable project. `doctor --fix` is the exception: after its repairs it exits 1 while any check still reports an error. `prose`, `pacing`, `clues`, and `voices` report every craft finding as a warning, so they exit 1 only when a file they read fails to read or parse, or when a [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` promotes one of their warnings to an error. With `prose -` or `voices -`, a broken chapter or scene file does not count, since the passage stands in for those files. They exit `2` for a usage error, such as an unknown option, `prose --baseline` with no `samples`, or empty stdin to `prose -` or `voices -`. They exit `3` when the folder is not a story project, or when `story.md` has an invalid `severity` or `cli-defaults` entry, since they then refuse to run. The one exception is `prose -` with no `--path` in a folder without `story.md`: it runs with the default rules and does not exit `3`. `passes` exits 0 unless it refuses a change: `2` for a bad pass name, `3` for a `story.md` it cannot safely rewrite, `4` when the write fails. `names` exits 1 when a candidate clashes with an existing name. Use `check` (or `validate`, `links`, and `continuity` one at a time) when you need a failing exit code, for example in CI (see [Automation and CI](automation.md)).
 
 ### JSON output
 
@@ -1455,7 +1455,7 @@ story prose [path|-] [--max-filter-words <n>] [--max-adverbs <n>] [--max-bookism
 
 An advisory prose lint. For each chapter it reports sentence count, average and longest sentence length and their spread, filter words and `-ly` adverbs per 1,000 narration words, dialogue tags and said-bookisms, words echoed within 30 words, and watch words and avoided spellings from `style-sheet.md`. Across the manuscript it lists repeated four-word phrases and characters with similar first names. Like `wordcount`, it ignores code between closed `` ``` `` fences.
 
-Style findings are warnings, so `prose` exits 1 only when a file's frontmatter fails to parse, or when a `severity` entry in `story.md` promotes a prose warning to an error (see [Defaults and severity from story.md](#defaults-and-severity-from-storymd)).
+Style findings are warnings, so `prose` exits 1 only when a file it reads fails to read or parse, or when a `severity` entry in `story.md` promotes one of its warnings to an error (see [Defaults and severity from story.md](#defaults-and-severity-from-storymd)).
 
 The word lists (filter words, `-ly` adverbs and their exceptions, dialogue tags and said-bookisms, echo and phrase stopwords, British and American spellings) come from the language pack for `story.md` `language`, changed by the style sheet's `add-words` and `replace-words` (see [Word lists](project-format.md#word-lists)). English, Spanish, French, and German have them; German has no adverb ending, so its `adverbs` check is skipped, and Spanish and French count `-mente` and `-ment` adverbs. In another language, each check whose list the pack lacks is skipped rather than run with English words: `filter-words`, `adverbs`, `dialogue-tags`, `echoes`, `repeated-phrases`, plus `dialect-spellings` when the style sheet sets a `dialect` and `signature-words` when a baseline is on. The text output prints `Note: Filter words skipped: no filterWords list for language it` under the heading for each one and leaves its line out, and `--json` lists them in `data.skipped` as `{ check, language, missing, message }` (`[]` for English), and `data.language` gives the tag. A baseline leaves the skipped measures out of its text, and `--json` sets them to `null`: `filterPerThousand`, `adverbsPerThousand`, and `signatureWords` in `data.baseline`, and the matching figures and `signatureWordsUsed` in `chapters[].baseline`. Skipping never changes the exit code. See [Books not in English](continuity.md#books-not-in-english).
 
@@ -1875,7 +1875,7 @@ It warns about:
 - three or more chapters in a row that end on `resolution`
 - with three or more written chapters, a chapter over twice or under half the median length
 
-Sequels are left out of the outcome counts. `pacing` exits 1 only when a file fails to parse.
+Sequels are left out of the outcome counts. `pacing` exits 1 only when a file it reads fails to read or parse, or when a `severity` entry in `story.md` promotes one of its warnings to an error.
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
@@ -1914,7 +1914,7 @@ For clues whose status is `planned`, `planted`, or `paid-off`, it warns when:
 - a red herring (`red-herring: true`) has no `payoff` chapter that debunks it
 - three or more genuine clues are live and none is `significance-delayed`
 
-Ordering errors, such as a reveal before its plant, belong to `story continuity`. `clues` exits 1 only when a file fails to parse. Mark a red herring with `story add clue --red-herring`.
+Ordering errors, such as a reveal before its plant, belong to `story continuity`. `clues` exits 1 only when a file it reads fails to read or parse, or when a `severity` entry in `story.md` promotes one of its warnings to an error. Mark a red herring with `story add clue --red-herring`.
 
 On a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/):
 
@@ -2001,7 +2001,7 @@ It warns when:
 - a character with at least five lines never uses a word from their `voice-words` list
 - two characters with at least five lines each have similar sentence length, contractions, questions, and exclamations
 
-`voices` exits 1 only when a file fails to parse.
+`voices` exits 1 only when a file it reads fails to read or parse, or when a `severity` entry in `story.md` promotes one of its warnings to an error.
 
 Speech verbs, pronouns, contractions, and stopwords come from the language pack for `story.md` `language`, changed by the style sheet's `add-words` and `replace-words` (see [Word lists](project-format.md#word-lists)). English, Spanish, French, and German have them, except contractions, which only English and German count. In a language without them the `speech-tags`, `contractions`, and `signature-words` checks are skipped: lines are attributed by action beats alone, `contractions` is `null` in `--json`, and the sound-alike comparison leaves contractions out. The text output prints a `Note:` line for each skipped check, and `--json` lists them in `data.skipped` (`[]` for English), and `data.language` gives the tag. See [Books not in English](continuity.md#books-not-in-english).
 
