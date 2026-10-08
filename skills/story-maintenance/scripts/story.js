@@ -31091,9 +31091,19 @@ function storySkillsChapter(text) {
   const bodyStart = text.length - parsed.body.length;
   const firstLine = text.slice(0, bodyStart).split(`
 `).length;
-  const skipped = text.slice(bodyStart, heading.index).split(`
-`).map((line, index) => ({ text: line.trim(), line: firstLine + index })).filter((line) => line.text !== "" && !/^#[ \t]/.test(line.text));
+  const lines = text.slice(bodyStart, heading.index).split(`
+`).map((line, index) => ({ text: line.trim(), line: firstLine + index })).filter((line) => line.text !== "");
+  const outline = outlineLines(lines);
+  const skipped = lines.filter((line) => !outline.has(line) && !/^#[ \t]/.test(line.text));
   return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
+}
+function outlineLines(lines) {
+  const start = lines.findIndex((line) => /^##[ \t]+Outline$/i.test(line.text));
+  if (start === -1) {
+    return new Set;
+  }
+  const divider = lines.findIndex((line, index) => index > start && line.text === "---");
+  return new Set(lines.slice(start, divider === -1 ? lines.length : divider + 1));
 }
 function importedNames(value) {
   return nameList(value).map((name) => name.replace(/\s+/g, " "));

@@ -677,11 +677,26 @@ function storySkillsChapter(text) {
   // The body is the end of the text, so it starts where the frontmatter ends.
   const bodyStart = text.length - parsed.body.length;
   const firstLine = text.slice(0, bodyStart).split("\n").length;
-  const skipped = text.slice(bodyStart, heading.index).split("\n")
+  const lines = text.slice(bodyStart, heading.index).split("\n")
     .map((line, index) => ({ text: line.trim(), line: firstLine + index }))
-    // A `# ` line is the chapter's heading, which the chapter takes from its title.
-    .filter((line) => line.text !== "" && !/^#[ \t]/.test(line.text));
+    .filter((line) => line.text !== "");
+  const outline = outlineLines(lines);
+  // A `# ` line is the chapter's heading, which the chapter takes from its title.
+  const skipped = lines.filter((line) => !outline.has(line) && !/^#[ \t]/.test(line.text));
   return { title, prose: text.slice(heading.index + heading[0].length).trim(), unnumbered: data.numbered === false, authors: importedNames(data.author), skipped };
+}
+
+// The outline that story add chapter writes above `## Chapter Text`: its
+// `## Outline` heading through the `---` divider after it, or to the end
+// when there is no divider. It is planning, not book text, so it is not
+// reported as unused. Takes the non-blank lines, as { text, line }.
+function outlineLines(lines) {
+  const start = lines.findIndex((line) => /^##[ \t]+Outline$/i.test(line.text));
+  if (start === -1) {
+    return new Set();
+  }
+  const divider = lines.findIndex((line, index) => index > start && line.text === "---");
+  return new Set(lines.slice(start, divider === -1 ? lines.length : divider + 1));
 }
 
 // A name field's names, each on one line, so a line break in one cannot
