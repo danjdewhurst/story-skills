@@ -599,7 +599,7 @@
     },
     "exemption": {
       "type": "object",
-      "$comment": "An entry matches a finding when every key it sets matches. story validate also requires a pattern, or a code with a file, chapter, or pattern; refuses a chapter with a code whose findings carry none, and a misspelled key; entries it rejects never take effect.",
+      "$comment": "An entry matches a finding when every key it sets matches. story validate also requires a pattern, or a code with a file, chapter, or pattern; refuses a chapter with a code whose findings carry none, and a key that is not an entry key; entries it rejects never take effect.",
       "required": ["reason"],
       "properties": {
         "pattern": { "type": "string", "minLength": 4, "pattern": "\\S", "description": "Text the finding's message contains, as a case-sensitive substring; / and \\ in paths match either separator." },

@@ -26,6 +26,10 @@ export const EXEMPTIONS_FILE = "continuity/exemptions.md";
 // The keys that say which findings an entry dismisses.
 export const MATCH_KEYS = ["pattern", "code", "file", "chapter"];
 
+// Every key an entry may set. Any other key is refused, so it cannot widen
+// the entry by being ignored.
+const ENTRY_KEYS = [...MATCH_KEYS, "reason"];
+
 const MIN_PATTERN_LENGTH = 4;
 
 // Findings name files with forward slashes on every system; an entry
@@ -57,12 +61,19 @@ export function exemptionProblems(entry, label = "exemption") {
     return [err("entry-not-mapping", `${label} must be a mapping`, EXEMPTIONS_FILE)];
   }
   const problems = [];
-  // A misspelled key (`Code`, `files`, `patern`) would be ignored, widening
-  // the entry to whatever its other keys match, so it stops the entry.
+  // A key that is not an entry key would be ignored, widening the entry to
+  // whatever its other keys match, so it stops the entry. A misspelled one
+  // (`Code`, `files`, `patern`) says what it means; any other (`file_path`,
+  // `scene`, `cde`) is named as unknown.
   for (const key of Object.keys(entry)) {
-    const intended = nearMissKeys(key, [...MATCH_KEYS, "reason"]);
+    if (ENTRY_KEYS.includes(key)) {
+      continue;
+    }
+    const intended = nearMissKeys(key, ENTRY_KEYS);
     if (intended.length > 0) {
       problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended.join(" or ")}?`, EXEMPTIONS_FILE));
+    } else {
+      problems.push(err("exemption-unknown-key", `${label} has ${key}, which is not an exemption key: use ${ENTRY_KEYS.join(", ")}`, EXEMPTIONS_FILE));
     }
   }
   if (MATCH_KEYS.every((key) => entry[key] === undefined)) {

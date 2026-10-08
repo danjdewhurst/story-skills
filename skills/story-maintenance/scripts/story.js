@@ -766,6 +766,7 @@ var FINDING_CODES = {
   "exemption-file-not-relative": "error",
   "exemption-too-broad": "error",
   "exemption-misspelled-key": "error",
+  "exemption-unknown-key": "error",
   "exemption-chapter-not-carried": "error",
   "style-use-equals-avoid": "error",
   "style-sample-missing": "warning",
@@ -13118,6 +13119,7 @@ function parseArgs(argv, suggestFrom = OPTIONS.map((option) => option.name)) {
 // src/exemptions.js
 var EXEMPTIONS_FILE = "continuity/exemptions.md";
 var MATCH_KEYS = ["pattern", "code", "file", "chapter"];
+var ENTRY_KEYS = [...MATCH_KEYS, "reason"];
 var MIN_PATTERN_LENGTH = 4;
 function portable(text) {
   return text.replace(/\\/g, "/");
@@ -13136,9 +13138,14 @@ function exemptionProblems(entry, label = "exemption") {
   }
   const problems = [];
   for (const key of Object.keys(entry)) {
-    const intended = nearMissKeys(key, [...MATCH_KEYS, "reason"]);
+    if (ENTRY_KEYS.includes(key)) {
+      continue;
+    }
+    const intended = nearMissKeys(key, ENTRY_KEYS);
     if (intended.length > 0) {
       problems.push(err("exemption-misspelled-key", `${label} has ${key}; did you mean ${intended.join(" or ")}?`, EXEMPTIONS_FILE));
+    } else {
+      problems.push(err("exemption-unknown-key", `${label} has ${key}, which is not an exemption key: use ${ENTRY_KEYS.join(", ")}`, EXEMPTIONS_FILE));
     }
   }
   if (MATCH_KEYS.every((key) => entry[key] === undefined)) {
