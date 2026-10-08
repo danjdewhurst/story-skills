@@ -34,13 +34,12 @@ export default {
     by: "",
     byline: "{names}",
     "edited-by": "Упорядкування: {names}",
-    // A count's noun takes the form for 1 (-one), for 2 to 4 and 22 to 24
-    // (-few), or the base key's form for the rest.
-    "approximate-words-one": "Близько {words} слово",
-    "approximate-words-few": "Близько {words} слова",
+    // After "близько" the count's noun is in the genitive: the singular for 1
+    // (-one, and 21, 31, ...), and the plural, which the base key holds, for
+    // 2 to 4 and the rest.
+    "approximate-words-one": "Близько {words} слова",
     "approximate-words": "Близько {words} слів",
-    "approximate-characters-one": "Близько {characters} знак",
-    "approximate-characters-few": "Близько {characters} знаки",
+    "approximate-characters-one": "Близько {characters} знака",
     "approximate-characters": "Близько {characters} знаків",
     "narration-opening": "{title}. Автор: {authors}. Читає {narrator}.",
     "narration-opening-anonymous": "{title}. Читає {narrator}.",

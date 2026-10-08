@@ -75,9 +75,26 @@ export function formatNumber(value, pack = languagePack()) {
 // The label key for a count: `key` with the plural form the count takes in
 // the pack's language (`key-one`, `key-few`, and so on, as Intl.PluralRules
 // names them) when the labels have that form, else `key` itself. Russian
-// says 523 words as the few form and 5 words as the many form, which the
-// base key holds.
+// says 1 word as the one form (Около 1 слова) and every other count with
+// the base key, which holds the genitive plural.
 export function pluralLabelKey(labels, key, count, pack = languagePack()) {
   const form = `${key}-${new Intl.PluralRules(pack.locale).select(count)}`;
   return labels?.[form] !== undefined ? form : key;
+}
+
+// The labels whose count forms pluralLabelKey picks between: a Shunn length
+// line's noun. Codex picks its own form, so its labels are not listed here.
+export const COUNT_LABELS = Object.freeze(["approximate-words", "approximate-characters"]);
+
+const PLURAL_CATEGORIES = new Set(["zero", "one", "two", "few", "many", "other"]);
+
+// Remove the count forms a pack gives `key` from `labels`, so that a book's
+// own `key` label reaches every count. pluralLabelKey would otherwise pick
+// the pack's form for some counts and ignore the book's label for them.
+export function dropCountForms(labels, key) {
+  for (const name of Object.keys(labels)) {
+    if (name.startsWith(`${key}-`) && PLURAL_CATEGORIES.has(name.slice(key.length + 1))) {
+      delete labels[name];
+    }
+  }
 }
