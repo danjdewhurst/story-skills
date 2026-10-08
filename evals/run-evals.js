@@ -441,9 +441,11 @@ function narration(text) {
 // First-person action verbs in the present ("I take the key"): narration a
 // past-tense brief rules out. Reflective verbs (I am, I think, I wonder) are
 // left out, since past-tense narration uses them too, and so are verbs whose
-// past is the same word (put, set, shut).
+// past is the same word (put, set, shut). A verb after a mandative verb ("she
+// insisted that I wait") is subjunctive, which past-tense narration uses too,
+// so it does not count.
 const PRESENT_TENSE_ACTION_RE =
-  /\bI (?:take|turn|kneel|walk|climb|carry|hold|stand|sit|look|reach|open|light|trim|lift|weigh|wait|pull|push|step|press|grab|drop|touch|unlock|pick|lean)\b/i;
+  /(?<!\b(?:insist|demand|suggest|recommend|require|request|urge|order|command|propose|ask)\w*\s+(?:[^\s.!?]+\s+){0,4}?that\s+)\bI (?:take|turn|kneel|walk|climb|carry|hold|stand|sit|look|reach|open|light|trim|lift|weigh|wait|pull|push|step|press|grab|drop|touch|unlock|pick|lean|run|go|come|throw|bring|fetch|crouch|crawl)\b/i;
 
 function runPattern(pattern, text, flags = "iu") {
   return new RegExp(pattern, flags).test(text);

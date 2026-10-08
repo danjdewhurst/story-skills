@@ -602,8 +602,10 @@ describe("the checker's prose checks", () => {
     for (const speech of ['"I can wait," he said.', "“I can wait,” he said.", "'I can wait,' he said.", "‘I can wait,’ he said.", "—I can wait, he said."]) {
       expect([speech, firstPerson(`${speech} Petra walked on.\n`)]).toEqual([speech, false]);
     }
-    // Narration after a closed quote still counts.
+    // Narration after a closed quote still counts, and a closed quote counts
+    // wherever it opens.
     expect(firstPerson('“I can wait,” he said. I walked on.\n')).toBe(true);
+    expect(firstPerson("Petra said:“I can wait,” and walked on.\n")).toBe(false);
   });
 
   test("a dash line, or a quote left open across paragraphs, is dialogue for the past-tense checks", () => {
@@ -615,9 +617,12 @@ describe("the checker's prose checks", () => {
       );
     const dashLine = "Petra turned to the chest. The key was gone.\n—I take the key from you, Tomas, she said. Tomas said nothing and sat down.\n";
     const longSpeech = "Petra turned to the chest. The key was gone.\n\n“I take the key from you, Tomas.\n\nHe said nothing and sat down. It was late.”\n";
+    const straightSpeech = longSpeech.replace(/[“”]/g, '"');
     expect(top(dashLine)[0]).toBe(true);
     expect(top(longSpeech)[0]).toBe(true);
+    expect(top(straightSpeech)[0]).toBe(true);
     expect(chapter(longSpeech)[0]).toBe(true);
+    expect(chapter(straightSpeech)[0]).toBe(true);
     // A closing quote opens no speech, so the narration after it still counts.
     expect(top('She said nothing." I take the lamp. Petra said it was late.\n')).toEqual([
       false,
@@ -647,6 +652,51 @@ describe("the checker's prose checks", () => {
       'chapter text: past-tense narration (2 marker(s), need 2; present tense: "I wait")',
     ]);
     expect(narration("I waited by the door and I pulled the lever. Petra said it was late.")[0]).toBe(true);
+  });
+
+  test("the present-tense action list catches each verb in the top-level and chapter past-tense checks", () => {
+    const verbs = [
+      "take", "turn", "kneel", "walk", "climb", "carry", "hold", "stand", "sit", "look", "reach", "open", "light", "trim", "lift", "weigh",
+      "wait", "pull", "push", "step", "press", "grab", "drop", "touch", "unlock", "pick", "lean", "run", "go", "come", "throw", "bring",
+      "fetch", "crouch", "crawl",
+    ];
+    const caught = (result, verb) => result[0] === false && result[1].includes(`present tense: "I ${verb}"`);
+    const missed = verbs.filter((verb) => {
+      const draft = `I ${verb} at the door. Petra said it was late.`;
+      const top = checkDraft({ requires_past_tense: true }, "", `${draft}\n`).find(([, desc]) =>
+        desc.startsWith("structure: past-tense voice present")
+      );
+      const chapter = checkDraft({ chapter_text: { requires_past_tense: true } }, "", `## Chapter Text\n\n${draft}\n`).find(([, desc]) =>
+        desc.startsWith("chapter text: past-tense narration")
+      );
+      return !caught(top, verb) || !caught(chapter, verb);
+    });
+    expect(missed).toEqual([]);
+  });
+
+  test("a present-tense run with two past-tense words fails the past-tense checks", () => {
+    const draft = "I run to the red door. I need the key.";
+    const top = checkDraft({ requires_past_tense: true }, "", `${draft}\n`).find(([, desc]) => desc.startsWith("structure: past-tense voice present"));
+    expect(top).toEqual([false, 'structure: past-tense voice present (2 marker(s), need 2; present tense: "I run")']);
+    const chapter = checkDraft({ chapter_text: { requires_past_tense: true } }, "", `## Chapter Text\n\n${draft}\n`).find(([, desc]) =>
+      desc.startsWith("chapter text: past-tense narration")
+    );
+    expect(chapter).toEqual([false, 'chapter text: past-tense narration (2 marker(s), need 2; present tense: "I run")']);
+  });
+
+  test("a present-tense verb after a mandative verb is subjunctive, so it passes the past-tense checks", () => {
+    const top = (draft) =>
+      checkDraft({ requires_past_tense: true }, "", draft).find(([, desc]) => desc.startsWith("structure: past-tense voice present"))[0];
+    const chapter = (text) =>
+      checkDraft({ chapter_text: { requires_past_tense: true } }, "", `## Chapter Text\n\n${text}\n`).find(([, desc]) =>
+        desc.startsWith("chapter text: past-tense narration")
+      )[0];
+    const insisted = "She insisted that I wait at the door. Petra said it was late.";
+    expect(top(`${insisted}\n`)).toBe(true);
+    expect(chapter(insisted)).toBe(true);
+    // Only the subjunctive is exempt: a present-tense main verb still fails.
+    expect(top("The order was clear. I wait at the door. Petra said it was late.\n")).toBe(false);
+    expect(chapter("She insisted. I wait at the door. Petra said it was late.")).toBe(false);
   });
 
   test("a misspelled top-level field fails the draft instead of being ignored", () => {
