@@ -541,6 +541,55 @@ describe("bun pin", () => {
   });
 });
 
+// ci.yml is the source of truth for the test job. The development guide lists
+// its steps in order, and AGENTS.md names its scripts in one sentence, so a
+// step that CI drops or moves must fail here rather than leave the docs wrong.
+describe("CI steps the docs name", () => {
+  const ci = readRepo(".github/workflows/ci.yml");
+  // The test job's steps, without its comment lines.
+  const testJob = ci
+    .slice(ci.indexOf("\n  test:\n"), ci.indexOf("\n  test-os:\n"))
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+
+  test("the development guide lists the test job's steps in CI order", () => {
+    const development = readRepo("docs/development.md");
+    const start = development.indexOf("runs, in order:");
+    const end = development.indexOf("It runs the suite once", start);
+    const steps = [...development.slice(start, end).matchAll(/^\d+\. `([^`]+)`/gm)].map((match) => match[1]);
+    expect(steps.length).toBeGreaterThan(0);
+    let previous = -1;
+    for (const step of steps) {
+      const index = testJob.indexOf(step);
+      expect({ step, found: index !== -1 }).toEqual({ step, found: true });
+      expect({ step, after: index > previous }).toEqual({ step, after: true });
+      previous = index;
+    }
+  });
+
+  test("AGENTS.md names the test job's scripts in CI order, with the seeded property test", () => {
+    const agents = readRepo("AGENTS.md");
+    const line = agents.split("\n").find((text) => text.startsWith("CI runs "));
+    expect(line).toBeDefined();
+    const scripts = [...testJob.matchAll(/bun run ([\w:.-]+)/g)].map((match) => match[1]);
+    expect(scripts.length).toBeGreaterThan(0);
+    let previous = -1;
+    for (const script of scripts) {
+      const index = line.indexOf(script);
+      expect({ script, found: index !== -1 }).toEqual({ script, found: true });
+      expect({ script, after: index > previous }).toEqual({ script, after: true });
+      previous = index;
+    }
+    const seeded = testJob.indexOf("test/validate-schema-property.test.js");
+    expect(seeded).toBeGreaterThan(testJob.indexOf("bun run test:coverage"));
+    expect(seeded).toBeLessThan(testJob.indexOf("bun run test:examples"));
+    expect(line).toContain("validate-schema property test for seeds 1 to 5");
+    expect(line.indexOf("validate-schema property test")).toBeGreaterThan(line.indexOf("test:coverage"));
+    expect(line.indexOf("validate-schema property test")).toBeLessThan(line.indexOf("test:examples"));
+  });
+});
+
 describe("check-metadata bun pin", () => {
   test("every workflow installs the pinned bun", () => {
     const packageJson = JSON.parse(readRepo("package.json"));
