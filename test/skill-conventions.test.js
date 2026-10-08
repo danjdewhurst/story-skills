@@ -750,6 +750,46 @@ describe("CLI detail in one place", () => {
   });
 });
 
+// The review skills' instructions match the CLI they run (#783, #786, #787,
+// #793, #806, #807, #808). Each phrase is checked after the whitespace of a
+// hard-wrapped line is collapsed, so a sentence is found across line breaks.
+describe("review skill instructions match the CLI", () => {
+  const read = (file) => fs.readFileSync(path.join(skillsDir, file), "utf8").replace(/\s+/g, " ");
+
+  test("feedback-triage maps a blank reader answer to minor", () => {
+    const text = read("feedback-triage/SKILL.md");
+    expect(text).toContain("and a blank answer is `minor`. A `Typo or wording` note with a blank answer is a `nit` unless the reader says more.");
+    expect(text).not.toContain("no answer is left blank");
+  });
+
+  test("reader-panel takes language only from the story context output", () => {
+    const text = read("reader-panel/SKILL.md");
+    expect(text).toContain("Take `language` only from the Language contract in that same `story context` output");
+    expect(text).not.toContain("or from `story.md` frontmatter only");
+  });
+
+  test("reader-panel gives the line editor the style sheet and the prose findings", () => {
+    expect(read("reader-panel/SKILL.md")).toContain("The line editor's subagent also gets `style-sheet.md` (when the project has one) and the `story prose .` findings for the chapters in range.");
+    expect(read("reader-panel/references/line-editor.md")).toContain("Your inputs include `style-sheet.md` when there is one");
+  });
+
+  test("the sensitivity persona records the Canon check value that simulated reads use", () => {
+    expect(read("reader-panel/references/sensitivity-reader.md")).toContain("Record the note's **Canon check** as `not checked (simulated read)`");
+  });
+
+  test("voice-style names the usage error that makes story prose exit 2", () => {
+    expect(read("voice-style/SKILL.md")).toContain("or the command line is wrong, such as `--baseline` with no `samples` (exit 2)");
+  });
+
+  test("the compare reference names all three sources it accepts", () => {
+    expect(read("story-maintenance/references/continuity-checks.md")).toContain("It needs exactly one of `--ref`, `--against`, or `--snapshot`.");
+  });
+
+  test("the query letter rounds the complete-at word count", () => {
+    expect(read("submission/references/query-letter.md")).toContain("complete at {word count rounded to the nearest thousand}, that will appeal to readers of {Comp A} and {Comp B}.");
+  });
+});
+
 // Registries are generated (#553): `story reindex` rebuilds every `_index.md`
 // table from the entity files, and `story add`, `rename`, `move`, and
 // `remove` reindex for you, so a row added by hand is thrown away. No skill
