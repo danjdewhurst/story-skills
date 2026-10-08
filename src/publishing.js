@@ -1,6 +1,6 @@
 import { storyDateError } from "./continuity.js";
 import { err, warn } from "./findings.js";
-import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, joinNames, LABEL_KEYS, languagePack, lookupTag, projectLanguage } from "./languages/index.js";
+import { DEFAULT_LANGUAGE, fillLabel, isLanguageTag, joinNames, LABEL_KEYS, languagePack, parseTag, projectLanguage } from "./languages/index.js";
 import { COUNT_LABELS, dropCountForms } from "./languages/locale.js";
 import { countTodoMarkers } from "./markdown.js";
 import { chapterNumerals } from "./numerals.js";
@@ -25,21 +25,30 @@ export function isPlaceholder(value) {
 // scripts that make any language right to left (az-Arab, ku-Arab). A script
 // subtag decides the direction: a Latin subtag makes a listed language left
 // to right (fa-Latn). Kurmanji (ku) is written in Latin script by default, so
-// it reads left to right, and Arabic-script Kurdish is tagged ku-Arab.
+// it reads left to right, unless a tag with no script subtag names a region
+// that writes Kurdish in Arabic script (see ARABIC_SCRIPT_KURDISH_REGIONS).
 const RTL_LANGUAGES = new Set(["ar", "arc", "ckb", "dv", "fa", "he", "iw", "ji", "ks", "ps", "sd", "syr", "ug", "ur", "yi"]);
 const RTL_SCRIPTS = new Set(["adlm", "arab", "hebr", "mand", "nkoo", "rohg", "samr", "syrc", "thaa"]);
 
-// The tag is read as the language packs read it (lookupTag), so an alias
-// (fas, per, heb, iw) or an extlang under a right-to-left macrolanguage
+// The regions where a Kurdish tag with no script subtag is Arabic-script:
+// Iraq, Iran, and Lebanon, as CLDR's likely subtags give (ku-IQ is ku-Arab-IQ).
+// The list is fixed, not read from Intl, so every runtime gives the same
+// direction. These tags read right to left, as they did before ku was
+// left to right by default.
+const ARABIC_SCRIPT_KURDISH_REGIONS = new Set(["ir", "iq", "lb"]);
+
+// The tag is read as the language packs read it (parseTag), so an alias
+// (fas, per, heb, iw, kur) or an extlang under a right-to-left macrolanguage
 // (ar-arz) gets the same direction as its pack's language.
 export function textDirection(language) {
-  const [lookup, macrolanguage] = lookupTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
-  const [primary, ...subtags] = lookup.split("-");
+  const { primary, macrolanguage, script, region } = parseTag(String(language ?? "").trim() || DEFAULT_LANGUAGE);
   // The script is the subtag right after the language. A four-letter subtag
   // later on belongs to an extension or private use (en-u-nu-arab).
-  const script = /^[a-z]{4}$/.test(subtags[0] ?? "") ? subtags[0] : undefined;
-  if (script !== undefined) {
-    return RTL_SCRIPTS.has(script) ? "rtl" : "ltr";
+  if (script !== null) {
+    return RTL_SCRIPTS.has(script.toLowerCase()) ? "rtl" : "ltr";
+  }
+  if (primary === "ku" && ARABIC_SCRIPT_KURDISH_REGIONS.has(region)) {
+    return "rtl";
   }
   return RTL_LANGUAGES.has(primary) || RTL_LANGUAGES.has(macrolanguage) ? "rtl" : "ltr";
 }

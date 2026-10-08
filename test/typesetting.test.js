@@ -172,6 +172,11 @@ describe("script-aware typesetting", () => {
     expect(arabic).toContain('<html lang="ar" dir="rtl">');
     expect(arabic).toContain('"Noto Naskh Arabic"');
     expect(arabic).not.toContain("small-caps");
+
+    // A bare Kurdish tag in Iraq keeps the right-to-left builds; Latin Kurmanji does not.
+    expect(text(book("ku-IQ"), "print")).toContain('dir="rtl"');
+    expect(archive(book("ku-IQ"), "epub")["OEBPS/content.opf"]).toContain('<spine page-progression-direction="rtl">');
+    expect(text(book("ku"), "print")).not.toContain('dir="rtl"');
   });
 
   test("the review copy names fonts for the book's script", () => {
