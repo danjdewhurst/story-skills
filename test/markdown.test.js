@@ -204,10 +204,12 @@ describe("markdown utilities", () => {
 
   test("markup stays linear on long runs", () => {
     // Each input is built from a count m: 100000 is the size of the runs.
+    // The backtick runs in the third input grow with m too, about 0.8 m
+    // characters of them, so a fixed prefix cannot hide growth in the rest.
     const inputs = [
       (m) => `a${"_".repeat(m)}b ${"<b x=".repeat(m / 5)} <i title="${"a".repeat(m)} ${"[^".repeat(m / 2)} ${"&a".repeat(m / 2)}`,
       (m) => `${"- [".repeat(m * 0.3)}\n${" ".repeat(m)}x\n${"[a]".repeat(m * 0.3)}\n${"> ".repeat(m / 2)}[x]: y`,
-      (m) => `${Array.from({ length: 400 }, (_, index) => "`".repeat(index + 1)).join(" ")}\n${"\\`".repeat(m * 0.3)}\n${"[a]: b\n".repeat(m * 0.2)}${"[x][a]".repeat(m * 0.1)}`,
+      (m) => `${Array.from({ length: Math.round(Math.sqrt(1.6 * m)) }, (_, index) => "`".repeat(index + 1)).join(" ")}\n${"\\`".repeat(m * 0.3)}\n${"[a]: b\n".repeat(m * 0.2)}${"[x][a]".repeat(m * 0.1)}`,
       (m) => `<b${" hidden".repeat(m / 5)} ${"<i open ".repeat(m / 5)}`,
     ];
     for (const make of inputs) {
@@ -810,7 +812,7 @@ describe("sweep fixes", () => {
       appendProse(project, "chapters/chapter-01.md", `${"[a](b ".repeat(copies)}${"<!--".repeat(copies)}`);
       computeWordCounts(project);
       return performance.now() - started;
-    }, 20000, { limit: 3000 });
+    }, 20000);
   });
 
   test("~~~ separators and unclosed fences never hide text from counts", () => {

@@ -395,10 +395,12 @@ describe("story list reads a filter in linear time", () => {
   });
 
   test("checks every query's keys once per kind", () => {
-    const keys = Array.from({ length: 5000 }, (_, index) => `custom-${index}: x`).join("\n");
-    // A project with `count` queries, each on the same 5000 keys.
+    // A project with `count` queries, and 40 * count keys that every query
+    // reads. Both grow with count: a query that rebuilt the keys each time
+    // would cost count * 40 * count in all, which the ratio shows.
     const scannedWith = (count) => {
       const root = sampleProject();
+      const keys = Array.from({ length: 40 * count }, (_, index) => `custom-${index}: x`).join("\n");
       writeMarkdown(path.join(root, "chapters", "chapter-03.md"), `title: Wide\nnumber: 3\n${keys}`, "## Chapter Text\n\nWords.\n");
       configure(root, ["queries:", ...Array.from({ length: count }, (_, index) => `  - name: q-${index}\n    kind: chapters\n    where: [custom-${index}=x, missing-${index}]`)].join("\n"));
       return scanProject(root);
@@ -406,8 +408,8 @@ describe("story list reads a filter in linear time", () => {
     const found = queryFindings(scannedWith(500));
     expect(found.errors).toEqual([]);
     expect(found.warnings).toHaveLength(500);
-    // Each query costs about the same, so 500 queries take about four times
-    // as long as 125.
+    // With the keys read once per kind, the time is linear in count, so 500
+    // queries take about four times as long as 125.
     expectLinearGrowthFresh((count) => {
       const project = scannedWith(count);
       const start = performance.now();
