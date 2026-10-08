@@ -143,6 +143,13 @@ describe("#132 validate rejects non-string text fields", () => {
     ].sort());
   });
 
+  test("a true or false pronunciation gets one error, quoted as the file should write it", () => {
+    const root = copyExample("the-last-ember");
+    editFile(path.join(root, "characters", "kael-voss.md"), (text) => text.replace(/^name: .*$/m, "name: \"Kael Voss\"\npronunciation: true"));
+    const errors = validateProject(root).errors.map((error) => error.message).filter((message) => message.includes("pronunciation"));
+    expect(errors).toEqual(['characters/kael-voss.md frontmatter field pronunciation must be text: quote it as pronunciation: "true"']);
+  });
+
   test("validate fails wherever the schema rejects a number in a text field", () => {
     const root = copyExample("the-last-ember");
     const files = ["story.md", "chapters/chapter-01.md", "characters/kael-voss.md", "worldbuilding/locations/ashen-citadel.md", "glossary/terms/ember-sight.md"]
