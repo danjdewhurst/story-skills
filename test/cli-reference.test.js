@@ -459,7 +459,7 @@ describe("docs/automation.md and the CLI reference", () => {
     const broken = exampleCopy((root) => fs.writeFileSync(path.join(root, "characters", "zz-broken.md"), "---\nname: A\nname: B\n---\n"));
     const exits = (name, root = broken) => ({ name, code: runStory(root, name, args).code });
     const row = (start) => exitOneRows().find((entry) => entry.when.startsWith(start)).commands;
-    for (const name of [...row("A project file cannot be parsed"), ...row("A candidate name clashes")]) {
+    for (const name of [...row("A project file cannot be parsed"), ...row("A file they read"), ...row("A candidate name clashes")]) {
       expect(exits(name)).toEqual({ name, code: 1 });
     }
     for (const name of row("Never, on a readable project")) {
@@ -501,22 +501,37 @@ describe("exit 1 for prose, voices, pacing, and clues in the docs", () => {
   // Each place that says when these commands exit 1 names both causes in the
   // same words: a file the command reads that fails to read or parse, and a
   // story.md severity entry that promotes one of its warnings to an error.
+  // A third entry, where present, is the text that ends the part of the line
+  // the check reads: concepts.md also says what `diagram` does on that line.
   const sites = [
     ["cli-reference.md", "`report`, `next`, and `doctor` summarise check results"],
     ["cli-reference.md", "Style findings are warnings, so `prose` exits 1"],
     ["cli-reference.md", "`pacing` exits 1 only when"],
     ["cli-reference.md", "`clues` exits 1 only when"],
     ["cli-reference.md", "`voices` exits 1 only when"],
-    ["concepts.md", "| Output | Changes to markdown files"],
+    ["automation.md", "| `prose`, `pacing`, `clues`, `voices` |"],
+    ["continuity.md", "`pacing`, `clues`, `prose`, and `voices` exit 1 only when"],
+    ["concepts.md", "| Output | Changes to markdown files", "`diagram` exits"],
     ["writing-workflows.md", "`story prose` and `story voices` exit 0"]
   ];
 
-  for (const [file, start] of sites) {
+  for (const [file, start, stop] of sites) {
     test(`${file} names both causes of exit 1 where it says "${start}"`, () => {
-      const line = readDoc(file).split("\n").find((entry) => entry.includes(start));
-      expect(line).toBeDefined();
+      const found = readDoc(file).split("\n").find((entry) => entry.includes(start));
+      expect(found).toBeDefined();
+      if (stop !== undefined) {
+        expect(found.indexOf(stop)).toBeGreaterThan(found.indexOf(start));
+      }
+      const line = stop === undefined ? found : found.slice(0, found.indexOf(stop));
       expect(line).toMatch(/file (?:they read|it reads) fails to read or parse/);
       expect(line).toMatch(/entry in `story\.md` promotes one of (?:their|its) warnings to an error/);
     });
   }
+
+  test("the docs say a broken chapter or scene file does not count for a piped passage", () => {
+    const sentence = /a broken chapter or scene file does not (?:count|block them), since the passage stands in for those files/;
+    for (const file of ["automation.md", "cli-reference.md", "writing-workflows.md"]) {
+      expect({ file, named: sentence.test(readDoc(file)) }).toEqual({ file, named: true });
+    }
+  });
 });
