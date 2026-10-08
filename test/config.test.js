@@ -538,7 +538,9 @@ describe("config validation", () => {
   test("a valid config passes validate with no findings", () => {
     const { root } = project();
     configure(root, "cli-defaults:\n  - command: build\n    format: html\n    shunn: false\n  - command: synopsis\n    pages: 3\n  - command: validate\nseverity:\n  - warning: todo-markers\n    level: error");
-    expect(messages(validateProject(root).errors)).toEqual([]);
+    const result = validateProject(root);
+    expect(messages(result.errors)).toEqual([]);
+    expect(messages(result.warnings)).toEqual([]);
   });
 
   test("an invalid config stops other commands but not the ones that report it", () => {
