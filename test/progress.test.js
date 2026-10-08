@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -122,15 +122,37 @@ describe("story progress", () => {
     expect(messages(result.errors).join("\n")).toContain("progress.md:");
   });
 
-  test("defaults the date to today", () => {
-    const { root } = progressProject("target-words: 1000");
-    // A fixed clock, so the expected day is a literal rather than the helper
-    // the command calls for its default.
-    setSystemTime(new Date(2026, 9, 7, 9, 30));
-    try {
-      expect(projectProgress(root, { log: true }).logged.date).toBe("2026-10-07");
-    } finally {
-      setSystemTime();
+  test("defaults the date to the local day, not the UTC day", () => {
+    // This machine runs in UTC. Each instant falls on a different day in its
+    // zone than in UTC, so a default taken from the UTC day fails a child.
+    // Each child fixes the clock, so the expected day is a literal.
+    const cases = [
+      { zone: "Pacific/Kiritimati", instant: Date.UTC(2026, 9, 6, 12, 0), day: "2026-10-07" },
+      { zone: "America/Los_Angeles", instant: Date.UTC(2026, 9, 7, 3, 0), day: "2026-10-06" }
+    ];
+    for (const { zone, instant, day } of cases) {
+      const { root } = progressProject("target-words: 1000");
+      const script = `
+        const RealDate = Date;
+        const fixed = ${instant};
+        globalThis.Date = class extends RealDate {
+          constructor(...args) {
+            if (args.length === 0) {
+              super(fixed);
+            } else {
+              super(...args);
+            }
+          }
+          static now() {
+            return fixed;
+          }
+        };
+        const story = await import(${JSON.stringify(pathToFileURL(path.join(import.meta.dir, "..", "src", "story.js")).href)});
+        console.log(JSON.stringify(story.projectProgress(${JSON.stringify(root)}, { log: true }).logged.date));
+      `;
+      const result = spawnSync(process.execPath, ["-e", script], { encoding: "utf8", env: { ...process.env, TZ: zone }, timeout: 20000 });
+      expect({ zone, status: result.status, stderr: result.stderr }).toEqual({ zone, status: 0, stderr: "" });
+      expect({ zone, date: JSON.parse(result.stdout) }).toEqual({ zone, date: day });
     }
   });
 
