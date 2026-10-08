@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { assertSafeProjectDirectory, assertWriteAllowed, currentText, lstatIfExists, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
+import { assertSafeProjectDirectory, assertWriteAllowed, currentText, forgetChanges, lstatIfExists, projectPath, readTextFile, removeDirectory, removeFile, writeFile } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { formatNumber } from "./compare.js";
 import { plural } from "./plural.js";
@@ -133,6 +133,8 @@ export function snapshotProject(root, options = {}) {
         // Not empty, or already gone.
       }
     }
+    // What was put back is as it was before, so the failure reports none of it.
+    forgetChanges(madeFolder ? folder : target);
     throw error;
   } finally {
     if (backup !== null) {

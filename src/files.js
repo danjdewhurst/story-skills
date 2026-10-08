@@ -356,16 +356,39 @@ export function assertWriteAllowed(target) {
 // journals open here. recordChanges opens one, so a command's --json result
 // and its --dry-run preview (see preview.js) list what it did from the same
 // calls that did it, and the two cannot drift apart.
+// Each journal is { entries, planned }, where planned is true when it was
+// opened inside planChanges. A planned write is recorded only by the planned
+// journals, so a plan nested in a real run (the wordcount preflight) does not
+// report files it never wrote to the real run's --json writes.
 const journals = [];
 
 function record(target, existed, action) {
   const key = path.resolve(target);
+  const planned = planning > 0;
   for (const journal of journals) {
-    const entry = journal.get(key);
+    if (journal.planned !== planned) {
+      continue;
+    }
+    const entry = journal.entries.get(key);
     if (entry) {
       entry.action = action;
     } else {
-      journal.set(key, { existed, action });
+      journal.entries.set(key, { existed, action });
+    }
+  }
+}
+
+// Drops the changes recorded for `target`, a file or a folder, from every
+// open journal. For a command that puts back what it changed before it fails
+// (a snapshot's rollback), so the failure does not report files that are as
+// they were before it.
+export function forgetChanges(target) {
+  const key = path.resolve(target);
+  for (const journal of journals) {
+    for (const file of [...journal.entries.keys()]) {
+      if (isPathInside(key, file)) {
+        journal.entries.delete(file);
+      }
     }
   }
 }
@@ -375,25 +398,26 @@ function record(target, existed, action) {
 // mkdir (a folder made), or rmdir (a folder removed, listed after what it
 // held) and path is relative to `root` with / separators. A file created and
 // then deleted by the same run is left out. Calls nest: an inner call's
-// changes are recorded in the outer one too. A run that fails partway may
+// changes are recorded in the outer one too, unless the inner one is a plan
+// and the outer one is not (see record). A run that fails partway may
 // have changed files already, so the error it throws carries those changes
 // as error.changes (an outer call's, made last, win), for a command to
 // report.
 export function recordChanges(root, run) {
-  const journal = new Map();
+  const journal = { entries: new Map(), planned: planning > 0 };
   journals.push(journal);
   let result;
   try {
     result = run();
   } catch (error) {
     if (error !== null && typeof error === "object") {
-      error.changes = summarizeJournal(root, journal);
+      error.changes = summarizeJournal(root, journal.entries);
     }
     throw error;
   } finally {
     journals.splice(journals.indexOf(journal), 1);
   }
-  return { result, changes: summarizeJournal(root, journal) };
+  return { result, changes: summarizeJournal(root, journal.entries) };
 }
 
 // Like recordChanges, but nothing is written: writeFile, removeFile, and

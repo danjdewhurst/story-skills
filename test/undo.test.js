@@ -402,7 +402,7 @@ describe("undo logs (#604)", () => {
     expect(invoke(root, ["reindex"]).code).toBe(0);
   });
 
-  test("export, build, and synopsis are refused while the log is there, a --dry-run too, and write nothing (#723)", () => {
+  test("export, build, synopsis, and diagram --out are refused while the log is there, a --dry-run too, and write nothing (#723)", () => {
     const root = book();
     stoppedAt(root, 4, () => COMMANDS.merge.run(root));
     const stopped = snapshot(root);
@@ -412,7 +412,20 @@ describe("undo logs (#604)", () => {
     expect(invoke(root, ["build"])).toEqual({ code: 4, out: "", err: refusal("build") });
     expect(invoke(root, ["build", "--dry-run"])).toEqual({ code: 4, out: "", err: refusal("build") });
     expect(invoke(root, ["synopsis"])).toEqual({ code: 4, out: "", err: refusal("synopsis") });
+    expect(invoke(root, ["diagram", "arcs", "--out", "arcs.mmd"])).toEqual({ code: 4, out: "", err: refusal("diagram") });
+    expect(invoke(root, ["diagram", "arcs", "--out", "arcs.mmd", "--dry-run"])).toEqual({ code: 4, out: "", err: refusal("diagram") });
     expect(snapshot(root)).toEqual(stopped);
+  });
+
+  test.skipIf(!POSIX)("a link at the log's path refuses nothing, and is left as it is (#723)", () => {
+    const root = book();
+    const outside = path.join(makeTempDir(), "outside.md");
+    fs.writeFileSync(outside, "outside\n");
+    fs.symlinkSync(outside, path.join(root, UNDO_LOG));
+    expect(invoke(root, ["export"]).code).toBe(0);
+    expect(invoke(root, ["build", "--dry-run"]).code).toBe(0);
+    expect(fs.readFileSync(outside, "utf8")).toBe("outside\n");
+    expect(fs.lstatSync(path.join(root, UNDO_LOG)).isSymbolicLink()).toBe(true);
   });
 
   test("the log of a command still running is its own: it is not reported, refused, or put back", () => {

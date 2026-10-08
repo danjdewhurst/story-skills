@@ -311,30 +311,44 @@ function assertWriteAllowed(target) {
 var journals = [];
 function record(target, existed, action) {
   const key = path.resolve(target);
+  const planned = planning > 0;
   for (const journal of journals) {
-    const entry = journal.get(key);
+    if (journal.planned !== planned) {
+      continue;
+    }
+    const entry = journal.entries.get(key);
     if (entry) {
       entry.action = action;
     } else {
-      journal.set(key, { existed, action });
+      journal.entries.set(key, { existed, action });
+    }
+  }
+}
+function forgetChanges(target) {
+  const key = path.resolve(target);
+  for (const journal of journals) {
+    for (const file of [...journal.entries.keys()]) {
+      if (isPathInside(key, file)) {
+        journal.entries.delete(file);
+      }
     }
   }
 }
 function recordChanges(root, run) {
-  const journal = new Map;
+  const journal = { entries: new Map, planned: planning > 0 };
   journals.push(journal);
   let result;
   try {
     result = run();
   } catch (error) {
     if (error !== null && typeof error === "object") {
-      error.changes = summarizeJournal(root, journal);
+      error.changes = summarizeJournal(root, journal.entries);
     }
     throw error;
   } finally {
     journals.splice(journals.indexOf(journal), 1);
   }
-  return { result, changes: summarizeJournal(root, journal) };
+  return { result, changes: summarizeJournal(root, journal.entries) };
 }
 function planChanges(root, run) {
   planning += 1;
@@ -22069,6 +22083,9 @@ function interruptedChange(root) {
   return { command: commandName(header) };
 }
 function assertNoInterruptedChange(root, command) {
+  if (!isLogFile(path12.resolve(root))) {
+    return;
+  }
   const interrupted = interruptedChange(root);
   if (interrupted !== null && interrupted.command !== command) {
     throw refusedError(`${interrupted.command} stopped part way, and ${UNDO_LOG} holds what it changed, so ${command} would build on a change made only in part; nothing was changed. Run story doctor --fix to put those files back first, or run ${interrupted.command} again to finish it`);
@@ -22125,6 +22142,9 @@ function logExists(file) {
   } catch {
     return false;
   }
+}
+function isLogFile(projectRoot) {
+  return lstatIfExists(path12.join(projectRoot, UNDO_LOG))?.isFile() === true;
 }
 function readUndoLog(logFile, visit) {
   const seen = new Set;
@@ -27212,6 +27232,7 @@ function snapshotProject(root, options = {}) {
         fs9.rmdirSync(folder);
       } catch {}
     }
+    forgetChanges(madeFolder ? folder : target);
     throw error;
   } finally {
     if (backup !== null) {
@@ -32201,6 +32222,9 @@ var COMMANDS = [
       const kind = parsed.positionals[1];
       const dryRun = outputDryRun(parsed, "diagram");
       const projectRoot = root();
+      if (parsed.options.out !== undefined) {
+        assertNoInterruptedChange(projectRoot, "story diagram");
+      }
       const { result, changes } = runOrPlan(dryRun, projectRoot, () => diagramProject(projectRoot, { kind, out: parsed.options.out }));
       if (wantsJson(parsed)) {
         const outFile = result.outFile ?? null;
