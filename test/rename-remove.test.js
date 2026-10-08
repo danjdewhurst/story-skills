@@ -1231,8 +1231,11 @@ describe("sweep fixes", () => {
       createEntity(root, { kind: "character", name: "Mara" });
       createEntity(root, { kind: "chapter", name: "One", number: 1 });
       const chapter = path.join(root, "chapters", "chapter-01.md");
-      const mentions = Array.from({ length: count }, () => "  - mara").join("\n");
-      fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("mentions: []", `mentions:\n${mentions}`));
+      // With no mentions the chapter keeps its empty list, which is the fixed cost.
+      if (count > 0) {
+        const mentions = Array.from({ length: count }, () => "  - mara").join("\n");
+        fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("mentions: []", `mentions:\n${mentions}`));
+      }
       const started = performance.now();
       renameEntity(root, { kind: "character", id: "mara", name: "Mara Quill" });
       const elapsed = performance.now() - started;
