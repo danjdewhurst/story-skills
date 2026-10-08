@@ -627,6 +627,13 @@ exemptions:
     expect(warnings).toContain("Chapter 2 has malformed time \"teatime\"");
     expect(warnings).toContain("scenes/chapter-01-scene-03.md has travel-hours but no date, so the clock check skips it");
   });
+
+  test("an undated scene with travel-hours 0 gets no travel-hours warning", () => {
+    const root = baseProject(2);
+    writeBaseScene(root, 1, 1, "travel-hours: 0");
+    const warnings = messages(continuity(root).warnings);
+    expect(warnings.filter((message) => message.includes("travel-hours"))).toEqual([]);
+  });
 });
 
 describe("setup ordering and Chekhov gaps", () => {
