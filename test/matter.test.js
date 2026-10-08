@@ -305,6 +305,28 @@ describe("matter in export and build", () => {
     expect(buildBook(root, { format: "markdown" }).warnings.some((finding) => finding.code === "matter-placement-left-out")).toBe(false);
   });
 
+  test("export warns about a written matter page with a placement other than front or back", () => {
+    const { root, cwd } = matterProject();
+    writeMatter(root, "stray", "title: Stray\nplacement: Back\norder: 1", "# Stray\n\nA stray page.\n");
+    const run = invoke(cwd, ["export", root]);
+    expect(run.code).toBe(0);
+    expect(run.err).toContain("matter/stray.md placement is Back");
+    expect(run.err).toContain("[matter-placement-left-out]");
+    expect(fs.readFileSync(path.join(root, "dist", "manuscript.md"), "utf8")).not.toContain("A stray page.");
+  });
+
+  test("a written matter page with no placement says it is missing, and shows no control characters", () => {
+    const { root } = matterProject();
+    writeMatter(root, "noplace", "title: No Place\norder: 1", "# No Place\n\nText.\n");
+    writeMatter(root, "escaped", "title: Escaped\nplacement: \"back\\u001b[2Kx\"\norder: 2", "# Escaped\n\nMore text.\n");
+    const messages = buildBook(root, { format: "markdown" }).warnings.filter((finding) => finding.code === "matter-placement-left-out").map((finding) => finding.message);
+    expect(messages).toContain("matter/noplace.md placement is missing, which is neither front nor back, so it is left out");
+    const escaped = messages.find((message) => message.startsWith("matter/escaped.md"));
+    expect(escaped).toBeDefined();
+    expect(escaped).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+    expect(escaped).toContain("\ufffd");
+  });
+
   test("docx places matter around the chapters", () => {
     const { root } = matterProject();
     withBookMatter(root);
