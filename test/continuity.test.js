@@ -1596,3 +1596,27 @@ describe("sweep fixes", () => {
     expect(messages(checkProjectContinuity(root).errors)).toEqual([]);
   });
 });
+
+describe("theme-craft motif rows raise no finding", () => {
+  test("a planted motif with no payoff changes no check, in the ledger or an arc's Foreshadowing table", () => {
+    const root = newProject("Salt");
+    createEntity(root, { kind: "arc", name: "Main", type: "main" });
+    const reports = () => {
+      const project = validateProject(root);
+      const continuityReport = checkProjectContinuity(root);
+      return [...messages(project.errors), ...messages(project.warnings), ...messages(continuityReport.errors), ...messages(continuityReport.warnings)];
+    };
+    const before = reports();
+
+    fs.mkdirSync(path.join(root, "continuity"), { recursive: true });
+    fs.writeFileSync(path.join(root, "continuity", "motifs.md"), "# Motifs\n\n| Motif | Planted | Payoff | Status |\n|---|---|---|---|\n| salt | chapter-01 | | planted |\n", "utf8");
+    const arc = path.join(root, "plot", "arcs", "main.md");
+    const arcText = fs.readFileSync(arc, "utf8");
+    const row = "| | | | | planned |";
+    expect(arcText.split(row)).toHaveLength(2);
+    fs.writeFileSync(arc, arcText.replace(row, "| Salt on the sill | | chapter-01 | | planted |"), "utf8");
+    expect(fs.readFileSync(arc, "utf8")).toContain("| Salt on the sill | | chapter-01 | | planted |");
+
+    expect(reports()).toEqual(before);
+  });
+});
