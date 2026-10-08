@@ -25,7 +25,7 @@ Each setup and each event has one record. Update that record, and never copy it 
 - **Any other setup the reader is owed a payoff on** (a Chekhov's gun, a vow, a prophecy, a deadline) - `continuity/promises/{id}.md` (`story add promise`), checked by `story continuity`
 - **A question the reader is left asking** - `continuity/questions/{id}.md` (`story add question`), checked by `story continuity`
 - **A hint inside one arc that needs no checked payoff** (an image or an echo) - a row of that arc's `## Foreshadowing` table. `story check` only checks that its `chapter-NN` ids exist (and `move` and `split` rewrite or guard them); nothing checks its status or payoff. A clue or promise never gets a row there too
-- **A motif that theme-craft tracks** (a recurring object or image with planted, variation, and ending beats) - a row of the motif table in `continuity/motifs.md`, the only place for motif rows. The CLI does not read that file, so nothing checks its status or payoff
+- **A motif that theme-craft tracks** (a recurring object or image with planted, variation, and ending beats) - a row of the motif table in `continuity/motifs.md`, the only place for motif rows. No CLI check reads that file's status or payoff
 - **When a drafted scene happens** - the scene's `date` and `time`, which `story timeline` orders and `story continuity` checks
 - **Backstory and planned events** - `plot/timeline.md`, the hand-kept plan. Once an event is drafted, set its `Chapter` cell; the scene's `date` and `time` then say when it happens, so do not add a plan row for each drafted scene
 

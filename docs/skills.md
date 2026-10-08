@@ -365,7 +365,7 @@ It never fixes an audit finding by adding a speech or narration that explains th
 
 **Reads.** `story.md`, character files, `plot/_index.md` theme tracking, and the opening and closing chapters.
 
-**Writes.** `story.md` premise fields, character arc fields, the motif ledger (`continuity/motifs.md` or a table in an arc file), and `continuity/theme-audit.md`. The CLI does not scan, validate, or reindex the motif ledger or the theme audit.
+**Writes.** `story.md` premise fields, character arc fields, the motif ledger (`continuity/motifs.md`), and `continuity/theme-audit.md`. The CLI does not scan, validate, or reindex the motif ledger or the theme audit, and no check reads a motif's status.
 
 **CLI.** `story reindex .`, `story wordcount . --write`, and `story check .`.
 

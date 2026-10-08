@@ -67,8 +67,8 @@ scenes/
 continuity/
   state.md                        durable character, object, and knowledge state
   exemptions.md                   optional: dismissed findings
-  motifs.md                       optional: skill-owned, not read by the CLI
-  theme-audit.md                  optional: skill-owned, not read by the CLI
+  motifs.md                       optional: skill-owned, no check reads its status
+  theme-audit.md                  optional: skill-owned, no check reads its verdict
   questions/_index.md
   questions/<question-id>.md
   promises/_index.md
