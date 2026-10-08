@@ -1494,10 +1494,11 @@ describe("planned and payoff warnings read the named chapter's own status (#164)
 });
 
 describe("continuity help lists every check (#168)", () => {
-  test("names each check the command runs", () => {
+  test("names the checks its help text lists", () => {
     const io = memoryIo(makeTempDir());
     runCli(["continuity", "--help"], io);
     const help = (io.output() + io.error()).replace(/\s+/g, " ");
+    // A fixed list of check names, not every check the command runs.
     for (const phrase of ["deaths", "casts and cut characters", "promises", "questions", "clues", "prop custody", "clock and travel time", "location routes", "durable state"]) {
       expect(help).toContain(phrase);
     }
