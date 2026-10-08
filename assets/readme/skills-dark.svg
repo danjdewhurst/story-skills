@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="344" viewBox="0 0 960 344" role="img" aria-labelledby="title desc">
+  <title id="title">How the Story Skills fit together</title>
+  <desc id="desc">Five stages from left to right. Set up: premise-workshop, story-init. Plan: character-management, worldbuilding, plot-structure, theme-craft, genre-craft, research. Draft: chapter-writing, discovery-drafting, scene-craft, voice-style, verse-craft, interactive-fiction. Revise: revision-continuity, line-editing, reader-panel, feedback-triage, editorial-review. Send it out: submission, publishing, adaptation. series-continuity loops from the last stage back to the first to start the next book, and story-maintenance runs the CLI checks under every stage.</desc>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace; }
+  </style>
+  <path d="M871.0 68 V42 Q871.0 30 859.0 30 H655.0" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="5 5" stroke-linecap="round"/>
+  <path d="M305.0 30 H101.0 Q89.0 30 89.0 42 V64" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-dasharray="5 5" stroke-linecap="round"/>
+  <path d="M84.0 59 L89.0 65 L94.0 59" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="480.0" y="34.5" text-anchor="middle" class="sans" font-size="13.5" fill="#9198a1"><tspan class="mono" font-weight="600" fill="#a78bfa">series-continuity</tspan> starts the next book</text>
+  <rect x="1.0" y="70" width="176" height="200" rx="12" fill="#151b23" stroke="#3d444d"/>
+  <circle cx="25.0" cy="96" r="11" fill="#a78bfa"/>
+  <text x="25.0" y="100.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="700" fill="#0d1117">1</text>
+  <text x="44.0" y="101" class="sans" font-size="16" font-weight="600" fill="#f0f6fc">Set up</text>
+  <line x1="15.0" y1="118" x2="163.0" y2="118" stroke="#3d444d"/>
+  <text x="15.0" y="144" class="mono" font-size="12.5" fill="#9198a1">premise-workshop</text>
+  <text x="15.0" y="166" class="mono" font-size="12.5" fill="#9198a1">story-init</text>
+  <path d="M181.0 96 H192.5 M187.5 91 L192.5 96 L187.5 101" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="89.0" y1="274" x2="89.0" y2="292" stroke="#7c5cd6" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+  <rect x="196.5" y="70" width="176" height="200" rx="12" fill="#151b23" stroke="#3d444d"/>
+  <circle cx="220.5" cy="96" r="11" fill="#a78bfa"/>
+  <text x="220.5" y="100.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="700" fill="#0d1117">2</text>
+  <text x="239.5" y="101" class="sans" font-size="16" font-weight="600" fill="#f0f6fc">Plan</text>
+  <line x1="210.5" y1="118" x2="358.5" y2="118" stroke="#3d444d"/>
+  <text x="210.5" y="144" class="mono" font-size="12.5" fill="#9198a1">character-management</text>
+  <text x="210.5" y="166" class="mono" font-size="12.5" fill="#9198a1">worldbuilding</text>
+  <text x="210.5" y="188" class="mono" font-size="12.5" fill="#9198a1">plot-structure</text>
+  <text x="210.5" y="210" class="mono" font-size="12.5" fill="#9198a1">theme-craft</text>
+  <text x="210.5" y="232" class="mono" font-size="12.5" fill="#9198a1">genre-craft</text>
+  <text x="210.5" y="254" class="mono" font-size="12.5" fill="#9198a1">research</text>
+  <path d="M376.5 96 H388.0 M383.0 91 L388.0 96 L383.0 101" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="284.5" y1="274" x2="284.5" y2="292" stroke="#7c5cd6" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+  <rect x="392.0" y="70" width="176" height="200" rx="12" fill="#151b23" stroke="#3d444d"/>
+  <circle cx="416.0" cy="96" r="11" fill="#a78bfa"/>
+  <text x="416.0" y="100.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="700" fill="#0d1117">3</text>
+  <text x="435.0" y="101" class="sans" font-size="16" font-weight="600" fill="#f0f6fc">Draft</text>
+  <line x1="406.0" y1="118" x2="554.0" y2="118" stroke="#3d444d"/>
+  <text x="406.0" y="144" class="mono" font-size="12.5" fill="#9198a1">chapter-writing</text>
+  <text x="406.0" y="166" class="mono" font-size="12.5" fill="#9198a1">discovery-drafting</text>
+  <text x="406.0" y="188" class="mono" font-size="12.5" fill="#9198a1">scene-craft</text>
+  <text x="406.0" y="210" class="mono" font-size="12.5" fill="#9198a1">voice-style</text>
+  <text x="406.0" y="232" class="mono" font-size="12.5" fill="#9198a1">verse-craft</text>
+  <text x="406.0" y="254" class="mono" font-size="12.5" fill="#9198a1">interactive-fiction</text>
+  <path d="M572.0 96 H583.5 M578.5 91 L583.5 96 L578.5 101" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="480.0" y1="274" x2="480.0" y2="292" stroke="#7c5cd6" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+  <rect x="587.5" y="70" width="176" height="200" rx="12" fill="#151b23" stroke="#3d444d"/>
+  <circle cx="611.5" cy="96" r="11" fill="#a78bfa"/>
+  <text x="611.5" y="100.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="700" fill="#0d1117">4</text>
+  <text x="630.5" y="101" class="sans" font-size="16" font-weight="600" fill="#f0f6fc">Revise</text>
+  <line x1="601.5" y1="118" x2="749.5" y2="118" stroke="#3d444d"/>
+  <text x="601.5" y="144" class="mono" font-size="12.5" fill="#9198a1">revision-continuity</text>
+  <text x="601.5" y="166" class="mono" font-size="12.5" fill="#9198a1">line-editing</text>
+  <text x="601.5" y="188" class="mono" font-size="12.5" fill="#9198a1">reader-panel</text>
+  <text x="601.5" y="210" class="mono" font-size="12.5" fill="#9198a1">feedback-triage</text>
+  <text x="601.5" y="232" class="mono" font-size="12.5" fill="#9198a1">editorial-review</text>
+  <path d="M767.5 96 H779.0 M774.0 91 L779.0 96 L774.0 101" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="675.5" y1="274" x2="675.5" y2="292" stroke="#7c5cd6" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+  <rect x="783.0" y="70" width="176" height="200" rx="12" fill="#151b23" stroke="#3d444d"/>
+  <circle cx="807.0" cy="96" r="11" fill="#a78bfa"/>
+  <text x="807.0" y="100.5" text-anchor="middle" class="sans" font-size="12.5" font-weight="700" fill="#0d1117">5</text>
+  <text x="826.0" y="101" class="sans" font-size="16" font-weight="600" fill="#f0f6fc">Send it out</text>
+  <line x1="797.0" y1="118" x2="945.0" y2="118" stroke="#3d444d"/>
+  <text x="797.0" y="144" class="mono" font-size="12.5" fill="#9198a1">submission</text>
+  <text x="797.0" y="166" class="mono" font-size="12.5" fill="#9198a1">publishing</text>
+  <text x="797.0" y="188" class="mono" font-size="12.5" fill="#9198a1">adaptation</text>
+  <line x1="871.0" y1="274" x2="871.0" y2="292" stroke="#7c5cd6" stroke-width="1.6" stroke-dasharray="1.5 4" stroke-linecap="round"/>
+  <rect x="1" y="296" width="958" height="46" rx="12" fill="#1b1530" stroke="#4c3a87"/>
+  <text x="480.0" y="324" text-anchor="middle" class="sans" font-size="14" fill="#ddd6fe"><tspan class="mono" font-weight="700" fill="#a78bfa">story-maintenance</tspan> runs the CLI checks under every stage: validation, continuity, reports, and exports</text>
+</svg>

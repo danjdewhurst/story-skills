@@ -72,7 +72,7 @@ story-skills/
 ├── evals/                        # skill regression harness (repo tooling only)
 ├── templates/github/             # workflows and an issue form users copy into story repositories (shipped in the npm package)
 ├── docs/                         # this documentation (shipped in the npm package)
-├── assets/                       # logo, screenshot, social preview, demo GIF + VHS tapes
+├── assets/                       # logo, screenshot, social preview, demo GIF + VHS tapes, README art
 ├── CHANGELOG.md                  # user-visible changes per release (Keep a Changelog)
 ├── CONTRIBUTING.md               # short contributor guide that points here
 ├── CODE_OF_CONDUCT.md            # Contributor Covenant 2.1
@@ -90,6 +90,7 @@ Notes on specific paths:
 - `docs/`, `bin/`, `src/`, `skills/`, `schemas/`, `examples/`, `templates/`, `README.md`, `CHANGELOG.md`, and `LICENSE` (the `files` list in `package.json`), plus `package.json` itself, which npm always includes, are the only paths published to npm.
 - The `exports` map in `package.json` makes only `story-skills/package.json` and `story-skills/schemas/*` importable; `src/` is internal and the `story` bin is the interface. The README and docs are read from the installed package too, so every shipped markdown file (`README.md`, `CHANGELOG.md`, `docs/`, `skills/`, `examples/`, `templates/`) links to anything outside the `files` list (`AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`, `assets/`, `evals/`, `scripts/`, `test/`, `.github/`, the plugin folders) with an absolute `https://github.com/danjdewhurst/story-skills/blob/main/...` URL, which `check:links` checks against the checkout. `check:package` fails on a relative link in any shipped markdown file that the tarball does not contain, and on any root-relative link (`/AGENTS.md`), which resolves from the disk's root in `node_modules`. `test/check-scripts.test.js` runs the same check against the `files` list.
 - `assets/demo.gif` is generated from `assets/demo.tape` with `vhs assets/demo.tape`, and the Codex plugin screenshot `assets/screenshot-continuity.png`, the GIF's last frame as a still, from `assets/screenshot-continuity.tape`. Regenerate both when the `story continuity` output they show changes. Run them with `vhs` and Node on your PATH, or in Docker with the image [`assets/vhs.Dockerfile`](https://github.com/danjdewhurst/story-skills/blob/main/assets/vhs.Dockerfile) builds: VHS and Node, both pinned by digest. The header of `demo.tape` gives the commands, which mount the repository read-only and only `assets/` writable.
+- `assets/readme/` holds the README's art: the banner (`hero-light.svg` and `hero-dark.svg`), the feature icons, and the skills diagram (`skills-light.svg` and `skills-dark.svg`). The README picks the light or dark file with a `<picture>` element and links each file by its absolute `raw.githubusercontent.com` URL on `main`, because `assets/` is not in the package. The banner's lettering is outlined to paths, so it looks the same without the fonts. The skills diagram is plain SVG text: when you add, rename, or move a skill, edit both diagram files.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Edit `AGENTS.md` and leave the symlink alone.
 
 Do not commit `node_modules/`, `coverage/`, `dist/` directories inside examples, or editor swap files. `.gitignore` already covers them.
