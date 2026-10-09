@@ -8,6 +8,14 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Changed
+
+- The README has a new design and links to the docs for detail it used to repeat. ([#848](https://github.com/danjdewhurst/story-skills/issues/848), [#849](https://github.com/danjdewhurst/story-skills/issues/849))
+  - It opens with a banner, badges, and a feature grid, and shows the skills in a diagram and a table grouped by stage. The images have light and dark versions.
+  - The per-agent install blocks, the four CLI tables, and the behaviour notes are gone. [Getting started](docs/getting-started.md), the [CLI reference](docs/cli-reference.md), and the concept pages cover them.
+  - The prompt that lets a coding agent install the skills moved to [Getting started](docs/getting-started.md#let-your-agent-install-it).
+  - `check:links` now checks the README's `raw.githubusercontent.com` image links against the checkout, and fails one that points at a branch other than `main`.
+
 ## [0.23.1] - 2026-10-08
 
 ### Changed
