@@ -11,10 +11,17 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 ### Changed
 
 - The README has a new design and links to the docs for detail it used to repeat. ([#848](https://github.com/danjdewhurst/story-skills/issues/848), [#849](https://github.com/danjdewhurst/story-skills/issues/849))
-  - It opens with a banner, badges, and a feature grid, and shows the skills in a diagram and a table grouped by stage. The images have light and dark versions.
-  - The per-agent install blocks, the four CLI tables, and the behaviour notes are gone. [Getting started](docs/getting-started.md), the [CLI reference](docs/cli-reference.md), and the concept pages cover them.
-  - The prompt that lets a coding agent install the skills moved to [Getting started](docs/getting-started.md#let-your-agent-install-it).
-  - `check:links` now checks the README's `raw.githubusercontent.com` image links against the checkout, and fails one that points at a branch other than `main`.
+  - It opens with a banner, badges, and a feature grid. A diagram shows the skills in five stages, and a table gives each skill with a request that starts it.
+  - The banner and the skills diagram have light and dark versions.
+  - One table of 15 common commands replaces the four CLI tables. The [CLI reference](docs/cli-reference.md) lists every command.
+  - The per-agent install blocks are gone, since [Getting started](docs/getting-started.md) covers each agent. The prompt that lets a coding agent install the skills [moved there too](docs/getting-started.md#let-your-agent-install-it).
+  - The behaviour notes are gone. [Concepts](docs/concepts.md), [Manuscripts](docs/manuscripts.md), and [Languages](docs/languages.md) cover them.
+
+### Fixed
+
+- `check:links` now checks raw GitHub links to this repository, so an image cannot point at a pull request branch that is deleted when it merges.
+  - It reads `raw.githubusercontent.com/danjdewhurst/story-skills/main/...` links against the checkout, in every markdown file it scans, as it does `blob/main` links.
+  - It fails a raw link to this repository at any other ref, such as a branch, a tag, or a commit.
 
 ## [0.23.1] - 2026-10-08
 
