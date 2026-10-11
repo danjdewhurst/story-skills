@@ -12,9 +12,11 @@ import { frontmatterEnd, lineKey, lineRange, range, textLines, tokenColumns } fr
 // about the file and points at its first line.
 
 const LINE_NUMBER = /\(line (\d+)\)/;
-const MESSAGE_TOKEN = /[\p{L}\p{N}][\p{L}\p{N}_./-]*(?:\[\d+\])?/gu;
+// A path may open with `./` or `../` and hold backslashes, as the link a
+// link-backslash error names does (`..\characters\sera.md`).
+const MESSAGE_TOKEN = /(?:\.{1,2}[\\/])*[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
 const FIELD_PATH = /^([A-Za-z0-9_-]+)\[(\d+)\]$/;
-const SPECIFIC = /[-\d/.]/;
+const SPECIFIC = /[-\d/.\\]/;
 const NUMBER = /^\d+$/;
 const LIST_ITEM = /^(\s*)-(?:\s|$)/;
 // A command a message suggests (`run story reindex`, `story wordcount
@@ -31,7 +33,7 @@ export function findingRange(text, finding) {
   const end = frontmatterEnd(lines);
   const frontmatter = [...lines.keys()].filter((index) => index > 0 && index < end);
   const body = [...lines.keys()].filter((index) => !frontmatter.includes(index));
-  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./-]+$/, ""));
+  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./\\-]+$/, ""));
   for (const [index, token] of tokens.entries()) {
     const fieldPath = FIELD_PATH.exec(token);
     if (fieldPath !== null) {

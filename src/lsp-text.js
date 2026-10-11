@@ -47,6 +47,68 @@ export function keyAt(lines, line, character) {
   return null;
 }
 
+// The list item frontmatter line `line` sits in, as { listKey, lines }: the
+// key the list is under (null when none can be read), and the item's line
+// numbers. null for a line in no list item.
+export function listItemAt(lines, line, end) {
+  const indent = indentOf(lines[line]);
+  let start = null;
+  for (let index = line; index > 0 && start === null; index -= 1) {
+    const item = LIST_ITEM.exec(lines[index]);
+    if (item !== null && (index === line || item[1].length < indent)) {
+      start = index;
+    } else if (index < line && lines[index].trim() !== "" && indentOf(lines[index]) < indent) {
+      return null;
+    }
+  }
+  if (start === null) {
+    return null;
+  }
+  const itemIndent = indentOf(lines[start]);
+  const itemLines = [start];
+  for (let index = start + 1; index < end && (lines[index].trim() === "" || indentOf(lines[index]) > itemIndent); index += 1) {
+    itemLines.push(index);
+  }
+  let listKey = null;
+  for (let index = start - 1; index > 0 && listKey === null; index -= 1) {
+    const parent = KEY_LINE.exec(lines[index]);
+    if (parent !== null && parent[2] === undefined && parent[1].length <= itemIndent) {
+      listKey = parent[3];
+    }
+  }
+  return { listKey, lines: itemLines };
+}
+
+// The plain value a list item gives `key` (`field: arc` gives `arc`), or null.
+export function itemField(lines, item, key) {
+  for (const index of item.lines) {
+    const match = KEY_LINE.exec(lines[index]);
+    if (match !== null && match[3] === key) {
+      return lines[index].slice(match[0].length).trim().replace(/^(["'])(.*)\1$/, "$2");
+    }
+  }
+  return null;
+}
+
+// The target of the markdown link whose target holds `column` on
+// `lineText` (`[Sera](../characters/sera-voss.md)` or a `[sera]: path`
+// definition), or null.
+const INLINE_LINK = /\[[^\]\n]*\]\(([^)\n]*)\)/g;
+const LINK_DEFINITION = /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/;
+
+export function linkTargetAt(lineText, column) {
+  const targets = [...lineText.matchAll(INLINE_LINK)].map((match) => ({ target: match[1], start: match.index + match[0].length - 1 - match[1].length }));
+  const definition = LINK_DEFINITION.exec(lineText);
+  if (definition !== null) {
+    targets.push({ target: definition[1], start: definition[0].length - definition[1].length });
+  }
+  return targets.find(({ target, start }) => column >= start && column < start + target.length)?.target ?? null;
+}
+
+function indentOf(lineText) {
+  return lineText.length - lineText.trimStart().length;
+}
+
 // The entity id under `character` on `lineText`: the run of letters,
 // digits, `_`, and `-` around it, when that run is a kebab-case id. A link
 // target such as `../characters/sera-voss.md` gives `sera-voss`.
@@ -94,8 +156,31 @@ export function range(startLine, startCharacter, endLine = startLine, endCharact
   return { start: { line: startLine, character: startCharacter }, end: { line: endLine, character: endCharacter } };
 }
 
-// The range that covers all of `text`, for an edit that replaces it.
-export function wholeTextRange(text) {
-  const lines = text.split("\n");
-  return range(0, 0, lines.length - 1, lines[lines.length - 1].length);
+// The smallest edit that turns `before` into `after`: the text between
+// what they open and end with alike. Neither end splits a surrogate pair or
+// a `\r\n`, so every position is one an editor can hold.
+export function minimalEdit(before, after) {
+  const splits = (text, index) => /[\uD800-\uDBFF\r]/.test(text[index - 1] ?? "");
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) {
+    start += 1;
+  }
+  while (start > 0 && splits(before, start)) {
+    start -= 1;
+  }
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) {
+    end += 1;
+  }
+  while (end > 0 && splits(before, before.length - end)) {
+    end -= 1;
+  }
+  const from = positionAt(before, start);
+  const to = positionAt(before, before.length - end);
+  return { range: range(from.line, from.character, to.line, to.character), newText: after.slice(start, after.length - end) };
+}
+
+function positionAt(text, offset) {
+  const lines = text.slice(0, offset).split("\n");
+  return { line: lines.length - 1, character: lines[lines.length - 1].length };
 }

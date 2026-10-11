@@ -3285,7 +3285,7 @@ const ENTRY_IDENTITY_FIELDS = {
 
 // The kind a nested `to` names, by the list it sits in: a location's route
 // leads to a location, a chapter's choice to a chapter.
-const NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
+export const NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
 
 // Describes the entity being renamed or removed. A frontmatter key counts as
 // a reference to it only when the key can point at its kind. A key that may
@@ -3316,7 +3316,7 @@ function entityReferenceContext(root, kind, id) {
 
 // Resolves a markdown link target in `file` to an absolute path, or null for
 // external links and bare anchors.
-function resolveLinkTarget(root, file, target) {
+export function resolveLinkTarget(root, file, target) {
   const cleaned = String(target).trim().split(/\s+/)[0].replace(/^<|>$/g, "").split("#")[0].split("?")[0];
   // A URL with a scheme, or a protocol-relative one, is not a project file.
   if (cleaned === "" || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(cleaned)) {
