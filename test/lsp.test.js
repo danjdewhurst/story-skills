@@ -7,7 +7,7 @@ import { runCli } from "../src/cli.js";
 import { readFileBytes, withOpenDocuments } from "../src/files.js";
 import { findingMessage, findingRange } from "../src/finding-locations.js";
 import { CHECK_DELAY_MS, ERROR_CODES, createLanguageServer, projectRootOf, projectsIn, uriPath } from "../src/language-server.js";
-import { frontmatterEnd, idAt, keyAt, lineKey, lineRange, range, textLines, tokenColumns, wholeTextRange } from "../src/lsp-text.js";
+import { frontmatterEnd, idAt, itemField, keyAt, lineKey, lineRange, linkTargetAt, listItemAt, minimalEdit, range, textLines, tokenColumns } from "../src/lsp-text.js";
 import { encodeMessage, messageReader } from "../src/lsp-transport.js";
 import { SYMLINKS_SUPPORTED, makeTempDir, memoryIo } from "./helpers.js";
 
@@ -32,6 +32,12 @@ function storyProject() {
 function edit(root, file, change) {
   const target = path.join(root, file);
   fs.writeFileSync(target, change(fs.readFileSync(target, "utf8")));
+}
+
+// `text` with an LSP edit applied.
+function applyEdit(text, { range: { start, end }, newText }) {
+  const offset = ({ line, character }) => text.split("\n").slice(0, line).reduce((sum, lineText) => sum + lineText.length + 1, 0) + character;
+  return text.slice(0, offset(start)) + newText + text.slice(offset(end));
 }
 
 function uri(root, file) {
@@ -131,12 +137,61 @@ describe("lsp text positions", () => {
     expect(tokenColumns("nothing here", "sera")).toEqual([]);
   });
 
-  test("lineKey, lineRange, range, and wholeTextRange", () => {
+  test("lineKey, lineRange, and range", () => {
     expect(lineKey("  - character: sera")).toBe("character");
     expect(lineKey("plain text")).toBeNull();
     expect(lineRange(["a", "  indented"], 5)).toEqual(range(1, 2, 1, 10));
     expect(lineRange(["first"], -3)).toEqual(range(0, 0, 0, 5));
-    expect(wholeTextRange("one\ntwo three")).toEqual(range(0, 0, 1, 9));
+  });
+});
+
+describe("lsp list items, links, and edits", () => {
+  const lines = textLines([
+    "---",
+    "title: x",
+    "progressions:",
+    "  - from: chapter-02",
+    "    field: arc",
+    '    value: "the-arc"',
+    "  - from: chapter-03",
+    "characters:",
+    "  - sera",
+    "nested:",
+    "  inner: x",
+    "---"
+  ].join("\n"));
+  const end = frontmatterEnd(lines);
+
+  test("listItemAt finds the item a line is in, and the list it is under", () => {
+    const item = listItemAt(lines, 4, end);
+    expect(item).toEqual({ listKey: "progressions", lines: [3, 4, 5] });
+    expect(listItemAt(lines, 6, end)).toEqual({ listKey: "progressions", lines: [6] });
+    expect(listItemAt(lines, 8, end)).toEqual({ listKey: "characters", lines: [8] });
+    expect(listItemAt(lines, 10, end)).toBeNull();
+    expect(listItemAt(lines, 1, end)).toBeNull();
+    expect(listItemAt(textLines("---\n- loose\n---"), 1, 2)).toEqual({ listKey: null, lines: [1] });
+    expect(itemField(lines, item, "value")).toBe("the-arc");
+    expect(itemField(lines, item, "missing")).toBeNull();
+  });
+
+  test("linkTargetAt reads inline links and link definitions", () => {
+    const line = "See [a](../x/sera.md) and [b](z.md)";
+    expect(linkTargetAt(line, line.indexOf("sera"))).toBe("../x/sera.md");
+    expect(linkTargetAt(line, line.indexOf("z.md"))).toBe("z.md");
+    expect(linkTargetAt(line, 1)).toBeNull();
+    expect(linkTargetAt("[sera]: ../characters/sera.md", 12)).toBe("../characters/sera.md");
+  });
+
+  test("minimalEdit changes only what differs, splitting no pair or line end", () => {
+    const cases = [["abc", "abXc"], ["a\r\nb", "a\rc"], ["\uD83D\uDE00a", "\uD83D\uDE01a"], ["\uD83D\uDE00", "\uD83E\uDE00"], ["a\r\n", "b\n"], ["same", "same"]];
+    for (const [before, after] of cases) {
+      expect(applyEdit(before, minimalEdit(before, after))).toBe(after);
+    }
+    expect(minimalEdit("abc", "abXc")).toEqual({ range: range(0, 2, 0, 2), newText: "X" });
+    expect(minimalEdit("a\r\nb", "a\rc").range.start).toEqual({ line: 0, character: 1 });
+    expect(minimalEdit("\uD83D\uDE00a", "\uD83D\uDE01a").range).toEqual(range(0, 0, 0, 2));
+    expect(minimalEdit("\uD83D\uDE00", "\uD83E\uDE00").range).toEqual(range(0, 0, 0, 2));
+    expect(minimalEdit("a\r\n", "b\n")).toEqual({ range: range(0, 0, 1, 0), newText: "b\n" });
   });
 });
 
@@ -179,6 +234,12 @@ describe("finding locations", () => {
     expect(at("knowledge-state[1] says nothing findable")).toEqual(range(8, 2, 8, 26));
     expect(at("knowledge-state[7] is out of range")).toEqual(range(0, 0, 0, 3));
     expect(at("missing-key[0] then pov")).toEqual(range(1, 0, 1, 3));
+  });
+
+  test("a backslash link points at the whole target", () => {
+    const linked = "---\ntitle: x\n---\n\nSee [Sera](..\\characters\\sera-voss.md).";
+    const finding = { code: "link-backslash", message: "chapters/a.md links to ..\\characters\\sera-voss.md with a backslash; write ../characters/sera-voss.md so the link works on every system", file: "chapters/a.md", chapter: null };
+    expect(findingRange(linked, finding)).toEqual(range(4, 11, 4, 37));
   });
 
   test("a command hint names no place, and an unplaceable finding is the first line", () => {
@@ -333,6 +394,38 @@ describe("language server diagnostics", () => {
     expect(client.diagnostics(root, file)).toEqual([]);
   });
 
+  test("checks a new file before it is saved", () => {
+    const root = storyProject();
+    const client = startServer({ folders: [root] });
+    const file = "characters/mara-quill.md";
+    const text = client.open(root, file, "---\nname: Mara Quill\nrole: supporting\nstatus: alive\nlocations:\n  - nowhere-at-all\n---\n\n# Mara Quill\n");
+    const missing = client.diagnostics(root, file).find((diagnostic) => diagnostic.message.includes("nowhere-at-all"));
+    expect(missing.range.start).toEqual(at(text, "nowhere-at-all"));
+    expect(client.diagnostics(root, "characters/_index.md").map((diagnostic) => diagnostic.code)).toContain("stale-registry");
+    expect(fs.existsSync(path.join(root, file))).toBe(false);
+  });
+
+  test("keeps a removed folder's project that another folder or an open document holds", () => {
+    const root = storyProject();
+    const chapters = path.join(root, "chapters");
+    const folder = (dir) => ({ uri: pathToFileURL(dir).href, name: path.basename(dir) });
+    const changeFolders = (client, added, removed) => client.notify("workspace/didChangeWorkspaceFolders", { event: { added: added.map(folder), removed: removed.map(folder) } });
+    const file = "chapters/chapter-03.md";
+    const client = startServer({ folders: [path.dirname(root), root] });
+    changeFolders(client, [], [path.dirname(root)]);
+    expect(client.diagnostics(root, file)).toHaveLength(1);
+    changeFolders(client, [chapters], [root]);
+    expect(client.diagnostics(root, file)).toHaveLength(1);
+    client.open(root, "chapters/chapter-01.md");
+    changeFolders(client, [], [chapters]);
+    expect(client.diagnostics(root, file)).toHaveLength(1);
+
+    const inside = startServer({ folders: [chapters] });
+    expect(inside.diagnostics(root, file)).toHaveLength(1);
+    changeFolders(inside, [], [chapters, path.join(root, "never-added")]);
+    expect(inside.diagnostics(root, file)).toEqual([]);
+  });
+
   test("applies story.md severity settings, and reports invalid ones", () => {
     const root = storyProject();
     edit(root, "story.md", (text) => text.replace("form: novel\n", "form: novel\nseverity:\n  - warning: pov-not-in-cast\n    level: error\n"));
@@ -423,6 +516,58 @@ describe("language server navigation", () => {
     expect(jonas.contents.value).toBe("**Jonas Reed** · character · `characters/jonas-reed.md`\n\nStatus: alive");
   });
 
+  test("reads an id in a list item by the list it is in", () => {
+    const root = storyProject();
+    edit(root, "characters/jonas-reed.md", (text) => text.replace("progressions:\n", "progressions:\n  - from: chapter-03\n    field: status\n    value: missing\n  - from: chapter-03\n    field: arc\n    value: the-ledger-trail\n"));
+    const client = startServer();
+    const jonasFile = "characters/jonas-reed.md";
+    const jonas = client.open(root, jonasFile);
+    const jonasDocument = { textDocument: { uri: uri(root, jonasFile) } };
+    expect(client.result("textDocument/definition", { ...jonasDocument, position: at(jonas, "value: the-ledger-trail", 10) })).toEqual([{ uri: uri(root, "plot/arcs/the-ledger-trail.md"), range: range(0, 0) }]);
+    expect(client.result("textDocument/completion", { ...jonasDocument, position: at(jonas, "from: chapter-03", 10) }).map((item) => item.label)).toEqual(["chapter-01", "chapter-02", "chapter-03", "chapter-04"]);
+    expect(client.result("textDocument/completion", { ...jonasDocument, position: at(jonas, "value: missing", 10) })).toEqual([]);
+
+    const chapterThree = client.open(root, "chapters/chapter-03.md");
+    const hover = client.result("textDocument/hover", { textDocument: { uri: uri(root, "chapters/chapter-03.md") }, position: at(chapterThree, "jonas-reed", 1) });
+    expect(hover.contents.value).toContain("Status: missing\n");
+    expect(hover.contents.value).toContain("- status: missing (from chapter-03)");
+
+    const arc = client.open(root, "plot/arcs/the-ledger-trail.md");
+    const found = client.result("textDocument/references", { textDocument: { uri: uri(root, "chapters/chapter-03.md") }, position: at(chapterThree, "the-ledger-trail", 1) });
+    expect(found).toContainEqual({ uri: uri(root, jonasFile), range: { start: at(jonas, "the-ledger-trail"), end: at(jonas, "the-ledger-trail", "the-ledger-trail".length) } });
+    expect(arc).toBeDefined();
+
+    const millFile = "worldbuilding/locations/the-mill-row.md";
+    const mill = client.open(root, millFile, fs.readFileSync(path.join(root, millFile), "utf8").replace("tags: []\n", "tags: []\nroutes:\n  - to: the-\nto: the-\n"));
+    expect(client.result("textDocument/completion", { textDocument: { uri: uri(root, millFile) }, position: at(mill, "  - to: the-", 12) }).map((item) => item.label)).toEqual(["the-mill-row"]);
+    expect(client.result("textDocument/completion", { textDocument: { uri: uri(root, millFile) }, position: at(mill, "\nto: the-", 9) })).toEqual([]);
+
+    const chapterTwoFile = "chapters/chapter-02.md";
+    const chapterTwo = client.open(root, chapterTwoFile, fs.readFileSync(path.join(root, chapterTwoFile), "utf8").replace("status: draft\n", "status: draft\nchoices:\n  - text: Run\n    to: chapter-03\n"));
+    expect(client.result("textDocument/definition", { textDocument: { uri: uri(root, chapterTwoFile) }, position: at(chapterTwo, "to: chapter-03", 6) })).toEqual([{ uri: uri(root, "chapters/chapter-03.md"), range: range(0, 0) }]);
+  });
+
+  test("counts a link only when it resolves to the entity's file", () => {
+    const root = storyProject();
+    fs.mkdirSync(path.join(root, "notes"));
+    fs.writeFileSync(path.join(root, "notes", "edran-vale.md"), "# Notes on Edran\n");
+    edit(root, "chapters/chapter-01.md", (text) => `${text}\n[Notes](../notes/edran-vale.md), [Edran][e], [web](https://example.com/edran-vale.md)\n\n[e]: ../characters/edran-vale.md\n`);
+    const client = startServer();
+    const chapterOneFile = "chapters/chapter-01.md";
+    const chapterOne = client.open(root, chapterOneFile);
+    const chapterOneDocument = { textDocument: { uri: uri(root, chapterOneFile) } };
+    const chapterTwo = client.open(root, "chapters/chapter-02.md");
+    const found = client.result("textDocument/references", { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(chapterTwo, "edran-vale", 1) })
+      .filter((location) => location.uri === uri(root, chapterOneFile)).map((location) => location.range.start);
+    expect(found).toContainEqual(at(chapterOne, "characters/edran-vale.md", "characters/".length));
+    expect(found).not.toContainEqual(at(chapterOne, "notes/edran-vale.md", "notes/".length));
+    expect(found).not.toContainEqual(at(chapterOne, "example.com/edran-vale.md", "example.com/".length));
+    expect(client.result("textDocument/definition", { ...chapterOneDocument, position: at(chapterOne, "notes/edran-vale.md", 7) })).toBeNull();
+    expect(client.result("textDocument/definition", { ...chapterOneDocument, position: at(chapterOne, "[e]: ../characters/edran-vale.md", 20) })).toEqual([{ uri: uri(root, "characters/edran-vale.md"), range: range(0, 0) }]);
+    expect(client.result("textDocument/prepareRename", { ...chapterOneDocument, position: at(chapterOne, "[e]: ../characters/edran-vale.md", 20) }).placeholder).toBe("edran-vale");
+    expect(client.result("textDocument/prepareRename", { ...chapterOneDocument, position: at(chapterOne, "example.com/edran-vale.md", 14) })).toBeNull();
+  });
+
   test("completes ids of the kinds a field takes", () => {
     const root = storyProject();
     const client = startServer();
@@ -448,9 +593,10 @@ describe("language server edits", () => {
     expect(documentChanges).toContainEqual({ kind: "delete", uri: uri(root, "characters/edran-vale.md"), options: { ignoreIfNotExists: true } });
     expect(documentChanges).toContainEqual({ kind: "create", uri: uri(root, "characters/edran-vane.md"), options: { ignoreIfExists: true } });
     const chapterEdit = documentChanges.find((change) => change.textDocument?.uri === uri(root, "chapters/chapter-02.md"));
-    expect(chapterEdit.textDocument.version).toBeNull();
-    expect(chapterEdit.edits[0].range).toEqual(wholeTextRange(text));
-    expect(chapterEdit.edits[0].newText).toContain("  - edran-vane\n");
+    expect(chapterEdit.textDocument.version).toBe(1);
+    expect(applyEdit(text, chapterEdit.edits[0])).toBe(text.replace("  - edran-vale\n", "  - edran-vane\n"));
+    const unopened = documentChanges.find((change) => change.textDocument?.uri === uri(root, "chapters/chapter-04.md"));
+    expect(unopened.textDocument.version).toBeNull();
     const created = documentChanges.find((change) => change.textDocument?.uri === uri(root, "characters/edran-vane.md"));
     expect(created.edits[0]).toEqual({ range: range(0, 0), newText: expect.stringContaining("name: Edran Vane\n") });
     expect(fs.existsSync(path.join(root, "characters/edran-vale.md"))).toBe(true);
@@ -471,10 +617,14 @@ describe("language server edits", () => {
     const client = startServer();
     const text = client.open(root, "chapters/chapter-02.md");
     const failure = (position, method = "textDocument/rename") => client.request(method, { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position, newName: "x" }).error;
-    expect(failure(at(text, "draft", 1))).toEqual({ code: ERROR_CODES.requestFailed, message: "Rename works on the id of a story entity, such as a character or a location" });
-    expect(failure(at(text, "draft", 1), "textDocument/prepareRename").code).toBe(ERROR_CODES.requestFailed);
+    expect(failure(at(text, "draft", 1))).toEqual({ code: ERROR_CODES.requestFailed, message: "Rename works on the id of a story entity in a frontmatter field or a link to its file" });
+    expect(client.result("textDocument/prepareRename", { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(text, "draft", 1) })).toBeNull();
     const state = client.open(root, "continuity/state.md");
-    expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "continuity/state.md") }, position: at(state, "| jonas-reed", 3), newName: "x" }).error.message).toBe("jonas-reed is the id of more than one entity (character, artifact): rename it from a field that takes one kind, or with story rename");
+    const prose = { textDocument: { uri: uri(root, "continuity/state.md") }, position: at(state, "| jonas-reed", 3) };
+    expect(client.result("textDocument/prepareRename", prose)).toBeNull();
+    expect(client.result("textDocument/hover", prose).contents.value).toContain("**Jonas Reed's Ledger**");
+    const mentions = client.open(root, "chapters/chapter-01.md", fs.readFileSync(path.join(root, "chapters/chapter-01.md"), "utf8").replace("status:", "mentions:\n  - jonas-reed\nstatus:"));
+    expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "chapters/chapter-01.md") }, position: at(mentions, "mentions:\n  - jonas-reed", 16), newName: "x" }).error.message).toBe("jonas-reed is the id of more than one entity (character, artifact): rename it from a field that takes one kind, or with story rename");
     const scene = client.open(root, "scenes/chapter-02-scene-01.md");
     expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "scenes/chapter-02-scene-01.md") }, position: at(scene, "chapter-02", 1), newName: "x" }).error.message).toBe("A chapter id follows its number: renumber it with story move");
     expect(client.request("textDocument/rename", { textDocument: { uri: "untitled:x" }, position: { line: 0, character: 0 }, newName: "x" }).error.code).toBe(ERROR_CODES.requestFailed);
@@ -502,15 +652,29 @@ describe("language server edits", () => {
     expect(fix.title).toBe("Update word counts (story wordcount --write)");
     expect(fix.kind).toBe("quickfix");
     expect(fix.diagnostics).toEqual([wordCount]);
-    const edited = fix.edit.changes[uri(root, chapter)][0];
-    expect(edited.range).toEqual(wholeTextRange(text));
-    expect(edited.newText).toContain("said nothing at all");
-    expect(edited.newText).not.toContain("word-count: 31\n");
+    const edited = applyEdit(text, fix.edit.changes[uri(root, chapter)][0]);
+    expect(edited).toBe(text.replace(/^word-count: 31$/m, edited.match(/^word-count: \d+$/m)[0]));
+    expect(edited).not.toContain("word-count: 31\n");
 
     const [rebuild] = client.result("textDocument/codeAction", { textDocument: { uri: uri(root, "characters/_index.md") }, range: registry.range, context: { diagnostics: [registry] } });
-    expect(rebuild.edit.changes[uri(root, "characters/_index.md")][0].newText).toContain("mara-quill");
+    expect(applyEdit(fs.readFileSync(path.join(root, "characters/_index.md"), "utf8"), rebuild.edit.changes[uri(root, "characters/_index.md")][0])).toContain("mara-quill");
     expect(client.result("textDocument/codeAction", { textDocument: { uri: uri(root, chapter) }, range: range(0, 0) })).toEqual([]);
     expect(client.result("textDocument/codeAction", { textDocument: { uri: "untitled:x" }, range: range(0, 0), context: { diagnostics: [registry] } })).toEqual([]);
+  });
+
+  test("shows a fix the editor cannot apply as disabled, and still answers", () => {
+    const root = storyProject();
+    fs.rmSync(path.join(root, "characters/_index.md"));
+    const client = startServer();
+    const chapter = "chapters/chapter-02.md";
+    const diagnostic = (code) => ({ range: range(0, 0), severity: SEVERITY_WARNING, code, source: "story", message: code });
+    const actions = client.result("textDocument/codeAction", { textDocument: { uri: uri(root, chapter) }, range: range(0, 0), context: { diagnostics: [diagnostic("stale-registry"), diagnostic("stale-word-count")] } });
+    const reason = "This change needs to create files, which this editor cannot do in an edit: run the story command in a terminal instead";
+    expect(actions.map((action) => [action.title, action.disabled?.reason])).toEqual([
+      ["Rebuild registries (story reindex)", reason],
+      ["Update word counts (story wordcount --write)", reason]
+    ]);
+    expect(actions.every((action) => action.edit === undefined)).toBe(true);
   });
 
   test("leaves the edit for the editor to resolve when it can", () => {
@@ -523,7 +687,7 @@ describe("language server edits", () => {
     expect(action.edit).toBeUndefined();
     expect(action.data).toEqual({ root, code: "stale-word-count" });
     const resolved = client.result("codeAction/resolve", action);
-    expect(resolved.edit.documentChanges.map((change) => change.textDocument)).toContainEqual({ uri: uri(root, chapter), version: null });
+    expect(resolved.edit.documentChanges.map((change) => change.textDocument)).toContainEqual({ uri: uri(root, chapter), version: 1 });
     expect(client.request("codeAction/resolve", { ...action, data: { root, code: "toString" } }).error.message).toBe("Not a story quick fix");
     expect(client.request("codeAction/resolve", { title: "x" }).error.message).toBe("Not a story quick fix");
   });

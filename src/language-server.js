@@ -3,11 +3,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatKnowledgeMark } from "./chronology.js";
 import { findingOverrides, readCliConfig } from "./config.js";
-import { portablePath, readTextFile, recordChanges, withOpenDocuments } from "./files.js";
+import { makeDirectories, portablePath, readTextFile, recordChanges, withOpenDocuments, writeFile } from "./files.js";
 import { findingMessage, findingRange } from "./finding-locations.js";
 import { encodeMessage, messageReader } from "./lsp-transport.js";
-import { frontmatterEnd, idAt, keyAt, range, textLines, tokenColumns, wholeTextRange } from "./lsp-text.js";
-import { REFERENCE_FIELD_KINDS } from "./mutate.js";
+import { frontmatterEnd, idAt, itemField, keyAt, linkTargetAt, listItemAt, minimalEdit, range, textLines, tokenColumns } from "./lsp-text.js";
+import { NESTED_TO_KINDS, REFERENCE_FIELD_KINDS, resolveLinkTarget } from "./mutate.js";
 import { previewChanges } from "./preview.js";
 import { PROGRESSION_KINDS } from "./progressions.js";
 import { SKIPPED_SCAN_DIRECTORIES, isKebabId, markdownFiles, scanProject } from "./scan.js";
@@ -94,7 +94,8 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
   // The uris each project's last check published diagnostics for.
   const published = new Map();
   const pending = new Map();
-  const folders = new Set();
+  // Each workspace folder, and the projects checked for it.
+  const folders = new Map();
   let capabilities = {};
   let shuttingDown = false;
   let registrations = 0;
@@ -134,7 +135,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
       found.set(uri, [...(found.get(uri) ?? []), diagnostic]);
     };
     try {
-      const result = underOpenDocuments(() => projectCheck(root, { overrides: projectOverrides(root) }));
+      const result = underOpenDocuments(() => checkWithUnsaved(root));
       for (const [severity, findings] of [[SEVERITY.error, result.errors], [SEVERITY.warning, result.warnings]]) {
         for (const finding of findings) {
           const file = path.join(root, finding.file ?? "story.md");
@@ -153,6 +154,24 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
       notify("textDocument/publishDiagnostics", { uri, diagnostics });
     }
     published.set(root, new Set(found.keys()));
+  }
+
+  // story check on the project, as the editor has it. A file the editor has
+  // open but not yet saved is not on disk for the scan to list, so then the
+  // check runs on a scratch copy with those files written into it.
+  function checkWithUnsaved(root) {
+    const unsaved = [...documents.keys()].filter((file) => file.endsWith(".md") && !fs.existsSync(file) && projectRootOf(file) === root);
+    if (unsaved.length === 0) {
+      return projectCheck(root, { overrides: projectOverrides(root) });
+    }
+    return previewChanges(root, (copyRoot) => {
+      for (const file of unsaved) {
+        const copy = path.join(copyRoot, path.relative(root, file));
+        makeDirectories(path.dirname(copy));
+        writeFile(copy, documents.get(file).text);
+      }
+      return projectCheck(copyRoot, { overrides: projectOverrides(copyRoot) });
+    }).result;
   }
 
   function clearProject(root) {
@@ -177,7 +196,9 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
   }
 
   function checkFolder(folder) {
-    for (const root of projectsIn(folder)) {
+    const roots = projectsIn(folder);
+    folders.set(folder, roots);
+    for (const root of roots) {
       checkNow(root);
     }
   }
@@ -188,18 +209,29 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     return underOpenDocuments(() => scanProject(root));
   }
 
-  // The entity the id under `position` names, as { token, project, matches }:
-  // in a frontmatter field that takes ids, the entities of the kinds it
-  // names; anywhere else, every entity with that id. null for no entity.
+  // The entity the id under `position` names, as { token, project, matches,
+  // explicit }: in a link, the entity whose file it resolves to; in a
+  // frontmatter field that takes ids, the entities of the kinds it names.
+  // Both are explicit references, which story rename rewrites. Anywhere
+  // else, such as prose, every entity with that id. null for no entity.
   function referenceAt(context, position) {
-    const token = idAt(context.lines[position.line] ?? "", position.character);
+    const lineText = context.lines[position.line] ?? "";
+    const token = idAt(lineText, position.character);
     if (token === null) {
       return null;
     }
     const project = scan(context.root);
-    const kinds = fieldKinds(frontmatterKey(context.lines, position.line, token.start));
-    const matches = (projectEntities(project).get(token.text) ?? []).filter((entry) => kinds === undefined || kinds.includes(entry.kind));
-    return matches.length === 0 ? null : { token, project, matches, line: position.line };
+    const linked = linkedFile(context, lineText, token.start);
+    const kinds = linked === null ? referenceKinds(context.lines, position.line, token.start) : undefined;
+    const matches = (projectEntities(project).get(token.text) ?? [])
+      .filter((entry) => (linked === null ? kinds === undefined || kinds.includes(entry.kind) : entry.file === linked));
+    return matches.length === 0 ? null : { token, project, matches, line: position.line, explicit: linked !== null || kinds !== undefined };
+  }
+
+  // The project file the link around `column` resolves to, or null.
+  function linkedFile(context, lineText, column) {
+    const target = linkTargetAt(lineText, column);
+    return target === null ? null : resolveLinkTarget(context.root, context.file, target);
   }
 
   function tokenRange(reference) {
@@ -222,14 +254,15 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     }
     const id = reference.token.text;
     const kinds = new Set(reference.matches.map((entry) => entry.kind));
+    const files = new Set(reference.matches.map((entry) => entry.file));
     const locations = params.context?.includeDeclaration ? reference.matches.map((entry) => ({ uri: uriFor(entry.file), range: range(0, 0) })) : [];
     for (const file of underOpenDocuments(() => markdownFiles(context.root)).sort()) {
       const lines = textLines(textOf(file));
+      const fileContext = { ...context, file };
       for (const [line, lineText] of lines.entries()) {
         for (const column of tokenColumns(lineText, id)) {
-          const fieldKindsHere = fieldKinds(frontmatterKey(lines, line, column));
-          const linked = fieldKindsHere === undefined && lineText.startsWith(".md", column + id.length);
-          if (linked || (fieldKindsHere ?? []).some((kind) => kinds.has(kind))) {
+          const linked = linkedFile(fileContext, lineText, column);
+          if (linked === null ? (referenceKinds(lines, line, column) ?? []).some((kind) => kinds.has(kind)) : files.has(linked)) {
             locations.push({ uri: uriFor(file), range: range(line, column, line, column + id.length) });
           }
         }
@@ -260,7 +293,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     const { line, character } = params.position;
     const typed = /[a-z0-9-]*$/.exec((context.lines[line] ?? "").slice(0, character))[0];
     const start = character - typed.length;
-    const kinds = fieldKinds(frontmatterKey(context.lines, line, start));
+    const kinds = referenceKinds(context.lines, line, start);
     if (kinds === undefined) {
       return [];
     }
@@ -272,11 +305,13 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
 
   // Rename
 
+  // The entity to rename, or null when the position holds no explicit
+  // reference to one: story rename leaves an id in prose as it is.
   function renameTarget(params) {
     const context = documentContext(params.textDocument.uri);
     const reference = context === null ? null : referenceAt(context, params.position);
-    if (reference === null) {
-      throw requestFailed("Rename works on the id of a story entity, such as a character or a location");
+    if (reference === null || !reference.explicit) {
+      return null;
     }
     if (reference.matches.length > 1) {
       throw requestFailed(`${reference.token.text} is the id of more than one entity (${reference.matches.map((entry) => entry.kind).join(", ")}): rename it from a field that takes one kind, or with story rename`);
@@ -289,15 +324,19 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
   }
 
   function prepareRename(params) {
-    const { reference } = renameTarget(params);
-    return { range: tokenRange(reference), placeholder: reference.token.text };
+    const target = renameTarget(params);
+    return target === null ? null : { range: tokenRange(target.reference), placeholder: target.reference.token.text };
   }
 
   // A new name in kebab case is the new id, and the entity keeps its name;
   // any other text is the new name, and the id follows it, as story rename
   // derives one.
   function rename(params) {
-    const { context, entry } = renameTarget(params);
+    const target = renameTarget(params);
+    if (target === null) {
+      throw requestFailed("Rename works on the id of a story entity in a frontmatter field or a link to its file");
+    }
+    const { context, entry } = target;
     const newName = String(params.newName).trim();
     const options = isKebabId(newName) ? { kind: entry.kind, id: entry.id, newId: newName, name: entry.name } : { kind: entry.kind, id: entry.id, name: newName };
     return projectEdit(context.root, (copyRoot) => renameEntity(copyRoot, options));
@@ -316,10 +355,20 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
       const diagnostics = (params.context?.diagnostics ?? []).filter((diagnostic) => diagnostic.source === SOURCE && diagnostic.code === code);
       if (diagnostics.length > 0) {
         const action = { title: fix.title, kind: "quickfix", diagnostics, data: { root: context.root, code } };
-        actions.push(lazy ? action : resolveCodeAction(action));
+        actions.push(lazy ? action : resolveOrDisable(action));
       }
     }
     return actions;
+  }
+
+  // A fix this editor cannot apply is shown disabled, with the reason, so
+  // the other fixes are still offered.
+  function resolveOrDisable(action) {
+    try {
+      return resolveCodeAction(action);
+    } catch (error) {
+      return { ...action, disabled: { reason: error.message } };
+    }
   }
 
   function resolveCodeAction(action) {
@@ -341,10 +390,11 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     for (const change of changes) {
       const file = path.join(root, change.path);
       const uri = uriFor(file);
+      const version = documents.get(file)?.version ?? null;
       if (change.action === "update") {
-        operations.push(textDocumentEdit(uri, wholeTextRange(textOf(file)), texts[change.path]));
+        operations.push(textDocumentEdit(uri, version, minimalEdit(textOf(file), texts[change.path])));
       } else if (change.action === "create") {
-        operations.push({ kind: "create", uri, options: { ignoreIfExists: true } }, textDocumentEdit(uri, range(0, 0), texts[change.path]));
+        operations.push({ kind: "create", uri, options: { ignoreIfExists: true } }, textDocumentEdit(uri, null, { range: range(0, 0), newText: texts[change.path] }));
       } else if (change.action === "delete") {
         operations.push({ kind: "delete", uri, options: { ignoreIfNotExists: true } });
       }
@@ -392,8 +442,8 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
 
   function addFolder(uri) {
     const folder = uriPath(uri);
-    if (folder !== null) {
-      folders.add(folder);
+    if (folder !== null && !folders.has(folder)) {
+      folders.set(folder, []);
     }
     return folder;
   }
@@ -409,7 +459,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
           params: { registrations: [{ id: "story-markdown-files", method: "workspace/didChangeWatchedFiles", registerOptions: { watchers: [{ globPattern: "**/*.md" }] } }] }
         });
       }
-      for (const folder of folders) {
+      for (const folder of folders.keys()) {
         checkFolder(folder);
       }
     },
@@ -419,7 +469,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     "textDocument/didOpen"({ textDocument }) {
       const file = uriPath(textDocument.uri);
       if (file !== null) {
-        documents.set(file, { uri: textDocument.uri, text: textDocument.text });
+        documents.set(file, { uri: textDocument.uri, text: textDocument.text, version: textDocument.version ?? null });
         checkDocumentProject(file, checkNow);
       }
     },
@@ -428,6 +478,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
       const document = documents.get(file);
       if (document !== undefined && contentChanges.length > 0) {
         document.text = contentChanges[contentChanges.length - 1].text;
+        document.version = textDocument.version ?? null;
         checkDocumentProject(file, checkLater);
       }
     },
@@ -450,12 +501,21 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
         }
       }
     },
+    // A removed folder's projects are cleared unless another folder or an
+    // open document still holds them.
     "workspace/didChangeWorkspaceFolders"({ event }) {
       for (const removed of event.removed) {
         const folder = uriPath(removed.uri);
+        if (folder === null) {
+          continue;
+        }
+        const roots = new Set([...(folders.get(folder) ?? []), ...[...published.keys()].filter((root) => isInside(folder, root))]);
         folders.delete(folder);
-        for (const root of [...published.keys()].filter((root) => folder !== null && isInside(folder, root))) {
-          clearProject(root);
+        const kept = new Set([...[...folders.values()].flat(), ...[...documents.keys()].map(projectRootOf)]);
+        for (const root of roots) {
+          if (published.has(root) && !kept.has(root)) {
+            clearProject(root);
+          }
         }
       }
       for (const added of event.added) {
@@ -598,6 +658,30 @@ function frontmatterKey(lines, line, character) {
   return line > 0 && line < frontmatterEnd(lines) ? keyAt(lines, line, character) : null;
 }
 
+// The entity kinds the frontmatter value at a position takes ids of, or
+// undefined for a value that takes none. Some keys depend on the list item
+// they sit in, as story rename reads them: a route's `to` names a location
+// and a choice's `to` a chapter, a progression's `from` names a chapter,
+// and its `value` takes what the field it changes takes.
+function referenceKinds(lines, line, character) {
+  const key = frontmatterKey(lines, line, character);
+  if (key === null) {
+    return undefined;
+  }
+  const item = listItemAt(lines, line, frontmatterEnd(lines));
+  const listKey = item?.listKey ?? null;
+  if (key === "to") {
+    return Object.hasOwn(NESTED_TO_KINDS, listKey) ? [NESTED_TO_KINDS[listKey]] : undefined;
+  }
+  if (listKey === "progressions" && key === "from") {
+    return ["chapter"];
+  }
+  if (listKey === "progressions" && key === "value") {
+    return fieldKinds(itemField(lines, item, "field"));
+  }
+  return fieldKinds(key);
+}
+
 // The entity kinds a frontmatter field takes ids of, or undefined for a
 // field that takes none.
 function fieldKinds(key) {
@@ -606,40 +690,46 @@ function fieldKinds(key) {
 
 function describeEntity(entry, root, chapter, project) {
   const lines = [`**${escapeMarkdown(entry.name)}** · ${entry.kind} · \`${portablePath(path.relative(root, entry.file))}\``];
-  const status = String(entry.entity.status ?? "");
+  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project) : null;
+  const status = String((atChapter === null ? entry.entity.status : atChapter.status) ?? "");
   if (status !== "") {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
   }
-  if (chapter !== null && PROGRESSION_KINDS.includes(entry.kind)) {
-    lines.push(...stateAtChapter(entry, root, chapter, project));
+  if (atChapter !== null && atChapter.lines.length > 0) {
+    lines.push("", `At ${chapter}:`, ...atChapter.lines);
   }
   return lines.join("\n");
 }
 
-// What a character knows, and what its progressions (or a location's or a
-// faction's) changed, by the chapter the document is in. Nothing when the
-// project cannot say: a chapter or the state file fails to parse.
+// The status of a character (or a location or a faction) by the chapter
+// the document is in, with what it knows and what its progressions changed,
+// as { status, lines }. null when the project cannot say: a chapter or the
+// state file fails to parse.
 function stateAtChapter(entry, root, chapter, project) {
-  let lines;
   try {
     const knowledge = entry.kind === "character" ? knowledgeAtChapter(root, entry.id, chapter, project) : [];
-    const { changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
-    lines = [
-      ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
-      ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
-    ];
+    const { state, changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
+    return {
+      status: state.status,
+      lines: [
+        ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
+        ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
+      ]
+    };
   } catch {
-    return [];
+    return null;
   }
-  return lines.length === 0 ? [] : ["", `At ${chapter}:`, ...lines];
 }
 
 function escapeMarkdown(text) {
   return text.replace(/[\\`*_{}[\]()#+!|<>~]/g, "\\$&");
 }
 
-function textDocumentEdit(uri, editRange, newText) {
-  return { textDocument: { uri, version: null }, edits: [{ range: editRange, newText }] };
+// An edit to one document. `version` is the version of the open document
+// the edit was worked out from, so the editor refuses it once the writer
+// has typed on; null for a document the editor does not have open.
+function textDocumentEdit(uri, version, edit) {
+  return { textDocument: { uri, version }, edits: [edit] };
 }
 
 function requestFailed(message) {

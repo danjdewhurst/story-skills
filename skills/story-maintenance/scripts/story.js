@@ -31647,6 +31647,56 @@ function keyAt(lines, line, character) {
   }
   return null;
 }
+function listItemAt(lines, line, end) {
+  const indent = indentOf2(lines[line]);
+  let start = null;
+  for (let index = line;index > 0 && start === null; index -= 1) {
+    const item = LIST_ITEM.exec(lines[index]);
+    if (item !== null && (index === line || item[1].length < indent)) {
+      start = index;
+    } else if (index < line && lines[index].trim() !== "" && indentOf2(lines[index]) < indent) {
+      return null;
+    }
+  }
+  if (start === null) {
+    return null;
+  }
+  const itemIndent = indentOf2(lines[start]);
+  const itemLines = [start];
+  for (let index = start + 1;index < end && (lines[index].trim() === "" || indentOf2(lines[index]) > itemIndent); index += 1) {
+    itemLines.push(index);
+  }
+  let listKey = null;
+  for (let index = start - 1;index > 0 && listKey === null; index -= 1) {
+    const parent = KEY_LINE.exec(lines[index]);
+    if (parent !== null && parent[2] === undefined && parent[1].length <= itemIndent) {
+      listKey = parent[3];
+    }
+  }
+  return { listKey, lines: itemLines };
+}
+function itemField(lines, item, key) {
+  for (const index of item.lines) {
+    const match = KEY_LINE.exec(lines[index]);
+    if (match !== null && match[3] === key) {
+      return lines[index].slice(match[0].length).trim().replace(/^(["'])(.*)\1$/, "$2");
+    }
+  }
+  return null;
+}
+var INLINE_LINK = /\[[^\]\n]*\]\(([^)\n]*)\)/g;
+var LINK_DEFINITION2 = /^ {0,3}\[[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)/;
+function linkTargetAt(lineText, column) {
+  const targets = [...lineText.matchAll(INLINE_LINK)].map((match) => ({ target: match[1], start: match.index + match[0].length - 1 - match[1].length }));
+  const definition = LINK_DEFINITION2.exec(lineText);
+  if (definition !== null) {
+    targets.push({ target: definition[1], start: definition[0].length - definition[1].length });
+  }
+  return targets.find(({ target, start }) => column >= start && column < start + target.length)?.target ?? null;
+}
+function indentOf2(lineText) {
+  return lineText.length - lineText.trimStart().length;
+}
 function idAt(lineText, character) {
   let start = character;
   while (start > 0 && WORD_CHARACTER.test(lineText[start - 1])) {
@@ -31681,17 +31731,37 @@ function lineRange(lines, line) {
 function range(startLine, startCharacter, endLine = startLine, endCharacter = startCharacter) {
   return { start: { line: startLine, character: startCharacter }, end: { line: endLine, character: endCharacter } };
 }
-function wholeTextRange(text) {
-  const lines = text.split(`
+function minimalEdit(before, after) {
+  const splits = (text, index) => /[\uD800-\uDBFF\r]/.test(text[index - 1] ?? "");
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) {
+    start += 1;
+  }
+  while (start > 0 && splits(before, start)) {
+    start -= 1;
+  }
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) {
+    end += 1;
+  }
+  while (end > 0 && splits(before, before.length - end)) {
+    end -= 1;
+  }
+  const from = positionAt(before, start);
+  const to = positionAt(before, before.length - end);
+  return { range: range(from.line, from.character, to.line, to.character), newText: after.slice(start, after.length - end) };
+}
+function positionAt(text, offset) {
+  const lines = text.slice(0, offset).split(`
 `);
-  return range(0, 0, lines.length - 1, lines[lines.length - 1].length);
+  return { line: lines.length - 1, character: lines[lines.length - 1].length };
 }
 
 // src/finding-locations.js
 var LINE_NUMBER = /\(line (\d+)\)/;
-var MESSAGE_TOKEN = /[\p{L}\p{N}][\p{L}\p{N}_./-]*(?:\[\d+\])?/gu;
+var MESSAGE_TOKEN = /(?:\.{1,2}[\\/])*[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
 var FIELD_PATH = /^([A-Za-z0-9_-]+)\[(\d+)\]$/;
-var SPECIFIC = /[-\d/.]/;
+var SPECIFIC = /[-\d/.\\]/;
 var NUMBER = /^\d+$/;
 var LIST_ITEM2 = /^(\s*)-(?:\s|$)/;
 var COMMAND_HINT = /\bstory [a-z-]+(?: --[a-z-]+)*/g;
@@ -31705,7 +31775,7 @@ function findingRange(text, finding) {
   const end = frontmatterEnd(lines);
   const frontmatter = [...lines.keys()].filter((index) => index > 0 && index < end);
   const body = [...lines.keys()].filter((index) => !frontmatter.includes(index));
-  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./-]+$/, ""));
+  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./\\-]+$/, ""));
   for (const [index, token] of tokens.entries()) {
     const fieldPath = FIELD_PATH.exec(token);
     if (fieldPath !== null) {
@@ -31867,7 +31937,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
   const documents = new Map;
   const published = new Map;
   const pending = new Map;
-  const folders = new Set;
+  const folders = new Map;
   let capabilities = {};
   let shuttingDown = false;
   let registrations = 0;
@@ -31901,7 +31971,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
       found.set(uri, [...found.get(uri) ?? [], diagnostic]);
     };
     try {
-      const result = underOpenDocuments(() => projectCheck(root, { overrides: projectOverrides(root) }));
+      const result = underOpenDocuments(() => checkWithUnsaved(root));
       for (const [severity, findings] of [[SEVERITY.error, result.errors], [SEVERITY.warning, result.warnings]]) {
         for (const finding of findings) {
           const file = path19.join(root, finding.file ?? "story.md");
@@ -31920,6 +31990,20 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
       notify("textDocument/publishDiagnostics", { uri, diagnostics });
     }
     published.set(root, new Set(found.keys()));
+  }
+  function checkWithUnsaved(root) {
+    const unsaved = [...documents.keys()].filter((file) => file.endsWith(".md") && !fs14.existsSync(file) && projectRootOf(file) === root);
+    if (unsaved.length === 0) {
+      return projectCheck(root, { overrides: projectOverrides(root) });
+    }
+    return previewChanges(root, (copyRoot) => {
+      for (const file of unsaved) {
+        const copy = path19.join(copyRoot, path19.relative(root, file));
+        makeDirectories(path19.dirname(copy));
+        writeFile(copy, documents.get(file).text);
+      }
+      return projectCheck(copyRoot, { overrides: projectOverrides(copyRoot) });
+    }).result;
   }
   function clearProject(root) {
     for (const uri of published.get(root)) {
@@ -31940,7 +32024,9 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     }, delay));
   }
   function checkFolder(folder) {
-    for (const root of projectsIn(folder)) {
+    const roots = projectsIn(folder);
+    folders.set(folder, roots);
+    for (const root of roots) {
       checkNow(root);
     }
   }
@@ -31948,14 +32034,20 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     return underOpenDocuments(() => scanProject(root));
   }
   function referenceAt(context, position) {
-    const token = idAt(context.lines[position.line] ?? "", position.character);
+    const lineText = context.lines[position.line] ?? "";
+    const token = idAt(lineText, position.character);
     if (token === null) {
       return null;
     }
     const project = scan(context.root);
-    const kinds = fieldKinds(frontmatterKey(context.lines, position.line, token.start));
-    const matches = (projectEntities(project).get(token.text) ?? []).filter((entry) => kinds === undefined || kinds.includes(entry.kind));
-    return matches.length === 0 ? null : { token, project, matches, line: position.line };
+    const linked = linkedFile(context, lineText, token.start);
+    const kinds = linked === null ? referenceKinds(context.lines, position.line, token.start) : undefined;
+    const matches = (projectEntities(project).get(token.text) ?? []).filter((entry) => linked === null ? kinds === undefined || kinds.includes(entry.kind) : entry.file === linked);
+    return matches.length === 0 ? null : { token, project, matches, line: position.line, explicit: linked !== null || kinds !== undefined };
+  }
+  function linkedFile(context, lineText, column) {
+    const target = linkTargetAt(lineText, column);
+    return target === null ? null : resolveLinkTarget(context.root, context.file, target);
   }
   function tokenRange(reference) {
     return range(reference.line, reference.token.start, reference.line, reference.token.end);
@@ -31973,14 +32065,15 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     }
     const id = reference.token.text;
     const kinds = new Set(reference.matches.map((entry) => entry.kind));
+    const files = new Set(reference.matches.map((entry) => entry.file));
     const locations = params.context?.includeDeclaration ? reference.matches.map((entry) => ({ uri: uriFor(entry.file), range: range(0, 0) })) : [];
     for (const file of underOpenDocuments(() => markdownFiles(context.root)).sort()) {
       const lines = textLines(textOf(file));
+      const fileContext = { ...context, file };
       for (const [line, lineText] of lines.entries()) {
         for (const column of tokenColumns(lineText, id)) {
-          const fieldKindsHere = fieldKinds(frontmatterKey(lines, line, column));
-          const linked = fieldKindsHere === undefined && lineText.startsWith(".md", column + id.length);
-          if (linked || (fieldKindsHere ?? []).some((kind) => kinds.has(kind))) {
+          const linked = linkedFile(fileContext, lineText, column);
+          if (linked === null ? (referenceKinds(lines, line, column) ?? []).some((kind) => kinds.has(kind)) : files.has(linked)) {
             locations.push({ uri: uriFor(file), range: range(line, column, line, column + id.length) });
           }
         }
@@ -32011,7 +32104,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     const { line, character } = params.position;
     const typed = /[a-z0-9-]*$/.exec((context.lines[line] ?? "").slice(0, character))[0];
     const start = character - typed.length;
-    const kinds = fieldKinds(frontmatterKey(context.lines, line, start));
+    const kinds = referenceKinds(context.lines, line, start);
     if (kinds === undefined) {
       return [];
     }
@@ -32020,8 +32113,8 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
   function renameTarget(params) {
     const context = documentContext(params.textDocument.uri);
     const reference = context === null ? null : referenceAt(context, params.position);
-    if (reference === null) {
-      throw requestFailed("Rename works on the id of a story entity, such as a character or a location");
+    if (reference === null || !reference.explicit) {
+      return null;
     }
     if (reference.matches.length > 1) {
       throw requestFailed(`${reference.token.text} is the id of more than one entity (${reference.matches.map((entry) => entry.kind).join(", ")}): rename it from a field that takes one kind, or with story rename`);
@@ -32033,11 +32126,15 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     return { context, reference, entry };
   }
   function prepareRename(params) {
-    const { reference } = renameTarget(params);
-    return { range: tokenRange(reference), placeholder: reference.token.text };
+    const target = renameTarget(params);
+    return target === null ? null : { range: tokenRange(target.reference), placeholder: target.reference.token.text };
   }
   function rename(params) {
-    const { context, entry } = renameTarget(params);
+    const target = renameTarget(params);
+    if (target === null) {
+      throw requestFailed("Rename works on the id of a story entity in a frontmatter field or a link to its file");
+    }
+    const { context, entry } = target;
     const newName = String(params.newName).trim();
     const options = isKebabId(newName) ? { kind: entry.kind, id: entry.id, newId: newName, name: entry.name } : { kind: entry.kind, id: entry.id, name: newName };
     return projectEdit(context.root, (copyRoot) => renameEntity(copyRoot, options));
@@ -32053,10 +32150,17 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
       const diagnostics = (params.context?.diagnostics ?? []).filter((diagnostic) => diagnostic.source === SOURCE && diagnostic.code === code);
       if (diagnostics.length > 0) {
         const action = { title: fix.title, kind: "quickfix", diagnostics, data: { root: context.root, code } };
-        actions.push(lazy ? action : resolveCodeAction(action));
+        actions.push(lazy ? action : resolveOrDisable(action));
       }
     }
     return actions;
+  }
+  function resolveOrDisable(action) {
+    try {
+      return resolveCodeAction(action);
+    } catch (error) {
+      return { ...action, disabled: { reason: error.message } };
+    }
   }
   function resolveCodeAction(action) {
     const { root, code } = action.data ?? {};
@@ -32074,10 +32178,11 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     for (const change of changes) {
       const file = path19.join(root, change.path);
       const uri = uriFor(file);
+      const version = documents.get(file)?.version ?? null;
       if (change.action === "update") {
-        operations.push(textDocumentEdit(uri, wholeTextRange(textOf(file)), texts[change.path]));
+        operations.push(textDocumentEdit(uri, version, minimalEdit(textOf(file), texts[change.path])));
       } else if (change.action === "create") {
-        operations.push({ kind: "create", uri, options: { ignoreIfExists: true } }, textDocumentEdit(uri, range(0, 0), texts[change.path]));
+        operations.push({ kind: "create", uri, options: { ignoreIfExists: true } }, textDocumentEdit(uri, null, { range: range(0, 0), newText: texts[change.path] }));
       } else if (change.action === "delete") {
         operations.push({ kind: "delete", uri, options: { ignoreIfNotExists: true } });
       }
@@ -32121,8 +32226,8 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
   };
   function addFolder(uri) {
     const folder = uriPath(uri);
-    if (folder !== null) {
-      folders.add(folder);
+    if (folder !== null && !folders.has(folder)) {
+      folders.set(folder, []);
     }
     return folder;
   }
@@ -32137,7 +32242,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
           params: { registrations: [{ id: "story-markdown-files", method: "workspace/didChangeWatchedFiles", registerOptions: { watchers: [{ globPattern: "**/*.md" }] } }] }
         });
       }
-      for (const folder of folders) {
+      for (const folder of folders.keys()) {
         checkFolder(folder);
       }
     },
@@ -32147,7 +32252,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     "textDocument/didOpen"({ textDocument }) {
       const file = uriPath(textDocument.uri);
       if (file !== null) {
-        documents.set(file, { uri: textDocument.uri, text: textDocument.text });
+        documents.set(file, { uri: textDocument.uri, text: textDocument.text, version: textDocument.version ?? null });
         checkDocumentProject(file, checkNow);
       }
     },
@@ -32156,6 +32261,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
       const document = documents.get(file);
       if (document !== undefined && contentChanges.length > 0) {
         document.text = contentChanges[contentChanges.length - 1].text;
+        document.version = textDocument.version ?? null;
         checkDocumentProject(file, checkLater);
       }
     },
@@ -32181,9 +32287,16 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     "workspace/didChangeWorkspaceFolders"({ event }) {
       for (const removed of event.removed) {
         const folder = uriPath(removed.uri);
+        if (folder === null) {
+          continue;
+        }
+        const roots = new Set([...folders.get(folder) ?? [], ...[...published.keys()].filter((root) => isInside(folder, root))]);
         folders.delete(folder);
-        for (const root of [...published.keys()].filter((root) => folder !== null && isInside(folder, root))) {
-          clearProject(root);
+        const kept = new Set([...[...folders.values()].flat(), ...[...documents.keys()].map(projectRootOf)]);
+        for (const root of roots) {
+          if (published.has(root) && !kept.has(root)) {
+            clearProject(root);
+          }
         }
       }
       for (const added of event.added) {
@@ -32298,40 +32411,60 @@ function projectEntities(project) {
 function frontmatterKey(lines, line, character) {
   return line > 0 && line < frontmatterEnd(lines) ? keyAt(lines, line, character) : null;
 }
+function referenceKinds(lines, line, character) {
+  const key = frontmatterKey(lines, line, character);
+  if (key === null) {
+    return;
+  }
+  const item = listItemAt(lines, line, frontmatterEnd(lines));
+  const listKey = item?.listKey ?? null;
+  if (key === "to") {
+    return Object.hasOwn(NESTED_TO_KINDS, listKey) ? [NESTED_TO_KINDS[listKey]] : undefined;
+  }
+  if (listKey === "progressions" && key === "from") {
+    return ["chapter"];
+  }
+  if (listKey === "progressions" && key === "value") {
+    return fieldKinds(itemField(lines, item, "field"));
+  }
+  return fieldKinds(key);
+}
 function fieldKinds(key) {
   return key !== null && Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : undefined;
 }
 function describeEntity(entry, root, chapter, project) {
   const lines = [`**${escapeMarkdown(entry.name)}** · ${entry.kind} · \`${portablePath(path19.relative(root, entry.file))}\``];
-  const status = String(entry.entity.status ?? "");
+  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project) : null;
+  const status = String((atChapter === null ? entry.entity.status : atChapter.status) ?? "");
   if (status !== "") {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
   }
-  if (chapter !== null && PROGRESSION_KINDS.includes(entry.kind)) {
-    lines.push(...stateAtChapter(entry, root, chapter, project));
+  if (atChapter !== null && atChapter.lines.length > 0) {
+    lines.push("", `At ${chapter}:`, ...atChapter.lines);
   }
   return lines.join(`
 `);
 }
 function stateAtChapter(entry, root, chapter, project) {
-  let lines;
   try {
     const knowledge = entry.kind === "character" ? knowledgeAtChapter(root, entry.id, chapter, project) : [];
-    const { changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
-    lines = [
-      ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
-      ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
-    ];
+    const { state, changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
+    return {
+      status: state.status,
+      lines: [
+        ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
+        ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
+      ]
+    };
   } catch {
-    return [];
+    return null;
   }
-  return lines.length === 0 ? [] : ["", `At ${chapter}:`, ...lines];
 }
 function escapeMarkdown(text) {
   return text.replace(/[\\`*_{}[\]()#+!|<>~]/g, "\\$&");
 }
-function textDocumentEdit(uri, editRange, newText) {
-  return { textDocument: { uri, version: null }, edits: [{ range: editRange, newText }] };
+function textDocumentEdit(uri, version, edit) {
+  return { textDocument: { uri, version }, edits: [edit] };
 }
 function requestFailed(message) {
   return new Error(message);
