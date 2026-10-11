@@ -3239,7 +3239,7 @@ function ensureFile(filePath, contents, changed, root) {
 // when the key can point at the kind being changed) plus markdown link targets
 // that resolve to the entity's file, never prose or unrelated fields such as
 // status or tense that may happen to equal an id.
-const REFERENCE_FIELD_KINDS = {
+export const REFERENCE_FIELD_KINDS = {
   arc: ["arc"],
   arcs: ["arc"],
   "arcs-advanced": ["arc"],

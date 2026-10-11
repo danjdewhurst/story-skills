@@ -299,7 +299,9 @@ describe("docs/cli-reference.md", () => {
   test("the JSON output section names exactly the commands that read --json", () => {
     const paragraph = section("### JSON output").split("\n").find((line) => line.startsWith("`--json` prints"));
     const list = paragraph.slice(paragraph.indexOf("Every command takes it"), paragraph.indexOf("Nothing is written to stderr"));
-    expect(commandNames.filter((name) => !commandsReading("json").includes(name))).toEqual([]);
+    // lsp speaks JSON-RPC on stdout, so it is the one command without --json.
+    expect(commandNames.filter((name) => !commandsReading("json").includes(name))).toEqual(["lsp"]);
+    expect(paragraph).toContain("The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.");
     expect(commandsIn(list)).toEqual(commandsReading("json"));
   });
 

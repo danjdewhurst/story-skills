@@ -115,7 +115,9 @@ const OK_ARGS = {
   },
   export: () => ["export"],
   build: () => ["build"],
-  synopsis: () => ["synopsis"]
+  synopsis: () => ["synopsis"],
+  // The server starts and waits for the editor on the memoryIo stdin.
+  lsp: () => ["lsp"]
 };
 
 // Commands whose report counts error findings: a chapter that fails to
