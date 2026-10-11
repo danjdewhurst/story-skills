@@ -56,6 +56,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Writing in other languages](languages.md) | What works in each language and script: counting in words or characters, dialogue and sentences, word lists, build labels, fonts, right-to-left and vertical text, ids, and adding a language pack |
 | [Series](series.md) | Linking sequels and prequels, `story series`, carrying characters and facts between books, and laying out a short-story collection or anthology |
 | [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, Twine and ink stories, story bible site (codex), and synopsis output |
+| [Editor integration](editors.md) | `story lsp` in VS Code, Neovim, Helix, Emacs, and other editors: findings as you type, go to definition, references, hover, id completion, rename, and quick fixes |
 | [Automation and CI](automation.md) | The GitHub Actions templates (checks, scheduled drafting, and the review copy with its reader-note issue form), exit codes and output streams, and pre-commit hooks |
 
 ### Reference
