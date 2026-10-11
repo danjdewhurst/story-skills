@@ -294,7 +294,9 @@ function describeError(error, cwd) {
 
 function commandUsageError(command, parsed) {
   if (command.project === "none" && parsed.options.path !== undefined) {
-    return `${command.name} uses --dir for the target directory. --path is the project root for other commands.`;
+    return command.options.includes("dir")
+      ? `${command.name} uses --dir for the target directory. --path is the project root for other commands.`
+      : `${command.name} takes no --path: the editor names the workspace folders, and each file's project is the folder holding its story.md`;
   }
   const maxArgs = command.args ?? (command.project === "positional" ? 1 : 0);
   const extra = parsed.positionals.slice(1 + maxArgs);

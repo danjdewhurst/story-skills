@@ -9,6 +9,7 @@ import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
+import { serveLanguageServer } from "./language-server.js";
 import { currentText, planChanges, recordChanges } from "./files.js";
 import { diagnostic, diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
@@ -1133,6 +1134,24 @@ export const COMMANDS = [
         io.stdout.write(`Wrote synopsis to ${result.outFile}\n`);
       }
       return 0;
+    }
+  },
+  {
+    name: "lsp",
+    usage: "lsp",
+    summary: [
+      "Run the language server for editors over stdin and",
+      "stdout: live check diagnostics, go to definition,",
+      "references, hover, id completion, rename, and",
+      "quick fixes"
+    ],
+    project: "none",
+    options: ["stdio"],
+    // The server answers the editor until it says exit; the exit code it
+    // returns here is only the one the process keeps meanwhile.
+    run({ io }) {
+      serveLanguageServer({ input: io.stdin ?? process.stdin, output: io.stdout, exit: io.exit ?? process.exit.bind(process) });
+      return EXIT_CODES.ok;
     }
   }
 ];

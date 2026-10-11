@@ -85,6 +85,7 @@ Which commands can report findings (exit `1`):
 | `doctor --fix` | A check still reports an error after its safe repairs. |
 | `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
 | `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. `snapshot --restore` is the exception above. |
+| `lsp` | Never. The language server exits `0` when the editor shuts it down and `1` when it exits without a shutdown request, or stops with `2` for an unknown option. |
 
 `report --actionable`, `next`, and `doctor` are for reading, not gating. Use `check`, which runs `validate`, `links`, and `continuity`, when a job must fail, as the [story checks workflow](#story-checks-workflow) does.
 

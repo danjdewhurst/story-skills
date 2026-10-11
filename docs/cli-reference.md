@@ -15,6 +15,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
+- [Editor commands](#editor-commands): `lsp`
 - [Finding codes](#finding-codes): every error and warning code, by command
 - [Option index](#option-index)
 - [The bundled fallback](#the-bundled-fallback)
@@ -85,6 +86,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
 | | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
+| Editor | [`lsp`](#lsp) | Run the language server an editor starts, for live diagnostics, navigation, completion, rename, and quick fixes | No |
 
 ## How the CLI behaves
 
@@ -103,8 +105,8 @@ Usage: story validate [path] [options]
 Check project structure, frontmatter, and registries
 
 Options:
-  --path <path>             Project root for every command except init and
-                            import
+  --path <path>             Project root for every command except init,
+                            import, and lsp
   --json                    Print one JSON result object (apiVersion,
                             command, ok, data, diagnostics, writes) instead
                             of text
@@ -138,13 +140,13 @@ The help text is generated from the command and option registries in [`src/comma
 
 ### Project paths
 
-Every command except `init` and `import` works on one story project: a directory with a `story.md` at its root. How you point a command at that directory depends on the command.
+Every command except `init`, `import`, and `lsp` works on one story project: a directory with a `story.md` at its root. How you point a command at that directory depends on the command.
 
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
-| `init`, `import` | Neither. They create a new project; use `--dir` to choose where | A directory named after the story id |
+| `init`, `import`, `lsp` | Neither. `init` and `import` create a new project; use `--dir` to choose where. `lsp` checks the projects in the folders the editor opens | A directory named after the story id (`init`, `import`) |
 
 Relative paths resolve against the current working directory. These are equivalent:
 
@@ -217,7 +219,7 @@ pandoc draft.docx -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--bylines`, `--force`, `--write`, `--log`, `--list`, `--shunn`, `--anonymous`, `--pdf`, `--spoilers`, `--include-pending`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
+- Boolean flags (`--bylines`, `--force`, `--write`, `--log`, `--list`, `--shunn`, `--anonymous`, `--pdf`, `--spoilers`, `--include-pending`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--stdio`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
 - Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -278,7 +280,7 @@ The CLI prints results to stdout and diagnostics to stderr.
 - `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
 - `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
-- All other commands write a short confirmation or report to stdout.
+- All other commands write a short confirmation or report to stdout, except `lsp`, which writes only protocol messages there for the editor.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
 - With `--json`, the command prints one JSON object to stdout and nothing to stderr. See [JSON output](#json-output).
 
@@ -300,7 +302,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
 
 Every result has the same envelope:
 
@@ -3190,6 +3192,30 @@ Unsupported synopsis length: 2. Supported pages: 1, 3
 
 The output is a scaffold. The [submission skill](../skills/submission/SKILL.md) turns it into a synopsis ready to send to agents.
 
+## Editor commands
+
+`lsp` is the one command you do not run yourself: an editor starts it and talks to it while you write. [Editor integration](editors.md) shows how to set it up in VS Code, Neovim, Helix, and Emacs.
+
+### lsp
+
+```text
+story lsp [--stdio]
+```
+
+Runs a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) server on stdin and stdout until the editor sends `exit`, or closes stdin. It exits `0` after a `shutdown` request and `1` without one, as the protocol asks. `--stdio` changes nothing: the server always uses stdin and stdout, and accepts the flag because some editors pass it. Stdout carries only protocol messages, so the command takes no `--json` and no `--path`. Each file's project is the nearest folder at or above it that holds a `story.md`.
+
+| Feature | What the server does |
+|---|---|
+| Diagnostics | Runs [`check`](#check) on every project in the workspace folders when the editor starts, a few folders deep (not hidden, `dist`, or `node_modules` folders), then on a file's project when you open, save, or close the file, and 300 ms after you stop typing. It checks the text in the editor, saved or not, and applies [`severity`](#defaults-and-severity-from-storymd) and [continuity exemptions](continuity.md#exemptions) as `check` does. Each finding is underlined where its message points: the line a parse error names, the id, path, or date it quotes, the list item a field path such as `knowledge-state[0]` names, or the frontmatter key it names. A finding that names none of these marks the file's first line. Every diagnostic has the finding's [code](#finding-codes) and the source `story`. |
+| Go to definition | On an entity id (a frontmatter value, a list item, or the file name in a markdown link), opens the entity's file. In a field that takes one kind, such as `pov`, only that kind is matched; elsewhere every entity with the id is. |
+| Find references | Lists every frontmatter field that names the entity, in a field that takes its kind, and every markdown link to its file, across the project. |
+| Hover | Shows the entity's name, kind, file, and status. In a chapter, or in a scene of one, a character also shows what they know by that chapter (as [`knowledge`](#knowledge) marks it) and what their progressions have changed; a location or faction shows its progressions. |
+| Completion | In a frontmatter field that takes ids, such as `characters`, `pov`, `locations`, `planted`, or `owner`, offers the ids of every entity of the kinds the field takes. |
+| Rename | Renames the entity under the cursor as [`rename`](#rename) does, and returns the changes for the editor to apply: the file moved to its new id, and every reference rewritten. A new name in kebab case, such as `ilse-varrow`, becomes the new id and the entity keeps its name; any other text, such as `Ilse Varrow`, becomes the new name, and the id follows it. Chapter and scene ids follow their numbers, so they are renumbered with [`move`](#move) instead. |
+| Quick fixes | On a `stale-registry` warning, rebuilds the registries as [`reindex`](#reindex) does; on a `stale-word-count` warning, updates the word counts as [`wordcount --write`](#wordcount) does. |
+
+The server never writes a project file. Rename and the quick fixes run their command on a scratch copy of the project, as [`--dry-run`](#previewing-changes-with---dry-run) does, and return what it changed as an edit, which you can review and undo in the editor. An editor that cannot create or delete files in an edit gets an error for a rename that moves a file; run `story rename` in a terminal there.
+
 ## Finding codes
 
 Every error and warning has a stable kebab-case code. Text output ends each warning line with it, `warning: chapters/chapter-01.md has 1 [TODO marker in its prose, ... [todo-markers]`, and `--json` gives it as each diagnostic's `code`. A [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` names a warning by its code. Codes never change once released: a reworded message keeps its code, and a code is never reused for another rule.
@@ -3615,7 +3641,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--anchor` | `<label>` | `compare` | Repeatable; a paragraph label from a review copy of the earlier draft, such as `ch03-p12`, to find in the current text instead of comparing chapters |
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
 | `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks, and the folders that leaves empty |
-| `--path` | `<path>` | Every command except `init` and `import` | Project root |
+| `--path` | `<path>` | Every command except `init`, `import`, and `lsp` | Project root |
 | `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
 | `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
@@ -3647,7 +3673,8 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--actionable` | | `report` | Boolean |
 | `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
 | `--strict` | | `check` | Boolean; fails on warnings as well as errors |
-| `--json` | | Every command | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
+| `--stdio` | | `lsp` | Boolean; accepted for editors that pass it, as the server always uses stdin and stdout |
+| `--json` | | Every command except `lsp` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
 | `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--prose` | | `rename` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |

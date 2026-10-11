@@ -4,6 +4,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { inflateRawSync } from "node:zlib";
 import { TEMPORARY_FILE_PATTERN } from "../src/files.js";
 
@@ -172,6 +173,8 @@ export function memoryIo(cwd) {
   const err = [];
   return {
     cwd,
+    // What story lsp reads from; nothing is ever written to it.
+    stdin: new PassThrough(),
     stdout: {
       write(value) {
         out.push(String(value));

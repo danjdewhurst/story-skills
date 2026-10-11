@@ -293,7 +293,9 @@ describe("--json result envelope", () => {
 
   test("every command takes --json, and its help lists it", () => {
     expect(invoke(makeTempDir(), ["--help"]).out).toContain("--json");
-    for (const command of COMMANDS) {
+    // lsp speaks JSON-RPC on stdout already, so a result envelope there would
+    // break the protocol.
+    for (const command of COMMANDS.filter((entry) => entry.name !== "lsp")) {
       expect(command.options).toContain("json");
       expect(invoke(makeTempDir(), [command.name, "--help"]).out).toContain("--json");
     }

@@ -65,10 +65,16 @@ describe("command registry", () => {
 
   test("commands that create projects refuse --path", () => {
     const cwd = makeTempDir();
-    for (const command of COMMANDS.filter((entry) => entry.project === "none")) {
+    for (const command of COMMANDS.filter((entry) => entry.project === "none" && entry.name !== "lsp")) {
       const io = memoryIo(cwd);
       expect(runCli([command.name, "x", "--path", "."], io)).toBe(2);
       expect(io.error()).toBe(`${command.name} uses --dir for the target directory. --path is the project root for other commands.\n`);
     }
+  });
+
+  test("lsp refuses --path, since the editor names the folders", () => {
+    const io = memoryIo(makeTempDir());
+    expect(runCli(["lsp", "--path", "."], io)).toBe(2);
+    expect(io.error()).toBe("lsp takes no --path: the editor names the workspace folders, and each file's project is the folder holding its story.md\n");
   });
 });

@@ -41,9 +41,33 @@ const READ_CHUNK_BYTES = 64 * 1024;
 export function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
   const { descriptor, stats } = openRegularFile(filePath, maxBytes);
   try {
-    return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+    const open = openDocuments?.get(path.resolve(filePath));
+    if (open === undefined) {
+      return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
+    }
+    const bytes = Buffer.from(open, "utf8");
+    if (bytes.length > maxBytes) {
+      throw projectError(`${filePath}: Refusing to read oversized file: ${bytes.length} bytes exceeds the ${maxBytes} byte limit`);
+    }
+    return { bytes, stats };
   } finally {
     fs.closeSync(descriptor);
+  }
+}
+
+// The text an editor holds for each file it has open, by absolute path,
+// while withOpenDocuments runs: the language server checks what the writer
+// sees, saved or not. A file is still opened and checked on disk first, so
+// an open document stands in only for a regular file that exists there.
+let openDocuments = null;
+
+export function withOpenDocuments(documents, run) {
+  const previous = openDocuments;
+  openDocuments = documents;
+  try {
+    return run();
+  } finally {
+    openDocuments = previous;
   }
 }
 
