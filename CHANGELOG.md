@@ -14,7 +14,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Diagnostics come from `story check` on each project the editor has open, using the text of unsaved files, and land on the line and word each finding names.
   - Go to definition, find references, and id completion work in frontmatter reference fields such as `pov`, `characters`, and `learned-in`, and on links to entity files.
   - Hover shows an entity's name, kind, file, and status. In a chapter or scene, it also shows what a character knows and the progressions that apply by that chapter.
-  - Rename works as `story rename` does. A kebab-case new name changes the id and the entity keeps its name; any other text changes the name, and the id follows it.
+  - Rename works as `story rename` does, from an id in a frontmatter field or a link. A kebab-case new name changes the id and the entity keeps its name; any other text changes the name, and the id follows it.
   - Quick fixes rebuild stale registries and update stale word counts. Every edit is worked out on a scratch copy and returned to the editor to apply, so the server never writes project files itself.
   - `editors/vscode` holds a small VS Code extension that starts `story lsp`. The guide also covers Neovim, Helix, and Emacs.
 
