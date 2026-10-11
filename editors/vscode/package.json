@@ -1,0 +1,58 @@
+{
+  "name": "story-skills",
+  "displayName": "Story Skills",
+  "description": "Continuity, link, and frontmatter findings as you type, go to definition, references, hover, id completion, rename, and quick fixes for Story Skills projects.",
+  "version": "0.1.0",
+  "publisher": "danjdewhurst",
+  "license": "MIT",
+  "private": true,
+  "homepage": "https://github.com/danjdewhurst/story-skills/blob/main/docs/editors.md",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danjdewhurst/story-skills.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "fiction",
+    "writing",
+    "continuity",
+    "markdown"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown",
+    "workspaceContains:**/story.md"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Story Skills",
+      "properties": {
+        "story.server.command": {
+          "type": "string",
+          "default": "story",
+          "description": "The command that starts the story language server, such as story, npx, or node."
+        },
+        "story.server.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "lsp"
+          ],
+          "description": "The arguments for the command, such as [\"--yes\", \"story-skills\", \"lsp\"] for npx."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}
