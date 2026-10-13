@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-13
+
 ### Added
 
 - `story lsp` runs a language server, so editors show check findings as you type and can navigate, complete, and rename story entities. See [Editor integration](docs/editors.md).
@@ -1445,7 +1447,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.23.2...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/danjdewhurst/story-skills/compare/v0.23.2...v0.24.0
 [0.23.2]: https://github.com/danjdewhurst/story-skills/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/danjdewhurst/story-skills/compare/v0.23.0...v0.23.1
 [0.23.0]: https://github.com/danjdewhurst/story-skills/compare/v0.22.1...v0.23.0
