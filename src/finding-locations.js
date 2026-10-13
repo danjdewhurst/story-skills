@@ -13,8 +13,14 @@ import { frontmatterEnd, lineKey, lineRange, range, textLines, tokenColumns } fr
 
 const LINE_NUMBER = /\(line (\d+)\)/;
 // A path may open with `./` or `../` and hold backslashes, as the link a
-// link-backslash error names does (`..\characters\sera.md`).
-const MESSAGE_TOKEN = /(?:\.{1,2}[\\/])*[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
+// link-backslash error names does (`..\characters\sera.md`). The opening
+// `./` run is read only where a token can start, so a long run of `./` with
+// no letter after it is read once, not again from each of its characters.
+const MESSAGE_TOKEN = /(?:(?<![.\\/])(?:\.{1,2}[\\/])+)?[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
+const TRAILING_PUNCTUATION = "./\\-";
+// Messages quote frontmatter values, which a project can make as long as it
+// likes; a real place is named well before this many characters.
+const MAX_MESSAGE_LENGTH = 2000;
 const FIELD_PATH = /^([A-Za-z0-9_-]+)\[(\d+)\]$/;
 const SPECIFIC = /[-\d/.\\]/;
 const NUMBER = /^\d+$/;
@@ -32,8 +38,8 @@ export function findingRange(text, finding) {
   }
   const end = frontmatterEnd(lines);
   const frontmatter = [...lines.keys()].filter((index) => index > 0 && index < end);
-  const body = [...lines.keys()].filter((index) => !frontmatter.includes(index));
-  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./\\-]+$/, ""));
+  const body = [...lines.keys()].filter((index) => index === 0 || index >= end);
+  const tokens = [...message.slice(0, MAX_MESSAGE_LENGTH).replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => trimEnd(word));
   for (const [index, token] of tokens.entries()) {
     const fieldPath = FIELD_PATH.exec(token);
     if (fieldPath !== null) {
@@ -49,6 +55,16 @@ export function findingRange(text, finding) {
     }
   }
   return lineRange(lines, 0);
+}
+
+// `word` without the `.`, `/`, `\`, and `-` it ends with, trimmed by hand:
+// a regex anchored at the end would read a long run again from each start.
+function trimEnd(word) {
+  let end = word.length;
+  while (end > 0 && TRAILING_PUNCTUATION.includes(word[end - 1])) {
+    end -= 1;
+  }
+  return word.slice(0, end);
 }
 
 // The message without the file label it opens with (`chapters/chapter-04.md

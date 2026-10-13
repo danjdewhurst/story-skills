@@ -31759,7 +31759,9 @@ function positionAt(text, offset) {
 
 // src/finding-locations.js
 var LINE_NUMBER = /\(line (\d+)\)/;
-var MESSAGE_TOKEN = /(?:\.{1,2}[\\/])*[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
+var MESSAGE_TOKEN = /(?:(?<![.\\/])(?:\.{1,2}[\\/])+)?[\p{L}\p{N}][\p{L}\p{N}_./\\-]*(?:\[\d+\])?/gu;
+var TRAILING_PUNCTUATION = "./\\-";
+var MAX_MESSAGE_LENGTH = 2000;
 var FIELD_PATH = /^([A-Za-z0-9_-]+)\[(\d+)\]$/;
 var SPECIFIC = /[-\d/.\\]/;
 var NUMBER = /^\d+$/;
@@ -31774,8 +31776,8 @@ function findingRange(text, finding) {
   }
   const end = frontmatterEnd(lines);
   const frontmatter = [...lines.keys()].filter((index) => index > 0 && index < end);
-  const body = [...lines.keys()].filter((index) => !frontmatter.includes(index));
-  const tokens = [...message.replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => word.replace(/[./\\-]+$/, ""));
+  const body = [...lines.keys()].filter((index) => index === 0 || index >= end);
+  const tokens = [...message.slice(0, MAX_MESSAGE_LENGTH).replace(COMMAND_HINT, " ").matchAll(MESSAGE_TOKEN)].map(([word]) => trimEnd(word));
   for (const [index, token] of tokens.entries()) {
     const fieldPath = FIELD_PATH.exec(token);
     if (fieldPath !== null) {
@@ -31791,6 +31793,13 @@ function findingRange(text, finding) {
     }
   }
   return lineRange(lines, 0);
+}
+function trimEnd(word) {
+  let end = word.length;
+  while (end > 0 && TRAILING_PUNCTUATION.includes(word[end - 1])) {
+    end -= 1;
+  }
+  return word.slice(0, end);
 }
 function findingMessage(finding) {
   const { message, file } = finding;
@@ -31991,17 +32000,24 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     }
     published.set(root, new Set(found.keys()));
   }
+  function unsavedFiles(root) {
+    return [...documents.keys()].filter((file) => file.endsWith(".md") && !fs14.existsSync(file) && projectRootOf(file) === root);
+  }
+  function writeUnsaved(root, copyRoot) {
+    for (const file of unsavedFiles(root)) {
+      try {
+        writeFile(path19.join(copyRoot, path19.relative(root, file)), documents.get(file).text, { root: copyRoot });
+      } catch (error) {
+        log(`Left out ${file}, which is not saved yet: ${error.message}`);
+      }
+    }
+  }
   function checkWithUnsaved(root) {
-    const unsaved = [...documents.keys()].filter((file) => file.endsWith(".md") && !fs14.existsSync(file) && projectRootOf(file) === root);
-    if (unsaved.length === 0) {
+    if (unsavedFiles(root).length === 0) {
       return projectCheck(root, { overrides: projectOverrides(root) });
     }
     return previewChanges(root, (copyRoot) => {
-      for (const file of unsaved) {
-        const copy = path19.join(copyRoot, path19.relative(root, file));
-        makeDirectories(path19.dirname(copy));
-        writeFile(copy, documents.get(file).text);
-      }
+      writeUnsaved(root, copyRoot);
       return projectCheck(copyRoot, { overrides: projectOverrides(copyRoot) });
     }).result;
   }
@@ -32067,7 +32083,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     const kinds = new Set(reference.matches.map((entry) => entry.kind));
     const files = new Set(reference.matches.map((entry) => entry.file));
     const locations = params.context?.includeDeclaration ? reference.matches.map((entry) => ({ uri: uriFor(entry.file), range: range(0, 0) })) : [];
-    for (const file of underOpenDocuments(() => markdownFiles(context.root)).sort()) {
+    for (const file of [...new Set([...underOpenDocuments(() => markdownFiles(context.root)), ...unsavedFiles(context.root)])].sort()) {
       const lines = textLines(textOf(file));
       const fileContext = { ...context, file };
       for (const [line, lineText] of lines.entries()) {
@@ -32153,13 +32169,17 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
         actions.push(lazy ? action : resolveOrDisable(action));
       }
     }
-    return actions;
+    return actions.filter((action) => action !== null);
   }
   function resolveOrDisable(action) {
     try {
       return resolveCodeAction(action);
     } catch (error) {
-      return { ...action, disabled: { reason: error.message } };
+      if (capabilities.textDocument?.codeAction?.disabledSupport === true) {
+        return { ...action, disabled: { reason: error.message } };
+      }
+      log(`${action.title}: ${error.message}`);
+      return null;
     }
   }
   function resolveCodeAction(action) {
@@ -32170,10 +32190,12 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
     return { ...action, edit: projectEdit(root, QUICK_FIXES[code].run) };
   }
   function projectEdit(root, run) {
-    const { result: texts, changes } = underOpenDocuments(() => previewChanges(root, (copyRoot) => {
-      const written = recordChanges(copyRoot, () => run(copyRoot)).changes.filter((change) => change.action === "create" || change.action === "update");
-      return Object.fromEntries(written.map((change) => [change.path, readTextFile(path19.join(copyRoot, change.path))]));
-    }));
+    const { texts, changes } = underOpenDocuments(() => previewChanges(root, (copyRoot) => {
+      writeUnsaved(root, copyRoot);
+      const recorded = recordChanges(copyRoot, () => run(copyRoot)).changes;
+      const written = recorded.filter((change) => change.action === "create" || change.action === "update");
+      return { texts: Object.fromEntries(written.map((change) => [change.path, readTextFile(path19.join(copyRoot, change.path))])), changes: recorded };
+    }).result);
     const operations = [];
     for (const change of changes) {
       const file = path19.join(root, change.path);
@@ -32440,7 +32462,7 @@ function describeEntity(entry, root, chapter, project) {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
   }
   if (atChapter !== null && atChapter.lines.length > 0) {
-    lines.push("", `At ${chapter}:`, ...atChapter.lines);
+    lines.push("", `At ${escapeMarkdown(chapter)}:`, ...atChapter.lines);
   }
   return lines.join(`
 `);
@@ -32453,7 +32475,7 @@ function stateAtChapter(entry, root, chapter, project) {
       status: state.status,
       lines: [
         ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
-        ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
+        ...changes.map((change) => `- ${escapeMarkdown(String(change.field))}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${escapeMarkdown(String(change.from))})`)
       ]
     };
   } catch {
