@@ -37,7 +37,8 @@
         "story.server.command": {
           "type": "string",
           "default": "story",
-          "description": "The command that starts the story language server, such as story, npx, or node."
+          "scope": "machine",
+          "description": "The command that starts the story language server, such as story, npx, or node. Set it in user settings: a workspace cannot change it."
         },
         "story.server.args": {
           "type": "array",
@@ -47,7 +48,8 @@
           "default": [
             "lsp"
           ],
-          "description": "The arguments for the command, such as [\"--yes\", \"story-skills\", \"lsp\"] for npx."
+          "scope": "machine",
+          "description": "The arguments for the command, such as [\"--yes\", \"story-skills@<version>\", \"lsp\"] for npx."
         }
       }
     }

@@ -35,7 +35,7 @@ The editor runs the `story` command, so it must be on your `PATH`. Install it as
 story --version
 ```
 
-If you would rather not install it globally, every setup below can run another command instead, such as `npx --yes story-skills lsp`, or the bundled fallback that ships with the skills, `node <skills-dir>/story-maintenance/scripts/story.js lsp`.
+If you would rather not install it globally, every setup below can run another command instead, such as `npx --yes story-skills@0.23.2 lsp` (name a version, so a new release never runs before you choose it), or the bundled fallback that ships with the skills, `node <skills-dir>/story-maintenance/scripts/story.js lsp`.
 
 Open the story project folder in the editor, or a folder that holds several projects, such as a series. Each file is checked with the nearest `story.md` at or above it.
 
@@ -50,12 +50,12 @@ npx @vscode/vsce package
 code --install-extension story-skills-*.vsix
 ```
 
-Reload VS Code and open a story project. Findings appear in the Problems panel. To run something other than `story`, set `story.server.command` and `story.server.args` in your settings:
+Reload VS Code and open a story project. Findings appear in the Problems panel. To run something other than `story`, set `story.server.command` and `story.server.args` in your user settings. A workspace's `.vscode/settings.json` cannot set them, so a project you open cannot choose the command:
 
 ```json
 {
   "story.server.command": "npx",
-  "story.server.args": ["--yes", "story-skills", "lsp"]
+  "story.server.args": ["--yes", "story-skills@0.23.2", "lsp"]
 }
 ```
 
