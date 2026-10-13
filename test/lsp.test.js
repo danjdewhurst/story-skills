@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,7 +10,7 @@ import { findingMessage, findingRange } from "../src/finding-locations.js";
 import { CHECK_DELAY_MS, ERROR_CODES, createLanguageServer, projectRootOf, projectsIn, uriPath } from "../src/language-server.js";
 import { frontmatterEnd, idAt, itemField, keyAt, lineKey, lineRange, linkTargetAt, listItemAt, minimalEdit, range, textLines, tokenColumns } from "../src/lsp-text.js";
 import { encodeMessage, messageReader } from "../src/lsp-transport.js";
-import { SYMLINKS_SUPPORTED, makeTempDir, memoryIo } from "./helpers.js";
+import { NODE_ON_PATH, SYMLINKS_SUPPORTED, makeTempDir, memoryIo } from "./helpers.js";
 
 const EXAMPLE = path.join(import.meta.dir, "..", "examples", "the-unraveled-thread");
 const SEVERITY_ERROR = 1;
@@ -242,8 +243,14 @@ describe("finding locations", () => {
     expect(findingRange(linked, finding)).toEqual(range(4, 11, 4, 37));
   });
 
+  test("a long message that a project wrote is read in linear time", () => {
+    expect(at(`lists ${"./".repeat(100000)}`)).toEqual(range(0, 0, 0, 3));
+    expect(at(`lists ${"-a".repeat(100000)}`)).toEqual(range(0, 0, 0, 3));
+  });
+
   test("a command hint names no place, and an unplaceable finding is the first line", () => {
     expect(at("is stale: run story reindex")).toEqual(range(0, 0, 0, 3));
+    expect(at("is out of date: run story status --json")).toEqual(range(0, 0, 0, 3));
     expect(at("has 12 problems")).toEqual(range(0, 0, 0, 3));
   });
 
@@ -267,6 +274,14 @@ describe("lsp transport", () => {
     }
     expect(received).toEqual([{ id: 1, text: "Séra" }, { id: 2 }]);
     expect(problems).toEqual([]);
+  });
+
+  test("reads a header with more than one field", () => {
+    const received = [];
+    const read = messageReader((message) => received.push(message), () => {});
+    const body = Buffer.from(JSON.stringify({ id: 1 }), "utf8");
+    read(Buffer.concat([Buffer.from(`Content-Type: application/vscode-jsonrpc; charset=utf-8\r\nContent-Length: ${body.length}\r\n\r\n`, "ascii"), body]));
+    expect(received).toEqual([{ id: 1 }]);
   });
 
   test("skips a header with no length and a body that is not JSON", () => {
@@ -296,6 +311,10 @@ describe("project discovery", () => {
     expect(uriPath(pathToFileURL("/tmp/a.md").href)).toBe(path.resolve("/tmp/a.md"));
     expect(uriPath("untitled:Untitled-1")).toBeNull();
     expect(uriPath(undefined)).toBeNull();
+  });
+
+  test.if(process.platform === "win32")("uriPath spells the drive letter as Node does", () => {
+    expect(uriPath("file:///c%3A/story/a.md")).toBe("C:\\story\\a.md");
   });
 
   test("projectRootOf finds the nearest story.md", () => {
@@ -405,6 +424,18 @@ describe("language server diagnostics", () => {
     expect(fs.existsSync(path.join(root, file))).toBe(false);
   });
 
+  test.if(SYMLINKS_SUPPORTED)("never writes an unsaved file through a symlink out of the project", () => {
+    const root = storyProject();
+    const outside = makeTempDir("story-lsp-outside-");
+    fs.symlinkSync(outside, path.join(root, "drafts"), "dir");
+    const client = startServer({ folders: [root] });
+    client.open(root, "drafts/new.md", "---\ntitle: Draft\n---\n\nUnsaved text.\n");
+    expect(fs.readdirSync(outside)).toEqual([]);
+    const logged = client.sent.filter((message) => message.method === "window/logMessage").map((message) => message.params.message);
+    expect(logged.some((message) => message.startsWith(`story lsp: Left out ${path.join(root, "drafts", "new.md")}, which is not saved yet: `))).toBe(true);
+    expect(client.diagnostics(root, "chapters/chapter-03.md")).toHaveLength(1);
+  });
+
   test("keeps a removed folder's project that another folder or an open document holds", () => {
     const root = storyProject();
     const chapters = path.join(root, "chapters");
@@ -414,7 +445,10 @@ describe("language server diagnostics", () => {
     const client = startServer({ folders: [path.dirname(root), root] });
     changeFolders(client, [], [path.dirname(root)]);
     expect(client.diagnostics(root, file)).toHaveLength(1);
-    changeFolders(client, [chapters], [root]);
+    changeFolders(client, [chapters], []);
+    const published = client.sent.length;
+    changeFolders(client, [], [root]);
+    expect(client.sent.slice(published)).toEqual([]);
     expect(client.diagnostics(root, file)).toHaveLength(1);
     client.open(root, "chapters/chapter-01.md");
     changeFolders(client, [], [chapters]);
@@ -502,6 +536,15 @@ describe("language server navigation", () => {
     const stateHover = client.result("textDocument/hover", { textDocument: { uri: uri(root, "continuity/state.md") }, position: at(state, "jonas-reed", 1) });
     expect(stateHover.contents.value).not.toContain("At ");
     expect(client.result("textDocument/hover", { textDocument: { uri: uri(root, "continuity/state.md") }, position: { line: 0, character: 0 } })).toBeNull();
+  });
+
+  test("hover escapes markdown in a progression's field", () => {
+    const root = storyProject();
+    edit(root, "characters/jonas-reed.md", (text) => text.replace("progressions:\n", "progressions:\n  - from: chapter-02\n    field: \"x ![t](https://example.com/p.png)\"\n    value: y\n"));
+    const client = startServer();
+    const text = client.open(root, "chapters/chapter-02.md");
+    const hover = client.result("textDocument/hover", { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(text, "jonas-reed", 1) });
+    expect(hover.contents.value).toContain("- x \\!\\[t\\]\\(https://example.com/p.png\\): y (from chapter-02)");
   });
 
   test("hover leaves out state the project cannot work out", () => {
@@ -602,6 +645,27 @@ describe("language server edits", () => {
     expect(fs.existsSync(path.join(root, "characters/edran-vale.md"))).toBe(true);
   });
 
+  test("an edit carries the version of the writer's latest change", () => {
+    const root = storyProject();
+    const client = startServer({ capabilities: FULL_EDITS });
+    const file = "chapters/chapter-02.md";
+    const text = client.open(root, file);
+    client.notify("textDocument/didChange", { textDocument: { uri: uri(root, file), version: 7 }, contentChanges: [{ text }] });
+    const { documentChanges } = client.result("textDocument/rename", { textDocument: { uri: uri(root, file) }, position: at(text, "edran-vale", 1), newName: "Edran Vane" });
+    expect(documentChanges.find((change) => change.textDocument?.uri === uri(root, file)).textDocument.version).toBe(7);
+  });
+
+  test("an edit uses the uri the editor gave, however it is spelled", () => {
+    const root = storyProject();
+    const client = startServer({ capabilities: FULL_EDITS });
+    const file = "chapters/chapter-02.md";
+    const spelled = uri(root, file).replace(/chapter-02\.md$/, "chapter%2D02.md");
+    const text = fs.readFileSync(path.join(root, file), "utf8");
+    client.notify("textDocument/didOpen", { textDocument: { uri: spelled, languageId: "markdown", version: 3, text } });
+    const { documentChanges } = client.result("textDocument/rename", { textDocument: { uri: spelled }, position: at(text, "edran-vale", 1), newName: "Edran Vane" });
+    expect(documentChanges.map((change) => change.textDocument)).toContainEqual({ uri: spelled, version: 3 });
+  });
+
   test("a kebab-case new name is the new id, and the name stays", () => {
     const root = storyProject();
     const client = startServer({ capabilities: FULL_EDITS });
@@ -627,6 +691,8 @@ describe("language server edits", () => {
     expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "chapters/chapter-01.md") }, position: at(mentions, "mentions:\n  - jonas-reed", 16), newName: "x" }).error.message).toBe("jonas-reed is the id of more than one entity (character, artifact): rename it from a field that takes one kind, or with story rename");
     const scene = client.open(root, "scenes/chapter-02-scene-01.md");
     expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "scenes/chapter-02-scene-01.md") }, position: at(scene, "chapter-02", 1), newName: "x" }).error.message).toBe("A chapter id follows its number: renumber it with story move");
+    const linked = client.open(root, "chapters/chapter-02.md", `${text}\nSee [the scene](../scenes/chapter-02-scene-01.md).\n`);
+    expect(client.request("textDocument/rename", { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(linked, "chapter-02-scene-01", 1), newName: "x" }).error.message).toBe("A scene id follows its number: renumber it with story move");
     expect(client.request("textDocument/rename", { textDocument: { uri: "untitled:x" }, position: { line: 0, character: 0 }, newName: "x" }).error.code).toBe(ERROR_CODES.requestFailed);
   });
 
@@ -653,7 +719,11 @@ describe("language server edits", () => {
     expect(fix.kind).toBe("quickfix");
     expect(fix.diagnostics).toEqual([wordCount]);
     const edited = applyEdit(text, fix.edit.changes[uri(root, chapter)][0]);
-    expect(edited).toBe(text.replace(/^word-count: 31$/m, edited.match(/^word-count: \d+$/m)[0]));
+    const counted = path.join(makeTempDir("story-lsp-count-"), "project");
+    fs.cpSync(root, counted, { recursive: true });
+    fs.writeFileSync(path.join(counted, chapter), text);
+    expect(runCli(["wordcount", counted, "--write"], memoryIo(counted))).toBe(0);
+    expect(edited).toBe(fs.readFileSync(path.join(counted, chapter), "utf8"));
     expect(edited).not.toContain("word-count: 31\n");
 
     const [rebuild] = client.result("textDocument/codeAction", { textDocument: { uri: uri(root, "characters/_index.md") }, range: registry.range, context: { diagnostics: [registry] } });
@@ -665,7 +735,7 @@ describe("language server edits", () => {
   test("shows a fix the editor cannot apply as disabled, and still answers", () => {
     const root = storyProject();
     fs.rmSync(path.join(root, "characters/_index.md"));
-    const client = startServer();
+    const client = startServer({ capabilities: { textDocument: { codeAction: { disabledSupport: true } } } });
     const chapter = "chapters/chapter-02.md";
     const diagnostic = (code) => ({ range: range(0, 0), severity: SEVERITY_WARNING, code, source: "story", message: code });
     const actions = client.result("textDocument/codeAction", { textDocument: { uri: uri(root, chapter) }, range: range(0, 0), context: { diagnostics: [diagnostic("stale-registry"), diagnostic("stale-word-count")] } });
@@ -675,6 +745,32 @@ describe("language server edits", () => {
       ["Update word counts (story wordcount --write)", reason]
     ]);
     expect(actions.every((action) => action.edit === undefined)).toBe(true);
+
+    const plain = startServer();
+    expect(plain.result("textDocument/codeAction", { textDocument: { uri: uri(root, chapter) }, range: range(0, 0), context: { diagnostics: [diagnostic("stale-registry")] } })).toEqual([]);
+    expect(plain.sent.filter((message) => message.method === "window/logMessage").map((message) => message.params.message)).toContain(`story lsp: Rebuild registries (story reindex): ${reason}`);
+  });
+
+  test("edits and references take in a file the editor has not saved yet", () => {
+    const root = storyProject();
+    const client = startServer({ capabilities: FULL_EDITS, folders: [root] });
+    const file = "chapters/chapter-05.md";
+    const text = client.open(root, file, fs.readFileSync(path.join(root, "chapters/chapter-04.md"), "utf8").replace("number: 4", "number: 5").replace("The Lock Gate", "Unsaved"));
+    const registry = client.diagnostics(root, "chapters/_index.md").find((diagnostic) => diagnostic.code === "stale-registry");
+    expect(registry).toBeDefined();
+    const [rebuild] = client.result("textDocument/codeAction", { textDocument: { uri: uri(root, "chapters/_index.md") }, range: registry.range, context: { diagnostics: [registry] } });
+    const indexEdit = rebuild.edit.documentChanges.find((change) => change.textDocument.uri === uri(root, "chapters/_index.md"));
+    expect(applyEdit(fs.readFileSync(path.join(root, "chapters/_index.md"), "utf8"), indexEdit.edits[0])).toContain("chapter-05");
+    expect(rebuild.edit.documentChanges.some((change) => change.textDocument.uri === uri(root, file))).toBe(false);
+
+    const chapterTwo = client.open(root, "chapters/chapter-02.md");
+    const position = { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(chapterTwo, "edran-vale", 1) };
+    expect(text).toContain("  - edran-vale\n");
+    expect(client.result("textDocument/references", { ...position, context: { includeDeclaration: false } }).map((location) => location.uri)).toContain(uri(root, file));
+    const { documentChanges } = client.result("textDocument/rename", { ...position, newName: "edran-the-elder" });
+    const unsavedEdit = documentChanges.find((change) => change.textDocument?.uri === uri(root, file));
+    expect(unsavedEdit.textDocument.version).toBe(1);
+    expect(applyEdit(text, unsavedEdit.edits[0])).toBe(text.replace("  - edran-vale\n", "  - edran-the-elder\n"));
   });
 
   test("leaves the edit for the editor to resolve when it can", () => {
@@ -786,6 +882,21 @@ describe("story lsp", () => {
     io.stdin.end();
     await settle();
     expect(exits).toEqual([1]);
+  });
+
+  test.if(NODE_ON_PATH)("runs under Node from the package and the bundled fallback", () => {
+    const input = Buffer.concat([
+      encodeMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: { capabilities: {} } }),
+      encodeMessage({ jsonrpc: "2.0", id: 2, method: "shutdown" }),
+      encodeMessage({ jsonrpc: "2.0", method: "exit" })
+    ]);
+    for (const script of ["bin/story.js", "skills/story-maintenance/scripts/story.js"]) {
+      const run = spawnSync("node", [path.join(import.meta.dir, "..", script), "lsp", "--stdio"], { input, cwd: makeTempDir(), encoding: "utf8", timeout: 20000 });
+      expect(run.status).toBe(0);
+      const messages = frames(run.stdout);
+      expect(messages[0].result.serverInfo.name).toBe("story");
+      expect(messages[1]).toEqual({ jsonrpc: "2.0", id: 2, result: null });
+    }
   });
 
   test("takes no --path", () => {

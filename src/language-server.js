@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatKnowledgeMark } from "./chronology.js";
 import { findingOverrides, readCliConfig } from "./config.js";
-import { makeDirectories, portablePath, readTextFile, recordChanges, withOpenDocuments, writeFile } from "./files.js";
+import { portablePath, readTextFile, recordChanges, withOpenDocuments, writeFile } from "./files.js";
 import { findingMessage, findingRange } from "./finding-locations.js";
 import { encodeMessage, messageReader } from "./lsp-transport.js";
 import { frontmatterEnd, idAt, itemField, keyAt, linkTargetAt, listItemAt, minimalEdit, range, textLines, tokenColumns } from "./lsp-text.js";
@@ -156,20 +156,34 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     published.set(root, new Set(found.keys()));
   }
 
-  // story check on the project, as the editor has it. A file the editor has
-  // open but not yet saved is not on disk for the scan to list, so then the
-  // check runs on a scratch copy with those files written into it.
+  // The markdown files of `root`'s project the editor has open but not yet
+  // saved, which are not on disk for a scan to list.
+  function unsavedFiles(root) {
+    return [...documents.keys()].filter((file) => file.endsWith(".md") && !fs.existsSync(file) && projectRootOf(file) === root);
+  }
+
+  // Writes the unsaved files of `root`'s project into its scratch copy, so
+  // a check or an edit there sees the project as the editor has it. A file
+  // whose folder leads out of the copy, through a symlink, is left out, so
+  // its text is never written outside the copy.
+  function writeUnsaved(root, copyRoot) {
+    for (const file of unsavedFiles(root)) {
+      try {
+        writeFile(path.join(copyRoot, path.relative(root, file)), documents.get(file).text, { root: copyRoot });
+      } catch (error) {
+        log(`Left out ${file}, which is not saved yet: ${error.message}`);
+      }
+    }
+  }
+
+  // story check on the project, as the editor has it: on a scratch copy
+  // when a file the editor has open is not saved yet.
   function checkWithUnsaved(root) {
-    const unsaved = [...documents.keys()].filter((file) => file.endsWith(".md") && !fs.existsSync(file) && projectRootOf(file) === root);
-    if (unsaved.length === 0) {
+    if (unsavedFiles(root).length === 0) {
       return projectCheck(root, { overrides: projectOverrides(root) });
     }
     return previewChanges(root, (copyRoot) => {
-      for (const file of unsaved) {
-        const copy = path.join(copyRoot, path.relative(root, file));
-        makeDirectories(path.dirname(copy));
-        writeFile(copy, documents.get(file).text);
-      }
+      writeUnsaved(root, copyRoot);
       return projectCheck(copyRoot, { overrides: projectOverrides(copyRoot) });
     }).result;
   }
@@ -256,7 +270,7 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
     const kinds = new Set(reference.matches.map((entry) => entry.kind));
     const files = new Set(reference.matches.map((entry) => entry.file));
     const locations = params.context?.includeDeclaration ? reference.matches.map((entry) => ({ uri: uriFor(entry.file), range: range(0, 0) })) : [];
-    for (const file of underOpenDocuments(() => markdownFiles(context.root)).sort()) {
+    for (const file of [...new Set([...underOpenDocuments(() => markdownFiles(context.root)), ...unsavedFiles(context.root)])].sort()) {
       const lines = textLines(textOf(file));
       const fileContext = { ...context, file };
       for (const [line, lineText] of lines.entries()) {
@@ -358,16 +372,21 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
         actions.push(lazy ? action : resolveOrDisable(action));
       }
     }
-    return actions;
+    return actions.filter((action) => action !== null);
   }
 
   // A fix this editor cannot apply is shown disabled, with the reason, so
-  // the other fixes are still offered.
+  // the other fixes are still offered. An editor that cannot show a
+  // disabled fix is not offered it, and the reason goes to its log.
   function resolveOrDisable(action) {
     try {
       return resolveCodeAction(action);
     } catch (error) {
-      return { ...action, disabled: { reason: error.message } };
+      if (capabilities.textDocument?.codeAction?.disabledSupport === true) {
+        return { ...action, disabled: { reason: error.message } };
+      }
+      log(`${action.title}: ${error.message}`);
+      return null;
     }
   }
 
@@ -380,12 +399,15 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
   }
 
   // Runs `run(copyRoot)` on a scratch copy of the project, open documents
-  // and all, and returns what it changed as a workspace edit.
+  // and all, unsaved ones too, and returns what it changed as a workspace
+  // edit.
   function projectEdit(root, run) {
-    const { result: texts, changes } = underOpenDocuments(() => previewChanges(root, (copyRoot) => {
-      const written = recordChanges(copyRoot, () => run(copyRoot)).changes.filter((change) => change.action === "create" || change.action === "update");
-      return Object.fromEntries(written.map((change) => [change.path, readTextFile(path.join(copyRoot, change.path))]));
-    }));
+    const { texts, changes } = underOpenDocuments(() => previewChanges(root, (copyRoot) => {
+      writeUnsaved(root, copyRoot);
+      const recorded = recordChanges(copyRoot, () => run(copyRoot)).changes;
+      const written = recorded.filter((change) => change.action === "create" || change.action === "update");
+      return { texts: Object.fromEntries(written.map((change) => [change.path, readTextFile(path.join(copyRoot, change.path))])), changes: recorded };
+    }).result);
     const operations = [];
     for (const change of changes) {
       const file = path.join(root, change.path);
@@ -696,7 +718,7 @@ function describeEntity(entry, root, chapter, project) {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
   }
   if (atChapter !== null && atChapter.lines.length > 0) {
-    lines.push("", `At ${chapter}:`, ...atChapter.lines);
+    lines.push("", `At ${escapeMarkdown(chapter)}:`, ...atChapter.lines);
   }
   return lines.join("\n");
 }
@@ -713,7 +735,7 @@ function stateAtChapter(entry, root, chapter, project) {
       status: state.status,
       lines: [
         ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
-        ...changes.map((change) => `- ${change.field}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${change.from})`)
+        ...changes.map((change) => `- ${escapeMarkdown(String(change.field))}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${escapeMarkdown(String(change.from))})`)
       ]
     };
   } catch {
