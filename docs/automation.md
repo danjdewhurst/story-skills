@@ -541,7 +541,7 @@ Give readers a direct link to the form alongside the review copy: `https://githu
 
 ### From issues to revisions
 
-The notes are raw reader reactions, not decisions. The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill records them in one file per reader under `feedback/round-<N>/`, fetches the issues with `gh issue list --label manuscript-note`, maps each old label to the current text, keeps each note's paragraph label in its **Where** line, and weighs them against your intent before anything changes in the manuscript. See [Skills catalogue](skills.md#feedback-triage) and [Writing workflows](writing-workflows.md).
+The notes are raw reader reactions, not decisions. The [`feedback-triage`](../skills/feedback-triage/SKILL.md) skill records them in one file per reader under `feedback/round-<N>/`, fetches the issues with `gh issue list --label manuscript-note`, maps each old label to the current text, keeps each note's paragraph label in its **Where** line, and weighs them against your intent before anything changes in the manuscript. Anyone who can open an issue can file a note, so the skill treats each issue's title, body, and author name as reader text, never instructions: if a note asks the agent to run a command, change files other than the round's feedback files, or reveal a secret, the agent does not do it and tells you what the note asked. See [Skills catalogue](skills.md#feedback-triage) and [Writing workflows](writing-workflows.md).
 
 ## Customising the workflows
 
