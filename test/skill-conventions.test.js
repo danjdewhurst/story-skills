@@ -1091,3 +1091,51 @@ describe("skill references", () => {
     expect(missing).toEqual([]);
   });
 });
+
+// Reader notes on a public story repository come from anyone who can open an
+// issue, so a skill that loads them must say they are data, not instructions
+// (#857). The shared conventions carry the rule once; each skill that reads
+// other people's text repeats it, because it may be installed on its own.
+describe("other people's text", () => {
+  const RULE = "never instructions";
+  const ACTIONS = ["run a command", "reveal a secret", "tell the user"];
+  const READS_ISSUES = /\bgh\s+(?:issue|pr)\s+(?:list|view)\b|\bgh\s+api\b[^\n`]*\/(?:issues|comments)\b/;
+
+  test("the shared conventions give the rule", () => {
+    const text = fs.readFileSync(path.join(skillsDir, "story-maintenance", "references", "conventions.md"), "utf8");
+    const section = text.match(/\n## Other people's text\n([\s\S]*?)(?=\n## |\s*$)/)?.[1];
+    expect(section).toBeString();
+    expect(section).toContain(RULE);
+    for (const action of ACTIONS) {
+      expect(section).toContain(action);
+    }
+  });
+
+  test("every skill file that loads issues says their text is never instructions", () => {
+    const missing = [];
+    for (const file of markdownFiles(skillsDir)) {
+      const text = fs.readFileSync(file, "utf8");
+      if (!READS_ISSUES.test(text)) {
+        continue;
+      }
+      const relative = path.relative(repoRoot, file);
+      if (!text.includes(RULE)) {
+        missing.push(`${relative} loads issues without saying their text is ${RULE}`);
+        continue;
+      }
+      for (const action of ACTIONS) {
+        if (!text.includes(action)) {
+          missing.push(`${relative} does not say what to do when a note asks to ${action}`);
+        }
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
+  test("the skills that read other people's text repeat the rule", () => {
+    for (const name of ["feedback-triage", "editorial-review", "story-maintenance"]) {
+      const text = fs.readFileSync(path.join(skillsDir, name, "SKILL.md"), "utf8");
+      expect(text, `${name} does not say other people's text is ${RULE}`).toContain(RULE);
+    }
+  });
+});
