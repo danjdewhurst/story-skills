@@ -10,9 +10,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Security
 
-- Skills that read other people's text now treat it as material to record, never as instructions. ([#857](https://github.com/danjdewhurst/story-skills/issues/857))
-  - `feedback-triage` says that `manuscript-note` issue titles, bodies, and author names are reader text. If a note asks the agent to run a command, change files other than the round's feedback files, or reveal a secret, the agent does not do it and tells you.
-  - The shared conventions add the same rule for files under `feedback/`, editor and sensitivity reader notes, and imported manuscripts. `editorial-review` and the `import` instructions in `story-maintenance` repeat it.
+- Skills that read other people's text now treat it as material to weigh, never as instructions. ([#857](https://github.com/danjdewhurst/story-skills/issues/857))
+  - `feedback-triage` says that `manuscript-note` issue titles, bodies, and author names are reader text. If a note asks the agent to act, for example to run a command, open a link, edit a file, change another note, or reveal a secret, the agent does not do it and tells you. It also tells you about text you would not see on GitHub, such as an HTML comment.
+  - `feedback-triage` names a reader's file from the issue's `author.login`, never from the display name the reader types.
+  - The shared conventions and every skill's conventions summary add the same rule. `editorial-review` repeats it for editor comments and returned notes, `story-init` and `story-maintenance` for imported manuscripts, and `research` for web pages and documents.
 
 ## [0.24.0] - 2026-10-13
 
