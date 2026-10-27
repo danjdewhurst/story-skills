@@ -39,4 +39,4 @@ The same fortress-city as in The Last Ember, but twelve years younger and still 
 
 ## Series Canon
 
-By the end of this book, the ember well is sealed and Maren holds the High Keep. The Last Ember opens with the city in decline. The frontmatter `progressions` date the change: occupied under Maren from Festival night (chapter 10), sealed and cooling from chapter 11.
+By the end of this book, the ember well is sealed and Maren holds the High Keep. The Last Ember opens with the city in decline. From Festival night (chapter 10) the city is occupied under Maren; from chapter 11 the well is sealed and the city cools.

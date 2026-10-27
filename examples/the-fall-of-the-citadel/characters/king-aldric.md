@@ -40,4 +40,4 @@ Slow, warm, and fond of questions he already knows the answers to.
 
 ## Series Canon
 
-Dies in the coup together with Queen Elara. The Last Ember treats both deaths as backstory, so on the page he dies in this book. When that chapter is drafted, set `status: deceased` and `died-in` here.
+Dies in the coup together with Queen Elara. The Last Ember treats both deaths as backstory, so on the page he dies in this book. He is alive and on the throne until Festival night (chapter 10).
