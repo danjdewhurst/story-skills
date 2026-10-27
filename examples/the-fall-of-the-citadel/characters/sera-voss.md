@@ -58,7 +58,7 @@ Quick, sharp, more words than she will use at twenty-eight. Her dry humour is al
 
 ## Series Canon
 
-Must end this book alive, scarred from jaw to collarbone, and in the Whispering Vale with Kael. She takes the scar on Festival night (chapter 10) and flees with Kael in chapter 11; before then she is unmarked and at home in the High Keep.
+Must end this book alive, scarred from jaw to collarbone, and in the Whispering Vale with Kael. She takes the scar holding a door on Festival night (chapter 10), and by chapter 11 she is in hiding with Kael in the Whispering Vale. Before Festival night she is unmarked and at home in the High Keep.
 
 ## Timeline
 
