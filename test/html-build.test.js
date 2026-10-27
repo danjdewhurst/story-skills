@@ -224,7 +224,10 @@ describe.skipIf(!weasyprint || !pdftotext)("print contents rendered with WeasyPr
     const out = path.join(cwd, "lamp.pdf");
     expect(invoke(cwd, ["build", root, "--format", "print", "--pdf", "--pdf-engine", weasyprint, "--out", out]).code).toBe(0);
     const pages = pdfWords(out);
-    const contents = pages.findIndex((words) => words.some((word) => word.text === "Contents"));
+    // The contents heading is in small caps. WeasyPrint 67 draws them with
+    // smaller capitals when the font has none, in a run of their own, so
+    // pdftotext reads "Contents" as "C" and "ontents". Join the page's words.
+    const contents = pages.findIndex((words) => words.map((word) => word.text).join("").includes("Contents"));
     expect(contents).toBeGreaterThanOrEqual(0);
     return titles.map((title) => {
       const start = pages.findIndex((words, index) => index > contents && words.some((word) => word.text === title));
