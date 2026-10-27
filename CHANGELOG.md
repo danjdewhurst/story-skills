@@ -8,6 +8,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Changed
+
+- Entity bodies in the examples no longer name frontmatter fields, and the skills tell agents to write entity bodies in story terms. ([#863](https://github.com/danjdewhurst/story-skills/issues/863))
+  - In `the-fall-of-the-citadel`, the Series Canon sections of `ashen-citadel`, `sera-voss`, and `king-aldric` now say what happens and when, instead of pointing at `progressions`, `status`, and `died-in`. Tools that show an entity's body to the writer, such as Plothold, no longer show these notes.
+  - The shared conventions, `character-management`, and `worldbuilding` say that the markdown below the frontmatter is prose for the writer and does not name frontmatter fields.
+
 ### Security
 
 - Skills that read other people's text now treat it as material to weigh, never as instructions. ([#857](https://github.com/danjdewhurst/story-skills/issues/857))
