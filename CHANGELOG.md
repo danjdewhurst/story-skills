@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-10-27
+
 ### Changed
 
 - Entity bodies in the examples no longer name frontmatter fields, and the skills tell agents to write entity bodies in story terms. ([#863](https://github.com/danjdewhurst/story-skills/issues/863))
@@ -1460,7 +1462,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.24.1...HEAD
+[0.24.1]: https://github.com/danjdewhurst/story-skills/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/danjdewhurst/story-skills/compare/v0.23.2...v0.24.0
 [0.23.2]: https://github.com/danjdewhurst/story-skills/compare/v0.23.1...v0.23.2
 [0.23.1]: https://github.com/danjdewhurst/story-skills/compare/v0.23.0...v0.23.1
