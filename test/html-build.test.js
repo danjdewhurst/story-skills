@@ -196,8 +196,9 @@ describe("html and print builds", () => {
 });
 
 // With WeasyPrint and pdftotext (from poppler) on PATH, render the print
-// interior and read the contents page back. CI installs neither, so there
-// the CSS checks above stand alone.
+// interior and read the contents page back. The Print rendering CI job
+// installs both; without them this block skips and the CSS checks above
+// stand alone.
 const weasyprint = findCommand("weasyprint");
 const pdftotext = findCommand("pdftotext");
 
@@ -226,8 +227,10 @@ describe.skipIf(!weasyprint || !pdftotext)("print contents rendered with WeasyPr
     const pages = pdfWords(out);
     // The contents heading is in small caps. WeasyPrint 67 draws them with
     // smaller capitals when the font has none, in a run of their own, so
-    // pdftotext reads "Contents" as "C" and "ontents". Join the page's words.
-    const contents = pages.findIndex((words) => words.map((word) => word.text).join("").includes("Contents"));
+    // pdftotext reads "Contents" as "C" and "ontents". Join the page's words,
+    // and ignore case in case a renderer gives the smaller capitals back as
+    // capitals.
+    const contents = pages.findIndex((words) => /contents/i.test(words.map((word) => word.text).join("")));
     expect(contents).toBeGreaterThanOrEqual(0);
     return titles.map((title) => {
       const start = pages.findIndex((words, index) => index > contents && words.some((word) => word.text === title));
