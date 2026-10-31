@@ -71,7 +71,7 @@ export function stdinText(command, bytes) {
 // and ends with `advice`, so no character is silently replaced.
 export function decodeUtf8(bytes, subject, advice) {
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
-    throw usageError(`${subject}: it is a zip archive (such as a .docx or .odt file). Save or export it as markdown or plain text first`);
+    throw usageError(`${subject}: it is a zip archive, such as a Word or OpenDocument file. story import reads a Word document saved as a .docx file; save or export anything else as markdown or plain text first`);
   }
   if (bytes.includes(0)) {
     throw usageError(`${subject}: it is a binary or UTF-16 file, not UTF-8 text. ${advice}`);

@@ -28,7 +28,7 @@ All output shown was captured by running the commands against copies of the exam
 
 ```mermaid
 flowchart LR
-  draft["Existing draft<br/>(.md, .markdown, .txt)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
+  draft["Existing draft<br/>(.md, .markdown, .txt, .docx)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
   project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
@@ -171,7 +171,7 @@ When a numbered `Chapter` line (one that would match the step 4 pattern) did not
 
 ### Importing a folder of chapter files
 
-A single source file is read as UTF-8 text, whatever its extension, and CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. A zip file (such as a `.docx`; export it to markdown first), a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, and `.txt` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
+A single source file is read as UTF-8 text, whatever its extension, unless its name ends in `.docx` (see [Importing a Word document](#importing-a-word-document)). CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. Any other zip file (such as an `.odt`), a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, `.txt`, and `.docx` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
 
 A chapter file in Story Skills' own layout, such as one copied from another project, imports as one chapter: its `title` frontmatter is the title, `numbered: false` and `author` are kept, and its prose is the text under `## Chapter Text`, without the outline. A file counts as one only when its frontmatter has a chapter key such as `number` or `status`, not just a `title` and `author`. The outline above the heading (`## Outline` through its `---` line) is not book text and is not reported. Neither is the `# ` heading that names the chapter's title. Any other text above `## Chapter Text` is not imported, and import warns about it with the `unused-chapter-text` code. A manuscript with frontmatter of its own and no chapter key is split with the rules above, so a folder of one-chapter files gives one chapter per file.
 
@@ -204,12 +204,28 @@ Imported 4 chapters (14 words) into ~/stories/door
 
 Remove stray files such as notes from the folder before importing, or delete the chapter files they produce afterwards.
 
+### Importing a Word document
+
+A source file whose name ends in `.docx` is read as a Word document, and so is each `.docx` file in a source folder. Google Docs, LibreOffice, Pages, and Scrivener can all save or compile a `.docx`. The document becomes markdown, which is then split into chapters as a markdown file is:
+
+```shell
+story import draft.docx --title "The Salt Road"
+```
+
+- A paragraph in a heading style (`Heading 1` to `Heading 6`, in any language Word uses) or with an outline level becomes a markdown heading of that level, and the `Title` style becomes a level 1 heading. So use Word's heading styles for chapter titles, or type `Chapter 1` on a line of its own.
+- Italic and bold, set directly or by a character style such as `Emphasis`, become `*italic*` and `**bold**`. A heading's own bold or italic is left out.
+- A paragraph in the `Quote` style becomes a block quote, a line break inside a paragraph becomes a hard line break, and a page break inside a paragraph splits it in two.
+- A paragraph that is only a scene break, such as `* * *` or a lone `#`, stays a scene break. Characters that markdown would read as markup, such as `*` and `_` in the prose or a `#` at the start of a paragraph, are escaped, so they print as written.
+- Tracked changes are read as if every change were accepted. Comments, footnotes and endnotes, images, and text in text boxes are left out, and table cells are read as plain paragraphs. For each of these, import warns with the `docx-content-left-out` code and names the document, so accept or reject the changes, and move anything you need into the text, before you import.
+
+Only the document's text and styles are read, each up to 64 MB unpacked, from a file of up to 64 MB. A password-protected, damaged, or ZIP64 document is refused.
+
 ### Importing from stdin
 
 With `-` as the source, `import` reads the manuscript from standard input, so a draft another tool prints never needs a file of its own:
 
 ```shell
-pandoc draft.docx -t markdown | story import - --title "The Salt Road"
+pandoc draft.odt -t markdown | story import - --title "The Salt Road"
 ```
 
 Piped text is read as markdown, as a `.md` file is, and split the same way. A piped document with no chapter headings becomes one chapter titled `Chapter 1`, and the synopsis placeholder says `Imported from stdin`. Empty input, a terminal, and text that is not UTF-8 are refused; see [Reading from stdin](cli-reference.md#reading-from-stdin).
@@ -1522,9 +1538,10 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to import symlinked source: <path>` | The source, or a document inside a source folder, is a symlink | Import the real file or folder. |
 | `Import source not found: <path>` | The source path is wrong | Check the path; it is relative to the current directory. |
 | `<source> is already a story project (it has story.md); ...` | The source folder is a Story Skills project, not a draft | Point `import` at the manuscript files. |
-| `No markdown or text files found in <dir>` | The folder has no `.md`, `.markdown`, or `.txt` files at its top level | Point at the folder that contains the chapter files. |
+| `No markdown, text, or Word files found in <dir>` | The folder has no `.md`, `.markdown`, `.txt`, or `.docx` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
-| `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a `.docx` or other zip, a binary file, or text in another encoding | Save or export it as UTF-8 markdown or plain text. |
+| `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a zip other than a `.docx`, such as an `.odt`, a binary file, or text in another encoding | Save or export it as a `.docx`, or as UTF-8 markdown or plain text. |
+| `Cannot import <file>.docx: it is not a readable zip file ...`, `... is password-protected ...`, `... is damaged ...` | The `.docx` is not a Word document, is locked with a password, or is damaged | Open it in Word or another editor and save it again as a `.docx`, without a password. |
 | `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or use `--force`, which replaces its chapters after saving them in snapshot `before-import-<n>`. |
 | `... The import stopped before deleting any chapter: it could not save the project as snapshot before-import-<n> first` | `import --force` could not save the project before deleting its chapters, often because a chapter is not UTF-8 text | Fix the problem the message names, then import again. No chapter was deleted. |
 | `Cannot import: chapters/<file> ..., so the snapshot import --force takes before replacing the chapters cannot keep it, ...` | A `chapter-NN.MD` file, or a symlink or folder named like a chapter, is in `chapters/` | Rename, move, or delete it, then import again. Nothing was changed. |

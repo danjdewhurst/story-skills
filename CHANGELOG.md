@@ -8,6 +8,15 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- `story import` reads Word documents, so a draft in Word, Google Docs, or Scrivener no longer needs Pandoc first. See [Importing a Word document](docs/manuscripts.md#importing-a-word-document).
+  - A `.docx` source, or a `.docx` file in a source folder, becomes markdown and is then split into chapters as before. Heading styles and outline levels become headings, in any language Word uses, and the `Title` style becomes a level 1 heading.
+  - Italic and bold become `*italic*` and `**bold**`, the `Quote` style becomes a block quote, line breaks are kept, and scene breaks stay scene breaks. Markdown characters in the prose are escaped, so they print as written.
+  - Tracked changes are read as accepted. Comments, footnotes, images, text boxes, and tables are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
+  - Only the document's text and styles parts are read, each up to 64 MB unpacked. A password-protected, damaged, or ZIP64 file is refused with a usage error.
+  - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document saved as `.docx`.
+
 ## [0.24.1] - 2026-10-27
 
 ### Changed

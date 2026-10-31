@@ -122,7 +122,7 @@ describe("stdinText", () => {
   });
 
   test("refuses a zip, a binary, and text that is not UTF-8, as import does for a file", () => {
-    expect(() => stdinText("import", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14]))).toThrow("Cannot read stdin: it is a zip archive (such as a .docx or .odt file). Save or export it as markdown or plain text first");
+    expect(() => stdinText("import", Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14]))).toThrow("Cannot read stdin: it is a zip archive, such as a Word or OpenDocument file. story import reads a Word document saved as a .docx file; save or export anything else as markdown or plain text first");
     expect(() => stdinText("import", Buffer.from("h\0i\0", "latin1"))).toThrow("Cannot read stdin: it is a binary or UTF-16 file, not UTF-8 text. Pipe UTF-8 plain text or markdown instead");
     expect(() => stdinText("import", Buffer.from([0x63, 0x61, 0x66, 0xe9]))).toThrow("Cannot read stdin: it is not valid UTF-8 text. Pipe UTF-8 plain text or markdown instead");
   });
