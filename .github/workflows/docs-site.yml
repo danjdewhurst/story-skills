@@ -21,10 +21,12 @@ on:
 permissions:
   contents: read
 
-# One deploy at a time; a newer push to main replaces a queued one, and a
-# pull request run cancels the one it replaces.
+# One deploy at a time: a newer push to main replaces a queued one. A pull
+# request run, or a manual run on another branch, has a group of its own,
+# so it never cancels a main deploy, and a pull request run cancels the one
+# it replaces.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || 'pages' }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'pages' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -46,9 +48,11 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
 
+      # No install scripts run: esbuild finds its binary through its
+      # optional platform package.
       - name: Install site dependencies
         working-directory: site
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Build site
         working-directory: site

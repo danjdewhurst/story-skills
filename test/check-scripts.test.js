@@ -1308,7 +1308,7 @@ describe("github workflows", () => {
     .filter((name) => /\.ya?ml$/.test(name))
     .sort()
     .map((name) => `templates/github/${name}`);
-  const workflowFiles = [".github/workflows/ci.yml", ...templateWorkflowFiles];
+  const workflowFiles = [".github/workflows/ci.yml", ".github/workflows/docs-site.yml", ...templateWorkflowFiles];
   // A template job runs on users' pull requests, so it gets an hour at most.
   const TEMPLATE_TIMEOUT_CAP = 60;
   // Every workflow this repository runs, including publish, CodeQL, and
@@ -2125,7 +2125,7 @@ describe("the published README only links to files the package ships (#401)", ()
 });
 
 describe("checkouts drop the token: only draft-next-chapter pushes, with its own (#137, #294)", () => {
-  for (const relativePath of [".github/workflows/ci.yml", "templates/github/story-checks.yml", "templates/github/review-copy.yml", "templates/github/draft-next-chapter.yml"]) {
+  for (const relativePath of [".github/workflows/ci.yml", ".github/workflows/docs-site.yml", "templates/github/story-checks.yml", "templates/github/review-copy.yml", "templates/github/draft-next-chapter.yml"]) {
     test(relativePath, () => {
       const blocks = checkoutBlocks(readRepo(relativePath));
       expect(blocks.length).toBeGreaterThan(0);

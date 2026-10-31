@@ -37,12 +37,13 @@ const SCRIPTS = new Set(["check-schema.js"]);
 // Every markdown file in the repository, except the example books and
 // what is not committed. A symlink, such as plugins/story-skills, is not
 // followed.
-const UNSCANNED = new Set(["examples", "node_modules", "coverage", "evals/outputs", "evals/baseline"]);
+const UNSCANNED = new Set(["examples", "coverage", "evals/outputs", "evals/baseline"]);
 function markdownFiles(dir = repoRoot) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const relative = path.relative(repoRoot, path.join(dir, entry.name)).split(path.sep).join("/");
     if (entry.isDirectory()) {
-      return entry.name.startsWith(".") || UNSCANNED.has(relative) ? [] : markdownFiles(path.join(dir, entry.name));
+      // Installed packages, such as site/node_modules, are not ours.
+      return entry.name.startsWith(".") || entry.name === "node_modules" || UNSCANNED.has(relative) ? [] : markdownFiles(path.join(dir, entry.name));
     }
     return entry.isFile() && entry.name.endsWith(".md") ? [relative] : [];
   }).sort();
