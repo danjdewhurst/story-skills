@@ -26,7 +26,7 @@ bun run story -- --help
 
 ## Add a CLI command or flag
 
-1. Put the logic in the module that owns it (`src/scan.js`, `src/validate.js`, `src/mutate.js`, `src/report.js`, `src/build.js`, or `src/story.js`) or in a feature module under `src/`, and export it. Re-export it from `src/story.js` when existing callers import it from there.
+1. Put the logic in the module that owns it (`src/scan*.js`, `src/validate*.js`, `src/mutate-*.js`, `src/report.js`, `src/build.js`, or `src/story.js`) or in a feature module under `src/`, and export it. A function in a `scan-*`, `validate-*`, or `mutate-*` module is re-exported from `src/scan.js`, `src/validate.js`, or `src/mutate.js`, which callers import. Re-export it from `src/story.js` when existing callers import it from there.
 2. Register the command in `COMMANDS` in `src/commands.js` (use `project: "positional"` if it takes `[path]`), and any new flag in `OPTIONS` in `src/options.js`. Help text, argument parsing, and project-path handling follow from these entries, so never edit help by hand or add a separate dispatch branch.
 3. Add focused Bun tests under `test/`.
 4. Update the [CLI reference](docs/cli-reference.md), the when-to-run list in [`skills/story-maintenance/SKILL.md`](skills/story-maintenance/SKILL.md) and an example in [`references/commands.md`](skills/story-maintenance/references/commands.md) (with a check command's rules in [`references/continuity-checks.md`](skills/story-maintenance/references/continuity-checks.md), an editing command's detail in [`references/editing-commands.md`](skills/story-maintenance/references/editing-commands.md), and a build format's in [`references/builds.md`](skills/story-maintenance/references/builds.md)), and the "Companion CLI" section of the README.

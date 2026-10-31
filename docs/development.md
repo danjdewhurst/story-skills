@@ -261,7 +261,7 @@ Parsing rules worth knowing when you add a flag:
 
 ### Adding a command
 
-1. Put the logic in the module that owns it (`src/scan.js`, `src/validate.js`, `src/mutate.js`, `src/report.js`, or `src/build.js`), or in a new or existing feature module if it is a pure analysis over the scanned project. Export the function, and re-export it from `src/story.js` when callers import it from there.
+1. Put the logic in the module that owns it (`src/scan*.js`, `src/validate*.js`, `src/mutate-*.js`, `src/report.js`, or `src/build.js`), or in a new or existing feature module if it is a pure analysis over the scanned project. Export the function, re-export it from `src/scan.js`, `src/validate.js`, or `src/mutate.js` when it lives in one of their sub-modules, and re-export it from `src/story.js` when callers import it from there.
 2. Import it in `src/commands.js` and add an entry to `COMMANDS` at the place you want it to appear in help. Use `project: "positional"` if the command takes `[path]`, and `writes` if it changes the project in place, so it runs under the project lock.
 3. Add any new flags to `OPTIONS` (see below).
 4. Add focused tests. `test/registry.test.js` checks automatically that every command is well formed, appears in help, and resolves its project path correctly; you still need behaviour tests for the command itself (see `test/cli.test.js` for the `invoke` pattern).
@@ -471,7 +471,7 @@ The test's time limit grows with the run count, about a minute for 20,000 runs.
 
 [`schemas/result.schema.json`](../schemas/result.schema.json) describes the object `story <command> --json` prints: the envelope, and under `$defs/data-<command>` the `data` of each command, chosen with `allOf` and `if`/`then` on `command`. The envelope is built by `writeJsonResult` in [`src/json.js`](../src/json.js); a command that gains `--json` calls it, adds `json` to its `options` in `src/commands.js`, and adds its `data` to the schema. `test/json-output.test.js` runs every `--json` command on every example and checks the output against the schema, so a change to a command's result shows up there. Adding a field keeps `apiVersion` (`story/v2`); renaming, removing, or retyping one needs a new version.
 
-The CLI's own validation (`story validate`) lives in `src/validate.js` and is separate from the JSON schema. A new frontmatter field usually needs both: the validation rule in the `src/validate*.js` module for its kind (usually `src/validate-entities.js`) and the property in the schema. The current schema version is `STORY_SCHEMA_VERSION = 2` in `src/scan.js`, re-exported from `src/story.js`; `story migrate` upgrades older projects. The field-by-field reference is [Project format reference](project-format.md).
+The CLI's own validation (`story validate`) lives in the `src/validate*.js` modules and is separate from the JSON schema. A new frontmatter field usually needs both: the validation rule in the `src/validate*.js` module for its kind (usually `src/validate-entities.js`) and the property in the schema. The current schema version is `STORY_SCHEMA_VERSION = 2` in `src/scan-schema.js`, re-exported from `src/scan.js` and from `src/story.js`; `story migrate` upgrades older projects. The field-by-field reference is [Project format reference](project-format.md).
 
 ## Metadata check
 
