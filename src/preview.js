@@ -222,7 +222,7 @@ function copyLinkTargets(copyRoot, scratch, mirror, realOf) {
 }
 
 // The files whose markdown links validate checks (see checkBodyLinkTarget
-// in validate.js): the timeline, the arcs, and the matter pages.
+// in validate-links.js): the timeline, the arcs, and the matter pages.
 function linkSources(copyRoot) {
   const files = [path.join(copyRoot, "plot", "timeline.md")];
   for (const folder of [path.join("plot", "arcs"), MATTER_DIR]) {
