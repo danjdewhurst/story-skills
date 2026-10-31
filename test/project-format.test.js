@@ -19,12 +19,11 @@ import { WRITING_MODES } from "../src/typesetting.js";
 const repoRoot = path.join(import.meta.dir, "..");
 const formatDoc = fs.readFileSync(path.join(repoRoot, "docs", "project-format.md"), "utf8");
 // The validate modules (src/validate.js and src/validate-*.js), in name
-// order, as one text.
-const validateSource = fs.readdirSync(path.join(repoRoot, "src"))
+// order, each with its file name.
+const validateSources = fs.readdirSync(path.join(repoRoot, "src"))
   .filter((name) => name.startsWith("validate") && name.endsWith(".js"))
   .sort()
-  .map((name) => fs.readFileSync(path.join(repoRoot, "src", name), "utf8"))
-  .join("\n");
+  .map((name) => ({ file: `src/${name}`, text: fs.readFileSync(path.join(repoRoot, "src", name), "utf8") }));
 
 const CONSTANTS = {
   ...scan,
@@ -143,16 +142,22 @@ const OTHER_CHECKS = {
 
 // Every value check in the validate modules, as { kind, field, list }: each
 // validateEnum call, each PROGRESSION_RULES enum, and each unsupported-value
-// error raised after a `!LIST.has(value)` test.
+// error raised after a `!LIST.has(value)` test. Each file is read on its
+// own, so a check is never credited to a function in the file before it,
+// and a failure names the file and line it is on.
 function enumChecks() {
+  return validateSources.flatMap(({ file, text }) => fileEnumChecks(file, text));
+}
+
+function fileEnumChecks(file, text) {
   const checks = [];
   let fn = null;
   let key = null;
-  const lines = validateSource.split("\n");
+  const lines = text.split("\n");
   lines.forEach((line, index) => {
     fn = line.match(/^(?:export )?function (\w+)/)?.[1] ?? fn;
     key = line.match(/^ {2}([a-z]+): \{$/)?.[1] ?? key;
-    const where = { fn, line: index + 1 };
+    const where = { file, fn, line: index + 1 };
     for (const match of line.matchAll(/validateEnum\([^,]+, "([^"]+)", ([A-Z][A-Z_]+),/g)) {
       checks.push({ ...where, kind: KINDS[fn], field: match[1], list: match[2] });
     }
