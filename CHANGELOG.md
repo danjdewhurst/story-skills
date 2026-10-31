@@ -17,6 +17,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A table of contents, an index, placeholder text, and hidden text are left out. Tracked changes are read as accepted. Comments, footnotes, images, text boxes, tables, list numbering, and ruby readings are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
   - Only the document's text and styles parts are read, each up to 32 MB unpacked, and the text may come to 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused with a usage error.
   - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document only from a `.docx` file.
+- The documentation has a website with search, at [danjdewhurst.github.io/story-skills](https://danjdewhurst.github.io/story-skills/).
+  - VitePress builds it from the same `docs/` pages that GitHub and the npm package show, and GitHub Pages publishes it on each change to `main`.
 
 ## [0.24.1] - 2026-10-27
 

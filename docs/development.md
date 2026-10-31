@@ -72,6 +72,7 @@ story-skills/
 ├── evals/                        # skill regression harness (repo tooling only)
 ├── templates/github/             # workflows and an issue form users copy into story repositories (shipped in the npm package)
 ├── docs/                         # this documentation (shipped in the npm package)
+├── site/                         # the documentation website: VitePress config and its own package.json
 ├── assets/                       # logo, screenshot, social preview, demo GIF + VHS tapes, README art
 ├── CHANGELOG.md                  # user-visible changes per release (Keep a Changelog)
 ├── CONTRIBUTING.md               # short contributor guide that points here
@@ -92,6 +93,7 @@ Notes on specific paths:
 - `assets/demo.gif` is generated from `assets/demo.tape` with `vhs assets/demo.tape`, and the Codex plugin screenshot `assets/screenshot-continuity.png`, the GIF's last frame as a still, from `assets/screenshot-continuity.tape`. Regenerate both when the `story continuity` output they show changes. Run them with `vhs` and Node on your PATH, or in Docker with the image [`assets/vhs.Dockerfile`](https://github.com/danjdewhurst/story-skills/blob/main/assets/vhs.Dockerfile) builds: VHS and Node, both pinned by digest. The header of `demo.tape` gives the commands, which mount the repository read-only and only `assets/` writable.
 - `assets/readme/` holds the README's art: the banner (`hero-light.svg` and `hero-dark.svg`), the feature icons, and the skills diagram (`skills-light.svg` and `skills-dark.svg`). The README picks the light or dark file with a `<picture>` element and links each file by its absolute `raw.githubusercontent.com` URL on `main`, because `assets/` is not in the package. `check:links` resolves those URLs against the checkout and fails on any other branch, which is deleted when its pull request merges. The banner's lettering is outlined to paths, so it looks the same without the fonts. The skills diagram is plain SVG text: when you add, rename, or move a skill, edit both diagram files. `test/skill-conventions.test.js` checks that the README's skill count, its skills table, and both diagrams name every skill.
 - `CLAUDE.md` is a symlink to `AGENTS.md`. Edit `AGENTS.md` and leave the symlink alone.
+- `site/` builds the [documentation website](https://danjdewhurst.github.io/story-skills/) from `docs/` with VitePress. It has its own `package.json` and lockfile, so the package's `devDependencies` stay empty; see [Documentation website](#documentation-website).
 
 Do not commit `node_modules/`, `coverage/`, `dist/` directories inside examples, or editor swap files. `.gitignore` already covers them.
 
@@ -658,6 +660,27 @@ bun run test:coverage
 bun run test:examples
 node skills/story-maintenance/scripts/story.js --help
 ```
+
+### Documentation website
+
+`docs-site.yml` builds the pages in `docs/` into the [documentation website](https://danjdewhurst.github.io/story-skills/) with [VitePress](https://vitepress.dev/) and publishes it to GitHub Pages on each push to `main` that changes `docs/` or `site/`. A pull request that changes them runs the build only, so a page VitePress cannot compile fails the pull request.
+
+The pages are the files in `docs/`, read as they are, so they keep working on GitHub and in the npm package. `site/.vitepress/config.mjs` makes plain GitHub markdown safe for VitePress, which compiles each page as a Vue template:
+
+- Inline code is printed as written, so `${{ inputs.name }}` is not a Vue interpolation.
+- A tag-like word in prose that is not an HTML element, such as `<id>`, is shown as text, as on GitHub.
+- A link or image that leaves `docs/`, such as `../examples/the-last-ember/` or `../CHANGELOG.md`, points at the file on GitHub.
+- `docs/README.md` is the home page, and the build fails on a link to a page that does not exist.
+
+To preview the site, install its own dependencies and start the dev server:
+
+```shell
+cd site
+npm ci
+npm run dev
+```
+
+`npm run build` writes the site to `site/.vitepress/dist/`. When you add a page to `docs/`, add it to the sidebar in `site/.vitepress/config.mjs` too.
 
 ## Contributing changes
 

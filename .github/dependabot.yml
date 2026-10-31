@@ -17,3 +17,16 @@ updates:
         group-by: dependency-name
         patterns:
           - "*"
+  # The documentation website's build tools (site/package.json). Nothing
+  # here ships in the npm package or runs in the CLI. One pull request a
+  # week holds every bump, since VitePress and the Mermaid plugin move
+  # together.
+  - package-ecosystem: "npm"
+    directories:
+      - "/site"
+    schedule:
+      interval: "weekly"
+    groups:
+      docs-site:
+        patterns:
+          - "*"
