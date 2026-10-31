@@ -130,10 +130,14 @@ jobs:
           ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
+      # The release binaries embed this Bun, so it is always downloaded,
+      # never restored from the Actions cache another workflow on main
+      # could write.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.2
+          no-cache: true
 
       # --smoke runs the binary on this runner: --version must match the
       # package, and validate must pass on an example.

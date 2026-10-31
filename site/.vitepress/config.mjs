@@ -1,8 +1,11 @@
 // The documentation website. Its pages are the markdown files in ../docs,
 // read as they are: the same files render on GitHub and ship in the npm
 // package, so nothing here may need a change to them. The rules below make
-// plain GitHub markdown safe for VitePress, which compiles each page as a
-// Vue template.
+// plain GitHub markdown build and behave in VitePress, which compiles each
+// page as a Vue template, and keep the page as inert as GitHub shows it:
+// raw HTML keeps only safe elements and attributes, and no text or
+// attribute is read as Vue.
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitepress";
@@ -13,33 +16,90 @@ const siteRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const docsRoot = path.resolve(siteRoot, "../docs");
 const repoRoot = path.resolve(siteRoot, "..");
 
-// HTML elements the docs may write inline. Anything else that looks like a
-// tag, such as `<id>` in a sentence, is text, as GitHub shows it.
+// HTML elements the docs may write. Anything else that looks like a tag,
+// such as `<id>` in a sentence or a `<script>`, is text, as GitHub shows it.
 const HTML_TAGS = new Set([
-  "a", "abbr", "b", "br", "code", "del", "details", "div", "em", "i", "img", "kbd", "mark",
-  "p", "picture", "pre", "s", "samp", "small", "source", "span", "strong", "sub", "summary",
-  "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "var"
+  "a", "abbr", "b", "blockquote", "br", "caption", "cite", "code", "dd", "del", "details", "div", "dl", "dt",
+  "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li",
+  "mark", "ol", "p", "picture", "pre", "q", "s", "samp", "small", "source", "span", "strong", "sub",
+  "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul", "var"
 ]);
+
+// The attributes an allowed element keeps. Event handlers, styles, and Vue
+// directives (`v-html`, `:href`, `@click`) are dropped, and a URL must not
+// run script.
+const ATTRIBUTES = new Set(["align", "alt", "class", "colspan", "dir", "height", "href", "id", "lang", "media", "name", "open", "rowspan", "src", "srcset", "start", "title", "type", "width"]);
+const SCRIPT_URL = /^\s*(?:javascript|vbscript|data):/i;
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Each tag in a run of raw HTML: an element the docs may use keeps its safe
+// attributes, and anything else is escaped as text. Comments stay.
+const RAW_TAG = /<!--[\s\S]*?-->|<\/?([a-z][a-z0-9-]*)((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/?)>|</gi;
+const RAW_ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g;
+
+function safeHtml(html) {
+  return html.replace(RAW_TAG, (tag, name, attributes = "", selfClosing) => {
+    if (tag.startsWith("<!--")) {
+      return tag;
+    }
+    if (name === undefined || !HTML_TAGS.has(name.toLowerCase())) {
+      return escapeHtml(tag);
+    }
+    if (tag.startsWith("</")) {
+      return `</${name.toLowerCase()}>`;
+    }
+    const kept = [];
+    for (const [, key, quoted] of attributes.matchAll(RAW_ATTRIBUTE)) {
+      const lower = key.toLowerCase();
+      const value = quoted === undefined ? "" : quoted.replace(/^["']|["']$/g, "");
+      if (!ATTRIBUTES.has(lower) || ((lower === "href" || lower === "src" || lower === "srcset") && SCRIPT_URL.test(value))) {
+        continue;
+      }
+      kept.push(quoted === undefined ? ` ${lower}` : ` ${lower}="${value.replace(/"/g, "&quot;").replace(/\{\{/g, "&#123;&#123;")}"`);
+    }
+    return `<${name.toLowerCase()}${kept.join("")}${selfClosing ? " /" : ""}>`;
+  });
+}
+
 // A link or image path that leaves docs/ (`../examples/the-last-ember/`,
-// `../CHANGELOG.md`) points at the file on GitHub instead.
-function outsideDocsUrl(href, env) {
+// `../CHANGELOG.md`) points at the file on GitHub instead, and a link to
+// the docs index (README.md) points at the home page it becomes.
+function siteUrl(href, page) {
   if (!href || /^[a-z][a-z0-9+.-]*:|^#|^\//i.test(href)) {
     return null;
   }
-  const [target, hash] = href.split("#");
-  const page = env.realPath ?? env.path ?? path.join(docsRoot, env.relativePath ?? "");
-  const resolved = path.resolve(path.dirname(page), decodeURI(target));
-  if (resolved === docsRoot || resolved.startsWith(docsRoot + path.sep)) {
+  const hashAt = href.indexOf("#");
+  const target = hashAt === -1 ? href : href.slice(0, hashAt);
+  const hash = hashAt === -1 ? "" : href.slice(hashAt);
+  let resolved;
+  try {
+    resolved = path.resolve(path.dirname(page), decodeURI(target));
+  } catch {
     return null;
   }
+  if (resolved === docsRoot || resolved.startsWith(docsRoot + path.sep)) {
+    return path.relative(docsRoot, resolved) === "README.md" ? `./index.md${hash}` : null;
+  }
   const fromRepo = path.relative(repoRoot, resolved).split(path.sep).join("/");
-  const kind = target.endsWith("/") ? "tree" : "blob";
-  return `${REPO}/${kind}/main/${fromRepo}${target.endsWith("/") ? "/" : ""}${hash === undefined ? "" : `#${hash}`}`;
+  // A path outside the repository, such as an example of a link between
+  // two story projects, has no file on GitHub to point at.
+  if (fromRepo === ".." || fromRepo.startsWith("../")) {
+    return null;
+  }
+  const folder = target.endsWith("/") || fs.statSync(resolved, { throwIfNoEntry: false })?.isDirectory() === true;
+  const encoded = encodeURI(fromRepo);
+  return `${REPO}/${folder ? "tree" : "blob"}/main/${encoded}${folder && encoded !== "" ? "/" : ""}${hash}`;
+}
+
+// GitHub's heading ids, so the docs' own anchors (`#1-download-the-skills`,
+// `#defaults-and-severity-from-storymd`) work on the site: lower case,
+// punctuation and symbols dropped except `-` and `_`, and each space a `-`.
+// The anchor plugin adds `-1`, `-2` to a repeated id, as GitHub does.
+function githubSlug(text) {
+  return text.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc}\- ]/gu, "").replace(/ /g, "-");
 }
 
 function githubMarkdown(md) {
@@ -48,26 +108,24 @@ function githubMarkdown(md) {
   const code = md.renderer.rules.code_inline;
   md.renderer.rules.code_inline = (tokens, index, options, env, self) => code(tokens, index, options, env, self).replace(/^<code/, "<code v-pre");
 
-  // A tag-like word in prose that is not an HTML element is text.
-  const inline = md.renderer.rules.html_inline ?? ((tokens, index) => tokens[index].content);
-  md.renderer.rules.html_inline = (tokens, index, options, env, self) => {
-    const content = tokens[index].content;
-    const tag = content.match(/^<\/?([a-z][a-z0-9-]*)/i)?.[1]?.toLowerCase();
-    if (tag !== undefined && !HTML_TAGS.has(tag)) {
-      return escapeHtml(content);
-    }
-    return inline(tokens, index, options, env, self);
-  };
+  // `{{` in prose is text too.
+  const text = md.renderer.rules.text;
+  md.renderer.rules.text = (tokens, index, options, env, self) => text(tokens, index, options, env, self).replace(/\{\{/g, "&#123;&#123;");
+
+  // Raw HTML keeps only safe elements and attributes.
+  md.renderer.rules.html_inline = (tokens, index) => safeHtml(tokens[index].content);
+  md.renderer.rules.html_block = (tokens, index) => safeHtml(tokens[index].content);
 
   // Links and images that leave docs/ go to GitHub.
-  md.core.ruler.push("outside-docs-links", (state) => {
+  md.core.ruler.push("site-links", (state) => {
+    const page = state.env.realPath ?? state.env.path ?? path.join(docsRoot, state.env.relativePath ?? "");
     for (const block of state.tokens) {
       for (const token of block.children ?? []) {
         const attribute = token.type === "link_open" ? "href" : token.type === "image" ? "src" : null;
         if (attribute === null) {
           continue;
         }
-        const url = outsideDocsUrl(token.attrGet(attribute), state.env);
+        const url = siteUrl(token.attrGet(attribute), page);
         if (url !== null) {
           token.attrSet(attribute, attribute === "src" ? url.replace(`${REPO}/blob/`, `${REPO}/raw/`) : url);
         }
@@ -76,6 +134,8 @@ function githubMarkdown(md) {
   });
 }
 
+// The sidebar, in the order of the docs index. test/docs-site.test.js
+// checks that it names every page in docs/ and no other.
 const guides = [
   { text: "Writers: start here", link: "/writers-start-here" },
   { text: "Getting started", link: "/getting-started" },
@@ -106,8 +166,11 @@ export default withMermaid(defineConfig({
   lastUpdated: true,
   head: [["link", { rel: "icon", href: "https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/logo.png" }]],
   markdown: {
+    anchor: { slugify: githubSlug },
     config: githubMarkdown
   },
+  // A diagram's links and labels cannot run script.
+  mermaid: { securityLevel: "strict" },
   // The pages live outside this folder, so the modules a compiled page
   // imports resolve from this folder's node_modules.
   vite: {

@@ -665,12 +665,13 @@ node skills/story-maintenance/scripts/story.js --help
 
 `docs-site.yml` builds the pages in `docs/` into the [documentation website](https://danjdewhurst.github.io/story-skills/) with [VitePress](https://vitepress.dev/) and publishes it to GitHub Pages on each push to `main` that changes `docs/` or `site/`. A pull request that changes them runs the build only, so a page VitePress cannot compile fails the pull request.
 
-The pages are the files in `docs/`, read as they are, so they keep working on GitHub and in the npm package. `site/.vitepress/config.mjs` makes plain GitHub markdown safe for VitePress, which compiles each page as a Vue template:
+The pages are the files in `docs/`, read as they are, so they keep working on GitHub and in the npm package. VitePress compiles each page as a Vue template, so `site/.vitepress/config.mjs` makes plain GitHub markdown build, link, and stay inert there:
 
-- Inline code is printed as written, so `${{ inputs.name }}` is not a Vue interpolation.
-- A tag-like word in prose that is not an HTML element, such as `<id>`, is shown as text, as on GitHub.
-- A link or image that leaves `docs/`, such as `../examples/the-last-ember/` or `../CHANGELOG.md`, points at the file on GitHub.
-- `docs/README.md` is the home page, and the build fails on a link to a page that does not exist.
+- Inline code and `{{` in prose are printed as written, so `${{ inputs.name }}` is not a Vue interpolation.
+- Raw HTML keeps only the elements and attributes GitHub would show. A tag-like word such as `<id>` is text, and so is a `<script>` or `<iframe>`. Event handlers, styles, Vue directives, and `javascript:` URLs are dropped. Mermaid diagrams render with `securityLevel: "strict"`.
+- Heading ids follow GitHub's rules, so an anchor such as `#previewing-changes-with---dry-run` works on both.
+- A link or image that leaves `docs/`, such as `../examples/the-last-ember/` or `../CHANGELOG.md`, points at the file on GitHub, and a link to `README.md` points at the home page, which `docs/README.md` becomes.
+- The build fails on a link in a page to a page that does not exist. It does not check anchors, or the sidebar and nav, so `test/docs-site.test.js` checks that the sidebar names every page in `docs/` once and that each nav link names a page.
 
 To preview the site, install its own dependencies and start the dev server:
 
@@ -680,7 +681,9 @@ npm ci
 npm run dev
 ```
 
-`npm run build` writes the site to `site/.vitepress/dist/`. When you add a page to `docs/`, add it to the sidebar in `site/.vitepress/config.mjs` too.
+`npm run build` writes the site to `site/.vitepress/dist/`. When you add a page to `docs/`, add it to the sidebar in `site/.vitepress/config.mjs` too; `test/docs-site.test.js` fails until you do. The dev server serves files from the repository to anything that can reach it, so keep it on `localhost`, its default.
+
+The site's dependencies run only in this workflow. `npm ci --ignore-scripts` runs no install scripts, Dependabot proposes a version only once it is a week old, and the publish workflow downloads Bun fresh (`no-cache: true`) rather than trusting an Actions cache this workflow could write.
 
 ## Contributing changes
 
