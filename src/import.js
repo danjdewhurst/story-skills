@@ -8,6 +8,7 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
+import { docxMarkdown } from "./docx.js";
 import { MAX_READ_BYTES, currentText, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { mirrorFolderNames } from "./preview.js";
@@ -115,7 +116,12 @@ function unitNumeral(words) {
 }
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
+// A Word document holds its images too, so it may be larger than a text
+// file; only its text parts are read, each under its own limit (docx.js).
+const MAX_IMPORT_DOCX_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORT_FILES = 500;
+const IMPORT_FILE = /\.(?:md|markdown|txt|docx)$/i;
+const DOCX_FILE = /\.docx$/i;
 
 function rejectSymlinkedSource(filePath) {
   if (fs.lstatSync(filePath).isSymbolicLink()) {
@@ -123,10 +129,15 @@ function rejectSymlinkedSource(filePath) {
   }
 }
 
+function importFileLimit(filePath) {
+  return DOCX_FILE.test(filePath) ? MAX_IMPORT_DOCX_BYTES : MAX_IMPORT_FILE_BYTES;
+}
+
 function assertImportFileSize(filePath) {
   const size = fs.statSync(filePath).size;
-  if (size > MAX_IMPORT_FILE_BYTES) {
-    throw usageError('Refusing to import oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + MAX_IMPORT_FILE_BYTES + ' byte limit');
+  const limit = importFileLimit(filePath);
+  if (size > limit) {
+    throw usageError('Refusing to import oversized file ' + filePath + ': ' + size + ' bytes exceeds the ' + limit + ' byte limit');
   }
 }
 
@@ -502,12 +513,28 @@ function addCandidate(counts, name) {
 }
 
 // Reads a source file as UTF-8 text without its byte-order mark. A zip
-// (such as .docx), a binary file, or text in another encoding is refused, so
-// no character is silently replaced. readSourceDocuments has already
-// refused a symlink or an oversized file; the read refuses one swapped in
-// since.
+// under another extension, a binary file, or text in another encoding is
+// refused, so no character is silently replaced. readSourceDocuments has
+// already refused a symlink or an oversized file; the read refuses one
+// swapped in since.
 function readSourceText(filePath) {
   return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+}
+
+// One source file as a document: a Word document is read as markdown, with
+// notes about what it left out.
+function readSourceDocument(name, filePath) {
+  if (!DOCX_FILE.test(name)) {
+    return { name, path: filePath, text: readSourceText(filePath) };
+  }
+  const bytes = readFileBytes(filePath, MAX_IMPORT_DOCX_BYTES);
+  let converted;
+  try {
+    converted = docxMarkdown(bytes);
+  } catch (error) {
+    throw usageError(`Cannot import ${filePath}: ${error.message}`);
+  }
+  return { name, path: filePath, text: converted.text, notes: converted.notes };
 }
 
 // The source is an argument, so a source that cannot be read (permission
@@ -524,7 +551,7 @@ function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [{ name: path.basename(source), path: source, text: readSourceText(source) }];
+    return [readSourceDocument(path.basename(source), source)];
   }
 
   const names = [];
@@ -541,14 +568,14 @@ function readSourceDocuments(source, rules) {
       } catch {
         targetIsDocument = false;
       }
-      if (targetIsDocument && /\.(md|markdown|txt)$/i.test(entry.name)) {
+      if (targetIsDocument && IMPORT_FILE.test(entry.name)) {
         rejectSymlinkedSource(fullPath);
       }
       continue;
     }
     // Hidden files, macOS AppleDouble files (._name), and Word lock files
     // (~$name) are copies or droppings, not chapters.
-    if (entry.isFile() && /\.(md|markdown|txt)$/i.test(entry.name) && !/^(?:\.|~\$)/.test(entry.name)) {
+    if (entry.isFile() && IMPORT_FILE.test(entry.name) && !/^(?:\.|~\$)/.test(entry.name)) {
       names.push(entry.name);
     }
   }
@@ -559,11 +586,11 @@ function readSourceDocuments(source, rules) {
   const documents = names.map((name) => {
     const fullPath = path.join(source, name);
     assertImportFileSize(fullPath);
-    return { name, path: fullPath, text: readSourceText(fullPath) };
+    return readSourceDocument(name, fullPath);
   });
 
   if (documents.length === 0) {
-    throw usageError(`No markdown or text files found in ${source}`);
+    throw usageError(`No markdown, text, or Word files found in ${source}`);
   }
 
   return documents;
@@ -609,6 +636,9 @@ function splitChapters(documents, warnings, rules, bylines) {
   const chapters = [];
 
   for (const document of documents) {
+    for (const note of document.notes ?? []) {
+      warnings.push({ ...warn("docx-content-left-out", `${shownText(document.name)}: ${note.message}`), source: document.path });
+    }
     // A bare CR (classic Mac OS) ends a line too.
     const source = document.text.replace(/\r\n?/g, "\n");
     const own = storySkillsChapter(source);

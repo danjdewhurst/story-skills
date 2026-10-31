@@ -193,7 +193,7 @@ export const COMMANDS = [
   {
     name: "import",
     usage: "import <source|->",
-    summary: ["Split an existing manuscript into a new story project;", "- reads the manuscript from stdin"],
+    summary: ["Split an existing manuscript (markdown, text, or", ".docx) into a new story project; - reads the", "manuscript from stdin"],
     project: "none",
     args: 1,
     options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "bylines", "force", ...WRITE_OPTIONS],

@@ -110,7 +110,7 @@ describe("manuscript import", () => {
 
     const emptyDir = path.join(cwd, "empty");
     fs.mkdirSync(emptyDir);
-    expect(() => importManuscript({ cwd, source: "empty", title: "X" })).toThrow("No markdown or text files found");
+    expect(() => importManuscript({ cwd, source: "empty", title: "X" })).toThrow("No markdown, text, or Word files found");
 
     fs.writeFileSync(path.join(cwd, "blank.md"), "---\ntitle: Blank\n---\n", "utf8");
     expect(() => importManuscript({ cwd, source: "blank.md", title: "X" })).toThrow("No chapter content found in import source");
@@ -1105,10 +1105,10 @@ describe("entity candidates (#149)", () => {
 });
 
 describe("non-text sources (#150)", () => {
-  test("a zip file such as .docx is refused", () => {
+  test("a zip file under another name than .docx, such as .odt, is refused", () => {
     const cwd = makeTempDir();
-    fs.writeFileSync(path.join(cwd, "book.docx"), Buffer.from("PK\x03\x04garbage", "latin1"));
-    expect(() => importManuscript({ source: "book.docx", title: "Docx", cwd })).toThrow("zip archive");
+    fs.writeFileSync(path.join(cwd, "book.odt"), Buffer.from("PK\x03\x04garbage", "latin1"));
+    expect(() => importManuscript({ source: "book.odt", title: "Docx", cwd })).toThrow("zip archive");
     expect(fs.existsSync(path.join(cwd, "docx"))).toBe(false);
   });
 

@@ -227,7 +227,7 @@ story import draft.md --title "The Lost Coast" --genre mystery
 story import brouillon.md --title "La Côte perdue" --language fr
 ```
 
-It splits the manuscript on chapter headings, or imports a folder of chapter files, and builds the full project with word counts and registries. [Import, export, and builds](docs/manuscripts.md#import-an-existing-manuscript) covers the options, including `--force`.
+It reads markdown, plain text, or a Word `.docx`. It splits the manuscript on chapter headings, or imports a folder of chapter files, and builds the full project with word counts and registries. [Import, export, and builds](docs/manuscripts.md#import-an-existing-manuscript) covers the options, including `--force`.
 
 ## How it works
 
