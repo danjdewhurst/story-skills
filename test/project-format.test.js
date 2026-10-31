@@ -18,7 +18,13 @@ import { WRITING_MODES } from "../src/typesetting.js";
 // values against.
 const repoRoot = path.join(import.meta.dir, "..");
 const formatDoc = fs.readFileSync(path.join(repoRoot, "docs", "project-format.md"), "utf8");
-const validateSource = fs.readFileSync(path.join(repoRoot, "src", "validate.js"), "utf8");
+// The validate modules (src/validate.js and src/validate-*.js), in name
+// order, as one text.
+const validateSource = fs.readdirSync(path.join(repoRoot, "src"))
+  .filter((name) => name.startsWith("validate") && name.endsWith(".js"))
+  .sort()
+  .map((name) => fs.readFileSync(path.join(repoRoot, "src", name), "utf8"))
+  .join("\n");
 
 const CONSTANTS = {
   ...scan,
@@ -39,9 +45,9 @@ const CONSTANTS = {
 };
 
 // Each row of the Allowed values table, by its Field cell, and the lists
-// whose values it gives. The rows validate.js does not check (build-style,
-// severity, calendar, and revision passes) are checked in build-style.js,
-// config.js, calendar.js, and passes.js.
+// whose values it gives. The rows the validate modules do not check
+// (build-style, severity, calendar, and revision passes) are checked in
+// build-style.js, config.js, calendar.js, and passes.js.
 const ALLOWED = {
   "Story `status`": ["STORY_STATUSES"],
   "Story `tense`": ["STORY_TENSES"],
@@ -85,8 +91,8 @@ const ALLOWED = {
   "Style sheet `dialect`": ["STYLE_DIALECTS"]
 };
 
-// The kind each validate.js function checks, as the Allowed values table
-// names it, and the heading of that kind's field table.
+// The kind each function in the validate modules checks, as the Allowed
+// values table names it, and the heading of that kind's field table.
 const KINDS = {
   validateStoryFrontmatter: "story",
   validateDailyTarget: "story",
@@ -135,7 +141,7 @@ const OTHER_CHECKS = {
   validateReleaseCadence: null
 };
 
-// Every value check in validate.js, as { kind, field, list }: each
+// Every value check in the validate modules, as { kind, field, list }: each
 // validateEnum call, each PROGRESSION_RULES enum, and each unsupported-value
 // error raised after a `!LIST.has(value)` test.
 function enumChecks() {
