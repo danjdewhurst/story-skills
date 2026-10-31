@@ -212,13 +212,16 @@ A source file whose name ends in `.docx` is read as a Word document, and so is e
 story import draft.docx --title "The Salt Road"
 ```
 
-- A paragraph in a heading style (`Heading 1` to `Heading 6`, in any language Word uses) or with an outline level becomes a markdown heading of that level, and the `Title` style becomes a level 1 heading. So use Word's heading styles for chapter titles, or type `Chapter 1` on a line of its own.
+- A paragraph in a heading style (`Heading 1` to `Heading 6`, in any language Word uses) or with an outline level becomes a markdown heading of that level, and the `Title` style becomes a level 1 heading. An outline level of `Body Text` is not a heading.
+- A plain paragraph that is only a chapter line, such as `Chapter 1`, `CHAPTER ONE: The Arrival`, or `Prologue`, becomes a heading too, bold or not, and so does `Chapter 1` with a line break and its title in the same paragraph (`Chapter 1: The Arrival`).
+- A heading splits the book only when its text is a chapter heading, as in any manuscript (see [How chapters are split](#how-chapters-are-split)). A heading with only a title, such as `The Arrival`, does not split, and a chapter number that Word's list numbering adds is not in the text, so type the number into the heading, such as `Chapter 1: The Arrival`.
 - Italic and bold, set directly or by a character style such as `Emphasis`, become `*italic*` and `**bold**`. A heading's own bold or italic is left out.
 - A paragraph in the `Quote` style becomes a block quote, a line break inside a paragraph becomes a hard line break, and a page break inside a paragraph splits it in two.
 - A paragraph that is only a scene break, such as `* * *` or a lone `#`, stays a scene break. Characters that markdown would read as markup, such as `*` and `_` in the prose or a `#` at the start of a paragraph, are escaped, so they print as written.
-- Tracked changes are read as if every change were accepted. Comments, footnotes and endnotes, images, and text in text boxes are left out, and table cells are read as plain paragraphs. For each of these, import warns with the `docx-content-left-out` code and names the document, so accept or reject the changes, and move anything you need into the text, before you import.
+- A table of contents, an index, the placeholder text of an empty content control (such as `Click here to enter text.`), and hidden text are left out, and so are ruby (furigana) readings, which keep their base text.
+- Tracked changes are read as if every change were accepted. Comments, footnotes and endnotes, images, text in text boxes, list numbering, and ruby readings are left out, and table cells are read as plain paragraphs. For each of these, import warns with the `docx-content-left-out` code and names the document, so accept or reject the changes, and move anything you need into the text, before you import.
 
-Only the document's text and styles are read, each up to 64 MB unpacked, from a file of up to 64 MB. A password-protected, damaged, or ZIP64 document is refused.
+A folder import reads every `.docx` file in the folder as a chapter file, so move notes and synopses saved as Word documents out of the folder first. Only the document's text and styles are read, each up to 32 MB unpacked, from a file of up to 64 MB, and the text must come to no more than 5 MB as markdown, as a text source must. A password-protected, damaged, or ZIP64 document is refused, and so is one with two zip entries of the same name.
 
 ### Importing from stdin
 

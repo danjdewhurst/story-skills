@@ -3,9 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 import { runCli } from "../src/cli.js";
+import { spawnSync } from "node:child_process";
 import { docxMarkdown, MAX_DOCX_PART_BYTES } from "../src/docx.js";
+import { scanComments } from "../src/markdown.js";
 import { crc32, writeZip } from "../src/packaging.js";
-import { makeTempDir, memoryIo } from "./helpers.js";
+import { expectLinearGrowth, makeTempDir, memoryIo, NODE_ON_PATH } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"';
@@ -246,9 +248,16 @@ describe("docxMarkdown on hand-made zips", () => {
     expect(docxMarkdown(rawZip([{ name: "word/document.xml", content: xml }])).text).toBe("Fish & \\<chips>\n");
   });
 
-  test("ends quietly at an unclosed comment", () => {
-    const xml = `<w:document ${W}><w:body><w:p><w:r><w:t>Before</w:t></w:r></w:p><!-- never closed`;
-    expect(docxMarkdown(rawZip([{ name: "word/document.xml", content: xml }])).text).toBe("Before\n");
+  test("refuses a part cut short or with tags that do not match", () => {
+    const before = `<w:document ${W}><w:body><w:p><w:r><w:t>Before</w:t></w:r></w:p>`;
+    for (const xml of [`${before}<!-- never closed`, `${before}</w:body>`, `${before}</w:r></w:body></w:document>`]) {
+      expect(() => docxMarkdown(rawZip([{ name: "word/document.xml", content: xml }]))).toThrow("its XML is damaged");
+    }
+  });
+
+  test("refuses a part that is not valid UTF-8", () => {
+    const xml = Buffer.concat([Buffer.from(`<w:document ${W}><w:body><w:p><w:r><w:t>caf`), Buffer.from([0xe9]), Buffer.from("</w:t></w:r></w:p></w:body></w:document>")]);
+    expect(() => docxMarkdown(rawZip([{ name: "word/document.xml", content: xml }]))).toThrow("word/document.xml is not valid UTF-8 text");
   });
 
   test("notes a deleted paragraph mark as a tracked change", () => {
@@ -288,7 +297,7 @@ describe("story import of a .docx", () => {
       const chapters = fs.readdirSync(path.join(repoRoot, "examples", example, "chapters")).filter((name) => /^chapter-\d+\.md$/.test(name)).sort();
       expect(fs.readdirSync(path.join(dir, "book", "chapters")).filter((name) => /^chapter-\d+\.md$/.test(name)).sort()).toEqual(chapters);
       for (const name of chapters) {
-        const original = chapterText(path.join(repoRoot, "examples", example, "chapters", name)).replace(/<!--[\s\S]*?-->/g, "").replace(/\s+/g, " ").trim();
+        const original = scanComments(chapterText(path.join(repoRoot, "examples", example, "chapters", name))).text.replace(/\s+/g, " ").trim();
         expect({ example, name, text: chapterText(path.join(dir, "book", "chapters", name)).replace(/\s+/g, " ") }).toEqual({ example, name, text: original });
       }
     }
@@ -331,6 +340,162 @@ describe("story import of a .docx", () => {
     docxFile(path.join(dir, "draft.txt"), paragraph(run("Text.")));
     const result = importCli(dir, "draft.txt", "--title", "Zip", "--dir", "zip");
     expect(result.code).toBe(2);
-    expect(result.err).toContain("story import reads a Word document saved as a .docx file");
+    expect(result.err).toContain("story import reads a Word document only from a file whose name ends in .docx");
+  });
+});
+
+describe("docxMarkdown after review", () => {
+  const chapterLine = (text) => (/^Chapter \d+$/.test(text) ? { bare: true } : /^Chapter \d+: /.test(text) ? { bare: false } : null);
+  const markdown = (body, options) => docxMarkdown(docxBytes(body, options), { chapterLine });
+
+  test("turns a chapter line in a plain paragraph, bold or not, into a heading", () => {
+    const body = paragraph(run("Chapter 1: Ticket", "<w:b/>"), '<w:jc w:val="center"/>')
+      + paragraph(run("Chapter 2"))
+      + paragraph(`<w:r><w:t>Chapter 3</w:t><w:br/><w:t>The Arrival</w:t></w:r>`)
+      + paragraph(`<w:r><w:t>Chapter 4: Late</w:t><w:br/><w:t>Too late</w:t></w:r>`)
+      + paragraph(run("Chapter 5 was the worst.", "<w:b/>"));
+    expect(markdown(body).text).toBe(["# Chapter 1: Ticket", "# Chapter 2", "# Chapter 3: The Arrival", "Chapter 4: Late\\\nToo late", "**Chapter 5 was the worst.**"].join("\n\n") + "\n");
+  });
+
+  test("leaves out a table of contents, a placeholder, hidden text, and ruby readings", () => {
+    const tocStyles = STYLES.replace("</w:styles>", '<w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="berschrift1"/><w:pPr><w:outlineLvl w:val="9"/></w:pPr></w:style></w:styles>');
+    const body = [
+      `<w:sdt><w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/></w:docPartObj></w:sdtPr><w:sdtContent>${paragraph(run("Contents"), '<w:pStyle w:val="TOCHeading"/>')}${paragraph(run("Chapter 1: Arrival 1"))}</w:sdtContent></w:sdt>`,
+      paragraph(run("Contents"), '<w:pStyle w:val="TOCHeading"/>'),
+      paragraph(`<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-3" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run("Chapter 1: Arrival")}<w:r><w:tab/></w:r>${run("1")}`),
+      paragraph(`${run("Chapter 2: Departure")}<w:r><w:tab/></w:r>${run("9")}<w:r><w:fldChar w:fldCharType="end"/></w:r>`),
+      paragraph(`<w:fldSimple w:instr=" INDEX "><w:r><w:t>Index entry</w:t></w:r></w:fldSimple>${run("Kept")}`),
+      paragraph(`<w:sdt><w:sdtPr><w:showingPlcHdr/></w:sdtPr><w:sdtContent>${run("Click here to enter text.")}</w:sdtContent></w:sdt>${run("Visible")}${run(" secret", "<w:vanish/>")}`),
+      paragraph(`<w:r><w:ruby><w:rubyPr/><w:rt><w:r><w:t>かんじ</w:t></w:r></w:rt><w:rubyBase><w:r><w:t>漢字</w:t></w:r></w:rubyBase></w:ruby></w:r>${run("を読む")}`),
+      paragraph(run("Body text"), '<w:pStyle w:val="berschrift1"/><w:outlineLvl w:val="9"/>')
+    ].join("");
+    const { text, notes } = markdown(body, { styles: tocStyles });
+    // The TOC Heading and the demoted paragraph keep their style's bold and
+    // italic, as body text in that style would.
+    expect(text).toBe(["***Contents***", "Kept", "Visible", "漢字を読む", "***Body text***"].join("\n\n") + "\n");
+    expect(notes.map((note) => note.code)).toEqual(["ruby"]);
+  });
+
+  test("notes list numbering, and insert-only and moved tracked changes", () => {
+    const body = paragraph(run("First item"), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>')
+      + paragraph(`<w:ins w:id="1"><w:r><w:t>Inserted</w:t></w:r></w:ins>`)
+      + paragraph(`<w:moveFrom w:id="2"><w:r><w:t>Moved away</w:t></w:r></w:moveFrom>`)
+      + paragraph(`<w:moveTo w:id="3"><w:r><w:t>Moved here</w:t></w:r></w:moveTo>`);
+    const { text, notes } = markdown(body);
+    expect(text).toBe(["First item", "Inserted", "Moved here"].join("\n\n") + "\n");
+    expect(notes.map((note) => note.code).sort()).toEqual(["numbering", "tracked-changes"]);
+  });
+
+  test("keeps only the chosen copy of alternate content", () => {
+    const body = paragraph(`<mc:AlternateContent><mc:Choice Requires="w14">${run("Chosen")}</mc:Choice><mc:Fallback>${run("Fallback")}</mc:Fallback></mc:AlternateContent>`);
+    expect(markdown(body).text).toBe("Chosen\n");
+  });
+
+  test("cleans the document's text so it cannot add markdown lines", () => {
+    const body = paragraph(run("First.&#13;# Chapter 2&#10;---&#0;end\u0007"))
+      + paragraph(run("A &constructor; &toString; B"))
+      + paragraph(run("She wrote &lt;!-- not a comment --&gt; and `code`."));
+    expect(markdown(body).text).toBe(["First. # Chapter 2 ---end", "A &constructor; &toString; B", "She wrote \\<\\!-- not a comment --> and \\`code\\`."].join("\n\n") + "\n");
+  });
+
+  test("keeps a no-break space at the edge of an emphasised run outside its markers", () => {
+    const body = paragraph(`${run("Quoi")}${run(" ?", "")}${run("Oui ", "<w:i/>")}${run("»")}`);
+    expect(markdown(body).text).toBe("Quoi ?*Oui* »\n");
+  });
+
+  test("refuses two zip entries with one name", () => {
+    const zip = rawZip([{ name: "word/document.xml", content: documentXml(paragraph(run("One"))) }, { name: "word/document.xml", content: documentXml(paragraph(run("Two"))) }]);
+    expect(() => docxMarkdown(zip)).toThrow("two zip entries named word/document.xml");
+  });
+
+  test("stops a part that inflates past the part limit", () => {
+    const content = Buffer.alloc(MAX_DOCX_PART_BYTES + 1024);
+    const zip = rawZip([{ name: "word/document.xml", content: Buffer.alloc(0), method: 8, data: zlib.deflateRawSync(content), size: 10 }]);
+    expect(() => docxMarkdown(zip)).toThrow("inflates past");
+  });
+
+  test("resolves a long chain of styles in linear time", () => {
+    const make = (size) => {
+      const chain = Array.from({ length: size }, (_, index) => `<w:style w:type="paragraph" w:styleId="s${index}"><w:name w:val="Style ${index}"/>${index + 1 < size ? `<w:basedOn w:val="s${index + 1}"/>` : ""}</w:style>`).join("");
+      const body = Array.from({ length: size }, () => paragraph(run("Text"), '<w:pStyle w:val="s0"/>')).join("");
+      return docxBytes(body, { styles: `<w:styles ${W}>${chain}</w:styles>` });
+    };
+    expectLinearGrowth((bytes) => docxMarkdown(bytes).text.length, make, 4000);
+  });
+});
+
+describe("story import of a .docx after review", () => {
+  test("splits the CLI's own Shunn DOCX back into its chapters", () => {
+    const dir = makeTempDir();
+    const example = path.join(repoRoot, "examples", "the-left-luggage-office");
+    expect(runCli(["build", example, "--format", "docx", "--shunn", "--out", path.join(dir, "shunn.docx")], memoryIo(dir))).toBe(0);
+    expect(importCli(dir, "shunn.docx", "--title", "Shunn", "--dir", "book").code).toBe(0);
+    const titles = fs.readdirSync(path.join(dir, "book", "chapters")).filter((name) => /^chapter-\d+\.md$/.test(name)).sort()
+      .map((name) => fs.readFileSync(path.join(dir, "book", "chapters", name), "utf8").match(/^title: (.*)$/m)[1]);
+    expect(titles).toEqual(["Opening", "Ticket 4471", "The Other Half", "Closing Time"].map((title, index) => (index === 0 ? title : expect.any(String))));
+    expect(titles.length).toBe(4);
+  });
+
+  test("refuses a .docx over the file limit, and imports a large one with images", () => {
+    const dir = makeTempDir();
+    const big = path.join(dir, "big.docx");
+    fs.writeFileSync(big, "");
+    fs.truncateSync(big, 64 * 1024 * 1024 + 1);
+    const refused = importCli(dir, "big.docx", "--title", "Big", "--dir", "big");
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("exceeds the 67108864 byte limit");
+    docxFile(path.join(dir, "pictures.docx"), paragraph(run("Chapter 1")) + paragraph(run("A picture follows.")), { entries: [{ name: "word/media/image1.png", content: Buffer.alloc(6 * 1024 * 1024, 7), stored: true }] });
+    expect(fs.statSync(path.join(dir, "pictures.docx")).size).toBeGreaterThan(5 * 1024 * 1024);
+    expect(importCli(dir, "pictures.docx", "--title", "Pictures", "--dir", "pictures").code).toBe(0);
+  });
+
+  test("refuses a document whose text is over the text file limit as markdown", () => {
+    const dir = makeTempDir();
+    const words = "word ".repeat(1200000);
+    docxFile(path.join(dir, "long.docx"), paragraph(run(words)));
+    const result = importCli(dir, "long.docx", "--title", "Long", "--dir", "long");
+    expect(result.code).toBe(2);
+    expect(result.err).toContain("over the 5242880 byte limit; split it into several documents");
+  });
+
+  test("splits on a Prologue paragraph and on a bare chapter line with its title on the next line", () => {
+    const dir = makeTempDir();
+    docxFile(path.join(dir, "draft.docx"), paragraph(run("Prologue", "<w:b/>")) + paragraph(run("Before it all.")) + paragraph(`<w:r><w:t>Chapter 1</w:t><w:br/><w:t>The Arrival</w:t></w:r>`) + paragraph(run("She came by train.")) + paragraph(run("Epilogue: After")) + paragraph(run("Later.")));
+    expect(importCli(dir, "draft.docx", "--title", "Split", "--dir", "split").code).toBe(0);
+    const chapters = fs.readdirSync(path.join(dir, "split", "chapters")).filter((name) => /^chapter-\d+\.md$/.test(name)).sort();
+    const titles = chapters.map((name) => fs.readFileSync(path.join(dir, "split", "chapters", name), "utf8").match(/^title: (.*)$/m)[1]);
+    // A section heading keeps its whole text as its title, as in any manuscript.
+    expect(titles).toEqual(["Prologue", "The Arrival", '"Epilogue: After"']);
+    expect(chapterText(path.join(dir, "split", "chapters", chapters[1]))).toBe("She came by train.");
+  });
+
+  test.skipIf(!NODE_ON_PATH)("the Node fallback imports a .docx as Bun does", () => {
+    const dir = makeTempDir();
+    docxFile(path.join(dir, "draft.docx"), paragraph(run("Chapter 1: Arrival", "<w:b/>")) + paragraph(`${run("She came by the ")}${run("night", "<w:i/>")}${run(" train.")}`));
+    const fallback = path.join(repoRoot, "skills", "story-maintenance", "scripts", "story.js");
+    const result = spawnSync("node", [fallback, "import", "draft.docx", "--title", "Trains", "--dir", "node"], { cwd: dir, encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(importCli(dir, "draft.docx", "--title", "Trains", "--dir", "bun").code).toBe(0);
+    const chapter = (folder) => fs.readFileSync(path.join(dir, folder, "chapters", "chapter-01.md"), "utf8");
+    expect(chapter("node")).toBe(chapter("bun"));
+    expect(chapterText(path.join(dir, "node", "chapters", "chapter-01.md"))).toBe("She came by the *night* train.");
+  });
+});
+
+describe("docxMarkdown after the bot review", () => {
+  test("reads a paragraph with no style in the default paragraph style", () => {
+    const styles = `<w:styles ${W}><w:style w:type="character" w:default="1" w:styleId="Char"><w:name w:val="Default Paragraph Font"/></w:style><w:style w:type="paragraph" w:default="1" w:styleId="Verse"><w:name w:val="Normal"/><w:rPr><w:i/></w:rPr></w:style></w:styles>`;
+    expect(docxMarkdown(docxBytes(paragraph(run("Sung")) + paragraph(run("Said", '<w:i w:val="0"/>')), { styles })).text).toBe("*Sung*\n\nSaid\n");
+  });
+
+  test("joins a paragraph whose mark is a tracked deletion to the next", () => {
+    const body = paragraph(run("The first half"), '<w:rPr><w:del w:id="1" w:author="Ed"/></w:rPr>') + paragraph(run(" and the second.")) + paragraph(run("Last, joined to nothing"), '<w:rPr><w:del w:id="2" w:author="Ed"/></w:rPr>');
+    const { text, notes } = docxMarkdown(docxBytes(body));
+    expect(text).toBe("The first half and the second.\n\nLast, joined to nothing\n");
+    expect(notes.map((note) => note.code)).toEqual(["tracked-changes"]);
+  });
+
+  test("keeps backslashed markers as prose, not a scene break", () => {
+    expect(docxMarkdown(docxBytes(paragraph(run("\\* \\* \\*")))).text).toBe("\\\\\\* \\\\\\* \\\\\\*\n");
   });
 });
