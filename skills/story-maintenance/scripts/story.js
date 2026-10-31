@@ -21476,22 +21476,30 @@ import path37 from "node:path";
 
 // src/docx.js
 import zlib from "node:zlib";
-var MAX_DOCX_PART_BYTES = 64 * 1024 * 1024;
+var MAX_DOCX_PART_BYTES = 32 * 1024 * 1024;
 var MAX_ZIP_ENTRIES = 1e4;
+var MAX_STYLE_DEPTH = 64;
 var EOCD_SIGNATURE = 101010256;
 var CENTRAL_SIGNATURE = 33639248;
 var LOCAL_SIGNATURE = 67324752;
 var ZIP64_MARK = 4294967295;
 var DOCUMENT_PART = "word/document.xml";
 var STYLES_PART = "word/styles.xml";
-function docxMarkdown(bytes) {
+
+class DocxError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "DocxError";
+  }
+}
+function docxMarkdown(bytes, { chapterLine = () => null } = {}) {
   const entries = zipEntries(bytes);
   const document = entries.get(DOCUMENT_PART);
   if (document === undefined) {
-    throw new Error(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
+    throw new DocxError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
   }
-  const styles = entries.has(STYLES_PART) ? readStyles(xmlText(bytes, entries.get(STYLES_PART))) : new Map;
-  return documentMarkdown(xmlText(bytes, document), styles);
+  const styles = entries.has(STYLES_PART) ? readStyles(xmlText(bytes, entries.get(STYLES_PART))) : { paragraph: () => EMPTY_STYLE, character: () => EMPTY_STYLE };
+  return documentMarkdown(xmlText(bytes, document), styles, chapterLine);
 }
 function zipEntries(bytes) {
   const end = findEndOfCentralDirectory(bytes);
@@ -21499,25 +21507,28 @@ function zipEntries(bytes) {
   const size = bytes.readUInt32LE(end + 12);
   const offset = bytes.readUInt32LE(end + 16);
   if (count === 65535 || size === ZIP64_MARK || offset === ZIP64_MARK) {
-    throw new Error("it is a ZIP64 archive, which import does not read; save it again from Word");
+    throw new DocxError("it is a ZIP64 archive, which import does not read; save it again from Word");
   }
   if (count > MAX_ZIP_ENTRIES) {
-    throw new Error(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
+    throw new DocxError(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
   }
   if (offset + size > end) {
-    throw new Error("its zip directory is damaged");
+    throw new DocxError("its zip directory is damaged");
   }
   const entries = new Map;
   let position = offset;
   for (let index = 0;index < count; index += 1) {
     if (position + 46 > end || bytes.readUInt32LE(position) !== CENTRAL_SIGNATURE) {
-      throw new Error("its zip directory is damaged");
+      throw new DocxError("its zip directory is damaged");
     }
     const flags = bytes.readUInt16LE(position + 8);
     const nameLength = bytes.readUInt16LE(position + 28);
     const extraLength = bytes.readUInt16LE(position + 30);
     const commentLength = bytes.readUInt16LE(position + 32);
     const name = bytes.toString("utf8", position + 46, position + 46 + nameLength);
+    if (entries.has(name)) {
+      throw new DocxError(`it has two zip entries named ${name}`);
+    }
     entries.set(name, {
       name,
       encrypted: (flags & 1) === 1,
@@ -21538,26 +21549,26 @@ function findEndOfCentralDirectory(bytes) {
       return position;
     }
   }
-  throw new Error("it is not a readable zip file, so it is not a .docx; save it again from Word, or export it to markdown");
+  throw new DocxError("it is not a readable zip file, so it is not a .docx; save it again from Word, or export it to markdown");
 }
 function xmlText(bytes, entry) {
   if (entry.encrypted) {
-    throw new Error("it is password-protected; remove the password in Word and save it again");
+    throw new DocxError("it is password-protected; remove the password in Word and save it again");
   }
   if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new Error("it is a ZIP64 archive, which import does not read; save it again from Word");
+    throw new DocxError("it is a ZIP64 archive, which import does not read; save it again from Word");
   }
   if (entry.size > MAX_DOCX_PART_BYTES) {
-    throw new Error(`${entry.name} is ${entry.size} bytes, over the ${MAX_DOCX_PART_BYTES} byte limit`);
+    throw new DocxError(`${entry.name} is ${entry.size} bytes, over the ${MAX_DOCX_PART_BYTES} byte limit`);
   }
   const local = entry.localOffset;
   if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== LOCAL_SIGNATURE) {
-    throw new Error(`its zip entry ${entry.name} is damaged`);
+    throw new DocxError(`its zip entry ${entry.name} is damaged`);
   }
   const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
   const data = bytes.subarray(start, start + entry.compressedSize);
   if (data.length !== entry.compressedSize) {
-    throw new Error(`its zip entry ${entry.name} is cut short`);
+    throw new DocxError(`its zip entry ${entry.name} is cut short`);
   }
   let content;
   if (entry.method === 0) {
@@ -21566,26 +21577,46 @@ function xmlText(bytes, entry) {
     try {
       content = zlib.inflateRawSync(data, { maxOutputLength: MAX_DOCX_PART_BYTES });
     } catch {
-      throw new Error(`its zip entry ${entry.name} cannot be inflated, or inflates past the ${MAX_DOCX_PART_BYTES} byte limit`);
+      throw new DocxError(`its zip entry ${entry.name} cannot be inflated, or inflates past the ${MAX_DOCX_PART_BYTES} byte limit`);
     }
   } else {
-    throw new Error(`its zip entry ${entry.name} uses compression method ${entry.method}, which import does not read`);
+    throw new DocxError(`its zip entry ${entry.name} uses compression method ${entry.method}, which import does not read`);
   }
   if (content.length !== entry.size || crc32(content) !== entry.crc) {
-    throw new Error(`its zip entry ${entry.name} is damaged`);
+    throw new DocxError(`its zip entry ${entry.name} is damaged`);
   }
-  let text = content.toString("utf8");
+  let text;
+  try {
+    text = UTF82.decode(content);
+  } catch {
+    throw new DocxError(`${entry.name} is not valid UTF-8 text`);
+  }
   if (text.charCodeAt(0) === 65279) {
     text = text.slice(1);
   }
   if (/<!DOCTYPE/i.test(text)) {
-    throw new Error(`${entry.name} has a document type declaration, which a Word document never has`);
+    throw new DocxError(`${entry.name} has a document type declaration, which a Word document never has`);
   }
   return text;
 }
+var UTF82 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 var TAG = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
 var ATTRIBUTE2 = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 function* xmlTokens(text) {
+  const open = [];
+  for (const token of rawTokens(text)) {
+    if (token.type === "start") {
+      open.push(token.name);
+    } else if (token.type === "end" && open.pop() !== token.name) {
+      throw new DocxError("its XML is damaged");
+    }
+    yield token;
+  }
+  if (open.length > 0) {
+    throw new DocxError("its XML is damaged");
+  }
+}
+function* rawTokens(text) {
   let position = 0;
   while (position < text.length) {
     const open = text.indexOf("<", position);
@@ -21600,7 +21631,7 @@ function* xmlTokens(text) {
     if (skip !== undefined) {
       const close = text.indexOf(skip[1], open + skip[0].length);
       if (close === -1) {
-        return;
+        throw new DocxError("its XML is damaged");
       }
       if (skip[0] === "<![CDATA[") {
         yield { type: "text", text: text.slice(open + 9, close) };
@@ -21611,7 +21642,7 @@ function* xmlTokens(text) {
     TAG.lastIndex = open;
     const match = TAG.exec(text);
     if (match === null) {
-      throw new Error("its XML is damaged");
+      throw new DocxError("its XML is damaged");
     }
     const attributes = {};
     for (const attribute of match[3].matchAll(ATTRIBUTE2)) {
@@ -21621,27 +21652,35 @@ function* xmlTokens(text) {
     position = TAG.lastIndex;
   }
 }
-var ENTITIES = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+var ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", '"'], ["apos", "'"]]);
 function decodeEntities(text) {
   return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, name) => {
     if (name[0] === "#") {
       const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
       return code <= 1114111 ? String.fromCodePoint(code) : whole;
     }
-    return ENTITIES[name] ?? whole;
+    return ENTITIES.get(name) ?? whole;
   });
+}
+function proseText(text) {
+  return text.replace(/[\r\n]/g, " ").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 function isOn(attributes) {
   const value = attributes["w:val"];
   return value === undefined || !["0", "false", "off", "none"].includes(value);
 }
+var EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null };
 function readStyles(xml) {
   const styles = new Map;
+  let defaultParagraph = null;
   let style = null;
   let inRunProperties = false;
   for (const token of xmlTokens(xml)) {
     if (token.type === "start" && token.name === "w:style") {
       style = { id: token.attributes["w:styleId"], name: "", outline: null, italic: null, bold: null, basedOn: null };
+      if (token.attributes["w:type"] === "paragraph" && isOn({ "w:val": token.attributes["w:default"] ?? "0" }) && defaultParagraph === null) {
+        defaultParagraph = style.id ?? null;
+      }
       continue;
     }
     if (style === null) {
@@ -21674,45 +21713,43 @@ function readStyles(xml) {
       style.bold = isOn(token.attributes);
     }
   }
-  return styles;
-}
-function styleProperty(styles, id, property) {
-  const seen = new Set;
-  for (let style = styles.get(id);style !== undefined && !seen.has(style.id); style = styles.get(style.basedOn)) {
-    seen.add(style.id);
-    if (style[property] !== null) {
-      return style[property];
+  const resolved = new Map;
+  const resolve = (id, depth) => {
+    if (resolved.has(id)) {
+      return resolved.get(id);
     }
-  }
-  return null;
-}
-function styleHeadingLevel(styles, id) {
-  const seen = new Set;
-  for (let style = styles.get(id);style !== undefined && !seen.has(style.id); style = styles.get(style.basedOn)) {
-    seen.add(style.id);
+    const style = styles.get(id);
+    if (style === undefined || depth > MAX_STYLE_DEPTH) {
+      return EMPTY_STYLE;
+    }
+    resolved.set(id, EMPTY_STYLE);
+    const base = resolve(style.basedOn, depth + 1);
     const name = style.name.trim().toLowerCase();
-    if (name === "title") {
-      return 1;
-    }
     const heading = name.match(/^heading (\d)$/);
-    if (heading !== null) {
-      return Math.min(Number(heading[1]), 6);
+    let level = base.level;
+    if (name === "title") {
+      level = 1;
+    } else if (heading !== null) {
+      level = Math.min(Number(heading[1]), 6);
+    } else if (Number.isInteger(style.outline) && style.outline >= 0 && style.outline <= 9) {
+      level = outlineLevel(style.outline);
     }
-    if (Number.isInteger(style.outline) && style.outline >= 0 && style.outline < 9) {
-      return Math.min(style.outline + 1, 6);
-    }
-  }
-  return 0;
+    const result = {
+      level,
+      quote: base.quote || /^(?:quote|intense quote|block text|block quote|blockquote)$/.test(name),
+      italic: style.italic ?? base.italic,
+      bold: style.bold ?? base.bold
+    };
+    resolved.set(id, result);
+    return result;
+  };
+  return {
+    paragraph: (id) => resolve(id ?? defaultParagraph, 0),
+    character: (id) => id === null ? EMPTY_STYLE : resolve(id, 0)
+  };
 }
-function isQuoteStyle(styles, id) {
-  const seen = new Set;
-  for (let style = styles.get(id);style !== undefined && !seen.has(style.id); style = styles.get(style.basedOn)) {
-    seen.add(style.id);
-    if (/^(?:quote|intense quote|block text|block quote|blockquote)$/i.test(style.name.trim())) {
-      return true;
-    }
-  }
-  return false;
+function outlineLevel(outline) {
+  return outline === 9 ? 0 : Math.min(outline + 1, 6);
 }
 var SKIPPED = new Map([
   ["w:del", "tracked-changes"],
@@ -21721,8 +21758,8 @@ var SKIPPED = new Map([
   ["w:pPrChange", null],
   ["w:sectPrChange", null],
   ["w:tblPrChange", null],
-  ["w:instrText", null],
   ["mc:Fallback", null],
+  ["w:rt", "ruby"],
   ["w:drawing", "images"],
   ["w:pict", "images"],
   ["w:object", "images"],
@@ -21734,9 +21771,12 @@ var NOTE_MESSAGES = {
   footnotes: "it has footnotes or endnotes, which the import leaves out",
   images: "it has images or drawings, which the import leaves out",
   "text-boxes": "it has text boxes, whose text the import leaves out",
-  tables: "it has tables, whose cells the import reads as plain paragraphs"
+  tables: "it has tables, whose cells the import reads as plain paragraphs",
+  numbering: "it numbers paragraphs or headings with Word's list numbering, which the import leaves out, so a chapter number made that way is lost",
+  ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text"
 };
-function documentMarkdown(xml, styles) {
+var GENERATED_FIELD = /^\s*(?:TOC|INDEX)\b/i;
+function documentMarkdown(xml, styles, chapterLine) {
   const notes = new Set;
   const blocks = [];
   let skipping = null;
@@ -21746,6 +21786,11 @@ function documentMarkdown(xml, styles) {
   let inParagraphProperties = false;
   let inRunProperties = false;
   let inText = false;
+  let inInstruction = false;
+  const fields = [];
+  const controls = [];
+  let joined = null;
+  const hidden = () => fields.some((field) => field.result && GENERATED_FIELD.test(field.instruction)) || controls.some((control) => control.skip);
   for (const token of xmlTokens(xml)) {
     if (skipping !== null) {
       if (token.name === "w:txbxContent" && SKIPPED.get(skipping) === "images") {
@@ -21770,13 +21815,50 @@ function documentMarkdown(xml, styles) {
       continue;
     }
     if (type === "text") {
-      if (inText && run !== null) {
-        run.text += token.text;
+      if (inInstruction && fields.length > 0) {
+        fields.at(-1).instruction += token.text;
+      } else if (inText && run !== null && !run.hidden && !hidden()) {
+        run.text += proseText(token.text);
       }
+      continue;
+    }
+    if (name === "w:instrText") {
+      inInstruction = type === "start";
+      continue;
+    }
+    if (name === "w:fldChar" && type !== "end") {
+      const kind = attributes["w:fldCharType"];
+      if (kind === "begin") {
+        fields.push({ instruction: "", result: false });
+      } else if (kind === "separate" && fields.length > 0) {
+        fields.at(-1).result = true;
+      } else if (kind === "end") {
+        fields.pop();
+      }
+      continue;
+    }
+    if (name === "w:fldSimple" && type === "start" && GENERATED_FIELD.test(attributes["w:instr"] ?? "")) {
+      skipping = name;
+      depth = 1;
+      continue;
+    }
+    if (name === "w:sdt") {
+      if (type === "start") {
+        controls.push({ skip: false });
+      } else if (type === "end") {
+        controls.pop();
+      }
+      continue;
+    }
+    if (controls.length > 0 && type !== "end" && (name === "w:docPartGallery" && /table of contents/i.test(attributes["w:val"] ?? "") || name === "w:showingPlcHdr")) {
+      controls.at(-1).skip = true;
       continue;
     }
     if (type === "empty" && SKIPPED.get(name) === "tracked-changes") {
       notes.add("tracked-changes");
+      if (paragraph !== null && inParagraphProperties && inRunProperties && name === "w:del") {
+        paragraph.markDeleted = true;
+      }
       continue;
     }
     if (name === "w:ins" || name === "w:moveTo") {
@@ -21797,9 +21879,16 @@ function documentMarkdown(xml, styles) {
     }
     if (name === "w:p") {
       if (type === "start") {
-        paragraph = { style: null, outline: null, runs: [] };
+        paragraph = { style: null, outline: null, runs: joined ?? [], markDeleted: false };
+        joined = null;
       } else if (type === "end" && paragraph !== null) {
-        blocks.push(...paragraphBlocks(paragraph, styles));
+        if (paragraph.markDeleted) {
+          joined = paragraph.runs;
+        } else {
+          for (const block of paragraphBlocks(paragraph, styles, chapterLine)) {
+            blocks.push(block);
+          }
+        }
         paragraph = null;
       }
       continue;
@@ -21820,12 +21909,14 @@ function documentMarkdown(xml, styles) {
         paragraph.style = attributes["w:val"] ?? null;
       } else if (name === "w:outlineLvl") {
         paragraph.outline = Number.parseInt(attributes["w:val"], 10);
+      } else if (name === "w:numPr") {
+        notes.add("numbering");
       }
       continue;
     }
     if (name === "w:r") {
       if (type === "start") {
-        run = { text: "", italic: null, bold: null, style: null };
+        run = { text: "", italic: null, bold: null, style: null, hidden: false };
       } else if (run !== null) {
         paragraph.runs.push(run);
         run = null;
@@ -21845,12 +21936,14 @@ function documentMarkdown(xml, styles) {
         run.bold = isOn(attributes);
       } else if (name === "w:rStyle") {
         run.style = attributes["w:val"] ?? null;
+      } else if (name === "w:vanish") {
+        run.hidden = isOn(attributes);
       }
       continue;
     }
     if (name === "w:t") {
       inText = type === "start";
-    } else if (type !== "end") {
+    } else if (type !== "end" && !run.hidden && !hidden()) {
       if (name === "w:tab" || name === "w:ptab") {
         run.text += "\t";
       } else if (name === "w:br" || name === "w:cr") {
@@ -21859,6 +21952,11 @@ function documentMarkdown(xml, styles) {
       } else if (name === "w:noBreakHyphen") {
         run.text += "‑";
       }
+    }
+  }
+  if (joined !== null) {
+    for (const block of paragraphBlocks({ style: null, outline: null, runs: joined }, styles, chapterLine)) {
+      blocks.push(block);
     }
   }
   const text = blocks.join(`
@@ -21872,18 +21970,14 @@ function documentMarkdown(xml, styles) {
 }
 var LINE_BREAK4 = "";
 var PARAGRAPH_BREAK = "";
-function paragraphBlocks(paragraph, styles) {
-  let level = styleHeadingLevel(styles, paragraph.style);
-  if (Number.isInteger(paragraph.outline) && paragraph.outline >= 0 && paragraph.outline < 9) {
-    level = Math.min(paragraph.outline + 1, 6);
-  }
-  const quote = level === 0 && isQuoteStyle(styles, paragraph.style);
-  const paragraphItalic = styleProperty(styles, paragraph.style, "italic") === true;
-  const paragraphBold = styleProperty(styles, paragraph.style, "bold") === true;
+function paragraphBlocks(paragraph, styles, chapterLine) {
+  const style = styles.paragraph(paragraph.style);
+  const level = Number.isInteger(paragraph.outline) && paragraph.outline >= 0 && paragraph.outline <= 9 ? outlineLevel(paragraph.outline) : style.level;
+  const quote = level === 0 && style.quote;
   const runs = paragraph.runs.map((run) => ({
     text: run.text.replace(/­/g, ""),
-    italic: level === 0 && (run.italic ?? styleProperty(styles, run.style, "italic") ?? paragraphItalic) === true,
-    bold: level === 0 && (run.bold ?? styleProperty(styles, run.style, "bold") ?? paragraphBold) === true
+    italic: level === 0 && (run.italic ?? styles.character(run.style).italic ?? style.italic) === true,
+    bold: level === 0 && (run.bold ?? styles.character(run.style).bold ?? style.bold) === true
   }));
   const pieces = [[]];
   for (const run of runs) {
@@ -21895,20 +21989,30 @@ function paragraphBlocks(paragraph, styles) {
       pieces.at(-1).push({ ...run, text: part });
     });
   }
-  return pieces.map((piece) => blockMarkdown(piece, level, quote)).filter((block) => block !== "");
+  return pieces.map((piece) => blockMarkdown(piece, level, quote, chapterLine)).filter((block) => block !== "");
 }
-function blockMarkdown(runs, level, quote) {
+function blockMarkdown(runs, level, quote, chapterLine) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
-  if (plain.replaceAll(LINE_BREAK4, "").trim() === "") {
+  const lines = plain.split(LINE_BREAK4).map((line) => line.trim()).filter((line) => line !== "");
+  if (lines.length === 0) {
     return "";
   }
-  if (level === 0 && isSceneBreak(plain)) {
-    return /^([*_~-])( ?\1){2,}$/.test(plain) ? plain : "***";
+  if (level === 0 && /^([*_~-])( ?\1){2,}$/.test(plain)) {
+    return plain;
   }
-  const text = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, lines) => line !== "" || index > 0 && index < lines.length - 1).join(level > 0 ? " " : "\\\n");
+  if (level === 0 && plain === "#") {
+    return "***";
+  }
+  if (level === 0) {
+    const heading = lines.length === 1 && chapterLine(lines[0]) !== null ? lines[0] : lines.length === 2 && chapterLine(lines[0])?.bare === true ? `${lines[0]}: ${lines[1]}` : null;
+    if (heading !== null) {
+      return `# ${escapeInline(heading)}`;
+    }
+  }
   if (level > 0) {
-    return `${"#".repeat(level)} ${text.replace(/[ \t\n]+/g, " ")}`;
+    return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
+  const text = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1).join("\\\n");
   const block = escapeBlockStart(text);
   return quote ? block.split(`
 `).map((line) => `> ${line}`).join(`
@@ -21927,18 +22031,18 @@ function inlineMarkdown(runs) {
   return merged.map((run) => {
     const text = run.text.replace(/[\t ]+/g, " ");
     const marker = (run.bold ? "**" : "") + (run.italic ? "*" : "");
-    const body = escapeInline(text.trim().replaceAll(` ${LINE_BREAK4}`, LINE_BREAK4).replaceAll(`${LINE_BREAK4} `, LINE_BREAK4));
+    const lead = text.match(/^\s*/)[0];
+    const trail = lead.length === text.length ? "" : text.match(/\s*$/)[0];
+    const body = text.slice(lead.length, text.length - trail.length).replaceAll(` ${LINE_BREAK4}`, LINE_BREAK4).replaceAll(`${LINE_BREAK4} `, LINE_BREAK4);
     if (marker === "" || body.replaceAll(LINE_BREAK4, "") === "") {
       return escapeInline(text);
     }
-    const lead = text.match(/^\s*/)[0] === "" ? "" : " ";
-    const trail = text.match(/\s*$/)[0] === "" ? "" : " ";
-    const marked = body.split(LINE_BREAK4).map((line) => line === "" ? line : `${marker}${line}${[...marker].reverse().join("")}`).join(LINE_BREAK4);
+    const marked = escapeInline(body).split(LINE_BREAK4).map((line) => line === "" ? line : `${marker}${line}${[...marker].reverse().join("")}`).join(LINE_BREAK4);
     return `${lead}${marked}${trail}`;
   }).join("");
 }
 function escapeInline(text) {
-  return text.replace(/[\\`*_[\]<]/g, "\\$&");
+  return text.replace(/[\\`*_[\]<]/g, "\\$&").replace(/\\<!/g, "\\<\\!");
 }
 function escapeBlockStart(text) {
   return text.split(`
@@ -28283,15 +28387,16 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
   return Buffer8.concat(chunks);
 }
 function stdinText(command, bytes) {
-  const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
+  const zipAdvice = command === "import" ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
+  const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead", zipAdvice);
   if (text.trim() === "") {
     throw usageError(`story ${command} - read nothing from stdin: pipe the text in, such as story ${command} - < draft.md`);
   }
   return text;
 }
-function decodeUtf82(bytes, subject, advice) {
+function decodeUtf82(bytes, subject, advice, zipAdvice = "Save or export it as markdown or plain text first") {
   if (bytes.length >= 4 && bytes[0] === 80 && bytes[1] === 75 && bytes[2] === 3 && bytes[3] === 4) {
-    throw usageError(`${subject}: it is a zip archive, such as a Word or OpenDocument file. story import reads a Word document saved as a .docx file; save or export anything else as markdown or plain text first`);
+    throw usageError(`${subject}: it is a zip archive, such as a Word or OpenDocument file. ${zipAdvice}`);
   }
   if (bytes.includes(0)) {
     throw usageError(`${subject}: it is a binary or UTF-16 file, not UTF-8 text. ${advice}`);
@@ -31668,20 +31773,36 @@ function addCandidate(counts, name) {
   counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 function readSourceText(filePath) {
-  return decodeUtf82(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+  return decodeUtf82(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document only from a file whose name ends in .docx; save or export anything else as markdown or plain text first");
 }
-function readSourceDocument(name, filePath) {
+function readSourceDocument(name, filePath, rules) {
   if (!DOCX_FILE.test(name)) {
     return { name, path: filePath, text: readSourceText(filePath) };
   }
   const bytes = readFileBytes(filePath, MAX_IMPORT_DOCX_BYTES);
   let converted;
   try {
-    converted = docxMarkdown(bytes);
+    converted = docxMarkdown(bytes, { chapterLine: docxChapterLine(rules) });
   } catch (error) {
-    throw usageError(`Cannot import ${filePath}: ${error.message}`);
+    throw error instanceof DocxError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
+  }
+  const size = Buffer9.byteLength(converted.text, "utf8");
+  if (size > MAX_IMPORT_FILE_BYTES) {
+    throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
   return { name, path: filePath, text: converted.text, notes: converted.notes };
+}
+function docxChapterLine(rules) {
+  return (text) => {
+    if (text.length > PLAIN_LINE_MAX_LENGTH) {
+      return null;
+    }
+    if (rules.plainSection.test(text)) {
+      return { bare: !/[:.\-–—]/.test(text) };
+    }
+    const match = rules.plainChapter.exec(text);
+    return match === null ? null : { bare: (match[1] ?? match[2] ?? "") === "" };
+  };
 }
 function readImportSource(source, rules) {
   try {
@@ -31694,7 +31815,7 @@ function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs26.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [readSourceDocument(path37.basename(source), source)];
+    return [readSourceDocument(path37.basename(source), source, rules)];
   }
   const names = [];
   for (const entry of fs26.readdirSync(source, { withFileTypes: true })) {
@@ -31722,7 +31843,7 @@ function readSourceDocuments(source, rules) {
   const documents = names.map((name) => {
     const fullPath = path37.join(source, name);
     assertImportFileSize(fullPath);
-    return readSourceDocument(name, fullPath);
+    return readSourceDocument(name, fullPath, rules);
   });
   if (documents.length === 0) {
     throw usageError(`No markdown, text, or Word files found in ${source}`);

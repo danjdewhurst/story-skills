@@ -60,7 +60,10 @@ export function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs.
 // binary, or text in another encoding. Empty input is an error, since a
 // report on nothing would read as a clean bill of health.
 export function stdinText(command, bytes) {
-  const text = decodeUtf8(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead");
+  const zipAdvice = command === "import"
+    ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead"
+    : "Save or export it as markdown or plain text first";
+  const text = decodeUtf8(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead", zipAdvice);
   if (text.trim() === "") {
     throw usageError(`story ${command} - read nothing from stdin: pipe the text in, such as story ${command} - < draft.md`);
   }
@@ -68,10 +71,11 @@ export function stdinText(command, bytes) {
 }
 
 // Text without its byte-order mark, or an error that starts with `subject`
-// and ends with `advice`, so no character is silently replaced.
-export function decodeUtf8(bytes, subject, advice) {
+// and ends with `advice` (`zipAdvice` for a zip), so no character is
+// silently replaced.
+export function decodeUtf8(bytes, subject, advice, zipAdvice = "Save or export it as markdown or plain text first") {
   if (bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04) {
-    throw usageError(`${subject}: it is a zip archive, such as a Word or OpenDocument file. story import reads a Word document saved as a .docx file; save or export anything else as markdown or plain text first`);
+    throw usageError(`${subject}: it is a zip archive, such as a Word or OpenDocument file. ${zipAdvice}`);
   }
   if (bytes.includes(0)) {
     throw usageError(`${subject}: it is a binary or UTF-16 file, not UTF-8 text. ${advice}`);

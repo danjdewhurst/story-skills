@@ -8,7 +8,7 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { docxMarkdown } from "./docx.js";
+import { DocxError, docxMarkdown } from "./docx.js";
 import { MAX_READ_BYTES, currentText, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { mirrorFolderNames } from "./preview.js";
@@ -117,7 +117,8 @@ function unitNumeral(words) {
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 // A Word document holds its images too, so it may be larger than a text
-// file; only its text parts are read, each under its own limit (docx.js).
+// file; only its text parts are read, each under its own limit (docx.js),
+// and the markdown it converts to is held to the text file limit.
 const MAX_IMPORT_DOCX_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORT_FILES = 500;
 const IMPORT_FILE = /\.(?:md|markdown|txt|docx)$/i;
@@ -518,23 +519,44 @@ function addCandidate(counts, name) {
 // already refused a symlink or an oversized file; the read refuses one
 // swapped in since.
 function readSourceText(filePath) {
-  return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first");
+  return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document only from a file whose name ends in .docx; save or export anything else as markdown or plain text first");
 }
 
 // One source file as a document: a Word document is read as markdown, with
 // notes about what it left out.
-function readSourceDocument(name, filePath) {
+function readSourceDocument(name, filePath, rules) {
   if (!DOCX_FILE.test(name)) {
     return { name, path: filePath, text: readSourceText(filePath) };
   }
   const bytes = readFileBytes(filePath, MAX_IMPORT_DOCX_BYTES);
   let converted;
   try {
-    converted = docxMarkdown(bytes);
+    converted = docxMarkdown(bytes, { chapterLine: docxChapterLine(rules) });
   } catch (error) {
-    throw usageError(`Cannot import ${filePath}: ${error.message}`);
+    // Only a DocxError says the file is bad; anything else is a bug.
+    throw error instanceof DocxError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
+  }
+  const size = Buffer.byteLength(converted.text, "utf8");
+  if (size > MAX_IMPORT_FILE_BYTES) {
+    throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
   return { name, path: filePath, text: converted.text, notes: converted.notes };
+}
+
+// Tells docx.js which paragraphs are chapter lines, by the rules a plain
+// text manuscript is split with: null for prose, or { bare } where bare is
+// true when the line has no title of its own ("Chapter 1", "Prologue").
+function docxChapterLine(rules) {
+  return (text) => {
+    if (text.length > PLAIN_LINE_MAX_LENGTH) {
+      return null;
+    }
+    if (rules.plainSection.test(text)) {
+      return { bare: !/[:.\-–—]/.test(text) };
+    }
+    const match = rules.plainChapter.exec(text);
+    return match === null ? null : { bare: (match[1] ?? match[2] ?? "") === "" };
+  };
 }
 
 // The source is an argument, so a source that cannot be read (permission
@@ -551,7 +573,7 @@ function readSourceDocuments(source, rules) {
   rejectSymlinkedSource(source);
   if (fs.statSync(source).isFile()) {
     assertImportFileSize(source);
-    return [readSourceDocument(path.basename(source), source)];
+    return [readSourceDocument(path.basename(source), source, rules)];
   }
 
   const names = [];
@@ -586,7 +608,7 @@ function readSourceDocuments(source, rules) {
   const documents = names.map((name) => {
     const fullPath = path.join(source, name);
     assertImportFileSize(fullPath);
-    return readSourceDocument(name, fullPath);
+    return readSourceDocument(name, fullPath, rules);
   });
 
   if (documents.length === 0) {
