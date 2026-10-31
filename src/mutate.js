@@ -1,4 +1,5 @@
-// Commands that write the project: init, add, rename, remove, move, reindex, wordcount, and migrate.
+// Commands that write the project: init, add, rename, remove, move, split,
+// merge, reindex, wordcount, and migrate.
 // They do not take the project lock themselves: runCli holds it around every
 // command whose registry entry declares `writes` (see commands.js), and
 // createStoryProject locks the folders init and import fill. A caller
