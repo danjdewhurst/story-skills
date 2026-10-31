@@ -112,7 +112,7 @@ Then ask your agent to **"Start a new story"**.
 
 - [Install the skills](docs/getting-started.md#install-the-skills) covers the other agents, including GitHub Copilot, Cursor, Windsurf, Gemini CLI, and OpenCode.
 - [Let your agent install it](docs/getting-started.md#let-your-agent-install-it) has a prompt that installs the skills for you.
-- New to Story Skills? [Getting started](docs/getting-started.md) walks through a first session. The [documentation index](docs/README.md) links every guide.
+- New to Story Skills? [Getting started](docs/getting-started.md) walks through a first session. The [documentation index](docs/README.md) links every guide, and the [documentation website](https://danjdewhurst.github.io/story-skills/) has the same pages with search.
 
 ## The continuity engine
 

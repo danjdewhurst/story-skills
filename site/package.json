@@ -1,0 +1,16 @@
+{
+  "name": "story-skills-docs-site",
+  "private": true,
+  "type": "module",
+  "description": "The Story Skills documentation website, built from ../docs with VitePress.",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "mermaid": "11.17.2",
+    "vitepress": "1.6.4",
+    "vitepress-plugin-mermaid": "2.0.17"
+  }
+}

@@ -3,6 +3,7 @@
 *.swo
 *~
 node_modules/
+site/.vitepress/cache/
 coverage/
 dist/
 evals/outputs/
