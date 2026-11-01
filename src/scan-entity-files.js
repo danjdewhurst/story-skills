@@ -129,6 +129,7 @@ Add 2-3 example lines.
 }
 
 function locationFile(name, options) {
+  const coordinates = coordinatesOption(options.coordinates);
   return `${stringifyFrontmatter({
     name,
     type: options.type ?? "other",
@@ -137,7 +138,8 @@ function locationFile(name, options) {
     "controlled-by": options["controlled-by"] ?? "",
     "notable-characters": listOption(options, "characters", "character"),
     tags: [],
-    status: options.status ?? "unknown"
+    status: options.status ?? "unknown",
+    ...(coordinates === undefined ? {} : { coordinates })
   })}# ${name}
 
 ## Description
@@ -160,6 +162,19 @@ Add landmarks or practical story elements.
 
 Add what is true at the current story moment.
 `;
+}
+
+// --coordinates 12,40: the place on the story's map, two numbers.
+function coordinatesOption(value) {
+  if (value === undefined || value === "") {
+    return undefined;
+  }
+  const parts = String(value).split(",").map((part) => part.trim());
+  const numbers = parts.map((part) => (part === "" ? Number.NaN : Number(part)));
+  if (numbers.length !== 2 || !numbers.every(Number.isFinite)) {
+    throw usageError(`coordinates must be two numbers separated by a comma, such as 12,40, got ${value}`);
+  }
+  return numbers;
 }
 
 function systemFile(name, options) {
@@ -378,6 +393,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
+    ...(options["travel-mode"] === undefined || options["travel-mode"] === "" ? {} : { "travel-mode": options["travel-mode"] }),
     sequel: options.sequel ?? false,
     ...(options.outcome === undefined ? {} : { outcome: options.outcome }),
     dilemma: options.dilemma ?? "",

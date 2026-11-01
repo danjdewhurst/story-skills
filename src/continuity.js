@@ -8,6 +8,7 @@ import { chapterChronology, deathWindow } from "./chronology.js";
 import { characterLifeline, progressionDeathAt, progressionDeathFrom, progressionStatusAt, statusProgressions } from "./deaths.js";
 import { auditMentions } from "./mentions.js";
 import { happensAfter } from "./progressions.js";
+import { distanceResolver, foldMode, hoursNeeded } from "./geography.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 // A mystery's central question is often the book, so the same three-chapter
@@ -1135,6 +1136,7 @@ function checkClock(project, errors, warnings) {
     checkClockOrder(stamps, errors, warnings);
   }
   checkRouteTravel(project, hours, errors);
+  checkDistanceTravel(project, hours, warnings);
 }
 
 // Story-order units shared by story timeline and the continuity clock: each
@@ -1396,6 +1398,94 @@ function checkStrandRoutes(characterId, list, errors, graph, distance, longestRo
       }
     }
   }
+}
+
+// Location geography (see geography.js) says how far apart two places are,
+// and the story.md travel modes how fast a journey can go. Each character is
+// followed through the scenes they are in (the scene's `characters` plus its
+// `pov`, or the chapter's POV), in reading order within a chapter strand, as
+// travel-hours reads it: the journey into a scene starts where the
+// character's last scene was. A scene whose travel-hours is too short to
+// cover that distance by its `travel-mode`, or by the fastest mode when it
+// names none or one story.md does not list, is a warning. Only a scene with
+// travel-hours above 0 is judged, so nothing changes without it. A
+// flashback scene is not part of the journey, and a scene with no location,
+// or a chapter with no scene records, loses track of where everyone is, so
+// the next scene starts afresh.
+function checkDistanceTravel(project, hoursPerDay, warnings) {
+  const geography = project.geography;
+  if (!geography || geography.modes.length === 0) {
+    return;
+  }
+  const distance = distanceResolver(project.locations, geography, shortestRoutesFrom);
+  const modes = new Map(geography.modes.map((mode) => [mode.key, mode]));
+  const unit = geography.unit;
+  const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
+  const strandOf = (chapter) => String(chapter.strand ?? "");
+  // strand -> character -> the location of their last scene
+  const last = new Map();
+  for (const { unit: scene, chapter, isChapter } of readingUnits(project)) {
+    const strand = strandOf(chapter);
+    if (!last.has(strand)) {
+      last.set(strand, new Map());
+    }
+    const whereabouts = last.get(strand);
+    if (isChapter) {
+      whereabouts.clear();
+      continue;
+    }
+    if (scene.flashbackTo !== "") {
+      continue;
+    }
+    const present = new Set(scene.characters.map(idText).filter((id) => id !== ""));
+    const pov = idText(scene.pov) || chapterPov.get(scene.chapter) || "";
+    if (pov !== "") {
+      present.add(pov);
+    }
+    const to = scene.location;
+    const origins = new Map();
+    for (const characterId of present) {
+      const from = whereabouts.get(characterId);
+      if (to === "") {
+        whereabouts.delete(characterId);
+        continue;
+      }
+      if (from !== undefined && from !== to && scene.travelHours > 0) {
+        origins.set(from, [...(origins.get(from) ?? []), characterId]);
+      }
+      whereabouts.set(characterId, to);
+    }
+    const label = relative(project, scene.file);
+    for (const from of [...origins.keys()].sort((left, right) => left.localeCompare(right, "en"))) {
+      const found = distance(from, to);
+      if (found === undefined) {
+        continue;
+      }
+      const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
+      const candidates = named ? [named] : geography.modes;
+      let best = null;
+      for (const mode of candidates) {
+        const needed = hoursNeeded(found.distance, mode, hoursPerDay);
+        if (best === null || needed < best.needed) {
+          best = { mode, needed };
+        }
+      }
+      if (scene.travelHours >= best.needed - 1e-9) {
+        continue;
+      }
+      const who = origins.get(from).sort((left, right) => left.localeCompare(right, "en")).join(", ");
+      const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
+      const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
+      const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
+      warnings.push(warn("travel-too-far", `${label} gives ${who} ${formatHours(scene.travelHours, Math.floor)} to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
+    }
+  }
+}
+
+// A distance to one decimal place, rounded down so a near miss never reads
+// as a longer journey than it is.
+function formatDistance(distance) {
+  return String(Math.floor(Math.round(distance * 1e6) / 1e5) / 10);
 }
 
 // The routes the travel check uses, one per declared direction: routes to a

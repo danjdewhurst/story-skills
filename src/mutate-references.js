@@ -323,12 +323,13 @@ const ENTRY_IDENTITY_FIELDS = {
   // A progression takes effect from a chapter; see transformReferences.
   progressions: "from",
   routes: "to",
+  distances: "to",
   choices: "to"
 };
 
 // The kind a nested `to` names, by the list it sits in: a location's route
-// leads to a location, a chapter's choice to a chapter.
-export const NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
+// or distance leads to a location, a chapter's choice to a chapter.
+export const NESTED_TO_KINDS = { routes: "location", distances: "location", choices: "chapter" };
 
 // Describes the entity being renamed or removed. A frontmatter key counts as
 // a reference to it only when the key can point at its kind. A key that may
@@ -528,7 +529,7 @@ function transformReferences(data, transform, context, identityKey = null, listK
   const next = {};
   // A `__proto__:` key is kept as an own property, as the parser keeps it.
   const set = (key, value) => Object.defineProperty(next, key, { value, enumerable: true, configurable: true, writable: true });
-  // A route's `to` names a location and a choice's `to` a chapter; `to`
+  // A route's or distance's `to` names a location and a choice's `to` a chapter; `to`
   // anywhere else is left alone. A progression's `from` names a chapter, and
   // its `value` is a reference when the field it changes is one (a
   // character's arc, a location's controlled-by).

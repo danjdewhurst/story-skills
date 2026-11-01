@@ -13,6 +13,8 @@ arcs-advanced: []
 status: draft
 date: 2026-02-07
 time: "14:00"
+travel-hours: 0.5
+travel-mode: bus
 sequel: true
 dilemma: "Let her aunt's suitcase go, as her mother asks, or find out why Fola came back"
 state-changes:
