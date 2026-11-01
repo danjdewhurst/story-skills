@@ -11,6 +11,7 @@ tags:
   - magical-nexus
   - seat-of-power
 status: declining
+coordinates: [10, 4]
 ---
 
 # The Ashen Citadel

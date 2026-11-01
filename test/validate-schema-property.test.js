@@ -45,7 +45,7 @@ const SEED = process.env.STORY_PROPERTY_SEED === "random"
 // List entries whose values validate reads as text or ids, and the key
 // that holds them: any key, except in a route, where hours is a number and
 // validate asks for quotes around a mode as the schema does.
-const LIST_ENTRIES = [["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes", "to"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]];
+const LIST_ENTRIES = [["character", "progressions"], ["location", "progressions"], ["faction", "progressions"], ["location", "routes", "to"], ["location", "distances", "to"], ["state", "character-state"], ["state", "object-state"], ["state", "knowledge-state"]];
 const entryKey = (key = "[^.\\]]+") => `\\]\\.${key}`;
 
 const EXCEPTIONS = [
@@ -55,6 +55,7 @@ const EXCEPTIONS = [
   { kind: "story", field: "isbn", side: "validate", match: /^invalid-isbn/, reason: "an ISBN's check digit is arithmetic, not a pattern" },
   { kind: "story", field: "cover", side: "validate", match: /^invalid-cover: story\.md cover .* (?:does not exist|is not a file|must be inside the project)$/, reason: "the cover file must exist on disk" },
   { kind: "story", field: "calendar", side: "validate", match: /^invalid-calendar: story\.md calendar (?:entry \d+ (?:must name exactly one of month, era, weekdays, or hours-per-day|first-weekday must be one of the weekdays|repeats (?:weekdays|hours-per-day)|weekdays needs at least one name)|needs at least one month entry|era .+ (?:counts backward, but only the first era may|needs years)|.+ appears more than once)/, reason: "a calendar entry must be exactly one kind, with months, unique names, and eras in a readable order, which needs counting and comparing across entries" },
+  { kind: "story", field: "travel-modes", side: "validate", match: /^invalid-geography: story\.md travel-modes entry \d+ mode .+ appears more than once$/, reason: "a travel mode must be named once, ignoring case, which needs comparing across entries" },
   { kind: "story", field: "cli-defaults", side: "validate", match: /^invalid-cli-config/, reason: "a cli-defaults entry's other keys are flags, checked against the command and option registries" },
   { kind: "story", field: "severity", side: "validate", match: /^invalid-cli-config/, reason: "an unknown key in a severity entry is rejected, and the schema checker has no additionalProperties" },
   { kind: "story", field: "queries", side: "validate", match: /^invalid-query: story\.md query [a-z0-9-]+ (?:has [\w-]+(?:, [\w-]+)*: a query takes only name, kind, and where|where needs at least one filter, such as where: \[status=draft\])$/, reason: "an unknown key in a query is rejected, and so is an empty where; the schema checker has neither additionalProperties nor minItems" },

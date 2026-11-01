@@ -15,6 +15,15 @@ pov: third-person-limited
 tense: past
 follows:
   - ../the-fall-of-the-citadel
+distance-unit: leagues
+map-scale: 2
+travel-modes:
+  - mode: on foot
+    speed: 1
+    per-day: 8
+  - mode: horse
+    speed: 3
+    per-day: 15
 calendar:
   - month: Frostwane
     days: 30

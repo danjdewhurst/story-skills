@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseCalendar } from "./calendar.js";
+import { parseGeography } from "./geography.js";
 import { FRONTMATTER_KEYS } from "./frontmatter-keys.js";
 import { portablePath, projectPath, UNDO_LOG } from "./files.js";
 import { interruptedChange } from "./undo.js";
@@ -298,6 +299,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateReleaseCadence(data, errors);
   for (const problem of parseCalendar(data.calendar).problems) {
     errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
+  }
+  for (const problem of parseGeography(data).problems) {
+    errors.push(err("invalid-geography", `story.md ${problem}`, "story.md"));
   }
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));

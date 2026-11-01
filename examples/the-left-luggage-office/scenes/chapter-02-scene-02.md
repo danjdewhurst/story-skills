@@ -13,6 +13,8 @@ arcs-advanced: []
 status: draft
 date: 2026-02-07
 time: "22:00"
+travel-hours: 1
+travel-mode: on foot
 sequel: false
 outcome: no-and
 state-changes:

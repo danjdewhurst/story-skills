@@ -138,7 +138,7 @@ function resolveRef(schema, ref) {
 // cannot quietly outgrow it.
 const SUPPORTED = new Set([
   "$schema", "$id", "$comment", "$defs", "title", "description",
-  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "maximum", "exclusiveMinimum", "minLength",
+  "$ref", "type", "required", "properties", "items", "enum", "const", "pattern", "minimum", "maximum", "exclusiveMinimum", "minLength", "minItems", "maxItems",
   "allOf", "if", "then"
 ]);
 
@@ -217,6 +217,12 @@ export function validateAgainstSchema(value, schema, root = schema, at = "$") {
   }
   if (typeof value === "number" && schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum) {
     errors.push(`${at}: ${value} must be greater than ${schema.exclusiveMinimum}`);
+  }
+  if (Array.isArray(value) && schema.minItems !== undefined && value.length < schema.minItems) {
+    errors.push(`${at}: fewer than ${schema.minItems} items`);
+  }
+  if (Array.isArray(value) && schema.maxItems !== undefined && value.length > schema.maxItems) {
+    errors.push(`${at}: more than ${schema.maxItems} items`);
   }
   if (Array.isArray(value) && schema.items !== undefined) {
     value.forEach((item, index) => {

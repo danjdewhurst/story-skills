@@ -16,6 +16,12 @@ writing-days: [mon, tue, thu, fri]
 release-every: 7
 release-start: 2026-09-04
 release-warn-days: 4
+distance-unit: miles
+travel-modes:
+  - mode: on foot
+    speed: 3
+  - mode: bus
+    speed: 12
 season-goal: Find out what Aunty Fola hid at Harrowgate Street station, and keep it from Raymond Sallis.
 premise: A family secret kept to protect someone ends up endangering them, until someone chooses to carry it in the open.
 ---
