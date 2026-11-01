@@ -622,9 +622,9 @@
               "initials": { "type": "string" },
               "date": { "type": ["string", "null"], "description": "As Word wrote it, usually ISO 8601; for a change, the latest of its changes." },
               "text": { "type": "string", "description": "The comment, one line per paragraph." },
-              "on": { "type": ["string", "null"], "description": "The text the comment's range covers, up to 300 characters, or null for a comment with no mark in the main text." },
+              "on": { "type": ["string", "null"], "description": "The text the comment's range covers, up to 300 characters, with deleted text in [-…-] and inserted text in {+…+}, or null for a comment with no mark in the main text." },
               "resolved": { "type": "boolean" },
-              "hidden": { "type": "boolean", "description": "Some of the comment is hidden text, which Word does not show." },
+              "hidden": { "type": "boolean", "description": "Some of the comment is hidden text, set on the text or by its character style, which Word does not show. Best effort: white or tiny text is not caught." },
               "replies": {
                 "type": "array",
                 "items": {

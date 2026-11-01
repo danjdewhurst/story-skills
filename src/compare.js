@@ -188,19 +188,29 @@ export function mapLabels(previous, current, labels) {
   });
 }
 
+// How many current copies of a repeated paragraph, nearest first, an old
+// one is paired against, so a text repeated thousands of times on both
+// sides costs thousands of pairs, not millions.
+const MAX_EXACT_CANDIDATES = 16;
+
 // Pairs old and current paragraphs with the same text one to one, closest
 // first (same part, then nearest position), so two copies of a repeated
-// paragraph never both claim the one that survived. Returns a Map from old
-// index to current index.
+// paragraph never both claim the one that survived. Each old paragraph is
+// paired against the MAX_EXACT_CANDIDATES current copies nearest its
+// position. Returns a Map from old index to current index.
 function exactPairs(previous, current) {
   const byText = new Map();
   current.forEach((entry, index) => {
     const text = normalise(entry.text);
-    byText.set(text, (byText.get(text) ?? []).concat(index));
+    if (byText.has(text)) {
+      byText.get(text).push(index);
+    } else {
+      byText.set(text, [index]);
+    }
   });
   const pairs = [];
   previous.forEach((entry, oldIndex) => {
-    for (const newIndex of byText.get(normalise(entry.text)) ?? []) {
+    for (const newIndex of nearest(byText.get(normalise(entry.text)) ?? [], oldIndex)) {
       pairs.push({ oldIndex, newIndex, sameKey: current[newIndex].key === entry.key, distance: Math.abs(newIndex - oldIndex) });
     }
   });
@@ -214,6 +224,25 @@ function exactPairs(previous, current) {
     }
   }
   return matched;
+}
+
+// The MAX_EXACT_CANDIDATES indexes in a sorted list nearest `index`.
+function nearest(indexes, index) {
+  if (indexes.length <= MAX_EXACT_CANDIDATES) {
+    return indexes;
+  }
+  let low = 0;
+  let high = indexes.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (indexes[middle] < index) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  const start = Math.max(0, Math.min(low - MAX_EXACT_CANDIDATES / 2, indexes.length - MAX_EXACT_CANDIDATES));
+  return indexes.slice(start, start + MAX_EXACT_CANDIDATES);
 }
 
 function normalise(text) {

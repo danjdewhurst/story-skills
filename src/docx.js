@@ -36,6 +36,16 @@ export class DocxError extends Error {
   }
 }
 
+// Text from the file, such as a zip entry name, made safe to print in a
+// message: a line break or tab is written as \n, \r, or \t, and any other
+// control character or line separator becomes "?", so the name cannot
+// start a line of its own.
+const ESCAPED_CONTROLS = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
+
+export function printable(text) {
+  return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) => ESCAPED_CONTROLS[character] ?? "?");
+}
+
 // Converts the bytes of a .docx to { text, notes }: markdown text, and the
 // notes about what was left out, each { code, message }. `chapterLine`
 // tells a paragraph that is a chapter line ("Chapter 3", "Prologue") from
@@ -82,7 +92,7 @@ export function zipEntries(bytes) {
     // Two entries with one name could show one text in Word and import
     // another.
     if (entries.has(name)) {
-      throw new DocxError(`it has two zip entries named ${name}`);
+      throw new DocxError(`it has two zip entries named ${printable(name)}`);
     }
     entries.set(name, {
       name,
@@ -252,13 +262,14 @@ export function isOn(attributes) {
   return value === undefined || !["0", "false", "off", "none"].includes(value);
 }
 
-export const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null };
+export const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null, hidden: null };
 
 // The paragraph and character styles, as { paragraph, character }
 // functions from a style id to the style's resolved { level, quote,
-// italic, bold }: its heading level (from
+// italic, bold, hidden }: its heading level (from
 // a `heading N` name, the `Title` style, or an outline level, where level 9
-// is body text), whether it is a quote, and whether it sets italic or bold,
+// is body text), whether it is a quote, and whether it sets italic, bold, or
+// hidden text (story notes reads the last),
 // each from the style or the nearest style it is based on. Each style is
 // resolved once, so a long chain of styles costs no more than its length.
 export function readStyles(xml) {
@@ -268,13 +279,15 @@ export function readStyles(xml) {
   let inRunProperties = false;
   for (const token of xmlTokens(xml)) {
     if (token.type === "start" && token.name === "w:style") {
-      style = { id: token.attributes["w:styleId"], name: "", outline: null, italic: null, bold: null, basedOn: null };
+      style = { id: token.attributes["w:styleId"], name: "", outline: null, italic: null, bold: null, hidden: null, basedOn: null };
       if (token.attributes["w:type"] === "paragraph" && isOn({ "w:val": token.attributes["w:default"] ?? "0" }) && defaultParagraph === null) {
         defaultParagraph = style.id ?? null;
       }
       continue;
     }
-    if (style === null) {
+    // Text between the tags, such as the line breaks of a pretty-printed
+    // styles.xml, is not a property.
+    if (style === null || token.type === "text") {
       continue;
     }
     if (token.type === "end" && token.name === "w:style") {
@@ -302,6 +315,8 @@ export function readStyles(xml) {
       style.italic = isOn(token.attributes);
     } else if (token.name === "w:b" && inRunProperties) {
       style.bold = isOn(token.attributes);
+    } else if (token.name === "w:vanish" && inRunProperties) {
+      style.hidden = isOn(token.attributes);
     }
   }
 
@@ -331,7 +346,8 @@ export function readStyles(xml) {
       level,
       quote: base.quote || /^(?:quote|intense quote|block text|block quote|blockquote)$/.test(name),
       italic: style.italic ?? base.italic,
-      bold: style.bold ?? base.bold
+      bold: style.bold ?? base.bold,
+      hidden: style.hidden ?? base.hidden
     };
     resolved.set(id, result);
     return result;
