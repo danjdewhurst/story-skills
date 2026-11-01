@@ -19,6 +19,7 @@ import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
 import { assertNoInterruptedChange } from "./undo.js";
 import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
+import { formatNotes, projectNotes } from "./notes.js";
 import { formatPacing } from "./pacing.js";
 import { DEFAULT_PASSES, formatPasses, nextPass, passChecks } from "./passes.js";
 import { formatProgress } from "./progress.js";
@@ -428,6 +429,26 @@ export const COMMANDS = [
       }
       io.stdout.write(comparison.anchors ? formatLabelMapping(comparison.anchors, comparison.label) : formatComparison(comparison, comparison.label));
       return reportResult(io, comparison, "Comparison complete", "Comparison failed");
+    }
+  },
+  {
+    name: "notes",
+    usage: "notes <file.docx>",
+    summary: [
+      "List the comments, replies, and tracked changes in",
+      "an editor's returned Word file, each placed on its",
+      "current review-copy paragraph label (ch03-p12)"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["json"],
+    run({ parsed, io, cwd, root, overrides }) {
+      const result = applySeverity(projectNotes(root(), parsed.positionals[1], { cwd }), overrides);
+      if (wantsJson(parsed)) {
+        return reportJson(io, "notes", result);
+      }
+      io.stdout.write(formatNotes(result));
+      return reportResult(io, result, "Notes read", "Notes failed");
     }
   },
   {
