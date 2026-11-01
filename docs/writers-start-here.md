@@ -4,6 +4,8 @@ This page is for writers who use Claude in a web browser or the Claude app and h
 
 If you are comfortable with a terminal, or you use Claude Code, Codex, or another coding agent, [Getting started](getting-started.md) has the full install and the `story` command-line tool.
 
+If you would rather not upload skills at all, [Plothold](https://plothold.com/?ref=story-skills-docs) is a web app built on Story Skills by the same maintainer. You chat with a writing partner while the chapters, cast, and story check sit beside the chat. It is a paid product with a free trial.
+
 ## Contents
 
 - [What you need](#what-you-need)
