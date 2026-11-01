@@ -13447,6 +13447,15 @@ var DEFAULT_DISTANCE_UNIT = "units";
 function isPositive(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
+function shown(value) {
+  if (value === undefined) {
+    return "nothing";
+  }
+  if (Array.isArray(value)) {
+    return "a list";
+  }
+  return value !== null && typeof value === "object" ? "a mapping" : String(value);
+}
 function isEntry2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -13465,7 +13474,7 @@ function parseGeography(data = {}) {
   let unit = DEFAULT_DISTANCE_UNIT;
   if (unitValue !== undefined) {
     if (typeof unitValue !== "string" || unitValue.trim() === "") {
-      problems.push(`distance-unit must be text, such as miles or leagues, got ${unitValue}`);
+      problems.push(`distance-unit must be text, such as miles or leagues, got ${shown(unitValue)}`);
     } else {
       unit = unitValue.trim();
     }
@@ -13477,7 +13486,7 @@ function parseGeography(data = {}) {
       scale = scaleValue;
     } else {
       scale = null;
-      problems.push(`map-scale must be a number greater than 0, the distance one coordinate unit spans, got ${scaleValue}`);
+      problems.push(`map-scale must be a number greater than 0, the distance one coordinate unit spans, got ${shown(scaleValue)}`);
     }
   }
   const modes = [];
@@ -13494,17 +13503,17 @@ function parseGeography(data = {}) {
     }
     const before = problems.length;
     if (typeof entry.mode !== "string" || entry.mode.trim() === "") {
-      problems.push(`${at} mode must be text, such as horse or "on foot", got ${entry.mode ?? "nothing"}`);
+      problems.push(`${at} mode must be text, such as horse or "on foot", got ${shown(entry.mode)}`);
     } else if (seen.has(foldMode(entry.mode))) {
       problems.push(`${at} mode ${entry.mode.trim()} appears more than once`);
     } else {
       seen.add(foldMode(entry.mode));
     }
     if (!isPositive(entry.speed)) {
-      problems.push(`${at} speed must be a number greater than 0, in ${unit} an hour, got ${entry.speed ?? "nothing"}`);
+      problems.push(`${at} speed must be a number greater than 0, in ${unit} an hour, got ${shown(entry.speed)}`);
     }
     if (entry["per-day"] !== undefined && !isPositive(entry["per-day"])) {
-      problems.push(`${at} per-day must be a number greater than 0, in ${unit}, got ${entry["per-day"]}`);
+      problems.push(`${at} per-day must be a number greater than 0, in ${unit}, got ${shown(entry["per-day"])}`);
     }
     if (problems.length === before) {
       modes.push({ mode: entry.mode.trim(), key: foldMode(entry.mode), speed: entry.speed, perDay: entry["per-day"] });
@@ -14307,7 +14316,7 @@ function coordinatesOption(value) {
     return;
   }
   const parts = String(value).split(",").map((part) => part.trim());
-  const numbers = parts.map((part) => part === "" ? Number.NaN : Number(part));
+  const numbers = parts.map((part) => /^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(part) ? Number(part) : Number.NaN);
   if (numbers.length !== 2 || !numbers.every(Number.isFinite)) {
     throw usageError(`coordinates must be two numbers separated by a comma, such as 12,40, got ${value}`);
   }
@@ -14512,7 +14521,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
-    ...options["travel-mode"] === undefined || options["travel-mode"] === "" ? {} : { "travel-mode": options["travel-mode"] },
+    ...String(options["travel-mode"] ?? "").trim() === "" ? {} : { "travel-mode": String(options["travel-mode"]).trim() },
     sequel: options.sequel ?? false,
     ...options.outcome === undefined ? {} : { outcome: options.outcome },
     dilemma: options.dilemma ?? "",
@@ -17093,16 +17102,11 @@ function checkDistanceTravel(project, hoursPerDay, warnings) {
   const modes = new Map(geography.modes.map((mode) => [mode.key, mode]));
   const unit = geography.unit;
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
-  const strandOf = (chapter) => String(chapter.strand ?? "");
-  const last = new Map;
+  const previousByStrand = new Map;
   for (const { unit: scene, chapter, isChapter } of readingUnits(project)) {
-    const strand = strandOf(chapter);
-    if (!last.has(strand)) {
-      last.set(strand, new Map);
-    }
-    const whereabouts = last.get(strand);
+    const strand = String(chapter.strand ?? "");
     if (isChapter) {
-      whereabouts.clear();
+      previousByStrand.set(strand, null);
       continue;
     }
     if (scene.flashbackTo !== "") {
@@ -17113,43 +17117,34 @@ function checkDistanceTravel(project, hoursPerDay, warnings) {
     if (pov !== "") {
       present.add(pov);
     }
+    const previous = previousByStrand.get(strand) ?? null;
+    previousByStrand.set(strand, { location: scene.location, present });
     const to = scene.location;
-    const origins = new Map;
-    for (const characterId of present) {
-      const from = whereabouts.get(characterId);
-      if (to === "") {
-        whereabouts.delete(characterId);
-        continue;
+    if (previous === null || !(scene.travelHours > 0) || to === "" || previous.location === "" || previous.location === to) {
+      continue;
+    }
+    const travellers = [...present].filter((id) => previous.present.has(id)).sort((left, right) => left.localeCompare(right, "en"));
+    const from = previous.location;
+    const found = travellers.length === 0 ? undefined : distance(from, to);
+    if (found === undefined) {
+      continue;
+    }
+    const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
+    let best = null;
+    for (const mode of named ? [named] : geography.modes) {
+      const needed = hoursNeeded(found.distance, mode, hoursPerDay);
+      if (best === null || needed < best.needed) {
+        best = { mode, needed };
       }
-      if (from !== undefined && from !== to && scene.travelHours > 0) {
-        origins.set(from, [...origins.get(from) ?? [], characterId]);
-      }
-      whereabouts.set(characterId, to);
+    }
+    if (scene.travelHours >= best.needed - 0.000000001) {
+      continue;
     }
     const label = relative2(project, scene.file);
-    for (const from of [...origins.keys()].sort((left, right) => left.localeCompare(right, "en"))) {
-      const found = distance(from, to);
-      if (found === undefined) {
-        continue;
-      }
-      const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
-      const candidates = named ? [named] : geography.modes;
-      let best = null;
-      for (const mode of candidates) {
-        const needed = hoursNeeded(found.distance, mode, hoursPerDay);
-        if (best === null || needed < best.needed) {
-          best = { mode, needed };
-        }
-      }
-      if (scene.travelHours >= best.needed - 0.000000001) {
-        continue;
-      }
-      const who = origins.get(from).sort((left, right) => left.localeCompare(right, "en")).join(", ");
-      const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
-      const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
-      const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
-      warnings.push(warn("travel-too-far", `${label} gives ${who} ${formatHours(scene.travelHours, Math.floor)} to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
-    }
+    const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
+    const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
+    const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
+    warnings.push(warn("travel-too-far", `${label} gives ${travellers.join(", ")} ${scene.travelHours}h to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
   }
 }
 function formatDistance(distance) {
@@ -24408,7 +24403,7 @@ function validateLocationGeography(data, label, errors, warnings) {
       destinations.add(to);
     }
     if (typeof entry.distance !== "number" || !Number.isFinite(entry.distance) || entry.distance <= 0) {
-      errors.push(err("invalid-distance", `${label} distance to ${entry.to ?? "?"} must be a positive number`, label));
+      errors.push(err("invalid-distance", `${label} distance to ${to || "?"} must be a positive number`, label));
     }
   }
 }
@@ -24670,9 +24665,8 @@ function validateTravelMode(project, data, label, errors, warnings) {
     return;
   }
   const modes = project.geography?.modes ?? [];
-  if (!modes.some((entry) => entry.key === foldMode(mode))) {
-    const listed = modes.length === 0 ? "story.md lists no travel-modes" : `story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}`;
-    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (${listed}), so the distance check uses the fastest one`, label));
+  if (modes.length > 0 && !modes.some((entry) => entry.key === foldMode(mode))) {
+    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}), so the distance check uses the fastest one`, label));
   }
 }
 var STATE_ENTRY_KEYS = {

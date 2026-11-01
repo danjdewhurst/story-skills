@@ -1401,17 +1401,17 @@ function checkStrandRoutes(characterId, list, errors, graph, distance, longestRo
 }
 
 // Location geography (see geography.js) says how far apart two places are,
-// and the story.md travel modes how fast a journey can go. Each character is
-// followed through the scenes they are in (the scene's `characters` plus its
-// `pov`, or the chapter's POV), in reading order within a chapter strand, as
-// travel-hours reads it: the journey into a scene starts where the
-// character's last scene was. A scene whose travel-hours is too short to
-// cover that distance by its `travel-mode`, or by the fastest mode when it
-// names none or one story.md does not list, is a warning. Only a scene with
-// travel-hours above 0 is judged, so nothing changes without it. A
-// flashback scene is not part of the journey, and a scene with no location,
-// or a chapter with no scene records, loses track of where everyone is, so
-// the next scene starts afresh.
+// and the story.md travel modes how fast a journey can go. travel-hours is
+// the journey since the previous scene, so each scene with travel-hours
+// above 0 is compared with the previous scene in reading order within its
+// chapter strand. Every character in both scenes (the scene's `characters`
+// plus its `pov`, or the chapter's POV) made the journey from the previous
+// scene's location. When the hours are too short to cover that distance by
+// the scene's `travel-mode`, or by the fastest mode when it names none or
+// one story.md does not list, it is a warning. A character who was not in
+// the previous scene may have had longer, so is not judged. A flashback
+// scene is not part of the journey, and a scene with no location, or a
+// chapter with no scene records, gives no place to start from.
 function checkDistanceTravel(project, hoursPerDay, warnings) {
   const geography = project.geography;
   if (!geography || geography.modes.length === 0) {
@@ -1421,17 +1421,12 @@ function checkDistanceTravel(project, hoursPerDay, warnings) {
   const modes = new Map(geography.modes.map((mode) => [mode.key, mode]));
   const unit = geography.unit;
   const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
-  const strandOf = (chapter) => String(chapter.strand ?? "");
-  // strand -> character -> the location of their last scene
-  const last = new Map();
+  // strand -> the previous scene's location and cast, or null
+  const previousByStrand = new Map();
   for (const { unit: scene, chapter, isChapter } of readingUnits(project)) {
-    const strand = strandOf(chapter);
-    if (!last.has(strand)) {
-      last.set(strand, new Map());
-    }
-    const whereabouts = last.get(strand);
+    const strand = String(chapter.strand ?? "");
     if (isChapter) {
-      whereabouts.clear();
+      previousByStrand.set(strand, null);
       continue;
     }
     if (scene.flashbackTo !== "") {
@@ -1442,43 +1437,34 @@ function checkDistanceTravel(project, hoursPerDay, warnings) {
     if (pov !== "") {
       present.add(pov);
     }
+    const previous = previousByStrand.get(strand) ?? null;
+    previousByStrand.set(strand, { location: scene.location, present });
     const to = scene.location;
-    const origins = new Map();
-    for (const characterId of present) {
-      const from = whereabouts.get(characterId);
-      if (to === "") {
-        whereabouts.delete(characterId);
-        continue;
+    if (previous === null || !(scene.travelHours > 0) || to === "" || previous.location === "" || previous.location === to) {
+      continue;
+    }
+    const travellers = [...present].filter((id) => previous.present.has(id)).sort((left, right) => left.localeCompare(right, "en"));
+    const from = previous.location;
+    const found = travellers.length === 0 ? undefined : distance(from, to);
+    if (found === undefined) {
+      continue;
+    }
+    const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
+    let best = null;
+    for (const mode of named ? [named] : geography.modes) {
+      const needed = hoursNeeded(found.distance, mode, hoursPerDay);
+      if (best === null || needed < best.needed) {
+        best = { mode, needed };
       }
-      if (from !== undefined && from !== to && scene.travelHours > 0) {
-        origins.set(from, [...(origins.get(from) ?? []), characterId]);
-      }
-      whereabouts.set(characterId, to);
+    }
+    if (scene.travelHours >= best.needed - 1e-9) {
+      continue;
     }
     const label = relative(project, scene.file);
-    for (const from of [...origins.keys()].sort((left, right) => left.localeCompare(right, "en"))) {
-      const found = distance(from, to);
-      if (found === undefined) {
-        continue;
-      }
-      const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
-      const candidates = named ? [named] : geography.modes;
-      let best = null;
-      for (const mode of candidates) {
-        const needed = hoursNeeded(found.distance, mode, hoursPerDay);
-        if (best === null || needed < best.needed) {
-          best = { mode, needed };
-        }
-      }
-      if (scene.travelHours >= best.needed - 1e-9) {
-        continue;
-      }
-      const who = origins.get(from).sort((left, right) => left.localeCompare(right, "en")).join(", ");
-      const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
-      const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
-      const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
-      warnings.push(warn("travel-too-far", `${label} gives ${who} ${formatHours(scene.travelHours, Math.floor)} to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
-    }
+    const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
+    const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
+    const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
+    warnings.push(warn("travel-too-far", `${label} gives ${travellers.join(", ")} ${scene.travelHours}h to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
   }
 }
 

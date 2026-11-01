@@ -205,7 +205,7 @@ function validateLocationGeography(data, label, errors, warnings) {
       destinations.add(to);
     }
     if (typeof entry.distance !== "number" || !Number.isFinite(entry.distance) || entry.distance <= 0) {
-      errors.push(err("invalid-distance", `${label} distance to ${entry.to ?? "?"} must be a positive number`, label));
+      errors.push(err("invalid-distance", `${label} distance to ${to || "?"} must be a positive number`, label));
     }
   }
 }
@@ -474,8 +474,9 @@ export function validateScenes(project, errors, warnings) {
 }
 
 // A scene's `travel-mode` is free text, matched against the story.md
-// travel-modes ignoring case and spacing. An unlisted mode is only a
-// warning: the distance check then uses the fastest mode.
+// travel-modes ignoring letter case and extra spaces. An unlisted mode is
+// only a warning: the distance check then uses the fastest mode. Without
+// travel-modes there is no distance check, so nothing is said.
 function validateTravelMode(project, data, label, errors, warnings) {
   const mode = data["travel-mode"];
   if (mode === undefined) {
@@ -490,9 +491,8 @@ function validateTravelMode(project, data, label, errors, warnings) {
     return;
   }
   const modes = project.geography?.modes ?? [];
-  if (!modes.some((entry) => entry.key === foldMode(mode))) {
-    const listed = modes.length === 0 ? "story.md lists no travel-modes" : `story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}`;
-    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (${listed}), so the distance check uses the fastest one`, label));
+  if (modes.length > 0 && !modes.some((entry) => entry.key === foldMode(mode))) {
+    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}), so the distance check uses the fastest one`, label));
   }
 }
 

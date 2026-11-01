@@ -3416,7 +3416,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-coordinates` | error | A location's `coordinates` is not a list of two numbers, such as `[12, 40]`. |
 | `invalid-distance` | error | A location `distances` entry's `distance` is not a positive number. |
 | `duplicate-distance` | warning | A location lists more than one distance to the same place. |
-| `unknown-travel-mode` | warning | A scene's `travel-mode` is not one of the `story.md` `travel-modes`, so the distance check uses the fastest mode. |
+| `unknown-travel-mode` | warning | `story.md` lists `travel-modes`, and a scene's `travel-mode` is not one of them, so the distance check uses the fastest mode. |
 | `deceased-without-died-in` | warning | A progression makes a character deceased without a matching `died-in`. A second death after a revival, which `died-in` cannot record, is not reported. |
 | `progression-fixed-field` | error | A progression changes a field that cannot change by chapter, such as `died-in`. |
 | `progression-list-field` | error | A progression changes a list field. |
@@ -3564,7 +3564,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `travel-too-fast` | error | Less time passes than a scene's `travel-hours` needs. |
 | `route-same-time` | error | A character is at two places at the same moment. |
 | `route-too-fast` | error | A character moves between places faster than the fastest route allows. |
-| `travel-too-far` | warning | A scene's `travel-hours` is too short to cover the distance from the character's last scene by the scene's `travel-mode`, or by the fastest mode. See [Distance travel](project-format.md#distance-travel). |
+| `travel-too-far` | warning | A scene's `travel-hours` is too short to cover the distance from the previous scene by the scene's `travel-mode`, or by the fastest mode. See [Distance travel](project-format.md#distance-travel). |
 
 ### Codes: series
 

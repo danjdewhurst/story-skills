@@ -117,6 +117,13 @@ exemptions:
     expect(validateAgainstSchema({ hours: 0 }, local)).toEqual(["$.hours: 0 is below the minimum 1"]);
   });
 
+  test("checks minItems and maxItems", () => {
+    const local = { type: "object", properties: { at: { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } } } };
+    expect(validateAgainstSchema({ at: [1, 2] }, local)).toEqual([]);
+    expect(validateAgainstSchema({ at: [1] }, local)).toEqual(["$.at: fewer than 2 items"]);
+    expect(validateAgainstSchema({ at: [1, 2, 3] }, local)).toEqual(["$.at: more than 2 items"]);
+  });
+
   test("refuses schema keywords it cannot enforce, even where no data reaches", () => {
     expect(() => validateAgainstSchema({}, { additionalProperties: false })).toThrow("Unsupported schema keyword additionalProperties");
     expect(() => validateAgainstSchema({}, { $ref: "other.json#/x" })).toThrow("Unsupported $ref");

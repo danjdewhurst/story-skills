@@ -19,6 +19,18 @@ function isPositive(value) {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
+// A value as a message shows it: a scalar as written, never an object, so
+// a list entry with a `toString` key cannot break the message.
+function shown(value) {
+  if (value === undefined) {
+    return "nothing";
+  }
+  if (Array.isArray(value)) {
+    return "a list";
+  }
+  return value !== null && typeof value === "object" ? "a mapping" : String(value);
+}
+
 function isEntry(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -45,7 +57,7 @@ export function parseGeography(data = {}) {
   let unit = DEFAULT_DISTANCE_UNIT;
   if (unitValue !== undefined) {
     if (typeof unitValue !== "string" || unitValue.trim() === "") {
-      problems.push(`distance-unit must be text, such as miles or leagues, got ${unitValue}`);
+      problems.push(`distance-unit must be text, such as miles or leagues, got ${shown(unitValue)}`);
     } else {
       unit = unitValue.trim();
     }
@@ -58,7 +70,7 @@ export function parseGeography(data = {}) {
     } else {
       // A scale that cannot be read turns the map off rather than guess.
       scale = null;
-      problems.push(`map-scale must be a number greater than 0, the distance one coordinate unit spans, got ${scaleValue}`);
+      problems.push(`map-scale must be a number greater than 0, the distance one coordinate unit spans, got ${shown(scaleValue)}`);
     }
   }
   const modes = [];
@@ -75,17 +87,17 @@ export function parseGeography(data = {}) {
     }
     const before = problems.length;
     if (typeof entry.mode !== "string" || entry.mode.trim() === "") {
-      problems.push(`${at} mode must be text, such as horse or "on foot", got ${entry.mode ?? "nothing"}`);
+      problems.push(`${at} mode must be text, such as horse or "on foot", got ${shown(entry.mode)}`);
     } else if (seen.has(foldMode(entry.mode))) {
       problems.push(`${at} mode ${entry.mode.trim()} appears more than once`);
     } else {
       seen.add(foldMode(entry.mode));
     }
     if (!isPositive(entry.speed)) {
-      problems.push(`${at} speed must be a number greater than 0, in ${unit} an hour, got ${entry.speed ?? "nothing"}`);
+      problems.push(`${at} speed must be a number greater than 0, in ${unit} an hour, got ${shown(entry.speed)}`);
     }
     if (entry["per-day"] !== undefined && !isPositive(entry["per-day"])) {
-      problems.push(`${at} per-day must be a number greater than 0, in ${unit}, got ${entry["per-day"]}`);
+      problems.push(`${at} per-day must be a number greater than 0, in ${unit}, got ${shown(entry["per-day"])}`);
     }
     if (problems.length === before) {
       modes.push({ mode: entry.mode.trim(), key: foldMode(entry.mode), speed: entry.speed, perDay: entry["per-day"] });

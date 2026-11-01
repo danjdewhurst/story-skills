@@ -151,11 +151,11 @@ story-time order, which helps when adjusting dates.
 
 ## The distance travel check
 
-Once `story.md` lists a travel mode, `story continuity .` follows each
-character (scene `characters` and `pov`) through their scenes in reading
-order. A scene with `travel-hours` above 0 at a different place from the
-character's last scene must give enough hours to cover the distance at the
-speed of the scene's `travel-mode`:
+Once `story.md` lists a travel mode, `story continuity .` compares each
+scene that has `travel-hours` above 0 with the previous scene in reading
+order. When the two scenes are at different places, the hours must cover
+the distance at the speed of the scene's `travel-mode`, for the characters
+(scene `characters` and `pov`) who are in both scenes:
 
 ```yaml
 location: stonebridge
@@ -166,8 +166,8 @@ travel-mode: horse
 Without `travel-mode`, or with a mode `story.md` does not list, the check
 uses the fastest mode, so the warning then means no way of travel in the
 world could make the journey. The finding is a warning, `travel-too-far`.
-Undated scenes count; a flashback scene is skipped; a scene with no
-`location` resets where the character is.
+Undated scenes count; a flashback scene is skipped; after a scene with no
+`location`, the next scene has no place to start from.
 
 To fix a finding:
 
