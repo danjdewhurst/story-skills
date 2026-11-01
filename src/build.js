@@ -11,7 +11,7 @@ import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
 import { PROGRESS_FILE, cleanSessions, writingDays } from "./progress.js";
 import { parseClockDate } from "./continuity.js";
 import { icsCalendar, scheduleEvents } from "./ics.js";
-import { releaseCadence, releaseDates } from "./release-schedule.js";
+import { releaseDates } from "./release-schedule.js";
 import {
   chapterHeading,
   chapterProse,
@@ -276,21 +276,32 @@ function buildCalendar(project, output) {
   let daily = null;
   const dailyTarget = data[unit.dailyTargetField];
   if (Number.isInteger(dailyTarget) && dailyTarget > 0 && data.status !== "complete") {
+    // release-start counts even without a valid release-every: it is the
+    // day the writer said the serial starts.
+    const releaseStart = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
     const starts = [
       ...cleanSessions(project.progressLog?.data.sessions).slice(0, 1).map((session) => parseClockDate(session.date).days),
-      ...[releaseCadence(data)?.startDays].filter((days) => days !== undefined),
+      ...(releaseStart ? [releaseStart.days] : []),
       ...episodes.map((episode) => episode.days)
     ];
     if (starts.length === 0) {
-      warnings.push(warn("ics-daily-target-unanchored", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
+      warnings.push(warn("ics-daily-target-left-out", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
     } else {
       daily = { target: dailyTarget, writingDays: writingDays(data["writing-days"]), startDays: Math.min(...starts) };
     }
   }
 
   const events = scheduleEvents({ title: project.title, storyId: project.storyId, noun: unit.noun, target, deadline, daily, episodes });
+  if (daily !== null && !events.some((event) => event.uid.startsWith("daily-target."))) {
+    const end = deadline === null ? "9999-12-31, the last day a calendar date can name" : `the deadline (${deadline.date})`;
+    warnings.push(warn("ics-daily-target-left-out", `story.md ${unit.dailyTargetField} is left out of the calendar: its first writing day is after ${end}`, "story.md"));
+  }
   if (events.length === 0) {
-    throw projectError("Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
+    // The only event there could have been is a daily target with no
+    // first day, so say that rather than ask for a daily target.
+    throw projectError(warnings.length > 0
+      ? `Cannot build ics: the calendar would have no events. ${warnings[0].message}`
+      : "Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
   }
   writeFile(output.outFile, icsCalendar({ title: project.title, events, stamp: buildTimestamp() }), output.writeOptions);
   return { outFile: output.outFile, chapters: project.chapters.length, format: "ics", events: events.length, warnings };

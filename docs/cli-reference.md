@@ -3565,7 +3565,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
 | `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`, misspelt, or not a cleared value; `--include-pending` keeps it. |
 | `matter-placement-left-out` | warning | `export` or a build leaves out a written matter page whose `placement` is neither `front` nor `back`, such as `Back`; `validate` reports the value as an error. |
-| `ics-daily-target-unanchored` | warning | An `ics` build leaves out the daily target because nothing gives it a first day: no session in `progress.md`, no `release-start`, and no release date. |
+| `ics-daily-target-left-out` | warning | An `ics` build leaves out the daily target: nothing gives it a first day (no session in `progress.md`, no `release-start`, and no release date), or its first writing day is after the `deadline`. |
 
 ### Codes: add, rename, move, split, merge, and remove
 

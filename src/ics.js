@@ -9,7 +9,11 @@
 // id and the event's role, never from a clock or a random number, and
 // DTSTAMP is the same fixed build timestamp the EPUB uses.
 
+import { Buffer } from "node:buffer";
 import { WEEKDAYS } from "./progress.js";
+
+// 9999-12-31, the last day a DATE can name, in days since 1970-01-01.
+const LAST_DAY = Date.UTC(9999, 11, 31) / 86400000;
 
 // The longest line RFC 5545 allows, in octets, not counting the CRLF.
 export const ICS_LINE_OCTETS = 75;
@@ -24,7 +28,9 @@ function listText(items) {
 
 // Escapes a TEXT value (RFC 5545 3.3.11): a backslash, semicolon, and comma
 // take a backslash, and a line break becomes `\n`. Other control characters
-// are not allowed in TEXT, so each becomes a space.
+// are not allowed in TEXT, so each becomes a space, as do the Unicode line
+// and paragraph separators and NEL, which a lax reader could take for a
+// line break.
 export function escapeText(value) {
   return String(value)
     .replace(/\r\n?/g, "\n")
@@ -32,7 +38,7 @@ export function escapeText(value) {
     .replace(/;/g, "\\;")
     .replace(/,/g, "\\,")
     .replace(/\n/g, "\\n")
-    .replace(/[\u0000-\u001f\u007f]/g, " ");
+    .replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]/g, " ");
 }
 
 // Folds a content line (RFC 5545 3.1): no line is longer than 75 octets of
@@ -73,6 +79,11 @@ function formatNumber(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// "1 word", "1,250 words".
+function countText(count, noun) {
+  return `${formatNumber(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 // Epoch days to the weekday, 0 for Monday: 1970-01-01 was a Thursday.
 function weekdayIndex(days) {
   return (((days + 3) % 7) + 7) % 7;
@@ -102,7 +113,9 @@ export function scheduleEvents(schedule) {
     while (scheduled !== null && !scheduled.has(WEEKDAYS[weekdayIndex(start)])) {
       start += 1;
     }
-    if (deadline === null || start <= deadline.days) {
+    // A start past the deadline, or past the last day a DATE can name, has
+    // no writing day left: build.js warns that the target is left out.
+    if (start <= (deadline === null ? LAST_DAY : deadline.days)) {
       const rule = scheduled === null ? ["FREQ=DAILY"] : ["FREQ=WEEKLY", `BYDAY=${daily.writingDays.map((day) => BYDAY[day]).join(",")}`];
       if (deadline !== null) {
         rule.push(`UNTIL=${icsDate(deadline.days)}`);
@@ -112,8 +125,8 @@ export function scheduleEvents(schedule) {
       events.push({
         uid: uid("daily-target"),
         days: start,
-        summary: `Write ${formatNumber(daily.target)} ${noun}s: ${title}`,
-        description: `The daily target for ${title}: ${formatNumber(daily.target)} ${noun}s ${days}${until}.`,
+        summary: `Write ${countText(daily.target, noun)}: ${title}`,
+        description: `The daily target for ${title}: ${countText(daily.target, noun)} ${days}${until}.`,
         rrule: rule.join(";")
       });
     }
@@ -132,7 +145,7 @@ export function scheduleEvents(schedule) {
     });
   }
   if (deadline !== null) {
-    const goal = target === null ? "" : ` Target: ${formatNumber(target)} ${noun}s.`;
+    const goal = target === null ? "" : ` Target: ${countText(target, noun)}.`;
     dated.push({
       uid: uid("deadline"),
       days: deadline.days,
@@ -165,7 +178,9 @@ export function icsCalendar({ title, events, stamp }) {
       `UID:${event.uid}`,
       `DTSTAMP:${dtstamp}`,
       `DTSTART;VALUE=DATE:${icsDate(event.days)}`,
-      `DTEND;VALUE=DATE:${icsDate(event.days + 1)}`,
+      // An all-day event ends the next day; on 9999-12-31 there is none to
+      // name, and DTSTART alone is one day (RFC 5545 3.6.1).
+      ...(event.days >= LAST_DAY ? [] : [`DTEND;VALUE=DATE:${icsDate(event.days + 1)}`]),
       ...(event.rrule === null ? [] : [`RRULE:${event.rrule}`]),
       `SUMMARY:${escapeText(event.summary)}`,
       `DESCRIPTION:${escapeText(event.description)}`,
