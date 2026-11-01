@@ -14,7 +14,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Each comment shows its author, date, the text it covers, its replies, and whether it is resolved. Each paragraph with tracked changes shows its text before and after, trimmed to the change with a few words either side.
   - A paragraph is matched by its text as the editor saw it, as `story compare --anchor` matches labels, so a note still finds its paragraph after you edit the chapter. A note on a chapter heading goes on the chapter's key, such as `ch03`.
   - A note that matches no current paragraph is listed with its chapter heading and opening words, with a new `note-unplaced` warning. A comment with hidden text is marked, with a new `note-hidden-text` warning.
-  - It reads the file only, and quotes every line of the editor's text, so a comment cannot pass as a heading or as another note. `--json` gives every note with the whole paragraphs before and after.
+  - It reads the file only, and quotes every line of the editor's text, so a comment cannot pass as a heading, another note, or a reply. `--json` gives every note with the whole paragraphs before and after.
+  - It also reads a Shunn manuscript build (`--format docx --shunn`), and places a note on a chapter heading by the chapter's title.
   - The `editorial-review` and `story-maintenance` skills use it when an editor's or reader's Word file comes back.
 - `story import` reads Word documents, so a draft in Word, Google Docs, or Scrivener no longer needs Pandoc first. See [Importing a Word document](docs/manuscripts.md#importing-a-word-document).
   - A `.docx` source, or a `.docx` file in a source folder, becomes markdown and is then split into chapters as before. Heading styles and outline levels become headings, in any language Word uses, and the `Title` style becomes a level 1 heading. A plain paragraph that is only a chapter line, such as a bold `Chapter 1`, becomes a chapter heading.
@@ -23,6 +24,7 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A table of contents, an index, placeholder text, and hidden text are left out. Tracked changes are read as accepted. Comments, footnotes, images, text boxes, tables, list numbering, and ruby readings are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
   - Only the document's text and styles parts are read, each up to 32 MB unpacked, and the text may come to 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused with a usage error.
   - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document only from a `.docx` file.
+  - A styles part with line breaks or spaces between its tags, as tools other than Word save it, is read too.
 - `story build --format ics` puts the writing schedule in a calendar file to import into Google Calendar, Apple Calendar, or Outlook. See [Writing schedule calendar](docs/manuscripts.md#writing-schedule-calendar-icalendar).
   - The file, `dist/<story-id>.ics`, holds all-day events for the `deadline` (with `target-words`), each serial episode's release date, and the daily target as a recurring event on the `writing-days` until the deadline.
   - The release dates are the ones `story next` works out: a chapter's `release-date`, or its place on `release-every` from `release-start`. An unfinished serial also gets the next episode on the cadence after its last chapter.

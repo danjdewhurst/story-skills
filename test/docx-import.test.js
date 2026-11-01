@@ -134,6 +134,19 @@ describe("docxMarkdown", () => {
     expect(notes.map((note) => note.code).sort()).toEqual(["comments", "footnotes", "images", "tables", "text-boxes", "tracked-changes"]);
   });
 
+  test("reads a styles part with white space between its tags", () => {
+    const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles ${W}>
+  <w:style w:type="paragraph" w:styleId="H1">
+    <w:name w:val="heading 1"/>
+    <w:rPr>
+      <w:b/>
+    </w:rPr>
+  </w:style>
+</w:styles>`;
+    expect(docxMarkdown(docxBytes(paragraph(run("Chapter One"), '<w:pStyle w:val="H1"/>'), { styles })).text).toBe("# Chapter One\n");
+  });
+
   test("reads a document with no styles part", () => {
     expect(docxMarkdown(docxBytes(paragraph(run("Only text.")), { styles: null })).text).toBe("Only text.\n");
   });
