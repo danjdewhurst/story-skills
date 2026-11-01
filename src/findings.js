@@ -303,6 +303,9 @@ export const FINDING_CODES = {
   "merge-conflicts": "warning",
   // story snapshot --restore
   "folder-not-removed": "warning",
+  // story notes
+  "note-unplaced": "warning",
+  "note-hidden-text": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",

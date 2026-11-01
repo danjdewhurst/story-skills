@@ -73,6 +73,14 @@ const OK_ARGS = {
   knowledge: () => ["knowledge", "mara-quill", "--at", "chapter-01"],
   context: () => ["context", "chapter-01"],
   compare: () => ["compare", "--against", "."],
+  // A Word build of the project, outside it, as an editor returns it.
+  notes: (cwd) => {
+    const file = path.join(cwd, "..", "returned.docx");
+    if (fs.existsSync(path.join(cwd, "story.md"))) {
+      expect(invoke(cwd, ["build", "--format", "docx", "--out", file]).code).toBe(ok);
+    }
+    return ["notes", file];
+  },
   similarity: (cwd) => {
     const reference = path.join(cwd, "..", "reference.txt");
     fs.writeFileSync(reference, "The tide came in over the rocks and the lamp was lit.\n", "utf8");
@@ -431,6 +439,9 @@ describe("exit codes", () => {
       ["mentions", "glass", "pane"],
       ["add", "glass", "Pane"],
       ["compare"],
+      ["notes"],
+      ["notes", "missing.docx"],
+      ["notes", "story.md"],
       ["similarity"],
       ["similarity", "--against", "no-such-reference"],
       ["synopsis", "--pages", "2"],

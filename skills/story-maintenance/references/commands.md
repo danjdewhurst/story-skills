@@ -39,6 +39,7 @@ story snapshot --list --path .
 story compare . --snapshot draft-1
 story snapshot --restore draft-1 --dry-run --path .
 story compare . --ref beta-round-1 --anchor ch03-p12
+story notes returned.docx --path .
 story similarity . --against ../book-one
 story similarity . --snapshot draft-1
 story series .
