@@ -58,14 +58,14 @@ CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:c
 
 Story Skills is CLI first. Do not add an MCP server, such as a `story mcp` command, and do not suggest one as a feature. [#259](https://github.com/danjdewhurst/story-skills/issues/259) proposed it and was closed for these reasons:
 
-- Every agent the project targets, such as Claude Code and Codex, has a shell, and the skills already name the `story` command to run.
+- Coding agents such as Claude Code and Codex have a shell, and the skills already name the `story` command to run. On claude.ai, skills run with code execution, and `story-maintenance` carries the bundled CLI for the chat to run (see [Writers: start here](docs/writers-start-here.md#what-needs-a-terminal)).
 - `--json` ([#255](https://github.com/danjdewhurst/story-skills/issues/255)) gives agents structured output with a versioned result envelope, so an MCP server would mostly repeat the CLI.
 - A second interface must stay in step with the CLI and needs its own tests and docs.
 - It needs either an MCP SDK runtime dependency, and the package keeps none, or a hand-written JSON-RPC layer.
 - It is awkward to ship in the copied-skill fallback bundle.
 - The CLI's write-safety rules (the project lock, the undo log, and `--dry-run`) would have to be enforced again in a new place.
 
-When an agent needs something it cannot get from the CLI, add a command or a `--json` field instead. Reopen #259 only if people ask to use Story Skills from an app with no shell, such as Claude Desktop or claude.ai.
+When an agent needs something it cannot get from the CLI, add a command or a `--json` field instead. Do not reopen #259 yourself. If writers ask for the checks in an app that cannot run the bundled CLI, tell a maintainer.
 
 ## Skill Authoring
 
