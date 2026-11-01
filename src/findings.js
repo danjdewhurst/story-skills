@@ -71,6 +71,7 @@ export const FINDING_CODES = {
   "invalid-build-style": "error",
   "invalid-date": "error",
   "invalid-calendar": "error",
+  "invalid-geography": "error",
   "invalid-cli-config": "error",
   "invalid-filename": "error",
   "filename-number-mismatch": "error",
@@ -80,6 +81,10 @@ export const FINDING_CODES = {
   "invalid-choice": "error",
   "invalid-route-hours": "error",
   "duplicate-route": "warning",
+  "invalid-coordinates": "error",
+  "invalid-distance": "error",
+  "duplicate-distance": "warning",
+  "unknown-travel-mode": "warning",
   "deceased-without-died-in": "warning",
   "progression-fixed-field": "error",
   "progression-list-field": "error",
@@ -130,6 +135,7 @@ export const FINDING_CODES = {
   "backlink-type-mismatch": "error",
   "legacy-backlink-type": "warning",
   "route-to-self": "error",
+  "distance-to-self": "error",
   "broken-link": "error",
   "link-backslash": "error",
   "link-not-kebab": "error",
@@ -215,6 +221,7 @@ export const FINDING_CODES = {
   "travel-too-fast": "error",
   "route-same-time": "error",
   "route-too-fast": "error",
+  "travel-too-far": "warning",
   // story series
   "series-link-outside": "error",
   "series-too-many-books": "error",
@@ -410,5 +417,6 @@ export const CHAPTER_CODES = [
   "clock-backward",
   "travel-too-fast",
   "route-same-time",
-  "route-too-fast"
+  "route-too-fast",
+  "travel-too-far"
 ];

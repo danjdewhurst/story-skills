@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { parseCalendar } from "./calendar.js";
+import { parseGeography } from "./geography.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { assertSafeProjectDirectory, lstatIfExists, readTextFile } from "./files.js";
 import {
@@ -260,6 +261,9 @@ export function scanProject(root) {
     // read under: null for YYYY-MM-DD dates, `{ invalid: true }` when the
     // calendar has problems, which validate reports.
     calendar: parseCalendar(story.data.calendar).calendar,
+    // The story.md distance unit, map scale, and travel modes (see
+    // geography.js); with no travel modes the distance check is off.
+    geography: parseGeography(story.data).geography,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -285,6 +289,8 @@ export function scanProject(root) {
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
       routes: asArray(data.routes),
+      coordinates: data.coordinates,
+      distances: asArray(data.distances),
       setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
@@ -389,6 +395,7 @@ export function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
+      travelMode: typeof data["travel-mode"] === "string" ? data["travel-mode"].trim() : "",
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),

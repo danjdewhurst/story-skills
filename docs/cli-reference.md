@@ -2466,13 +2466,13 @@ Options by kind:
 | Kind | Options (frontmatter field) | Defaults |
 |---|---|---|
 | `character` | `--role` (`role`), `--status` (`status`), `--location` (`locations`), `--arc` (`arc`: one free-text theme label such as `redemption`, not an arc id; give it once) | `supporting`, `alive` |
-| `location` | `--type`, `--status`, `--region`, `--population`, `--controlled-by`, `--character` (`notable-characters`) | `other`, `unknown` |
+| `location` | `--type`, `--status`, `--region`, `--population`, `--controlled-by`, `--character` (`notable-characters`), `--coordinates` (`coordinates`, two numbers such as `12,40`) | `other`, `unknown`; no `coordinates` |
 | `system` | `--type`, `--prevalence` | `other`, `uncommon` |
 | `faction` | `--type`, `--status`, `--member` (`members`; `--character` also works), `--location` (`locations`) | `other`, `active` |
 | `artifact` | `--type`, `--status`, `--owner` (`owner`), `--location` (`location`, a single id; give it once) | `object`, `active` |
 | `arc` | `--type`, `--status`, `--character` (`characters`), `--theme`/`--themes` (`themes`), `--acts` (`acts`) | `subplot`, `planned` |
 | `chapter` | `--number`, `--pov`, `--location` (`locations`), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--mode`, `--date`, `--time`, `--hook`, `--beat` | One more than the highest chapter number, `outline`; no `hook` or `beat` |
-| `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--sequel`, `--outcome`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline`; no `outcome` |
+| `scene` | `--chapter`, `--scene`, `--pov`, `--location` (`location`, a single id; give it once), `--character` (`characters`), `--mention` (`mentions`), `--arc` (`arcs-advanced`), `--status`, `--date`, `--time`, `--travel-hours`, `--travel-mode`, `--sequel`, `--outcome`, `--dilemma` | Latest chapter, one more than that chapter's highest scene number, `outline`; no `outcome` |
 | `question` | `--status`, `--introduced`, `--resolved`, `--character` (`characters`) | `answered` with `--resolved`, otherwise `open`; `--status open` with `--resolved` is an error |
 | `promise` | `--status`, `--planted`, `--payoff`, `--arc` (`arcs`), `--character` (`characters`) | `planted` when `--planted` names an existing chapter, otherwise `planned` |
 | `clue` | `--status`, `--planted`, `--payoff`, `--significance-delayed`, `--red-herring`, `--character` (`characters`), `--arc` (`arcs`) | `planted` when `--planted` names an existing chapter, otherwise `planned`; `red-herring` written only when set |
@@ -2541,7 +2541,7 @@ A status that says the chapter is on the page needs it written, as `story links`
 
 `add scene` also adds its `location` to the chapter's `locations` and each of its `characters` to the chapter's `characters`, unless the chapter already lists that character in `mentions`. Only ids that have an entity file are copied; an unknown id stays on the scene, where `story links` reports it.
 
-Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` (with the hour below the calendar's [`hours-per-day`](project-format.md#hours-per-day), 24 by default) or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). A singular flag keeps a comma, so a comma list in any singular id flag is refused as not an id (`--location "port-kestrel,salt-market" must be a kebab-case id (such as port-kestrel)`), and one in `--risk` as an unsupported risk. Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
+Location and system `--type`, location `--status`, and system `--prevalence` are free text; an empty `--type` is refused. `--date` must be a real `YYYY-MM-DD` day, or a day of the book's [custom calendar](project-format.md#custom-calendars) when `story.md` has one; `--time` is `HH:MM` (with the hour below the calendar's [`hours-per-day`](project-format.md#hours-per-day), 24 by default) or one of `dawn`, `morning`, `midday`, `afternoon`, `evening`, `night`; `--travel-hours` is a number zero or above; `--coordinates` is two numbers separated by a comma; `--number` and `--scene` are positive integers; `--order` is a non-negative integer. Fields that hold one id refuse a repeated flag: `--location` on `add artifact` and `add scene`, `--chapter` and `--pov` on `add scene`, `--owner`, `--controlled-by`, `--planted`, `--payoff`, `--introduced`, and `--resolved` (`--location takes one id for a scene, got port-kestrel, salt-market`). A singular flag keeps a comma, so a comma list in any singular id flag is refused as not an id (`--location "port-kestrel,salt-market" must be a kebab-case id (such as port-kestrel)`), and one in `--risk` as an unsupported risk. Repeating `--arc` on `add character` writes a list that `story validate` rejects. Other single-value flags keep the last value given.
 
 `--source` and `--sources` keep each value whole, because citations contain commas. Repeat the flag for more sources. The other plural list options split on commas.
 
@@ -3283,6 +3283,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-build-style` | error | `story.md` `build-style` has an unknown key, a bad value, or a `css` path that is not a `.css` file inside the project. See [Build styles](manuscripts.md#build-styles). |
 | `invalid-date` | error | A date (`deadline`, `publication-date`, a progress session) is not a real `YYYY-MM-DD` day, or a chapter or scene `date` shaped `YYYY-MM-DD` is not a real day (`2024-13-45`). Under a story [`calendar`](project-format.md#custom-calendars), a chapter or scene `date` that starts with a digit or a weekday is not a day of that calendar (`31 Thaw 302 AE` in a 30-day month). |
 | `invalid-calendar` | error | The `story.md` `calendar` is not a valid list of months, weekdays, eras, and `hours-per-day`. See [Custom calendars](project-format.md#custom-calendars). |
+| `invalid-geography` | error | `story.md` `distance-unit`, `map-scale`, or `travel-modes` cannot be read: a `map-scale` that is not a number above 0, or a travel mode with no text `mode`, a repeated `mode`, or a `speed` or `per-day` that is not a number above 0. See [Geography](project-format.md#geography). |
 | `invalid-cli-config` | error | `story.md` `cli-defaults` or `severity` is invalid. See [Defaults and severity](#defaults-and-severity-from-storymd). |
 | `invalid-filename` | error | A chapter or scene file name does not follow `chapter-NN.md` or `{chapter}-scene-NN.md`. |
 | `filename-number-mismatch` | error | A chapter or scene number does not match its file name. |
@@ -3292,6 +3293,10 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `invalid-choice` | error | A chapter `choices` entry has no text, bad text, or no target. |
 | `invalid-route-hours` | error | A location route's `hours` is not a positive number. |
 | `duplicate-route` | warning | A location lists more than one route to the same place. |
+| `invalid-coordinates` | error | A location's `coordinates` is not a list of two numbers, such as `[12, 40]`. |
+| `invalid-distance` | error | A location `distances` entry's `distance` is not a positive number. |
+| `duplicate-distance` | warning | A location lists more than one distance to the same place. |
+| `unknown-travel-mode` | warning | A scene's `travel-mode` is not one of the `story.md` `travel-modes`, so the distance check uses the fastest mode. |
 | `deceased-without-died-in` | warning | A progression makes a character deceased without a matching `died-in`. A second death after a revival, which `died-in` cannot record, is not reported. |
 | `progression-fixed-field` | error | A progression changes a field that cannot change by chapter, such as `died-in`. |
 | `progression-list-field` | error | A progression changes a list field. |
@@ -3349,6 +3354,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `backlink-type-mismatch` | error | A relationship's backlink has the wrong type. |
 | `legacy-backlink-type` | warning | A relationship's backlink uses a pairing from before story-skills 0.10.0. |
 | `route-to-self` | error | A location route points at the location itself. |
+| `distance-to-self` | error | A location `distances` entry points at the location itself. |
 | `broken-link` | error | A markdown link points at a file that does not exist. |
 | `link-backslash` | error | A markdown link uses a backslash. |
 | `link-not-kebab` | error | A markdown link's file name is not kebab-case. |
@@ -3438,6 +3444,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `travel-too-fast` | error | Less time passes than a scene's `travel-hours` needs. |
 | `route-same-time` | error | A character is at two places at the same moment. |
 | `route-too-fast` | error | A character moves between places faster than the fastest route allows. |
+| `travel-too-far` | warning | A scene's `travel-hours` is too short to cover the distance from the character's last scene by the scene's `travel-mode`, or by the fastest mode. See [Distance travel](project-format.md#distance-travel). |
 
 ### Codes: series
 
@@ -3690,6 +3697,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--date` | `<date>` | `add chapter`, `add scene`, `progress`, `next` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add`; for `progress` the session date, and for `progress` and `next` the day release dates are measured from (default today) |
 | `--time` | `<time>` | `add chapter`, `add scene` | `HH:MM` or a named time of day |
 | `--travel-hours` | `<n>` | `add scene` | |
+| `--travel-mode` | `<name>` | `add scene` | One of the `story.md` [`travel-modes`](project-format.md#geography) |
 | `--dilemma` | `<text>` | `add scene` | |
 | `--sequel` | | `add scene` | Boolean |
 | `--outcome` | `<name>` | `add scene` | `yes`, `no`, `yes-but`, `no-and` |
@@ -3711,6 +3719,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--alias` | `<name>` | `add term` | Repeatable; alias `--aliases` |
 | `--region` | `<name>` | `add location` | |
 | `--population` | `<name>` | `add location` | |
+| `--coordinates` | `<x,y>` | `add location` | Two numbers, such as `12,40` |
 | `--controlled-by` | `<id>` | `add location` | |
 | `--prevalence` | `<name>` | `add system` | |
 | `--acts` | `<a,b>` | `add arc` | Repeatable; alias `--act` |

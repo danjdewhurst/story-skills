@@ -6,6 +6,7 @@ import { chapterChronology } from "./chronology.js";
 import { characterLifeline, diesAgainIn } from "./deaths.js";
 import { validateProgressions } from "./progressions.js";
 import { FRONTMATTER_KEYS } from "./frontmatter-keys.js";
+import { foldMode, locationCoordinates } from "./geography.js";
 import { copyrightPageTodos, isCopyrightMatter, isPlaceholder, publishingMeta, validateNames } from "./publishing.js";
 import { SCENE_SETTINGS } from "./fountain.js";
 import { CHAPTER_HOOKS, SCENE_OUTCOMES } from "./pacing.js";
@@ -75,7 +76,7 @@ const PROGRESSION_RULES = {
     enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
   },
   location: {
-    lists: new Set(["notable-characters", "tags", "routes"]),
+    lists: new Set(["notable-characters", "tags", "routes", "coordinates", "distances"]),
     enums: new Map([["setting", SCENE_SETTINGS]])
   },
   faction: {
@@ -178,7 +179,34 @@ export function validateLocations(project, errors, warnings) {
         errors.push(err("field-not-text", `${label} route to ${route.to ?? "?"} mode must be text: quote it as mode: "${route.mode}"`, label));
       }
     }
+    validateLocationGeography(data, label, errors, warnings);
     validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
+  }
+}
+
+// `coordinates` on the story's own map and `distances` to other locations,
+// which the distance travel check reads (see geography.js).
+function validateLocationGeography(data, label, errors, warnings) {
+  if (data.coordinates !== undefined && locationCoordinates(data.coordinates) === undefined) {
+    errors.push(err("invalid-coordinates", `${label} coordinates must be two numbers, the place on the story's map, such as [12, 40]`, label));
+  }
+  validateObjectArray(data, "distances", label, errors);
+  const destinations = new Set();
+  for (const entry of Array.isArray(data.distances) ? data.distances : []) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const to = idText(entry.to);
+    if (to === "") {
+      errors.push(err("missing-field", `${label} distance is missing to`, label));
+    } else if (destinations.has(to)) {
+      warnings.push(warn("duplicate-distance", `${label} lists more than one distance to ${to}; the distance check uses only the shortest`, label));
+    } else {
+      destinations.add(to);
+    }
+    if (typeof entry.distance !== "number" || !Number.isFinite(entry.distance) || entry.distance <= 0) {
+      errors.push(err("invalid-distance", `${label} distance to ${entry.to ?? "?"} must be a positive number`, label));
+    }
   }
 }
 
@@ -406,6 +434,7 @@ export function validateScenes(project, errors, warnings) {
     if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
       errors.push(err("field-not-number", `${label} frontmatter field travel-hours must be a number`, label));
     }
+    validateTravelMode(project, data, label, errors, warnings);
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
       errors.push(err("field-not-boolean", `${label} frontmatter field sequel must be a boolean`, label));
     }
@@ -441,6 +470,29 @@ export function validateScenes(project, errors, warnings) {
         seenKeys.set(key, label);
       }
     }
+  }
+}
+
+// A scene's `travel-mode` is free text, matched against the story.md
+// travel-modes ignoring case and spacing. An unlisted mode is only a
+// warning: the distance check then uses the fastest mode.
+function validateTravelMode(project, data, label, errors, warnings) {
+  const mode = data["travel-mode"];
+  if (mode === undefined) {
+    return;
+  }
+  requireScalar(data, "travel-mode", label, errors);
+  if (typeof mode === "number" || typeof mode === "boolean") {
+    errors.push(err("field-not-text", `${label} frontmatter field travel-mode must be text: quote it as travel-mode: "${mode}"`, label));
+    return;
+  }
+  if (typeof mode !== "string" || mode.trim() === "") {
+    return;
+  }
+  const modes = project.geography?.modes ?? [];
+  if (!modes.some((entry) => entry.key === foldMode(mode))) {
+    const listed = modes.length === 0 ? "story.md lists no travel-modes" : `story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}`;
+    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (${listed}), so the distance check uses the fastest one`, label));
   }
 }
 
