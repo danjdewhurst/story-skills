@@ -24,7 +24,7 @@ describe("command registry", () => {
     // Commands that never write the project. Every other command on a
     // project must declare `writes`, so a new writing command cannot skip
     // this check, and a command here must not declare it.
-    const readOnly = ["validate", "links", "continuity", "check", "knowledge", "context", "compare", "similarity", "timeline", "prose", "names", "mentions", "pacing", "clues", "grid", "list", "voices", "series", "report", "next"];
+    const readOnly = ["validate", "links", "continuity", "check", "knowledge", "context", "compare", "similarity", "timeline", "prose", "names", "mentions", "pacing", "clues", "grid", "list", "voices", "series", "report", "next", "impact"];
     for (const command of COMMANDS.filter((entry) => entry.project !== "none")) {
       const writing = !generated.includes(command.name) && !readOnly.includes(command.name);
       expect([command.name, command.writes !== undefined]).toEqual([command.name, writing]);

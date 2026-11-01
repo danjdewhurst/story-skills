@@ -1078,6 +1078,8 @@ The skill reads the chapter, its neighbours, the scene files, and every entity t
 Revise chapter 3 so Nell hides the log instead of burning it. Keep continuity.
 ```
 
+Before a structural or plot change, the skill tests it with [`story impact`](cli-reference.md#impact), which makes the change on a scratch copy of the project, runs `story check` before and after, and lists only the findings the change would add and clear. Nothing is written to your project. Ask it "what breaks if Old Pike dies in chapter 2?" and it runs `story impact die old-pike chapter-02`, which reports each later chapter and scene that still lists him; "what if I move this scene to chapter 9?" runs `story impact move scene chapter-03-scene-02 --chapter chapter-09`. The skill shows you what the change adds and how it would fix each finding, and makes the change only once you agree.
+
 Structural edits change chapter and scene numbers, and those numbers are the ids every clue, question, research note, and state entry points at. The skill makes them with `story move`, `story split`, and `story merge`, which rename the files and rewrite those references, instead of renaming files by hand:
 
 - **Insert a chapter.** Move each later chapter up one, starting from the highest (`story move chapter chapter-05 --number 6`, then `chapter-04 --number 5`), then `story add chapter '<Title>' --number 4`. `move` refuses a number that is taken, so the order matters.

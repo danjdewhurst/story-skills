@@ -17,6 +17,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A table of contents, an index, placeholder text, and hidden text are left out. Tracked changes are read as accepted. Comments, footnotes, images, text boxes, tables, list numbering, and ruby readings are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
   - Only the document's text and styles parts are read, each up to 32 MB unpacked, and the text may come to 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused with a usage error.
   - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document only from a `.docx` file.
+- `story impact` tests a plot change before you make it and lists only the check findings it would add and clear, without writing to the project. See [`story impact`](docs/cli-reference.md#impact).
+  - `story impact <command> <args...>` runs `rename`, `remove`, `move`, `split`, or `merge`, with that command's own arguments and flags, on a scratch copy of the project, the copy `--dry-run` uses. It runs `story check` on the copy before and after the change and prints the files the change would touch, the change's own warnings, and each finding it adds and clears, with its check.
+  - `story impact die <character-id> <chapter-id>` tests a death: it sets the character's `died-in` and `status: deceased` in the copy, so it reports each later chapter and scene that still lists the character. A death in an `outline` chapter keeps the status and gives a new `planned-death` warning.
+  - It exits 1 when the change adds an error, and with `--strict` a warning too. `--json` gives the changes, the counts before and after, and the cleared findings as data, and the added findings as diagnostics.
+  - It never takes the project lock or touches the undo log, refuses what the tested command would refuse with the same message and exit code, and refuses while an interrupted change is in the project.
+  - The `revision-continuity`, `plot-structure`, `character-management`, and `story-maintenance` skills now test structural changes and deaths with `story impact` first and show the writer what would break.
 - The documentation has a website with search, at [danjdewhurst.github.io/story-skills](https://danjdewhurst.github.io/story-skills/).
   - VitePress builds it from the same `docs/` pages that GitHub and the npm package show, and GitHub Pages publishes it on each change to `main`.
 

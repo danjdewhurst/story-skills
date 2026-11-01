@@ -13,6 +13,7 @@ import { serveLanguageServer } from "./language-server.js";
 import { currentText, planChanges, recordChanges } from "./files.js";
 import { diagnostic, diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
+import { markDeath, projectImpact } from "./impact.js";
 import { workflowPinActions } from "./workflows.js";
 import { isTruthy, optionValues } from "./options.js";
 import { STDIN_ARG, readStdin, stdinText } from "./stdin.js";
@@ -930,8 +931,7 @@ export const COMMANDS = [
     options: ["id", "prose", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed, cwd } = context;
+    change({ parsed, cwd }, command = "rename") {
       const options = {
         ...entityOptions(parsed),
         kind: parsed.positionals[1],
@@ -939,10 +939,13 @@ export const COMMANDS = [
         // the id it moves to instead of one derived from the new name.
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: nameWords(parsed, 3, cwd, "rename").join(" "),
+        name: nameWords(parsed, 3, cwd, command).join(" "),
         prose: isTruthy(parsed.options.prose)
       };
-      return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options),
+      return (projectRoot) => renameEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "rename", this.change(context),
         (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}\n${formatProseRenames(result)}`,
         formatProseRenames);
     }
@@ -956,10 +959,12 @@ export const COMMANDS = [
     options: WRITE_OPTIONS,
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
-      return runWrite(context, "remove", (projectRoot) => removeEntity(projectRoot, options), (result) => (result.alreadyGone
+      return (projectRoot) => removeEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "remove", this.change(context), (result) => (result.alreadyGone
         ? `Removed references to ${result.kind} ${result.id}: its file was already gone\n`
         : `Removed ${result.kind} ${result.id}: ${result.file}\n`));
     }
@@ -977,8 +982,7 @@ export const COMMANDS = [
     options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = {
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -986,7 +990,10 @@ export const COMMANDS = [
         chapter: parsed.options.chapter,
         scene: parsed.options.scene
       };
-      return runWrite(context, "move", (projectRoot) => moveEntity(projectRoot, options),
+      return (projectRoot) => moveEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "move", this.change(context),
         (result) => `Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}\n`);
     }
   },
@@ -1003,10 +1010,12 @@ export const COMMANDS = [
     options: ["at", "title", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
-      return runWrite(context, "split", (projectRoot) => splitChapter(projectRoot, options),
+      return (projectRoot) => splitChapter(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "split", this.change(context),
         (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}\n${choiceChanges(result, false)}`,
         (result) => choiceChanges(result, true));
     }
@@ -1023,12 +1032,64 @@ export const COMMANDS = [
     options: WRITE_OPTIONS,
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
-      return runWrite(context, "merge", (projectRoot) => mergeChapters(projectRoot, options),
+      return (projectRoot) => mergeChapters(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "merge", this.change(context),
         (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}\n${choiceChanges(result, false)}`,
         (result) => choiceChanges(result, true));
+    }
+  },
+  {
+    name: "impact",
+    usage: "impact <command> <args...>",
+    summary: [
+      "Test a change before making it: run rename, remove,",
+      "move, split, merge, or die <character-id>",
+      "<chapter-id> on a copy of the project and list the",
+      "check findings it adds and clears; writes nothing"
+    ],
+    project: "flag",
+    args: Infinity,
+    // Its own flags, then every flag a change it tests reads (see
+    // impactOptions); impactParsed refuses one the change does not read.
+    options: ["strict", "json", "id", "prose", "number", "chapter", "scene", "at", "title"],
+    run(context) {
+      const { parsed, io, root, overrides } = context;
+      const name = String(parsed.positionals[1] ?? "").trim();
+      const wrapped = impactChange(name);
+      const inner = { ...context, parsed: impactParsed(parsed, wrapped) };
+      const projectRoot = root();
+      // A change stopped part way leaves files the impact would be measured
+      // against; the writer finishes or puts it back first.
+      assertNoInterruptedChange(projectRoot, "story impact");
+      const strict = isTruthy(parsed.options.strict);
+      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overrides, strict });
+      const own = checkedWarnings(impact.outcome.warnings, overrides);
+      const ok = impact.ok && own.ok;
+      const added = [...impact.added.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.added.warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "impact",
+          ok,
+          data: {
+            change: name,
+            args: parsed.positionals.slice(2),
+            result: writeResultData(projectRoot, impact.outcome),
+            changes: impact.changes,
+            strict,
+            added: { errors: impact.added.errors.length, warnings: impact.added.warnings.length },
+            cleared: [...impact.cleared.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.cleared.warnings.map((finding) => diagnostic("warning", finding, finding.check))],
+            before: impact.before,
+            after: impact.after
+          },
+          diagnostics: [...added, ...diagnosticsFrom(own, name)]
+        });
+      }
+      io.stdout.write(formatImpact(parsed.positionals.slice(1).map(shellWord).join(" "), impact, own));
+      return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
     }
   },
   {
@@ -1155,6 +1216,85 @@ export const COMMANDS = [
     }
   }
 ];
+
+// The changes story impact can test: the write commands that restructure
+// the book, by name, and die, which only story impact runs (see
+// markDeath). Each has the `change` its command builds its write from, so
+// impact reads the command's arguments and flags exactly as the command
+// does, and refuses what it refuses.
+const IMPACT_CHANGES = ["rename", "remove", "move", "split", "merge", "die"];
+
+const IMPACT_DIE = {
+  name: "die",
+  usage: "die <character-id> <chapter-id>",
+  args: 2,
+  options: [],
+  change: ({ parsed }) => (projectRoot) => markDeath(projectRoot, { id: parsed.positionals[1], chapter: parsed.positionals[2] })
+};
+
+// The command story impact runs for `name`, or a usage error naming the
+// changes it can test.
+function impactChange(name) {
+  const list = `${IMPACT_CHANGES.slice(0, -1).join(", ")}, or ${IMPACT_CHANGES.at(-1)}`;
+  if (name === "") {
+    throw usageError(`impact requires a change to test: story impact <command> <args...>, where the command is ${list}`);
+  }
+  if (!IMPACT_CHANGES.includes(name)) {
+    throw usageError(`story impact cannot test ${name}: it tests ${list}`);
+  }
+  return name === "die" ? IMPACT_DIE : COMMANDS.find((command) => command.name === name);
+}
+
+// The flags a change reads, without the output flags impact has itself.
+function impactOptions(name) {
+  const options = name === "die" ? IMPACT_DIE.options : COMMANDS.find((command) => command.name === name).options;
+  return options.filter((option) => !WRITE_OPTIONS.includes(option));
+}
+
+// The arguments and flags story impact passes on to the change: the words
+// after impact, and the flags the change's command reads. More arguments
+// than the command takes, or a flag it does not read, is refused as the
+// command refuses it.
+function impactParsed(parsed, command) {
+  const positionals = parsed.positionals.slice(1);
+  const extra = positionals.slice(1 + command.args);
+  if (extra.length > 0) {
+    throw usageError(`Unexpected argument${extra.length === 1 ? "" : "s"} for story impact ${command.usage}: ${extra.join(" ")}`);
+  }
+  const allowed = new Set(impactOptions(command.name));
+  const options = {};
+  for (const [key, value] of Object.entries(parsed.options)) {
+    if (key === "json" || key === "strict" || key === "path") {
+      continue;
+    }
+    if (!allowed.has(key)) {
+      throw usageError(`--${key} does not apply to story impact ${command.name}`, key);
+    }
+    options[key] = value;
+  }
+  return { positionals, options };
+}
+
+// story impact's text output: the files the change would touch, the
+// findings it adds and clears, the change's own warnings, and a summary.
+function formatImpact(typed, impact, own) {
+  const plural = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
+  const counted = ({ errors, warnings }) => (errors.length + warnings.length === 0 ? "nothing" : [errors.length > 0 ? plural(errors.length, "error") : "", warnings.length > 0 ? plural(warnings.length, "warning") : ""].filter(Boolean).join(" and "));
+  const line = (severity, finding) => `  ${severity}: [${finding.check}] ${findingLine(finding)}\n`;
+  const section = (title, found) => (found.errors.length + found.warnings.length === 0 ? "" : `${title}:\n${found.errors.map((finding) => line("error", finding)).join("")}${found.warnings.map((finding) => line("warning", finding)).join("")}`);
+  const changes = impact.changes.length === 0
+    ? "The change would make no changes\n"
+    : `The change would make ${plural(impact.changes.length, "change")}:\n${impact.changes.map((change) => `  ${change.action.padEnd(7)} ${change.path}\n`).join("")}`;
+  const warnings = own.errors.length + own.warnings.length === 0 ? "" : `The change warns:\n${[...own.errors.map((finding) => `  error: ${findingLine(finding)}\n`), ...own.warnings.map((finding) => `  warning: ${findingLine(finding)}\n`)].join("")}`;
+  return [
+    `Impact of ${typed} (tested on a copy; nothing was written)\n`,
+    changes,
+    warnings,
+    section("Adds", impact.added),
+    section("Clears", impact.cleared),
+    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}\n`
+  ].join("");
+}
 
 // The words of a name. Other commands take [path], so a trailing `.` (or
 // another project folder) is refused with a hint rather than written into

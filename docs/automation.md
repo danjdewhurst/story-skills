@@ -81,6 +81,7 @@ Which commands can report findings (exit `1`):
 | `prose`, `pacing`, `clues`, `voices` | A file they read fails to read or parse and is reported as an `error:` line, or a `severity` entry in `story.md` promotes one of their warnings to an error. With `prose -` or `voices -`, a broken chapter or scene file does not count, since the passage stands in for those files. A `samples` entry in `style-sheet.md` that cannot be read only warns. |
 | `compare` | `style-sheet.md` or `progress.md` cannot be parsed and is reported as an `error:` line. Any other project file that fails to parse, or any file of the earlier draft, stops it with exit 3 instead, because it cannot compare without it. Its own findings are advisory, unless `severity` in `story.md` promotes one to an error. |
 | `names` | A candidate name clashes with an existing one, or a project file cannot be parsed and is reported as an `error:` line. |
+| `impact` | The change it tests would add an error to `story check`. With `--strict`, an added warning fails it too. Findings the project already has do not count. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
 | `similarity`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
@@ -138,7 +139,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), `impact`, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {

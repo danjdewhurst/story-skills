@@ -986,6 +986,7 @@ var FINDING_CODES = {
   "stale-exemption": "warning",
   "stale-query": "warning",
   "ambiguous-references": "warning",
+  "planned-death": "warning",
   "split-references": "warning",
   "split-scenes": "warning",
   "merge-conflicts": "warning",
@@ -13059,7 +13060,7 @@ var OPTIONS = [
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
-  { name: "strict", help: ["Fail check on warnings as well as errors"] },
+  { name: "strict", help: ["Fail check, or impact on the warnings a change", "adds, on warnings as well as errors"] },
   { name: "stdio", help: ["Talk to the editor over stdin and stdout for lsp", "(the default, accepted for editors that pass it)"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text"] },
   { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, snapshot, passes, progress --log,", "diagram or synopsis --out, export, build, init,", "or import would create, update, or delete, and", "change nothing"] },
@@ -21265,7 +21266,7 @@ function formatSimilarity(report) {
 
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
-var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
+var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
 var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
 var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"] };
 var LINKED_FLAGS = {
@@ -33218,6 +33219,87 @@ function resultData(result) {
   return data;
 }
 
+// src/impact.js
+function projectImpact(root, change, { overrides, strict = false } = {}) {
+  const { result, changes } = previewChanges(root, (copyRoot) => {
+    const before = projectCheck(copyRoot, { overrides });
+    const outcome = change(copyRoot);
+    const after = projectCheck(copyRoot, { overrides });
+    return { outcome, before, after };
+  });
+  const { outcome, before, after } = result;
+  const added = { errors: [], warnings: [] };
+  const cleared = { errors: [], warnings: [] };
+  for (const severity of ["errors", "warnings"]) {
+    const was = taggedFindings(before, severity);
+    const now = taggedFindings(after, severity);
+    added[severity] = difference(now, was);
+    cleared[severity] = difference(was, now);
+  }
+  return {
+    root: before.root,
+    ok: added.errors.length === 0 && (!strict || added.warnings.length === 0),
+    strict,
+    outcome,
+    changes,
+    added,
+    cleared,
+    before: counts(before),
+    after: counts(after)
+  };
+}
+function taggedFindings(result, severity) {
+  return Object.entries(result.findings).flatMap(([check, found]) => found[severity].map((finding) => ({ ...finding, check })));
+}
+function difference(list, other) {
+  const left = new Map;
+  for (const finding of other) {
+    const key = findingKey(finding);
+    left.set(key, (left.get(key) ?? 0) + 1);
+  }
+  return list.filter((finding) => {
+    const key = findingKey(finding);
+    const count = left.get(key) ?? 0;
+    if (count > 0) {
+      left.set(key, count - 1);
+      return false;
+    }
+    return true;
+  });
+}
+function findingKey(finding) {
+  return [finding.check, finding.code, finding.file ?? "", finding.chapter ?? "", finding.message].join(`
+`);
+}
+function counts(result) {
+  return { errors: result.errors.length, warnings: result.warnings.length, dismissed: result.dismissed.length };
+}
+function markDeath(root, options) {
+  const project = scanProject(root);
+  assertProjectParses(project, "test a death");
+  const id = String(options.id ?? "").trim();
+  if (!id) {
+    throw usageError("impact die requires a character id and a chapter id: story impact die <character-id> <chapter-id>");
+  }
+  requireKebabId(id, "character id");
+  const character = project.characters.find((entry) => entry.id === id);
+  if (!character) {
+    throw usageError(`character ${id} does not exist`);
+  }
+  const chapter = existingChapter(project, options.chapter, "impact die requires a chapter id: story impact die <character-id> <chapter-id>");
+  const text = readTextFile(character.file);
+  const { data } = parseFrontmatter(text, character.file);
+  const planned = chapter.status === "outline";
+  const next = planned ? { ...data, "died-in": chapter.id } : { ...data, "died-in": chapter.id, status: "deceased" };
+  const changed = [];
+  if (data["died-in"] !== next["died-in"] || data.status !== next.status) {
+    writeFile(character.file, replaceFrontmatter(text, next), { root: project.root });
+    changed.push(character.file, ...reindexProject(project.root).changed);
+  }
+  const warnings = planned ? [warn("planned-death", `${relative(project, chapter.file)} is an outline chapter, so continuity treats a death there as planned and checks no later cast against it until the chapter is drafted`, relative(project, chapter.file))] : [];
+  return { kind: "character", id, chapter: chapter.id, file: character.file, changed, warnings };
+}
+
 // src/workflows.js
 import fs28 from "node:fs";
 import path39 from "node:path";
@@ -34270,17 +34352,19 @@ var COMMANDS = [
     options: ["id", "prose", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed, cwd } = context;
+    change({ parsed, cwd }, command = "rename") {
       const options = {
         ...entityOptions(parsed),
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
         newId: parsed.options.id,
-        name: nameWords2(parsed, 3, cwd, "rename").join(" "),
+        name: nameWords2(parsed, 3, cwd, command).join(" "),
         prose: isTruthy(parsed.options.prose)
       };
-      return runWrite(context, "rename", (projectRoot) => renameEntity(projectRoot, options), (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
+      return (projectRoot) => renameEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "rename", this.change(context), (result) => `${result.resumed ? "Finished an interrupted rename of" : "Renamed"} ${result.kind} ${result.oldId} to ${result.id}: ${result.file}
 ${formatProseRenames(result)}`, formatProseRenames);
     }
   },
@@ -34293,10 +34377,12 @@ ${formatProseRenames(result)}`, formatProseRenames);
     options: WRITE_OPTIONS,
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { ...entityOptions(parsed), kind: parsed.positionals[1], id: parsed.positionals[2] };
-      return runWrite(context, "remove", (projectRoot) => removeEntity(projectRoot, options), (result) => result.alreadyGone ? `Removed references to ${result.kind} ${result.id}: its file was already gone
+      return (projectRoot) => removeEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "remove", this.change(context), (result) => result.alreadyGone ? `Removed references to ${result.kind} ${result.id}: its file was already gone
 ` : `Removed ${result.kind} ${result.id}: ${result.file}
 `);
     }
@@ -34314,8 +34400,7 @@ ${formatProseRenames(result)}`, formatProseRenames);
     options: ["number", "chapter", "scene", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = {
         kind: parsed.positionals[1],
         id: parsed.positionals[2],
@@ -34323,7 +34408,10 @@ ${formatProseRenames(result)}`, formatProseRenames);
         chapter: parsed.options.chapter,
         scene: parsed.options.scene
       };
-      return runWrite(context, "move", (projectRoot) => moveEntity(projectRoot, options), (result) => `Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}
+      return (projectRoot) => moveEntity(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "move", this.change(context), (result) => `Moved ${result.kind} ${result.oldId} to ${result.id}: ${result.file}${result.moved > 1 ? ` (with ${result.moved - 1} ${result.moved === 2 ? "scene" : "scenes"})` : ""}
 `);
     }
   },
@@ -34340,10 +34428,12 @@ ${formatProseRenames(result)}`, formatProseRenames);
     options: ["at", "title", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { id: parsed.positionals[1], at: parsed.options.at, title: parsed.options.title };
-      return runWrite(context, "split", (projectRoot) => splitChapter(projectRoot, options), (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}
+      return (projectRoot) => splitChapter(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "split", this.change(context), (result) => `Split chapter ${result.id}: the rest is ${result.newId} "${result.title}": ${result.file}${restructureDetails(result)}
 ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
     }
   },
@@ -34359,11 +34449,59 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
     options: WRITE_OPTIONS,
     writes: true,
     recovers: true,
-    run(context) {
-      const { parsed } = context;
+    change({ parsed }) {
       const options = { id: parsed.positionals[1], next: parsed.positionals[2] };
-      return runWrite(context, "merge", (projectRoot) => mergeChapters(projectRoot, options), (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}
+      return (projectRoot) => mergeChapters(projectRoot, options);
+    },
+    run(context) {
+      return runWrite(context, "merge", this.change(context), (result) => `Merged chapter ${result.mergedId} into ${result.id}: ${result.file}${restructureDetails(result)}
 ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
+    }
+  },
+  {
+    name: "impact",
+    usage: "impact <command> <args...>",
+    summary: [
+      "Test a change before making it: run rename, remove,",
+      "move, split, merge, or die <character-id>",
+      "<chapter-id> on a copy of the project and list the",
+      "check findings it adds and clears; writes nothing"
+    ],
+    project: "flag",
+    args: Infinity,
+    options: ["strict", "json", "id", "prose", "number", "chapter", "scene", "at", "title"],
+    run(context) {
+      const { parsed, io, root, overrides } = context;
+      const name = String(parsed.positionals[1] ?? "").trim();
+      const wrapped = impactChange(name);
+      const inner = { ...context, parsed: impactParsed(parsed, wrapped) };
+      const projectRoot = root();
+      assertNoInterruptedChange(projectRoot, "story impact");
+      const strict = isTruthy(parsed.options.strict);
+      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overrides, strict });
+      const own = checkedWarnings(impact.outcome.warnings, overrides);
+      const ok = impact.ok && own.ok;
+      const added = [...impact.added.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.added.warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "impact",
+          ok,
+          data: {
+            change: name,
+            args: parsed.positionals.slice(2),
+            result: writeResultData(projectRoot, impact.outcome),
+            changes: impact.changes,
+            strict,
+            added: { errors: impact.added.errors.length, warnings: impact.added.warnings.length },
+            cleared: [...impact.cleared.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.cleared.warnings.map((finding) => diagnostic("warning", finding, finding.check))],
+            before: impact.before,
+            after: impact.after
+          },
+          diagnostics: [...added, ...diagnosticsFrom(own, name)]
+        });
+      }
+      io.stdout.write(formatImpact(parsed.positionals.slice(1).map(shellWord).join(" "), impact, own));
+      return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
     }
   },
   {
@@ -34488,6 +34626,73 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
     }
   }
 ];
+var IMPACT_CHANGES = ["rename", "remove", "move", "split", "merge", "die"];
+var IMPACT_DIE = {
+  name: "die",
+  usage: "die <character-id> <chapter-id>",
+  args: 2,
+  options: [],
+  change: ({ parsed }) => (projectRoot) => markDeath(projectRoot, { id: parsed.positionals[1], chapter: parsed.positionals[2] })
+};
+function impactChange(name) {
+  const list = `${IMPACT_CHANGES.slice(0, -1).join(", ")}, or ${IMPACT_CHANGES.at(-1)}`;
+  if (name === "") {
+    throw usageError(`impact requires a change to test: story impact <command> <args...>, where the command is ${list}`);
+  }
+  if (!IMPACT_CHANGES.includes(name)) {
+    throw usageError(`story impact cannot test ${name}: it tests ${list}`);
+  }
+  return name === "die" ? IMPACT_DIE : COMMANDS.find((command) => command.name === name);
+}
+function impactOptions(name) {
+  const options = name === "die" ? IMPACT_DIE.options : COMMANDS.find((command) => command.name === name).options;
+  return options.filter((option) => !WRITE_OPTIONS.includes(option));
+}
+function impactParsed(parsed, command) {
+  const positionals = parsed.positionals.slice(1);
+  const extra = positionals.slice(1 + command.args);
+  if (extra.length > 0) {
+    throw usageError(`Unexpected argument${extra.length === 1 ? "" : "s"} for story impact ${command.usage}: ${extra.join(" ")}`);
+  }
+  const allowed = new Set(impactOptions(command.name));
+  const options = {};
+  for (const [key, value] of Object.entries(parsed.options)) {
+    if (key === "json" || key === "strict" || key === "path") {
+      continue;
+    }
+    if (!allowed.has(key)) {
+      throw usageError(`--${key} does not apply to story impact ${command.name}`, key);
+    }
+    options[key] = value;
+  }
+  return { positionals, options };
+}
+function formatImpact(typed, impact, own) {
+  const plural = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
+  const counted = ({ errors, warnings }) => errors.length + warnings.length === 0 ? "nothing" : [errors.length > 0 ? plural(errors.length, "error") : "", warnings.length > 0 ? plural(warnings.length, "warning") : ""].filter(Boolean).join(" and ");
+  const line = (severity, finding) => `  ${severity}: [${finding.check}] ${findingLine(finding)}
+`;
+  const section = (title, found) => found.errors.length + found.warnings.length === 0 ? "" : `${title}:
+${found.errors.map((finding) => line("error", finding)).join("")}${found.warnings.map((finding) => line("warning", finding)).join("")}`;
+  const changes = impact.changes.length === 0 ? `The change would make no changes
+` : `The change would make ${plural(impact.changes.length, "change")}:
+${impact.changes.map((change) => `  ${change.action.padEnd(7)} ${change.path}
+`).join("")}`;
+  const warnings = own.errors.length + own.warnings.length === 0 ? "" : `The change warns:
+${[...own.errors.map((finding) => `  error: ${findingLine(finding)}
+`), ...own.warnings.map((finding) => `  warning: ${findingLine(finding)}
+`)].join("")}`;
+  return [
+    `Impact of ${typed} (tested on a copy; nothing was written)
+`,
+    changes,
+    warnings,
+    section("Adds", impact.added),
+    section("Clears", impact.cleared),
+    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}
+`
+  ].join("");
+}
 function nameWords2(parsed, from, cwd, command) {
   const words = parsed.positionals.slice(from);
   for (const word of words) {
