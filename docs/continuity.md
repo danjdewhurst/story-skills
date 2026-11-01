@@ -552,7 +552,7 @@ travel-hours: 0.5
 travel-mode: bus
 ```
 
-Nothing is checked until `story.md` lists at least one travel mode. Then `story continuity` follows each character through their scenes in reading order, within one `strand`, as `travel-hours` reads them: the journey into a scene starts at the character's last scene. When a scene with `travel-hours` above 0 is at a different place, and the geography gives the distance, the hours must cover it at the mode's speed. Undated scenes count too. Flashback scenes (with `flashback-to`) are skipped. A scene with no `location`, or a chapter with no scene records, resets where each character is.
+Nothing is checked until `story.md` lists at least one travel mode. Then `story continuity` compares each scene that has `travel-hours` above 0 with the previous scene in reading order, within one `strand`, as `travel-hours` reads them: the journey since that scene. When the two scenes are at different places, and the geography gives the distance, the hours must cover it at the mode's speed. Only the characters in both scenes are judged; one who was not in the previous scene may have had longer. Undated scenes count too, though the clock check still warns `travel-hours-undated` about them. Flashback scenes (with `flashback-to`) are skipped. After a scene with no `location`, or a chapter with no scene records, the next scene has no place to start from.
 
 [`examples/the-left-luggage-office`](../examples/the-left-luggage-office/) lists these modes, a 2.5-mile distance from Ashby Road to the left luggage office, and Ines's bus home in chapter 2. In a copy whose chapter 2 scene says `travel-mode: on foot`:
 
@@ -566,9 +566,9 @@ warning: scenes/chapter-02-scene-01.md gives ines-achebe 0.5h to travel 2.5 mile
 |----------|---------|-----|
 | warning | `<scene> gives <characters> <n>h to travel <d> <unit> from <location> to <location>, but the <mode> mode (<speed>) needs at least <m>h` | Raise `travel-hours` (and, if the scenes are dated, move the scene later so the clock allows it), choose a faster `travel-mode`, or correct the distance. |
 | warning | The same, with `even the fastest travel mode, <mode> (<speed>),` | The scene names no `travel-mode`, or one `story.md` does not list, and no listed mode is fast enough. Add the faster way (a portal, a wyvern) to `travel-modes`, or raise `travel-hours`. |
-| warning | `<scene> travel-mode <mode> is not a travel mode` (from `story validate`) | Fix the spelling, or add the mode to `travel-modes`. |
+| warning | `<scene> travel-mode <mode> is not a travel mode` (from `story validate`, only when `story.md` lists travel modes) | Fix the spelling, or add the mode to `travel-modes`. |
 
-The message says `in a straight line on the map` when the distance comes from `coordinates`, and `by the listed distances` when it is a chain of `distances` entries through other places. Distances and hours are shown to 0.1, with `travel-hours` rounded down and the hours needed rounded up. A travel mode with `per-day` also counts whole days: by a horse that covers 15 leagues a day at 3 leagues an hour, 30 leagues takes at least a day and 5 hours (29h on a 24-hour day). The clock check and this check join up: `travel-too-fast` makes sure the dated scenes leave room for `travel-hours`, and `travel-too-far` makes sure `travel-hours` covers the distance.
+The message says `in a straight line on the map` when the distance comes from `coordinates`, and `by the listed distances` when it is a chain of `distances` entries through other places. `travel-hours` is shown as written. Distances are shown to 0.1, rounded down, and the hours needed to 0.1h, rounded up. A travel mode with `per-day` also counts whole days: by a horse that covers 15 leagues a day at 3 leagues an hour, 30 leagues takes at least a day and 5 hours (29h on a 24-hour day). The clock check and this check join up: `travel-too-fast` makes sure the dated scenes leave room for `travel-hours`, and `travel-too-far` makes sure `travel-hours` covers the distance.
 
 ### Worked example: fixing the unraveled thread
 

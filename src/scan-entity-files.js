@@ -170,7 +170,7 @@ function coordinatesOption(value) {
     return undefined;
   }
   const parts = String(value).split(",").map((part) => part.trim());
-  const numbers = parts.map((part) => (part === "" ? Number.NaN : Number(part)));
+  const numbers = parts.map((part) => (/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(part) ? Number(part) : Number.NaN));
   if (numbers.length !== 2 || !numbers.every(Number.isFinite)) {
     throw usageError(`coordinates must be two numbers separated by a comma, such as 12,40, got ${value}`);
   }
@@ -393,7 +393,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
-    ...(options["travel-mode"] === undefined || options["travel-mode"] === "" ? {} : { "travel-mode": options["travel-mode"] }),
+    ...(String(options["travel-mode"] ?? "").trim() === "" ? {} : { "travel-mode": String(options["travel-mode"]).trim() }),
     sequel: options.sequel ?? false,
     ...(options.outcome === undefined ? {} : { outcome: options.outcome }),
     dilemma: options.dilemma ?? "",

@@ -70,10 +70,10 @@ It checks clock/time plausibility when scenes or chapters carry `date: YYYY-MM-D
 
 When `story.md` lists `travel-modes` (each a `mode` with a `speed` in its `distance-unit` an hour, and an optional `per-day`), it checks scene `travel-hours` against location geography: `coordinates` on the story's map (times `map-scale`) or `distances` between locations.
 
-- Each character, by scene `characters` or `pov`, is followed in reading order within a chapter `strand`; the journey into a scene starts at the character's last scene. Dates are not needed.
-- A scene with `travel-hours` above 0 at a different place warns (`travel-too-far`) when the hours cannot cover the distance at the speed of its `travel-mode`, or of the fastest mode when it names none or an unlisted one (`story validate` warns `unknown-travel-mode`).
+- Each scene with `travel-hours` above 0 is compared with the previous scene in reading order within a chapter `strand`; the characters in both scenes, by `characters` or `pov`, made the journey between their locations. Dates are not needed.
+- A scene with `travel-hours` above 0 at a different place warns (`travel-too-far`) when the hours cannot cover the distance at the speed of its `travel-mode`, or of the fastest mode when it names none or an unlisted one (`story validate` warns `unknown-travel-mode` when travel modes are listed).
 - A listed distance wins, then the straight line between coordinates, then the shortest chain of listed distances.
-- Flashback scenes are skipped; a scene with no `location`, or a chapter with no scene records, resets where characters are.
+- Flashback scenes are skipped; after a scene with no `location`, or a chapter with no scene records, the next scene has no place to start from.
 - Without `travel-modes`, nothing is checked.
 
 ### Exemptions

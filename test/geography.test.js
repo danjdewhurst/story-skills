@@ -114,6 +114,16 @@ describe("geography parsing", () => {
     expect(parseGeography({ "travel-modes": "horse" }).problems).toEqual(["travel-modes must be a list of entries, such as - mode: horse then speed: 8"]);
   });
 
+  test("a list or mapping where a value belongs never breaks the message", () => {
+    const sneaky = [{ toString: 1 }];
+    expect(parseGeography({ "distance-unit": sneaky, "map-scale": sneaky, "travel-modes": [{ mode: sneaky, speed: { toString: 1 } }] }).problems).toEqual([
+      "distance-unit must be text, such as miles or leagues, got a list",
+      "map-scale must be a number greater than 0, the distance one coordinate unit spans, got a list",
+      "travel-modes entry 1 mode must be text, such as horse or \"on foot\", got a list",
+      "travel-modes entry 1 speed must be a number greater than 0, in units an hour, got a mapping"
+    ]);
+  });
+
   test("a per-day limit adds a whole day for each full day's distance", () => {
     const horse = { speed: 3, perDay: 15 };
     expect(hoursNeeded(12, horse, 24)).toBe(4);
@@ -131,9 +141,7 @@ describe("distance travel check", () => {
     writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven");
     writeScene(root, 1, 2, "pov: mara\nlocation: stonebridge\ntravel-hours: 1\ntravel-mode: horse");
     expect(distanceWarnings(root)).toEqual([]);
-    expect(messages(validateProject(root).warnings)).toContain(
-      "scenes/chapter-01-scene-02.md travel-mode horse is not a travel mode (story.md lists no travel-modes), so the distance check uses the fastest one"
-    );
+    expect(validateProject(root).warnings.filter((finding) => finding.code === "unknown-travel-mode")).toEqual([]);
   });
 
   test("travel-hours too short for a listed distance by the scene's mode warns, with the chapter", () => {
@@ -208,15 +216,35 @@ describe("distance travel check", () => {
     ]);
   });
 
-  test("characters arriving from different places get a warning each, by origin", () => {
+  test("only characters in the previous scene are judged, since another may have had longer", () => {
     const root = geographyProject();
-    writeScene(root, 1, 1, "pov: mara\nlocation: the-barrow");
-    writeScene(root, 1, 2, "pov: ivo\nlocation: greyhaven");
+    writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven");
+    writeScene(root, 1, 2, "pov: ivo\nlocation: the-barrow");
+    // Ivo walks a short way; Mara was last seen at greyhaven two scenes ago.
     writeScene(root, 1, 3, "location: stonebridge\ncharacters: [mara, ivo]\ntravel-hours: 1");
     expect(distanceWarnings(root)).toEqual([
-      "scenes/chapter-01-scene-03.md gives ivo 1h to travel 30 leagues from greyhaven to stonebridge, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 2.5h",
-      "scenes/chapter-01-scene-03.md gives mara 1h to travel 48 leagues in a straight line on the map from the-barrow to stonebridge, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 4h"
+      "scenes/chapter-01-scene-03.md gives ivo 1h to travel 48 leagues in a straight line on the map from the-barrow to stonebridge, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 4h"
     ]);
+  });
+
+  test("travel-hours is shown as written", () => {
+    const root = geographyProject();
+    writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven");
+    writeScene(root, 1, 2, "pov: mara\nlocation: stonebridge\ntravel-hours: 0.05");
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-01-scene-02.md gives mara 0.05h to travel 30 leagues from greyhaven to stonebridge, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 2.5h"
+    ]);
+  });
+
+  test("a scene with many travellers is checked in linear time", () => {
+    const root = geographyProject();
+    const cast = Array.from({ length: 20000 }, (_, index) => `  - walker-${index}`).join("\n");
+    writeScene(root, 1, 1, `location: greyhaven\ncharacters:\n${cast}`);
+    writeScene(root, 1, 2, `location: stonebridge\ntravel-hours: 1\ncharacters:\n${cast}`);
+    const started = performance.now();
+    const found = distanceWarnings(root);
+    expect(found).toHaveLength(1);
+    expect(performance.now() - started).toBeLessThan(20000);
   });
 
   test("flashbacks are skipped, and a scene with no location or a chapter with no scenes resets whereabouts", () => {
@@ -332,7 +360,9 @@ describe("story add geography flags", () => {
     const io = memoryIo(root);
     expect(runCli(["add", "location", "Hollow Oak", "--coordinates", "3.5, -2"], io)).toBe(0);
     expect(fs.readFileSync(path.join(root, "worldbuilding", "locations", "hollow-oak.md"), "utf8")).toContain("coordinates:\n  - 3.5\n  - -2\n");
-    expect(runCli(["add", "scene", "Ride", "--chapter", "chapter-01", "--travel-hours", "3", "--travel-mode", "horse"], io)).toBe(0);
+    expect(runCli(["add", "scene", "Ride", "--chapter", "chapter-01", "--travel-hours", "3", "--travel-mode", " horse "], io)).toBe(0);
+    expect(runCli(["add", "scene", "Rest", "--chapter", "chapter-01", "--travel-mode", "  "], io)).toBe(0);
+    expect(fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-02.md"), "utf8")).not.toContain("travel-mode");
     const scene = fs.readFileSync(path.join(root, "scenes", "chapter-01-scene-01.md"), "utf8");
     expect(scene).toContain("travel-mode: horse\n");
     expect(scene).toContain("travel-hours: 3\n");
@@ -341,7 +371,7 @@ describe("story add geography flags", () => {
 
   test("add location refuses coordinates that are not two numbers", () => {
     const root = geographyProject();
-    for (const value of ["3", "3,4,5", "north,4", "3,"]) {
+    for (const value of ["3", "3,4,5", "north,4", "3,", "0x10,1e2"]) {
       const io = memoryIo(root);
       expect(runCli(["add", "location", "Far Point", "--coordinates", value], io)).toBe(2);
       expect(io.error()).toContain(`coordinates must be two numbers separated by a comma, such as 12,40, got ${value}`);

@@ -73,7 +73,7 @@ travel-modes:
 
 - `speed` is distance units an hour while moving; `per-day` (optional) is the most one day of travel covers.
 - `map-scale` is how many distance units one map unit spans. Give each location `coordinates: [x, y]` read off the user's map (squares, centimetres, or pixels), or `distances` to other locations (`- to: greyhaven` then `distance: 30`), or both. A listed distance wins over the straight line on the map.
-- On each scene that follows a journey, set `travel-hours` and `travel-mode` (one of the modes). `story continuity .` warns (`travel-too-far`) when the hours cannot cover the distance from the character's last scene at that mode's speed, or at the fastest mode when the scene names none.
+- On each scene that follows a journey, set `travel-hours` and `travel-mode` (one of the modes). `story continuity .` warns (`travel-too-far`) when the hours cannot cover the distance from the previous scene at that mode's speed, or at the fastest mode when the scene names none. It judges only the characters who were in both scenes.
 - Nothing is checked until `story.md` lists at least one travel mode.
 
 ## Creating a System

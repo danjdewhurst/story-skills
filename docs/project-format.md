@@ -743,7 +743,7 @@ A route is two-way unless the destination declares its own route back, which the
 
 #### Geography
 
-Routes give journey times. Geography gives distances instead, and `story.md` gives the speed of each way to travel, so `story continuity` can check a scene's `travel-hours` (see [Distance travel](#distance-travel)). It is opt-in: without `travel-modes` in `story.md`, nothing is checked and nothing is reported.
+Routes give journey times. Geography gives distances instead, and `story.md` gives the speed of each way to travel, so `story continuity` can check a scene's `travel-hours` (see [Distance travel](#distance-travel)). The check is opt-in: without `travel-modes` in `story.md`, `story continuity` checks no distances. `story validate` still checks the shape of `coordinates` and `distances` wherever they appear, since they are now defined fields.
 
 Nothing assumes Earth. Coordinates are a flat grid on the story's own map, and a distance table needs no map at all. In `story.md`:
 
@@ -765,7 +765,7 @@ travel-modes:
 |-------|------|---------|
 | `distance-unit` | string | Free text, printed in the findings. Default `units`. |
 | `map-scale` | number > 0 | Distance units per unit of `coordinates`, such as `4` when one square on the map is 4 leagues. Default `1`. |
-| `travel-modes[].mode` | string | The name a scene's `travel-mode` uses, matched ignoring case and spaces. Each mode once. |
+| `travel-modes[].mode` | string | The name a scene's `travel-mode` uses, matched ignoring letter case and extra spaces (`On  Foot` matches `on foot`, but `onfoot` does not). Each mode once. |
 | `travel-modes[].speed` | number > 0 | The top speed while moving, in distance units an hour. |
 | `travel-modes[].per-day` | number > 0 | Optional. The most distance one day of travel covers. A longer journey then takes at least a whole day, of the [`hours-per-day`](#hours-per-day) in the story calendar, for each full day's distance before the last stretch. |
 
@@ -792,7 +792,7 @@ A distance is two-way unless the other place lists its own distance back. The di
 2. The straight line between their `coordinates`, times `map-scale`.
 3. The shortest chain of listed distances, which may pass through other places.
 
-`story validate` errors on a `story.md` geography it cannot read (`invalid-geography`): a `map-scale` that is not a number above 0, or a travel mode with no text `mode`, a repeated `mode`, or a `speed` or `per-day` that is not a number above 0. It errors when `coordinates` is not two numbers (`invalid-coordinates`), when a `distances` entry has no `to` or a `distance` that is not a positive number (`invalid-distance`), and warns when a location lists two distances to one place (`duplicate-distance`; the check uses the shorter). It warns when a scene's `travel-mode` is not a listed mode (`unknown-travel-mode`). `story links` errors when `to` names a missing location or the location itself (`distance-to-self`). `story rename location` rewrites `to`, and `story remove location` drops the entries that lead to the removed location. `story add location --coordinates 12,40` writes `coordinates`, and `story add scene --travel-mode horse` writes `travel-mode`. The [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) covers how to choose distances and speeds.
+`story validate` errors on a `story.md` geography it cannot read (`invalid-geography`): a `map-scale` that is not a number above 0, or a travel mode with no text `mode`, a repeated `mode`, or a `speed` or `per-day` that is not a number above 0. It errors when `coordinates` is not two numbers (`invalid-coordinates`), when a `distances` entry has no `to` or a `distance` that is not a positive number (`invalid-distance`), and warns when a location lists two distances to one place (`duplicate-distance`; the check uses the shorter). When `story.md` lists travel modes, it warns when a scene's `travel-mode` is not one of them (`unknown-travel-mode`). `story links` errors when `to` names a missing location or the location itself (`distance-to-self`). `story rename location` rewrites `to`, and `story remove location` drops the entries that lead to the removed location. `story add location --coordinates 12,40` writes `coordinates`, and `story add scene --travel-mode horse` writes `travel-mode`. The [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) covers how to choose distances and speeds.
 
 ### Systems
 
@@ -1028,7 +1028,7 @@ state-changes:
 | `outcome` | enum | no | How a scene unit ends for the POV character's goal: `yes`, `no`, `yes-but` (they get it, at a cost), or `no-and` (they fail, and things get worse). Set it with `story add scene --outcome <name>`. Read by [`story pacing`](#pacing), which ignores it on sequel units. |
 | `date` | `YYYY-MM-DD` | no | Story date. A scene never inherits its chapter's date. |
 | `time` | string | no | Story time (see [Dates and times](#dates-and-times)). |
-| `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less, and warns when the hours cannot cover the distance from a character's last scene (see [Distance travel](#distance-travel)). |
+| `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less, and warns when the hours cannot cover the distance from the previous scene (see [Distance travel](#distance-travel)). |
 | `travel-mode` | string | no | How the journey into this scene was made, one of the `story.md` [`travel-modes`](#geography), such as `horse`. Without it, the distance check uses the fastest mode. |
 | `flashback-to` | string | no | Free-form note of the moment flashed back to. Kept but not checked; continuity checks use `mentions`. |
 | `setting` | enum | no | `interior`, `exterior`, or `both`, for a scene whose place differs from its location's `setting` (on the harbor wall rather than inside the harbor office). Read only by `story build --format fountain`. |
@@ -1585,7 +1585,7 @@ error: scenes/chapter-01-scene-02.md puts ann at gamma at the same time as scene
 
 ### Distance travel
 
-When `story.md` lists [`travel-modes`](#geography), `story continuity` follows each character through the scenes they are in (the scene's `characters` plus its `pov`, or the chapter's POV) in reading order, within one chapter [`strand`](#chapters). A scene with `travel-hours` above 0 says how long the journey into it took. That journey starts at the location of the character's last scene. When the geography gives the distance between the two places, and the hours are too short to cover it by the scene's `travel-mode`, it is a warning:
+When `story.md` lists [`travel-modes`](#geography), `story continuity` compares each scene that has `travel-hours` above 0 with the previous scene in reading order, within one chapter [`strand`](#chapters). `travel-hours` says how long the journey since that scene took. The characters in both scenes (each scene's `characters` plus its `pov`, or the chapter's POV) made that journey, from the previous scene's location to this one. When the geography gives the distance between the two places, and the hours are too short to cover it by the scene's `travel-mode`, it is a warning:
 
 ```text
 warning: scenes/chapter-02-scene-01.md gives mara-quill 2h to travel 30 leagues from greyhaven to stonebridge, but the horse mode (3 leagues an hour and 15 leagues a day) needs at least 29h [travel-too-far]
@@ -1597,7 +1597,7 @@ Without `travel-mode`, or with a mode `story.md` does not list, the check uses t
 warning: scenes/chapter-03-scene-02.md gives ivo 1h to travel 48 leagues in a straight line on the map from stonebridge to the-barrow, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 4h [travel-too-far]
 ```
 
-Undated scenes count, since `travel-hours` alone says how long the journey took. A scene with no `travel-hours` is not judged here; [Route travel](#route-travel) and the clock check judge the time between dated scenes instead. A flashback scene (one with `flashback-to`) is not part of the journey. A scene with no `location`, and a chapter with no scene records, loses track of where each character is, so the next scene does not count a journey from before it. Characters who arrive together from one place get one warning for the scene.
+Undated scenes count, since `travel-hours` alone says how long the journey took (the clock check still warns `travel-hours-undated`, because it cannot place them). A scene with no `travel-hours` is not judged here; [Route travel](#route-travel) and the clock check judge the time between dated scenes instead. A character who was not in the previous scene may have had longer, so is not judged. A flashback scene (one with `flashback-to`) is not part of the journey and is not a previous scene. After a scene with no `location`, or a chapter with no scene records, the next scene has no place to start from. The characters who made the journey together get one warning for the scene.
 
 The checks join up: the clock check (`travel-too-fast`) makes sure the dated scenes leave at least `travel-hours` for the journey, and this check makes sure `travel-hours` is long enough for the distance.
 
