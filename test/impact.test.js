@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
@@ -6,7 +7,10 @@ import { COMMANDS } from "../src/commands.js";
 import { UNDO_LOG } from "../src/files.js";
 import { LOCK_FILE } from "../src/lock.js";
 import { EXIT_CODES } from "../src/exit-codes.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, treeSnapshot } from "./helpers.js";
+
+const RESULT_SCHEMA = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
 const examples = path.join(import.meta.dir, "..", "examples");
 
@@ -21,6 +25,17 @@ function invoke(root, argv) {
   const io = memoryIo(root);
   const code = runCli(argv, io);
   return { code, out: io.output(), err: io.error() };
+}
+
+// A --json run: one envelope that matches the result schema, ok exactly
+// when the exit code is 0, and nothing on stderr.
+function invokeJson(root, argv) {
+  const result = invoke(root, [...argv, "--json"]);
+  expect(result.err).toBe("");
+  const envelope = JSON.parse(result.out);
+  expect(validateAgainstSchema(envelope, RESULT_SCHEMA)).toEqual([]);
+  expect(envelope.ok).toBe(result.code === EXIT_CODES.ok);
+  return { code: result.code, envelope };
 }
 
 function setFrontmatter(file, key, value) {
@@ -58,17 +73,15 @@ describe("story impact", () => {
     expect(plain.code).toBe(EXIT_CODES.ok);
     expect(plain.out).toContain("  warning: [continuity] continuity/state.md character-state[1] tracks lord-maren, who died in chapter-01; remove the entry once they are dead [state-tracks-dead-character]\n");
     expect(invoke(root, ["impact", "die", "lord-maren", "chapter-01", "--strict"]).code).toBe(EXIT_CODES.findings);
-    const json = JSON.parse(invoke(root, ["impact", "die", "lord-maren", "chapter-01", "--strict", "--json"]).out);
+    const { envelope: json } = invokeJson(root, ["impact", "die", "lord-maren", "chapter-01", "--strict"]);
     expect(json).toMatchObject({ ok: false, data: { strict: true, added: { errors: 0, warnings: 1 } } });
     expect(json.diagnostics).toEqual([expect.objectContaining({ severity: "warning", code: "state-tracks-dead-character", check: "continuity" })]);
   });
 
   test("--json gives the changes, the counts, the cleared findings, and the added ones as diagnostics", () => {
     const root = exampleCopy("bo-and-the-missing-moon");
-    const result = invoke(root, ["impact", "die", "old-pike", "chapter-02", "--json"]);
-    expect(result.code).toBe(EXIT_CODES.findings);
-    expect(result.err).toBe("");
-    const envelope = JSON.parse(result.out);
+    const { code, envelope } = invokeJson(root, ["impact", "die", "old-pike", "chapter-02"]);
+    expect(code).toBe(EXIT_CODES.findings);
     expect(envelope).toMatchObject({ command: "impact", ok: false, writes: [] });
     expect(envelope.data).toMatchObject({
       change: "die",
@@ -91,11 +104,11 @@ describe("story impact", () => {
       check: "continuity"
     });
 
-    const cleared = JSON.parse(invoke(exampleCopy("the-unraveled-thread"), ["impact", "remove", "character", "edran-vale", "--json"]).out);
+    const { envelope: cleared } = invokeJson(exampleCopy("the-unraveled-thread"), ["impact", "remove", "character", "edran-vale"]);
     expect(cleared.ok).toBe(true);
     expect(cleared.data.cleared).toEqual([expect.objectContaining({ severity: "error", code: "posthumous-appearance", check: "continuity", file: "chapters/chapter-04.md" })]);
 
-    const warning = JSON.parse(invoke(exampleCopy("the-unraveled-thread"), ["impact", "remove", "promise", "the-sealed-letter", "--json"]).out);
+    const { envelope: warning } = invokeJson(exampleCopy("the-unraveled-thread"), ["impact", "remove", "promise", "the-sealed-letter"]);
     expect(warning.data.cleared).toEqual([expect.objectContaining({ severity: "warning", code: "promise-unpaid", check: "continuity" })]);
   });
 
@@ -177,8 +190,7 @@ describe("story impact", () => {
   test("die in an outline chapter keeps the status and warns that the death is planned", () => {
     const root = exampleCopy("bo-and-the-missing-moon");
     setFrontmatter(path.join(root, "chapters", "chapter-05.md"), "status", "outline");
-    const result = invoke(root, ["impact", "die", "old-pike", "chapter-05", "--json"]);
-    const envelope = JSON.parse(result.out);
+    const { envelope } = invokeJson(root, ["impact", "die", "old-pike", "chapter-05"]);
     expect(envelope.diagnostics).toContainEqual(expect.objectContaining({ severity: "warning", code: "planned-death", check: "die", file: "chapters/chapter-05.md" }));
     expect(envelope.diagnostics.filter((entry) => entry.code === "posthumous-appearance")).toEqual([]);
     expect(envelope.data.changes).toContainEqual({ action: "update", path: "characters/old-pike.md" });
@@ -187,6 +199,8 @@ describe("story impact", () => {
     const text = invoke(root, ["impact", "die", "old-pike", "chapter-05"]);
     expect(text.code).toBe(EXIT_CODES.ok);
     expect(text.out).toContain("The change warns:\n  warning: chapters/chapter-05.md is an outline chapter, so continuity treats a death there as planned and checks no later cast against it until the chapter is drafted [planned-death]\n");
+    // --strict fails on the change's own warnings, as on those it adds.
+    expect(invoke(root, ["impact", "die", "old-pike", "chapter-05", "--strict"]).code).toBe(EXIT_CODES.findings);
 
     // A story.md severity entry that promotes the change's own warning fails
     // the run, as it fails the command the change comes from.
@@ -195,6 +209,107 @@ describe("story impact", () => {
     const promoted = invoke(root, ["impact", "die", "old-pike", "chapter-05"]);
     expect(promoted.code).toBe(EXIT_CODES.findings);
     expect(promoted.out).toContain("The change warns:\n  error: chapters/chapter-05.md is an outline chapter");
+  });
+
+  test("a finding the change only gives new ids is carried over, not added and cleared", () => {
+    // The Unraveled Thread lists edran-vale in chapter 4 after his death in
+    // chapter 2: a rename keeps that error under the new id.
+    const renamed = invokeJson(exampleCopy("the-unraveled-thread"), ["impact", "rename", "character", "edran-vale", "Edran", "Valemont"]);
+    expect(renamed.code).toBe(EXIT_CODES.ok);
+    expect(renamed.envelope.data).toMatchObject({ added: { errors: 0, warnings: 0 }, cleared: [] });
+    expect(renamed.envelope.data.carried).toEqual([expect.objectContaining({ code: "posthumous-appearance", message: "chapters/chapter-04.md lists edran-valemont, who died in chapter-02; move posthumous appearances to mentions" })]);
+
+    // A merge renumbers chapter 4 to 3, so the same error names chapter 3.
+    const root = exampleCopy("the-unraveled-thread");
+    const merged = invoke(root, ["impact", "merge", "chapter-01", "chapter-02"]);
+    expect(merged.code).toBe(EXIT_CODES.ok);
+    expect(merged.out).not.toContain("Adds:\n");
+    expect(merged.out).toContain("carries over 3 errors and 1 warning under new ids");
+
+    // Another character in the same cast after death is a new error: same
+    // code and file, another message.
+    const second = invokeJson(root, ["impact", "die", "jonas-reed", "chapter-02"]);
+    expect(second.envelope.diagnostics.filter((entry) => entry.file === "chapters/chapter-04.md" && entry.code === "posthumous-appearance").map((entry) => entry.message)).toEqual(["chapters/chapter-04.md lists jonas-reed, who died in chapter-02; move posthumous appearances to mentions"]);
+  });
+
+  test("findings that read the same once ids are set aside are each carried over once", () => {
+    // Old Pike, dead in chapter 2, is listed in chapters 6 and 7 and their
+    // scenes. Merging chapter 2 into chapter 1 renumbers all four and moves
+    // the death to chapter 1, so no finding keeps its text, and the two
+    // chapter errors (and the two scene errors) read the same with the
+    // chapter ids set aside.
+    const root = exampleCopy("bo-and-the-missing-moon");
+    const pike = path.join(root, "characters", "old-pike.md");
+    fs.writeFileSync(pike, fs.readFileSync(pike, "utf8").replace("status: alive\n", "status: deceased\ndied-in: chapter-02\n"), "utf8");
+    const merged = invokeJson(root, ["impact", "merge", "chapter-01", "chapter-02"]);
+    expect(merged.envelope.data).toMatchObject({ added: { errors: 0, warnings: 0 }, cleared: [] });
+    expect(merged.envelope.data.carried.map((entry) => entry.file).sort()).toEqual(["chapters/chapter-05.md", "chapters/chapter-06.md", "scenes/chapter-05-scene-01.md", "scenes/chapter-06-scene-01.md"]);
+  });
+
+  test("the flags the change reads reach it: split --at --title, move scene --chapter, rename --id --prose", () => {
+    const root = exampleCopy("bo-and-the-missing-moon");
+    const before = treeSnapshot(root);
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    fs.appendFileSync(chapter, "\nThe moon was gone.\n\n* * *\n\nBo went looking.\n", "utf8");
+    const split = invokeJson(root, ["impact", "split", "chapter-02", "--at", "1", "--title", "The Search"]);
+    expect(split.envelope.data.result).toMatchObject({ id: "chapter-02", newId: "chapter-03", title: "The Search" });
+    fs.writeFileSync(chapter, Buffer.from(before["chapters/chapter-02.md"], "base64"));
+
+    const moved = invokeJson(root, ["impact", "move", "scene", "chapter-02-scene-01", "--chapter", "chapter-09"]);
+    expect(moved.envelope.data.result).toMatchObject({ kind: "scene", oldId: "chapter-02-scene-01", id: "chapter-09-scene-02" });
+    expect(moved.envelope.data.changes).toContainEqual({ action: "delete", path: "scenes/chapter-02-scene-01.md" });
+
+    const renamed = invokeJson(root, ["impact", "rename", "character", "old-pike", "Pike", "--id", "the-pike", "--prose"]);
+    expect(renamed.envelope.data.result).toMatchObject({ kind: "character", oldId: "old-pike", id: "the-pike" });
+    expect(renamed.envelope.data.result.prose.edits.length).toBeGreaterThan(0);
+    expect(treeSnapshot(root)).toEqual(before);
+  });
+
+  test("the checks read story.md severity and the exemptions as the change leaves them", () => {
+    // A severity entry that promotes a check warning makes it an added error.
+    const promoted = exampleCopy("the-fall-of-the-citadel");
+    const story = path.join(promoted, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, "---\nseverity:\n  - warning: state-tracks-dead-character\n    level: error\n"), "utf8");
+    const result = invokeJson(promoted, ["impact", "die", "lord-maren", "chapter-01"]);
+    expect(result.code).toBe(EXIT_CODES.findings);
+    expect(result.envelope.data.added).toEqual({ errors: 1, warnings: 0 });
+
+    // An exempted finding stays dismissed after a merge renumbers its
+    // chapter, since merge rewrites the exemption to follow it.
+    const root = exampleCopy("bo-and-the-missing-moon");
+    const chapter = path.join(root, "chapters", "chapter-05.md");
+    fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("word-count: 24", "word-count: 99"), "utf8");
+    fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), "---\nexemptions:\n  - code: stale-word-count\n    file: chapters/chapter-05.md\n    reason: Counted by hand.\n---\n", "utf8");
+    const merged = invokeJson(root, ["impact", "merge", "chapter-01", "chapter-02", "--strict"]);
+    expect(merged.code).toBe(EXIT_CODES.ok);
+    expect(merged.envelope.data.added).toEqual({ errors: 0, warnings: 0 });
+    expect(merged.envelope.data.after.dismissed).toBe(1);
+  });
+
+  test("a project path among the new name's words is refused with the impact command named", () => {
+    const root = exampleCopy("bo-and-the-missing-moon");
+    const result = invoke(root, ["impact", "rename", "character", "old-pike", "Pike", "."]);
+    expect(result.code).toBe(EXIT_CODES.usage);
+    expect(result.err).toContain('"." looks like a project path: story impact rename takes the project as --path .');
+  });
+
+  test("die after a revival is a second death; at or before it, the first death moves", () => {
+    const root = exampleCopy("bo-and-the-missing-moon");
+    const pike = path.join(root, "characters", "old-pike.md");
+    fs.writeFileSync(pike, fs.readFileSync(pike, "utf8").replace("status: alive\n", "status: alive\ndied-in: chapter-02\nrevived-in: chapter-04\n"), "utf8");
+    const second = invokeJson(root, ["impact", "die", "old-pike", "chapter-05"]);
+    expect(second.envelope.data.added).toEqual({ errors: 0, warnings: 4 });
+    expect(second.envelope.diagnostics.map((entry) => entry.code)).toEqual(Array(4).fill("progression-deceased-in-cast"));
+    const moved = invokeJson(root, ["impact", "die", "old-pike", "chapter-03"]);
+    expect(moved.envelope.data.added).toEqual({ errors: 0, warnings: 0 });
+    expect(moved.envelope.data.changes).toContainEqual({ action: "update", path: "characters/old-pike.md" });
+  });
+
+  test("the header names the flags of the change, so two options can be told apart", () => {
+    const root = exampleCopy("bo-and-the-missing-moon");
+    for (const chapter of ["chapter-05", "chapter-09"]) {
+      expect(invoke(root, ["impact", "move", "scene", "chapter-02-scene-01", "--chapter", chapter]).out).toStartWith(`Impact of move scene chapter-02-scene-01 --chapter ${chapter} (tested on a copy; nothing was written)\n`);
+    }
   });
 
   test("die of a character already dead in that chapter changes nothing", () => {

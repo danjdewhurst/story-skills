@@ -33434,21 +33434,42 @@ function resultData(result) {
 }
 
 // src/impact.js
-function projectImpact(root, change, { overrides, strict = false } = {}) {
+function projectImpact(root, change, { overridesAt, strict = false }) {
   const { result, changes } = previewChanges(root, (copyRoot) => {
-    const before = projectCheck(copyRoot, { overrides });
+    const before = projectCheck(copyRoot, { overrides: overridesAt(copyRoot) });
     const outcome = change(copyRoot);
-    const after = projectCheck(copyRoot, { overrides });
+    const after = projectCheck(copyRoot, { overrides: overridesAt(copyRoot) });
     return { outcome, before, after };
   });
   const { outcome, before, after } = result;
   const added = { errors: [], warnings: [] };
   const cleared = { errors: [], warnings: [] };
+  const carried = { errors: [], warnings: [] };
+  const carry = carriedText(outcome);
   for (const severity of ["errors", "warnings"]) {
     const was = taggedFindings(before, severity);
     const now = taggedFindings(after, severity);
-    added[severity] = difference(now, was);
-    cleared[severity] = difference(was, now);
+    const gone = difference(was, now);
+    const waiting = new Map;
+    for (const finding of carry === null ? [] : gone) {
+      const key = carriedKey(finding, carry);
+      if (waiting.has(key)) {
+        waiting.get(key).push(finding);
+      } else {
+        waiting.set(key, [finding]);
+      }
+    }
+    const paired = new Set;
+    for (const finding of difference(now, was)) {
+      const match = carry === null ? undefined : waiting.get(carriedKey(finding, carry))?.shift();
+      if (match === undefined) {
+        added[severity].push(finding);
+      } else {
+        paired.add(match);
+        carried[severity].push(finding);
+      }
+    }
+    cleared[severity] = gone.filter((finding) => !paired.has(finding));
   }
   return {
     root: before.root,
@@ -33458,6 +33479,7 @@ function projectImpact(root, change, { overrides, strict = false } = {}) {
     changes,
     added,
     cleared,
+    carried,
     before: counts(before),
     after: counts(after)
   };
@@ -33466,27 +33488,45 @@ function taggedFindings(result, severity) {
   return Object.entries(result.findings).flatMap(([check, found]) => found[severity].map((finding) => ({ ...finding, check })));
 }
 function difference(list, other) {
-  const left = new Map;
-  for (const finding of other) {
-    const key = findingKey(finding);
-    left.set(key, (left.get(key) ?? 0) + 1);
-  }
-  return list.filter((finding) => {
-    const key = findingKey(finding);
-    const count = left.get(key) ?? 0;
-    if (count > 0) {
-      left.set(key, count - 1);
-      return false;
-    }
-    return true;
-  });
+  const keys = new Set(other.map(findingKey));
+  return list.filter((finding) => !keys.has(findingKey(finding)));
 }
 function findingKey(finding) {
   return [finding.check, finding.code, finding.file ?? "", finding.chapter ?? "", finding.message].join(`
 `);
 }
+function carriedText(outcome) {
+  const steps = [];
+  if (typeof outcome.oldId === "string" && typeof outcome.id === "string" && outcome.oldId !== outcome.id) {
+    const old = new RegExp(`(?<![\\p{L}\\p{N}-])${escapeRegExp(outcome.oldId)}(?![\\p{L}\\p{N}-])`, "gu");
+    steps.push((text) => text.replace(old, outcome.id));
+  }
+  if (outcome.renumbered !== undefined || ["chapter", "scene"].includes(outcome.kind) && typeof outcome.oldId === "string") {
+    steps.push((text) => text.replace(CHAPTER_IDS, "chapter-#"));
+  }
+  return steps.length === 0 ? null : (text) => steps.reduce((value, step) => step(value), text);
+}
+var CHAPTER_IDS = /(?<![\p{L}\p{N}-])chapter-\d+(?:-scene-\d+)?(?![\p{L}\p{N}-])/gu;
+function carriedKey(finding, carry) {
+  return [finding.check, finding.code, carry(finding.file ?? ""), carry(finding.message)].join(`
+`);
+}
 function counts(result) {
   return { errors: result.errors.length, warnings: result.warnings.length, dismissed: result.dismissed.length };
+}
+function deathFields(project, data, chapter) {
+  const died = idText(data["died-in"]);
+  const revived = idText(data["revived-in"]);
+  const status = chapter.status === "outline" ? {} : { status: "deceased" };
+  if (revived === "") {
+    return { "died-in": chapter.id, ...status };
+  }
+  const chronology = chapterChronology(project);
+  if (died === "" || !chronology.after(chapter.id, revived)) {
+    return { "died-in": chapter.id };
+  }
+  const list = Array.isArray(data.progressions) ? data.progressions : [];
+  return { progressions: sortProgressions([...list, { from: chapter.id, field: "status", value: "deceased" }], chronology), ...status };
 }
 function markDeath(root, options) {
   const project = scanProject(root);
@@ -33503,14 +33543,13 @@ function markDeath(root, options) {
   const chapter = existingChapter(project, options.chapter, "impact die requires a chapter id: story impact die <character-id> <chapter-id>");
   const text = readTextFile(character.file);
   const { data } = parseFrontmatter(text, character.file);
-  const planned = chapter.status === "outline";
-  const next = planned ? { ...data, "died-in": chapter.id } : { ...data, "died-in": chapter.id, status: "deceased" };
+  const next = { ...data, ...deathFields(project, data, chapter) };
   const changed = [];
-  if (data["died-in"] !== next["died-in"] || data.status !== next.status) {
+  if (JSON.stringify(next) !== JSON.stringify(data)) {
     writeFile(character.file, replaceFrontmatter(text, next), { root: project.root });
     changed.push(character.file, ...reindexProject(project.root).changed);
   }
-  const warnings = planned ? [warn("planned-death", `${relative(project, chapter.file)} is an outline chapter, so continuity treats a death there as planned and checks no later cast against it until the chapter is drafted`, relative(project, chapter.file))] : [];
+  const warnings = chapter.status === "outline" ? [warn("planned-death", `${relative(project, chapter.file)} is an outline chapter, so continuity treats a death there as planned and checks no later cast against it until the chapter is drafted`, relative(project, chapter.file))] : [];
   return { kind: "character", id, chapter: chapter.id, file: character.file, changed, warnings };
 }
 
@@ -35408,10 +35447,10 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       const projectRoot = root();
       assertNoInterruptedChange(projectRoot, "story impact");
       const strict = isTruthy(parsed.options.strict);
-      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overrides, strict });
+      const overridesAt = (copyRoot) => findingOverrides(readCliConfig(copyRoot));
+      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overridesAt, strict });
       const own = checkedWarnings(impact.outcome.warnings, overrides);
-      const ok = impact.ok && own.ok;
-      const added = [...impact.added.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.added.warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+      const ok = impact.ok && own.ok && (!strict || own.warnings.length === 0);
       if (wantsJson(parsed)) {
         return writeJsonResult(io, {
           command: "impact",
@@ -35423,14 +35462,15 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
             changes: impact.changes,
             strict,
             added: { errors: impact.added.errors.length, warnings: impact.added.warnings.length },
-            cleared: [...impact.cleared.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.cleared.warnings.map((finding) => diagnostic("warning", finding, finding.check))],
+            cleared: impactDiagnostics(impact.cleared),
+            carried: impactDiagnostics(impact.carried),
             before: impact.before,
             after: impact.after
           },
-          diagnostics: [...added, ...diagnosticsFrom(own, name)]
+          diagnostics: [...impactDiagnostics(impact.added), ...diagnosticsFrom(own, name)]
         });
       }
-      io.stdout.write(formatImpact(parsed.positionals.slice(1).map(shellWord).join(" "), impact, own));
+      io.stdout.write(formatImpact(impactWords(inner.parsed), impact, own));
       return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
     }
   },
@@ -35600,6 +35640,13 @@ function impactParsed(parsed, command) {
   }
   return { positionals, options };
 }
+function impactWords({ positionals, options }) {
+  const flags = Object.entries(options).flatMap(([key, value]) => [].concat(value).map((item) => item === true ? `--${key}` : `--${key} ${shellWord(String(item))}`));
+  return [...positionals.map(shellWord), ...flags].join(" ");
+}
+function impactDiagnostics({ errors, warnings }) {
+  return [...errors.map((finding) => diagnostic("error", finding, finding.check)), ...warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+}
 function formatImpact(typed, impact, own) {
   const plural = (count, word) => `${count} ${count === 1 ? word : `${word}s`}`;
   const counted = ({ errors, warnings }) => errors.length + warnings.length === 0 ? "nothing" : [errors.length > 0 ? plural(errors.length, "error") : "", warnings.length > 0 ? plural(warnings.length, "warning") : ""].filter(Boolean).join(" and ");
@@ -35607,6 +35654,7 @@ function formatImpact(typed, impact, own) {
 `;
   const section = (title, found) => found.errors.length + found.warnings.length === 0 ? "" : `${title}:
 ${found.errors.map((finding) => line("error", finding)).join("")}${found.warnings.map((finding) => line("warning", finding)).join("")}`;
+  const carriedCount = ({ errors, warnings }) => errors.length + warnings.length === 0 ? "" : `; carries over ${counted({ errors, warnings })} under new ids`;
   const changes = impact.changes.length === 0 ? `The change would make no changes
 ` : `The change would make ${plural(impact.changes.length, "change")}:
 ${impact.changes.map((change) => `  ${change.action.padEnd(7)} ${change.path}
@@ -35622,7 +35670,7 @@ ${[...own.errors.map((finding) => `  error: ${findingLine(finding)}
     warnings,
     section("Adds", impact.added),
     section("Clears", impact.cleared),
-    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}
+    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}${carriedCount(impact.carried)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}
 `
   ].join("");
 }
