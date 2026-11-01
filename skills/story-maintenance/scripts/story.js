@@ -11,7 +11,7 @@ import path40 from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer } from "node:buffer";
 
 // src/exit-codes.js
 var EXIT_CODES = Object.freeze({
@@ -87,7 +87,7 @@ function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
     if (open === undefined) {
       return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
     }
-    const bytes = Buffer2.from(open, "utf8");
+    const bytes = Buffer.from(open, "utf8");
     if (bytes.length > maxBytes) {
       throw projectError(`${filePath}: Refusing to read oversized file: ${bytes.length} bytes exceeds the ${maxBytes} byte limit`);
     }
@@ -109,7 +109,7 @@ function withOpenDocuments(documents, run) {
 function readFilePrefix(filePath, length) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const buffer = Buffer2.allocUnsafe(length);
+    const buffer = Buffer.allocUnsafe(length);
     let filled = 0;
     let read;
     do {
@@ -124,7 +124,7 @@ function readFilePrefix(filePath, length) {
 function forEachLine(filePath, maxLineBytes, visit) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const chunk = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
+    const chunk = Buffer.allocUnsafe(READ_CHUNK_BYTES);
     let parts = [];
     let size = 0;
     let number = 0;
@@ -142,13 +142,13 @@ function forEachLine(filePath, maxLineBytes, visit) {
         const piece = data.subarray(start, end);
         add(piece);
         number += 1;
-        visit(parts.length === 0 ? piece : Buffer2.concat([...parts, piece]), number);
+        visit(parts.length === 0 ? piece : Buffer.concat([...parts, piece]), number);
         parts = [];
         size = 0;
         start = end + 1;
       }
       add(data.subarray(start));
-      parts.push(Buffer2.from(data.subarray(start)));
+      parts.push(Buffer.from(data.subarray(start)));
     }
   } finally {
     fs.closeSync(descriptor);
@@ -185,13 +185,13 @@ function openRegularFile(filePath, maxBytes) {
 function readAtMost(descriptor, filePath, size, maxBytes) {
   const chunks = [];
   let total = 0;
-  let buffer = Buffer2.allocUnsafe(Math.min(size, maxBytes) + 1);
+  let buffer = Buffer.allocUnsafe(Math.min(size, maxBytes) + 1);
   let filled = 0;
   let read;
   do {
     if (filled === buffer.length) {
       chunks.push(buffer);
-      buffer = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
+      buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
       filled = 0;
     }
     read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);
@@ -202,7 +202,7 @@ function readAtMost(descriptor, filePath, size, maxBytes) {
     }
   } while (read > 0);
   chunks.push(buffer.subarray(0, filled));
-  return chunks.length === 1 ? chunks[0] : Buffer2.concat(chunks, total);
+  return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total);
 }
 function symlinkReadRefusal(filePath) {
   return projectError(`${filePath}: Refusing to read through symlink`);
@@ -240,7 +240,7 @@ function invalidUtf8Offset(buffer) {
     if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
       break;
     }
-    offset += Buffer2.byteLength(character, "utf8");
+    offset += Buffer.byteLength(character, "utf8");
   }
   return Math.max(0, Math.min(offset, buffer.length - 1));
 }
@@ -549,7 +549,7 @@ function temporaryPath(target) {
   let name = "";
   let bytes = 0;
   for (const character of path.basename(target)) {
-    bytes += Buffer2.byteLength(character, "utf8");
+    bytes += Buffer.byteLength(character, "utf8");
     if (bytes > TEMPORARY_NAME_BYTES) {
       break;
     }
@@ -977,7 +977,7 @@ var FINDING_CODES = {
   "scene-no-setting": "warning",
   "permission-pending-left-out": "warning",
   "matter-placement-left-out": "warning",
-  "ics-daily-target-unanchored": "warning",
+  "ics-daily-target-left-out": "warning",
   "unknown-reference": "warning",
   "adopted-references": "warning",
   "prose-name-shared": "warning",
@@ -14612,7 +14612,7 @@ function extractMarkdownLinkTargets(body) {
 // src/scan-cover.js
 import fs4 from "node:fs";
 import path9 from "node:path";
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer2 } from "node:buffer";
 var COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -14677,10 +14677,10 @@ var IMAGE_SIGNATURE_BYTES = 12;
 function coverFormat(filePath) {
   const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
   const ascii = (start, end) => head.subarray(start, end).toString("latin1");
-  if (head.subarray(0, 8).equals(Buffer3.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+  if (head.subarray(0, 8).equals(Buffer2.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return "image/png";
   }
-  if (head.subarray(0, 3).equals(Buffer3.from([255, 216, 255]))) {
+  if (head.subarray(0, 3).equals(Buffer2.from([255, 216, 255]))) {
     return "image/jpeg";
   }
   if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
@@ -19599,7 +19599,7 @@ import path15 from "node:path";
 import fs6 from "node:fs";
 import os from "node:os";
 import path14 from "node:path";
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -19811,7 +19811,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs6.existsSync(output) ? fs6.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer4.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer3.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -19843,10 +19843,10 @@ function lastLines(text, count = 10) {
 }
 
 // src/packaging.js
-import { Buffer as Buffer6 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 
 // src/deflate.js
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 var WINDOW_SIZE = 32768;
 var WINDOW_MASK = WINDOW_SIZE - 1;
 var MIN_MATCH = 3;
@@ -20010,7 +20010,7 @@ function bitWriter(size) {
       if (pendingBits > 0) {
         push(pending);
       }
-      return Buffer5.from(bytes.buffer, 0, used);
+      return Buffer4.from(bytes.buffer, 0, used);
     }
   };
 }
@@ -20997,14 +20997,14 @@ function writeZip(outFile, entries, writeOptions = {}) {
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer6.from(entry.name, "utf8");
-    const content = Buffer6.isBuffer(entry.content) ? entry.content : Buffer6.from(entry.content, "utf8");
+    const name = Buffer5.from(entry.name, "utf8");
+    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer6.alloc(30);
+    const localHeader = Buffer5.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -21017,7 +21017,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer6.alloc(46);
+    const centralHeader = Buffer5.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -21042,7 +21042,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer6.alloc(22);
+  const end = Buffer5.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -21051,7 +21051,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer6.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -22285,7 +22285,7 @@ function realPath(target) {
 }
 
 // src/preview.js
-import { Buffer as Buffer7 } from "node:buffer";
+import { Buffer as Buffer6 } from "node:buffer";
 import fs8 from "node:fs";
 import os3 from "node:os";
 import path17 from "node:path";
@@ -22558,12 +22558,12 @@ function copyRegularFile(from, to, keepHead = false) {
 function copyUndoLog(from, to) {
   fs8.writeFileSync(to, "");
   try {
-    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs8.appendFileSync(to, Buffer7.concat([line, LINE_FEED])));
+    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs8.appendFileSync(to, Buffer6.concat([line, LINE_FEED])));
   } catch {
     fs8.appendFileSync(to, LINE_FEED);
   }
 }
-var LINE_FEED = Buffer7.from(`
+var LINE_FEED = Buffer6.from(`
 `);
 function coverOf(root) {
   const cover = existingStoryData(root)?.cover;
@@ -23215,7 +23215,7 @@ import fs13 from "node:fs";
 import path24 from "node:path";
 
 // src/undo.js
-import { Buffer as Buffer8 } from "node:buffer";
+import { Buffer as Buffer7 } from "node:buffer";
 import path19 from "node:path";
 var HEADER_BYTES = 4096;
 var ABSENT = "absent";
@@ -23329,7 +23329,7 @@ function parsedLine(bytes) {
   }
 }
 function isUndoEntry(entry, first) {
-  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer8.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
+  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer7.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
 }
 function stateOf(value, hashed = false) {
   return value === null ? ABSENT : hashed ? value : contentHash(value);
@@ -28358,7 +28358,7 @@ function unparsedNote(snapshot) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer9 } from "node:buffer";
+import { Buffer as Buffer8 } from "node:buffer";
 import fs23 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -28370,7 +28370,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer9.alloc(CHUNK_BYTES);
+  const buffer = Buffer8.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -28396,9 +28396,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer9.from(buffer.subarray(0, read)));
+    chunks.push(Buffer8.from(buffer.subarray(0, read)));
   }
-  return Buffer9.concat(chunks);
+  return Buffer8.concat(chunks);
 }
 function stdinText(command, bytes) {
   const zipAdvice = command === "import" ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
@@ -29714,6 +29714,8 @@ ${body.filter((part) => part !== "").join(`
 var CODEX_GENERATOR = "story build --format codex";
 
 // src/ics.js
+import { Buffer as Buffer9 } from "node:buffer";
+var LAST_DAY2 = Date.UTC(9999, 11, 31) / 86400000;
 var ICS_LINE_OCTETS = 75;
 var BYDAY = { mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA", sun: "SU" };
 var DAY_NAMES = { mon: "Mondays", tue: "Tuesdays", wed: "Wednesdays", thu: "Thursdays", fri: "Fridays", sat: "Saturdays", sun: "Sundays" };
@@ -29722,14 +29724,14 @@ function listText(items) {
 }
 function escapeText2(value) {
   return String(value).replace(/\r\n?/g, `
-`).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n").replace(/[\u0000-\u001f\u007f]/g, " ");
+`).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n").replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]/g, " ");
 }
 function foldLine(line) {
   const parts = [];
   let current = "";
   let octets = 0;
   for (const char of line.match(/\\[^]|[^]/gu) ?? []) {
-    const size = Buffer.byteLength(char, "utf8");
+    const size = Buffer9.byteLength(char, "utf8");
     if (octets + size > ICS_LINE_OCTETS) {
       parts.push(current);
       current = " ";
@@ -29751,6 +29753,9 @@ function icsTimestamp(iso) {
 function formatNumber6(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
+function countText(count, noun) {
+  return `${formatNumber6(count)} ${noun}${count === 1 ? "" : "s"}`;
+}
 function weekdayIndex2(days) {
   return ((days + 3) % 7 + 7) % 7;
 }
@@ -29764,7 +29769,7 @@ function scheduleEvents(schedule) {
     while (scheduled !== null && !scheduled.has(WEEKDAYS[weekdayIndex2(start)])) {
       start += 1;
     }
-    if (deadline === null || start <= deadline.days) {
+    if (start <= (deadline === null ? LAST_DAY2 : deadline.days)) {
       const rule = scheduled === null ? ["FREQ=DAILY"] : ["FREQ=WEEKLY", `BYDAY=${daily.writingDays.map((day) => BYDAY[day]).join(",")}`];
       if (deadline !== null) {
         rule.push(`UNTIL=${icsDate(deadline.days)}`);
@@ -29774,8 +29779,8 @@ function scheduleEvents(schedule) {
       events.push({
         uid: uid("daily-target"),
         days: start,
-        summary: `Write ${formatNumber6(daily.target)} ${noun}s: ${title}`,
-        description: `The daily target for ${title}: ${formatNumber6(daily.target)} ${noun}s ${days}${until}.`,
+        summary: `Write ${countText(daily.target, noun)}: ${title}`,
+        description: `The daily target for ${title}: ${countText(daily.target, noun)} ${days}${until}.`,
         rrule: rule.join(";")
       });
     }
@@ -29793,7 +29798,7 @@ function scheduleEvents(schedule) {
     });
   }
   if (deadline !== null) {
-    const goal = target === null ? "" : ` Target: ${formatNumber6(target)} ${noun}s.`;
+    const goal = target === null ? "" : ` Target: ${countText(target, noun)}.`;
     dated.push({
       uid: uid("deadline"),
       days: deadline.days,
@@ -29818,7 +29823,7 @@ function icsCalendar({ title, events, stamp }) {
     `X-WR-CALNAME:${escapeText2(title)}`
   ];
   for (const event of events) {
-    lines.push("BEGIN:VEVENT", `UID:${event.uid}`, `DTSTAMP:${dtstamp}`, `DTSTART;VALUE=DATE:${icsDate(event.days)}`, `DTEND;VALUE=DATE:${icsDate(event.days + 1)}`, ...event.rrule === null ? [] : [`RRULE:${event.rrule}`], `SUMMARY:${escapeText2(event.summary)}`, `DESCRIPTION:${escapeText2(event.description)}`, "TRANSP:TRANSPARENT", "END:VEVENT");
+    lines.push("BEGIN:VEVENT", `UID:${event.uid}`, `DTSTAMP:${dtstamp}`, `DTSTART;VALUE=DATE:${icsDate(event.days)}`, ...event.days >= LAST_DAY2 ? [] : [`DTEND;VALUE=DATE:${icsDate(event.days + 1)}`], ...event.rrule === null ? [] : [`RRULE:${event.rrule}`], `SUMMARY:${escapeText2(event.summary)}`, `DESCRIPTION:${escapeText2(event.description)}`, "TRANSP:TRANSPARENT", "END:VEVENT");
   }
   lines.push("END:VCALENDAR");
   return `${lines.map(foldLine).join(`\r
@@ -30185,20 +30190,25 @@ function buildCalendar(project, output) {
   let daily = null;
   const dailyTarget = data[unit.dailyTargetField];
   if (Number.isInteger(dailyTarget) && dailyTarget > 0 && data.status !== "complete") {
+    const releaseStart = typeof data["release-start"] === "string" ? parseClockDate(data["release-start"]) : undefined;
     const starts = [
       ...cleanSessions(project.progressLog?.data.sessions).slice(0, 1).map((session) => parseClockDate(session.date).days),
-      ...[releaseCadence(data)?.startDays].filter((days) => days !== undefined),
+      ...releaseStart ? [releaseStart.days] : [],
       ...episodes.map((episode) => episode.days)
     ];
     if (starts.length === 0) {
-      warnings.push(warn("ics-daily-target-unanchored", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
+      warnings.push(warn("ics-daily-target-left-out", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
     } else {
       daily = { target: dailyTarget, writingDays: writingDays(data["writing-days"]), startDays: Math.min(...starts) };
     }
   }
   const events = scheduleEvents({ title: project.title, storyId: project.storyId, noun: unit.noun, target, deadline, daily, episodes });
+  if (daily !== null && !events.some((event) => event.uid.startsWith("daily-target."))) {
+    const end = deadline === null ? "9999-12-31, the last day a calendar date can name" : `the deadline (${deadline.date})`;
+    warnings.push(warn("ics-daily-target-left-out", `story.md ${unit.dailyTargetField} is left out of the calendar: its first writing day is after ${end}`, "story.md"));
+  }
   if (events.length === 0) {
-    throw projectError("Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
+    throw projectError(warnings.length > 0 ? `Cannot build ics: the calendar would have no events. ${warnings[0].message}` : "Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
   }
   writeFile(output.outFile, icsCalendar({ title: project.title, events, stamp: buildTimestamp() }), output.writeOptions);
   return { outFile: output.outFile, chapters: project.chapters.length, format: "ics", events: events.length, warnings };

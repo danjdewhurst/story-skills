@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { runCli } from "../src/cli.js";
 import { ICS_LINE_OCTETS, escapeText, foldLine } from "../src/ics.js";
 import { buildBook, createStoryProject, validateProject } from "../src/story.js";
@@ -49,26 +50,41 @@ function parseIcs(text) {
       logical.push(line);
     }
   }
+  // One VCALENDAR holding only VEVENTs, no property given twice in a
+  // component, and the properties RFC 5545 requires in each.
+  expect(logical[0]).toBe("BEGIN:VCALENDAR");
+  expect(logical[logical.length - 1]).toBe("END:VCALENDAR");
   const events = [];
-  let calendar = {};
+  const calendar = {};
   let current = null;
-  for (const line of logical) {
+  for (const line of logical.slice(1, -1)) {
     const colon = line.indexOf(":");
     expect(colon).toBeGreaterThan(0);
     const [name, ...params] = line.slice(0, colon).split(";");
     const raw = line.slice(colon + 1);
-    if (name === "BEGIN" && raw === "VEVENT") {
+    if (name === "BEGIN") {
+      expect(raw).toBe("VEVENT");
+      expect(current).toBeNull();
       current = {};
       continue;
     }
-    if (name === "END" && raw === "VEVENT") {
+    if (name === "END") {
+      expect(raw).toBe("VEVENT");
+      expect(current).not.toBeNull();
+      for (const required of ["UID", "DTSTAMP", "DTSTART", "SUMMARY"]) {
+        expect(current[required], required).toBeDefined();
+      }
       events.push(current);
       current = null;
       continue;
     }
     const target = current ?? calendar;
+    expect(target[name], `${name} given twice`).toBeUndefined();
     target[name] = { params, raw, text: unescape(raw) };
   }
+  expect(current).toBeNull();
+  expect(calendar.VERSION.raw).toBe("2.0");
+  expect(calendar.PRODID).toBeDefined();
   return { calendar, events, logical };
 }
 
@@ -98,8 +114,15 @@ function readCalendar(root) {
   return fs.readFileSync(path.join(root, "dist", "calendar-book.ics"), "utf8");
 }
 
+function buildCalendar(root) {
+  return fs.readFileSync(buildBook(root, { format: "ics" }).outFile, "utf8");
+}
+
+const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
+
 const savedEpoch = process.env.SOURCE_DATE_EPOCH;
 afterEach(() => {
+  setSystemTime();
   if (savedEpoch === undefined) {
     delete process.env.SOURCE_DATE_EPOCH;
   } else {
@@ -110,6 +133,8 @@ afterEach(() => {
 describe("escapeText and foldLine", () => {
   test("escape backslashes, semicolons, commas, and line breaks, and drop control characters", () => {
     expect(escapeText("a\\b;c,d\ne\r\nf\rg\u0007h")).toBe("a\\\\b\\;c\\,d\\ne\\nf\\ng h");
+    // Separators a lax reader could split a line on become spaces too.
+    expect(escapeText("a\u2028b\u2029c\u0085d")).toBe("a b c d");
   });
 
   test("leave a short line alone and fold a long one at 75 octets with a space", () => {
@@ -160,13 +185,16 @@ describe("build --format ics", () => {
     expect(events[4].DESCRIPTION.text).toBe("The Left Luggage Office, episode 4. No chapter is written for it yet.");
   });
 
-  test("is byte-identical from build to build, and DTSTAMP follows SOURCE_DATE_EPOCH", () => {
-    const { root } = project("deadline: 2027-03-01\ntarget-words: 90000");
+  test("is byte-identical from build to build, on any day, and DTSTAMP follows SOURCE_DATE_EPOCH", () => {
+    const { root } = project("deadline: 2027-03-01\ntarget-words: 90000\ndaily-target-words: 500\nrelease-every: 7\nrelease-start: 2026-09-04", [{}]);
     delete process.env.SOURCE_DATE_EPOCH;
-    buildBook(root, { format: "ics" });
-    const first = readCalendar(root);
-    buildBook(root, { format: "ics" });
-    expect(readCalendar(root)).toBe(first);
+    setSystemTime(new Date("2026-09-01T10:00:00Z"));
+    const first = buildCalendar(root);
+    setSystemTime(new Date("2027-01-15T23:30:00Z"));
+    expect(buildCalendar(root)).toBe(first);
+    setSystemTime();
+    // No version in PRODID, so a release does not change every calendar.
+    expect(parseIcs(first).calendar.PRODID.raw).toBe("-//Story Skills//story build --format ics//EN");
     expect(parseIcs(first).events[0].DTSTAMP.raw).toBe("20000101T000000Z");
     process.env.SOURCE_DATE_EPOCH = "1767225600";
     buildBook(root, { format: "ics" });
@@ -178,7 +206,7 @@ describe("build --format ics", () => {
     // 2026-11-02 is a Monday, so the first writing day is Wednesday 4 November.
     fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2026-11-05\n    words: 300\n  - date: 2026-11-02\n    words: 100\n---\n\n# Progress Log\n", "utf8");
     expect(messages(validateProject(root).errors)).toEqual([]);
-    const { events } = parseIcs(readCalendar(root, buildBook(root, { format: "ics" })));
+    const { events } = parseIcs(buildCalendar(root));
     expect(events.map((event) => [event.UID.raw, event.DTSTART.raw, event.DTEND.raw])).toEqual([
       ["daily-target.calendar-book@story-skills", "20261104", "20261105"],
       ["deadline.calendar-book@story-skills", "20270301", "20270302"]
@@ -192,20 +220,59 @@ describe("build --format ics", () => {
 
   test("writes every day without writing-days, and leaves out a target that starts after the deadline", () => {
     const daily = project("daily-target-words: 400\nrelease-every: 1 month\nrelease-start: 2027-01-31", [{}, {}]);
-    const { events } = parseIcs(readCalendar(daily.root, buildBook(daily.root, { format: "ics" })));
+    const { events } = parseIcs(buildCalendar(daily.root));
     expect(events[0].RRULE.raw).toBe("FREQ=DAILY");
     expect(events[0].DTSTART.raw).toBe("20270131");
     // A monthly cadence from the 31st goes out on the last day of a shorter month.
     expect(events.slice(1).map((event) => event.DTSTART.raw)).toEqual(["20270131", "20270228", "20270331"]);
 
     const late = project("deadline: 2026-01-01\ndaily-target-words: 400\nrelease-every: 7\nrelease-start: 2026-06-01", [{}]);
-    const uids = parseIcs(readCalendar(late.root, buildBook(late.root, { format: "ics" }))).events.map((event) => event.UID.raw);
+    const uids = parseIcs(buildCalendar(late.root)).events.map((event) => event.UID.raw);
     expect(uids).toEqual(["deadline.calendar-book@story-skills", "episode-1.calendar-book@story-skills", "episode-2.calendar-book@story-skills"]);
+  });
+
+  test("the daily target starts on the earliest anchor, and same-day events keep episodes first", () => {
+    // Chapter 1 goes out before release-start; the deadline shares a day with episode 2.
+    const { root } = project("deadline: 2026-09-11\ndaily-target-words: 400\nrelease-every: 7\nrelease-start: 2026-09-04", [{ extra: "release-date: 2026-08-01\n" }, {}, { extra: "release-date: 2026-12-24\n" }]);
+    const { events } = parseIcs(buildCalendar(root));
+    expect(events.map((event) => [event.UID.raw.split(".")[0], event.DTSTART.raw])).toEqual([
+      ["daily-target", "20260801"],
+      ["episode-1", "20260801"],
+      ["episode-2", "20260911"],
+      ["deadline", "20260911"],
+      // Episode 4, projected after the last chapter, still comes before episode 3's own date.
+      ["episode-4", "20260925"],
+      ["episode-3", "20261224"]
+    ]);
+  });
+
+  test("the release dates are the ones story next reports", () => {
+    const cwd = makeTempDir();
+    const root = path.join(cwd, "serial");
+    fs.cpSync(path.join(repoRoot, "examples", "the-left-luggage-office"), root, { recursive: true });
+    const next = JSON.parse(invoke(cwd, ["next", root, "--date", "2026-09-01", "--json"]).out).data.release;
+    const { events } = parseIcs(buildCalendar(root));
+    const episodes = events.filter((event) => event.UID.raw.startsWith("episode-"));
+    const dates = [...next.episodes, next.next].map((episode) => episode.date.replace(/-/g, ""));
+    expect(episodes.slice(0, next.episodes.length).map((event) => event.DTSTART.raw)).toEqual(dates.slice(0, -1));
+    // On 2026-09-01 the next release is episode 1; the calendar also projects
+    // the episode after the last chapter.
+    expect(episodes[episodes.length - 1].UID.raw).toBe(`episode-${next.episodes.length + 1}.the-left-luggage-office@story-skills`);
+  });
+
+  test("a book counted in characters names characters", () => {
+    const { root } = project("count-unit: characters\ndeadline: 2027-03-01\ntarget-characters: 120000\ndaily-target-characters: 2000");
+    const result = buildBook(root, { format: "ics" });
+    expect(result.warnings.map((warning) => warning.message)).toEqual(["story.md daily-target-characters is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again"]);
+    const { events } = parseIcs(readCalendar(root));
+    expect(events[0].DESCRIPTION.text).toBe("The deadline for Calendar Book. Target: 120,000 characters.");
+    fs.writeFileSync(path.join(root, "progress.md"), "---\ntype: progress-log\nsessions:\n  - date: 2026-11-02\n    words: 0\n    characters: 0\n---\n\n# Progress Log\n", "utf8");
+    expect(parseIcs(buildCalendar(root)).events[0].SUMMARY.text).toBe("Write 2,000 characters: Calendar Book");
   });
 
   test("a complete story has no projected episode and no daily target", () => {
     const { root } = project("status: complete\ndaily-target-words: 400\nrelease-every: 7\nrelease-start: 2026-09-04", [{}, { extra: "release-date: 2026-12-24\n" }]);
-    const { events } = parseIcs(readCalendar(root, buildBook(root, { format: "ics" })));
+    const { events } = parseIcs(buildCalendar(root));
     expect(events.map((event) => [event.UID.raw, event.DTSTART.raw])).toEqual([
       ["episode-1.calendar-book@story-skills", "20260904"],
       ["episode-2.calendar-book@story-skills", "20261224"]
@@ -215,7 +282,7 @@ describe("build --format ics", () => {
   test("escapes and folds titles so a calendar reads them back unchanged", () => {
     const title = "Salt, Pepper; and a Back\\slash: the very long chapter title that runs past one line, \u{1F30A} and on";
     const { root } = project("release-every: 7\nrelease-start: 2026-09-04\nstatus: complete", [{ title }]);
-    const text = readCalendar(root, buildBook(root, { format: "ics" }));
+    const text = buildCalendar(root);
     const { events, logical } = parseIcs(text);
     expect(events[0].DESCRIPTION.text).toBe(`Calendar Book, episode 1. Chapter: ${title} (chapter-01).`);
     expect(events[0].DESCRIPTION.raw).toContain("Salt\\, Pepper\\; and a Back\\\\slash: ");
@@ -228,8 +295,52 @@ describe("build --format ics", () => {
   test("warns when the daily target has no first day, and builds the rest", () => {
     const { root } = project("deadline: 2027-03-01\ndaily-target-words: 500");
     const result = buildBook(root, { format: "ics" });
-    expect(result.warnings.map((warning) => warning.code)).toEqual(["ics-daily-target-unanchored"]);
+    expect(result.warnings.map((warning) => warning.code)).toEqual(["ics-daily-target-left-out"]);
     expect(parseIcs(readCalendar(root)).events.map((event) => event.UID.raw)).toEqual(["deadline.calendar-book@story-skills"]);
+  });
+
+  test("a release-start alone anchors the daily target, and a start after the deadline warns", () => {
+    const anchored = project("deadline: 2026-06-01\ndaily-target-words: 1\nrelease-start: 2026-02-01");
+    const result = buildBook(anchored.root, { format: "ics" });
+    expect(result.warnings.map((warning) => warning.code)).toEqual([]);
+    const { events } = parseIcs(readCalendar(anchored.root));
+    expect(events[0].DTSTART.raw).toBe("20260201");
+    expect(events[0].SUMMARY.text).toBe("Write 1 word: Calendar Book");
+
+    const late = project("deadline: 2026-01-01\ndaily-target-words: 500\nrelease-every: 7\nrelease-start: 2026-02-01", [{}]);
+    const warnings = buildBook(late.root, { format: "ics" }).warnings;
+    expect(warnings.map((warning) => [warning.code, warning.message])).toEqual([["ics-daily-target-left-out", "story.md daily-target-words is left out of the calendar: its first writing day is after the deadline (2026-01-01)"]]);
+
+    // Friday 4 September, with Mondays only: the first writing day, the 7th, is past a deadline on the 5th.
+    const moved = project("deadline: 2026-09-05\ndaily-target-words: 400\nwriting-days: [mon]\nrelease-start: 2026-09-04");
+    expect(buildBook(moved.root, { format: "ics" }).warnings.map((warning) => warning.code)).toEqual(["ics-daily-target-left-out"]);
+
+    // With no deadline, a first writing day past 9999-12-31 cannot be written.
+    const end = project("daily-target-words: 400\nwriting-days: [mon]\nrelease-every: 7\nrelease-start: 9999-12-31", [{}]);
+    expect(buildBook(end.root, { format: "ics" }).warnings.map((warning) => warning.message)).toEqual(["story.md daily-target-words is left out of the calendar: its first writing day is after 9999-12-31, the last day a calendar date can name"]);
+    expect(readCalendar(end.root)).not.toContain("+0");
+
+    // A first writing day on the deadline gives one occurrence.
+    const same = project("deadline: 2026-09-07\ndaily-target-words: 400\nwriting-days: [mon]\nrelease-start: 2026-09-04");
+    const daily = parseIcs(buildCalendar(same.root)).events[0];
+    expect([daily.DTSTART.raw, daily.RRULE.raw]).toEqual(["20260907", "FREQ=WEEKLY;BYDAY=MO;UNTIL=20260907"]);
+  });
+
+  test("an event on 9999-12-31 has no DTEND, since the next day cannot be written", () => {
+    const { root } = project("deadline: 9999-12-31\ntarget-words: 1");
+    const text = buildCalendar(root);
+    const { events } = parseIcs(text);
+    expect(events[0].DTSTART.raw).toBe("99991231");
+    expect(events[0].DTEND).toBeUndefined();
+    expect(events[0].DESCRIPTION.text).toBe("The deadline for Calendar Book. Target: 1 word.");
+    expect(text).not.toContain("+0");
+  });
+
+  test("with only a daily target and no first day, the refusal says why", () => {
+    const { root, cwd } = project("daily-target-words: 300");
+    const { code, err } = invoke(cwd, ["build", root, "--format", "ics"]);
+    expect(code).toBe(3);
+    expect(err).toContain("Cannot build ics: the calendar would have no events. story.md daily-target-words is left out of the calendar: it has no first day. Log a session with story progress --log");
   });
 
   test("refuses a calendar with no events, exiting 3", () => {
@@ -248,11 +359,23 @@ describe("build --format ics", () => {
     const built = invoke(cwd, ["build", root, "--format", "ICS"]);
     expect(built.code).toBe(0);
     expect(built.out).toBe(`Built a calendar of 1 event to ${path.join(root, "dist", "calendar-book.ics")}\n`);
-    const json = JSON.parse(invoke(cwd, ["build", root, "--format", "ics", "--json"]).out);
-    expect(json.data).toMatchObject({ format: "ics", events: 1, pages: null, pdf: false });
+    for (const argv of [["--json"], ["--dry-run", "--json"]]) {
+      const json = JSON.parse(invoke(cwd, ["build", root, "--format", "ics", ...argv]).out);
+      expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+      expect(json.data).toMatchObject({ format: "ics", events: 1, pages: null, pdf: false, dryRun: argv.includes("--dry-run") });
+    }
+    // A warning goes to stderr and the build still passes.
+    fs.writeFileSync(path.join(root, "story.md"), fs.readFileSync(path.join(root, "story.md"), "utf8").replace("deadline: 2027-03-01\n", "deadline: 2027-03-01\ndaily-target-words: 9\n"), "utf8");
+    const warned = invoke(cwd, ["build", root, "--format", "ics", "--json"]);
+    const envelope = JSON.parse(warned.out);
+    expect(validateAgainstSchema(envelope, resultSchema)).toEqual([]);
+    expect(envelope.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["ics-daily-target-left-out"]);
+    const text = invoke(cwd, ["build", root, "--format", "ics"]);
+    expect(text.code).toBe(0);
+    expect(text.err).toContain("[ics-daily-target-left-out]");
   });
 
-  test("--include-pending and other matter options are errors with ics", () => {
+  test("--include-pending is an error with ics, which prints no matter", () => {
     const { root } = project("deadline: 2027-03-01");
     expect(() => buildBook(root, { format: "ics", includePending: true })).toThrow("prints none");
   });

@@ -286,7 +286,7 @@ export const FINDING_CODES = {
   "scene-no-setting": "warning",
   "permission-pending-left-out": "warning",
   "matter-placement-left-out": "warning",
-  "ics-daily-target-unanchored": "warning",
+  "ics-daily-target-left-out": "warning",
   // story add, rename, move, and remove
   "unknown-reference": "warning",
   "adopted-references": "warning",
