@@ -554,6 +554,8 @@ dismissed: continuity/promises/the-sealed-letter.md was planted in chapter-01, 3
 
 After any continuity fix, run the maintenance block (`story reindex .`, `story wordcount . --write`, and `story check .`) so registries and backlinks match and the fix is confirmed.
 
+To see what a change would break before you make it, run [`story impact`](cli-reference.md#impact). It makes the change on a scratch copy, runs the checks before and after, and lists only the findings the change adds and clears. In this project, cutting Edran clears the posthumous appearance in chapter 4 and adds nothing: `story impact remove character edran-vale`.
+
 ## Exemptions
 
 Some findings are intentional: a flashback that runs the clock backward, a setup whose payoff is in a sequel, a chapter that names a destroyed heirloom in memory. Record those in `continuity/exemptions.md` instead of bending the frontmatter to silence the checker:
@@ -1627,6 +1629,7 @@ Work down from P0. P0 and P1 items are mechanical and have a command to run. P2 
 | Before drafting a chapter or scene | `story context <chapter-or-scene-id> --path .` |
 | Before writing a scene that turns on a secret | `story knowledge <id> --at <chapter-id>` |
 | Planning structure or pacing | `story timeline .`, `story pacing .`, `story diagram arcs` |
+| Before a plot or structural change: a death, a cut character, a moved scene | `story impact die <character-id> <chapter-id> --path .`, `story impact remove <kind> <id> --path .`, `story impact move scene <id> --chapter <chapter-id> --path .`: the findings the change would add and clear, on a scratch copy |
 | Inserting, reordering, splitting, or merging chapters and scenes | `story split <chapter-id> --at <marker>`, `story merge <chapter-id> <next-chapter-id>`, `story move chapter <id> --number <n>` (highest chapter first), `story move scene <id> --chapter <chapter-id>`, then `story reindex .`, `story wordcount . --write`, and `story check .` |
 | Planting or revealing a mystery clue | `story clues .`, `story diagram clues` |
 | Adding places and journeys | `story diagram locations`, then `story continuity .` for route travel |
