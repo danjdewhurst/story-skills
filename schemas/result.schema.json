@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "story/v2" },
     "command": {
-      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "split", "merge", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "notes", "passes", "diagram", "synopsis", "grid", "list", "snapshot", "export", "build", "init", "import"]
+      "enum": ["validate", "links", "continuity", "check", "series", "next", "doctor", "report", "knowledge", "context", "timeline", "prose", "voices", "pacing", "clues", "progress", "similarity", "add", "rename", "remove", "move", "split", "merge", "impact", "reindex", "migrate", "wordcount", "names", "mentions", "compare", "notes", "passes", "diagram", "synopsis", "grid", "list", "snapshot", "export", "build", "init", "import"]
     },
     "ok": { "type": "boolean", "description": "True exactly when the command exits 0." },
     "data": { "type": ["object", "null"] },
@@ -32,6 +32,7 @@
     { "if": { "properties": { "command": { "const": "progress" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-progress" } } } },
     { "if": { "properties": { "command": { "const": "similarity" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-similarity" } } } },
     { "if": { "properties": { "command": { "enum": ["add", "rename", "remove", "move", "split", "merge", "reindex", "migrate", "wordcount"] }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-write" } } } },
+    { "if": { "properties": { "command": { "const": "impact" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-impact" } } } },
     { "if": { "properties": { "command": { "const": "names" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-names" } } } },
     { "if": { "properties": { "command": { "const": "mentions" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-mentions" } } } },
     { "if": { "properties": { "command": { "const": "compare" }, "data": { "type": "object" } } }, "then": { "properties": { "data": { "$ref": "#/$defs/data-compare" } } } },
@@ -453,6 +454,27 @@
         "date": { "type": "string" },
         "time": { "type": "string" },
         "reading": { "$ref": "#/$defs/count" }
+      }
+    },
+    "data-impact": {
+      "type": "object",
+      "$comment": "story impact: the change tested and what it would do to story check. The findings it adds are the diagnostics, after them the change's own warnings, with the change as their check.",
+      "required": ["change", "args", "result", "changes", "strict", "added", "cleared", "carried", "before", "after"],
+      "properties": {
+        "change": { "enum": ["rename", "remove", "move", "split", "merge", "die"] },
+        "args": { "type": "array", "items": { "type": "string" }, "description": "The arguments after the change, as typed." },
+        "result": { "type": "object", "description": "The change's own result, as the --json data of its command gives it (kind, id, and file for each change; chapter for die), without dryRun and changes." },
+        "changes": { "type": "array", "items": { "$ref": "#/$defs/change" }, "description": "The files the change would create, update, or delete; none was written." },
+        "strict": { "type": "boolean" },
+        "added": {
+          "type": "object",
+          "required": ["errors", "warnings"],
+          "properties": { "errors": { "$ref": "#/$defs/count" }, "warnings": { "$ref": "#/$defs/count" } }
+        },
+        "cleared": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" }, "description": "The findings the change would clear." },
+        "carried": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" }, "description": "The findings the project already had that the change only gives new ids (a renamed entity, a renumbered chapter), as they read after it." },
+        "before": { "$ref": "#/$defs/data-check" },
+        "after": { "$ref": "#/$defs/data-check" }
       }
     },
     "data-write": {

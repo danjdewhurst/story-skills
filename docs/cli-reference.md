@@ -3004,7 +3004,7 @@ Tests a plot change before you make it: what breaks if a character dies in chapt
 
 The words after `impact` are a command and its arguments, read exactly as that command reads them, with the same flags. So `story impact move scene chapter-03-scene-01 --chapter chapter-09` tests `story move scene chapter-03-scene-01 --chapter chapter-09`, and `impact` refuses what the command would refuse, with the same message and exit code: a missing id, a chapter number already taken, a flag the command does not read, a file that fails to parse. `--dry-run` does not apply, since `impact` never writes.
 
-`die` has no command of its own: `impact die <character-id> <chapter-id>` sets the character's `died-in` to the chapter and `status` to `deceased`, as a written death needs (see [Deaths](continuity.md#deaths-and-posthumous-appearances)), and reindexes. Both ids must exist. A death in a chapter whose `status` is `outline` is planned: `impact die` keeps the character's `status`, as a planned death is recorded, and says that `continuity` checks no later cast against the death until the chapter is drafted (`planned-death`).
+`die` has no command of its own: `impact die <character-id> <chapter-id>` sets the character's `died-in` to the chapter and `status` to `deceased`, as a written death needs (see [Deaths](continuity.md#deaths-and-posthumous-appearances)), and reindexes. For a character already dead and revived before that chapter, it records a second death instead: a `status` progression to `deceased` from the chapter, with `died-in` and `revived-in` kept. A death at or before the revival moves the first death and leaves the status to the revival. Both ids must exist. A death in a chapter whose `status` is `outline` is planned: `impact die` keeps the character's `status`, as a planned death is recorded, and says that `continuity` checks no later cast against the death until the chapter is drafted (`planned-death`).
 
 <!-- replay: bo-and-the-missing-moon exit=1 -->
 ```text
@@ -3041,14 +3041,14 @@ Clears:
 Adds nothing; clears 1 error. Before: 4 errors, 3 warnings. After: 3 errors, 3 warnings
 ```
 
-The output lists the files the change would touch, the warnings the change itself gives (such as `leftover-references` from `remove`), each finding it adds and clears with the check that reports it, and the counts before and after. A finding is matched on its check, code, file, chapter, and message, so a finding whose message names a file the change renamed shows as cleared under the old name and added under the new one.
+The output lists the files the change would touch, the warnings the change itself gives (such as `leftover-references` from `remove`), each finding it adds and clears with the check that reports it, and the project's totals before and after. A finding is matched on its check, code, file, chapter, and message. A finding the project already had that the change only gives new ids is carried over, not added and cleared: after `rename character edran-vale`, the error about `edran-vale` in chapter 4 names `edran-valemont`, and after a `move`, `split`, or `merge` an error about a renumbered chapter names its new number. The summary line counts these (`carries over 1 error under new ids`). Each check reads the copy's `story.md` [`severity`](#defaults-and-severity-from-storymd) entries and [exemptions](continuity.md#exemptions) as they are at that point, so an exemption that `move`, `split`, or `merge` rewrites to follow a renumbered chapter still dismisses its finding after the change.
 
 | Option | Effect |
 |---|---|
-| `--strict` | Fail on the warnings the change adds as well as the errors. |
-| `--json` | Print a JSON result: `data.change` (the command tested) and `data.args`, `data.result` (that command's own result), `data.changes` (the files it would create, update, or delete), `data.strict`, `data.added` (the count of `errors` and `warnings` added), `data.cleared` (each cleared finding as a diagnostic), and `data.before` and `data.after` (each check's `errors`, `warnings`, and `dismissed` counts). The added findings, then the change's own warnings, are the diagnostics, and `writes` is always empty (see [JSON output](#json-output)). |
+| `--strict` | Fail on the warnings the change adds, and on the change's own warnings, as well as the errors. |
+| `--json` | Print a JSON result: `data.change` (the command tested) and `data.args`, `data.result` (that command's own result), `data.changes` (the files it would create, update, or delete), `data.strict`, `data.added` (the count of `errors` and `warnings` added), `data.cleared` (each cleared finding as a diagnostic), `data.carried` (each finding carried over under new ids, as it reads after the change), and `data.before` and `data.after` (the project's `errors`, `warnings`, and `dismissed` totals). The added findings, then the change's own warnings, are the diagnostics, and `writes` is always empty (see [JSON output](#json-output)). |
 
-`impact` exits `1` when the change would add an error, or with `--strict` a warning, so a script can gate on it; `0` when it adds none, even if the project already has errors. It refuses while an interrupted change is in the project (see [Interrupted changes](#interrupted-changes)), since its result would build on a half-made change: finish that change or run `story doctor --fix` first.
+`impact` exits `1` when the change would add an error, or with `--strict` a warning, so a script can gate on it; `0` when it adds none, even if the project already has errors, which it may carry over. A `severity` entry that promotes one of the change's own warnings also makes it exit `1`, as it does the command. It refuses while an interrupted change is in the project (see [Interrupted changes](#interrupted-changes)), since its result would build on a half-made change: finish that change or run `story doctor --fix` first.
 
 ## Output commands
 
@@ -3810,7 +3810,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
 | `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
-| `--strict` | | `check`, `impact` | Boolean; fails on warnings as well as errors (for `impact`, on the warnings the change adds) |
+| `--strict` | | `check`, `impact` | Boolean; fails on warnings as well as errors (for `impact`, on the warnings the change adds or gives) |
 | `--stdio` | | `lsp` | Boolean; accepted for editors that pass it, as the server always uses stdin and stdout |
 | `--json` | | Every command except `lsp` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
 | `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |

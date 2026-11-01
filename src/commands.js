@@ -6,7 +6,7 @@ import { formatContext } from "./context.js";
 import { formatGrid, gridFormat } from "./grid.js";
 import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
-import { applySeverity } from "./config.js";
+import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
 import { FINDING_CODES, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { serveLanguageServer } from "./language-server.js";
@@ -1088,10 +1088,14 @@ export const COMMANDS = [
       // against; the writer finishes or puts it back first.
       assertNoInterruptedChange(projectRoot, "story impact");
       const strict = isTruthy(parsed.options.strict);
-      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overrides, strict });
+      // The checks read the copy's story.md and exemptions, before and after
+      // the change, as the real run's checks would.
+      const overridesAt = (copyRoot) => findingOverrides(readCliConfig(copyRoot));
+      const impact = projectImpact(projectRoot, wrapped.change(inner, `impact ${name}`), { overridesAt, strict });
+      // The change's own warnings, as its command reports them; --strict
+      // fails on them too, as on the warnings the change adds to the checks.
       const own = checkedWarnings(impact.outcome.warnings, overrides);
-      const ok = impact.ok && own.ok;
-      const added = [...impact.added.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.added.warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+      const ok = impact.ok && own.ok && (!strict || own.warnings.length === 0);
       if (wantsJson(parsed)) {
         return writeJsonResult(io, {
           command: "impact",
@@ -1103,14 +1107,15 @@ export const COMMANDS = [
             changes: impact.changes,
             strict,
             added: { errors: impact.added.errors.length, warnings: impact.added.warnings.length },
-            cleared: [...impact.cleared.errors.map((finding) => diagnostic("error", finding, finding.check)), ...impact.cleared.warnings.map((finding) => diagnostic("warning", finding, finding.check))],
+            cleared: impactDiagnostics(impact.cleared),
+            carried: impactDiagnostics(impact.carried),
             before: impact.before,
             after: impact.after
           },
-          diagnostics: [...added, ...diagnosticsFrom(own, name)]
+          diagnostics: [...impactDiagnostics(impact.added), ...diagnosticsFrom(own, name)]
         });
       }
-      io.stdout.write(formatImpact(parsed.positionals.slice(1).map(shellWord).join(" "), impact, own));
+      io.stdout.write(formatImpact(impactWords(inner.parsed), impact, own));
       return ok ? EXIT_CODES.ok : EXIT_CODES.findings;
     }
   },
@@ -1301,6 +1306,20 @@ function impactParsed(parsed, command) {
   return { positionals, options };
 }
 
+// The change as story impact's text output names it: its words, then the
+// flags it read (move scene x --chapter chapter-09), so two tests of the
+// same change with other flags can be told apart.
+function impactWords({ positionals, options }) {
+  const flags = Object.entries(options).flatMap(([key, value]) => [].concat(value).map((item) => (item === true ? `--${key}` : `--${key} ${shellWord(String(item))}`)));
+  return [...positionals.map(shellWord), ...flags].join(" ");
+}
+
+// Findings story impact sorted, as diagnostics of the check that raised
+// them: errors first.
+function impactDiagnostics({ errors, warnings }) {
+  return [...errors.map((finding) => diagnostic("error", finding, finding.check)), ...warnings.map((finding) => diagnostic("warning", finding, finding.check))];
+}
+
 // story impact's text output: the files the change would touch, the
 // findings it adds and clears, the change's own warnings, and a summary.
 function formatImpact(typed, impact, own) {
@@ -1308,6 +1327,7 @@ function formatImpact(typed, impact, own) {
   const counted = ({ errors, warnings }) => (errors.length + warnings.length === 0 ? "nothing" : [errors.length > 0 ? plural(errors.length, "error") : "", warnings.length > 0 ? plural(warnings.length, "warning") : ""].filter(Boolean).join(" and "));
   const line = (severity, finding) => `  ${severity}: [${finding.check}] ${findingLine(finding)}\n`;
   const section = (title, found) => (found.errors.length + found.warnings.length === 0 ? "" : `${title}:\n${found.errors.map((finding) => line("error", finding)).join("")}${found.warnings.map((finding) => line("warning", finding)).join("")}`);
+  const carriedCount = ({ errors, warnings }) => (errors.length + warnings.length === 0 ? "" : `; carries over ${counted({ errors, warnings })} under new ids`);
   const changes = impact.changes.length === 0
     ? "The change would make no changes\n"
     : `The change would make ${plural(impact.changes.length, "change")}:\n${impact.changes.map((change) => `  ${change.action.padEnd(7)} ${change.path}\n`).join("")}`;
@@ -1318,7 +1338,7 @@ function formatImpact(typed, impact, own) {
     warnings,
     section("Adds", impact.added),
     section("Clears", impact.cleared),
-    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}\n`
+    `Adds ${counted(impact.added)}; clears ${counted(impact.cleared)}${carriedCount(impact.carried)}. Before: ${plural(impact.before.errors, "error")}, ${plural(impact.before.warnings, "warning")}. After: ${plural(impact.after.errors, "error")}, ${plural(impact.after.warnings, "warning")}\n`
   ].join("");
 }
 
