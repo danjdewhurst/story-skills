@@ -8,7 +8,10 @@ import { entityStateAt } from "./progressions.js";
 import { fileSystemName, isInsideGitDirectory, isPlanning, isShortNameOf, lstatIfExists, nearestExistingAncestor, projectPath, readFilePrefix, removeDirectory, removeFile, writeFile } from "./files.js";
 import { CODEX_GENERATOR, CODEX_KINDS, codexPages } from "./codex.js";
 import { FRONTMATTER_KEYS, nearMissKeys } from "./frontmatter-keys.js";
-import { PROGRESS_FILE } from "./progress.js";
+import { PROGRESS_FILE, cleanSessions, writingDays } from "./progress.js";
+import { parseClockDate } from "./continuity.js";
+import { icsCalendar, scheduleEvents } from "./ics.js";
+import { releaseCadence, releaseDates } from "./release-schedule.js";
 import {
   chapterHeading,
   chapterProse,
@@ -27,7 +30,7 @@ import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { derivedIfid, isIfid, tweeSource } from "./twee.js";
-import { DEFAULT_PAPER, htmlBook, SHUNN_PAPERS, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { DEFAULT_PAPER, buildTimestamp, htmlBook, SHUNN_PAPERS, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { renderPdf, resolvePdfEngine } from "./pdf.js";
 import { buildStyle, styleSheetFile, validateBuildStyle } from "./build-style.js";
 import { wordSpans } from "./words.js";
@@ -173,6 +176,12 @@ export function buildBook(root, options = {}) {
     return withIdWarnings({ ...result, format });
   }
 
+  // The calendar reads story.md and the chapters' release dates, not
+  // matter or prose, so a matter problem cannot stop it either.
+  if (format === "ics") {
+    return withIdWarnings(buildCalendar(project, output));
+  }
+
   // The screenplay skeleton reads chapters and scene records, not matter
   // or prose, so a matter problem cannot stop it.
   if (format === "fountain") {
@@ -232,6 +241,59 @@ export function buildBook(root, options = {}) {
   }
 
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
+}
+
+// `build --format ics`: the deadline, the serial release dates, and the
+// daily target on the writing days, as an iCalendar file. A field validate
+// reports as invalid is left out, as progress and next leave it out. The
+// daily target needs a first day, and only the project can give one that
+// does not change from one build to the next: the first logged session,
+// release-start, or the first release date, whichever is earliest. A
+// complete story has no daily target left to keep.
+function buildCalendar(project, output) {
+  const data = project.story.data;
+  const unit = project.unit;
+  const warnings = [];
+  const deadlineDate = typeof data.deadline === "string" ? parseClockDate(data.deadline) : undefined;
+  const deadline = deadlineDate ? { days: deadlineDate.days, date: deadlineDate.text } : null;
+  const target = Number.isInteger(data[unit.targetField]) && data[unit.targetField] > 0 ? data[unit.targetField] : null;
+
+  const chapters = project.chapters.map((chapter) => ({
+    id: chapter.id,
+    file: projectPath(project.root, chapter.file),
+    releaseDate: chapter.releaseDate,
+    drafted: chapter.wordCount > 0 || chapter.count > 0
+  }));
+  const titles = new Map(project.chapters.map((chapter) => [chapter.id, chapter.title]));
+  const release = releaseDates(data, chapters);
+  const episodes = release === null ? [] : [...release.episodes, ...(release.next === null ? [] : [release.next])].map((episode) => ({
+    episode: episode.episode,
+    chapter: episode.chapter,
+    title: episode.chapter === null ? null : String(titles.get(episode.chapter)),
+    days: episode.days
+  }));
+
+  let daily = null;
+  const dailyTarget = data[unit.dailyTargetField];
+  if (Number.isInteger(dailyTarget) && dailyTarget > 0 && data.status !== "complete") {
+    const starts = [
+      ...cleanSessions(project.progressLog?.data.sessions).slice(0, 1).map((session) => parseClockDate(session.date).days),
+      ...[releaseCadence(data)?.startDays].filter((days) => days !== undefined),
+      ...episodes.map((episode) => episode.days)
+    ];
+    if (starts.length === 0) {
+      warnings.push(warn("ics-daily-target-unanchored", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
+    } else {
+      daily = { target: dailyTarget, writingDays: writingDays(data["writing-days"]), startDays: Math.min(...starts) };
+    }
+  }
+
+  const events = scheduleEvents({ title: project.title, storyId: project.storyId, noun: unit.noun, target, deadline, daily, episodes });
+  if (events.length === 0) {
+    throw projectError("Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
+  }
+  writeFile(output.outFile, icsCalendar({ title: project.title, events, stamp: buildTimestamp() }), output.writeOptions);
+  return { outFile: output.outFile, chapters: project.chapters.length, format: "ics", events: events.length, warnings };
 }
 
 // `--pdf`: the print interior or Shunn manuscript as HTML, rendered by an
@@ -1087,7 +1149,7 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
 // The formats that print no matter pages, as docx --shunn prints none.
 // Every other format prints them, so a new one leaves out and warns about
 // the pages whose permission is not cleared unless it is listed here.
-const NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex"]);
+const NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics"]);
 
 // The file extension of each build format; its keys are the formats
 // --format accepts, besides BUILD_FORMAT_ALIASES.
@@ -1103,6 +1165,7 @@ export const BUILD_EXTENSIONS = {
   fountain: "fountain",
   twee: "twee",
   ink: "ink",
+  ics: "ics",
   // A folder of pages, dist/codex/, rather than one file.
   codex: ""
 };

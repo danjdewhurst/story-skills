@@ -25,7 +25,7 @@ const MARKED = {
   "docs/development.md": 1,
   "docs/getting-started.md": 7,
   "docs/languages.md": 2,
-  "docs/manuscripts.md": 5,
+  "docs/manuscripts.md": 6,
   "docs/series.md": 1,
   "docs/writing-workflows.md": 2
 };

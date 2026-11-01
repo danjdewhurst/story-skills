@@ -175,7 +175,7 @@ describe("--json on export, build, init, and import", () => {
 
     const book = path.join(root, "dist", "the-unraveled-thread.md");
     const built = invokeJson(root, ["build", "--format", "md", "--json"]).envelope;
-    expect(built.data).toEqual({ format: "markdown", outFile: book, chapters: 4, pages: null, pdf: false, engine: null, dryRun: false, changes: [{ action: "create", path: "dist/the-unraveled-thread.md" }] });
+    expect(built.data).toEqual({ format: "markdown", outFile: book, chapters: 4, pages: null, events: null, pdf: false, engine: null, dryRun: false, changes: [{ action: "create", path: "dist/the-unraveled-thread.md" }] });
     expect(built.writes).toEqual([book]);
     // A rebuild lists the file it rewrote as an update.
     expect(invokeJson(root, ["build", "--json"]).envelope.data.changes).toEqual([{ action: "update", path: "dist/the-unraveled-thread.md" }]);

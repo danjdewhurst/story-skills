@@ -253,7 +253,7 @@ describe.skipIf(!posix)("build --pdf with a stub engine", () => {
     };
 
     const preview = run("", ["--dry-run"]);
-    expect(preview.envelope.data).toEqual({ format: "shunn", outFile, chapters: 1, pages: null, pdf: true, engine: "pagedjs-cli", dryRun: true, changes: [{ action: "mkdir", path: "dist" }, { action: "create", path: "dist/paper-lanterns.shunn.pdf" }] });
+    expect(preview.envelope.data).toEqual({ format: "shunn", outFile, chapters: 1, pages: null, events: null, pdf: true, engine: "pagedjs-cli", dryRun: true, changes: [{ action: "mkdir", path: "dist" }, { action: "create", path: "dist/paper-lanterns.shunn.pdf" }] });
     expect(preview.envelope.writes).toEqual([]);
     expect(readLog(log)).toEqual([]);
 

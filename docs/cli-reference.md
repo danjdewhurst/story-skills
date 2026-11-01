@@ -84,7 +84,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`merge <chapter-id> <next-chapter-id>`](#merge) | Merge the next chapter into a chapter, update references, and renumber the chapters after it | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 | Editor | [`lsp`](#lsp) | Run the language server an editor starts, for live diagnostics, navigation, completion, rename, and quick fixes | No |
 
@@ -2975,11 +2975,11 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 story build [path] [--format <name>] [--shunn] [--anonymous] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run] [--json]
 ```
 
-Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
+Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps and the iCalendar `DTSTAMP` use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
 
 | Option | Effect | Default |
 |---|---|---|
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` | `markdown` |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--anonymous` | With `--format shunn` (and its `--pdf`) or `--format docx --shunn`, leave every name out, for a market that reads blind: the byline, editor credit, contact lines, story bylines, and the running head's surname. An error with any other build, and it cannot be a `cli-defaults` entry. See [Anonymous manuscripts](manuscripts.md#anonymous-manuscripts) | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
@@ -2992,7 +2992,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--include-pending` | With a build that prints matter pages (`markdown`, `epub`, `docx` without `--shunn`, `html`, `print`, and `narration`), keep the pages whose `permission` is `pending`. An error with any other build. `cli-defaults` cannot set it. See [Pending permissions](#pending-permissions) | Off |
 | `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
 | `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
-| `--json` | Print a JSON result: `data.format`, `data.outFile` (the absolute path, or the `codex` folder), `data.chapters`, `data.pages` (for `codex`), `data.pdf`, `data.engine` (for `--pdf`), `data.dryRun`, and `data.changes`, with the files written in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
+| `--json` | Print a JSON result: `data.format`, `data.outFile` (the absolute path, or the `codex` folder), `data.chapters`, `data.pages` (for `codex`), `data.events` (for `ics`), `data.pdf`, `data.engine` (for `--pdf`), `data.dryRun`, and `data.changes`, with the files written in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
 
 | Format | Default output | Contents |
 |---|---|---|
@@ -3010,6 +3010,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `fountain` | `dist/<story-id>.fountain` | A screenplay scene skeleton in Fountain, not a conversion of the prose: a title page, a `##` section per chapter, and one scene heading per scene record (`INT. LAMP ROOM - DUSK`, from the `setting`, location name, and time), with the scene title as a synopsis and the source scene id, cast, and scene notes as unprinted notes. A scene with no `setting` on it or its location gets a forced heading (`.LAMP ROOM - DUSK`) and a warning. See [Screenplay skeleton](manuscripts.md#screenplay-skeleton-fountain) |
 | `twee` | `dist/<story-id>.twee` | A Twine story in Twee 3: `StoryTitle`, `StoryData` with the IFID (`ifid` in `story.md`, or one derived from the story id, with a warning giving the line to pin it) and the first chapter as the start, then one passage per chapter, named by its id, ending in a `[[text->chapter-NN]]` link for each of its [`choices`](project-format.md#branching-chapters). With no choices anywhere, each chapter links to the next. No matter pages. Refuses to build, exiting 3, while a choice is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed, and warns about chapters no choice path reaches. See [Twine story](manuscripts.md#twine-story) |
 | `ink` | `dist/<story-id>.ink` | An ink story for Inky and inklecate from the same chapters and choices, with the same checks as `twee`: `# title`, `# author`, and `# ifid` global tags, a divert to the first chapter, then one knot per chapter (`chapter-03` becomes `chapter_03`), ending in a sticky `+ [text] -> knot` choice for each of its `choices`, or `-> END` when it has none. With no choices anywhere, each chapter diverts to the next. Prose and choice text are escaped so ink reads them as text. See [ink story](manuscripts.md#ink-story) |
+| `ics` | `dist/<story-id>.ics` | An iCalendar (RFC 5545) file of the writing schedule, to import into Google Calendar, Apple Calendar, or Outlook, or to subscribe to from a published build: all-day events for the `deadline` (with `target-words` or `target-characters`), each serial episode's release date from the [release schedule](project-format.md#release-schedule), plus the next episode on the cadence after the last chapter while the story is not `complete`, and the daily target (`daily-target-words` or `daily-target-characters`) as a recurring event on the `writing-days` until the deadline. Each `UID` comes from the story id and the event, so a rebuilt calendar updates the events instead of adding copies. No prose. Exits 3 when there is nothing to schedule. See [Writing schedule calendar](manuscripts.md#writing-schedule-calendar-icalendar) |
 | `codex` | `dist/codex/` | A story bible as a static site: `index.html` with every entity listed, a page per character, location, faction, artifact, system, and arc (`characters/<id>.html`) with its fields, relationships, the chapters it appears in, and the pages that link to it, and `timeline.html`, `threads.html` (open questions and promises), and `progress.html` (length, chapter targets, plot grid, session log). Plain HTML and inline CSS: no script, no external asset, no date. Spoiler-safe unless `--spoilers` is given. See [Story bible site](manuscripts.md#story-bible-site-codex) |
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
@@ -3071,7 +3072,7 @@ $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
 $ story build --format pdf
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, codex
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
@@ -3564,6 +3565,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `scene-no-setting` | warning | A Fountain build has locations with no interior or exterior setting. |
 | `permission-pending-left-out` | warning | `export` or a build leaves out a matter page whose `permission` is `pending`, misspelt, or not a cleared value; `--include-pending` keeps it. |
 | `matter-placement-left-out` | warning | `export` or a build leaves out a written matter page whose `placement` is neither `front` nor `back`, such as `Back`; `validate` reports the value as an error. |
+| `ics-daily-target-unanchored` | warning | An `ics` build leaves out the daily target because nothing gives it a first day: no session in `progress.md`, no `release-start`, and no release date. |
 
 ### Codes: add, rename, move, split, merge, and remove
 

@@ -471,6 +471,8 @@ Once `story.md` has `status: complete`, the chapters are every episode there is,
 Next release: none, the story is complete; episode 12 (chapter-12) on 2026-11-20 was the last
 ```
 
+To put the release dates in a calendar app, build them as an iCalendar file with `story build . --format ics`, which holds the `deadline` and the daily target too. See [Writing schedule calendar](manuscripts.md#writing-schedule-calendar-icalendar).
+
 ### Revision passes
 
 `revision-passes` records a revision as separate named passes, each looking for one kind of problem. It is a list of mappings:

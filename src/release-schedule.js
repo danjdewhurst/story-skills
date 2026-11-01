@@ -150,16 +150,7 @@ export function releaseSchedule({ data, chapters, today }) {
   const warnDays = releaseWarnDays(data);
   const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
-  const episodes = [];
-  chapters.forEach((chapter, index) => {
-    let days = cadence ? cadenceDays(cadence, index) : null;
-    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
-      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
-    }
-    if (days !== null && days <= LAST_DAY) {
-      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
-    }
-  });
+  const episodes = chapterEpisodes(cadence, chapters);
   if (cadence === null && episodes.length === 0) {
     return null;
   }
@@ -167,12 +158,8 @@ export function releaseSchedule({ data, chapters, today }) {
   // Past the last chapter, a cadence keeps scheduling episodes: those due
   // by today plus warnDays have no chapter to draft yet, and the first one
   // today or later can be the next release. A complete story has no
-  // episode past its last chapter, so nothing is projected. A projection
-  // past LAST_DAY is null.
-  const projected = (index) => {
-    const days = cadenceDays(cadence, index);
-    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
-  };
+  // episode past its last chapter, so nothing is projected.
+  const projected = (index) => projectedEpisode(cadence, index);
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
@@ -215,6 +202,46 @@ export function releaseSchedule({ data, chapters, today }) {
     episodes: episodes.map(({ days, ...episode }) => episode),
     warnings
   };
+}
+
+// The chapters' episodes as { episode, chapter, file, date, days,
+// drafted }, in reading order: each chapter's release-date, else its slot
+// on the cadence. A chapter with neither, or a release-date that is not a
+// real day (validate reports it), has no episode in the schedule.
+function chapterEpisodes(cadence, chapters) {
+  const episodes = [];
+  chapters.forEach((chapter, index) => {
+    let days = cadence ? cadenceDays(cadence, index) : null;
+    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
+      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
+    }
+    if (days !== null && days <= LAST_DAY) {
+      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
+    }
+  });
+  return episodes;
+}
+
+// Episode `index + 1` on the cadence, with no chapter yet, or null past
+// LAST_DAY.
+function projectedEpisode(cadence, index) {
+  const days = cadenceDays(cadence, index);
+  return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+}
+
+// The release dates a calendar can hold without a today: { episodes, next }
+// with `episodes` the chapters' episodes, as releaseSchedule lists them, and
+// `next` the first cadence episode past the last chapter, or null for a
+// complete story, a book with no cadence, or a projection past 9999-12-31.
+// Each episode keeps `days`, its day since 1970-01-01. null when the book
+// has no release schedule.
+export function releaseDates(data, chapters) {
+  const cadence = releaseCadence(data);
+  const episodes = chapterEpisodes(cadence, chapters);
+  if (cadence === null && episodes.length === 0) {
+    return null;
+  }
+  return { episodes, next: cadence === null || data.status === "complete" ? null : projectedEpisode(cadence, chapters.length) };
 }
 
 function withDaysUntil({ days, ...episode }, todayDays) {
