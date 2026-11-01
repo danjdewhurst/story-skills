@@ -34,7 +34,7 @@ export { severityCodes };
 // with the command rather than one by one: a story-wide default for them
 // makes no sense, and story split chapter-01 with no --at still fails with a
 // usage error instead of splitting where a default says.
-const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge"]);
+const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
 
 // Flags that name one target or one moment rather than a habit.
 const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
