@@ -54,6 +54,19 @@ CI runs `check:metadata`, `check:evals`, `check:links`, `eval:selftest`, `test:c
 - Keep examples realistic and valid; if you change the story project format, update examples and tests together.
 - A Dependabot bump of an action that a workflow in `templates/github/` also uses needs the same SHA edited by hand in the same pull request. Dependabot does not scan `templates/github/`, and `test/check-scripts.test.js` fails until every pin matches.
 
+## No MCP Server
+
+Story Skills is CLI first. Do not add an MCP server, such as a `story mcp` command, and do not suggest one as a feature. [#259](https://github.com/danjdewhurst/story-skills/issues/259) proposed it and was closed for these reasons:
+
+- Every agent the project targets, such as Claude Code and Codex, has a shell, and the skills already name the `story` command to run.
+- `--json` ([#255](https://github.com/danjdewhurst/story-skills/issues/255)) gives agents structured output with a versioned result envelope, so an MCP server would mostly repeat the CLI.
+- A second interface must stay in step with the CLI and needs its own tests and docs.
+- It needs either an MCP SDK runtime dependency, and the package keeps none, or a hand-written JSON-RPC layer.
+- It is awkward to ship in the copied-skill fallback bundle.
+- The CLI's write-safety rules (the project lock, the undo log, and `--dry-run`) would have to be enforced again in a new place.
+
+When an agent needs something it cannot get from the CLI, add a command or a `--json` field instead. Reopen #259 only if people ask to use Story Skills from an app with no shell, such as Claude Desktop or claude.ai.
+
 ## Skill Authoring
 
 - Every skill lives in `skills/<skill-name>/SKILL.md` with YAML frontmatter containing `name` and `description`.
