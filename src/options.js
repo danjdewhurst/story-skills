@@ -76,7 +76,7 @@ export const OPTIONS = [
   { name: "pages", value: "<n>", help: ["Synopsis length for synopsis (1 or 3)"] },
   { name: "actionable", help: ["Include next actions in report"] },
   { name: "fix", help: ["Apply doctor's safe repairs (migrate, reindex,", "wordcount --write), then report what remains"] },
-  { name: "strict", help: ["Fail check on warnings as well as errors"] },
+  { name: "strict", help: ["Fail check, or impact on the warnings a change", "adds, on warnings as well as errors"] },
   { name: "stdio", help: ["Talk to the editor over stdin and stdout for lsp", "(the default, accepted for editors that pass it)"] },
   { name: "json", help: ["Print one JSON result object (apiVersion,", "command, ok, data, diagnostics, writes) instead", "of text"] },
   { name: "dry-run", help: ["List the files add, rename, remove, move, split,", "merge, reindex, migrate, wordcount --write,", "doctor --fix, snapshot, passes, progress --log,", "diagram or synopsis --out, export, build, init,", "or import would create, update, or delete, and", "change nothing"] },

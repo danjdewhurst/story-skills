@@ -296,6 +296,8 @@ export const FINDING_CODES = {
   "stale-exemption": "warning",
   "stale-query": "warning",
   "ambiguous-references": "warning",
+  // story impact die
+  "planned-death": "warning",
   // story split and story merge
   "split-references": "warning",
   "split-scenes": "warning",

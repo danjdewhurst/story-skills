@@ -13,7 +13,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
 - [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
-- [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`
+- [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
 - [Editor commands](#editor-commands): `lsp`
 - [Finding codes](#finding-codes): every error and warning code, by command
@@ -83,6 +83,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`split <chapter-id>`](#split) | Split a chapter in two at a scene break, heading, or line, renumbering the chapters after it | Yes |
 | | [`merge <chapter-id> <next-chapter-id>`](#merge) | Merge the next chapter into a chapter, update references, and renumber the chapters after it | Yes |
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
+| | [`impact <command> <args...>`](#impact) | Test a `rename`, `remove`, `move`, `split`, `merge`, or a character's death on a copy of the project, and list the check findings it would add and clear | No |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
 | | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
@@ -145,7 +146,7 @@ Every command except `init`, `import`, and `lsp` works on one story project: a d
 | Commands | How to give the project | Default |
 |---|---|---|
 | `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
-| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
+| `knowledge`, `context`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact` | `--path <path>` only, because their positionals are ids, names, or an entity or diagram kind | Current directory |
 | `init`, `import`, `lsp` | Neither. `init` and `import` create a new project; use `--dir` to choose where. `lsp` checks the projects in the folders the editor opens | A directory named after the story id (`init`, `import`) |
 
 Relative paths resolve against the current working directory. These are equivalent:
@@ -302,7 +303,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, and `compare`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), `impact`, which tests such a change, and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
 
 Every result has the same envelope:
 
@@ -2375,7 +2376,7 @@ A snapshot copies every markdown file, including ones the project's `.gitignore`
 
 ## Entity commands
 
-`add`, `rename`, `move`, `split`, `merge`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name, or chapter ids. Each one reindexes the registries when it finishes.
+`add`, `rename`, `move`, `split`, `merge`, and `remove` take the project from `--path` (default: the current directory), because their positional arguments are the entity kind, id, and name, or chapter ids. Each one reindexes the registries when it finishes. [`impact`](#impact) runs `rename`, `remove`, `move`, `split`, or `merge`, or a character's death, on a copy of the project and lists what the change would break, without writing anything.
 
 ### Entity kinds
 
@@ -2931,6 +2932,68 @@ When the entity file is already gone (deleted in a file manager, or lost in a me
 
 Run `story links` and `story validate` after `rename`, `move`, or `remove` to confirm nothing else needs attention.
 
+### impact
+
+```text
+story impact rename <kind> <id> <name> [--id <kebab-id>] [--prose] [--strict] [--json] [--path <project>]
+story impact remove <kind> <id> [--strict] [--json] [--path <project>]
+story impact move chapter <id> --number <n> [--strict] [--json] [--path <project>]
+story impact move scene <id> [--chapter <chapter-id>] [--scene <n>] [--strict] [--json] [--path <project>]
+story impact split <chapter-id> --at <marker> [--title <name>] [--strict] [--json] [--path <project>]
+story impact merge <chapter-id> <next-chapter-id> [--strict] [--json] [--path <project>]
+story impact die <character-id> <chapter-id> [--strict] [--json] [--path <project>]
+```
+
+Tests a plot change before you make it: what breaks if a character dies in chapter 5, if a scene moves to chapter 9, if a character is cut. `impact` copies the project to a scratch folder, as [`--dry-run`](#previewing-changes-with---dry-run) does, runs [`story check`](#check) on the copy, makes the change there, and runs `story check` again. It then lists only the findings the change adds and the ones it clears; findings the project already has are left out. The project itself is only read: nothing is written to it, its lock is not taken, so `impact` never waits on a running command, and the change's undo log and reindex stay in the copy.
+
+The words after `impact` are a command and its arguments, read exactly as that command reads them, with the same flags. So `story impact move scene chapter-03-scene-01 --chapter chapter-09` tests `story move scene chapter-03-scene-01 --chapter chapter-09`, and `impact` refuses what the command would refuse, with the same message and exit code: a missing id, a chapter number already taken, a flag the command does not read, a file that fails to parse. `--dry-run` does not apply, since `impact` never writes.
+
+`die` has no command of its own: `impact die <character-id> <chapter-id>` sets the character's `died-in` to the chapter and `status` to `deceased`, as a written death needs (see [Deaths](continuity.md#deaths-and-posthumous-appearances)), and reindexes. Both ids must exist. A death in a chapter whose `status` is `outline` is planned: `impact die` keeps the character's `status`, as a planned death is recorded, and says that `continuity` checks no later cast against the death until the chapter is drafted (`planned-death`).
+
+<!-- replay: bo-and-the-missing-moon exit=1 -->
+```text
+$ story impact die old-pike chapter-02
+Impact of die old-pike chapter-02 (tested on a copy; nothing was written)
+The change would make 2 changes:
+  update  characters/_index.md
+  update  characters/old-pike.md
+Adds:
+  error: [continuity] chapters/chapter-06.md lists old-pike, who died in chapter-02; move posthumous appearances to mentions
+  error: [continuity] chapters/chapter-07.md lists old-pike, who died in chapter-02; move posthumous appearances to mentions
+  error: [continuity] scenes/chapter-06-scene-01.md lists old-pike, who died in chapter-02; move posthumous appearances to mentions
+  error: [continuity] scenes/chapter-07-scene-01.md lists old-pike, who died in chapter-02; move posthumous appearances to mentions
+Adds 4 errors; clears nothing. Before: 0 errors, 0 warnings. After: 4 errors, 0 warnings
+```
+
+A change can also clear findings. The Unraveled Thread has a character listed after their death; cutting the character clears that error and adds nothing:
+
+<!-- replay: the-unraveled-thread -->
+```text
+$ story impact remove character edran-vale
+Impact of remove character edran-vale (tested on a copy; nothing was written)
+The change would make 8 changes:
+  update  chapters/chapter-01.md
+  update  chapters/chapter-02.md
+  update  chapters/chapter-04.md
+  update  characters/_index.md
+  delete  characters/edran-vale.md
+  update  scenes/chapter-01-scene-01.md
+  update  scenes/chapter-02-scene-01.md
+  update  worldbuilding/artifacts/vales-compass.md
+Clears:
+  error: [continuity] chapters/chapter-04.md lists edran-vale, who died in chapter-02; move posthumous appearances to mentions
+Adds nothing; clears 1 error. Before: 4 errors, 3 warnings. After: 3 errors, 3 warnings
+```
+
+The output lists the files the change would touch, the warnings the change itself gives (such as `leftover-references` from `remove`), each finding it adds and clears with the check that reports it, and the counts before and after. A finding is matched on its check, code, file, chapter, and message, so a finding whose message names a file the change renamed shows as cleared under the old name and added under the new one.
+
+| Option | Effect |
+|---|---|
+| `--strict` | Fail on the warnings the change adds as well as the errors. |
+| `--json` | Print a JSON result: `data.change` (the command tested) and `data.args`, `data.result` (that command's own result), `data.changes` (the files it would create, update, or delete), `data.strict`, `data.added` (the count of `errors` and `warnings` added), `data.cleared` (each cleared finding as a diagnostic), and `data.before` and `data.after` (each check's `errors`, `warnings`, and `dismissed` counts). The added findings, then the change's own warnings, are the diagnostics, and `writes` is always empty (see [JSON output](#json-output)). |
+
+`impact` exits `1` when the change would add an error, or with `--strict` a warning, so a script can gate on it; `0` when it adds none, even if the project already has errors. It refuses while an interrupted change is in the project (see [Interrupted changes](#interrupted-changes)), since its result would build on a half-made change: finish that change or run `story doctor --fix` first.
+
 ## Output commands
 
 These commands produce files for reading or submission. The source of truth stays in the chapter files; regenerate outputs whenever you need them. See [Import, export, and builds](manuscripts.md) for formats, front and back matter, and covers.
@@ -3228,7 +3291,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [mentions](#codes-mentions) · [names](#codes-names)
 - [context](#codes-context) · [progress and next](#codes-progress-and-next) · [compare](#codes-compare) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
-- [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [snapshot --restore](#codes-snapshot---restore) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
+- [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [impact](#codes-impact) · [snapshot --restore](#codes-snapshot---restore) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
 
@@ -3582,6 +3645,14 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `split-scenes` | warning | `split` assigned scene records by order, or split inside a scene. |
 | `merge-conflicts` | warning | `merge` kept the first chapter's value for a field the second set differently, dropped a hook, or dropped a repeated progression. |
 
+### Codes: impact
+
+`impact` reports the codes of the change it tests (above) and the `validate`, `links`, and `continuity` codes the change adds or clears. `impact die` has one code of its own:
+
+| Code | Level | Reported when |
+|---|---|---|
+| `planned-death` | warning | `impact die` put the death in a chapter whose `status` is `outline`, so `continuity` treats it as planned and checks no later cast against it until the chapter is drafted. |
+
 ### Codes: snapshot --restore
 
 | Code | Level | Reported when |
@@ -3616,7 +3687,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 
 | Option | Value | Used by | Notes |
 |---|---|---|---|
-| `--title` | `<name>` | `import`, `split` | Required for `import`; for `split`, the new chapter's title (default: the chapter's title with `(continued)`) |
+| `--title` | `<name>` | `import`, `split`, `impact` | Required for `import`; for `split`, the new chapter's title (default: the chapter's title with `(continued)`) |
 | `--dir` | `<path>` | `init`, `import` | Target directory |
 | `--genre` | `<name>` | `init`, `import` | |
 | `--sub-genre` | `<name>` | `init`, `import` | |
@@ -3660,7 +3731,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
 | `--query` | `<name>` | `list` | A query from `story.md` `queries`; any `--where` adds to its filters |
-| `--at` | `<chapter-id>` | `knowledge`, `split` | Required for both; for `split`, where to split: a scene break number, a heading, or a line of the chapter text |
+| `--at` | `<chapter-id>` | `knowledge`, `split`, `impact` | Required for both; for `split`, where to split: a scene break number, a heading, or a line of the chapter text |
 | `--budget` | `<tokens>` | `context` | Positive integer; default `6000` |
 | `--scenes` | `<n>` | `context` | `0` or more earlier scenes to summarise; default `5` |
 | `--init` | | `passes` | Boolean; adds the missing default passes |
@@ -3674,15 +3745,15 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--pages` | `<n>` | `synopsis` | `1` or `3` |
 | `--actionable` | | `report` | Boolean |
 | `--fix` | | `doctor` | Boolean; applies the safe repairs (`migrate`, `reindex`, `wordcount --write`), then reports what remains |
-| `--strict` | | `check` | Boolean; fails on warnings as well as errors |
+| `--strict` | | `check`, `impact` | Boolean; fails on warnings as well as errors (for `impact`, on the warnings the change adds) |
 | `--stdio` | | `lsp` | Boolean; accepted for editors that pass it, as the server always uses stdin and stdout |
 | `--json` | | Every command except `lsp` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
 | `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
-| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
-| `--prose` | | `rename` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
-| `--number` | `<n>` | `add chapter`, `move chapter` | Required for `move chapter` |
-| `--chapter` | `<id>` | `add scene`, `move scene` | |
-| `--scene` | `<n>` | `add scene`, `move scene` | |
+| `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot`, `impact` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
+| `--prose` | | `rename`, `impact` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
+| `--number` | `<n>` | `add chapter`, `move chapter`, `impact` | Required for `move chapter` |
+| `--chapter` | `<id>` | `add scene`, `move scene`, `impact` | |
+| `--scene` | `<n>` | `add scene`, `move scene`, `impact` | |
 | `--type` | `<name>` | `add location`, `system`, `faction`, `artifact`, `arc` | |
 | `--role` | `<name>` | `add character` | |
 | `--status` | `<name>` | `add` (every kind except `system`, `term`, and `matter`) | |

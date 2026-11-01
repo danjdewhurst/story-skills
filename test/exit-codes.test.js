@@ -113,6 +113,7 @@ const OK_ARGS = {
     }
     return ["merge", "chapter-01", "chapter-02"];
   },
+  impact: () => ["impact", "remove", "character", "mara-quill"],
   export: () => ["export"],
   build: () => ["build"],
   synopsis: () => ["synopsis"],
@@ -167,6 +168,11 @@ const REFUSED = {
   move: (root) => {
     invoke(root, ["add", "chapter", "Two"]);
     return ["move", "chapter", "chapter-01", "--number", "2"];
+  },
+  // impact refuses what the change it tests refuses, with the same code.
+  impact: (root) => {
+    invoke(root, ["add", "chapter", "Two"]);
+    return ["impact", "move", "chapter", "chapter-01", "--number", "2"];
   },
   snapshot: (root) => {
     invoke(root, ["snapshot", "draft"]);

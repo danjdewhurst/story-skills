@@ -72,6 +72,9 @@ story split chapter-07 --at 2 --dry-run
 story split chapter-07 --at 'The ferry came at noon.' --title 'The Crossing'
 story merge chapter-07 chapter-08
 story remove promise old-promise
+story impact die king-aldric chapter-05
+story impact move scene chapter-03-scene-02 --chapter chapter-09
+story impact remove character old-id --json
 story export . --out dist/manuscript.md
 story build . --format markdown
 story build . --format epub

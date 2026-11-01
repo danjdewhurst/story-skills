@@ -204,7 +204,8 @@ function runArgs(clean) {
     "mentions <kind> <id>": ["character", "kael-voss"],
     list: ["chapters"],
     diagram: ["relationships"],
-    snapshot: ["--list"]
+    snapshot: ["--list"],
+    impact: ["die", "kael-voss", "chapter-01"]
   };
 }
 
