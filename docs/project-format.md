@@ -383,6 +383,9 @@ tense: past
 | `release-start` | `YYYY-MM-DD` | no | The real-world day episode 1 releases. Needs `release-every`. Always a Gregorian date, even with a `calendar`. |
 | `release-warn-days` | integer ≥ 0 | no | How many days before its release an episode with no prose is warned about. Default `3`. See [Release schedule](#release-schedule). |
 | `calendar` | list of mappings | no | A secondary world's months, weekdays, and eras. Chapter and scene dates are then written in it, such as `3 Thaw 302 AE`. See [Custom calendars](#custom-calendars). |
+| `distance-unit` | string | no | The unit location distances and travel speeds are in, as free text such as `miles`, `km`, or `leagues`. Default `units`. See [Geography](#geography). |
+| `map-scale` | number > 0 | no | How many distance units one unit of a location's `coordinates` spans. Default `1`. See [Geography](#geography). |
+| `travel-modes` | list of mappings | no | The ways characters travel and how fast. With at least one, `story continuity` checks `travel-hours` against distance. See [Geography](#geography). |
 | `draft-mode` | enum | no | `discovered` marks a discovery-drafted project, `outlined` an outline-first one; any other value is a validate error. In a `discovered` project, `story next` treats a drafted chapter with no `mode` of its own as discovered. |
 | `revision-passes` | list of mappings | no | Named revision passes and their progress. See [Revision passes](#revision-passes). |
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
@@ -711,6 +714,8 @@ Files: `worldbuilding/locations/<location-id>.md`. Created with `story add locat
 | `tags` | list of strings | no | Free labels. |
 | `status` | string | no | Free text (default `unknown`). |
 | `routes` | list of mappings | no | Journeys to other locations, with travel times. See below. |
+| `coordinates` | list of two numbers | no | The place on the story's own map, `[x, y]`. See [Geography](#geography). |
+| `distances` | list of mappings | no | How far it is to other locations. See [Geography](#geography). |
 | `setting` | enum | no | `interior`, `exterior`, or `both`: the `INT.`, `EXT.`, or `INT./EXT.` in the scene headings of `story build --format fountain`. A scene's own `setting` overrides it, and a [progression](#progressions) can change it from a chapter on. |
 | `pronunciation` | string | no | Respelling for the narration build (see [Characters](#characters)). |
 | `progressions` | list of mappings | no | Changes from a chapter on, such as `status` or `controlled-by`. See [Progressions](#progressions). |
@@ -733,6 +738,59 @@ routes:
 | `routes[].mode` | string | no | Free text, such as `cart`, `ferry`, or `on foot`. |
 
 A route is two-way unless the destination declares its own route back, which then sets the return time. `story validate` errors when an entry has no `to`, when `hours` is not a positive number, and when `mode` is not text: a list, a mapping, or a number or `true` written without quotes (`mode: "4"`). `story links` errors when `to` names a missing location or the location itself. `story rename location` rewrites `to`, and `story remove location` drops the routes that lead to the removed location. [Route travel](#route-travel) describes the continuity check, and `story diagram locations` draws the network. The [worldbuilding skill](../skills/worldbuilding/SKILL.md) and its [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) cover how to set travel times.
+
+#### Geography
+
+Routes give journey times. Geography gives distances instead, and `story.md` gives the speed of each way to travel, so `story continuity` can check a scene's `travel-hours` (see [Distance travel](#distance-travel)). It is opt-in: without `travel-modes` in `story.md`, nothing is checked and nothing is reported.
+
+Nothing assumes Earth. Coordinates are a flat grid on the story's own map, and a distance table needs no map at all. In `story.md`:
+
+```yaml
+distance-unit: leagues
+map-scale: 4
+travel-modes:
+  - mode: on foot
+    speed: 1
+    per-day: 8
+  - mode: horse
+    speed: 3
+    per-day: 15
+  - mode: wyvern
+    speed: 12
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `distance-unit` | string | Free text, printed in the findings. Default `units`. |
+| `map-scale` | number > 0 | Distance units per unit of `coordinates`, such as `4` when one square on the map is 4 leagues. Default `1`. |
+| `travel-modes[].mode` | string | The name a scene's `travel-mode` uses, matched ignoring case and spaces. Each mode once. |
+| `travel-modes[].speed` | number > 0 | The top speed while moving, in distance units an hour. |
+| `travel-modes[].per-day` | number > 0 | Optional. The most distance one day of travel covers. A longer journey then takes at least a whole day, of the [`hours-per-day`](#hours-per-day) in the story calendar, for each full day's distance before the last stretch. |
+
+On a location, give either or both of these:
+
+```yaml
+coordinates: [12, 40]
+distances:
+  - to: greyhaven
+    distance: 30
+  - to: the-barrow
+    distance: 7
+```
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `coordinates` | two numbers | Where the place is on the story's map, `[x, y]`, in map units. |
+| `distances[].to` | location id | The other place. |
+| `distances[].distance` | number > 0 | How far it is, in the distance unit, by the way people go. |
+
+A distance is two-way unless the other place lists its own distance back. The distance between two places is the first of these that the geography gives:
+
+1. A distance listed between them.
+2. The straight line between their `coordinates`, times `map-scale`.
+3. The shortest chain of listed distances, which may pass through other places.
+
+`story validate` errors on a `story.md` geography it cannot read (`invalid-geography`): a `map-scale` that is not a number above 0, or a travel mode with no text `mode`, a repeated `mode`, or a `speed` or `per-day` that is not a number above 0. It errors when `coordinates` is not two numbers (`invalid-coordinates`), when a `distances` entry has no `to` or a `distance` that is not a positive number (`invalid-distance`), and warns when a location lists two distances to one place (`duplicate-distance`; the check uses the shorter). It warns when a scene's `travel-mode` is not a listed mode (`unknown-travel-mode`). `story links` errors when `to` names a missing location or the location itself (`distance-to-self`). `story rename location` rewrites `to`, and `story remove location` drops the entries that lead to the removed location. `story add location --coordinates 12,40` writes `coordinates`, and `story add scene --travel-mode horse` writes `travel-mode`. The [maps and routes reference](../skills/worldbuilding/references/maps-and-routes.md) covers how to choose distances and speeds.
 
 ### Systems
 
@@ -804,7 +862,7 @@ At a given chapter, an entity's state is its frontmatter with every progression 
 Rules:
 
 - `story validate` errors when `progressions` is not a list, when an entry is not a mapping or lacks `from`, `field`, or `value`, when `field` is not kebab-case, when `value` is a list or mapping, and when two entries change the same field from the same chapter. Entries must be listed in story order: an entry whose chapter comes before the previous entry's is an error.
-- A progression holds one value, so it cannot change a list field (`aliases`, `relationships`, `locations`, `tags`, `voice-words`, `voice-avoid`, `notable-characters`, `routes`, `members`). It also cannot change `id`, `progressions`, `died-in`, or `revived-in`. Record a changed relationship as a progression on its own field, such as `field: standing-with-kael` with `value: estranged`.
+- A progression holds one value, so it cannot change a list field (`aliases`, `relationships`, `locations`, `tags`, `voice-words`, `voice-avoid`, `notable-characters`, `routes`, `coordinates`, `distances`, `members`). It also cannot change `id`, `progressions`, `died-in`, or `revived-in`. Record a changed relationship as a progression on its own field, such as `field: standing-with-kael` with `value: estranged`.
 - A value for an enum field must be allowed there: a character's `role` and `status`, a location's `setting`, a faction's `type` and `status`.
 - A character progression to `status: deceased` warns unless `died-in` names the same chapter, since the `story continuity` death checks read `died-in`. Without `died-in`, `story continuity` still treats the progression as the death and warns about later appearances, and it warns when a status progression contradicts `died-in` or `revived-in`; see [Status progressions](continuity.md#status-progressions).
 - `story links` errors when `from` names a chapter that does not exist and is not a planned `chapter-NN` spelled the way `story add chapter` writes it.
@@ -968,7 +1026,8 @@ state-changes:
 | `outcome` | enum | no | How a scene unit ends for the POV character's goal: `yes`, `no`, `yes-but` (they get it, at a cost), or `no-and` (they fail, and things get worse). Set it with `story add scene --outcome <name>`. Read by [`story pacing`](#pacing), which ignores it on sequel units. |
 | `date` | `YYYY-MM-DD` | no | Story date. A scene never inherits its chapter's date. |
 | `time` | string | no | Story time (see [Dates and times](#dates-and-times)). |
-| `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less. |
+| `travel-hours` | number | no | Minimum travel time into this scene; `story continuity` errors when the timestamps allow less, and warns when the hours cannot cover the distance from a character's last scene (see [Distance travel](#distance-travel)). |
+| `travel-mode` | string | no | How the journey into this scene was made, one of the `story.md` [`travel-modes`](#geography), such as `horse`. Without it, the distance check uses the fastest mode. |
 | `flashback-to` | string | no | Free-form note of the moment flashed back to. Kept but not checked; continuity checks use `mentions`. |
 | `setting` | enum | no | `interior`, `exterior`, or `both`, for a scene whose place differs from its location's `setting` (on the harbor wall rather than inside the harbor office). Read only by `story build --format fountain`. |
 
@@ -1389,6 +1448,7 @@ Fields that name another entity hold its id. `story links` checks that each id i
 | Character, location, faction | `progressions[].from` | Chapter; may be a scheduled `chapter-NN` with no chapter file yet (see [Progressions](#progressions)) |
 | Location | `notable-characters` | Character that lists the location in `locations` |
 | Location | `routes[].to` | Another location (not the location itself) |
+| Location | `distances[].to` | Another location (not the location itself) |
 | Chapter | `choices[].to` | Chapter (the chapter itself is allowed); may be a scheduled `chapter-NN` with no chapter file yet |
 | Faction | `members` | Character |
 | Faction | `locations` | Location |
@@ -1416,10 +1476,10 @@ A promise or clue can schedule its setup and payoff ahead of the drafted book: `
 
 When you add a character with `--location`, or a location with `--character`, `story add` writes the backlink into the other file.
 
-`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to` and a chapter's `choices[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), the `character` and `target` (an artifact) keys inside a scene's `state-changes`, and a progression's `value` when its `field` is one of these reference fields. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id, since the reference could mean either: both commands list those references in an `ambiguous-references` warning, and `story validate` warns about the shared id (`shared-id`). Beyond that:
+`story rename` and `story remove` keep ids consistent across every file's frontmatter (except `story.md`). They rewrite the entity-reference fields in the table above (including a location's `routes[].to` and `distances[].to` and a chapter's `choices[].to`), plus `controlled-by`, the state-file fields (`character`, `location`, `artifact`, `owner`, `learned-in`, `since`), the `character` and `target` (an artifact) keys inside a scene's `state-changes`, and a progression's `value` when its `field` is one of these reference fields. A field that can name more than one kind (`owner`, `controlled-by`, `mentions`) is left alone when another kind has an entity with the same id, since the reference could mean either: both commands list those references in an `ambiguous-references` warning, and `story validate` warns about the shared id (`shared-id`). Beyond that:
 
 - `story rename` also rewrites markdown links, inline or reference-style definitions, in any project file, that point at the renamed file. `rename` and `add` refuse an id that another kind sharing one of those fields already uses, since the references could not tell them apart.
-- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, `learned-in`, or a progression's `from` names the chapter, since an empty value there means "before the story" and a progression needs its chapter), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, `routes`, or `choices` entry whose identifying `character`, `artifact`, or `to` was removed. A progression's `value` that named the removed entity is cleared like any other scalar reference. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
+- `story remove` clears a scalar reference (except that `remove chapter` refuses while `died-in`, `since`, `learned-in`, or a progression's `from` names the chapter, since an empty value there means "before the story" and a progression needs its chapter), drops the id from a list, and drops a whole `relationships`, `character-state`, `knowledge-state`, `object-state`, `routes`, `distances`, or `choices` entry whose identifying `character`, `artifact`, or `to` was removed. A progression's `value` that named the removed entity is cleared like any other scalar reference. It does not edit bodies, so bare `chapter-NN` tokens and links to a removed file remain. `story links` reports them only in `plot/timeline.md` and arc bodies; find leftovers elsewhere (hand-written registry sections, `style-sheet.md`, other entity bodies) by hand.
 - Neither command edits `follows` or `precedes`, which name other projects rather than entities.
 
 When `story move` renumbers a chapter or moves a scene, it rewrites the old chapter or scene id in these fields, in `progressions[].from`, and in `current-chapter`, rewrites markdown links to the moved files, and updates bare chapter and scene ids in `plot/timeline.md`, arc bodies, and `plot/_index.md`.
@@ -1520,6 +1580,24 @@ A character in two scenes of the same strand at different places at the same exa
 ```text
 error: scenes/chapter-01-scene-02.md puts ann at gamma at the same time as scenes/chapter-01-scene-01.md at alpha
 ```
+
+### Distance travel
+
+When `story.md` lists [`travel-modes`](#geography), `story continuity` follows each character through the scenes they are in (the scene's `characters` plus its `pov`, or the chapter's POV) in reading order, within one chapter [`strand`](#chapters). A scene with `travel-hours` above 0 says how long the journey into it took. That journey starts at the location of the character's last scene. When the geography gives the distance between the two places, and the hours are too short to cover it by the scene's `travel-mode`, it is a warning:
+
+```text
+warning: scenes/chapter-02-scene-01.md gives mara-quill 2h to travel 30 leagues from greyhaven to stonebridge, but the horse mode (3 leagues an hour and 15 leagues a day) needs at least 29h [travel-too-far]
+```
+
+Without `travel-mode`, or with a mode `story.md` does not list, the check uses the fastest mode for that distance, so the warning means no listed mode could make the journey:
+
+```text
+warning: scenes/chapter-03-scene-02.md gives ivo 1h to travel 48 leagues in a straight line on the map from stonebridge to the-barrow, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 4h [travel-too-far]
+```
+
+Undated scenes count, since `travel-hours` alone says how long the journey took. A scene with no `travel-hours` is not judged here; [Route travel](#route-travel) and the clock check judge the time between dated scenes instead. A flashback scene (one with `flashback-to`) is not part of the journey. A scene with no `location`, and a chapter with no scene records, loses track of where each character is, so the next scene does not count a journey from before it. Characters who arrive together from one place get one warning for the scene.
+
+The checks join up: the clock check (`travel-too-fast`) makes sure the dated scenes leave at least `travel-hours` for the journey, and this check makes sure `travel-hours` is long enough for the distance.
 
 ## Analysis views
 

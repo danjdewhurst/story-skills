@@ -776,6 +776,7 @@ var FINDING_CODES = {
   "invalid-build-style": "error",
   "invalid-date": "error",
   "invalid-calendar": "error",
+  "invalid-geography": "error",
   "invalid-cli-config": "error",
   "invalid-filename": "error",
   "filename-number-mismatch": "error",
@@ -785,6 +786,10 @@ var FINDING_CODES = {
   "invalid-choice": "error",
   "invalid-route-hours": "error",
   "duplicate-route": "warning",
+  "invalid-coordinates": "error",
+  "invalid-distance": "error",
+  "duplicate-distance": "warning",
+  "unknown-travel-mode": "warning",
   "deceased-without-died-in": "warning",
   "progression-fixed-field": "error",
   "progression-list-field": "error",
@@ -834,6 +839,7 @@ var FINDING_CODES = {
   "backlink-type-mismatch": "error",
   "legacy-backlink-type": "warning",
   "route-to-self": "error",
+  "distance-to-self": "error",
   "broken-link": "error",
   "link-backslash": "error",
   "link-not-kebab": "error",
@@ -918,6 +924,7 @@ var FINDING_CODES = {
   "travel-too-fast": "error",
   "route-same-time": "error",
   "route-too-fast": "error",
+  "travel-too-far": "warning",
   "series-link-outside": "error",
   "series-too-many-books": "error",
   "series-conflict": "error",
@@ -1077,7 +1084,8 @@ var CHAPTER_CODES = [
   "clock-backward",
   "travel-too-fast",
   "route-same-time",
-  "route-too-fast"
+  "route-too-fast",
+  "travel-too-far"
 ];
 
 // src/clues.js
@@ -2192,15 +2200,15 @@ function withoutLeadingFrontmatter(text) {
 
 // src/frontmatter-keys.js
 var FRONTMATTER_KEYS = {
-  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "surname", "short-title", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "revision-passes", "build-style", "cli-defaults", "severity", "queries"],
+  story: ["title", "schema-version", "series", "series-title", "book-number", "follows", "precedes", "genre", "sub-genre", "setting-era", "status", "themes", "pov", "tense", "premise", "counter-premise", "author", "surname", "short-title", "contact", "season-goal", "target-words", "target-characters", "count-unit", "language", "isbn", "publisher", "publication-date", "description", "keywords", "subjects", "copyright", "ifid", "cover-alt", "ai-disclosure", "chapter-label", "writing-mode", "chapter-numerals", "contents-label", "labels", "authors", "editor", "form", "draft-mode", "cover", "deadline", "daily-target-words", "daily-target-characters", "writing-days", "release-every", "release-start", "release-warn-days", "calendar", "distance-unit", "map-scale", "travel-modes", "revision-passes", "build-style", "cli-defaults", "severity", "queries"],
   character: ["pronunciation", "id", "name", "role", "status", "died-in", "revived-in", "aliases", "relationships", "locations", "tags", "arc", "arc-type", "lie", "truth", "ghost-wound", "voice-words", "voice-avoid", "progressions"],
-  location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "progressions"],
+  location: ["pronunciation", "id", "name", "type", "region", "population", "controlled-by", "notable-characters", "tags", "status", "setting", "routes", "coordinates", "distances", "progressions"],
   system: ["id", "name", "type", "prevalence", "pronunciation"],
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
   chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "choices"],
-  scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
+  scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "travel-mode", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
   clue: ["id", "title", "status", "planted", "payoff", "significance-delayed", "red-herring", "arcs", "characters"],
@@ -13075,6 +13083,7 @@ var OPTIONS = [
   { name: "date", value: "<date>", help: ["Story date (YYYY-MM-DD, or in the story.md", "calendar) for add chapter/scene; the session", "date for progress, and today for progress and", "next release dates (default today)"] },
   { name: "time", value: "<time>", help: ["Story time (HH:MM or dawn, morning, midday,", "afternoon, evening, night) for add chapter/scene"] },
   { name: "travel-hours", value: "<n>", help: ["Travel hours for add scene"] },
+  { name: "travel-mode", value: "<name>", help: ["Travel mode for add scene, one of the story.md", "travel-modes (such as horse)"] },
   { name: "dilemma", value: "<text>", help: ["Dilemma for add scene sequel unit"] },
   { name: "sequel", help: ["Mark scene as sequel unit for add scene"] },
   { name: "outcome", value: "<name>", help: ["Scene outcome for add scene (yes, no, yes-but,", "no-and)"] },
@@ -13102,6 +13111,7 @@ var OPTIONS = [
   { name: "aliases", value: "<names>", repeatable: true, commas: true, aliasOf: "alias" },
   { name: "region", value: "<name>", help: ["Region for add location"] },
   { name: "population", value: "<name>", help: ["Population for add location"] },
+  { name: "coordinates", value: "<x,y>", help: ["Place on the story's map for add location, two", "numbers such as 12,40"] },
   { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
   { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },
   { name: "acts", value: "<a,b>", repeatable: true, commas: true, help: ["Comma-separated acts for add arc; repeatable"] },
@@ -13428,6 +13438,160 @@ function dismissByExemptions(result, exemptions, { errors: withErrors, dismissab
 import fs5 from "node:fs";
 import path11 from "node:path";
 
+// src/geography.js
+var DEFAULT_DISTANCE_UNIT = "units";
+function isPositive(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+function isEntry2(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function referenceText(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+  return typeof value === "number" || typeof value === "boolean" ? String(value) : "";
+}
+function foldMode(value) {
+  return String(value).trim().replace(/\s+/g, " ").toLowerCase();
+}
+function parseGeography(data = {}) {
+  const problems = [];
+  const unitValue = data["distance-unit"];
+  let unit = DEFAULT_DISTANCE_UNIT;
+  if (unitValue !== undefined) {
+    if (typeof unitValue !== "string" || unitValue.trim() === "") {
+      problems.push(`distance-unit must be text, such as miles or leagues, got ${unitValue}`);
+    } else {
+      unit = unitValue.trim();
+    }
+  }
+  const scaleValue = data["map-scale"];
+  let scale = 1;
+  if (scaleValue !== undefined) {
+    if (isPositive(scaleValue)) {
+      scale = scaleValue;
+    } else {
+      scale = null;
+      problems.push(`map-scale must be a number greater than 0, the distance one coordinate unit spans, got ${scaleValue}`);
+    }
+  }
+  const modes = [];
+  const value = data["travel-modes"];
+  if (value !== undefined && !Array.isArray(value)) {
+    problems.push("travel-modes must be a list of entries, such as - mode: horse then speed: 8");
+  }
+  const seen = new Set;
+  (Array.isArray(value) ? value : []).forEach((entry, index) => {
+    const at = `travel-modes entry ${index + 1}`;
+    if (!isEntry2(entry)) {
+      problems.push(`${at} must be a mode with a speed, such as - mode: horse then speed: 8`);
+      return;
+    }
+    const before = problems.length;
+    if (typeof entry.mode !== "string" || entry.mode.trim() === "") {
+      problems.push(`${at} mode must be text, such as horse or "on foot", got ${entry.mode ?? "nothing"}`);
+    } else if (seen.has(foldMode(entry.mode))) {
+      problems.push(`${at} mode ${entry.mode.trim()} appears more than once`);
+    } else {
+      seen.add(foldMode(entry.mode));
+    }
+    if (!isPositive(entry.speed)) {
+      problems.push(`${at} speed must be a number greater than 0, in ${unit} an hour, got ${entry.speed ?? "nothing"}`);
+    }
+    if (entry["per-day"] !== undefined && !isPositive(entry["per-day"])) {
+      problems.push(`${at} per-day must be a number greater than 0, in ${unit}, got ${entry["per-day"]}`);
+    }
+    if (problems.length === before) {
+      modes.push({ mode: entry.mode.trim(), key: foldMode(entry.mode), speed: entry.speed, perDay: entry["per-day"] });
+    }
+  });
+  return { geography: { unit, scale, modes }, problems };
+}
+function locationCoordinates(value) {
+  if (!Array.isArray(value) || value.length !== 2 || !value.every((item) => typeof item === "number" && Number.isFinite(item))) {
+    return;
+  }
+  return value;
+}
+function usableDistances(locations) {
+  const known = new Set(locations.map((location) => location.id));
+  const shortest = new Map;
+  for (const location of locations) {
+    for (const entry of location.distances ?? []) {
+      if (!isEntry2(entry)) {
+        continue;
+      }
+      const to = referenceText(entry.to);
+      if (!known.has(to) || to === location.id || !isPositive(entry.distance)) {
+        continue;
+      }
+      const key = `${location.id}>${to}`;
+      if (!shortest.has(key) || shortest.get(key).distance > entry.distance) {
+        shortest.set(key, { from: location.id, to, distance: entry.distance });
+      }
+    }
+  }
+  return [...shortest.values()];
+}
+function hoursNeeded(distance, mode, hoursPerDay) {
+  const moving = distance / mode.speed;
+  if (!isPositive(mode.perDay) || distance <= mode.perDay) {
+    return moving;
+  }
+  const fullDays = Math.ceil(distance / mode.perDay - 0.000000001) - 1;
+  return Math.max(moving, fullDays * hoursPerDay + (distance - fullDays * mode.perDay) / mode.speed);
+}
+function distanceResolver(locations, geography, shortestFrom) {
+  const direct = new Map;
+  const graph = new Map;
+  const addEdge = (from, to, distance) => {
+    if (!graph.has(from)) {
+      graph.set(from, new Map);
+    }
+    const edges = graph.get(from);
+    if (!edges.has(to) || edges.get(to) > distance) {
+      edges.set(to, distance);
+    }
+  };
+  const entries = usableDistances(locations);
+  const declared = new Set(entries.map((entry) => `${entry.from}>${entry.to}`));
+  for (const { from, to, distance } of entries) {
+    direct.set(`${from}>${to}`, distance);
+    addEdge(from, to, distance);
+    if (!declared.has(`${to}>${from}`)) {
+      direct.set(`${to}>${from}`, distance);
+      addEdge(to, from, distance);
+    }
+  }
+  const coordinates = new Map;
+  for (const location of locations) {
+    const point = locationCoordinates(location.coordinates);
+    if (point) {
+      coordinates.set(location.id, point);
+    }
+  }
+  const chains = new Map;
+  return (from, to) => {
+    if (direct.has(`${from}>${to}`)) {
+      return { distance: direct.get(`${from}>${to}`), basis: "listed" };
+    }
+    if (geography.scale !== null && coordinates.has(from) && coordinates.has(to)) {
+      const [x1, y1] = coordinates.get(from);
+      const [x2, y2] = coordinates.get(to);
+      return { distance: Math.hypot(x2 - x1, y2 - y1) * geography.scale, basis: "map" };
+    }
+    if (!graph.has(from) || !graph.has(to)) {
+      return;
+    }
+    if (!chains.has(from)) {
+      chains.set(from, shortestFrom(graph, from));
+    }
+    const distance = chains.get(from).get(to);
+    return distance === undefined ? undefined : { distance, basis: "chain" };
+  };
+}
+
 // src/forms.js
 var STORY_FORMS = new Map([
   ["flash", { min: 1, max: 1500, target: 1000 }],
@@ -13508,9 +13672,9 @@ var STYLE_LISTS = {
 };
 var STYLE_LIST_FIELDS = ["replace-words", "add-words"];
 function styleListEntries(value) {
-  return Array.isArray(value) ? value.filter(isEntry2).flatMap((entry) => Object.entries(entry)) : [];
+  return Array.isArray(value) ? value.filter(isEntry3).flatMap((entry) => Object.entries(entry)) : [];
 }
-function isEntry2(value) {
+function isEntry3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function styleWords(value) {
@@ -14100,6 +14264,7 @@ Add 2-3 example lines.
 `;
 }
 function locationFile(name, options) {
+  const coordinates = coordinatesOption(options.coordinates);
   return `${stringifyFrontmatter({
     name,
     type: options.type ?? "other",
@@ -14108,7 +14273,8 @@ function locationFile(name, options) {
     "controlled-by": options["controlled-by"] ?? "",
     "notable-characters": listOption(options, "characters", "character"),
     tags: [],
-    status: options.status ?? "unknown"
+    status: options.status ?? "unknown",
+    ...coordinates === undefined ? {} : { coordinates }
   })}# ${name}
 
 ## Description
@@ -14131,6 +14297,17 @@ Add landmarks or practical story elements.
 
 Add what is true at the current story moment.
 `;
+}
+function coordinatesOption(value) {
+  if (value === undefined || value === "") {
+    return;
+  }
+  const parts = String(value).split(",").map((part) => part.trim());
+  const numbers = parts.map((part) => part === "" ? Number.NaN : Number(part));
+  if (numbers.length !== 2 || !numbers.every(Number.isFinite)) {
+    throw usageError(`coordinates must be two numbers separated by a comma, such as 12,40, got ${value}`);
+  }
+  return numbers;
 }
 function systemFile(name, options) {
   return `${stringifyFrontmatter({
@@ -14331,6 +14508,7 @@ function sceneFile(title, chapter, scene, options, calendar = null) {
     status: options.status ?? "outline",
     date: options.date ?? "",
     time: options.time ?? "",
+    ...options["travel-mode"] === undefined || options["travel-mode"] === "" ? {} : { "travel-mode": options["travel-mode"] },
     sequel: options.sequel ?? false,
     ...options.outcome === undefined ? {} : { outcome: options.outcome },
     dilemma: options.dilemma ?? "",
@@ -15192,6 +15370,7 @@ function scanProject(root) {
     pack,
     unit,
     calendar: parseCalendar(story.data.calendar).calendar,
+    geography: parseGeography(story.data).geography,
     fileErrors: scanErrors,
     characters: readEntityFiles(projectRoot, "characters", (id, file, data) => ({
       id,
@@ -15217,6 +15396,8 @@ function scanProject(root) {
       region: data.region ?? "",
       notableCharacters: asArray(data["notable-characters"]),
       routes: asArray(data.routes),
+      coordinates: data.coordinates,
+      distances: asArray(data.distances),
       setting: typeof data.setting === "string" ? data.setting : "",
       pronunciation: data.pronunciation
     }), scanErrors),
@@ -15304,6 +15485,7 @@ function scanProject(root) {
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       travelHours: typeof data["travel-hours"] === "number" ? data["travel-hours"] : 0,
+      travelMode: typeof data["travel-mode"] === "string" ? data["travel-mode"].trim() : "",
       sequel: typeof data.sequel === "boolean" ? data.sequel : false,
       outcome: typeof data.outcome === "string" ? data.outcome : "",
       dilemma: String(data.dilemma ?? ""),
@@ -16713,6 +16895,7 @@ function checkClock(project, errors, warnings) {
     checkClockOrder(stamps, errors, warnings);
   }
   checkRouteTravel(project, hours, errors);
+  checkDistanceTravel(project, hours, warnings);
 }
 function readingUnits(project) {
   const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id, "en"));
@@ -16896,6 +17079,77 @@ function checkStrandRoutes(characterId, list, errors, graph, distance, longestRo
       }
     }
   }
+}
+function checkDistanceTravel(project, hoursPerDay, warnings) {
+  const geography = project.geography;
+  if (!geography || geography.modes.length === 0) {
+    return;
+  }
+  const distance = distanceResolver(project.locations, geography, shortestRoutesFrom);
+  const modes = new Map(geography.modes.map((mode) => [mode.key, mode]));
+  const unit = geography.unit;
+  const chapterPov = new Map(project.chapters.map((chapter) => [chapter.id, idText(chapter.pov)]));
+  const strandOf = (chapter) => String(chapter.strand ?? "");
+  const last = new Map;
+  for (const { unit: scene, chapter, isChapter } of readingUnits(project)) {
+    const strand = strandOf(chapter);
+    if (!last.has(strand)) {
+      last.set(strand, new Map);
+    }
+    const whereabouts = last.get(strand);
+    if (isChapter) {
+      whereabouts.clear();
+      continue;
+    }
+    if (scene.flashbackTo !== "") {
+      continue;
+    }
+    const present = new Set(scene.characters.map(idText).filter((id) => id !== ""));
+    const pov = idText(scene.pov) || chapterPov.get(scene.chapter) || "";
+    if (pov !== "") {
+      present.add(pov);
+    }
+    const to = scene.location;
+    const origins = new Map;
+    for (const characterId of present) {
+      const from = whereabouts.get(characterId);
+      if (to === "") {
+        whereabouts.delete(characterId);
+        continue;
+      }
+      if (from !== undefined && from !== to && scene.travelHours > 0) {
+        origins.set(from, [...origins.get(from) ?? [], characterId]);
+      }
+      whereabouts.set(characterId, to);
+    }
+    const label = relative2(project, scene.file);
+    for (const from of [...origins.keys()].sort((left, right) => left.localeCompare(right, "en"))) {
+      const found = distance(from, to);
+      if (found === undefined) {
+        continue;
+      }
+      const named = scene.travelMode === "" ? undefined : modes.get(foldMode(scene.travelMode));
+      const candidates = named ? [named] : geography.modes;
+      let best = null;
+      for (const mode of candidates) {
+        const needed = hoursNeeded(found.distance, mode, hoursPerDay);
+        if (best === null || needed < best.needed) {
+          best = { mode, needed };
+        }
+      }
+      if (scene.travelHours >= best.needed - 0.000000001) {
+        continue;
+      }
+      const who = origins.get(from).sort((left, right) => left.localeCompare(right, "en")).join(", ");
+      const how = { listed: "", map: " in a straight line on the map", chain: " by the listed distances" }[found.basis];
+      const pace = `${best.mode.speed} ${unit} an hour${best.mode.perDay === undefined ? "" : ` and ${best.mode.perDay} ${unit} a day`}`;
+      const by = named ? `the ${best.mode.mode} mode (${pace})` : `even the fastest travel mode, ${best.mode.mode} (${pace}),`;
+      warnings.push(warn("travel-too-far", `${label} gives ${who} ${formatHours(scene.travelHours, Math.floor)} to travel ${formatDistance(found.distance)} ${unit}${how} from ${from} to ${to}, but ${by} needs at least ${formatHours(best.needed, Math.ceil)}`, label, chapterOf(scene)));
+    }
+  }
+}
+function formatDistance(distance) {
+  return String(Math.floor(Math.round(distance * 1e6) / 1e5) / 10);
 }
 function usableRoutes(locations) {
   const known = new Set(locations.map((location) => location.id));
@@ -18392,10 +18646,10 @@ var PRESETS = {
   modern: { headingFont: SANS_STACK, headingStyle: "left", sceneBreak: "• • •", dropCaps: false, paragraphs: "block" },
   elegant: { bodyFont: OLD_STYLE_STACK, headingStyle: "small-caps", sceneBreak: "❦", dropCaps: true, paragraphs: "indented" }
 };
-var isEntry3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var isEntry4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 function styleFields(data) {
   const value = data["build-style"];
-  return Array.isArray(value) ? Object.assign({}, ...value.filter(isEntry3)) : {};
+  return Array.isArray(value) ? Object.assign({}, ...value.filter(isEntry4)) : {};
 }
 function fontList(value) {
   return String(value).split(",").map((item) => {
@@ -18467,7 +18721,7 @@ function validateBuildStyle(data, errors, root = null) {
     return;
   }
   const fail = (message) => errors.push(err("invalid-build-style", `story.md build-style ${message}`, "story.md"));
-  if (!Array.isArray(value) || !value.every(isEntry3)) {
+  if (!Array.isArray(value) || !value.every(isEntry4)) {
     fail("must be a list of key: value entries, such as - preset: modern (see docs/manuscripts.md#build-styles)");
     return;
   }
@@ -22833,9 +23087,10 @@ var ENTRY_IDENTITY_FIELDS = {
   "object-state": "artifact",
   progressions: "from",
   routes: "to",
+  distances: "to",
   choices: "to"
 };
-var NESTED_TO_KINDS = { routes: "location", choices: "chapter" };
+var NESTED_TO_KINDS = { routes: "location", distances: "location", choices: "chapter" };
 function entityReferenceContext(root, kind, id) {
   const otherExists = new Map;
   const existsAs = (other) => {
@@ -23991,7 +24246,7 @@ var PROGRESSION_RULES = {
     enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
   },
   location: {
-    lists: new Set(["notable-characters", "tags", "routes"]),
+    lists: new Set(["notable-characters", "tags", "routes", "coordinates", "distances"]),
     enums: new Map([["setting", SCENE_SETTINGS]])
   },
   faction: {
@@ -24084,7 +24339,31 @@ function validateLocations(project, errors, warnings) {
         errors.push(err("field-not-text", `${label} route to ${route.to ?? "?"} mode must be text: quote it as mode: "${route.mode}"`, label));
       }
     }
+    validateLocationGeography(data, label, errors, warnings);
     validateProgressions(data, label, PROGRESSION_RULES.location, chronology, errors);
+  }
+}
+function validateLocationGeography(data, label, errors, warnings) {
+  if (data.coordinates !== undefined && locationCoordinates(data.coordinates) === undefined) {
+    errors.push(err("invalid-coordinates", `${label} coordinates must be two numbers, the place on the story's map, such as [12, 40]`, label));
+  }
+  validateObjectArray(data, "distances", label, errors);
+  const destinations = new Set;
+  for (const entry of Array.isArray(data.distances) ? data.distances : []) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const to = idText(entry.to);
+    if (to === "") {
+      errors.push(err("missing-field", `${label} distance is missing to`, label));
+    } else if (destinations.has(to)) {
+      warnings.push(warn("duplicate-distance", `${label} lists more than one distance to ${to}; the distance check uses only the shortest`, label));
+    } else {
+      destinations.add(to);
+    }
+    if (typeof entry.distance !== "number" || !Number.isFinite(entry.distance) || entry.distance <= 0) {
+      errors.push(err("invalid-distance", `${label} distance to ${entry.to ?? "?"} must be a positive number`, label));
+    }
   }
 }
 function validateSystems(project, errors, warnings) {
@@ -24295,6 +24574,7 @@ function validateScenes(project, errors, warnings) {
     if (data["travel-hours"] !== undefined && typeof data["travel-hours"] !== "number") {
       errors.push(err("field-not-number", `${label} frontmatter field travel-hours must be a number`, label));
     }
+    validateTravelMode(project, data, label, errors, warnings);
     if (data.sequel !== undefined && typeof data.sequel !== "boolean") {
       errors.push(err("field-not-boolean", `${label} frontmatter field sequel must be a boolean`, label));
     }
@@ -24328,6 +24608,25 @@ function validateScenes(project, errors, warnings) {
         seenKeys.set(key, label);
       }
     }
+  }
+}
+function validateTravelMode(project, data, label, errors, warnings) {
+  const mode = data["travel-mode"];
+  if (mode === undefined) {
+    return;
+  }
+  requireScalar(data, "travel-mode", label, errors);
+  if (typeof mode === "number" || typeof mode === "boolean") {
+    errors.push(err("field-not-text", `${label} frontmatter field travel-mode must be text: quote it as travel-mode: "${mode}"`, label));
+    return;
+  }
+  if (typeof mode !== "string" || mode.trim() === "") {
+    return;
+  }
+  const modes = project.geography?.modes ?? [];
+  if (!modes.some((entry) => entry.key === foldMode(mode))) {
+    const listed = modes.length === 0 ? "story.md lists no travel-modes" : `story.md travel-modes lists ${modes.map((entry) => entry.mode).join(", ")}`;
+    warnings.push(warn("unknown-travel-mode", `${label} travel-mode ${mode.trim()} is not a travel mode (${listed}), so the distance check uses the fastest one`, label));
   }
 }
 var STATE_ENTRY_KEYS = {
@@ -24737,6 +25036,17 @@ function validateLinksOf(project) {
         continue;
       }
       checkIdReference(errors, `${label} route`, to, "location", hasLocation, label);
+    }
+    for (const entry of location.distances ?? []) {
+      const to = entry && typeof entry === "object" && !Array.isArray(entry) ? idText(entry.to) : "";
+      if (to === "") {
+        continue;
+      }
+      if (to === location.id) {
+        errors.push(err("distance-to-self", `${label} distance points at itself`, label));
+        continue;
+      }
+      checkIdReference(errors, `${label} distance`, to, "location", hasLocation, label);
     }
     for (const characterId of location.notableCharacters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
@@ -25216,6 +25526,9 @@ function validateStoryFrontmatter(project, errors, warnings) {
   validateReleaseCadence(data, errors);
   for (const problem of parseCalendar(data.calendar).problems) {
     errors.push(err("invalid-calendar", `story.md calendar ${problem}`, "story.md"));
+  }
+  for (const problem of parseGeography(data).problems) {
+    errors.push(err("invalid-geography", `story.md ${problem}`, "story.md"));
   }
   if (data.ifid !== undefined && !isIfid(data.ifid)) {
     errors.push(err("invalid-ifid", "story.md ifid must be a version 4 UUID, such as 3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07", "story.md"));
@@ -33456,7 +33769,7 @@ function action2(title, detail) {
 var STDIN_LABEL = "stdin";
 var ADD_KIND_OPTIONS = {
   character: ["id", "role", "status", "location", "locations", "arc"],
-  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters"],
+  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters", "coordinates"],
   system: ["id", "type", "prevalence"],
   faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
   artifact: ["id", "type", "status", "owner", "location"],
@@ -33477,6 +33790,7 @@ var ADD_KIND_OPTIONS = {
     "date",
     "time",
     "travel-hours",
+    "travel-mode",
     "sequel",
     "outcome",
     "dilemma"

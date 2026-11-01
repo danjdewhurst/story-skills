@@ -10,6 +10,9 @@ notable-characters:
 tags:
   - home
 status: active
+distances:
+  - to: left-luggage-office
+    distance: 2.5
 ---
 
 # Ashby Road

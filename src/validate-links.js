@@ -196,6 +196,17 @@ export function validateLinksOf(project) {
       }
       checkIdReference(errors, `${label} route`, to, "location", hasLocation, label);
     }
+    for (const entry of location.distances ?? []) {
+      const to = entry && typeof entry === "object" && !Array.isArray(entry) ? idText(entry.to) : "";
+      if (to === "") {
+        continue;
+      }
+      if (to === location.id) {
+        errors.push(err("distance-to-self", `${label} distance points at itself`, label));
+        continue;
+      }
+      checkIdReference(errors, `${label} distance`, to, "location", hasLocation, label);
+    }
     for (const characterId of location.notableCharacters) {
       checkIdReference(errors, label, characterId, "character", hasCharacter);
       if (typeof characterId === "string" && characterId !== "" && characterId === kebabCase(characterId) && characters.has(characterId) && !characters.get(characterId).locations.includes(location.id)) {

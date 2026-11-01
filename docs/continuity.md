@@ -1,6 +1,6 @@
 # Continuity and analysis
 
-This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, clock, and route travel), exemptions, and the analysis commands: `knowledge`, `timeline`, `pacing`, `clues`, `grid`, `prose`, `voices`, `names`, `diagram`, `progress`, `compare`, `passes`, `report`, `next`, and `doctor`.
+This page is for writers and agents who want to know what the `story` CLI can check about a manuscript, and what to do when it finds something. It covers the continuity engine (deaths, casts, promises, questions, clues, state, prop custody, clock, route travel, and distance travel), exemptions, and the analysis commands: `knowledge`, `timeline`, `pacing`, `clues`, `grid`, `prose`, `voices`, `names`, `diagram`, `progress`, `compare`, `passes`, `report`, `next`, and `doctor`.
 
 All of them are read-only except three:
 
@@ -16,7 +16,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 - [At a glance](#at-a-glance)
 - [Find your message](#find-your-message)
-- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [status progressions](#status-progressions), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
+- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [status progressions](#status-progressions), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [distance travel](#distance-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
 - [Exemptions](#exemptions)
 - [Story knowledge](#story-knowledge)
 - [Story timeline](#story-timeline)
@@ -79,6 +79,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `uses <artifact>, destroyed/lost since`, `mentions <artifact>, destroyed/lost since`, `lists <artifact>, destroyed/lost since`, `destroyed/lost before the story`, `references missing since chapter` | `continuity` | [Prop custody](#prop-custody) |
 | `timestamp runs backward`, `allows only …h for travel` (or `allows at most …h`), `is earlier than Chapter`, `malformed date`, `malformed time`, `negative travel-hours` | `continuity` | [Clock and travel time](#clock-and-travel-time) |
 | `puts <character> at <location> …, but the fastest route takes`, `at the same time as` | `continuity` | [Route travel](#route-travel) |
+| `gives <character> …h to travel …`, `travel-mode … is not a travel mode` | `continuity`, `validate` | [Distance travel](#distance-travel) |
 | `dismissed:` | `continuity`, and any command reporting a warning an exemption names by code | [Exemptions](#exemptions) |
 | `has no hook`, `end in an outright yes`, `with no sequel`, `end on resolution`, `the median chapter` | `pacing` | [Pacing findings](#pacing-findings) |
 | `never planted: readers cannot play fair`, `late plant`, `lists no characters`, `red herring with no payoff`, `no clue is significance-delayed` | `clues` | [Fair-play findings](#fair-play-findings) |
@@ -132,11 +133,12 @@ The report itself (timeline sections, pacing and clue grids, prose counts, voice
 | File | Fields |
 |------|--------|
 | `characters/*.md` | `status`, `died-in`, `revived-in`, `relationships`, and `status` entries in `progressions` |
-| `worldbuilding/locations/*.md` | `routes` |
+| `story.md` | `calendar`, `distance-unit`, `map-scale`, `travel-modes` |
+| `worldbuilding/locations/*.md` | `routes`, `coordinates`, `distances` |
 | `worldbuilding/factions/*.md` | the file itself: a faction id is accepted as an `object-state` `owner` |
 | `plot/arcs/*.md` | `characters` |
 | `chapters/chapter-NN.md` | `number`, `status`, `pov`, `characters`, `mentions`, `locations`, `date`, `time`, `strand`, and the names in its prose |
-| `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours` |
+| `scenes/*.md` | `chapter`, `scene`, `pov`, `characters`, `mentions`, `location`, `state-changes`, `date`, `time`, `travel-hours`, `travel-mode`, `flashback-to` |
 | `continuity/promises/*.md` | `status`, `planted`, `payoff` |
 | `continuity/questions/*.md` | `status`, `introduced`, `resolved` |
 | `continuity/clues/*.md` | `status`, `planted`, `payoff` |
@@ -529,6 +531,45 @@ Hours are shown to 0.1h, with the gap rounded down and the route time rounded up
 
 Record routes with the [`worldbuilding`](../skills/worldbuilding/SKILL.md) skill, whose [`maps-and-routes.md`](../skills/worldbuilding/references/maps-and-routes.md) reference covers recording them. To see the network, run [`story diagram locations`](#story-diagram).
 
+### Distance travel
+
+Routes need a journey time for each pair of places. Geography needs only where places are, or how far apart, and how fast people travel. It suits an invented world with a map, and a real one with a road atlas. Set the travel modes in `story.md`, in a distance unit of your choice:
+
+```yaml
+distance-unit: miles
+travel-modes:
+  - mode: on foot
+    speed: 3
+  - mode: bus
+    speed: 12
+```
+
+Then give locations `coordinates` on your map (with `map-scale` in `story.md` for the distance one map unit spans), a `distances` table, or both. [Geography](project-format.md#geography) has the fields and how the distance between two places is chosen. A scene says how the journey into it was made with `travel-mode`:
+
+```yaml
+location: ashby-road
+travel-hours: 0.5
+travel-mode: bus
+```
+
+Nothing is checked until `story.md` lists at least one travel mode. Then `story continuity` follows each character through their scenes in reading order, within one `strand`, as `travel-hours` reads them: the journey into a scene starts at the character's last scene. When a scene with `travel-hours` above 0 is at a different place, and the geography gives the distance, the hours must cover it at the mode's speed. Undated scenes count too. Flashback scenes (with `flashback-to`) are skipped. A scene with no `location`, or a chapter with no scene records, resets where each character is.
+
+[`examples/the-left-luggage-office`](../examples/the-left-luggage-office/) lists these modes, a 2.5-mile distance from Ashby Road to the left luggage office, and Ines's bus home in chapter 2. In a copy whose chapter 2 scene says `travel-mode: on foot`:
+
+```text
+$ story continuity .
+Continuity is consistent: 0 errors, 1 warnings, 0 dismissed
+warning: scenes/chapter-02-scene-01.md gives ines-achebe 0.5h to travel 2.5 miles from left-luggage-office to ashby-road, but the on foot mode (3 miles an hour) needs at least 0.9h [travel-too-far]
+```
+
+| Severity | Message | Fix |
+|----------|---------|-----|
+| warning | `<scene> gives <characters> <n>h to travel <d> <unit> from <location> to <location>, but the <mode> mode (<speed>) needs at least <m>h` | Raise `travel-hours` (and, if the scenes are dated, move the scene later so the clock allows it), choose a faster `travel-mode`, or correct the distance. |
+| warning | The same, with `even the fastest travel mode, <mode> (<speed>),` | The scene names no `travel-mode`, or one `story.md` does not list, and no listed mode is fast enough. Add the faster way (a portal, a wyvern) to `travel-modes`, or raise `travel-hours`. |
+| warning | `<scene> travel-mode <mode> is not a travel mode` (from `story validate`) | Fix the spelling, or add the mode to `travel-modes`. |
+
+The message says `in a straight line on the map` when the distance comes from `coordinates`, and `by the listed distances` when it is a chain of `distances` entries through other places. Distances and hours are shown to 0.1, with `travel-hours` rounded down and the hours needed rounded up. A travel mode with `per-day` also counts whole days: by a horse that covers 15 leagues a day at 3 leagues an hour, 30 leagues takes at least a day and 5 hours (29h on a 24-hour day). The clock check and this check join up: `travel-too-fast` makes sure the dated scenes leave room for `travel-hours`, and `travel-too-far` makes sure `travel-hours` covers the distance.
+
 ### Worked example: fixing the unraveled thread
 
 Each finding in the [example output](#story-continuity) has a direct fix:
@@ -586,7 +627,7 @@ Each entry sets a `reason`, and either a `pattern` or a `code` with a `file`, `c
 
 Prefer `code` with `file` (or `chapter`): the code names the rule and the file names the one place, so rewording a message never stops the entry from matching or makes it match something new. A `pattern` still works, alone or with the other keys, and every log written before `code`, `file`, and `chapter` existed behaves as it did. Copy the code and file from the finding, or from `story continuity --json`, where each diagnostic has `code`, `file`, and `chapter`.
 
-These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `named-not-listed`, `mention-not-named`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, and `route-too-fast`.
+These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `named-not-listed`, `mention-not-named`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, `route-too-fast`, and `travel-too-far`.
 
 Their chapter is where the problem shows up: the chapter of the chapter or scene file the finding is about (a scene's `chapter` field), the `learned-in` chapter of a learning event, `current-chapter` for `state-tracks-dead-character`, `state-location-drift`, and `state-differs-by-path`, the chapter of the scene that last set the object for `object-not-recorded` and `state-object-drift`, and for `progression-death-conflict` the chapter of the death, the progression, or the revival it names. `story continuity --json` shows each finding's `chapter`. Findings about a whole character, promise, question, or clue, or about `story.md`, carry no chapter: match those with `file`. A scene with no `chapter` field gives its findings no chapter.
 

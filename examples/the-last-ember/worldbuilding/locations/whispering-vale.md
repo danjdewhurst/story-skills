@@ -12,6 +12,7 @@ tags:
   - hidden
   - ancient-forest
 status: thriving
+coordinates: [16, 12]
 ---
 
 # The Whispering Vale

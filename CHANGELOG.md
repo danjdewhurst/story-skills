@@ -17,6 +17,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A table of contents, an index, placeholder text, and hidden text are left out. Tracked changes are read as accepted. Comments, footnotes, images, text boxes, tables, list numbering, and ruby readings are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
   - Only the document's text and styles parts are read, each up to 32 MB unpacked, and the text may come to 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused with a usage error.
   - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document only from a `.docx` file.
+- `story continuity` can warn when a scene's `travel-hours` is too short for the distance a character travels. See [Geography](docs/project-format.md#geography).
+  - It is opt-in: nothing is checked until `story.md` lists `travel-modes`, each a `mode` with a `speed` in distance units an hour and an optional `per-day` limit. `distance-unit` (free text, such as `leagues`) and `map-scale` are optional.
+  - Locations can give `coordinates: [x, y]` on the story's own map, and `distances` to other locations. Nothing assumes Earth. A listed distance wins, then the straight line on the map, then the shortest chain of listed distances.
+  - Each character is followed through their scenes in reading order within a `strand`. A scene with `travel-hours` above 0 gets a new `travel-too-far` warning when the hours cannot cover the distance from the character's last scene by its new `travel-mode`, or by the fastest mode. Undated scenes count.
+  - `story validate` reports `invalid-geography`, `invalid-coordinates`, `invalid-distance`, `duplicate-distance`, and `unknown-travel-mode`, and `story links` reports `distance-to-self` and unknown `distances` targets. `story rename` and `story remove` keep `distances[].to` current.
+  - `story add location --coordinates 12,40` and `story add scene --travel-mode horse` write the new fields. The schema, the `worldbuilding`, `scene-craft`, and `story-maintenance` skills, and the `the-left-luggage-office` and `the-last-ember` examples cover them.
 - The documentation has a website with search, at [danjdewhurst.github.io/story-skills](https://danjdewhurst.github.io/story-skills/).
   - VitePress builds it from the same `docs/` pages that GitHub and the npm package show, and GitHub Pages publishes it on each change to `main`.
 

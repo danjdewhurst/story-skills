@@ -9,6 +9,9 @@ notable-characters:
 tags:
   - station
 status: abandoned
+distances:
+  - to: left-luggage-office
+    distance: 0.1
 ---
 
 # Old Parcels Office

@@ -86,7 +86,7 @@ const STDIN_LABEL = "stdin";
 // chapter or scene takes no --id, as its id comes from its number.
 const ADD_KIND_OPTIONS = {
   character: ["id", "role", "status", "location", "locations", "arc"],
-  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters"],
+  location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters", "coordinates"],
   system: ["id", "type", "prevalence"],
   faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
   artifact: ["id", "type", "status", "owner", "location"],
@@ -94,7 +94,7 @@ const ADD_KIND_OPTIONS = {
   chapter: ["number", "pov", "location", "locations", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "mode", "date", "time", "hook", "beat"],
   scene: [
     "chapter", "scene", "pov", "location", "character", "characters", "mention", "mentions", "arc", "arcs", "status", "date", "time",
-    "travel-hours", "sequel", "outcome", "dilemma"
+    "travel-hours", "travel-mode", "sequel", "outcome", "dilemma"
   ],
   question: ["id", "status", "introduced", "resolved", "character", "characters"],
   promise: ["id", "status", "planted", "payoff", "arc", "arcs", "character", "characters"],
