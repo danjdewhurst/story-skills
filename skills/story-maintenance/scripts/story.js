@@ -11,7 +11,7 @@ import path40 from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Buffer } from "node:buffer";
+import { Buffer as Buffer2 } from "node:buffer";
 
 // src/exit-codes.js
 var EXIT_CODES = Object.freeze({
@@ -87,7 +87,7 @@ function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
     if (open === undefined) {
       return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
     }
-    const bytes = Buffer.from(open, "utf8");
+    const bytes = Buffer2.from(open, "utf8");
     if (bytes.length > maxBytes) {
       throw projectError(`${filePath}: Refusing to read oversized file: ${bytes.length} bytes exceeds the ${maxBytes} byte limit`);
     }
@@ -109,7 +109,7 @@ function withOpenDocuments(documents, run) {
 function readFilePrefix(filePath, length) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const buffer = Buffer.allocUnsafe(length);
+    const buffer = Buffer2.allocUnsafe(length);
     let filled = 0;
     let read;
     do {
@@ -124,7 +124,7 @@ function readFilePrefix(filePath, length) {
 function forEachLine(filePath, maxLineBytes, visit) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const chunk = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+    const chunk = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
     let parts = [];
     let size = 0;
     let number = 0;
@@ -142,13 +142,13 @@ function forEachLine(filePath, maxLineBytes, visit) {
         const piece = data.subarray(start, end);
         add(piece);
         number += 1;
-        visit(parts.length === 0 ? piece : Buffer.concat([...parts, piece]), number);
+        visit(parts.length === 0 ? piece : Buffer2.concat([...parts, piece]), number);
         parts = [];
         size = 0;
         start = end + 1;
       }
       add(data.subarray(start));
-      parts.push(Buffer.from(data.subarray(start)));
+      parts.push(Buffer2.from(data.subarray(start)));
     }
   } finally {
     fs.closeSync(descriptor);
@@ -185,13 +185,13 @@ function openRegularFile(filePath, maxBytes) {
 function readAtMost(descriptor, filePath, size, maxBytes) {
   const chunks = [];
   let total = 0;
-  let buffer = Buffer.allocUnsafe(Math.min(size, maxBytes) + 1);
+  let buffer = Buffer2.allocUnsafe(Math.min(size, maxBytes) + 1);
   let filled = 0;
   let read;
   do {
     if (filled === buffer.length) {
       chunks.push(buffer);
-      buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+      buffer = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
       filled = 0;
     }
     read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);
@@ -202,7 +202,7 @@ function readAtMost(descriptor, filePath, size, maxBytes) {
     }
   } while (read > 0);
   chunks.push(buffer.subarray(0, filled));
-  return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total);
+  return chunks.length === 1 ? chunks[0] : Buffer2.concat(chunks, total);
 }
 function symlinkReadRefusal(filePath) {
   return projectError(`${filePath}: Refusing to read through symlink`);
@@ -240,7 +240,7 @@ function invalidUtf8Offset(buffer) {
     if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
       break;
     }
-    offset += Buffer.byteLength(character, "utf8");
+    offset += Buffer2.byteLength(character, "utf8");
   }
   return Math.max(0, Math.min(offset, buffer.length - 1));
 }
@@ -549,7 +549,7 @@ function temporaryPath(target) {
   let name = "";
   let bytes = 0;
   for (const character of path.basename(target)) {
-    bytes += Buffer.byteLength(character, "utf8");
+    bytes += Buffer2.byteLength(character, "utf8");
     if (bytes > TEMPORARY_NAME_BYTES) {
       break;
     }
@@ -977,6 +977,7 @@ var FINDING_CODES = {
   "scene-no-setting": "warning",
   "permission-pending-left-out": "warning",
   "matter-placement-left-out": "warning",
+  "ics-daily-target-unanchored": "warning",
   "unknown-reference": "warning",
   "adopted-references": "warning",
   "prose-name-shared": "warning",
@@ -13030,7 +13031,7 @@ var OPTIONS = [
   { name: "restore", value: "<name>", help: ["Put a snapshot back over the project for", "snapshot, after saving the project as it is;", "deletes markdown files the snapshot lacks"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init,", "import, and lsp"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex)"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, codex) or grid (markdown,", "csv)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, ics, codex) or grid", "(markdown, csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "paper", value: "<letter|a4>", help: ["Paper for build --format shunn --pdf and", "--format docx --shunn (letter, a4; default letter)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
@@ -14611,7 +14612,7 @@ function extractMarkdownLinkTargets(body) {
 // src/scan-cover.js
 import fs4 from "node:fs";
 import path9 from "node:path";
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 var COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -14676,10 +14677,10 @@ var IMAGE_SIGNATURE_BYTES = 12;
 function coverFormat(filePath) {
   const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
   const ascii = (start, end) => head.subarray(start, end).toString("latin1");
-  if (head.subarray(0, 8).equals(Buffer2.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+  if (head.subarray(0, 8).equals(Buffer3.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return "image/png";
   }
-  if (head.subarray(0, 3).equals(Buffer2.from([255, 216, 255]))) {
+  if (head.subarray(0, 3).equals(Buffer3.from([255, 216, 255]))) {
     return "image/jpeg";
   }
   if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
@@ -18991,23 +18992,11 @@ function releaseSchedule({ data, chapters, today }) {
   const warnDays = releaseWarnDays(data);
   const complete = data.status === "complete";
   const todayDays = parseClockDate(today).days;
-  const episodes = [];
-  chapters.forEach((chapter, index) => {
-    let days = cadence ? cadenceDays(cadence, index) : null;
-    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
-      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
-    }
-    if (days !== null && days <= LAST_DAY) {
-      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
-    }
-  });
+  const episodes = chapterEpisodes(cadence, chapters);
   if (cadence === null && episodes.length === 0) {
     return null;
   }
-  const projected = (index) => {
-    const days = cadenceDays(cadence, index);
-    return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
-  };
+  const projected = (index) => projectedEpisode(cadence, index);
   const candidates = episodes.filter((episode) => episode.days >= todayDays);
   let unwritten = 0;
   let firstUnwritten = null;
@@ -19043,6 +19032,31 @@ function releaseSchedule({ data, chapters, today }) {
     episodes: episodes.map(({ days, ...episode }) => episode),
     warnings
   };
+}
+function chapterEpisodes(cadence, chapters) {
+  const episodes = [];
+  chapters.forEach((chapter, index) => {
+    let days = cadence ? cadenceDays(cadence, index) : null;
+    if (chapter.releaseDate !== undefined && chapter.releaseDate !== null) {
+      days = typeof chapter.releaseDate === "string" ? parseClockDate(chapter.releaseDate)?.days ?? null : null;
+    }
+    if (days !== null && days <= LAST_DAY) {
+      episodes.push({ episode: index + 1, chapter: chapter.id, file: chapter.file, date: formatDate(days), days, drafted: chapter.drafted });
+    }
+  });
+  return episodes;
+}
+function projectedEpisode(cadence, index) {
+  const days = cadenceDays(cadence, index);
+  return days > LAST_DAY ? null : { episode: index + 1, chapter: null, file: null, date: formatDate(days), days, drafted: false };
+}
+function releaseDates(data, chapters) {
+  const cadence = releaseCadence(data);
+  const episodes = chapterEpisodes(cadence, chapters);
+  if (cadence === null && episodes.length === 0) {
+    return null;
+  }
+  return { episodes, next: cadence === null || data.status === "complete" ? null : projectedEpisode(cadence, chapters.length) };
 }
 function withDaysUntil({ days, ...episode }, todayDays) {
   return { ...episode, daysUntil: days - todayDays };
@@ -19585,7 +19599,7 @@ import path15 from "node:path";
 import fs6 from "node:fs";
 import os from "node:os";
 import path14 from "node:path";
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -19797,7 +19811,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs6.existsSync(output) ? fs6.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer3.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer4.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -19829,10 +19843,10 @@ function lastLines(text, count = 10) {
 }
 
 // src/packaging.js
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer6 } from "node:buffer";
 
 // src/deflate.js
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 var WINDOW_SIZE = 32768;
 var WINDOW_MASK = WINDOW_SIZE - 1;
 var MIN_MATCH = 3;
@@ -19996,7 +20010,7 @@ function bitWriter(size) {
       if (pendingBits > 0) {
         push(pending);
       }
-      return Buffer4.from(bytes.buffer, 0, used);
+      return Buffer5.from(bytes.buffer, 0, used);
     }
   };
 }
@@ -20189,7 +20203,7 @@ function canonicalCodes(lengths) {
 }
 
 // src/packaging.js
-function epubModifiedTimestamp() {
+function buildTimestamp() {
   const raw = process.env.SOURCE_DATE_EPOCH;
   if (raw !== undefined && raw !== "") {
     const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
@@ -20254,7 +20268,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
-  const modified = epubModifiedTimestamp();
+  const modified = buildTimestamp();
   writeZip(outFile, [
     { name: "mimetype", content: "application/epub+zip", stored: true },
     { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
@@ -20983,14 +20997,14 @@ function writeZip(outFile, entries, writeOptions = {}) {
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer5.from(entry.name, "utf8");
-    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
+    const name = Buffer6.from(entry.name, "utf8");
+    const content = Buffer6.isBuffer(entry.content) ? entry.content : Buffer6.from(entry.content, "utf8");
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer5.alloc(30);
+    const localHeader = Buffer6.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -21003,7 +21017,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer5.alloc(46);
+    const centralHeader = Buffer6.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -21028,7 +21042,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer5.alloc(22);
+  const end = Buffer6.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -21037,7 +21051,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer6.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -21470,7 +21484,7 @@ function applySeverity(result, overrides = NO_OVERRIDES) {
 }
 
 // src/import.js
-import { Buffer as Buffer9 } from "node:buffer";
+import { Buffer as Buffer10 } from "node:buffer";
 import fs26 from "node:fs";
 import path37 from "node:path";
 
@@ -22271,7 +22285,7 @@ function realPath(target) {
 }
 
 // src/preview.js
-import { Buffer as Buffer6 } from "node:buffer";
+import { Buffer as Buffer7 } from "node:buffer";
 import fs8 from "node:fs";
 import os3 from "node:os";
 import path17 from "node:path";
@@ -22544,12 +22558,12 @@ function copyRegularFile(from, to, keepHead = false) {
 function copyUndoLog(from, to) {
   fs8.writeFileSync(to, "");
   try {
-    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs8.appendFileSync(to, Buffer6.concat([line, LINE_FEED])));
+    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs8.appendFileSync(to, Buffer7.concat([line, LINE_FEED])));
   } catch {
     fs8.appendFileSync(to, LINE_FEED);
   }
 }
-var LINE_FEED = Buffer6.from(`
+var LINE_FEED = Buffer7.from(`
 `);
 function coverOf(root) {
   const cover = existingStoryData(root)?.cover;
@@ -23201,7 +23215,7 @@ import fs13 from "node:fs";
 import path24 from "node:path";
 
 // src/undo.js
-import { Buffer as Buffer7 } from "node:buffer";
+import { Buffer as Buffer8 } from "node:buffer";
 import path19 from "node:path";
 var HEADER_BYTES = 4096;
 var ABSENT = "absent";
@@ -23315,7 +23329,7 @@ function parsedLine(bytes) {
   }
 }
 function isUndoEntry(entry, first) {
-  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer7.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
+  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer8.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
 }
 function stateOf(value, hashed = false) {
   return value === null ? ABSENT : hashed ? value : contentHash(value);
@@ -28344,7 +28358,7 @@ function unparsedNote(snapshot) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer8 } from "node:buffer";
+import { Buffer as Buffer9 } from "node:buffer";
 import fs23 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -28356,7 +28370,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer8.alloc(CHUNK_BYTES);
+  const buffer = Buffer9.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -28382,9 +28396,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer8.from(buffer.subarray(0, read)));
+    chunks.push(Buffer9.from(buffer.subarray(0, read)));
   }
-  return Buffer8.concat(chunks);
+  return Buffer9.concat(chunks);
 }
 function stdinText(command, bytes) {
   const zipAdvice = command === "import" ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
@@ -29699,6 +29713,119 @@ ${body.filter((part) => part !== "").join(`
 }
 var CODEX_GENERATOR = "story build --format codex";
 
+// src/ics.js
+var ICS_LINE_OCTETS = 75;
+var BYDAY = { mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA", sun: "SU" };
+var DAY_NAMES = { mon: "Mondays", tue: "Tuesdays", wed: "Wednesdays", thu: "Thursdays", fri: "Fridays", sat: "Saturdays", sun: "Sundays" };
+function listText(items) {
+  return items.length < 3 ? items.join(" and ") : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+function escapeText2(value) {
+  return String(value).replace(/\r\n?/g, `
+`).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n").replace(/[\u0000-\u001f\u007f]/g, " ");
+}
+function foldLine(line) {
+  const parts = [];
+  let current = "";
+  let octets = 0;
+  for (const char of line.match(/\\[^]|[^]/gu) ?? []) {
+    const size = Buffer.byteLength(char, "utf8");
+    if (octets + size > ICS_LINE_OCTETS) {
+      parts.push(current);
+      current = " ";
+      octets = 1;
+    }
+    current += char;
+    octets += size;
+  }
+  parts.push(current);
+  return parts.join(`\r
+`);
+}
+function icsDate(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10).replace(/-/g, "");
+}
+function icsTimestamp(iso) {
+  return iso.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+}
+function formatNumber6(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function weekdayIndex2(days) {
+  return ((days + 3) % 7 + 7) % 7;
+}
+function scheduleEvents(schedule) {
+  const { title, storyId, noun, target, deadline, daily, episodes } = schedule;
+  const uid = (role) => `${role}.${storyId}@story-skills`;
+  const events = [];
+  if (daily !== null) {
+    const scheduled = daily.writingDays === null ? null : new Set(daily.writingDays);
+    let start = daily.startDays;
+    while (scheduled !== null && !scheduled.has(WEEKDAYS[weekdayIndex2(start)])) {
+      start += 1;
+    }
+    if (deadline === null || start <= deadline.days) {
+      const rule = scheduled === null ? ["FREQ=DAILY"] : ["FREQ=WEEKLY", `BYDAY=${daily.writingDays.map((day) => BYDAY[day]).join(",")}`];
+      if (deadline !== null) {
+        rule.push(`UNTIL=${icsDate(deadline.days)}`);
+      }
+      const days = scheduled === null ? "every day" : `on ${listText(daily.writingDays.map((day) => DAY_NAMES[day]))}`;
+      const until = deadline === null ? "" : `, until the deadline on ${deadline.date}`;
+      events.push({
+        uid: uid("daily-target"),
+        days: start,
+        summary: `Write ${formatNumber6(daily.target)} ${noun}s: ${title}`,
+        description: `The daily target for ${title}: ${formatNumber6(daily.target)} ${noun}s ${days}${until}.`,
+        rrule: rule.join(";")
+      });
+    }
+  }
+  const dated = [];
+  for (const episode of episodes) {
+    const chapter = episode.chapter === null ? "No chapter is written for it yet." : `Chapter: ${episode.title} (${episode.chapter}).`;
+    dated.push({
+      uid: uid(`episode-${episode.episode}`),
+      days: episode.days,
+      order: episode.episode,
+      summary: `Episode ${episode.episode} release: ${title}`,
+      description: `${title}, episode ${episode.episode}. ${chapter}`,
+      rrule: null
+    });
+  }
+  if (deadline !== null) {
+    const goal = target === null ? "" : ` Target: ${formatNumber6(target)} ${noun}s.`;
+    dated.push({
+      uid: uid("deadline"),
+      days: deadline.days,
+      order: Infinity,
+      summary: `Deadline: ${title}`,
+      description: `The deadline for ${title}.${goal}`,
+      rrule: null
+    });
+  }
+  dated.sort((left, right) => left.days - right.days || left.order - right.order);
+  return [...events, ...dated.map(({ order, ...event }) => event)];
+}
+function icsCalendar({ title, events, stamp }) {
+  const dtstamp = icsTimestamp(stamp);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Story Skills//story build --format ics//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `NAME:${escapeText2(title)}`,
+    `X-WR-CALNAME:${escapeText2(title)}`
+  ];
+  for (const event of events) {
+    lines.push("BEGIN:VEVENT", `UID:${event.uid}`, `DTSTAMP:${dtstamp}`, `DTSTART;VALUE=DATE:${icsDate(event.days)}`, `DTEND;VALUE=DATE:${icsDate(event.days + 1)}`, ...event.rrule === null ? [] : [`RRULE:${event.rrule}`], `SUMMARY:${escapeText2(event.summary)}`, `DESCRIPTION:${escapeText2(event.description)}`, "TRANSP:TRANSPARENT", "END:VEVENT");
+  }
+  lines.push("END:VCALENDAR");
+  return `${lines.map(foldLine).join(`\r
+`)}\r
+`;
+}
+
 // src/narration.js
 var NARRATION_WORDS_PER_MINUTE = 155;
 var NARRATION_CHARACTERS_PER_MINUTE = 300;
@@ -29979,6 +30106,9 @@ function buildBook(root, options = {}) {
     });
     return withIdWarnings({ ...result, format });
   }
+  if (format === "ics") {
+    return withIdWarnings(buildCalendar(project, output));
+  }
   if (format === "fountain") {
     const screenplay = screenplayOutline(project, bookChapters(project));
     writeFile(output.outFile, fountainScript(screenplay), output.writeOptions);
@@ -30030,6 +30160,48 @@ function buildBook(root, options = {}) {
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   }
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
+}
+function buildCalendar(project, output) {
+  const data = project.story.data;
+  const unit = project.unit;
+  const warnings = [];
+  const deadlineDate = typeof data.deadline === "string" ? parseClockDate(data.deadline) : undefined;
+  const deadline = deadlineDate ? { days: deadlineDate.days, date: deadlineDate.text } : null;
+  const target = Number.isInteger(data[unit.targetField]) && data[unit.targetField] > 0 ? data[unit.targetField] : null;
+  const chapters = project.chapters.map((chapter) => ({
+    id: chapter.id,
+    file: projectPath(project.root, chapter.file),
+    releaseDate: chapter.releaseDate,
+    drafted: chapter.wordCount > 0 || chapter.count > 0
+  }));
+  const titles = new Map(project.chapters.map((chapter) => [chapter.id, chapter.title]));
+  const release = releaseDates(data, chapters);
+  const episodes = release === null ? [] : [...release.episodes, ...release.next === null ? [] : [release.next]].map((episode) => ({
+    episode: episode.episode,
+    chapter: episode.chapter,
+    title: episode.chapter === null ? null : String(titles.get(episode.chapter)),
+    days: episode.days
+  }));
+  let daily = null;
+  const dailyTarget = data[unit.dailyTargetField];
+  if (Number.isInteger(dailyTarget) && dailyTarget > 0 && data.status !== "complete") {
+    const starts = [
+      ...cleanSessions(project.progressLog?.data.sessions).slice(0, 1).map((session) => parseClockDate(session.date).days),
+      ...[releaseCadence(data)?.startDays].filter((days) => days !== undefined),
+      ...episodes.map((episode) => episode.days)
+    ];
+    if (starts.length === 0) {
+      warnings.push(warn("ics-daily-target-unanchored", `story.md ${unit.dailyTargetField} is left out of the calendar: it has no first day. Log a session with story progress --log, or set release-start, and build again`, "story.md"));
+    } else {
+      daily = { target: dailyTarget, writingDays: writingDays(data["writing-days"]), startDays: Math.min(...starts) };
+    }
+  }
+  const events = scheduleEvents({ title: project.title, storyId: project.storyId, noun: unit.noun, target, deadline, daily, episodes });
+  if (events.length === 0) {
+    throw projectError("Cannot build ics: the calendar would have no events. Set a deadline, a release schedule (release-every with release-start, or a chapter release-date), or a daily target in story.md");
+  }
+  writeFile(output.outFile, icsCalendar({ title: project.title, events, stamp: buildTimestamp() }), output.writeOptions);
+  return { outFile: output.outFile, chapters: project.chapters.length, format: "ics", events: events.length, warnings };
 }
 function buildPdf(project, format, { trim, paper, parts }, output, options) {
   const engineFlag = options.pdfEngine === undefined ? "pdf" : "pdf-engine";
@@ -30694,7 +30866,7 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
     writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
-var NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex"]);
+var NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics"]);
 var BUILD_EXTENSIONS = {
   markdown: "md",
   epub: "epub",
@@ -30707,6 +30879,7 @@ var BUILD_EXTENSIONS = {
   fountain: "fountain",
   twee: "twee",
   ink: "ink",
+  ics: "ics",
   codex: ""
 };
 var SHUNN_DOCX_EXTENSION = "shunn.docx";
@@ -31564,7 +31737,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered, chapter.authors);
-      const bytes = Buffer9.byteLength(text, "utf8");
+      const bytes = Buffer10.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }
@@ -31786,7 +31959,7 @@ function readSourceDocument(name, filePath, rules) {
   } catch (error) {
     throw error instanceof DocxError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
   }
-  const size = Buffer9.byteLength(converted.text, "utf8");
+  const size = Buffer10.byteLength(converted.text, "utf8");
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
@@ -32535,21 +32708,21 @@ function listItem2(lines, frontmatter, key, item) {
 }
 
 // src/lsp-transport.js
-import { Buffer as Buffer10 } from "node:buffer";
-var HEADER_END = Buffer10.from(`\r
+import { Buffer as Buffer11 } from "node:buffer";
+var HEADER_END = Buffer11.from(`\r
 \r
 `, "ascii");
 var CONTENT_LENGTH = /^content-length:[ \t]*(\d+)[ \t]*$/im;
 function encodeMessage(message) {
-  const body = Buffer10.from(JSON.stringify(message), "utf8");
-  return Buffer10.concat([Buffer10.from(`Content-Length: ${body.length}\r
+  const body = Buffer11.from(JSON.stringify(message), "utf8");
+  return Buffer11.concat([Buffer11.from(`Content-Length: ${body.length}\r
 \r
 `, "ascii"), body]);
 }
 function messageReader(onMessage, onProblem) {
-  let pending = Buffer10.alloc(0);
+  let pending = Buffer11.alloc(0);
   return (chunk) => {
-    pending = Buffer10.concat([pending, chunk]);
+    pending = Buffer11.concat([pending, chunk]);
     for (let headerEnd = pending.indexOf(HEADER_END);headerEnd !== -1; headerEnd = pending.indexOf(HEADER_END)) {
       const header = pending.subarray(0, headerEnd).toString("ascii");
       const length = CONTENT_LENGTH.exec(header);
@@ -34403,8 +34576,10 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       "narration (audiobook script), metadata (retailer",
       "sheet), fountain (screenplay scene skeleton),",
       "twee (Twine story from chapter choices), ink",
-      "(ink story from chapter choices), or codex (story",
-      "bible as linked HTML pages in dist/codex/)"
+      "(ink story from chapter choices), ics (calendar of",
+      "the deadline, release dates, and daily target), or",
+      "codex (story bible as linked HTML pages in",
+      "dist/codex/)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
@@ -34440,6 +34615,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex" ? `Built a codex of ${result.pages} pages to ${result.outFile}
+` : result.format === "ics" ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}
 ` : `Built ${result.chapters} chapters as ${as} to ${result.outFile}
 `);
       return writeFindings(io, findings);
@@ -34776,6 +34952,7 @@ function buildData(result) {
     outFile: result.outFile,
     chapters: result.chapters,
     pages: result.pages ?? null,
+    events: result.events ?? null,
     pdf: result.pdf === true,
     engine: result.engine ?? null
   };

@@ -17,6 +17,13 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - A table of contents, an index, placeholder text, and hidden text are left out. Tracked changes are read as accepted. Comments, footnotes, images, text boxes, tables, list numbering, and ruby readings are not carried over, and a new `docx-content-left-out` warning names each kind the document had.
   - Only the document's text and styles parts are read, each up to 32 MB unpacked, and the text may come to 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused with a usage error.
   - A zip under another name, such as an `.odt`, is still refused, and the message now says that import reads a Word document only from a `.docx` file.
+- `story build --format ics` puts the writing schedule in a calendar file to import into Google Calendar, Apple Calendar, or Outlook. See [Writing schedule calendar](docs/manuscripts.md#writing-schedule-calendar-icalendar).
+  - The file, `dist/<story-id>.ics`, holds all-day events for the `deadline` (with `target-words`), each serial episode's release date, and the daily target as a recurring event on the `writing-days` until the deadline.
+  - The release dates are the ones `story next` works out: a chapter's `release-date`, or its place on `release-every` from `release-start`. An unfinished serial also gets the next episode on the cadence after its last chapter.
+  - The daily target starts from the first session in `progress.md`, `release-start`, or the first release date. With none of these, the build leaves the target out and warns with the new `ics-daily-target-unanchored` code. The words a day that the deadline needs are not in the file, because that number changes after each session.
+  - The file is the same for the same sources, like every build. Each event's UID comes from the story id and the event, so an import of a rebuilt file updates the events and adds no copies. `DTSTAMP` follows `SOURCE_DATE_EPOCH`, as the EPUB timestamp does.
+  - A book with no deadline, release schedule, or daily target has nothing to schedule, so the build stops with exit code 3. In `--json`, `data.events` counts the events, and is null for other formats.
+  - To subscribe to the calendar, publish the file at a URL, such as with one extra line in the review-copy workflow. The docs give the line. The template does not add it, because a Pages site is public.
 - The documentation has a website with search, at [danjdewhurst.github.io/story-skills](https://danjdewhurst.github.io/story-skills/).
   - VitePress builds it from the same `docs/` pages that GitHub and the npm package show, and GitHub Pages publishes it on each change to `main`.
 

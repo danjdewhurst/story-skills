@@ -173,7 +173,9 @@ describe("pending permissions in export and build (#558)", () => {
   test("every build format either leaves the pages out with a warning or refuses --include-pending", () => {
     const root = quotedBook("pending");
     for (const format of Object.keys(BUILD_EXTENSIONS)) {
-      const warned = buildBook(root, { format }).warnings.filter((finding) => finding.code === "permission-pending-left-out").length;
+      // The book has no schedule, so an ics build has no calendar to write;
+      // its --include-pending check still comes first.
+      const warned = format === "ics" ? 0 : buildBook(root, { format }).warnings.filter((finding) => finding.code === "permission-pending-left-out").length;
       let refused = false;
       try {
         buildBook(root, { format, includePending: true });

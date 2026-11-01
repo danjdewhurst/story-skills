@@ -20,6 +20,7 @@ import { assertNoInterruptedChange } from "./undo.js";
 import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
 import { formatPacing } from "./pacing.js";
+import { plural } from "./plural.js";
 import { DEFAULT_PASSES, formatPasses, nextPass, passChecks } from "./passes.js";
 import { formatProgress } from "./progress.js";
 import { formatStateChanges } from "./progressions.js";
@@ -1067,8 +1068,10 @@ export const COMMANDS = [
       "narration (audiobook script), metadata (retailer",
       "sheet), fountain (screenplay scene skeleton),",
       "twee (Twine story from chapter choices), ink",
-      "(ink story from chapter choices), or codex (story",
-      "bible as linked HTML pages in dist/codex/)"
+      "(ink story from chapter choices), ics (calendar of",
+      "the deadline, release dates, and daily target), or",
+      "codex (story bible as linked HTML pages in",
+      "dist/codex/)"
     ],
     project: "positional",
     options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
@@ -1107,7 +1110,9 @@ export const COMMANDS = [
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex"
         ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
-        : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
+        : result.format === "ics"
+          ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}\n`
+          : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
       return writeFindings(io, findings);
     }
   },
@@ -1576,6 +1581,7 @@ function buildData(result) {
     outFile: result.outFile,
     chapters: result.chapters,
     pages: result.pages ?? null,
+    events: result.events ?? null,
     pdf: result.pdf === true,
     engine: result.engine ?? null
   };

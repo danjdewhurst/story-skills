@@ -672,6 +672,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `fountain` | Screenplay scene skeleton in Fountain, from the scene records | `dist/<story-id>.fountain` | No prose at all |
 | `twee` | Twine story in Twee 3: one passage per chapter, linked by chapter `choices` | `dist/<story-id>.twee` | No |
 | `ink` | ink story for inkle's Inky and inklecate: one knot per chapter, with chapter `choices` as choices | `dist/<story-id>.ink` | No |
+| `ics` | iCalendar file of the writing schedule: the deadline, serial release dates, and daily target, to import into a calendar app or subscribe to | `dist/<story-id>.ics` | No prose at all |
 | `codex` | Story bible as a static site of linked HTML pages: characters, places, factions, artifacts, systems, arcs, timeline, threads, and progress | `dist/codex/` (a folder) | No prose at all |
 
 The story id is the kebab-case title from `story.md` (see [Identifiers and filenames](project-format.md#identifiers-and-filenames) for titles without ASCII letters or digits). Build every format of the example *The Last Ember* like this:
@@ -702,12 +703,12 @@ Built 1 chapters as fountain to ~/stories/the-last-ember/dist/the-last-ember.fou
 warning: No setting (interior, exterior, or both) for whispering-vale: their scene headings are forced without INT. or EXT. [scene-no-setting]
 ```
 
-The confirmation always counts chapters, even for the metadata sheet and the screenplay skeleton.
+The confirmation counts chapters, even for the metadata sheet and the screenplay skeleton. A `codex` build counts its pages instead, and an `ics` build its calendar events.
 
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--paper <letter\|a4>` | With `--format shunn --pdf` or `--format docx --shunn`, the manuscript's paper: `letter` (US Letter) or `a4`. Case-insensitive. Defaults to `letter`. An error with every other build, including the Shunn markdown file, which has no pages. See [Paper size](#paper-size). |
@@ -720,7 +721,7 @@ The confirmation always counts chapters, even for the metadata sheet and the scr
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, codex
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex
 ```
 
 For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
@@ -1217,6 +1218,39 @@ Notes on the fields:
 
 The limits are common defaults, not any one retailer's rules. The [`publishing`](../skills/publishing/SKILL.md) skill fills the missing fields with you, rebuilds the sheet until the checklist is clean, and checks each field against the retailer's current requirements.
 
+### Writing schedule calendar (iCalendar)
+
+`--format ics` puts the book's dates into a calendar file, `dist/<story-id>.ics`, in the [iCalendar](https://www.rfc-editor.org/rfc/rfc5545) format that Google Calendar, Apple Calendar, and Outlook import. It reads `story.md` and the chapters' release dates, not the prose, and it holds these all-day events:
+
+| Event | From | When |
+|---|---|---|
+| `Deadline: <title>` | [`deadline`](project-format.md#story-file), with `target-words` (or `target-characters`) in its description | On the deadline |
+| `Episode <n> release: <title>` | The [release schedule](project-format.md#release-schedule): each chapter's `release-date`, or its place on the `release-every` cadence from `release-start` | On each chapter's release date. A serial whose `status` is not `complete` also gets the next episode on the cadence after the last chapter, which has no chapter yet |
+| `Write <n> words: <title>` | `daily-target-words` (or `daily-target-characters`) and `writing-days` | A recurring event on each writing day (every day without `writing-days`), until the deadline when there is one. It starts on the first writing day on or after the earliest of the first session in `progress.md`, `release-start`, and the first release date. A complete story has none |
+
+The words a day that `story progress` says the deadline needs are not in the calendar. That number changes each time you write, and a calendar file keeps the number from the day you built it. The daily target is a number that you set, so the calendar can hold it. A field that `story validate` reports as invalid is left out, as `progress` and `next` leave it out. With nothing to put in the calendar, the build stops with exit code 3, and with a daily target but no day to start it, the build leaves the target out and warns ([`ics-daily-target-unanchored`](cli-reference.md#codes-build-and-export)).
+
+The serial example has a weekly cadence, three chapters, and a daily target on four writing days:
+
+<!-- replay: the-left-luggage-office -->
+```shell
+story build . --format ics
+```
+
+```text
+Built a calendar of 5 events to ~/stories/the-left-luggage-office/dist/the-left-luggage-office.ics
+```
+
+Like every build, the file is the same each time for the same sources. Each event's `UID` comes from the story id and the event, such as `episode-3.the-left-luggage-office@story-skills`, so a rebuilt calendar updates the events that you imported before and does not add copies. `DTSTAMP` is a fixed time, or `SOURCE_DATE_EPOCH` when it is set, as in the EPUB. The dates are days with no time and no time zone, so a release shows on its date wherever you are. Lines end in CRLF and are folded at 75 octets, and text is escaped, as RFC 5545 asks.
+
+To use the file once, import `dist/<story-id>.ics` into your calendar app. Import it again after a change. To have the calendar update itself, publish the file at a URL and subscribe to that URL. Google Calendar calls this "From URL", Apple Calendar "New Calendar Subscription", and Outlook "Subscribe from web". The [review-copy workflow](../templates/github/review-copy.yml) publishes `review-site/` to GitHub Pages. To publish the calendar there too, add this line to its build step, after the HTML build:
+
+```shell
+story build "$STORY_DIR" --format ics --out "$GITHUB_WORKSPACE/review-site/schedule.ics"
+```
+
+Subscribe to `https://<owner>.github.io/<repo>/schedule.ics`. A Pages site is public, so anyone with the link can see the deadline and the release dates. The template does not add this step by default, for three reasons: most books have no schedule, and the build stops without one; the `STORY_VERSION` that the template pins must be a release that has `--format ics`; and not every writer wants a public deadline.
+
 ### Twine story
 
 `--format twee` writes the book as [Twee 3](https://github.com/iftechfoundation/twine-specs/blob/master/twee-3-specification.md), the text format of the [Twine](https://twinery.org) interactive fiction editor. Each chapter becomes a passage named by its chapter id, and the [`choices`](project-format.md#branching-chapters) in its frontmatter become links. [`examples/the-gull-rock-light`](../examples/the-gull-rock-light/) is a branching story built this way:
@@ -1555,7 +1589,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, holds a control character, or is not a supported image, or the file cannot be read or its contents are not the image its extension names | Fix `cover` in `story.md`, or remove it; save the cover again, or rename it to match its format. |
 | `<file>: a matter page needs a title to build` | A `matter/` page with text has a blank `title` | Give the page a `title`. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, or `codex`. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex`. |
 | `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |
 | `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |

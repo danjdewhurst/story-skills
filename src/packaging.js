@@ -14,7 +14,9 @@ import { autolinkEnd, breaksParagraph, characterCount, codeSpanCloser, collapseS
 import { creditLines, publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
-function epubModifiedTimestamp() {
+// The timestamp a build records, such as the EPUB modified date and the
+// iCalendar DTSTAMP.
+export function buildTimestamp() {
   // Deterministic builds: identical sources must produce byte-identical
   // output. Honor SOURCE_DATE_EPOCH when set (seconds since epoch, per the
   // reproducible-builds spec); otherwise fall back to a stable default
@@ -104,7 +106,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
   const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
-  const modified = epubModifiedTimestamp();
+  const modified = buildTimestamp();
   writeZip(outFile, [
     // OCF requires mimetype first and uncompressed so the media type sits at
     // a fixed offset in the archive.
