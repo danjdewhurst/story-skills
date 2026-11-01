@@ -86,7 +86,7 @@ The companion `story` CLI treats the story bible as a checkable contract. Its co
 
 ## Quick start
 
-> **Writing in claude.ai without a terminal?** [Writers: start here](docs/writers-start-here.md) shows how to upload a skill as a zip. To skip setup entirely, [Plothold](#prefer-an-app) is a web app built on Story Skills.
+> **Writing in claude.ai without a terminal?** [Writers: start here](docs/writers-start-here.md) shows how to upload a skill as a zip. To skip setup entirely, [Plothold](#prefer-an-app) is a paid, hosted app built on Story Skills.
 
 **Claude Code.** Type these inside a Claude Code session, not a shell:
 
@@ -140,13 +140,13 @@ Each finding names its file and reproduces exactly, and CI asserts this output o
 <a href="https://plothold.com/?ref=story-skills">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/plothold-dark.png">
-    <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/plothold-light.png" alt="Plothold with a sample mystery open: the writing partner's chat on the left, and on the right each chapter's promises and open questions, with the story check all clear" width="900">
+    <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/readme/plothold-light.png" alt="Plothold with a sample mystery open: the writing partner on the left, and on the right each chapter's promises and open questions, with the story check all clear" width="900">
   </picture>
 </a>
 
-[Plothold](https://plothold.com/?ref=story-skills) is a web app for writing fiction, built on Story Skills, for writers who would rather not use a terminal or a coding agent. You chat with a writing partner on one side, and the book updates on the other: chapters, cast, world, open threads, and a story check powered by the same continuity engine. It runs in the browser on a laptop or a phone, imports drafts from Word, and exports EPUB, Word, and a paperback interior.
+[Plothold](https://plothold.com/?ref=story-skills) is a web app for writing fiction, built on Story Skills, for writers who would rather not use a terminal or a coding agent. You chat with a writing partner on one side, and the book updates on the other: chapters, cast, world, open threads, and a story check powered by the same continuity engine. It runs in the browser on a laptop or a phone, imports drafts from Word, and exports EPUB, PDF, and Word.
 
-Plothold is made by the Story Skills maintainer, and its subscriptions fund Story Skills development. It has a free trial with no card. Everything in this repository stays free and MIT-licensed; Plothold is a separate product built on top of it.
+Plothold is a paid product made by the Story Skills maintainer, and its subscriptions fund Story Skills development. It has a free trial. Your book is stored on Plothold's servers; its [privacy policy](https://plothold.com/privacy) says how it is handled. Story Skills itself stays free and MIT-licensed, and Plothold is a separate product built on top of it.
 
 ## Skills
 
