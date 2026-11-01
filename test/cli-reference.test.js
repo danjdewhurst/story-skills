@@ -191,11 +191,17 @@ function exampleCopy(edit = () => {}) {
 // The arguments each run needs besides its project, by the name the docs
 // give the run: `mentions` audits every chapter, and `mentions <kind> <id>`
 // lists one entity's mentions. compare and similarity read the copy at
-// `clean` and a text taken from its chapter, outside the project.
+// `clean` and a text taken from its chapter, outside the project. notes
+// reads a Word build of the copy, outside the project too.
 function runArgs(clean) {
   const reference = path.join(path.dirname(clean), "reference.txt");
   fs.copyFileSync(path.join(clean, "chapters", "chapter-01.md"), reference);
+  const returned = path.join(path.dirname(clean), "returned.docx");
+  if (!fs.existsSync(returned)) {
+    expect(runCli(["build", clean, "--format", "docx", "--out", returned], memoryIo(clean))).toBe(0);
+  }
   return {
+    notes: [returned],
     knowledge: ["kael-voss", "--at", "chapter-01"],
     context: ["chapter-01"],
     compare: ["--against", clean],

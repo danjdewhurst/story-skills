@@ -24,8 +24,8 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const LOCAL_SIGNATURE = 0x04034b50;
 const ZIP64_MARK = 0xffffffff;
 
-const DOCUMENT_PART = "word/document.xml";
-const STYLES_PART = "word/styles.xml";
+export const DOCUMENT_PART = "word/document.xml";
+export const STYLES_PART = "word/styles.xml";
 
 // The error for a file that is not a readable Word document. Its message
 // is the reason, for the caller to show after the file name.
@@ -54,13 +54,13 @@ export function docxMarkdown(bytes, { chapterLine = () => null } = {}) {
 
 // The zip's central directory, as a map from entry name to the entry's
 // method, sizes, CRC, and local header offset.
-function zipEntries(bytes) {
+export function zipEntries(bytes) {
   const end = findEndOfCentralDirectory(bytes);
   const count = bytes.readUInt16LE(end + 10);
   const size = bytes.readUInt32LE(end + 12);
   const offset = bytes.readUInt32LE(end + 16);
   if (count === 0xffff || size === ZIP64_MARK || offset === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which import does not read; save it again from Word");
+    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
   }
   if (count > MAX_ZIP_ENTRIES) {
     throw new DocxError(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
@@ -112,12 +112,12 @@ function findEndOfCentralDirectory(bytes) {
 
 // One entry's bytes, inflated and checked against its size and CRC, read
 // as UTF-8 XML.
-function xmlText(bytes, entry) {
+export function xmlText(bytes, entry) {
   if (entry.encrypted) {
     throw new DocxError("it is password-protected; remove the password in Word and save it again");
   }
   if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which import does not read; save it again from Word");
+    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
   }
   if (entry.size > MAX_DOCX_PART_BYTES) {
     throw new DocxError(`${entry.name} is ${entry.size} bytes, over the ${MAX_DOCX_PART_BYTES} byte limit`);
@@ -141,7 +141,7 @@ function xmlText(bytes, entry) {
       throw new DocxError(`its zip entry ${entry.name} cannot be inflated, or inflates past the ${MAX_DOCX_PART_BYTES} byte limit`);
     }
   } else {
-    throw new DocxError(`its zip entry ${entry.name} uses compression method ${entry.method}, which import does not read`);
+    throw new DocxError(`its zip entry ${entry.name} uses compression method ${entry.method}, which story does not read`);
   }
   if (content.length !== entry.size || crc32(content) !== entry.crc) {
     throw new DocxError(`its zip entry ${entry.name} is damaged`);
@@ -173,7 +173,7 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const TAG = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
 const ATTRIBUTE = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
-function* xmlTokens(text) {
+export function* xmlTokens(text) {
   const open = [];
   for (const token of rawTokens(text)) {
     if (token.type === "start") {
@@ -241,18 +241,18 @@ function decodeEntities(text) {
 // dropped, a line break or carriage return is a space, as XML and Word
 // read them, and the private-use marks this module uses for breaks are
 // dropped, so text can never add a markdown line of its own.
-function proseText(text) {
+export function proseText(text) {
   return text.replace(/[\r\n]/g, " ").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 
 // A Word on/off property (`<w:i/>`, `<w:i w:val="0"/>`) is on unless its
 // value says off.
-function isOn(attributes) {
+export function isOn(attributes) {
   const value = attributes["w:val"];
   return value === undefined || !["0", "false", "off", "none"].includes(value);
 }
 
-const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null };
+export const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null };
 
 // The paragraph and character styles, as { paragraph, character }
 // functions from a style id to the style's resolved { level, quote,
@@ -261,7 +261,7 @@ const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null };
 // is body text), whether it is a quote, and whether it sets italic or bold,
 // each from the style or the nearest style it is based on. Each style is
 // resolved once, so a long chain of styles costs no more than its length.
-function readStyles(xml) {
+export function readStyles(xml) {
   const styles = new Map();
   let defaultParagraph = null;
   let style = null;
@@ -345,7 +345,7 @@ function readStyles(xml) {
 
 // The markdown heading level of a Word outline level: 0 to 8 are heading
 // levels 1 to 9 (markdown stops at 6), and 9 is body text.
-function outlineLevel(outline) {
+export function outlineLevel(outline) {
   return outline === 9 ? 0 : Math.min(outline + 1, 6);
 }
 

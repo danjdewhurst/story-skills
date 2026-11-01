@@ -823,6 +823,12 @@ The title and its credits open the first page, and the text after them follows o
 
 For a `language` other than `en`, the document declares it, so Word spell-checks and lays out the text in that language, and picks East Asian or complex-script fonts for the book's script. A right-to-left book has every paragraph and run marked right to left. See [Typesetting other scripts](#typesetting-other-scripts).
 
+When an editor sends the DOCX back with comments and tracked changes, [`story notes`](cli-reference.md#notes) lists each comment, reply, and change, and places it on the paragraph's current review-copy label, such as `ch03-p12`. It still finds the paragraph after you edit the chapter. It reads the file only, so you still accept or reject the changes in Word and copy the accepted text into the chapter files.
+
+```shell
+story notes ~/Downloads/the-gull-rock-light-jane.docx
+```
+
 ### Shunn standard manuscript format
 
 Shunn manuscript format is the plain layout that many agents, publishers, and short-fiction markets ask for. There are two Shunn builds:
