@@ -10,6 +10,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Added
 
+- `story notes <file.docx>` lists the comments and tracked changes in an editor's returned Word file, each on its current paragraph label, such as `ch03-p12`. See [notes](docs/cli-reference.md#notes).
+  - Each comment shows its author, date, the text it covers, its replies, and whether it is resolved. Each paragraph with tracked changes shows its text before and after, trimmed to the change with a few words either side.
+  - A paragraph is matched by its text as the editor saw it, as `story compare --anchor` matches labels, so a note still finds its paragraph after you edit the chapter. A note on a chapter heading goes on the chapter's key, such as `ch03`.
+  - A note that matches no current paragraph is listed with its chapter heading and opening words, with a new `note-unplaced` warning. A comment with hidden text is marked, with a new `note-hidden-text` warning.
+  - It reads the file only, and quotes every line of the editor's text, so a comment cannot pass as a heading or as another note. `--json` gives every note with the whole paragraphs before and after.
+  - The `editorial-review` and `story-maintenance` skills use it when an editor's or reader's Word file comes back.
 - `story import` reads Word documents, so a draft in Word, Google Docs, or Scrivener no longer needs Pandoc first. See [Importing a Word document](docs/manuscripts.md#importing-a-word-document).
   - A `.docx` source, or a `.docx` file in a source folder, becomes markdown and is then split into chapters as before. Heading styles and outline levels become headings, in any language Word uses, and the `Title` style becomes a level 1 heading. A plain paragraph that is only a chapter line, such as a bold `Chapter 1`, becomes a chapter heading.
   - A folder import now reads the `.docx` files in the folder too, so move notes saved as Word documents out of it first.
