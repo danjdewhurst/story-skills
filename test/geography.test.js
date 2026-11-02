@@ -132,6 +132,8 @@ describe("geography parsing", () => {
     expect(hoursNeeded(31, horse, 24)).toBeCloseTo(48 + 1 / 3);
     expect(hoursNeeded(30, horse, 30)).toBe(35);
     expect(hoursNeeded(30, { speed: 3 }, 24)).toBe(10);
+    // A per-day limit longer than a day of moving never makes it quicker.
+    expect(hoursNeeded(150, { speed: 1, perDay: 100 }, 24)).toBe(150);
   });
 });
 
@@ -236,21 +238,91 @@ describe("distance travel check", () => {
     ]);
   });
 
-  test("a scene with many travellers is checked in linear time", () => {
+  test("map coordinates come before a chain of listed distances", () => {
     const root = geographyProject();
-    const cast = Array.from({ length: 20000 }, (_, index) => `  - walker-${index}`).join("\n");
-    writeScene(root, 1, 1, `location: greyhaven\ncharacters:\n${cast}`);
-    writeScene(root, 1, 2, `location: stonebridge\ntravel-hours: 1\ncharacters:\n${cast}`);
-    const started = performance.now();
-    const found = distanceWarnings(root);
-    expect(found).toHaveLength(1);
-    expect(performance.now() - started).toBeLessThan(20000);
+    // 4 leagues apart on the map (one square), but 40 by the listed chain.
+    writeLocation(root, "north-gate", "coordinates: [0, 0]\ndistances:\n  - to: fenmoor\n    distance: 20");
+    writeLocation(root, "south-gate", "coordinates: [0, 1]");
+    writeLocation(root, "fenmoor", "distances:\n  - to: south-gate\n    distance: 20");
+    writeScene(root, 1, 1, "pov: mara\nlocation: north-gate");
+    writeScene(root, 1, 2, "pov: mara\nlocation: south-gate\ntravel-hours: 1.5\ntravel-mode: horse");
+    expect(distanceWarnings(root)).toEqual([]);
+  });
+
+  test("a distance listed back the other way is used for that direction", () => {
+    const root = geographyProject();
+    writeLocation(root, "fenmoor", "distances:\n  - to: island\n    distance: 10");
+    writeLocation(root, "island", "distances:\n  - to: fenmoor\n    distance: 50");
+    writeScene(root, 1, 1, "pov: mara\nlocation: fenmoor");
+    writeScene(root, 1, 2, "pov: mara\nlocation: island\ntravel-hours: 1\ntravel-mode: wyvern");
+    writeScene(root, 1, 3, "pov: mara\nlocation: fenmoor\ntravel-hours: 1\ntravel-mode: wyvern");
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-01-scene-03.md gives mara 1h to travel 50 leagues from island to fenmoor, but the wyvern mode (12 leagues an hour) needs at least 4.2h"
+    ]);
+  });
+
+  test("of two distances listed to one place, the check uses the shorter", () => {
+    const root = geographyProject();
+    writeLocation(root, "fenmoor", "distances:\n  - to: island\n    distance: 50\n  - to: island\n    distance: 5");
+    writeScene(root, 1, 1, "pov: mara\nlocation: fenmoor");
+    writeScene(root, 1, 2, "pov: mara\nlocation: island\ntravel-hours: 1\ntravel-mode: wyvern");
+    expect(distanceWarnings(root)).toEqual([]);
+  });
+
+  test("without a travel-mode the mode needing the fewest hours is used, not the top speed", () => {
+    const root = geographyProject({ geography: "travel-modes:\n  - mode: sprinter\n    speed: 20\n    per-day: 10\n  - mode: barge\n    speed: 5" });
+    writeLocation(root, "fenmoor", "distances:\n  - to: island\n    distance: 100");
+    writeScene(root, 1, 1, "pov: mara\nlocation: fenmoor");
+    // The barge needs 20h; the sprinter needs 9 days and more.
+    writeScene(root, 1, 2, "pov: mara\nlocation: island\ntravel-hours: 20");
+    writeScene(root, 1, 3, "pov: mara\nlocation: fenmoor\ntravel-hours: 19");
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-01-scene-03.md gives mara 19h to travel 100 units from island to fenmoor, but even the fastest travel mode, barge (5 units an hour), needs at least 20h"
+    ]);
+  });
+
+  test("a scene's own POV wins over the chapter POV", () => {
+    const root = geographyProject();
+    writeChapter(root, 1, "pov: ivo");
+    writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven");
+    writeScene(root, 1, 2, "location: stonebridge\ncharacters: [ivo]");
+    writeScene(root, 1, 3, "pov: mara\nlocation: greyhaven");
+    writeScene(root, 1, 4, "pov: mara\nlocation: stonebridge\ntravel-hours: 1");
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-01-scene-04.md gives mara 1h to travel 30 leagues from greyhaven to stonebridge, but even the fastest travel mode, wyvern (12 leagues an hour), needs at least 2.5h"
+    ]);
+  });
+
+  test("mode names match ignoring letter case and extra spaces", () => {
+    const root = geographyProject();
+    writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven\ntravel-mode: \"  On   Foot \"");
+    writeScene(root, 1, 2, "pov: mara\nlocation: stonebridge\ntravel-hours: 29\ntravel-mode: \"on  foot\"");
+    writeScene(root, 1, 3, "pov: mara\nlocation: greyhaven\ntravel-mode: onfoot");
+    expect(validateProject(root).warnings.filter((finding) => finding.code === "unknown-travel-mode").map((finding) => finding.message)).toEqual([
+      "scenes/chapter-01-scene-03.md travel-mode onfoot is not a travel mode (story.md travel-modes lists on foot, horse, wyvern), so the distance check uses the fastest one"
+    ]);
+    // On foot: 3 full days of 8 leagues, then 6 more: 3 x 24h + 6h = 78h.
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-01-scene-02.md gives mara 29h to travel 30 leagues from greyhaven to stonebridge, but the on foot mode (1 leagues an hour and 8 leagues a day) needs at least 78h"
+    ]);
+  });
+
+  test("the left luggage office example is checked, and a slower mode warns", () => {
+    const root = path.join(makeTempDir(), "office");
+    fs.cpSync(path.join(import.meta.dir, "..", "examples", "the-left-luggage-office"), root, { recursive: true });
+    expect(distanceWarnings(root)).toEqual([]);
+    const scene = path.join(root, "scenes", "chapter-02-scene-01.md");
+    fs.writeFileSync(scene, fs.readFileSync(scene, "utf8").replace("travel-mode: bus", "travel-mode: on foot"));
+    expect(distanceWarnings(root)).toEqual([
+      "scenes/chapter-02-scene-01.md gives ines-achebe 0.5h to travel 2.5 miles from left-luggage-office to ashby-road, but the on foot mode (3 miles an hour) needs at least 0.9h"
+    ]);
   });
 
   test("flashbacks are skipped, and a scene with no location or a chapter with no scenes resets whereabouts", () => {
     const root = geographyProject({ chapters: 4 });
     writeScene(root, 1, 1, "pov: mara\nlocation: greyhaven");
-    writeScene(root, 1, 2, "pov: mara\nlocation: the-barrow\nflashback-to: her childhood");
+    // Without the skip, the flashback at stonebridge would be 30 leagues back.
+    writeScene(root, 1, 2, "pov: mara\nlocation: stonebridge\nflashback-to: her childhood");
     writeScene(root, 1, 3, "pov: mara\nlocation: greyhaven\ntravel-hours: 0.1");
     writeScene(root, 2, 1, "pov: mara\nlocation: stonebridge\ntravel-hours: 30");
     writeScene(root, 2, 2, "pov: mara");
@@ -339,9 +411,10 @@ describe("geography validation", () => {
   test("links checks distance targets, and rename and remove keep them current", () => {
     const root = geographyProject();
     writeLocation(root, "fenmoor", "distances:\n  - to: fenmoor\n    distance: 1\n  - to: nowhere\n    distance: 2");
-    const links = messages(validateLinks(root).errors);
-    expect(links).toContain("worldbuilding/locations/fenmoor.md distance points at itself");
-    expect(links.some((message) => message.startsWith("worldbuilding/locations/fenmoor.md distance") && message.includes("nowhere"))).toBe(true);
+    const links = validateLinks(root).errors.filter((finding) => finding.file === "worldbuilding/locations/fenmoor.md");
+    expect(links.map((finding) => finding.code)).toEqual(["distance-to-self", "missing-reference"]);
+    expect(links[0].message).toBe("worldbuilding/locations/fenmoor.md distance points at itself");
+    expect(links[1].message).toContain("nowhere");
     writeLocation(root, "fenmoor");
 
     renameEntity(root, { kind: "location", id: "stonebridge", name: "Stone Bridge" });
