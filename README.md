@@ -37,7 +37,7 @@
 
 </div>
 
-> **Prefer an app?** [Plothold](https://plothold.com/?ref=story-skills) is Story Skills in the browser, with a writing partner and the same continuity engine. It is paid, with a free trial, and made by the Story Skills maintainer.
+> **Prefer an app?** [Plothold](https://plothold.com/?ref=story-skills) is a web app built on Story Skills by the same maintainer, with a writing partner and the same continuity engine. It is paid, with a free trial, and stores your book on its servers, as its [privacy policy](https://plothold.com/privacy) explains.
 
 <div align="center">
 
