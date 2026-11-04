@@ -35,7 +35,11 @@
   <a href="https://github.com/danjdewhurst/story-skills/blob/main/CONTRIBUTING.md"><b>Contributing</b></a>
 </p>
 
-<br>
+</div>
+
+> **Prefer an app?** [Plothold](https://plothold.com/?ref=story-skills) is Story Skills in the browser, with a writing partner and the same continuity engine. It is paid, with a free trial, and made by the Story Skills maintainer.
+
+<div align="center">
 
 <img src="https://raw.githubusercontent.com/danjdewhurst/story-skills/main/assets/demo.gif" alt="story continuity flags a character who died in chapter 2 but appears in chapter 4, a payoff that lands before its setup, and a question resolved before it is asked" width="900">
 
