@@ -50,8 +50,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Changed
 
-- The README now points to Plothold, the paid hosted app built on Story Skills, just below the badges and links at the top.
-  - The note says that Plothold is paid, has a free trial, and is made by the Story Skills maintainer. The "Prefer an app?" section further down is unchanged.
+- The README now points to Plothold, the paid hosted app built on Story Skills, just below the badges and links at the top. ([#877](https://github.com/danjdewhurst/story-skills/pull/877))
+  - The note says that Plothold is paid, has a free trial, is made by the Story Skills maintainer, and stores your book on its servers.
 
 ## [0.24.1] - 2026-10-27
 
