@@ -342,20 +342,9 @@ function labelsIn(root, label) {
 // repository or its working tree.
 function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
   const { git } = gitAtRef(root, ref, flag);
-  // -z keeps names unquoted; each record is "<mode> <type> <hash>\t<path>",
-  // the path relative to the project folder (-C root).
-  const blobs = git(["ls-tree", "-r", "-z", ref, "--", "."])
-    .split("\0")
-    .filter((record) => record !== "")
-    .map((record) => {
-      const tab = record.indexOf("\t");
-      const [mode, type, hash] = record.slice(0, tab).split(" ");
-      return { mode, type, hash, name: record.slice(tab + 1) };
-    })
-    // Regular files only (not symlinks or submodules), and only markdown,
-    // which is all a manuscript is built from.
-    .filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
-  const contents = catBlobs(root, blobs.map((entry) => entry.hash));
+  // Only markdown, which is all a manuscript is built from.
+  const blobs = markdownAtRef(git, ref, ".");
+  const contents = catBlobs(root, blobs.map((entry) => entry.hash), ref, flag);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "story-compare-"));
   try {
     blobs.forEach((entry, index) => {
@@ -378,25 +367,49 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
 // A project folder may hold repository files that another person wrote, so
 // git must not treat the folder as a bare repository, fetch a missing object
 // from a remote that repository config names (which can start a program), or
-// run a hook or file monitor.
+// run a hook or file monitor. GIT_ALLOW_PROTOCOL names no real transport, so
+// no fetch can start on any git version, whatever protocol.<name>.allow the
+// repository config sets; GIT_NO_LAZY_FETCH (git 2.45 and later) also stops
+// the attempt. Only plumbing commands read the files, so no textconv or diff
+// driver from repository config runs.
 const GIT_SAFE_ARGS = ["-c", "safe.bareRepository=explicit", "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
 
 function gitEnvironment() {
-  return { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
+  return { ...process.env, GIT_ALLOW_PROTOCOL: "none", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
 }
 
-// Blob contents for these hashes, read with one git cat-file process.
-function catBlobs(root, hashes) {
+// Blob contents for these hashes, read with one git cat-file process. An
+// object this clone does not hold, as in a partial clone, is never fetched,
+// so it stops the command.
+function catBlobs(root, hashes, ref, flag) {
   const output = execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, "cat-file", "--batch"], { input: `${hashes.join("\n")}\n`, env: gitEnvironment(), stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
   const contents = [];
   let cursor = 0;
   for (let index = 0; index < hashes.length; index += 1) {
     const headerEnd = output.indexOf(10, cursor);
-    const size = Number(output.toString("utf8", cursor, headerEnd).split(" ")[2]);
-    contents.push(output.subarray(headerEnd + 1, headerEnd + 1 + size));
-    cursor = headerEnd + 1 + size + 1;
+    const [, type, size] = output.toString("utf8", cursor, headerEnd).split(" ");
+    if (type !== "blob" || !/^\d+$/.test(size ?? "")) {
+      throw projectError(`${flag} cannot read the files at git ref ${ref}: this clone does not hold them, and story never fetches. Run git fetch, or clone without --filter, and try again`);
+    }
+    contents.push(output.subarray(headerEnd + 1, headerEnd + 1 + Number(size)));
+    cursor = headerEnd + 1 + Number(size) + 1;
   }
   return contents;
+}
+
+// The regular markdown files under `folder` at `ref`, relative to the
+// project folder: "<mode> <type> <hash>\t<path>" records, read with -z so
+// names are unquoted. Symlinks and submodules are left out.
+function markdownAtRef(git, ref, folder) {
+  return git(["ls-tree", "-r", "-z", ref, "--", folder])
+    .split("\0")
+    .filter((record) => record !== "")
+    .map((record) => {
+      const tab = record.indexOf("\t");
+      const [mode, type, hash] = record.slice(0, tab).split(" ");
+      return { mode, type, hash, name: record.slice(tab + 1) };
+    })
+    .filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
 }
 
 function gitFailure(error, flag) {
@@ -434,10 +447,17 @@ function gitAtRef(root, ref, flag = "compare --ref") {
   }
   const git = (args) => execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, ...args], { encoding: "utf8", env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   let prefix;
+  let bare;
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();
+    bare = git(["rev-parse", "--is-bare-repository"]).trim() === "true";
   } catch (error) {
     throw projectError(gitFailure(error, flag));
+  }
+  // Git before 2.38 does not know safe.bareRepository, so it would use a
+  // project folder laid out as a bare repository, with its config.
+  if (bare) {
+    throw projectError(`${flag} needs the project inside a git working tree, not a bare repository`);
   }
   try {
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
@@ -457,20 +477,22 @@ function gitAtRef(root, ref, flag = "compare --ref") {
 }
 
 function chaptersAtGitRef(root, ref, warnings) {
-  const { git, prefix } = gitAtRef(root, ref);
+  const { git } = gitAtRef(root, ref);
   if (git(["ls-tree", "--name-only", ref, "--", "story.md"]).trim() === "") {
     warnings.push(warn("story-missing-at-ref", `story.md does not exist at git ref ${ref}: the project may not have existed then`, "story.md"));
   }
-  // ls-tree paths are relative to the working directory (-C root); git show
-  // paths are relative to the repository root, hence the prefix there.
-  const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"])
-    .split("\n")
-    .map((name) => path.posix.basename(name.trim()))
-    .filter((name) => CHAPTER_FILENAME_PATTERN.test(name))
-    .sort();
-  return names.map((name) => {
+  // Each chapter is read as a blob through cat-file: git show would print a
+  // submodule entry's commit, and run a textconv that repository config
+  // names to do it.
+  const chapters = markdownAtRef(git, ref, "chapters/")
+    .filter((entry) => path.posix.dirname(entry.name) === "chapters")
+    .map((entry) => ({ ...entry, name: path.posix.basename(entry.name) }))
+    .filter((entry) => CHAPTER_FILENAME_PATTERN.test(entry.name))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const contents = catBlobs(root, chapters.map((entry) => entry.hash), ref, "compare --ref");
+  return chapters.map(({ name }, index) => {
     const id = path.basename(name, ".md");
-    const raw = git(["show", `${ref}:${prefix}chapters/${name}`]);
+    const raw = contents[index].toString("utf8");
     try {
       return comparableChapter(id, parseFrontmatter(raw, name));
     } catch {

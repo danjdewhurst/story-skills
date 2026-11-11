@@ -293,6 +293,28 @@ describe("compare --ref git failures", () => {
     expect(() => withPath(bin, () => compareProject(root, { ref: "HEAD" }))).toThrow("compare --ref could not run git: fatal: something odd happened");
   });
 
+  // Git before 2.38 has no safe.bareRepository; this fake answers as one would.
+  test.skipIf(process.platform === "win32")("refuses a bare repository that an older git would use", () => {
+    const root = gapProject();
+    const bin = makeTempDir();
+    const fake = path.join(bin, "git");
+    fs.writeFileSync(fake, "#!/bin/sh\ncase \"$*\" in *--is-bare-repository*) echo true ;; *) echo ;; esac\n", "utf8");
+    fs.chmodSync(fake, 0o755);
+    expect(() => withPath(bin, () => compareProject(root, { ref: "HEAD" }))).toThrow("compare --ref needs the project inside a git working tree, not a bare repository");
+  });
+
+  test("an object the clone does not hold stops compare and similarity with a clear error", () => {
+    const { repo, root } = gitProject();
+    // Drop one chapter's blob at draft-1, as a partial clone would lack it.
+    const hash = git(repo, "rev-parse", "draft-1:book/chapters/chapter-02.md").trim();
+    fs.rmSync(path.join(repo, ".git", "objects", hash.slice(0, 2), hash.slice(2)));
+    for (const [argv, flag] of [[["compare", root, "--ref", "draft-1"], "compare --ref"], [["similarity", root, "--against", "draft-1"], "similarity --against"]]) {
+      const result = invoke(repo, argv);
+      expect(result.code).toBe(3);
+      expect(result.err).toBe(`${flag} cannot read the files at git ref draft-1: this clone does not hold them, and story never fetches. Run git fetch, or clone without --filter, and try again\n`);
+    }
+  });
+
   test("warns when story.md is missing at the ref", () => {
     const repo = makeTempDir();
     const root = path.join(repo, "book");
@@ -364,6 +386,34 @@ describe.skipIf(process.platform === "win32")("git refs in a project from anothe
     expect(fs.existsSync(marker)).toBe(false);
     const similar = invoke(parent, ["similarity", root, "--against", "main"]);
     expect(similar.code).not.toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test("a chapter that is a submodule entry is skipped, so no textconv from repository config runs", () => {
+    const { repo, root } = gitProject();
+    const marker = path.join(makeTempDir(), "ran");
+    const commit = git(repo, "rev-parse", "HEAD").trim();
+    git(repo, "update-index", "--add", "--cacheinfo", `160000,${commit},book/chapters/chapter-05.md`);
+    git(repo, "commit", "-qm", "gitlink chapter");
+    git(repo, "tag", "linked");
+    fs.mkdirSync(path.join(repo, ".git", "info"), { recursive: true });
+    fs.writeFileSync(path.join(repo, ".git", "info", "attributes"), "* diff=evil\n");
+    git(repo, "config", "diff.evil.textconv", `touch ${marker}; cat`);
+    const compared = invoke(repo, ["compare", root, "--ref", "linked"]);
+    expect(compared.code).toBe(0);
+    expect(compared.out).toContain("Compared with git ref linked");
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test("a repository config that allows a protocol by name still fetches nothing", () => {
+    const parent = makeTempDir();
+    const root = path.join(parent, "book");
+    createStoryProject({ cwd: parent, title: "Allowed Story", dir: root });
+    const marker = path.join(makeTempDir(), "ran");
+    const gitDir = path.join(root, ".git");
+    repositoryFiles(gitDir, marker, false);
+    fs.appendFileSync(path.join(gitDir, "config"), '[protocol "file"]\n\tallow = always\n[protocol "ssh"]\n\tallow = always\n');
+    expect(invoke(parent, ["compare", root, "--ref", "main"]).code).not.toBe(0);
     expect(fs.existsSync(marker)).toBe(false);
   });
 
