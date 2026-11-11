@@ -405,8 +405,26 @@ describe("draft-next-chapter guardrails (#294)", () => {
       const broken = runStep(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
       expect(broken.output).toBe("passed=false\n");
       const report = fs.readFileSync(path.join(broken.runnerTemp, "checks.md"), "utf8");
-      expect(report).toContain("- story links: failed\n  - chapters/chapter-01.md:");
+      expect(report).toContain("- story links: failed\n\n      chapters/chapter-01.md:");
       expect(report).not.toContain("Word range");
+    });
+
+    test("a finding quotes the agent's text as code, so it cannot mention anyone or link an issue", () => {
+      const PATH = fakeTools();
+      const { repo } = storyRepo();
+      writeChapterProse(repo, 30);
+      const chapter = path.join(repo, "chapters", "chapter-01.md");
+      fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("characters: []", 'characters:\n  - "x\\n\\n@octocat Closes #1 \\e[31m"'));
+      const result = runStep(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
+      expect(result.output).toBe("passed=false\n");
+      const report = fs.readFileSync(path.join(result.runnerTemp, "checks.md"), "utf8");
+      expect(report).toContain("@octocat Closes #1");
+      for (const line of report.split("\n")) {
+        if (/@octocat|Closes #1/.test(line)) {
+          expect(line).toStartWith("      ");
+        }
+      }
+      expect(report).not.toMatch(/[\u0000-\u0009\u000b-\u001f]/);
     });
 
     test("a project the CLI cannot use stops the job", () => {
