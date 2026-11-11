@@ -95,6 +95,14 @@ describe("draft-next-chapter guardrails (#294)", () => {
     expect(storyCommands).toContain("next");
     expect(storyCommands).toContain("context");
     expect(storyCommands).toContain("check");
+    // Every story command the prompt and the maintenance skill tell the
+    // agent to run is allowed.
+    const prompt = draft.slice(draft.indexOf("prompt: |"), draft.indexOf("claude_args: |"));
+    const named = new Set([...prompt.matchAll(/`?story ([a-z]+)\b/g)].map((match) => match[1]).filter((name) => COMMANDS.some((entry) => entry.name === name)));
+    expect(named.size).toBeGreaterThan(3);
+    for (const name of [...named, "impact", "migrate"]) {
+      expect(storyCommands).toContain(name);
+    }
     for (const name of storyCommands) {
       const command = COMMANDS.find((entry) => entry.name === name);
       expect(command).toBeDefined();
@@ -187,8 +195,8 @@ describe("draft-next-chapter guardrails (#294)", () => {
     expect(bundled.output).toContain("drafted=true\nbranch=draft/chapter-1\n");
     expect(fs.existsSync(path.join(bundled.runnerTemp, "draft", "draft.bundle"))).toBe(true);
 
-    // A global or system config the agent wrote (through an absolute --out)
-    // is not read, though plain git in the same step stops on either.
+    // A global or system config the agent wrote (by some way past its tool
+    // limits) is not read, though plain git in the same step stops on either.
     const home = makeTempDir("home-");
     const written = "# Chapter 1\nnot a config line\n";
     fs.writeFileSync(path.join(home, ".gitconfig"), written);
@@ -260,6 +268,16 @@ describe("draft-next-chapter guardrails (#294)", () => {
         expect(result.stdout).toContain(reason);
       });
     }
+
+    // Windows file names cannot hold a colon.
+    test.skipIf(process.platform === "win32")("prints each refused name after a prefix, so none starts a workflow command", () => {
+      const { repo, base } = storyRepo();
+      const temp = agentCommit(repo, base, "draft/chapter-1", (dir) => fs.writeFileSync(path.join(dir, "::warning::forged.md"), "x"));
+      const result = runStep(script, repo, { BASE: base, BRANCH: "draft/chapter-1", RUNNER_TEMP: temp });
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("refused: ::warning::forged.md (not a story file)");
+      expect(result.stdout.split("\n").some((line) => line.trimStart().startsWith("::warning"))).toBe(false);
+    });
 
     // A draft branch whose merge commit adds package.json and CLAUDE.md of
     // its own, bundled as the draft job would.
@@ -425,6 +443,26 @@ describe("draft-next-chapter guardrails (#294)", () => {
         }
       }
       expect(report).not.toMatch(/[\u0000-\u0009\u000b-\u001f]/);
+    });
+
+    test("findings that cannot be read are reported as such, and quoted text loses its direction marks", () => {
+      const PATH = fakeTools();
+      const { repo } = storyRepo();
+      writeChapterProse(repo, 30);
+      const chapter = path.join(repo, "chapters", "chapter-01.md");
+      fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("characters: []", 'characters:\n  - "a\\u202eb\\u2066c"'));
+      const marked = runStep(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
+      const report = fs.readFileSync(path.join(marked.runnerTemp, "checks.md"), "utf8");
+      expect(report).toContain("a b c");
+      expect(report).not.toMatch(/[\u202e\u2066]/);
+
+      // A story whose --json output is not JSON.
+      const bin = makeTempDir("fake-bin-");
+      fs.writeFileSync(path.join(bin, "story"), "#!/bin/sh\nif [ \"$1\" = links ]; then echo 'not json'; exit 1; fi\necho '{\"diagnostics\":[]}'\n", { mode: 0o755 });
+      const broken = runStep(script, repo, { PATH: `${bin}${path.delimiter}${process.env.PATH}`, BRANCH: "draft/maintenance-2026-09-28" });
+      expect(broken.status).toBe(0);
+      expect(broken.output).toBe("passed=false\n");
+      expect(fs.readFileSync(path.join(broken.runnerTemp, "checks.md"), "utf8")).toContain("- story links: failed\n\n      (its findings could not be read; see the job log)\n");
     });
 
     test("a project the CLI cannot use stops the job", () => {
