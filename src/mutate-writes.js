@@ -29,7 +29,7 @@ import { assertNoInterruptedChange, safeCommandName, undoInterruptedChange } fro
 // arguments and flags, which name it as typed: ["split", "chapter-03",
 // "--at", "2"] is story split chapter-03 --at 2.
 export function withUndo(root, words, run) {
-  const command = safeCommandName(["story", ...words.filter((word) => word !== undefined).map((word) => shellWord(String(word).trim()))].join(" "));
+  const command = undoCommand(words);
   assertNoInterruptedChange(root, command);
   const undone = undoInterruptedChange(root);
   try {
@@ -42,6 +42,12 @@ export function withUndo(root, words, run) {
     }
     throw error;
   }
+}
+
+// The command as an undo log names it, from its arguments and flags as
+// typed (see withUndo).
+export function undoCommand(words) {
+  return safeCommandName(["story", ...words.filter((word) => word !== undefined).map((word) => shellWord(String(word).trim()))].join(" "));
 }
 
 // A flag and its value as withUndo names a command, or nothing when the

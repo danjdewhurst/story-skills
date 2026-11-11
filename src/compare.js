@@ -249,8 +249,15 @@ function normalise(text) {
   return String(text).replace(/\s+/g, " ").trim();
 }
 
+// How alike two paragraphs are, as mapLabels measures an edited one: the
+// share of words they have in common (Dice coefficient on word multisets),
+// from 0 to 1. Pass each paragraph's wordBag.
+export function paragraphSimilarity(left, right) {
+  return dice(left, right);
+}
+
 // The words story wordcount counts in `text`, lowercased, with counts.
-function wordBag(text) {
+export function wordBag(text) {
   const bag = new Map();
   for (const word of splitWords(text)) {
     const key = word.toLowerCase();

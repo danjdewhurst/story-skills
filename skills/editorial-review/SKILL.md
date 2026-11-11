@@ -175,9 +175,13 @@ Follow `references/editor-rounds.md`:
    format.
 2. When edits come back, list them with `story notes <returned.docx>
    --path .`: each comment, reply, and tracked change on its current
-   paragraph label. The author accepts or rejects the changes in Word; the
-   agent transfers the accepted text into the chapter markdown, chapter
-   by chapter, never by a bulk script. Queries that change events go to
+   paragraph label. The author accepts or rejects the changes in Word.
+   Then preview the accepted text with
+   `story apply <returned.docx> --path . --ref sent-to-editor-1 --dry-run`,
+   show the author what it would change, and with approval run it without
+   `--dry-run`, then the maintenance block (see Taking edits back in
+   `references/editor-rounds.md`). Never convert the whole DOCX back over
+   the project. Queries that change events go to
    `revision-continuity`; editorial letters go through `feedback-triage`.
 3. Show how deep the round went: `story compare . --ref sent-to-editor-1`.
 

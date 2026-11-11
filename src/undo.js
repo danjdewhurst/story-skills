@@ -23,7 +23,7 @@ import {
 import { lockedByAnother } from "./lock.js";
 import { projectError, refusedError } from "./exit-codes.js";
 
-// Putting back a split, merge, move, rename, or remove that stopped part
+// Putting back a split, merge, move, rename, remove, or apply that stopped part
 // way, from the undo log it leaves (see withUndoLog in files.js). The same
 // command run again does it before it starts, and so does `story doctor
 // --fix`; every other command that changes the project is refused while

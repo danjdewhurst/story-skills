@@ -56,7 +56,7 @@ const CHANGE_ELEMENTS = new Map([
 ]);
 const FORMAT_CHANGES = new Set(["w:rPrChange", "w:pPrChange"]);
 // Text one reviewer inserted and another deleted is in neither view.
-const TRANSIENT = "transient";
+export const TRANSIENT = "transient";
 
 // The notes in the Word document at `file`, placed on the paragraphs of the
 // project at `root`. Returns { ok, errors, warnings, file, comments,
@@ -66,12 +66,25 @@ export function projectNotes(root, file, { cwd = process.cwd() } = {}) {
   if (typeof file !== "string" || file.trim() === "") {
     throw usageError("Usage: story notes <file.docx> [--path <project>]");
   }
+  const { review, shown, project } = readReturnedFile(file, { cwd, command: "notes", root });
+  const book = htmlBook(manuscriptParts(project, "place notes", { includePending: true, warnLeftOut: false }));
+  return placeNotes(review, { labels: paragraphLabels(book), parts: book.parts }, shown);
+}
+
+// The editor's returned Word file for `story <command>` (notes, apply), as
+// { review, shown, project }: what readReview reads from it, the file as
+// the user would name it, relative to where they are, or its full path when
+// it is outside that folder, and the project at `root`, scanned. A name
+// that does not end in .docx is refused before the project is read, and the
+// project must parse. Every problem with the file is a usage error. The
+// file is only read.
+export function readReturnedFile(file, { cwd, command, root }) {
   const filePath = path.resolve(cwd, file);
   if (!/\.docx$/i.test(filePath)) {
-    throw usageError(`Cannot read ${printable(file)}: story notes reads a Word document, a file whose name ends in .docx`);
+    throw usageError(`Cannot read ${printable(file)}: story ${command} reads a Word document, a file whose name ends in .docx`);
   }
   const project = scanProject(root);
-  assertProjectParses(project, "notes");
+  assertProjectParses(project, command);
   // A file that is not there, or not a plain file, is a mistake on the
   // command line, as a missing import source is.
   let stats;
@@ -93,12 +106,9 @@ export function projectNotes(root, file, { cwd = process.cwd() } = {}) {
     // Only a DocxError says the file is bad; anything else is a bug.
     throw error instanceof DocxError ? usageError(`Cannot read ${printable(file)}: ${error.message}`) : error;
   }
-  const book = htmlBook(manuscriptParts(project, "place notes", { includePending: true, warnLeftOut: false }));
-  // The file as the user would name it: relative to where they are, or
-  // its full path when it is outside that folder.
   const relative = path.relative(cwd, filePath);
   const shown = printable(relative === "" || relative.startsWith("..") || path.isAbsolute(relative) ? filePath : portablePath(relative));
-  return placeNotes(review, { labels: paragraphLabels(book), parts: book.parts }, shown);
+  return { review, shown, project };
 }
 
 // The comments and tracked changes in a .docx, as { paragraphs, quoted,
@@ -121,7 +131,15 @@ export function readReview(bytes) {
   if (extendedXml !== null) {
     threadComments(comments, extendedXml);
   }
-  return { ...documentParagraphs(document, styles, comments), comments };
+  return { ...documentParagraphs(document, styles, comments), comments, styles };
+}
+
+// The paragraphs of a document.xml and its styles.xml given as text, as
+// readReview reads them, with no comments: for a build story apply makes in
+// memory to compare a returned file with.
+export function documentReview(documentXml, stylesXml) {
+  const styles = readStyles(stylesXml);
+  return { ...documentParagraphs(documentXml, styles, new Map()), comments: new Map(), styles };
 }
 
 // Whether a run is hidden: its own `w:vanish`, else its character style's.
@@ -267,19 +285,28 @@ function threadComments(comments, xml) {
   }
 }
 
-// The paragraphs of document.xml, as { paragraphs, quoted, styled }. Each
-// paragraph is { segments, mark, changes, comments, level }: its text as
-// segments { text, state } (state "kept", "inserted", "deleted", or
-// "transient"), whether its break was "kept", "inserted", or "deleted",
-// each tracked change in it { kind, author, date }, the ids of the
-// comments whose range starts in it, and its heading level by its style
+// The paragraphs of document.xml, as { paragraphs, quoted, styled,
+// leftOut }. Each paragraph is { segments, mark, changes, comments, level }:
+// its text as segments { text, state } (state "kept", "inserted",
+// "deleted", or "transient"), whether its break was "kept", "inserted", or
+// "deleted", each tracked change in it { kind, author, date }, the ids of
+// the comments whose range starts in it, and its heading level by its style
 // (0 for body text). `quoted` maps each comment id to the segments its
 // range covers, up to MAX_QUOTED_CHARACTERS characters.
+// For story apply, which writes the text back, a segment also carries its
+// run's own italic, bold, and character style (null when the run does not
+// set them) and `lineBreak` for a line break; a paragraph carries `hidden`
+// when some of its text is hidden, `table` when it is in a table cell, and
+// `pageBreak` when a page break opens it, as a Shunn chapter heading does;
+// and `leftOut` names what the text leaves out: "images", "text-boxes",
+// "footnotes", and "tables".
 function documentParagraphs(xml, styles, comments) {
   const paragraphs = [];
   const quoted = new Map();
   const open = new Map();
   const changes = [];
+  const leftOut = new Set();
+  let tables = 0;
   let paragraph = null;
   let run = null;
   let inParagraphProperties = false;
@@ -305,12 +332,16 @@ function documentParagraphs(xml, styles, comments) {
       }
     }
   };
-  const add = (text) => {
-    if (paragraph === null || run === null || runHidden(run, styles)) {
+  const add = (text, lineBreak = false) => {
+    const hidden = paragraph !== null && run !== null && runHidden(run, styles);
+    if (hidden) {
+      paragraph.hidden ||= text.trim() !== "";
+    }
+    if (paragraph === null || run === null || hidden) {
       return;
     }
     const segmentState = state();
-    paragraph.segments.push({ text, state: segmentState });
+    paragraph.segments.push({ text, state: segmentState, italic: run.italic, bold: run.bold, style: run.style, ...(lineBreak ? { lineBreak } : {}) });
     collect(text, segmentState);
   };
   const record = (kind, attributes) => {
@@ -320,6 +351,10 @@ function documentParagraphs(xml, styles, comments) {
   for (const token of xmlTokens(xml)) {
     const { type, name, attributes } = token;
     if (skip !== null) {
+      // A text box sits inside the drawing or picture that holds it.
+      if (name === "w:txbxContent") {
+        leftOut.add("text-boxes");
+      }
       skip = skipped(skip, token);
       continue;
     }
@@ -331,7 +366,20 @@ function documentParagraphs(xml, styles, comments) {
       continue;
     }
     if (type === "start" && SKIPPED.has(name)) {
+      const kind = LEFT_OUT.get(name);
+      if (kind !== undefined) {
+        leftOut.add(kind);
+      }
       skip = { name, depth: 1 };
+      continue;
+    }
+    if (name === "w:tbl" && type !== "empty") {
+      tables += type === "start" ? 1 : -1;
+      leftOut.add("tables");
+      continue;
+    }
+    if ((name === "w:footnoteReference" || name === "w:endnoteReference") && type !== "end") {
+      leftOut.add("footnotes");
       continue;
     }
     if (type === "text") {
@@ -378,7 +426,7 @@ function documentParagraphs(xml, styles, comments) {
         if (paragraphs.length >= MAX_NOTES_PARAGRAPHS) {
           throw new DocxError(`it has more than ${MAX_NOTES_PARAGRAPHS} paragraphs, far more than a book has`);
         }
-        paragraph = { segments: [], mark: "kept", changes: [], comments: pending, style: null, outline: null };
+        paragraph = { segments: [], mark: "kept", changes: [], comments: pending, style: null, outline: null, hidden: false, table: tables > 0, pageBreak: false };
         pending = [];
       }
       if (type !== "start" && paragraph !== null) {
@@ -409,7 +457,7 @@ function documentParagraphs(xml, styles, comments) {
       continue;
     }
     if (name === "w:r") {
-      run = type === "start" ? { hidden: null, style: null } : null;
+      run = type === "start" ? { hidden: null, style: null, italic: null, bold: null } : null;
       continue;
     }
     if (run === null) {
@@ -420,13 +468,21 @@ function documentParagraphs(xml, styles, comments) {
         run.hidden = isOn(attributes);
       } else if (type !== "end" && name === "w:rStyle") {
         run.style = attributes["w:val"] ?? null;
+      } else if (type !== "end" && (name === "w:i" || name === "w:b")) {
+        run[name === "w:i" ? "italic" : "bold"] = isOn(attributes);
       }
       continue;
     }
     if (name === "w:t" || name === "w:delText") {
       inText = type === "start";
     } else if (type !== "end") {
-      if (name === "w:tab" || name === "w:ptab" || name === "w:br" || name === "w:cr") {
+      if ((name === "w:br" || name === "w:cr") && (attributes["w:type"] === "page" || attributes["w:type"] === "column")) {
+        // A page break before any text opens the paragraph on a new page.
+        paragraph.pageBreak ||= paragraph.segments.length === 0;
+        add(" ");
+      } else if (name === "w:br" || name === "w:cr") {
+        add(" ", true);
+      } else if (name === "w:tab" || name === "w:ptab") {
         add(" ");
       } else if (name === "w:noBreakHyphen") {
         add("‑");
@@ -434,8 +490,11 @@ function documentParagraphs(xml, styles, comments) {
     }
   }
 
-  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0) };
+  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0), leftOut };
 }
+
+// What a skipped element holds that the text leaves out.
+const LEFT_OUT = new Map([["w:drawing", "images"], ["w:pict", "images"], ["w:object", "images"], ["w:txbxContent", "text-boxes"]]);
 
 // One element skipped with its content: `skip` is { name, depth }, and the
 // result is null once its end is passed.
@@ -458,7 +517,7 @@ function headingLevel(paragraph, styles) {
 // as lists of paragraph indexes. Joined by inserted breaks, they are the
 // paragraphs the editor was sent; joined by any tracked break, they are
 // the units a change is shown in.
-function groups(paragraphs, joins) {
+export function groups(paragraphs, joins) {
   const result = [];
   let members = [];
   paragraphs.forEach((paragraph, index) => {
@@ -496,7 +555,7 @@ function textOf(paragraphs, members, view) {
 // are one space, and C1 controls and Unicode line separators, which some
 // readers take as line breaks, are spaces too. A no-break space stays, so
 // a change to one shows.
-function displayText(text) {
+export function displayText(text) {
   return String(text).replace(/[\u0080-\u009f\u2028\u2029]/g, " ").replace(/[ \t\r\n]+/g, " ").trim();
 }
 
@@ -725,7 +784,7 @@ function threadOf(comment, replies) {
   return thread;
 }
 
-function clip(text) {
+export function clip(text) {
   const characters = [...text];
   return characters.length > MAX_QUOTED_CHARACTERS ? `${characters.slice(0, MAX_QUOTED_CHARACTERS).join("").trimEnd()}…` : text;
 }
@@ -802,14 +861,14 @@ function day(date) {
 // Each line of the editor's text after a "> " marker: the first after
 // `label`, the rest indented under it, so a line of the comment cannot
 // pass for a reply.
-function quotedLines(label, text) {
+export function quotedLines(label, text) {
   const lines = String(text).split("\n");
   return lines.map((line, index) => (index === 0 ? `> ${label}: ${line}` : `>   ${line}`));
 }
 
 // Editor text in a heading line: one line, with markdown's markup
 // characters escaped, so a name cannot make the line bold or a link.
-function inline(text) {
+export function inline(text) {
   return displayText(String(text).replace(/[\u0000-\u001f\u007f]/g, " ")).replace(/[\\`*_[\]<>]/g, "\\$&");
 }
 
@@ -869,6 +928,6 @@ function contextEnd(text, index) {
   return text.length;
 }
 
-function count(value, singular, plural = `${singular}s`) {
+export function count(value, singular, plural = `${singular}s`) {
   return `${value} ${value === 1 ? singular : plural}`;
 }

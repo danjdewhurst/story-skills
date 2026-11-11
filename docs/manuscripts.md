@@ -824,11 +824,27 @@ The title and its credits open the first page, and the text after them follows o
 
 For a `language` other than `en`, the document declares it, so Word spell-checks and lays out the text in that language, and picks East Asian or complex-script fonts for the book's script. A right-to-left book has every paragraph and run marked right to left. See [Typesetting other scripts](#typesetting-other-scripts).
 
-When an editor sends the DOCX back with comments and tracked changes, [`story notes`](cli-reference.md#notes) lists each comment, reply, and change, and places it on the paragraph's current review-copy label, such as `ch03-p12`. It still finds the paragraph after you edit the chapter. It reads the file only, so you still accept or reject the changes in Word and copy the accepted text into the chapter files.
+#### The editor's round trip
+
+A round with an editor in Word goes out as a build and comes back in four steps:
+
+1. **Send.** Tag the commit (or save a [snapshot](cli-reference.md#snapshot)) so you know which version the editor got, then build the file: `story build . --format docx`, or `--format docx --shunn` for manuscript format.
+2. **Read.** When the file comes back, [`story notes`](cli-reference.md#notes) lists each comment, reply, and tracked change on the paragraph's current review-copy label, such as `ch03-p12`. It still finds the paragraph after you edit the chapter, and it only reads the file.
+3. **Decide.** Accept or reject each tracked change in Word, and save the file.
+4. **Apply.** [`story apply`](cli-reference.md#apply) writes the document's text back into the chapters' prose, paragraph by paragraph. Pass the version sent with `--ref` or `--snapshot`, so an edit you made after sending is kept and a clash is reported, and run it with `--dry-run` first to see what it would change.
 
 ```shell
+git tag sent-to-editor-1
+story build . --format docx
 story notes ~/Downloads/the-gull-rock-light-jane.docx
+story apply ~/Downloads/the-gull-rock-light-jane.docx --ref sent-to-editor-1 --dry-run
+story apply ~/Downloads/the-gull-rock-light-jane.docx --ref sent-to-editor-1
+story reindex .
+story wordcount . --write
+story check .
 ```
+
+`apply` changes only the paragraphs whose text changed, and leaves every other byte of the chapter files as it was: frontmatter, headings, the outline, comments, and the markdown of each unchanged paragraph. It writes no heading, matter page, or scene file, and it never writes a paragraph whose markdown holds a link, code, or a comment; it lists those for you to make by hand. It saves the project as snapshot `before-apply-<n>` before it writes, so `story snapshot --restore before-apply-1` puts it back. Do not use `story import --force` for a returned file: it replaces the chapter files whole and loses their frontmatter.
 
 ### Shunn standard manuscript format
 

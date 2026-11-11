@@ -308,35 +308,60 @@ export function htmlBook(manuscript, ownIndent = false) {
 }
 
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
+  writeZip(outFile, docxEntries(manuscript), writeOptions);
+}
+
+// The parts of the Word build, as writeZip takes them. `trace`, when given,
+// gets one entry per paragraph of the document, in order, saying what the
+// build put there (see traceEntry), so story apply can tell a chapter's
+// paragraphs from the title page and the matter.
+export function docxEntries(manuscript, trace = null) {
   const meta = manuscript.meta ?? publishingMeta({});
   const script = docxScript(meta);
+  const note = (entry) => trace?.push(entry);
   // The title block: the title, then the book's credits as the HTML and
   // print title pages set them, the authors and then "Edited by" the
   // editors, in the book's language. A story's own author stays in its
   // byline.
-  const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...creditLines(meta).map((line) => paragraphXml(script, line, "Credit"))];
-  const pushSection = (heading, body, byline = "") => {
+  const credits = creditLines(meta);
+  const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
+  note(traceEntry("title", null));
+  credits.forEach(() => note(traceEntry("credit", null)));
+  const pushSection = (heading, body, byline, part) => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
+      note(traceEntry("heading", part));
     }
     if (byline !== "") {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
+      note(traceEntry("byline", part));
     }
     // Normal indents every first line (see docxStyles).
-    for (const paragraph of markdownParagraphs(body, true)) {
+    markdownParagraphs(body, true).forEach((paragraph, index) => {
       bodyParts.push(paragraph.sceneBreak
         ? paragraphXml(script, "* * *", "SceneBreak")
         : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
-    }
+      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+    });
   };
-  const pushMatter = (entry) => pushSection(entry.heading ? entry.title : null, entry.body);
-  manuscript.front.forEach(pushMatter);
-  for (const chapter of manuscript.chapters) {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "");
-  }
-  manuscript.back.forEach(pushMatter);
+  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
+  manuscript.front.forEach(pushMatter("front"));
+  manuscript.chapters.forEach((chapter, index) => {
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index });
+  });
+  manuscript.back.forEach(pushMatter("back"));
+  return docxPackageEntries(script, bodyParts.join(""));
+}
 
-  writeZip(outFile, docxPackageEntries(script, bodyParts.join("")), writeOptions);
+// What one paragraph of a Word build is: `kind` is "title", "credit",
+// "heading", "byline", "paragraph", "scene-break", or, in a Shunn build,
+// "title-page", "blank", or "separator" (the # between a short story's
+// sections); `part` is null outside a chapter or matter page, else
+// { placement: "body", chapter } with the chapter's index in the
+// manuscript, or { placement: "front" | "back", id } for a matter page; and
+// `index` is a paragraph's place in the part's markdownParagraphs.
+function traceEntry(kind, part, index = null) {
+  return { kind, part, index };
 }
 
 // Word's settings for the book's language and script, as XML fragments:
@@ -647,38 +672,52 @@ function shunnTitlePageXml(script, meta) {
 // section or scene break is a centred `#`, as Shunn's short-story format
 // sets it.
 export function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName = DEFAULT_PAPER) {
+  writeZip(outFile, shunnDocxEntries(manuscript, meta, paperName), writeOptions);
+}
+
+// The parts of the Shunn Word build, as writeZip takes them, with `trace`
+// as docxEntries fills it.
+export function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = null) {
   const script = docxScript(manuscript.meta);
+  const note = (entry) => trace?.push(entry);
   const paragraphs = [...shunnTitlePageXml(script, meta)];
+  paragraphs.forEach(() => note(traceEntry("title-page", null)));
   const sceneBreak = meta.shortForm ? "#" : "* * *";
   const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
   if (meta.shortForm) {
     paragraphs.push(shunnParagraphXml(script, "", true));
+    note(traceEntry("blank", null));
   }
   let sections = 0;
-  for (const chapter of manuscript.chapters) {
+  manuscript.chapters.forEach((chapter, chapterIndex) => {
+    const part = { placement: "body", chapter: chapterIndex };
     // A Shunn manuscript indents every first line half an inch.
     const body = markdownParagraphs(chapter.body, true);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+      note(traceEntry("heading", part));
       const byline = shunnChapterByline(chapter, meta);
       if (byline !== "") {
         paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, byline), true));
+        note(traceEntry("byline", part));
       }
     } else if (body.length === 0) {
-      continue;
+      return;
     } else if (sections++ > 0) {
       paragraphs.push(hash);
+      note(traceEntry("separator", null));
     }
-    for (const paragraph of body) {
+    body.forEach((paragraph, index) => {
       paragraphs.push(paragraph.sceneBreak
         ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true)
         : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
-    }
-  }
+      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+    });
+  });
 
   const paper = shunnPaper(paperName);
   const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
-  writeZip(outFile, docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta)), writeOptions);
+  return docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta));
 }
 
 export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
@@ -1103,6 +1142,17 @@ function markdownParagraphs(markdown, ownIndent = false) {
   }
   flush();
   return paragraphs;
+}
+
+// A chapter or matter body as the Word builds set it: one entry per
+// paragraph markdownParagraphs reads (with first lines indented by the
+// build), { sceneBreak: true } or { quote, code, runs }, where `code`
+// marks a paragraph from a code fence and `runs` are inlineRuns' { text,
+// strong, em } with LINE_BREAK for each hard break. story apply reads a
+// chapter's source through this to know what each of its paragraphs
+// prints.
+export function wordParagraphs(body) {
+  return markdownParagraphs(body, true).map((paragraph) => (paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) }));
 }
 
 // Every entry is stamped 1980-01-01 00:00, the earliest valid MS-DOS date

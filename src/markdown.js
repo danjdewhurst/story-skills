@@ -880,6 +880,12 @@ export function scanComments(text, replacement = "") {
   return { text: result + source.slice(position), unclosed };
 }
 
+// The HTML comments in `text`, as { start, end } offsets, as chapterProse
+// finds and removes them.
+export function commentRanges(text) {
+  return scanMarkup(String(text)).ranges.filter((range) => range.kind === "comment").map(({ start, end }) => ({ start, end }));
+}
+
 // The text with every HTML comment and closed code fence blanked to spaces,
 // keeping line breaks, so headings and dividers can be found by offset
 // without matching one written inside a comment or a fence.

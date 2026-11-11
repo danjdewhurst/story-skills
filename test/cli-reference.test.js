@@ -202,6 +202,8 @@ function runArgs(clean) {
   }
   return {
     notes: [returned],
+    // apply writes, so its report is checked with --dry-run.
+    "apply <file.docx>": [returned, "--dry-run"],
     knowledge: ["kael-voss", "--at", "chapter-01"],
     context: ["chapter-01"],
     compare: ["--against", clean],
