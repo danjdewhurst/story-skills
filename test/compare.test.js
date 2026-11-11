@@ -329,3 +329,52 @@ describe("compare reads a relative cli-defaults against from the project folder 
     expect(commandLine.out).toContain("Words: 3 then, 6 now (+3)");
   });
 });
+
+// A project from another author can carry repository files: a folder laid out
+// as a bare repository, or its own .git directory. Their config can name a
+// promisor remote whose upload-pack command git would start to fetch a
+// missing object. compare and similarity must never start it.
+describe.skipIf(process.platform === "win32")("git refs in a project from another author", () => {
+  const MISSING = "1111111111111111111111111111111111111111";
+
+  function repositoryFiles(dir, marker, bare) {
+    fs.mkdirSync(path.join(dir, "objects"), { recursive: true });
+    fs.mkdirSync(path.join(dir, "refs", "heads"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "objects", "keep"), "keep\n");
+    fs.writeFileSync(path.join(dir, "HEAD"), "ref: refs/heads/main\n");
+    fs.writeFileSync(path.join(dir, "refs", "heads", "main"), `${MISSING}\n`);
+    fs.writeFileSync(
+      path.join(dir, "config"),
+      `[core]\n\trepositoryformatversion = 1\n\tbare = ${bare}\n[extensions]\n\tpartialClone = origin\n[remote "origin"]\n\turl = ${path.join(path.dirname(marker), "nowhere")}\n\tpromisor = true\n\tuploadpack = touch ${marker}; false\n`
+    );
+  }
+
+  test("a project folder laid out as a bare repository is refused, and no program starts", () => {
+    const parent = makeTempDir();
+    const root = path.join(parent, "book");
+    createStoryProject({ cwd: parent, title: "Bare Story", dir: root });
+    const marker = path.join(makeTempDir(), "ran");
+    repositoryFiles(root, marker, true);
+    git(parent, "init", "-q");
+    git(parent, "add", "-A");
+    git(parent, "commit", "-qm", "fixture");
+
+    const compared = invoke(parent, ["compare", root, "--ref", "main"]);
+    expect(compared.code).not.toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
+    const similar = invoke(parent, ["similarity", root, "--against", "main"]);
+    expect(similar.code).not.toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  test("a project folder with its own .git directory fetches nothing, and no program starts", () => {
+    const parent = makeTempDir();
+    const root = path.join(parent, "book");
+    createStoryProject({ cwd: parent, title: "Shipped Story", dir: root });
+    const marker = path.join(makeTempDir(), "ran");
+    repositoryFiles(path.join(root, ".git"), marker, false);
+
+    expect(invoke(parent, ["compare", root, "--ref", "main"]).code).not.toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+});
