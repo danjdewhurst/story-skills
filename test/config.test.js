@@ -381,6 +381,39 @@ describe("cli-defaults", () => {
     expect(compare.err).toEndWith("(story.md cli-defaults set --against drafts/v1)\n");
   });
 
+  test("a default --out must stay inside the project, so a project from another author cannot replace a file outside it", () => {
+    const { root } = project();
+    writeChapter(root, 1, "status: draft", "Words here.");
+    const outside = path.join(makeTempDir(), "victim.txt");
+    fs.writeFileSync(outside, "keep me\n");
+    const commands = ["export", "build", "diagram", "synopsis"];
+    configure(root, `cli-defaults:\n${commands.map((name) => `  - command: ${name}\n    out: ${JSON.stringify(outside)}`).join("\n")}`);
+    for (const name of commands) {
+      const result = invoke(root, [name]);
+      expect(result.code).toBe(3);
+      expect(result.err).toContain(`cli-defaults[${commands.indexOf(name)}] out must be a path inside the project`);
+    }
+    expect(fs.readFileSync(outside, "utf8")).toBe("keep me\n");
+    const validate = invoke(root, ["validate"]);
+    expect(validate.code).toBe(1);
+    expect(validate.out + validate.err).toContain("out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line");
+
+    // Windows absolute and drive-relative paths are refused on every system.
+    for (const out of ["C:\\Users\\x\\book.md", "C:book.md", "\\\\server\\share\\book.md"]) {
+      expect(parseCliConfig({ "cli-defaults": [{ command: "export", out }] }).errors).toEqual(["story.md cli-defaults[0] out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line"]);
+    }
+    // A relative default and an absolute --out typed on the command line still work.
+    expect(parseCliConfig({ "cli-defaults": [{ command: "export", out: "dist/book.md" }] }).errors).toEqual([]);
+    const fresh = project();
+    writeChapter(fresh.root, 1, "status: draft", "Words here.");
+    configure(fresh.root, "cli-defaults:\n  - command: export\n    out: dist/default.md");
+    expect(invoke(fresh.cwd, ["export", fresh.root]).code).toBe(0);
+    expect(fs.existsSync(path.join(fresh.root, "dist", "default.md"))).toBe(true);
+    const typed = path.join(makeTempDir(), "typed.md");
+    expect(invoke(fresh.cwd, ["export", fresh.root, "--out", typed]).code).toBe(0);
+    expect(fs.existsSync(typed)).toBe(true);
+  });
+
   // Root ignores folder permissions, and Windows has no read-only folders.
   test.skipIf(process.platform === "win32" || process.getuid?.() === 0)("a default --out in a folder story cannot write to says so (#566)", () => {
     const { root, cwd } = project();
