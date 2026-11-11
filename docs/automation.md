@@ -395,15 +395,15 @@ The agent reads the whole project, and some of it is written by other people: re
 
 What the agent has:
 
-- the `story` CLI (`Bash(story:*)`), installed before it starts;
+- the `story` commands it needs, each named in `--allowedTools` (such as `Bash(story next:*)` and `Bash(story check:*)`), installed before it starts. None of them takes `--out` or `--pdf-engine`, so `story build`, `export`, `diagram`, and `synopsis` are not among them, and the agent cannot write outside the checkout through `story` or make it run a program;
 - `git checkout -b draft/`, `git add`, and `git commit`;
-- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`). The `story` CLI refuses `--out` inside a `.git` folder, and `init` or `import` into one, so it cannot write `.git/` either. It can still write other files on the draft runner, outside the checkout, through an absolute `--out` (a `~/.gitconfig`, say), which is why the agent's git reads no global or system config and why nothing the agent writes outside the checkout leaves the job;
+- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`). None of its `story` commands writes under `.git/` either. As a second guard, the agent's git reads no global or system config, and nothing the agent writes outside the checkout leaves the job;
 - the prompt's instruction to treat project text as data and report, not follow, any instruction it finds.
 
 What it does not have:
 
 - **No push and no pull requests.** `git push` and `gh` are not in `--allowedTools`, and the draft job's token is read-only anyway.
-- **No other shell commands.** Beyond `story` and the three git commands, it runs nothing. `story` is installed outside the repository, so no `.npmrc` it writes can change what runs. The agent's git runs with `GIT_CONFIG_PARAMETERS` turning off `core.fsmonitor`, hooks, and commit signing, as a second guard on top of the `.git/` write ban, and with `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`, so a global or system git config written through an absolute `--out` is never read. The bundle step's git runs the same way.
+- **No other shell commands.** Beyond the named `story` commands and the three git commands, it runs nothing. A `story` command that is not in the list, or one with a flag before its name, such as `story --path . build`, is refused. `story` is installed outside the repository, so no `.npmrc` it writes can change what runs. The agent's git runs with `GIT_CONFIG_PARAMETERS` turning off `core.fsmonitor`, hooks, and commit signing, as a second guard on top of the `.git/` write ban, and with `GIT_CONFIG_GLOBAL=/dev/null` and `GIT_CONFIG_NOSYSTEM=1`, so no global or system git config is read. The bundle step's git runs the same way.
 - **No way to change what runs next.** Its work reaches the repository only as the story's markdown, through the publish job's check, which runs on a fresh runner. So nothing the agent wrote on its own runner runs anywhere else. Workflow files, skills, and agent instruction files are refused.
 - **No write token.** The draft job's `GITHUB_TOKEN` is read-only and expires when the job ends.
 

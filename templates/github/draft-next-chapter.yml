@@ -252,10 +252,13 @@ jobs:
                "Maintenance: <what you fixed>"), and its body a summary of the
                beats, the arcs advanced, and any promises planted or paid off.
                The pull request quotes it.
+          # Each story command is named: none of them takes --out or
+          # --pdf-engine, so the agent cannot write outside the checkout or
+          # run a program, such as a file it committed as executable.
           claude_args: |
             --max-turns ${{ env.MAX_TURNS }}
             --max-budget-usd ${{ env.MAX_BUDGET_USD }}
-            --allowedTools "Bash(story:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(story next:*),Bash(story context:*),Bash(story reindex:*),Bash(story wordcount:*),Bash(story check:*),Bash(story validate:*),Bash(story links:*),Bash(story continuity:*),Bash(story knowledge:*),Bash(story timeline:*),Bash(story progress:*),Bash(story pacing:*),Bash(story clues:*),Bash(story list:*),Bash(story mentions:*),Bash(story names:*),Bash(story voices:*),Bash(story prose:*),Bash(story report:*),Bash(story doctor:*),Bash(story add:*),Bash(story rename:*),Bash(story move:*),Bash(story remove:*),Bash(story split:*),Bash(story merge:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
             --disallowedTools "Edit(.git/**),Write(.git/**)"
 
       - name: Explain a stopped agent
