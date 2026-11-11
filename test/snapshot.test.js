@@ -162,6 +162,10 @@ describe("story snapshot", () => {
       expect(fs.readdirSync(tmp)).toEqual([]);
       fs.rmSync(folder);
     }
+    // A real .snapshots without this snapshot previews a new one.
+    invoke(cwd, ["snapshot", "other", "--path", root]);
+    expect(invoke(cwd, ["snapshot", "one", "--dry-run", "--path", root]).code).toBe(0);
+    expect(fs.readdirSync(folder).sort()).toEqual([".gitignore", "other"]);
   });
 
   test("--list shows every snapshot, oldest first, as text and JSON", () => {
