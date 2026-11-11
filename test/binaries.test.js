@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { TARGETS, archiveName, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeTest, verifyZip } from "../scripts/build-binaries.js";
+import { COMPILE_SAFETY_FLAGS, TARGETS, archiveName, buildTarget, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeTest, verifyZip } from "../scripts/build-binaries.js";
 import { formula, parseChecksums } from "../scripts/homebrew-formula.js";
 import { writeZip } from "../src/packaging.js";
 import { VERSION } from "../src/version.js";
@@ -57,6 +57,36 @@ describe("standalone binaries (#296)", () => {
     let calls = 0;
     const failingValidate = () => (calls++ === 0 ? { status: 0, stdout: `${VERSION}\n` } : { status: 1, stdout: "", stderr: "boom" });
     expect(() => smokeTest("story", VERSION, failingValidate)).toThrow("validate");
+  });
+
+  test("the binary is compiled without bunfig.toml or .env autoload, and the smoke test checks it", () => {
+    const calls = [];
+    const spawn = (command, args, options) => {
+      calls.push({ command, args });
+      if (command === "tar") {
+        fs.writeFileSync(path.join(options.cwd, args[1].split(path.sep).pop()), "");
+        fs.writeFileSync(args[1], "archive");
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const out = makeTempDir();
+    buildTarget(TARGETS.find((target) => target.name === "linux-x64"), VERSION, out, { spawn });
+    const compile = calls.find((call) => call.command === "bun");
+    expect(COMPILE_SAFETY_FLAGS).toEqual(["--no-compile-autoload-bunfig", "--no-compile-autoload-dotenv"]);
+    for (const flag of COMPILE_SAFETY_FLAGS) {
+      expect(compile.args).toContain(flag);
+    }
+
+    // A binary that runs the working folder's preload fails the smoke test.
+    const preloading = (command, args, options) => {
+      if (options.cwd && fs.existsSync(path.join(options.cwd, "bunfig.toml"))) {
+        const script = fs.readFileSync(path.join(options.cwd, "preload.js"), "utf8");
+        const marker = JSON.parse(script.match(/writeFileSync\((".*?"),/)[1]);
+        fs.writeFileSync(marker, "ran");
+      }
+      return { status: 0, stdout: `${VERSION}\n`, stderr: "" };
+    };
+    expect(() => smokeTest("story", VERSION, preloading)).toThrow("ran the preload script");
   });
 
   test("the Windows zip is read back and must unpack to the executable (#589)", () => {

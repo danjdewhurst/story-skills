@@ -118,8 +118,16 @@ function run(command, args, cwd, spawn = spawnSync) {
   }
 }
 
+// A compiled Bun executable reads bunfig.toml and .env from the folder it
+// runs in unless told not to. The docs recommend the binary for story
+// projects you did not write, so a project's bunfig.toml preload must not
+// run and its .env must not reach the process.
+export const COMPILE_SAFETY_FLAGS = ["--no-compile-autoload-bunfig", "--no-compile-autoload-dotenv"];
+
 // Runs a compiled executable the way a user would: it must report the
-// package version and validate an example project.
+// package version and validate an example project. It then runs the
+// executable in a folder whose bunfig.toml names a preload script, which
+// must not run.
 export function smokeTest(executable, version, spawn = spawnSync) {
   const versionRun = spawn(executable, ["--version"], { encoding: "utf8" });
   if (versionRun.error || versionRun.status !== 0 || versionRun.stdout.trim() !== version) {
@@ -129,6 +137,21 @@ export function smokeTest(executable, version, spawn = spawnSync) {
   const validateRun = spawn(executable, ["validate", example], { encoding: "utf8" });
   if (validateRun.error || validateRun.status !== 0) {
     throw new Error(`${executable} validate ${example} failed (exit ${validateRun.status}): ${validateRun.stderr || validateRun.error?.message}`);
+  }
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "story-autoload-"));
+  try {
+    const marker = path.join(folder, "preload-ran");
+    fs.writeFileSync(path.join(folder, "bunfig.toml"), 'preload = ["./preload.js"]\n');
+    fs.writeFileSync(path.join(folder, "preload.js"), `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "ran");\n`);
+    const autoloadRun = spawn(executable, ["--version"], { cwd: folder, encoding: "utf8" });
+    if (autoloadRun.error || autoloadRun.status !== 0) {
+      throw new Error(`${executable} --version in a folder with a bunfig.toml failed (exit ${autoloadRun.status}): ${autoloadRun.stderr || autoloadRun.error?.message}`);
+    }
+    if (fs.existsSync(marker)) {
+      throw new Error(`${executable} ran the preload script that bunfig.toml in its working folder names`);
+    }
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
   }
 }
 
@@ -153,7 +176,7 @@ export function buildTarget(target, version, out, { smoke = false, spawn = spawn
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `story-binary-${target.name}-`));
   try {
     const executable = executableName(target);
-    run("bun", ["build", "./bin/story.js", "--compile", `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot, spawn);
+    run("bun", ["build", "./bin/story.js", "--compile", ...COMPILE_SAFETY_FLAGS, `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot, spawn);
     if (smoke && target === hostTarget()) {
       smokeTest(path.join(work, executable), version, spawn);
       log(`Smoke-tested ${target.name}: --version ${version}, validate passed`);
