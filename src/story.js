@@ -375,9 +375,19 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
   }
 }
 
+// A project folder may hold repository files that another person wrote, so
+// git must not treat the folder as a bare repository, fetch a missing object
+// from a remote that repository config names (which can start a program), or
+// run a hook or file monitor.
+const GIT_SAFE_ARGS = ["-c", "safe.bareRepository=explicit", "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
+
+function gitEnvironment() {
+  return { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
+}
+
 // Blob contents for these hashes, read with one git cat-file process.
 function catBlobs(root, hashes) {
-  const output = execFileSync("git", ["-C", root, "cat-file", "--batch"], { input: `${hashes.join("\n")}\n`, stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
+  const output = execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, "cat-file", "--batch"], { input: `${hashes.join("\n")}\n`, env: gitEnvironment(), stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
   const contents = [];
   let cursor = 0;
   for (let index = 0; index < hashes.length; index += 1) {
@@ -422,7 +432,7 @@ function gitAtRef(root, ref, flag = "compare --ref") {
   if (UNSAFE_GIT_REF.test(ref)) {
     throw usageError(`Unsupported git ref: ${ref}`);
   }
-  const git = (args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const git = (args) => execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, ...args], { encoding: "utf8", env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   let prefix;
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();
