@@ -21618,6 +21618,10 @@ function parseDefaults(raw, errors) {
   }
   return defaults;
 }
+function isOutsidePath(value) {
+  const text = String(value).trim();
+  return path15.isAbsolute(text) || path15.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text);
+}
 function parseCommandDefaults(command, item, label, errors) {
   const accepted = command.options ?? [];
   const values = {};
@@ -21640,6 +21644,8 @@ function parseCommandDefaults(command, item, label, errors) {
       errors.push(`${label} sets ${key}, which belongs to one run: pass --${key} on the command line`);
     } else if (key === "pdf-engine" && !isPdfEngineName(value)) {
       errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
+    } else if (key === "out" && isOutsidePath(value)) {
+      errors.push(`${label} out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line`);
     } else if (key === "paper" && !SHUNN_PAPERS.has(String(value).trim().toLowerCase())) {
       errors.push(`${label} paper must be ${[...SHUNN_PAPERS.keys()].join(" or ")}`);
     } else if (option.value === undefined) {
@@ -31412,10 +31418,14 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
     fs25.rmSync(dir, { recursive: true, force: true });
   }
 }
+var GIT_SAFE_ARGS = ["-c", "safe.bareRepository=explicit", "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
+function gitEnvironment() {
+  return { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
+}
 function catBlobs(root, hashes) {
-  const output = execFileSync("git", ["-C", root, "cat-file", "--batch"], { input: `${hashes.join(`
+  const output = execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, "cat-file", "--batch"], { input: `${hashes.join(`
 `)}
-`, stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
+`, env: gitEnvironment(), stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
   const contents = [];
   let cursor = 0;
   for (let index = 0;index < hashes.length; index += 1) {
@@ -31450,7 +31460,7 @@ function gitAtRef(root, ref, flag = "compare --ref") {
   if (UNSAFE_GIT_REF.test(ref)) {
     throw usageError(`Unsupported git ref: ${ref}`);
   }
-  const git = (args) => execFileSync("git", ["-C", root, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const git = (args) => execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, ...args], { encoding: "utf8", env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   let prefix;
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();

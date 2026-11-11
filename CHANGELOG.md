@@ -53,6 +53,16 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - The README now points to Plothold, the paid hosted app built on Story Skills, just below the badges and links at the top. ([#877](https://github.com/danjdewhurst/story-skills/pull/877))
   - The note says that Plothold is paid, has a free trial, is made by the Story Skills maintainer, and stores your book on its servers.
 
+### Security
+
+- The standalone `story` binary no longer reads `bunfig.toml` or `.env` from the folder it runs in, so a project you did not write cannot run a preload script when you run it there.
+  - The release build compiles with `--no-compile-autoload-bunfig` and `--no-compile-autoload-dotenv`, and its smoke test fails if a working folder's `bunfig.toml` preload runs.
+- `story compare --ref` and `story similarity --against` no longer let a project's own repository files start a program through git.
+  - Git no longer treats a project folder laid out as a bare repository as one, and never fetches a missing object from a remote that the project's repository config names.
+  - Git also runs with no hooks and no file monitor, and never asks for a password.
+- A `cli-defaults` entry in `story.md` can no longer set an absolute `out`, so a project you clone cannot make `story export` or `story build` replace a file outside it.
+  - `story validate` reports such a default as `invalid-cli-config`, and other commands refuse to run until it is fixed. A relative default, and any path you type with `--out`, work as before.
+
 ## [0.24.1] - 2026-10-27
 
 ### Changed
