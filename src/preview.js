@@ -27,11 +27,11 @@ import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js"
 export function previewChanges(root, run) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
-  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
+  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot, scratch) => {
     fs.mkdirSync(path.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath(projectRoot), copyRoot, cover: coverOf(projectRoot) });
     if (!atRoot) {
-      copyLinkedBooks(projectRoot, mirror);
+      copyLinkedBooks(projectRoot, mirror, scratch);
     }
   });
 }
@@ -87,7 +87,7 @@ export function previewNewProject(root, run) {
 }
 
 // Runs `run(copyRoot)` in a scratch folder that stands in for the
-// filesystem root, after `prepare(copyRoot, mirror, atRoot)` copies into it
+// filesystem root, after `prepare(copyRoot, mirror, atRoot, scratch)` copies into it
 // what the command reads (and makes the folders above copyRoot), and
 // removes the folder afterwards.
 function inScratch(target, run, prepare) {
@@ -105,7 +105,7 @@ function inScratch(target, run, prepare) {
   // finding about a linked book names the real book too.
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
-    prepare(copyRoot, mirror, atRoot);
+    prepare(copyRoot, mirror, atRoot, scratch);
     if (!atRoot) {
       // The real path a scratch path mirrors; null for another drive's.
       const realOf = (file) => (isPathInside(from, file) ? to + file.slice(from.length) : null);
@@ -128,7 +128,7 @@ function inScratch(target, run, prepare) {
 // book, is it a sibling) answer as they do in the project. The copies are
 // scratch files, so no write reaches a linked book, and copying stops at
 // the series book limit, as `story series` does.
-function copyLinkedBooks(projectRoot, mirror) {
+function copyLinkedBooks(projectRoot, mirror, scratch) {
   const parent = path.dirname(projectRoot);
   const realParent = realPath(parent);
   // A real path in the parent folder is named through the parent as the
@@ -136,10 +136,18 @@ function copyLinkedBooks(projectRoot, mirror) {
   // copy shares the parent folder of the project's copy.
   const home = (real) => (isPathInside(realParent, real) ? path.join(parent, path.relative(realParent, real)) : real);
   const alias = (link, book) => {
-    if (link !== book && !fs.existsSync(mirror(link))) {
-      fs.mkdirSync(path.dirname(mirror(link)), { recursive: true });
-      fs.symlinkSync(mirror(book), mirror(link));
+    const copy = mirror(link);
+    // lstat, so a dangling link already there is not made a second time.
+    if (link === book || lstatIfExists(copy) !== null) {
+      return;
     }
+    // A symlink copied from a book can lead out of the scratch folder, so
+    // an alias is made only where its folder resolves inside it.
+    if (!isPathInside(scratch, realPath(nearestExistingAncestor(path.dirname(copy)).ancestor))) {
+      return;
+    }
+    fs.mkdirSync(path.dirname(copy), { recursive: true });
+    fs.symlinkSync(mirror(book), copy);
   };
   const projectReal = realPath(projectRoot);
   // Each book copied, by real path, and the path its copy mirrors.

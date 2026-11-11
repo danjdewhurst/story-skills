@@ -578,3 +578,35 @@ function writeAndRemove(root) {
   removeFile(path.join(root, "kept.md"));
 }
 
+
+// A book linked through follows or precedes is aliased in the scratch copy
+// at the path that names it. A project symlink in that path, copied as a
+// symlink, can lead out of the scratch folder; no alias is made through it.
+describe.skipIf(process.platform === "win32")("--dry-run with a linked book named through a project symlink", () => {
+  test("makes nothing outside its scratch folder, and runs twice", () => {
+    const root = fs.realpathSync(copyExample("salt-and-lantern"));
+    const depth = root.split(path.sep).filter(Boolean).length;
+    // In the scratch copy, this link leads one folder above the scratch
+    // folder; in the project, to the filesystem root.
+    fs.symlinkSync(Array(depth + 1).fill("..").join("/"), path.join(root, "esc"));
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^---\n/, `---\nfollows: esc${root}\n`));
+    const tmp = fs.realpathSync(makeTempDir());
+    const saved = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      for (let run = 0; run < 2; run += 1) {
+        const result = invoke(root, ["reindex", root, "--dry-run"]);
+        expect(result.err).toBe("");
+        expect(result.code).toBe(0);
+        expect(fs.readdirSync(tmp)).toEqual([]);
+      }
+    } finally {
+      if (saved === undefined) {
+        delete process.env.TMPDIR;
+      } else {
+        process.env.TMPDIR = saved;
+      }
+    }
+  });
+});
