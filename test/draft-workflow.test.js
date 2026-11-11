@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { git, makeTempDir } from "./helpers.js";
+import { COMMANDS } from "../src/commands.js";
 
 const repoRoot = path.resolve(import.meta.dir, "..");
 const WORKFLOW = fs.readFileSync(path.join(repoRoot, "templates", "github", "draft-next-chapter.yml"), "utf8");
@@ -87,7 +88,20 @@ describe("draft-next-chapter guardrails (#294)", () => {
     const draft = jobText("draft");
     expect(draft).toContain("permissions:\n      contents: read\n      pull-requests: read");
     const allowed = /--allowedTools "([^"]+)"/.exec(draft)[1];
-    expect(allowed).toBe("Bash(story:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep");
+    expect(allowed.split(",").filter((tool) => !tool.startsWith("Bash(story "))).toEqual(["Bash(git checkout -b draft/:*)", "Bash(git add:*)", "Bash(git commit:*)", "Read", "Write", "Edit", "Glob", "Grep"]);
+    // Each story command is named, and none takes --out or --pdf-engine, so
+    // the agent cannot write outside the checkout or run a program it wrote.
+    const storyCommands = allowed.split(",").filter((tool) => tool.startsWith("Bash(story ")).map((tool) => /^Bash\(story ([a-z-]+):\*\)$/.exec(tool)?.[1]);
+    expect(storyCommands).toContain("next");
+    expect(storyCommands).toContain("context");
+    expect(storyCommands).toContain("check");
+    for (const name of storyCommands) {
+      const command = COMMANDS.find((entry) => entry.name === name);
+      expect(command).toBeDefined();
+      expect(command.options ?? []).not.toContain("out");
+      expect(command.options ?? []).not.toContain("pdf-engine");
+      expect(command.project).not.toBe("none");
+    }
     expect(/--disallowedTools "([^"]+)"/.exec(draft)[1]).toBe("Edit(.git/**),Write(.git/**)");
     expect(draft).toContain("GIT_CONFIG_PARAMETERS: \"'core.fsmonitor=false' 'core.hooksPath=/dev/null' 'commit.gpgsign=false'\"");
     // The agent's git reads no global or system config, which an absolute
