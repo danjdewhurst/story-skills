@@ -10,7 +10,7 @@ import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
 import { FINDING_CODES, outputText, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { serveLanguageServer } from "./language-server.js";
-import { currentText, planChanges, recordChanges } from "./files.js";
+import { assertExistingAncestorInsideRoot, assertSafeProjectDirectory, currentText, lstatIfExists, planChanges, recordChanges } from "./files.js";
 import { diagnostic, diagnosticsFrom, resultData, wantsJson, writeJsonResult } from "./json.js";
 import { previewChanges, previewNewProject } from "./preview.js";
 import { markDeath, projectImpact } from "./impact.js";
@@ -844,9 +844,22 @@ export const COMMANDS = [
       // run does when the name is taken.
       const existing = path.join(projectRoot, SNAPSHOTS_DIR, snapshotId(name, id));
       const seed = (target) => {
-        if (target !== projectRoot && fs.existsSync(existing)) {
-          fs.cpSync(existing, path.join(target, path.relative(projectRoot, existing)), { recursive: true });
+        const folder = path.dirname(existing);
+        if (target === projectRoot || lstatIfExists(folder) === null) {
+          return;
         }
+        // A symlinked .snapshots or snapshot folder is refused before
+        // anything is copied through it, as the real run refuses it.
+        // .snapshots is checked first: a lookup under a file fails with
+        // ENOTDIR.
+        assertSafeProjectDirectory(folder, projectRoot);
+        if (lstatIfExists(existing) === null) {
+          return;
+        }
+        assertSafeProjectDirectory(existing, projectRoot);
+        const copy = path.join(target, path.relative(projectRoot, existing));
+        assertExistingAncestorInsideRoot(path.dirname(copy), target);
+        fs.cpSync(existing, copy, { recursive: true });
       };
       return runWrite(context, "snapshot", (target) => {
         seed(target);
@@ -1436,7 +1449,9 @@ function runRestore(context, name) {
         }
       }
     }
-    fs.cpSync(directory, path.join(target, SNAPSHOTS_DIR, path.basename(directory)), { recursive: true });
+    const copy = path.join(target, SNAPSHOTS_DIR, path.basename(directory));
+    assertExistingAncestorInsideRoot(path.dirname(copy), target);
+    fs.cpSync(directory, copy, { recursive: true });
     return plan;
   };
   return runWrite(context, "snapshot", (target) => restoreSnapshot(target, { name: restore, plan: seed(target) }), formatRestore, formatRestorePreview);

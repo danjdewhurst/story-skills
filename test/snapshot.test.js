@@ -132,6 +132,38 @@ describe("story snapshot", () => {
     expect(invoke(cwd, ["snapshot", "one", "--dry-run", "--path", root]).code).toBe(4);
   });
 
+  test("--dry-run refuses a symlinked .snapshots before it copies anything through it", () => {
+    const { cwd, root } = project();
+    const outside = makeTempDir();
+    fs.mkdirSync(path.join(outside, "one"));
+    fs.writeFileSync(path.join(outside, "one", "secret.md"), "outside\n");
+    const folder = path.join(root, ".snapshots");
+    const links = [(target) => fs.symlinkSync(target, folder, "junction")];
+    if (process.platform !== "win32") {
+      // A relative link that climbs past the project root.
+      links.push((target) => fs.symlinkSync(path.relative(root, target), folder));
+    }
+    for (const link of links) {
+      link(outside);
+      const tmp = makeTempDir();
+      const saved = process.env.TMPDIR;
+      process.env.TMPDIR = tmp;
+      try {
+        const preview = invoke(cwd, ["snapshot", "one", "--force", "--dry-run", "--path", root]);
+        expect(preview.code).toBe(3);
+        expect(preview.err).toContain("Refusing to use symlinked project directory");
+      } finally {
+        if (saved === undefined) {
+          delete process.env.TMPDIR;
+        } else {
+          process.env.TMPDIR = saved;
+        }
+      }
+      expect(fs.readdirSync(tmp)).toEqual([]);
+      fs.rmSync(folder);
+    }
+  });
+
   test("--list shows every snapshot, oldest first, as text and JSON", () => {
     const { cwd, root } = project();
     expect(invoke(cwd, ["snapshot", "--list", "--path", root]).out).toBe("No snapshots yet: story snapshot <name> takes one\n");
