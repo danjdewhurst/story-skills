@@ -398,8 +398,9 @@ describe("cli-defaults", () => {
     expect(validate.code).toBe(1);
     expect(validate.out + validate.err).toContain("out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line");
 
-    // Windows absolute and drive-relative paths are refused on every system.
-    for (const out of ["C:\\Users\\x\\book.md", "C:book.md", "\\\\server\\share\\book.md"]) {
+    // Windows absolute and drive-relative paths, a path that climbs out, and
+    // one with a control character are refused on every system.
+    for (const out of ["C:\\Users\\x\\book.md", "C:book.md", "\\\\server\\share\\book.md", "../victim.md", "dist/../../victim.md", "..\\victim.md", "dist/a\n::error::b.md"]) {
       expect(parseCliConfig({ "cli-defaults": [{ command: "export", out }] }).errors).toEqual(["story.md cli-defaults[0] out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line"]);
     }
     // A relative default and an absolute --out typed on the command line still work.

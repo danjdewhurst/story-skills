@@ -166,6 +166,12 @@ describe("story snapshot", () => {
     invoke(cwd, ["snapshot", "other", "--path", root]);
     expect(invoke(cwd, ["snapshot", "one", "--dry-run", "--path", root]).code).toBe(0);
     expect(fs.readdirSync(folder).sort()).toEqual([".gitignore", "other"]);
+
+    // A snapshot folder that is a symlink is refused too.
+    fs.symlinkSync(path.join(outside, "one"), path.join(folder, "one"), "junction");
+    const linked = invoke(cwd, ["snapshot", "one", "--force", "--dry-run", "--path", root]);
+    expect(linked.code).toBe(3);
+    expect(linked.err).toContain("Refusing to use symlinked project directory");
   });
 
   test("--list shows every snapshot, oldest first, as text and JSON", () => {
