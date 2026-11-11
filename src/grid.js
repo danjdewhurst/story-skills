@@ -136,8 +136,10 @@ function formatCsv(table) {
 
 // A cell a spreadsheet would read as a formula (=, +, -, or @ first, or a
 // tab or carriage return, which some read past) gets a ' first, so a beat
-// or arc id opens as the text it is.
+// or arc id opens as the text it is. A cell with a semicolon or tab is
+// quoted too, since a spreadsheet set to split on one would otherwise start
+// a new cell there, which could begin with =.
 function csvCell(value) {
   const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
+  return /[",;\t\r\n]/.test(text) ? `"${text.replace(/"/g, "\"\"")}"` : text;
 }

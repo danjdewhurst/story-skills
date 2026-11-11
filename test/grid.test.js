@@ -231,6 +231,14 @@ describe("story grid", () => {
     expect(invoke(root, ["grid"]).out).toContain("| =IMAGE(");
   });
 
+  test("--format csv quotes a cell with a semicolon or tab, so a reader that splits on one sees no formula", () => {
+    const root = gridProject();
+    writeChapter(root, 1, "beat: \"x;=1+1;\"");
+    writeChapter(root, 2, "beat: \"y\\t=2+2\"");
+    // A tab in a beat is already a space by the time it reaches a cell.
+    expect(invoke(root, ["grid", "--format", "csv"]).out).toBe("Arc,1,2\n(beat),\"x;=1+1;\",y =2+2\n(hook),,\n(outcomes),,\n");
+  });
+
   test("columns line up by terminal width for wide and combining characters", () => {
     const root = gridProject();
     writeChapter(root, 1, "beat: 中点");
