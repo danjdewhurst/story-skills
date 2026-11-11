@@ -128,6 +128,13 @@ function parseDefaults(raw, errors) {
   return defaults;
 }
 
+// An absolute path on any system, or a drive-relative Windows path such as
+// C:book.md.
+function isOutsidePath(value) {
+  const text = String(value).trim();
+  return path.isAbsolute(text) || path.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text);
+}
+
 function parseCommandDefaults(command, item, label, errors) {
   const accepted = command.options ?? [];
   const values = {};
@@ -152,6 +159,12 @@ function parseCommandDefaults(command, item, label, errors) {
       // A path or command here would let a cloned project pick a program
       // for `story build` to run, so a default may only name an engine.
       errors.push(`${label} pdf-engine must name an engine (${PDF_ENGINES.map((engine) => engine.name).join(", ")}); give the path to one with --pdf-engine on the command line`);
+    } else if (key === "out" && isOutsidePath(value)) {
+      // An absolute --out is written where the user says, so only the
+      // command line may give one: a project from another author must not
+      // choose a file outside itself for story export or story build to
+      // replace. A relative default is held to the project root when written.
+      errors.push(`${label} out must be a path inside the project, such as dist/book.md; give any other path with --out on the command line`);
     } else if (key === "paper" && !SHUNN_PAPERS.has(String(value).trim().toLowerCase())) {
       errors.push(`${label} paper must be ${[...SHUNN_PAPERS.keys()].join(" or ")}`);
     } else if (option.value === undefined) {
