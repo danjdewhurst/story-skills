@@ -726,9 +726,16 @@ function hasGitDirectoryBelow(start, end) {
 
 // src/findings.js
 var UNSAFE_OUTPUT = /[\p{Cc}\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+var UNSAFE_LINES = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+var WORKFLOW_COMMAND = /(^|\n)([ \t]*):(?=:)/g;
+function escapeCharacter(character) {
+  return `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`;
+}
 function outputText(text, { lines = false } = {}) {
-  return String(text).replace(UNSAFE_OUTPUT, (character) => lines && character === `
-` ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  if (!lines) {
+    return String(text).replace(UNSAFE_OUTPUT, escapeCharacter);
+  }
+  return String(text).replace(UNSAFE_LINES, escapeCharacter).replace(WORKFLOW_COMMAND, "$1$2\\u003a");
 }
 function err(code, message, file = null, chapter = null) {
   return { code, message, file: portablePath(file), chapter };
@@ -21625,7 +21632,7 @@ function parseDefaults(raw, errors) {
 }
 function isOutsidePath(value) {
   const text = String(value).trim();
-  return path15.isAbsolute(text) || path15.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text);
+  return path15.isAbsolute(text) || path15.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text) || path15.posix.normalize(text.replace(/\\/g, "/")).split("/")[0] === ".." || /\p{Cc}/u.test(text);
 }
 function parseCommandDefaults(command, item, label, errors) {
   const accepted = command.options ?? [];
@@ -31409,12 +31416,8 @@ function labelsIn(root, label) {
 }
 function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
   const { git } = gitAtRef(root, ref, flag);
-  const blobs = git(["ls-tree", "-r", "-z", ref, "--", "."]).split("\x00").filter((record) => record !== "").map((record) => {
-    const tab = record.indexOf("\t");
-    const [mode, type, hash] = record.slice(0, tab).split(" ");
-    return { mode, type, hash, name: record.slice(tab + 1) };
-  }).filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
-  const contents = catBlobs(root, blobs.map((entry) => entry.hash));
+  const blobs = markdownAtRef(git, ref, ".");
+  const contents = catBlobs(root, blobs.map((entry) => entry.hash), ref, flag);
   const dir = fs25.mkdtempSync(path36.join(os4.tmpdir(), "story-compare-"));
   try {
     blobs.forEach((entry, index) => {
@@ -31432,9 +31435,9 @@ function withProjectAtGitRef(root, ref, read, flag = "compare --ref") {
 }
 var GIT_SAFE_ARGS = ["-c", "safe.bareRepository=explicit", "-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"];
 function gitEnvironment() {
-  return { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
+  return { ...process.env, GIT_ALLOW_PROTOCOL: "none", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
 }
-function catBlobs(root, hashes) {
+function catBlobs(root, hashes, ref, flag) {
   const output = execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, "cat-file", "--batch"], { input: `${hashes.join(`
 `)}
 `, env: gitEnvironment(), stdio: ["pipe", "pipe", "pipe"], maxBuffer: 256 * 1024 * 1024 });
@@ -31442,11 +31445,21 @@ function catBlobs(root, hashes) {
   let cursor = 0;
   for (let index = 0;index < hashes.length; index += 1) {
     const headerEnd = output.indexOf(10, cursor);
-    const size = Number(output.toString("utf8", cursor, headerEnd).split(" ")[2]);
-    contents.push(output.subarray(headerEnd + 1, headerEnd + 1 + size));
-    cursor = headerEnd + 1 + size + 1;
+    const [, type, size] = output.toString("utf8", cursor, headerEnd).split(" ");
+    if (type !== "blob" || !/^\d+$/.test(size ?? "")) {
+      throw projectError(`${flag} cannot read the files at git ref ${ref}: this clone does not hold them, and story never fetches. Run git fetch, or clone without --filter, and try again`);
+    }
+    contents.push(output.subarray(headerEnd + 1, headerEnd + 1 + Number(size)));
+    cursor = headerEnd + 1 + Number(size) + 1;
   }
   return contents;
+}
+function markdownAtRef(git, ref, folder) {
+  return git(["ls-tree", "-r", "-z", ref, "--", folder]).split("\x00").filter((record) => record !== "").map((record) => {
+    const tab = record.indexOf("\t");
+    const [mode, type, hash] = record.slice(0, tab).split(" ");
+    return { mode, type, hash, name: record.slice(tab + 1) };
+  }).filter((entry) => entry.type === "blob" && entry.mode.startsWith("100") && entry.name.endsWith(".md"));
 }
 function gitFailure(error, flag) {
   if (error && error.code === "ENOENT") {
@@ -31474,10 +31487,15 @@ function gitAtRef(root, ref, flag = "compare --ref") {
   }
   const git = (args) => execFileSync("git", [...GIT_SAFE_ARGS, "-C", root, ...args], { encoding: "utf8", env: gitEnvironment(), stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   let prefix;
+  let bare;
   try {
     prefix = git(["rev-parse", "--show-prefix"]).trim();
+    bare = git(["rev-parse", "--is-bare-repository"]).trim() === "true";
   } catch (error) {
     throw projectError(gitFailure(error, flag));
+  }
+  if (bare) {
+    throw projectError(`${flag} needs the project inside a git working tree, not a bare repository`);
   }
   try {
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
@@ -31494,15 +31512,15 @@ function gitAtRef(root, ref, flag = "compare --ref") {
   return { git, prefix };
 }
 function chaptersAtGitRef(root, ref, warnings) {
-  const { git, prefix } = gitAtRef(root, ref);
+  const { git } = gitAtRef(root, ref);
   if (git(["ls-tree", "--name-only", ref, "--", "story.md"]).trim() === "") {
     warnings.push(warn("story-missing-at-ref", `story.md does not exist at git ref ${ref}: the project may not have existed then`, "story.md"));
   }
-  const names = git(["ls-tree", "--name-only", ref, "--", "chapters/"]).split(`
-`).map((name) => path36.posix.basename(name.trim())).filter((name) => CHAPTER_FILENAME_PATTERN.test(name)).sort();
-  return names.map((name) => {
+  const chapters = markdownAtRef(git, ref, "chapters/").filter((entry) => path36.posix.dirname(entry.name) === "chapters").map((entry) => ({ ...entry, name: path36.posix.basename(entry.name) })).filter((entry) => CHAPTER_FILENAME_PATTERN.test(entry.name)).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const contents = catBlobs(root, chapters.map((entry) => entry.hash), ref, "compare --ref");
+  return chapters.map(({ name }, index) => {
     const id = path36.basename(name, ".md");
-    const raw = git(["show", `${ref}:${prefix}chapters/${name}`]);
+    const raw = contents[index].toString("utf8");
     try {
       return comparableChapter(id, parseFrontmatter(raw, name));
     } catch {
@@ -36469,7 +36487,11 @@ function formatCommandsHelp() {
   return lines;
 }
 var CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
-function runCli(argv, io) {
+function safeStream(stream) {
+  return { write: (value) => stream.write(typeof value === "string" ? outputText(value, { lines: true }) : value) };
+}
+function runCli(argv, rawIo) {
+  const io = commandWord(argv) === "lsp" ? rawIo : { ...rawIo, stdout: safeStream(rawIo.stdout), stderr: safeStream(rawIo.stderr) };
   let configured = [];
   const jsonCommand = COMMANDS_BY_NAME.get(commandWord(argv));
   const failJson = jsonCommand?.options?.includes("json") && jsonRequested(argv) ? (message, exitCode, writes = []) => writeJsonResult(io, { command: jsonCommand.name, ok: false, exitCode, diagnostics: [failureDiagnostic(message, exitCode, jsonCommand.name)], writes }) : null;
@@ -36531,7 +36553,7 @@ Run story --help to list commands.
     if (failJson) {
       return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
-    io.stderr.write(`${outputText(message, { lines: true })}
+    io.stderr.write(`${message}
 `);
     return exitCode;
   }
