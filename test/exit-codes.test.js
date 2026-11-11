@@ -81,6 +81,14 @@ const OK_ARGS = {
     }
     return ["notes", file];
   },
+  // The same Word build, applied back: nothing changes.
+  apply: (cwd) => {
+    const file = path.join(cwd, "..", "returned.docx");
+    if (fs.existsSync(path.join(cwd, "story.md"))) {
+      expect(invoke(cwd, ["build", "--format", "docx", "--out", file]).code).toBe(ok);
+    }
+    return ["apply", file];
+  },
   similarity: (cwd) => {
     const reference = path.join(cwd, "..", "reference.txt");
     fs.writeFileSync(reference, "The tide came in over the rocks and the lamp was lit.\n", "utf8");
@@ -214,7 +222,8 @@ const LOCKED = {
   move: ["move", "chapter", "chapter-01", "--number", "2"],
   snapshot: ["snapshot", "draft"],
   split: ["split", "chapter-01", "--at", "1"],
-  merge: ["merge", "chapter-01", "chapter-02"]
+  merge: ["merge", "chapter-01", "chapter-02"],
+  apply: ["apply", "returned.docx"]
 };
 
 const savedLockWait = process.env.STORY_LOCK_WAIT_MS;
@@ -448,6 +457,9 @@ describe("exit codes", () => {
       ["notes"],
       ["notes", "missing.docx"],
       ["notes", "story.md"],
+      ["apply"],
+      ["apply", "missing.docx"],
+      ["apply", "story.md"],
       ["similarity"],
       ["similarity", "--against", "no-such-reference"],
       ["synopsis", "--pages", "2"],

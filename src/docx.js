@@ -609,6 +609,18 @@ function documentMarkdown(xml, styles, chapterLine) {
 const LINE_BREAK = "";
 const PARAGRAPH_BREAK = "";
 
+// One paragraph of body text as markdown, as the import writes it: `runs`
+// are { text, italic, bold }, with HARD_BREAK for each line break, and
+// `quote` makes it a block quote. story apply writes an editor's paragraph
+// into a chapter with this. A run of scene-break markers comes back as
+// written, so the caller decides what a scene break is.
+export function paragraphMarkdown(runs, { quote = false } = {}) {
+  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null);
+}
+
+// The mark paragraphMarkdown reads as a line break inside a paragraph.
+export const HARD_BREAK = LINE_BREAK;
+
 // One Word paragraph as markdown blocks: a page break inside it splits it.
 function paragraphBlocks(paragraph, styles, chapterLine) {
   const style = styles.paragraph(paragraph.style);

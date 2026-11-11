@@ -21,6 +21,7 @@ import { assertNoInterruptedChange } from "./undo.js";
 import { formatMentions } from "./mentions.js";
 import { formatNames } from "./names.js";
 import { formatNotes, projectNotes } from "./notes.js";
+import { applyDocument, formatApply } from "./apply.js";
 import { formatPacing } from "./pacing.js";
 import { plural } from "./plural.js";
 import { DEFAULT_PASSES, formatPasses, nextPass, passChecks } from "./passes.js";
@@ -124,8 +125,9 @@ const WRITE_OPTIONS = ["dry-run", "json"];
 // options for one that writes only with a flag (wordcount --write). runCli
 // holds the project lock around such a run, except with --dry-run (see
 // lock.js). `recovers` marks a write command that deals itself with the
-// undo log a command stopped part way left (split, merge, move, rename, and
-// remove, which put back their own and refuse any other, and doctor --fix;
+// undo log a command stopped part way left (split, merge, move, rename,
+// remove, and apply, which put back their own and refuse any other, and
+// doctor --fix;
 // see undo.js); runCli refuses every other write command while such a log
 // is in the project. init and import lock the folder
 // they fill themselves, and the builds write only generated files, so they
@@ -451,6 +453,51 @@ export const COMMANDS = [
       }
       io.stdout.write(formatNotes(result));
       return reportResult(io, result, "Notes read", "Notes failed");
+    }
+  },
+  {
+    name: "apply",
+    usage: "apply <file.docx>",
+    summary: [
+      "Write the text of an editor's returned Word file",
+      "into the chapters' prose, paragraph by paragraph;",
+      "--ref or --snapshot names the version sent, to",
+      "keep edits made since; saves a snapshot first"
+    ],
+    project: "flag",
+    args: 1,
+    options: ["tracked", "ref", "snapshot", ...WRITE_OPTIONS],
+    writes: true,
+    recovers: true,
+    run({ parsed, io, cwd, root, overrides }) {
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const projectRoot = root();
+      const run = () => applyDocument(projectRoot, parsed.positionals[1], {
+        cwd,
+        dryRun,
+        tracked: parsed.options.tracked,
+        ref: parsed.options.ref,
+        snapshot: parsed.options.snapshot
+      });
+      const { result: outcome, changes: recorded } = dryRun ? { result: run(), changes: [] } : recordWrites(projectRoot, run);
+      const { writes, root: _root, ...rest } = outcome;
+      const changes = dryRun ? writes.map((write) => ({ action: "update", path: write.file })) : recorded;
+      const result = applySeverity({ ...rest, dryRun }, overrides);
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "apply",
+          ok: result.ok,
+          data: { ...resultData(result), dryRun, changes },
+          diagnostics: diagnosticsFrom(result, "apply"),
+          writes: dryRun ? [] : writtenFiles(projectRoot, changes)
+        });
+      }
+      if (result.undone !== null && result.undone !== undefined) {
+        io.stderr.write(undoneNote(result.undone, dryRun));
+      }
+      const flag = parsed.options.path;
+      io.stdout.write(formatApply(result, (Array.isArray(flag) ? flag.at(-1) : flag) ?? "."));
+      return reportResult(io, result, dryRun ? "Edits planned" : "Edits applied", "Apply failed");
     }
   },
   {

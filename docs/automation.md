@@ -84,7 +84,7 @@ Which commands can report findings (exit `1`):
 | `impact` | The change it tests would add an error to `story check`. With `--strict`, an added warning, or a warning the change itself gives, fails it too. Findings the project already has do not count, even when the change gives them new ids. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
-| `similarity`, `notes`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
+| `similarity`, `notes`, `apply`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
 | `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. `snapshot --restore` is the exception above. |
 | `lsp` | Never. The language server exits `0` when the editor shuts it down and `1` when it exits without a shutdown request, or stops with `2` for an unknown option. |
 
@@ -124,7 +124,7 @@ exit=1
 By default, output is plain text with stable line prefixes, so you can filter it with standard tools. For a machine-readable result, see [JSON output](#json-output).
 
 - `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write only to **stderr**: one summary line, then one line per finding, prefixed `error:`, `warning:`, or `dismissed:`. Nothing goes to stdout.
-- `compare`, `notes`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout and the same summary and finding lines to stderr.
+- `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout and the same summary and finding lines to stderr.
 - Every other command writes its report or confirmation to stdout.
 - A command that cannot run, for example because of an unknown option or a missing argument, prints one error line to stderr and exits 2. An unknown command also prints the full help text after the error.
 - Pointing any command at a directory without `story.md` prints `<path> is not a story project: missing story.md` to stderr and exits 3. In a project that has `story.md`, `validate` reports each other missing required file as an `error:` finding and exits 1.
@@ -139,7 +139,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, and `snapshot`), `impact`, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {

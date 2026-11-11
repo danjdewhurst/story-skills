@@ -337,6 +337,21 @@ function labelsIn(root, label) {
   return paragraphLabels(htmlBook(manuscriptParts(project, `read labels from ${label}`, { includePending: true })));
 }
 
+// Runs `read(root, label)` on an earlier version of the project: its
+// markdown at the git ref `ref`, copied into a temporary folder, or the
+// snapshot `snapshot` in .snapshots/. Errors are about the flag that named
+// it. story apply reads the version that was sent to the editor this way.
+export function withBaseProject(project, { ref, snapshot }, read, command) {
+  if (typeof ref === "string" && ref !== "") {
+    const label = `git ref ${ref}`;
+    return withFlags("ref", () => withProjectAtGitRef(project.root, ref, (oldRoot) => read(oldRoot, label), `${command} --ref`));
+  }
+  return withFlags("snapshot", () => {
+    const found = existingSnapshot(project.root, snapshot);
+    return read(found.directory, `snapshot ${found.id}`);
+  });
+}
+
 // Runs `read` on the project's markdown as it was at `ref`, copied into a
 // temporary directory that is removed afterwards. Nothing is written to the
 // repository or its working tree.

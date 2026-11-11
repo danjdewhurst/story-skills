@@ -342,6 +342,16 @@ export const FINDING_CODES = {
   // story notes
   "note-unplaced": "warning",
   "note-hidden-text": "warning",
+  // story apply
+  "apply-conflict": "warning",
+  "apply-kept-paragraph": "warning",
+  "apply-heading-changed": "warning",
+  "apply-section-unplaced": "warning",
+  "apply-chapter-missing": "warning",
+  "apply-chapters-reordered": "warning",
+  "apply-hidden-text": "warning",
+  "apply-content-left-out": "warning",
+  "apply-not-written": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",

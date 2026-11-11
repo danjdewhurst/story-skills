@@ -30,7 +30,7 @@ import { narrationScript, pronunciationGuide } from "./narration.js";
 import { SCENE_SETTINGS, fountainScript } from "./fountain.js";
 import { inkSource } from "./ink.js";
 import { derivedIfid, isIfid, tweeSource } from "./twee.js";
-import { DEFAULT_PAPER, buildTimestamp, htmlBook, SHUNN_PAPERS, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
+import { DEFAULT_PAPER, buildTimestamp, docxEntries, htmlBook, SHUNN_PAPERS, shunnDocxEntries, shunnHtml, writeDocx, writeEpub, writeShunnDocx, writeShunnMarkdown } from "./packaging.js";
 import { renderPdf, resolvePdfEngine } from "./pdf.js";
 import { buildStyle, styleSheetFile, validateBuildStyle } from "./build-style.js";
 import { wordSpans } from "./words.js";
@@ -241,6 +241,21 @@ export function buildBook(root, options = {}) {
   }
 
   return withIdWarnings({ outFile: output.outFile, chapters: manuscript.chapters.length, format, warnings: manuscript.warnings });
+}
+
+// The Word build of a project as `story build --format docx` writes it
+// (`shunn`: with --shunn), made in memory for story apply to compare a
+// returned file with: { document, styles, trace, manuscript }, the text of
+// word/document.xml and word/styles.xml, what each paragraph is (see
+// docxEntries), and the manuscript it was built from. Every matter page is
+// in it, pending permission or not, so a file built with --include-pending
+// matches too.
+export function wordBuild(project, { shunn = false } = {}) {
+  const manuscript = manuscriptParts(project, "apply", { includePending: true, warnLeftOut: false });
+  const trace = [];
+  const entries = shunn ? shunnDocxEntries(manuscript, shunnMeta(project), DEFAULT_PAPER, trace) : docxEntries(manuscript, trace);
+  const part = (name) => entries.find((entry) => entry.name === name).content;
+  return { document: part("word/document.xml"), styles: part("word/styles.xml"), trace, manuscript };
 }
 
 // `build --format ics`: the deadline, the serial release dates, and the
