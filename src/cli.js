@@ -7,6 +7,7 @@ import { KIND_ALIASES } from "./scan.js";
 import { VERSION } from "./version.js";
 import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.js";
 import { FILE_ERROR_REASONS, portablePath } from "./files.js";
+import { outputText } from "./findings.js";
 import { withProjectLock } from "./lock.js";
 import { assertNoInterruptedChange } from "./undo.js";
 
@@ -167,7 +168,9 @@ export function runCli(argv, io) {
     if (failJson) {
       return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
-    io.stderr.write(`${message}\n`);
+    // An error message may list problems on lines of their own, so line
+    // breaks stay; every other control character is escaped.
+    io.stderr.write(`${outputText(message, { lines: true })}\n`);
     return exitCode;
   }
 }

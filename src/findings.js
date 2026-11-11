@@ -14,6 +14,16 @@ import { portablePath } from "./files.js";
 // docs/cli-reference.md documents it; test/finding-codes.test.js fails when a
 // code is raised but not listed or documented, or listed but never raised.
 
+// Project text on one line of terminal output: a control character, line
+// or paragraph separator, or bidirectional mark is printed as a \u escape,
+// so a value in a project from another author cannot move the cursor, ring
+// the bell, or start a line of its own, such as a CI log's ::error::.
+const UNSAFE_OUTPUT = /[\p{Cc}\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+
+export function outputText(text, { lines = false } = {}) {
+  return String(text).replace(UNSAFE_OUTPUT, (character) => (lines && character === "\n" ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`));
+}
+
 export function err(code, message, file = null, chapter = null) {
   return { code, message, file: portablePath(file), chapter };
 }
