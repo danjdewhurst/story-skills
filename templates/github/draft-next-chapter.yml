@@ -424,6 +424,9 @@ jobs:
         run: |
           report="$RUNNER_TEMP/checks.md"
           : > "$report"
+          # A jq function that puts a text on one line with no control
+          # characters.
+          ONE_LINE='def oneline(text): [text | tostring | explode[] | if . < 32 or (. >= 127 and . < 160) or . == 8232 or . == 8233 then 32 else . end] | implode;'
           passed=true
           for check in validate links continuity; do
             code=0
@@ -433,12 +436,16 @@ jobs:
               1)
                 passed=false
                 echo "- story $check: failed" >> "$report"
-                jq -r '.diagnostics[] | select(.severity == "error") | "  - \(.file // "project"): \(.message)"' "$RUNNER_TEMP/$check.json" >> "$report" \
-                  || echo "  - (its findings could not be read; see the job log)" >> "$report"
+                # Findings quote text the agent wrote, so each goes on one
+                # line of a code block: no mention, issue link, or markdown.
+                { echo; jq -r "$ONE_LINE"' .diagnostics[] | select(.severity == "error") | "      " + oneline("\(.file // "project"): \(.message)")' "$RUNNER_TEMP/$check.json"; echo; } >> "$report" \
+                  || echo "  (its findings could not be read; see the job log)" >> "$report"
                 ;;
               *)
                 echo "::error::story $check exited $code, so the project could not be checked. Nothing was pushed."
-                jq -r '.diagnostics[]?.message' "$RUNNER_TEMP/$check.json" || true
+                # Each line starts with the check's name, so a message cannot
+                # pass as a workflow command such as ::error::.
+                jq -r --arg check "$check" "$ONE_LINE"' .diagnostics[]? | "story \($check): " + oneline(.message)' "$RUNNER_TEMP/$check.json" || true
                 exit 1
                 ;;
             esac
