@@ -435,7 +435,8 @@ describe("draft-next-chapter guardrails (#294)", () => {
       fs.writeFileSync(chapter, fs.readFileSync(chapter, "utf8").replace("characters: []", 'characters:\n  - "x\\n\\n@octocat Closes #1 \\e[31m"'));
       const result = runStep(script, repo, { PATH, BRANCH: "draft/maintenance-2026-09-28" });
       expect(result.output).toBe("passed=false\n");
-      const report = fs.readFileSync(path.join(result.runnerTemp, "checks.md"), "utf8");
+      // jq on Windows ends its lines with CRLF; the workflow runs on Linux.
+      const report = fs.readFileSync(path.join(result.runnerTemp, "checks.md"), "utf8").replace(/\r\n/g, "\n");
       expect(report).toContain("@octocat Closes #1");
       for (const line of report.split("\n")) {
         if (/@octocat|Closes #1/.test(line)) {
