@@ -184,9 +184,9 @@ jobs:
           # Overrides .git/config for the agent's git add and git commit, so a
           # config the agent wrote cannot run a command.
           GIT_CONFIG_PARAMETERS: "'core.fsmonitor=false' 'core.hooksPath=/dev/null' 'commit.gpgsign=false'"
-          # The agent's story commands can write outside the checkout (an
-          # absolute --out such as ~/.gitconfig), so its git reads no global
-          # or system config at all.
+          # A second guard: none of the agent's story commands writes outside
+          # the checkout, and its git reads no global or system config at all
+          # in case another way past the tool limits does.
           GIT_CONFIG_GLOBAL: /dev/null
           GIT_CONFIG_NOSYSTEM: "1"
         with:
@@ -258,7 +258,7 @@ jobs:
           claude_args: |
             --max-turns ${{ env.MAX_TURNS }}
             --max-budget-usd ${{ env.MAX_BUDGET_USD }}
-            --allowedTools "Bash(story next:*),Bash(story context:*),Bash(story reindex:*),Bash(story wordcount:*),Bash(story check:*),Bash(story validate:*),Bash(story links:*),Bash(story continuity:*),Bash(story knowledge:*),Bash(story timeline:*),Bash(story progress:*),Bash(story pacing:*),Bash(story clues:*),Bash(story list:*),Bash(story mentions:*),Bash(story names:*),Bash(story voices:*),Bash(story prose:*),Bash(story report:*),Bash(story doctor:*),Bash(story add:*),Bash(story rename:*),Bash(story move:*),Bash(story remove:*),Bash(story split:*),Bash(story merge:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
+            --allowedTools "Bash(story next:*),Bash(story context:*),Bash(story reindex:*),Bash(story wordcount:*),Bash(story check:*),Bash(story validate:*),Bash(story links:*),Bash(story continuity:*),Bash(story knowledge:*),Bash(story timeline:*),Bash(story progress:*),Bash(story pacing:*),Bash(story clues:*),Bash(story list:*),Bash(story mentions:*),Bash(story names:*),Bash(story voices:*),Bash(story prose:*),Bash(story report:*),Bash(story doctor:*),Bash(story add:*),Bash(story rename:*),Bash(story move:*),Bash(story remove:*),Bash(story split:*),Bash(story merge:*),Bash(story migrate:*),Bash(story impact:*),Bash(git checkout -b draft/:*),Bash(git add:*),Bash(git commit:*),Read,Write,Edit,Glob,Grep"
             --disallowedTools "Edit(.git/**),Write(.git/**)"
 
       - name: Explain a stopped agent
@@ -394,7 +394,9 @@ jobs:
           done | sort -u)
           if [ -n "$refused" ]; then
             echo "::error::The agent changed files a draft may not touch. Nothing was pushed:"
-            echo "$refused"
+            # Each name the agent chose starts with "refused:", so none can
+            # pass as a workflow command such as ::error::.
+            printf '%s\n' "$refused" | sed 's/^/refused: /'
             exit 1
           fi
           git checkout --quiet "$BRANCH"
@@ -425,8 +427,9 @@ jobs:
           report="$RUNNER_TEMP/checks.md"
           : > "$report"
           # A jq function that puts a text on one line with no control
-          # characters.
-          ONE_LINE='def oneline(text): [text | tostring | explode[] | if . < 32 or (. >= 127 and . < 160) or . == 8232 or . == 8233 then 32 else . end] | implode;'
+          # character, line or paragraph separator, or direction mark, as
+          # story escapes them in its own output.
+          ONE_LINE='def oneline(text): [text | tostring | explode[] | if . < 32 or (. >= 127 and . < 160) or . == 1564 or . == 8206 or . == 8207 or (. >= 8232 and . <= 8238) or (. >= 8294 and . <= 8297) then 32 else . end] | implode;'
           passed=true
           for check in validate links continuity; do
             code=0
@@ -438,8 +441,10 @@ jobs:
                 echo "- story $check: failed" >> "$report"
                 # Findings quote text the agent wrote, so each goes on one
                 # line of a code block: no mention, issue link, or markdown.
-                { echo; jq -r "$ONE_LINE"' .diagnostics[] | select(.severity == "error") | "      " + oneline("\(.file // "project"): \(.message)")' "$RUNNER_TEMP/$check.json"; echo; } >> "$report" \
-                  || echo "  (its findings could not be read; see the job log)" >> "$report"
+                echo >> "$report"
+                jq -r "$ONE_LINE"' .diagnostics[] | select(.severity == "error") | "      " + oneline("\(.file // "project"): \(.message)")' "$RUNNER_TEMP/$check.json" >> "$report" \
+                  || echo "      (its findings could not be read; see the job log)" >> "$report"
+                echo >> "$report"
                 ;;
               *)
                 echo "::error::story $check exited $code, so the project could not be checked. Nothing was pushed."
