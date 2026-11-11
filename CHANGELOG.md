@@ -62,6 +62,18 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Git also runs with no hooks and no file monitor, and never asks for a password.
 - A `cli-defaults` entry in `story.md` can no longer set an absolute `out`, so a project you clone cannot make `story export` or `story build` replace a file outside it.
   - `story validate` reports such a default as `invalid-cli-config`, and other commands refuse to run until it is fixed. A relative default, and any path you type with `--out`, work as before.
+- The `draft-next-chapter.yml` template lets the drafting agent run only the `story` commands it needs, so it cannot run a program through `story build --pdf-engine`.
+  - Copy the new template into your repository to get the change.
+  - `--allowedTools` names each `story` command, such as `story next`, `story context`, and `story check`, in place of `Bash(story:*)`. None of them takes `--out` or `--pdf-engine`, so `story build`, `export`, `diagram`, and `synopsis` are not among them.
+  - Before, the agent could commit a file as executable with `git add --chmod=+x` and run it as a PDF engine, or write over the installed CLI with `--out`.
+  - The publish job now quotes each check finding as code in the pull request, so text the agent wrote cannot mention someone or link an issue there, and puts each one on a single line in the job log.
+- `story validate`, `story check`, and the other checks print each finding on one line, with control characters in project text shown as `\u` escapes.
+  - A frontmatter value can no longer move the cursor, ring the bell, or start a line of its own, such as a forged `::error::` line in a CI log. Error messages escape them too, but keep their line breaks.
+- `story snapshot --dry-run`, `story init --force`, `story import --force`, and the dry-run copy of linked books no longer follow a symlink in the project out of it.
+  - `story snapshot <name> --dry-run` refuses a symlinked `.snapshots` before it copies anything, as the real run does.
+  - `init --force` and `import --force` refuse a starter folder that is a symlink, such as `worldbuilding`, before they make any folder.
+  - A `--dry-run` no longer makes folders or a link outside its scratch folder when `follows` or `precedes` names a book through a symlink in the project.
+- `story grid --format csv` quotes a cell that holds a semicolon, so a spreadsheet that splits cells on semicolons cannot read part of it as a formula.
 
 ## [0.24.1] - 2026-10-27
 

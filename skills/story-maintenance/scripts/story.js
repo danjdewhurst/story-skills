@@ -725,6 +725,11 @@ function hasGitDirectoryBelow(start, end) {
 }
 
 // src/findings.js
+var UNSAFE_OUTPUT = /[\p{Cc}\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+function outputText(text, { lines = false } = {}) {
+  return String(text).replace(UNSAFE_OUTPUT, (character) => lines && character === `
+` ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
 function err(code, message, file = null, chapter = null) {
   return { code, message, file: portablePath(file), chapter };
 }
@@ -18303,7 +18308,7 @@ function formatCsv(table) {
 }
 function csvCell(value) {
   const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  return /[",;\t\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 // src/list.js
@@ -22579,11 +22584,11 @@ import path17 from "node:path";
 function previewChanges(root, run) {
   const projectRoot = path17.resolve(root);
   requireStoryFile(projectRoot);
-  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot) => {
+  return inScratch(projectRoot, run, (copyRoot, mirror, atRoot, scratch) => {
     fs8.mkdirSync(path17.dirname(copyRoot), { recursive: true });
     copyProject(projectRoot, copyRoot, { realSource: realPath2(projectRoot), copyRoot, cover: coverOf(projectRoot) });
     if (!atRoot) {
-      copyLinkedBooks(projectRoot, mirror);
+      copyLinkedBooks(projectRoot, mirror, scratch);
     }
   });
 }
@@ -22633,7 +22638,7 @@ function inScratch(target, run, prepare) {
   const copyRoot = atRoot ? path17.join(scratch, "project") : mirror(target);
   const [from, to] = atRoot ? [copyRoot, target] : [mirror(fsRoot), fsRoot.replace(/[\\/]+$/, "")];
   try {
-    prepare(copyRoot, mirror, atRoot);
+    prepare(copyRoot, mirror, atRoot, scratch);
     if (!atRoot) {
       const realOf = (file) => isPathInside(from, file) ? to + file.slice(from.length) : null;
       copyLinkTargets(copyRoot, scratch, mirror, realOf);
@@ -22646,15 +22651,20 @@ function inScratch(target, run, prepare) {
     removeScratch(scratch);
   }
 }
-function copyLinkedBooks(projectRoot, mirror) {
+function copyLinkedBooks(projectRoot, mirror, scratch) {
   const parent = path17.dirname(projectRoot);
   const realParent = realPath2(parent);
   const home = (real) => isPathInside(realParent, real) ? path17.join(parent, path17.relative(realParent, real)) : real;
   const alias = (link, book) => {
-    if (link !== book && !fs8.existsSync(mirror(link))) {
-      fs8.mkdirSync(path17.dirname(mirror(link)), { recursive: true });
-      fs8.symlinkSync(mirror(book), mirror(link));
+    const copy = mirror(link);
+    if (link === book || lstatIfExists(copy) !== null) {
+      return;
     }
+    if (!isPathInside(scratch, realPath2(nearestExistingAncestor(path17.dirname(copy)).ancestor))) {
+      return;
+    }
+    fs8.mkdirSync(path17.dirname(copy), { recursive: true });
+    fs8.symlinkSync(mirror(book), copy);
   };
   const projectReal = realPath2(projectRoot);
   const copies = new Map([[projectReal, projectRoot]]);
@@ -26631,9 +26641,11 @@ function fillStoryProject(root, title, cwd, options) {
     assertNoInterruptedChange(root, options.command ?? "story init --force");
   }
   options.beforeWrite?.(root, existingStory !== null);
-  for (const directory of PROJECT_DIRECTORIES) {
-    makeDirectories(path27.join(root, directory));
+  const directories = PROJECT_DIRECTORIES.map((directory) => path27.join(root, directory));
+  if (lstatIfExists(root) !== null) {
+    directories.forEach((directory) => assertExistingAncestorInsideRoot(directory, root));
   }
+  directories.forEach((directory) => makeDirectories(directory));
   const storyInherited = { ...inheritedStoryFields(inherited), ...options.language === undefined ? {} : { language: options.language.trim() } };
   const pack = languagePack(projectLanguage(storyInherited));
   const unit = countUnit(storyInherited, pack);
@@ -35533,9 +35545,18 @@ var COMMANDS = [
       const projectRoot = root();
       const existing = path41.join(projectRoot, SNAPSHOTS_DIR, snapshotId(name, id));
       const seed = (target) => {
-        if (target !== projectRoot && fs30.existsSync(existing)) {
-          fs30.cpSync(existing, path41.join(target, path41.relative(projectRoot, existing)), { recursive: true });
+        const folder = path41.dirname(existing);
+        if (target === projectRoot || lstatIfExists(folder) === null) {
+          return;
         }
+        assertSafeProjectDirectory(folder, projectRoot);
+        if (lstatIfExists(existing) === null) {
+          return;
+        }
+        assertSafeProjectDirectory(existing, projectRoot);
+        const copy = path41.join(target, path41.relative(projectRoot, existing));
+        assertExistingAncestorInsideRoot(path41.dirname(copy), target);
+        fs30.cpSync(existing, copy, { recursive: true });
       };
       return runWrite(context, "snapshot", (target) => {
         seed(target);
@@ -36056,7 +36077,9 @@ function runRestore(context, name) {
         }
       }
     }
-    fs30.cpSync(directory, path41.join(target, SNAPSHOTS_DIR, path41.basename(directory)), { recursive: true });
+    const copy = path41.join(target, SNAPSHOTS_DIR, path41.basename(directory));
+    assertExistingAncestorInsideRoot(path41.dirname(copy), target);
+    fs30.cpSync(directory, copy, { recursive: true });
     return plan;
   };
   return runWrite(context, "snapshot", (target) => restoreSnapshot(target, { name: restore, plan: seed(target) }), formatRestore, formatRestorePreview);
@@ -36371,12 +36394,13 @@ function printFindings(io, result) {
 `);
   }
   for (const entry of result.dismissed ?? []) {
-    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note ?? `exemption: ${entry.reason}`})
+    io.stderr.write(`dismissed: ${outputText(entry.finding.message)} (${outputText(entry.note ?? `exemption: ${entry.reason}`)})
 `);
   }
 }
 function findingLine(finding) {
-  return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
+  const message = outputText(finding.message);
+  return FINDING_CODES[finding.code] === "warning" ? `${message} [${finding.code}]` : message;
 }
 
 // src/cli.js
@@ -36507,7 +36531,7 @@ Run story --help to list commands.
     if (failJson) {
       return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
-    io.stderr.write(`${message}
+    io.stderr.write(`${outputText(message, { lines: true })}
 `);
     return exitCode;
   }
