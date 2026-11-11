@@ -92,7 +92,16 @@ function formatCommandsHelp() {
 // than pass or fail without the severity a CI job set.
 export const CONFIG_REPAIR_COMMANDS = new Set(["validate", "report", "next", "doctor"]);
 
-export function runCli(argv, io) {
+// Text output can quote project text, so everything written goes through
+// outputText: a project from another author cannot send a terminal escape or
+// a CI log workflow command. story lsp speaks JSON-RPC on stdout, which JSON
+// escaping already covers, so its streams are left as they are.
+function safeStream(stream) {
+  return { write: (value) => stream.write(typeof value === "string" ? outputText(value, { lines: true }) : value) };
+}
+
+export function runCli(argv, rawIo) {
+  const io = commandWord(argv) === "lsp" ? rawIo : { ...rawIo, stdout: safeStream(rawIo.stdout), stderr: safeStream(rawIo.stderr) };
   let configured = [];
   // A command asked for --json reports a usage error or a failure as a JSON
   // result too, so a script reading stdout always gets one object. `writes`
@@ -168,9 +177,7 @@ export function runCli(argv, io) {
     if (failJson) {
       return failJson(message, exitCode, Array.isArray(error?.writes) ? error.writes : []);
     }
-    // An error message may list problems on lines of their own, so line
-    // breaks stay; every other control character is escaped.
-    io.stderr.write(`${outputText(message, { lines: true })}\n`);
+    io.stderr.write(`${message}\n`);
     return exitCode;
   }
 }

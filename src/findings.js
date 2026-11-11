@@ -20,8 +20,25 @@ import { portablePath } from "./files.js";
 // the bell, or start a line of its own, such as a CI log's ::error::.
 const UNSAFE_OUTPUT = /[\p{Cc}\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
 
+// Output that keeps its lines, such as a table or an error that lists
+// problems: tabs and line breaks stay, and so do the direction marks that
+// right-to-left text needs (U+061C, U+200E, U+200F). Every other control
+// character, separator, and direction override or isolate is escaped.
+const UNSAFE_LINES = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/gu;
+
+// A line that starts, after any spaces, with :: is a workflow command in a
+// GitHub Actions log, so its first colon is escaped.
+const WORKFLOW_COMMAND = /(^|\n)([ \t]*):(?=:)/g;
+
+function escapeCharacter(character) {
+  return `\\u${character.codePointAt(0).toString(16).padStart(4, "0")}`;
+}
+
 export function outputText(text, { lines = false } = {}) {
-  return String(text).replace(UNSAFE_OUTPUT, (character) => (lines && character === "\n" ? character : `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`));
+  if (!lines) {
+    return String(text).replace(UNSAFE_OUTPUT, escapeCharacter);
+  }
+  return String(text).replace(UNSAFE_LINES, escapeCharacter).replace(WORKFLOW_COMMAND, "$1$2\\u003a");
 }
 
 export function err(code, message, file = null, chapter = null) {
