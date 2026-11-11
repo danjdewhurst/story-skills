@@ -7,7 +7,7 @@ import { formatGrid, gridFormat } from "./grid.js";
 import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
-import { FINDING_CODES, warn } from "./findings.js";
+import { FINDING_CODES, outputText, warn } from "./findings.js";
 import { importManuscript } from "./import.js";
 import { serveLanguageServer } from "./language-server.js";
 import { currentText, planChanges, recordChanges } from "./files.js";
@@ -1882,7 +1882,7 @@ function printFindings(io, result) {
     io.stderr.write(`warning: ${findingLine(warning)}\n`);
   }
   for (const entry of result.dismissed ?? []) {
-    io.stderr.write(`dismissed: ${entry.finding.message} (${entry.note ?? `exemption: ${entry.reason}`})\n`);
+    io.stderr.write(`dismissed: ${outputText(entry.finding.message)} (${outputText(entry.note ?? `exemption: ${entry.reason}`)})\n`);
   }
 }
 
@@ -1890,5 +1890,6 @@ function printFindings(io, result) {
 // severity promoted to an error, ends with its code, the name a story.md
 // severity entry takes; errors cannot be overridden, so they print without.
 function findingLine(finding) {
-  return FINDING_CODES[finding.code] === "warning" ? `${finding.message} [${finding.code}]` : finding.message;
+  const message = outputText(finding.message);
+  return FINDING_CODES[finding.code] === "warning" ? `${message} [${finding.code}]` : message;
 }
