@@ -128,11 +128,13 @@ function parseDefaults(raw, errors) {
   return defaults;
 }
 
-// An absolute path on any system, or a drive-relative Windows path such as
-// C:book.md.
+// An absolute path on any system, a drive-relative Windows path such as
+// C:book.md, a path that climbs out with .., or one with a control
+// character in it.
 function isOutsidePath(value) {
   const text = String(value).trim();
-  return path.isAbsolute(text) || path.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text);
+  return path.isAbsolute(text) || path.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text)
+    || path.posix.normalize(text.replace(/\\/g, "/")).split("/")[0] === ".." || /\p{Cc}/u.test(text);
 }
 
 function parseCommandDefaults(command, item, label, errors) {
