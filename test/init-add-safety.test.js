@@ -137,6 +137,30 @@ describe("init", () => {
     expect(fs.existsSync(path.join(root, "glossary", "_index.md"))).toBe(true);
   });
 
+  test("init --force and import --force make no folder outside the project through a symlinked starter folder", () => {
+    const cwd = makeTempDir();
+    const outside = makeTempDir();
+    const source = path.join(makeTempDir(), "draft.md");
+    fs.writeFileSync(source, "# Chapter 1\n\nWords.\n");
+    const runs = [
+      ["init", "Draft", "--dir", "draft", "--force"],
+      ["init", "Draft", "--dir", "draft", "--force", "--dry-run"],
+      ["import", source, "--title", "Draft", "--dir", "draft", "--force"],
+      ["import", source, "--title", "Draft", "--dir", "draft", "--force", "--dry-run"]
+    ];
+    for (const argv of runs) {
+      const draft = path.join(cwd, "draft");
+      fs.rmSync(draft, { recursive: true, force: true });
+      fs.mkdirSync(draft);
+      fs.symlinkSync(outside, path.join(draft, "worldbuilding"), "junction");
+      const result = invoke(cwd, argv);
+      expect(result.code).not.toBe(0);
+      expect(result.err).toContain("Refusing to access project path outside root");
+      expect(fs.readdirSync(outside)).toEqual([]);
+      expect(fs.existsSync(path.join(draft, "characters"))).toBe(false);
+    }
+  });
+
   test("--force against an existing book does not add series backlinks it did not write", () => {
     const cwd = makeTempDir();
     createStoryProject({ cwd, title: "Book One", bookNumber: 1 });

@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  assertExistingAncestorInsideRoot,
   assertSafeProjectPath,
   assertWriteAllowed,
   isInsideGitDirectory,
@@ -164,9 +165,14 @@ function fillStoryProject(root, title, cwd, options) {
   // A last check before anything is written, such as the parse check import
   // runs on an existing project.
   options.beforeWrite?.(root, existingStory !== null);
-  for (const directory of PROJECT_DIRECTORIES) {
-    makeDirectories(path.join(root, directory));
+  // A starter folder that is a symlink must not make folders outside the
+  // project, so every one is checked before any is made. A new project has
+  // no root to resolve yet, and so no symlink in it.
+  const directories = PROJECT_DIRECTORIES.map((directory) => path.join(root, directory));
+  if (lstatIfExists(root) !== null) {
+    directories.forEach((directory) => assertExistingAncestorInsideRoot(directory, root));
   }
+  directories.forEach((directory) => makeDirectories(directory));
 
   // An explicit --language replaces one inherited from a linked book.
   const storyInherited = { ...inheritedStoryFields(inherited), ...(options.language === undefined ? {} : { language: options.language.trim() }) };
