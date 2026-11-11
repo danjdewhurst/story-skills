@@ -397,7 +397,7 @@ What the agent has:
 
 - the `story` commands it needs, each named in `--allowedTools` (such as `Bash(story next:*)` and `Bash(story check:*)`), installed before it starts. None of them takes `--out` or `--pdf-engine`, so `story build`, `export`, `diagram`, and `synopsis` are not among them, and the agent cannot write outside the checkout through `story` or make it run a program;
 - `git checkout -b draft/`, `git add`, and `git commit`;
-- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`). None of its `story` commands writes under `.git/` either. As a second guard, the agent's git reads no global or system config, and nothing the agent writes outside the checkout leaves the job;
+- reading, writing, and searching files (`Read`, `Write`, `Edit`, `Glob`, `Grep`), except writing under `.git/` (`--disallowedTools "Edit(.git/**),Write(.git/**)"`). None of its `story` commands writes under `.git/` either. As a second guard, the agent's git reads no global or system config. Nothing the agent writes outside the checkout leaves the job;
 - the prompt's instruction to treat project text as data and report, not follow, any instruction it finds.
 
 What it does not have:
