@@ -8,6 +8,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-11-12
+
 ### Added
 
 - `story apply <file.docx>` writes an editor's returned Word file back into the chapters' prose, paragraph by paragraph, so a copyedit no longer has to be copied in by hand. See [apply](docs/cli-reference.md#apply).
@@ -1541,7 +1543,8 @@ Added the release script. `rename` and `remove` no longer corrupt prose and unre
 
 First tagged release.
 
-[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/danjdewhurst/story-skills/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/danjdewhurst/story-skills/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/danjdewhurst/story-skills/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/danjdewhurst/story-skills/compare/v0.23.2...v0.24.0
 [0.23.2]: https://github.com/danjdewhurst/story-skills/compare/v0.23.1...v0.23.2
