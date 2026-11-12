@@ -8,7 +8,8 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { writeZip } from "../src/packaging.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { UNDO_LOG, withUndoLog, writeFile } from "../src/files.js";
-import { git, makeTempDir, memoryIo, treeSnapshot, whileWriting } from "./helpers.js";
+import { createHash } from "node:crypto";
+import { expectLinearGrowth, git, makeTempDir, memoryIo, READONLY_IGNORED, treeSnapshot, whileWriting } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const EDITOR = 'w:author="Jane Editor" w:date="2026-10-30T10:00:00Z"';
@@ -61,6 +62,22 @@ function sentEdited(edit, { example = "the-gull-rock-light", args = [] } = {}) {
   const file = path.join(root, "chapters", "chapter-01.md");
   fs.writeFileSync(file, edit(fs.readFileSync(file, "utf8")));
   return sentBook({ root, args });
+}
+
+// A plain paragraph of `text`, as Word writes one with no style.
+function plain(text) {
+  return `<w:p><w:r><w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r></w:p>`;
+}
+
+// The three prose paragraphs of the-gull-rock-light's chapter 1, as written.
+const BOAT = "The supply boat backs off the landing before your boots are dry. The boatman does not wait for thanks. He has seen what you have seen: the lamp at the top of Gull Rock is dark, and the sun is already down.";
+const CALL = "You call for Tobias Wren. The keeper you have come to relieve should be on the landing with a lantern and a list of complaints. The only answer is the sea working at the rocks.";
+const DOOR = "The tower door stands open. A coil of rope lies across the path to the east ledge, where the rock drops to the water.";
+
+// Chapter 1 of the-gull-rock-light with its prose replaced by `blocks`, as
+// sentEdited takes it.
+function proseOf(...blocks) {
+  return (text) => text.replace(/## Chapter Text[\s\S]*$/, `## Chapter Text\n\n${blocks.join("\n\n")}\n`);
 }
 
 function xmlEscape(text) {
@@ -320,8 +337,16 @@ describe("story apply: cuts and the base version", () => {
       .replace(/She pressed her palms flat[^\n]*/, "She pressed both palms against the nearest ash tree.")
       .replace(/A branch cracked behind her\.[^\n]*\n\n/, ""));
     expect(codes(result.stderr)).toEqual(["apply-conflict"]);
-    expect(result.stderr).toContain('warning: ch01-p5 in chapters/chapter-01.md: the document and the project both changed it since it was sent, so the project\'s text was kept. Project: ""You feel it," she whispered.". Document: ""You feel it too?" she asked."');
+    expect(result.stderr).toContain('warning: ch01-p5 in chapters/chapter-01.md: the document and the project both changed it since it was sent, so the project\'s text was kept. Project: "\\"You feel it,\\" she whispered.". Document: "\\"You feel it too?\\" she asked."');
     expect(result.stdout).toContain("## Conflicts: the project's text was kept");
+    // The same run as --json, on the merged chapter: nothing more to do.
+    fs.writeFileSync(chapterFile, authored);
+    const { json } = applyJson(book, file, "--snapshot", "sent", "--dry-run");
+    expect(json.data.counts).toEqual({ changed: 1, added: 0, cut: 1, conflicts: 1, kept: 0, notWritten: 0, chapters: 1 });
+    expect(json.data.base).toEqual({ kind: "snapshot", name: "sent", label: "snapshot sent" });
+    expect(json.data.conflicts).toEqual([{ file: "chapters/chapter-01.md", chapter: "chapter-01", label: "ch01-p5", reason: "the document and the project both changed it since it was sent", project: '"You feel it," she whispered.', document: '"You feel it too?" she asked.', base: '"You feel it too," she murmured.' }]);
+    expect(json.data.kept).toEqual([]);
+    expect(json.data.notWritten).toEqual([]);
   });
 
   test("merges three ways with --ref: a cut the project changed is a conflict, and the same edit is no conflict", () => {
@@ -346,6 +371,10 @@ describe("story apply: cuts and the base version", () => {
     expect(result.stdout).toContain("merged with git ref sent-to-editor-1 as the version sent.");
     const json = applyJson(book, file, "--ref", "sent-to-editor-1");
     expect(json.json.data.base).toEqual({ kind: "ref", name: "sent-to-editor-1", label: "git ref sent-to-editor-1" });
+    expect(json.json.data.counts).toEqual({ changed: 0, added: 0, cut: 0, conflicts: 1, kept: 0, notWritten: 0, chapters: 0 });
+    expect(json.json.data.conflicts).toEqual([{ file: "chapters/chapter-01.md", chapter: "chapter-01", label: "ch01-p7", reason: "the document cuts it, but the project changed it since it was sent", project: "A branch snapped behind her. She didn't turn.", document: "", base: "A branch cracked behind her. She didn't turn." }]);
+    expect(json.json.data.kept).toEqual([]);
+    expect(json.json.data.notWritten).toEqual([]);
   });
 
   test("a base that is not a project, or that does not parse, is a project error", () => {
@@ -441,7 +470,7 @@ describe("story apply: untrusted text", () => {
     expect(prose).toContain("\\<\\!-- an open comment");
     expect(prose).toContain("\\&amp; \\&#42; entity");
     expect(codes(applied.stderr)).toEqual(["apply-hidden-text", "apply-kept-paragraph"]);
-    expect(applied.stderr).toContain("warning: 1 paragraph in returned.docx holds hidden text, which Word shows neither the editor nor the author; it was left out of the chapters [apply-hidden-text]");
+    expect(applied.stderr).toContain("warning: 1 paragraph in returned.docx holds text marked hidden, which Word shows neither the editor nor the author; it was left out of the chapters [apply-hidden-text]");
     // It reads back as the editor's text: a second run changes nothing.
     const again = applyJson(book, file);
     expect(again.json.data.counts).toMatchObject({ changed: 0, added: 0, cut: 0 });
@@ -467,21 +496,27 @@ describe("story apply: what it reports and does not write", () => {
     const result = story(book.dir, "apply", file, "--path", "book");
     expect(result.code).toBe(0);
     expect(chapter(book, 1)).toContain("You call for Tobias Wren twice.");
-    expect(codes(result.stderr).sort()).toEqual(["apply-chapter-missing", "apply-heading-changed", "apply-heading-changed", "apply-section-unplaced"]);
+    expect(codes(result.stderr).sort()).toEqual(["apply-chapter-missing", "apply-heading-changed", "apply-heading-changed", "apply-not-written", "apply-section-unplaced"]);
     expect(result.stderr).toContain('returned.docx changes the heading of chapters/chapter-01.md from "Chapter 1: The Landing" to "Chapter 1: Landfall"');
-    expect(result.stderr).toContain('The section of returned.docx headed "Appendix" matches no chapter or matter page of this book, so its 1 paragraph was not written');
+    expect(result.stderr).toContain('warning: returned.docx has a heading, "Appendix", that matches no chapter or matter page of this book; story apply does not write headings, and read the paragraphs under it as part of the section before it, writing none that section does not have [apply-section-unplaced]');
+    expect(result.stderr).toContain('warning: A paragraph returned.docx adds after ch05-p3 in chapters/chapter-05.md was not written: it is in a section of the document that matches no chapter or matter page of this book, so story apply cannot tell where it belongs. Make it by hand if you want it: "Notes from the editor." [apply-not-written]');
+    expect(chapter(book, 5)).not.toContain("Notes from the editor.");
     expect(result.stderr).toContain("returned.docx has no section for chapters/chapter-06.md, so it was left as it is");
   });
 
-  test("a file from another book matches nothing and writes nothing", () => {
+  test("a file from another book matches nothing and writes nothing, with a base too", () => {
     const book = sentBook();
     const other = sentBook({ example: "the-last-ember" });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
     const before = treeSnapshot(book.root);
-    const result = story(book.dir, "apply", other.sent, "--path", "book");
-    expect(result.code).toBe(0);
-    expect(codes(result.stderr)).toEqual(["apply-section-unplaced"]);
-    expect(result.stderr).toContain("None of ");
-    expect(treeSnapshot(book.root)).toEqual(before);
+    for (const args of [[], ["--snapshot", "sent"]]) {
+      const result = story(book.dir, "apply", other.sent, "--path", "book", ...args);
+      expect(result.code).toBe(0);
+      expect(codes(result.stderr)).toEqual(["apply-section-unplaced"]);
+      expect(result.stderr).toContain(`warning: Only 0 of the 18 paragraphs of this book's chapters and matter line up with ${other.sent}, which has 57 paragraphs, so nothing was written; check that it was built from this book (story build . --format docx) [apply-section-unplaced]`);
+      expect(result.stdout).toContain("Changed 0, added 0, and cut 0 paragraphs in 0 chapters");
+      expect(treeSnapshot(book.root)).toEqual(before);
+    }
   });
 
   test("reordered chapters are reported, and their own edits still written", () => {
@@ -489,10 +524,13 @@ describe("story apply: what it reports and does not write", () => {
     const headings = book.paragraphs.filter((paragraph) => paragraph.includes('w:val="Heading1"'));
     const second = book.xml.slice(book.xml.indexOf(headings[1]), book.xml.indexOf(headings[2]));
     const target = paragraphWith(book, "You call for Tobias Wren.");
-    const file = returned(book, (xml) => xml.replace(second, "").replace(headings[0], `${second}${headings[0]}`).replace(target, withText(target, "You call again.")));
+    const original = chapter(book, 2);
+    const file = returned(book, (xml) => xml.replace(second, "").replace(headings[0], `${second}${headings[0]}`).replace(target, withText(target, textIn(target).replace("You call", "You call again"))));
     const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
     expect(codes(result.stderr)).toEqual(["apply-chapters-reordered"]);
-    expect(chapter(book, 1)).toContain("You call again.");
+    expect(chapter(book, 1)).toContain("You call again for Tobias Wren.");
+    expect(chapter(book, 2)).toBe(original);
   });
 
   test("comments, footnotes, images, and tables are left out and named", () => {
@@ -529,8 +567,9 @@ describe("story apply: what it reports and does not write", () => {
     expect(codes(result.stderr)).toEqual(["apply-not-written", "apply-not-written", "apply-not-written"]);
     expect(result.stderr).toContain("ch01-p2 in chapters/chapter-01.md was not written: it holds markdown the Word text cannot carry (a link, code, a footnote, or HTML). Make it by hand if you want it: \"You call for Tobias.\"");
     expect(result.stderr).toContain("ch01-p3 in chapters/chapter-01.md was not written: it changes only formatting");
-    expect(result.stderr).toContain("A change in returned.docx was not written: it is not chapter text (the title page, a byline, or a matter page)");
+    expect(result.stderr).toContain('warning: A paragraph returned.docx adds was not written: it is not chapter text (the title page, a byline, or a matter page), which story apply does not write. Make it by hand if you want it: "A subtitle the editor added" [apply-not-written]');
     expect(result.stdout).toContain("## Not written: make these by hand if you want them");
+    expect(result.stdout).toContain("**(no label)** · added paragraph: it is not chapter text (the title page, a byline, or a matter page), which story apply does not write\n> Document: A subtitle the editor added");
   });
 
   test("a change to a matter page is reported, not written", () => {
@@ -553,10 +592,12 @@ describe("story apply: what it reports and does not write", () => {
     const file = returned(book, (xml) => xml.replace(first, "").replace(third, `${third}${first}`));
     const result = story(book.dir, "apply", file, "--path", "book");
     expect(result.code).toBe(0);
-    const paragraphs = (text) => text.slice(text.indexOf("## Chapter Text")).split("\n\n").map((block) => block.trim().slice(0, 20));
-    const moved = paragraphs(chapter(book, 1));
-    expect(moved.indexOf("The supply boat back")).toBeGreaterThan(moved.indexOf("The tower door stand"));
-    expect(chapter(book, 1).length).toBe(original.length);
+    const boat = /The supply boat backs off[^\n]*\n\n/.exec(original)[0];
+    const door = /The tower door stands open\.[^\n]*/.exec(original)[0];
+    expect(chapter(book, 1)).toBe(original.replace(boat, "").replace(door, `${door}\n\n${boat.trimEnd()}`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+    expect(result.stdout).toContain("**ch01-p1** · moved to after ch01-p3\n> Moved: The supply boat backs off");
+    expect(result.stdout).toContain("**after ch01-p3** · moved here from ch01-p1\n> Moved: The supply boat backs off");
   });
 });
 
@@ -571,7 +612,7 @@ describe("story apply: placing and refusing edits", () => {
     expect(result.code).toBe(0);
     expect(chapter(book, 1)).toBe(original);
     expect(codes(result.stderr)).toEqual(["apply-not-written"]);
-    expect(result.stderr).toContain("A change in returned.docx was not written: it is not chapter text");
+    expect(result.stderr).toContain('warning: ch01-p2 in chapters/chapter-01.md stays where it is, though returned.docx moves it out of the chapters: that is not chapter text, which story apply does not write. Move it by hand if you want it: "You call for Tobias Wren.');
   });
 
   test("text from a chapter whose heading the document lost is not written into the chapter before it", () => {
@@ -633,8 +674,8 @@ describe("story apply: placing and refusing edits", () => {
     expect(result.code).toBe(0);
     expect(chapter(book, 1)).toBe(authored.replace("The tower door stands open.", "A new line.\n\nThe tower door stands open."));
     expect(codes(result.stderr)).toEqual(["apply-conflict", "apply-not-written"]);
-    expect(result.stderr).toContain("A paragraph in chapters/chapter-01.md: the document changes a paragraph the project has cut since it was sent");
-    expect(result.stderr).toContain("was not written: it holds an HTML comment, which rewriting it would lose");
+    expect(result.stderr).toContain("A paragraph in chapters/chapter-01.md: the document changes a paragraph the project no longer has in this chapter (cut or moved since it was sent)");
+    expect(result.stderr).toContain("ch01-p4 in chapters/chapter-01.md was not cut, though returned.docx cuts it: it holds an HTML comment, which cutting it would lose. Cut it by hand if you want it");
     expect(result.stdout).toContain("**(cut in the project)** · chapters/chapter-01.md");
     expect(result.stdout).toContain("**after ch01-p3** · added\n> Added: A new line.");
   });
@@ -696,10 +737,10 @@ describe("story apply: placing and refusing edits", () => {
     expect(result.stdout).not.toContain("After applying");
   });
 
-  test("a write that fails after the snapshot names the snapshot that puts the project back", () => {
+  test("a write that fails first changes nothing and says so", () => {
     const book = sentBook();
     const target = paragraphWith(book, "You call for Tobias Wren.");
-    const file = returned(book, (xml) => xml.replace(target, withText(target, "You shout.")));
+    const file = returned(book, (xml) => xml.replace(target, withText(target, textIn(target).replace("You call", "You shout"))));
     const chapterFile = path.join(book.root, "chapters", "chapter-01.md");
     const spy = whileWriting(chapterFile, () => fs.appendFileSync(chapterFile, "\nSaved meanwhile.\n"));
     let result;
@@ -709,8 +750,10 @@ describe("story apply: placing and refusing edits", () => {
       spy.mockRestore();
     }
     expect(result.code).toBe(4);
-    expect(result.stderr).toContain("Snapshot before-apply-1 holds the project as it was before this apply: story snapshot --restore before-apply-1 --path book puts it back");
+    expect(result.stderr).toBe("chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again. story apply had written no chapter, so nothing was changed; run the same story apply again\n");
     expect(chapter(book, 1)).toContain("Saved meanwhile.");
+    expect(chapter(book, 1)).not.toContain("You shout");
+    expect(fs.existsSync(path.join(book.root, UNDO_LOG))).toBe(false);
   });
 });
 
@@ -732,7 +775,7 @@ describe("story apply: refusals", () => {
     }
   });
 
-  test("refuses while another command's change is half made, and a dry run refuses its own", () => {
+  test("refuses while another command's change is half made, with --dry-run too", () => {
     const book = sentBook();
     fs.writeFileSync(path.join(book.root, UNDO_LOG), `${JSON.stringify({ command: "story split chapter-01 --at 1", started: "2026-01-01T00:00:00Z" })}\n`);
     const result = story(book.dir, "apply", book.sent, "--path", "book");
@@ -740,13 +783,14 @@ describe("story apply: refusals", () => {
     expect(result.code).toBe(4);
     const dry = story(book.dir, "apply", book.sent, "--path", "book", "--dry-run");
     expect(dry.code).toBe(4);
+    expect(dry.stderr).toContain("story split chapter-01 --at 1 stopped part way");
   });
 
   test("an apply that stopped part way is put back first when the same apply runs again", () => {
     const book = sentBook();
     const original = chapter(book, 1);
     const target = paragraphWith(book, "You call for Tobias Wren.");
-    const file = returned(book, (xml) => xml.replace(target, withText(target, "You shout.")));
+    const file = returned(book, (xml) => xml.replace(target, withText(target, textIn(target).replace("You call", "You shout"))));
     const chapterFile = path.join(book.root, "chapters", "chapter-01.md");
     expect(() => withUndoLog(book.root, "story apply returned.docx", () => {
       writeFile(chapterFile, "half written\n", { root: book.root, unchangedFrom: original });
@@ -755,7 +799,7 @@ describe("story apply: refusals", () => {
     const result = story(book.dir, "apply", "returned.docx", "--path", "book");
     expect(result.code).toBe(0);
     expect(result.stderr).toContain("note: story apply returned.docx stopped part way, so this first put back the 1 file it had changed");
-    expect(chapter(book, 1)).toBe(original.replace(/You call for Tobias Wren\.[^\n]*/, "You shout."));
+    expect(chapter(book, 1)).toBe(original.replace("You call for Tobias Wren.", "You shout for Tobias Wren."));
     expect(fs.existsSync(path.join(book.root, UNDO_LOG))).toBe(false);
   });
 
@@ -763,11 +807,11 @@ describe("story apply: refusals", () => {
     const book = sentBook();
     const original = chapter(book, 1);
     const target = paragraphWith(book, "You call for Tobias Wren.");
-    const file = returned(book, (xml) => xml.replace(target, withText(target, "You shout.")));
+    const file = returned(book, (xml) => xml.replace(target, withText(target, CALL.replace("You call", "You shout"))));
     fs.writeFileSync(path.join(book.root, ".snapshots"), "not a folder");
     const result = story(book.dir, "apply", file, "--path", "book");
     expect(result.stderr).toContain("story apply stopped before writing any chapter: it could not save the project as snapshot before-apply-1 first");
-    expect(result.code).not.toBe(0);
+    expect(result.code).toBe(3);
     expect(chapter(book, 1)).toBe(original);
   });
 });
@@ -798,9 +842,15 @@ describe("alignItems", () => {
     const right = [...left.slice(1000, 2000), ...left.slice(0, 1000), "* ".trim(), ...Array.from({ length: 100 }, (unused, index) => `other ${index}`)];
     const ops = alignItems(items(...left), items(...right));
     expect(ops.filter((op) => op.type === "same")).toHaveLength(1000);
-    const gap = alignItems(items(...Array.from({ length: 600 }, (unused, index) => `a${index}`), "*"), items(...Array.from({ length: 600 }, (unused, index) => `b${index}`), "x"));
+    const gap = alignItems(items(...Array.from({ length: 600 }, (unused, index) => `a b c a${index}`), "*"), items(...Array.from({ length: 600 }, (unused, index) => `a b c b${index}`), "x"));
     expect(gap.filter((op) => op.type === "change")).toHaveLength(600);
     expect(gap.slice(-2)).toEqual([{ type: "insert", right: 600 }, { type: "cut", left: 600 }]);
+    // Past the cell limit, a pair by place that is not alike is a cut and
+    // an insert.
+    const unlike = alignItems(items(...Array.from({ length: 600 }, (unused, index) => `a${index}`), "*"), items(...Array.from({ length: 600 }, (unused, index) => `b${index}`), "x"));
+    expect(unlike.filter((op) => op.type === "change")).toEqual([]);
+    expect(unlike.filter((op) => op.type === "cut")).toHaveLength(601);
+    expect(unlike.filter((op) => op.type === "insert")).toHaveLength(601);
   });
 
   test("a long list with few matches still aligns by its unique paragraphs", () => {
@@ -808,5 +858,806 @@ describe("alignItems", () => {
     const right = Array.from({ length: 2500 }, (unused, index) => (index % 500 === 0 ? `left ${index}` : `right ${index}`));
     const ops = alignItems(items(...left), items(...right));
     expect(ops.filter((op) => op.type === "same")).toHaveLength(5);
+  });
+});
+
+describe("story apply: moves", () => {
+  test("a moved paragraph takes its own markdown along, a link and code included", () => {
+    const linked = "The [tower door](https://example.com/door) stands `open`. A coil of rope lies across the path to the east ledge, where the rock drops to the water.";
+    const book = sentEdited(proseOf(BOAT, CALL, linked));
+    const original = chapter(book, 1);
+    const moved = paragraphWith(book, "tower door");
+    const first = paragraphWith(book, "The supply boat backs off");
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(first, `${moved}${first}`));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${BOAT}\n\n${CALL}\n\n${linked}`, `${linked}\n\n${BOAT}\n\n${CALL}`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("a moved paragraph with an inline comment moves once, with its comment", () => {
+    const commented = "The tower door <!-- check --> stands open.";
+    const book = sentEdited(proseOf(BOAT, CALL, commented));
+    const original = chapter(book, 1);
+    const moved = paragraphWith(book, "tower door");
+    const first = paragraphWith(book, "The supply boat backs off");
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(first, `${moved}${first}`));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${BOAT}\n\n${CALL}\n\n${commented}`, `${commented}\n\n${BOAT}\n\n${CALL}`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("a paragraph moved to another chapter goes there whole", () => {
+    const book = sentBook();
+    const one = chapter(book, 1);
+    const two = chapter(book, 2);
+    const moved = paragraphWith(book, "You call for Tobias Wren.");
+    const target = paragraphWith(book, "There is no one inside it.");
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(target, `${target}${moved}`));
+    const { json, code } = applyJson(book, file);
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(one.replace(`${CALL}\n\n`, ""));
+    expect(chapter(book, 2)).toBe(two.replace("There is no one inside it.", `There is no one inside it.\n\n${CALL}`));
+    expect(json.data.edits.map(({ type, file: where, label, after, move }) => ({ type, where, label, after, move }))).toEqual([
+      { type: "cut", where: "chapters/chapter-01.md", label: "ch01-p2", after: null, move: { from: "ch01-p2", to: "after ch02-p2" } },
+      { type: "added", where: "chapters/chapter-02.md", label: null, after: "ch02-p2", move: { from: "ch01-p2", to: "after ch02-p2" } }
+    ]);
+    expect(json.diagnostics).toEqual([]);
+  });
+
+  test("with a base, a paragraph the editor moved and the author changed or cut since stays as the author left it", () => {
+    for (const authorEdit of [(text) => text.replace("The tower door stands open.", "The tower door hangs open."), (text) => text.replace(`\n\n${DOOR}`, "")]) {
+      const book = sentBook();
+      expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+      const chapterFile = path.join(book.root, "chapters", "chapter-01.md");
+      fs.writeFileSync(chapterFile, authorEdit(chapter(book, 1)));
+      const authored = chapter(book, 1);
+      const moved = paragraphWith(book, "The tower door stands open.");
+      const first = paragraphWith(book, "The supply boat backs off");
+      const file = returned(book, (xml) => xml.replace(moved, "").replace(first, `${moved}${first}`));
+      const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+      expect(result.code).toBe(0);
+      expect(chapter(book, 1)).toBe(authored);
+      expect(codes(result.stderr)).toEqual(["apply-conflict"]);
+      expect(result.stderr).toMatch(/: the document moves (it, but the project changed it|a paragraph the project has cut) since it was sent, so the project's text was kept/);
+    }
+  });
+
+  test("a move into a block of several paragraphs is not made, and the paragraph stays where it was", () => {
+    const book = sentEdited(proseOf(BOAT, CALL, DOOR, "A first line.\n> A quoted line."));
+    const original = chapter(book, 1);
+    const moved = paragraphWith(book, "You call for Tobias Wren.");
+    const quoted = book.paragraphs.find((paragraph) => textIn(paragraph) === "A quoted line.");
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(quoted, `${moved}${quoted}`));
+    const { json, code, stderr } = (() => {
+      const run = applyJson(book, file);
+      return { ...run, stderr: story(book.dir, "apply", file, "--path", "book").stderr };
+    })();
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(json.data.notWritten).toEqual([{ type: "moved", reason: "placement", file: "chapters/chapter-01.md", label: "ch01-p2", before: CALL, text: CALL, sceneBreak: false, to: "to after ch01-p4" }]);
+    expect(stderr).toContain(`warning: ch01-p2 in chapters/chapter-01.md stays where it is, though returned.docx moves it to after ch01-p4: it would go inside a block of several paragraphs written as one, or inside code. Move it by hand if you want it: "${CALL.slice(0, 120).trimEnd()}…" [apply-not-written]`);
+  });
+
+  test("with a base, a move into a chapter the project deleted is not made, and a paragraph added there is reported with its text", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    fs.rmSync(path.join(book.root, "chapters", "chapter-06.md"));
+    const original = chapter(book, 1);
+    const moved = paragraphWith(book, "You call for Tobias Wren.");
+    const last = book.body.at(-1);
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(last, `${last}${moved}${plain("A line for the lost chapter.")}`));
+    const { json, code } = applyJson(book, file, "--snapshot", "sent");
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(json.data.notWritten).toEqual([
+      { type: "added", reason: "missing", file: "chapters/chapter-06.md", label: null, before: null, text: "A line for the lost chapter.", sceneBreak: false, to: null },
+      { type: "moved", reason: "missing", file: "chapters/chapter-01.md", label: "ch01-p2", before: CALL, text: CALL, sceneBreak: false, to: "into a chapter the project no longer has" }
+    ]);
+    expect(json.diagnostics.map((entry) => entry.code)).toEqual(["apply-chapter-missing", "apply-not-written", "apply-not-written"]);
+  });
+
+  test("a move is made whole or not at all: beside an edit that does not read back, a moved paragraph with a comment stays", () => {
+    const book = sentEdited(proseOf(BOAT, "Alpha <!-- c --> beta gamma.", DOOR));
+    const original = chapter(book, 1);
+    const moved = paragraphWith(book, "Alpha");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const boat = paragraphWith(book, "The supply boat backs off");
+    // Italic that ends on a full stop with a letter after it does not read
+    // back, so the chapter is planned again without what cannot be checked.
+    const odd = "<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Odd.</w:t></w:r><w:r><w:t>x more words here</w:t></w:r></w:p>";
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(door, `${door}${moved}${odd}`).replace(boat, withText(boat, BOAT.replace("backs off", "pulls away from"))));
+    const { json, code } = applyJson(book, file);
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace("backs off", "pulls away from"));
+    expect(json.data.notWritten.map(({ type, reason, label }) => ({ type, reason, label }))).toEqual([
+      { type: "moved", reason: "unsafe", label: "ch01-p2" },
+      { type: "added", reason: "unsafe", label: "after ch01-p3" }
+    ]);
+    expect(json.data.edits.map((edit) => edit.type)).toEqual(["changed"]);
+  });
+
+  test("a paragraph with a link moved to another chapter stays, since its markdown may not work there", () => {
+    const linked = "You call for [Tobias Wren](../characters/tobias-wren.md). Nobody answers you.";
+    const book = sentEdited(proseOf(BOAT, linked, DOOR));
+    const before = treeSnapshot(book.root);
+    const moved = paragraphWith(book, "You call for Tobias Wren.");
+    const target = paragraphWith(book, "There is no one inside it.");
+    const file = returned(book, (xml) => xml.replace(moved, "").replace(target, `${target}${moved}`));
+    const { json, code } = applyJson(book, file);
+    expect(code).toBe(0);
+    expect(treeSnapshot(book.root)).toEqual(before);
+    expect(json.data.notWritten).toEqual([{ type: "moved", reason: "markup", file: "chapters/chapter-01.md", label: "ch01-p2", before: "You call for Tobias Wren. Nobody answers you.", text: "You call for Tobias Wren. Nobody answers you.", sceneBreak: false, to: "to after ch02-p2" }]);
+  });
+
+  test("with a base, a move to just after a paragraph the author has cut since stays where it was", () => {
+    const book = sentBook({ example: "salt-and-lantern" });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const tide = paragraphWith(book, "The tide went out further");
+    const wreck = paragraphWith(book, "At the wreck she put her hand");
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), chapter(book, 1).replace(`${textIn(tide)}\n\n`, ""));
+    const authored = chapter(book, 1);
+    const file = returned(book, (xml) => xml.replace(wreck, "").replace(tide, `${tide}${wreck}`));
+    const { json, code } = applyJson(book, file, "--snapshot", "sent");
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(authored);
+    expect(json.data.notWritten.map(({ type, reason, label, to }) => ({ type, reason, label, to }))).toEqual([{ type: "moved", reason: "anchor", label: "ch01-p3", to: "into chapters/chapter-01.md" }]);
+  });
+
+  test("a paragraph moved under a heading that matches nothing stays where it was", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const boat = paragraphWith(book, "The supply boat backs off");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const heading = '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Interlude</w:t></w:r></w:p>';
+    const file = returned(book, (xml) => xml.replace(boat, "").replace(door, `${door}${heading}${boat}`));
+    const { json, code } = applyJson(book, file);
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(json.data.notWritten).toEqual([{ type: "moved", reason: "unplaced", file: "chapters/chapter-01.md", label: "ch01-p1", before: BOAT, text: BOAT, sceneBreak: false, to: "into a section that matches no chapter" }]);
+    expect(json.diagnostics.map((entry) => entry.code)).toEqual(["apply-section-unplaced", "apply-not-written"]);
+  });
+
+  test("with a base, paragraphs the author reordered do not make the editor's addition twice", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const added = "Somewhere above, a gull cries once.";
+    // Sent: boat, call, door. Now: call, boat, the addition, door. The
+    // document: boat, the addition, call, door.
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), chapter(book, 1).replace(`${BOAT}\n\n${CALL}`, `${CALL}\n\n${BOAT}\n\n${added}`));
+    const authored = chapter(book, 1);
+    const boat = paragraphWith(book, "The supply boat backs off");
+    const file = returned(book, (xml) => xml.replace(boat, `${boat}${plain(added)}`));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(authored);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+});
+
+describe("story apply: sections and whether the document is this book", () => {
+  test("with a base, a heading the editor adds inside a chapter cuts nothing, and the paragraphs under it are only compared", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const heading = '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Interlude</w:t></w:r></w:p>';
+    const file = returned(book, (xml) => xml.replace(call, `${withText(call, CALL.replace("You call", "You shout"))}${heading}`).replace(door, withText(door, DOOR.replace("stands open", "is open"))));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace("You call for", "You shout for"));
+    expect(codes(result.stderr)).toEqual(["apply-section-unplaced", "apply-not-written"]);
+    expect(result.stderr).toContain('warning: returned.docx has a heading, "Interlude", that matches no chapter or matter page of this book');
+    expect(result.stderr).toContain("warning: ch01-p3 in chapters/chapter-01.md was not written: it is in a section of the document that matches no chapter or matter page of this book");
+    for (const later of [2, 3, 4, 5, 6]) {
+      expect(fs.readFileSync(path.join(book.root, ".snapshots", "sent", "chapters", `chapter-0${later}.md`), "utf8")).toBe(chapter(book, later));
+    }
+  });
+
+  test("with a base, an empty heading paragraph cuts nothing", () => {
+    const book = sentBook({ example: "the-last-ember" });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const before = treeSnapshot(book.root);
+    const heading = book.paragraphs.filter((paragraph) => paragraph.includes('w:val="Heading1"'))[0];
+    const file = returned(book, (xml) => xml.replace(heading, `${heading}<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr></w:p>`));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+    expect(treeSnapshot(book.root)).toEqual(before);
+  });
+
+  test("in a Shunn file with a base, a paragraph that opens with a page break, or a page break alone, cuts nothing", () => {
+    const book = sentBook({ example: "the-last-ember", args: ["--shunn"] });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const before = treeSnapshot(book.root);
+    const branch = paragraphWith(book, "A branch cracked behind her.");
+    const grove = paragraphWith(book, "The grove was quieter than it should have been.");
+    const file = returned(book, (xml) => xml
+      .replace(branch, branch.replace("<w:r>", '<w:r><w:br w:type="page"/></w:r><w:r>'))
+      .replace(grove, `<w:p><w:r><w:br w:type="page"/></w:r></w:p>${grove}`), { name: "returned.shunn.docx" });
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+    expect(treeSnapshot(book.root)).toEqual(before);
+  });
+
+  test("with a base, a paragraph the editor moved into a table is not cut", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, `<w:tbl><w:tr><w:tc>${call}</w:tc></w:tr></w:tbl>`));
+    const { json, code } = applyJson(book, file, "--snapshot", "sent");
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(json.data.notWritten).toEqual([{ type: "cut", reason: "table", file: "chapters/chapter-01.md", label: "ch01-p2", before: CALL, text: "", sceneBreak: false, to: null }]);
+    expect(story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent").stderr).toContain("warning: ch01-p2 in chapters/chapter-01.md was not cut, though returned.docx cuts it: the document has its text in a table, which story apply does not read as prose. Cut it by hand if you want it");
+  });
+
+  test("a heavy copyedit, a word changed in nine paragraphs in ten, is still written whole", () => {
+    const book = sentBook({ example: "the-last-ember" });
+    const prose = book.body.filter((paragraph) => textIn(paragraph).split(" ").length > 3);
+    const edited = prose.filter((paragraph, index) => index % 10 !== 0);
+    const file = returned(book, (xml) => edited.reduce((text, paragraph) => text.replace(paragraph, withText(paragraph, textIn(paragraph).replace(/\b(\w+)\b/, "Indeed"))), xml));
+    const { json, code } = applyJson(book, file, "--dry-run");
+    expect(code).toBe(0);
+    expect(edited.length).toBeGreaterThan(30);
+    expect(json.data.counts).toMatchObject({ changed: edited.length, added: 0, cut: 0, kept: 0, notWritten: 0 });
+    expect(json.diagnostics).toEqual([]);
+  });
+
+  test("a section from another book under one of this book's headings writes nothing there, and the rest still is", () => {
+    const book = sentBook();
+    const other = sentBook({ example: "the-last-ember" });
+    const two = chapter(book, 2);
+    const headings = book.paragraphs.filter((paragraph) => paragraph.includes('w:val="Heading1"'));
+    const second = book.xml.slice(book.xml.indexOf(headings[1]) + headings[1].length, book.xml.indexOf(headings[2]));
+    const foreign = other.body.slice(10, 16).join("");
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(second, foreign).replace(call, withText(call, CALL.replace("You call", "You shout"))));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 2)).toBe(two);
+    expect(chapter(book, 1)).toContain("You shout for Tobias Wren.");
+    expect(codes(result.stderr)).toEqual(["apply-section-unplaced"]);
+    expect(result.stderr).toContain('warning: Only 0 of the 3 paragraphs of chapters/chapter-02.md as sent line up with the section of returned.docx headed "Chapter 2: The Rocks", so none of that section\'s edits were written; check that the section belongs to this book [apply-section-unplaced]');
+  });
+
+  test("thousands of added paragraphs take time in proportion to their number", () => {
+    const book = sentBook();
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const make = (size) => returned(book, (xml) => xml.replace(call, `${call}${plain("An added line of text.").repeat(size)}`), { name: `added-${size}.docx` });
+    const counts = expectLinearGrowth((file) => applyJson(book, file, "--dry-run").json.data.counts, make, 8000, { limit: 20000 });
+    expect(counts).toMatchObject({ added: 8000, notWritten: 0, chapters: 1 });
+  });
+
+  test("many sections that match nothing are named up to a limit", () => {
+    const book = sentBook();
+    const before = treeSnapshot(book.root);
+    const door = paragraphWith(book, "The tower door stands open.");
+    const extra = Array.from({ length: 25 }, (unused, index) => `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Extra ${index}</w:t></w:r></w:p>`).join("");
+    const file = returned(book, (xml) => xml.replace(door, `${door}${extra}`));
+    const { json } = applyJson(book, file);
+    const unplaced = json.diagnostics.filter((entry) => entry.code === "apply-section-unplaced");
+    expect(unplaced).toHaveLength(21);
+    expect(unplaced[0].message).toBe('returned.docx has a heading, "Extra 0", that matches no chapter or matter page of this book; story apply does not write headings, and read the paragraphs under it as part of the section before it, writing none that section does not have');
+    expect(unplaced.at(-1).message).toBe("returned.docx has 5 more headings that match no chapter or matter page of this book, read the same way");
+    expect(treeSnapshot(book.root)).toEqual(before);
+  });
+
+  test("two sections with the same heading pair by their paragraphs", () => {
+    const dir = makeTempDir();
+    const root = path.join(dir, "book");
+    fs.cpSync(path.join(repoRoot, "examples", "the-gull-rock-light"), root, { recursive: true });
+    const file2 = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(file2, fs.readFileSync(file2, "utf8").replace(/^title: .*$/m, "title: The Landing"));
+    const book = sentBook({ root });
+    const two = chapter(book, 2);
+    const target = paragraphWith(book, "There is no one inside it.");
+    const file = returned(book, (xml) => xml.replace(target, withText(target, "There is no one inside it at all.")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 2)).toBe(two.replace("There is no one inside it.", "There is no one inside it at all."));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+});
+
+describe("story apply: the base and the current chapters", () => {
+  test("with a base, edits follow a chapter that story move renumbered since", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    expect(story(book.dir, "move", "chapter", "chapter-01", "--number", "7", "--path", "book").code).toBe(0);
+    expect(story(book.dir, "move", "chapter", "chapter-02", "--number", "1", "--path", "book").code).toBe(0);
+    const landing = chapter(book, 7);
+    const rocks = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, `${withText(call, CALL.replace("You call", "You shout"))}${plain("An added line by the editor.")}`));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 7)).toBe(landing.replace(CALL, `${CALL.replace("You call", "You shout")}\n\nAn added line by the editor.`));
+    expect(chapter(book, 1)).toBe(rocks);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("with a base, edits to two chapters the author merged since go into the merged chapter", () => {
+    const book = sentBook({ example: "salt-and-lantern" });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    expect(story(book.dir, "merge", "chapter-01", "chapter-02", "--path", "book").code).toBe(0);
+    const merged = chapter(book, 1);
+    const mud = paragraphWith(book, "The mud took her boots");
+    const ruth = paragraphWith(book, "Ruth said nothing.");
+    const file = returned(book, (xml) => xml.replace(mud, withText(mud, textIn(mud).replace("The mud took", "The mud held"))).replace(ruth, withText(ruth, textIn(ruth).replace("Ruth said nothing.", "Ruth said nothing at all."))));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(merged.replace("The mud took", "The mud held").replace("Ruth said nothing.", "Ruth said nothing at all."));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("with a base, a paragraph added after paragraphs the author has cut since is not written at the start", () => {
+    const book = sentBook({ example: "salt-and-lantern" });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const tide = paragraphWith(book, "The tide went out further");
+    const funeral = paragraphWith(book, "She had not been out to it since the funeral.");
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), chapter(book, 1).replace(`${textIn(tide)}\n\n${textIn(funeral)}\n\n`, ""));
+    const authored = chapter(book, 1);
+    expect(authored).not.toContain("since the funeral");
+    const file = returned(book, (xml) => xml.replace(funeral, `${funeral}${plain("A line after the call.")}`));
+    const { json, code } = applyJson(book, file, "--snapshot", "sent");
+    expect(code).toBe(0);
+    expect(chapter(book, 1)).toBe(authored);
+    expect(json.data.notWritten).toEqual([{ type: "added", reason: "anchor", file: "chapters/chapter-01.md", label: null, before: null, text: "A line after the call.", sceneBreak: false, to: null }]);
+  });
+
+  test("with a base, an author's change of emphasis alone since sending is kept, as a conflict", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), chapter(book, 1).replace("You call for Tobias Wren.", "You call for *Tobias Wren*."));
+    const authored = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(authored);
+    expect(codes(result.stderr)).toEqual(["apply-conflict"]);
+    expect(result.stderr).toContain("warning: ch01-p2 in chapters/chapter-01.md: the document and the project both changed it since it was sent, so the project's text was kept");
+  });
+
+  test("with a base, a paragraph added to a chapter sent empty is written there", () => {
+    const dir = makeTempDir();
+    const root = path.join(dir, "book");
+    fs.cpSync(path.join(repoRoot, "examples", "the-gull-rock-light"), root, { recursive: true });
+    expect(story(dir, "add", "chapter", "The Last Watch", "--path", "book").code).toBe(0);
+    const book = sentBook({ root });
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 7);
+    const heading = book.paragraphs.filter((paragraph) => paragraph.includes('w:val="Heading1"')).at(-1);
+    const file = returned(book, (xml) => xml.replace(heading, `${heading}${plain("Dawn comes grey.")}`));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 7)).toBe(`${original.replace(/\s+$/, "")}\n\nDawn comes grey.\n`);
+  });
+
+  test("both sides cutting the same paragraph is silent", () => {
+    const book = sentBook();
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), chapter(book, 1).replace(`${CALL}\n\n`, ""));
+    const authored = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, ""));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(authored);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("with a base, a comment between paragraphs survives a cut, and so does a cut of a chapter's last paragraph", () => {
+    const book = sentEdited(proseOf(BOAT, CALL, "<!-- keep me -->", DOOR));
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const file = returned(book, (xml) => xml.replace(call, "").replace(door, ""));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${BOAT}\n\n${CALL}\n\n<!-- keep me -->\n\n${DOOR}\n`, `${BOAT}\n\n<!-- keep me -->\n`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("with a base, a cut of a paragraph that holds a link goes whole", () => {
+    const book = sentEdited(proseOf(BOAT, "You call for [Tobias Wren](../characters/tobias-wren.md).", DOOR));
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, ""));
+    const result = story(book.dir, "apply", file, "--path", "book", "--snapshot", "sent");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace("You call for [Tobias Wren](../characters/tobias-wren.md).\n\n", ""));
+  });
+});
+
+describe("story apply: pairing and joining paragraphs", () => {
+  test("without a base, an editor's paragraph unlike the one it replaces is added, and the author's is kept", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, plain("Somewhere above, a bell rings twice.")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(CALL, `Somewhere above, a bell rings twice.\n\n${CALL}`));
+    expect(codes(result.stderr)).toEqual(["apply-kept-paragraph"]);
+    expect(result.stdout).toContain("**after ch01-p1** · added\n> Added: Somewhere above, a bell rings twice.");
+  });
+
+  test("without a base, two paragraphs the editor joined are not left twice", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const file = returned(book, (xml) => xml.replace(door, "").replace(call, withText(call, `${CALL} ${DOOR}`)));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${CALL}\n\n${DOOR}`, `${CALL} ${DOOR}`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("a tracked join under --tracked accept cuts the paragraph joined in, even when the editor changed its words", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const joined = call.replace(/^<w:p>(<w:pPr>.*?<\/w:pPr>)?/s, `<w:p><w:pPr><w:rPr><w:del w:id="70" ${EDITOR}/></w:rPr></w:pPr>`);
+    const file = returned(book, (xml) => xml.replace(call, joined).replace(door, replaceFirstWord(door, "A")));
+    const result = story(book.dir, "apply", file, "--path", "book", "--tracked", "accept");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${CALL}\n\n${DOOR}`, `${CALL}${DOOR.replace("The tower", "A tower")}`));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("a tracked cut of a chapter's last paragraph cuts only that paragraph", () => {
+    const book = sentBook();
+    const one = chapter(book, 1);
+    const two = chapter(book, 2);
+    const door = paragraphWith(book, "The tower door stands open.");
+    const file = returned(book, (xml) => xml.replace(door, cutParagraph(door)));
+    const result = story(book.dir, "apply", file, "--path", "book", "--tracked", "accept");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(one.replace(`\n\n${DOOR}`, ""));
+    expect(chapter(book, 2)).toBe(two);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+});
+
+describe("story apply: block quotes, breaks, and scene breaks", () => {
+  for (const args of [[], ["--shunn"]]) {
+    test(`a changed block quote stays a block quote${args.length > 0 ? " in a Shunn file" : ""}`, () => {
+      const book = sentEdited(proseOf(BOAT, "> A letter came for you.", DOOR), { args });
+      const original = chapter(book, 1);
+      const letter = book.paragraphs.find((paragraph) => textIn(paragraph) === "A letter came for you.");
+      const file = returned(book, (xml) => xml.replace(letter, withText(letter, "A letter came for you today.")), { name: args.length > 0 ? "returned.shunn.docx" : "returned.docx" });
+      const result = story(book.dir, "apply", file, "--path", "book");
+      expect(result.code).toBe(0);
+      expect(chapter(book, 1)).toBe(original.replace("> A letter came for you.", "> A letter came for you today."));
+      expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+    });
+  }
+
+  test("a block quote the editor takes off, and nothing else, is not written", () => {
+    const book = sentEdited(proseOf(BOAT, "> A letter came for you.", DOOR));
+    const original = chapter(book, 1);
+    const letter = book.paragraphs.find((paragraph) => textIn(paragraph) === "A letter came for you.");
+    const file = returned(book, (xml) => xml.replace(letter, plain("A letter came for you.")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(codes(result.stderr)).toEqual(["apply-not-written"]);
+    expect(result.stderr).toContain("ch01-p2 in chapters/chapter-01.md was not written: it changes only formatting (italic, bold, a block quote, or a line break)");
+  });
+
+  test("a change of hard line breaks alone is reported as a change of formatting", () => {
+    const book = sentEdited(proseOf(BOAT, "You call for Tobias Wren.\\\nNobody answers.", DOOR));
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, plain("You call for Tobias Wren. Nobody answers.")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(codes(result.stderr)).toEqual(["apply-not-written"]);
+    expect(result.stderr).toContain("ch01-p2 in chapters/chapter-01.md was not written: it changes only formatting");
+  });
+
+  test("spaces around a line break are not a change", () => {
+    const book = sentEdited(proseOf(BOAT, "You call for Tobias Wren.\\\nNobody answers.", DOOR));
+    const before = treeSnapshot(book.root);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, '<w:p><w:r><w:t xml:space="preserve">You call for Tobias Wren.  </w:t><w:br/><w:t xml:space="preserve"> Nobody answers.</w:t></w:r></w:p>'));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+    expect(treeSnapshot(book.root)).toEqual(before);
+  });
+
+  test("a hard line break the editor adds in a CRLF chapter is written with its line ends", () => {
+    const book = sentEdited((text) => text.replace(/\n/g, "\r\n"));
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, `<w:p><w:r><w:t xml:space="preserve">You call for Tobias Wren.</w:t><w:br/><w:t>Nobody answers at all.</w:t></w:r></w:p>`));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(CALL, "You call for Tobias Wren.\\\r\nNobody answers at all."));
+  });
+
+  test("an edit beside a scene break written without blank lines gets blank lines of its own, and so does a cut of that break", () => {
+    const book = sentEdited(proseOf(BOAT, `${CALL}\n***\n${DOOR}`));
+    expect(story(book.dir, "snapshot", "sent", "--path", "book").code).toBe(0);
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const boat = paragraphWith(book, "The supply boat backs off");
+    const added = returned(book, (xml) => xml.replace(call, `${call}${plain("An added line.")}`).replace(boat, withText(boat, BOAT.replace("backs off", "pulls away from"))));
+    const result = story(book.dir, "apply", added, "--path", "book", "--dry-run", "--json");
+    expect(JSON.parse(result.stdout).data.counts).toMatchObject({ changed: 1, added: 1, notWritten: 0 });
+    expect(story(book.dir, "apply", added, "--path", "book").code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace("backs off", "pulls away from").replace(`${CALL}\n***\n`, `${CALL}\n\nAn added line.\n\n***\n`));
+    fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), original);
+    const sceneBreak = book.paragraphs.find((paragraph) => textIn(paragraph) === "* * *" || textIn(paragraph) === "***");
+    const cut = returned(book, (xml) => xml.replace(sceneBreak, ""), { name: "cut.docx" });
+    const cutResult = story(book.dir, "apply", cut, "--path", "book", "--snapshot", "sent");
+    expect(cutResult.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(`${CALL}\n***\n${DOOR}`, `${CALL}\n\n${DOOR}`));
+    expect(cutResult.stdout).toContain("**scene break after ch01-p2** · scene break cut\n");
+  });
+
+  test("a scene-break marker the editor types is a scene break, reported as one, in the chapter's own style or * * *", () => {
+    for (const marker of ["#", "---", "***"]) {
+      const book = sentBook();
+      const original = chapter(book, 1);
+      const boat = paragraphWith(book, "The supply boat backs off");
+      const file = returned(book, (xml) => xml.replace(boat, `${boat}${plain(marker)}`));
+      const { json } = applyJson(book, file);
+      expect(chapter(book, 1)).toBe(original.replace(BOAT, `${BOAT}\n\n* * *`));
+      expect(json.data.edits).toEqual([{ type: "added", file: "chapters/chapter-01.md", chapter: "chapter-01", label: null, after: "ch01-p1", before: "", text: marker, sceneBreak: true, move: null }]);
+      fs.writeFileSync(path.join(book.root, "chapters", "chapter-01.md"), original);
+      expect(story(book.dir, "apply", file, "--path", "book").stdout).toContain("**after ch01-p1** · scene break added\n\n");
+    }
+  });
+
+  test("an added paragraph takes the chapter's own indent", () => {
+    const book = sentBook({ example: "kirimi-eki-no-wasuremono" });
+    const original = chapter(book, 1);
+    const target = paragraphWith(book, "霧見線は今夜");
+    const file = returned(book, (xml) => xml.replace(target, `${target}${plain("風が止んだ。")}`));
+    expect(story(book.dir, "apply", file, "--path", "book").code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace("　霧見線は今夜、最終列車を最後に廃止される。", "　霧見線は今夜、最終列車を最後に廃止される。\n\n　風が止んだ。"));
+  });
+});
+
+describe("story apply: untrusted text in the report and the chapters", () => {
+  test("invisible characters are left out and named, and format characters show in the report", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const flag = "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}";
+    const smuggled = CALL.replace("Tobias Wren.", `Tobias\u{E0049}\u{E0047}\u2060\uFEFF Wren${flag}, and\u202E back\u202C.`);
+    const file = returned(book, (xml) => xml.replace(call, withText(call, smuggled)));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(CALL, CALL.replace("Tobias Wren.", `Tobias Wren${flag}, and\u202E back\u202C.`)));
+    expect(codes(result.stderr)).toEqual(["apply-invisible-text"]);
+    expect(result.stderr).toContain('warning: ch01-p2 in chapters/chapter-01.md: the document\'s text for it holds 4 invisible characters (tag characters, word joiners or invisible operators, or byte order marks), which were left out of what was written: "You call for Tobias Wren\u{1F3F4}\\u{e0067}\\u{e0062}\\u{e0073}\\u{e0063}\\u{e0074}\\u{e007f}, and\\u{202e} back\\u{202c}. The keeper you have come to relieve should be on the landing with a lantern…" [apply-invisible-text]');
+    expect(result.stdout).toContain("\\u{202e} back\\u{202c}.");
+  });
+
+  test("the editor's private-use marks, soft hyphens, and a heading or list line after a line break are not markdown", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const broken = `<w:p><w:r><w:t xml:space="preserve">You call for To\u00ADbias\uE000 Wren\uE001. The keeper you have come to relieve.</w:t><w:br/><w:t xml:space="preserve"># x</w:t><w:br/><w:t xml:space="preserve">- x</w:t></w:r></w:p>`;
+    const file = returned(book, (xml) => xml.replace(call, broken));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(CALL, "You call for Tobias Wren. The keeper you have come to relieve.\\\n\\# x\\\n\\- x"));
+    expect(result.stderr).toBe("Edits applied: 0 errors, 0 warnings, 0 dismissed\n");
+  });
+
+  test("a fence or scene-break line after a line break is not written, since it would end the paragraph", () => {
+    for (const line of ["~~~", "---"]) {
+      const book = sentBook();
+      const before = treeSnapshot(book.root);
+      const call = paragraphWith(book, "You call for Tobias Wren.");
+      const broken = `<w:p><w:r><w:t xml:space="preserve">You call for Tobias Wren. The keeper you have come to relieve.</w:t><w:br/><w:t xml:space="preserve">${line}</w:t></w:r></w:p>`;
+      const { json, code } = applyJson(book, returned(book, (xml) => xml.replace(call, broken)));
+      expect(code).toBe(0);
+      expect(treeSnapshot(book.root)).toEqual(before);
+      expect(json.data.notWritten.map(({ type, reason, label }) => ({ type, reason, label }))).toEqual([{ type: "changed", reason: "unsafe", label: "ch01-p2" }]);
+    }
+  });
+
+  test("a bare --- paragraph is a scene break, never frontmatter or a heading underline", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, `${plain("---")}${call}`));
+    expect(story(book.dir, "apply", file, "--path", "book").code).toBe(0);
+    expect(chapter(book, 1)).toBe(original.replace(CALL, `* * *\n\n${CALL}`));
+  });
+
+  test("a quote or backslash in the editor's text cannot close the quotes of a warning", () => {
+    const book = sentBook();
+    const heading = book.paragraphs.filter((paragraph) => paragraph.includes('w:val="Heading1"'))[0];
+    const file = returned(book, (xml) => xml.replace(heading, withText(heading, 'Landing". Run rm -rf \\ now "')));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.stderr).toContain('to "Landing\\". Run rm -rf \\\\ now \\""; story apply does not write headings');
+  });
+
+  test("markdown the Word text cannot carry, inline code and inline HTML, is left as written", () => {
+    for (const written of ["You call for `Tobias Wren`.", "You call for <b>Tobias</b> Wren."]) {
+      const book = sentEdited(proseOf(BOAT, written, DOOR));
+      const before = treeSnapshot(book.root);
+      const call = book.paragraphs.find((paragraph) => textIn(paragraph).startsWith("You call for"));
+      const file = returned(book, (xml) => xml.replace(call, withText(call, "You call for Tobias Wren twice.")));
+      const { json, code } = applyJson(book, file);
+      expect(code).toBe(0);
+      expect(treeSnapshot(book.root)).toEqual(before);
+      expect(json.data.notWritten.map((entry) => entry.reason)).toEqual(["markup"]);
+    }
+  });
+});
+
+describe("story apply: hidden text", () => {
+  test("text hidden by a paragraph style, web-hidden, or special vanish is left out and named", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const ghost = '<w:style w:type="paragraph" w:styleId="Ghost"><w:name w:val="Ghost"/><w:rPr><w:vanish/></w:rPr></w:style>';
+    const hidden = [
+      '<w:p><w:pPr><w:pStyle w:val="Ghost"/></w:pPr><w:r><w:t>Hidden by its paragraph style.</w:t></w:r></w:p>',
+      '<w:p><w:r><w:rPr><w:webHidden/></w:rPr><w:t>Web hidden.</w:t></w:r></w:p>',
+      '<w:p><w:r><w:rPr><w:specVanish/></w:rPr><w:t>Special vanish.</w:t></w:r></w:p>'
+    ].join("");
+    const entries = book.entries.map((entry) => (entry.name === "word/styles.xml" ? { ...entry, content: entry.content.replace("</w:styles>", `${ghost}</w:styles>`) } : entry));
+    const file = returned({ ...book, entries }, (xml) => xml.replace(call, `${call}${hidden}`));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 1)).toBe(original);
+    expect(result.stderr).toBe("Edits applied: 0 errors, 1 warnings, 0 dismissed\nwarning: 3 paragraphs in returned.docx hold text marked hidden, which Word shows neither the editor nor the author; it was left out of the chapters [apply-hidden-text]\n");
+  });
+});
+
+describe("story apply: the file, the hash, and the undo log", () => {
+  test("the report and --json give the Word file's SHA-256, dry run and real run alike", () => {
+    const book = sentBook();
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))));
+    const hash = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+    expect(story(book.dir, "apply", file, "--path", "book", "--dry-run").stdout).toContain(`\nSHA-256 of returned.docx: ${hash}\n`);
+    expect(applyJson(book, file, "--dry-run").json.data.sha256).toBe(hash);
+    const real = applyJson(book, file);
+    expect(real.json.data.sha256).toBe(hash);
+    expect(real.json.data.counts.changed).toBe(1);
+  });
+
+  test("run inside the project, the undo command and the maintenance block name no --path", () => {
+    const book = sentBook();
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))));
+    const result = story(book.root, "apply", file);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Undo it: story snapshot --restore before-apply-1\nNext, run:\n  story reindex .\n  story wordcount . --write\n  story check .\n");
+  });
+
+  test("a failed write of a second chapter puts back the first, says nothing was changed, and a second run writes both", () => {
+    const book = sentBook();
+    const one = chapter(book, 1);
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const empty = paragraphWith(book, "There is no one inside it.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))).replace(empty, withText(empty, "There is nobody inside it.")));
+    const chapterTwo = path.join(book.root, "chapters", "chapter-02.md");
+    const spy = whileWriting(chapterTwo, () => fs.appendFileSync(chapterTwo, "\nSaved meanwhile.\n"));
+    let result;
+    try {
+      result = story(book.dir, "apply", file, "--path", "book", "--json");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    const failed = JSON.parse(result.stdout);
+    expect(failed.diagnostics.map((entry) => [entry.code, entry.message])).toEqual([["write-refused", "chapters/chapter-02.md changed on disk while story was updating it, so it was left as it is. Run the command again. story apply put back the 1 chapter it had written (chapters/chapter-01.md), so nothing was changed; run the same story apply again"]]);
+    expect(failed.writes).toContain(path.join(book.root, "chapters", "chapter-01.md"));
+    expect(chapter(book, 1)).toBe(one);
+    expect(fs.existsSync(path.join(book.root, UNDO_LOG))).toBe(false);
+    const again = story(book.dir, "apply", file, "--path", "book");
+    expect(again.code).toBe(0);
+    expect(chapter(book, 1)).toBe(one.replace("You call for", "You shout for"));
+    expect(chapter(book, 2)).toContain("There is nobody inside it.");
+    expect(chapter(book, 2)).toContain("Saved meanwhile.");
+  });
+
+  test("when the chapters written cannot be put back either, the error names the snapshot and the log stays", () => {
+    const book = sentBook();
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const empty = paragraphWith(book, "There is no one inside it.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))).replace(empty, withText(empty, "There is nobody inside it.")));
+    const chapterOne = path.join(book.root, "chapters", "chapter-01.md");
+    const chapterTwo = path.join(book.root, "chapters", "chapter-02.md");
+    // While chapter 2 is written, both chapters are saved in an editor, so
+    // chapter 1 no longer holds what apply wrote there.
+    const spy = whileWriting(chapterTwo, () => {
+      fs.appendFileSync(chapterOne, "\nSaved meanwhile.\n");
+      fs.appendFileSync(chapterTwo, "\nSaved meanwhile.\n");
+    });
+    let result;
+    try {
+      result = story(book.dir, "apply", file, "--path", "book");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain(`chapters/chapter-02.md changed on disk while story was updating it, so it was left as it is. Run the command again. story apply could not put back the chapters it had written: Cannot put back what story apply ${file} changed before it stopped part way: chapters/chapter-01.md has changed since`);
+    expect(result.stderr).toContain("Snapshot before-apply-1 holds the project as it was before this apply: once that is done, story snapshot --restore before-apply-1 --path book puts it back");
+    expect(fs.existsSync(path.join(book.root, UNDO_LOG))).toBe(true);
+    expect(chapter(book, 1)).toContain("You shout for Tobias Wren.");
+    expect(chapter(book, 1)).toContain("Saved meanwhile.");
+  });
+
+  test("a rerun that puts back a stopped apply and then fails says so, and --json lists the put-back file", () => {
+    const book = sentBook();
+    const original = chapter(book, 1);
+    const chapterFile = path.join(book.root, "chapters", "chapter-01.md");
+    expect(() => withUndoLog(book.root, "story apply gone.docx", () => {
+      writeFile(chapterFile, "half written\n", { root: book.root, unchangedFrom: original });
+      throw new Error("stopped");
+    })).toThrow("stopped");
+    const result = story(book.dir, "apply", "gone.docx", "--path", "book", "--json");
+    expect(result.code).toBe(2);
+    const json = JSON.parse(result.stdout);
+    expect(json.diagnostics.map((entry) => entry.message)).toEqual(["Word file not found: gone.docx. story apply gone.docx had stopped part way, so the 1 file it changed was put back first"]);
+    expect(json.writes).toEqual([chapterFile]);
+    expect(chapter(book, 1)).toBe(original);
+  });
+
+  test("a dry run refuses while its own apply is half made, and names --dry-run", () => {
+    const book = sentBook();
+    fs.writeFileSync(path.join(book.root, UNDO_LOG), `${JSON.stringify({ command: "story apply returned.docx", started: "2026-01-01T00:00:00Z" })}\n`);
+    const dry = story(book.dir, "apply", "returned.docx", "--path", "book", "--dry-run");
+    expect(dry.code).toBe(4);
+    expect(dry.stderr).toContain("story apply returned.docx stopped part way, and .story-undo.tmp holds what it changed, so story apply returned.docx --dry-run would build on a change made only in part; nothing was changed");
+  });
+
+  test("a promoted apply-kept-paragraph exits 1 after writing, with the snapshot saved", () => {
+    const book = sentBook();
+    const storyFile = path.join(book.root, "story.md");
+    fs.writeFileSync(storyFile, fs.readFileSync(storyFile, "utf8").replace(/^---\n/, "---\nseverity:\n  - warning: apply-kept-paragraph\n    level: error\n"));
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const door = paragraphWith(book, "The tower door stands open.");
+    const file = returned(book, (xml) => xml.replace(call, "").replace(door, withText(door, DOOR.replace("stands open", "is open"))));
+    const { json, code } = applyJson(book, file);
+    expect(code).toBe(1);
+    expect(json.ok).toBe(false);
+    expect(json.diagnostics.map((entry) => [entry.code, entry.severity])).toEqual([["apply-kept-paragraph", "error"]]);
+    expect(json.data.kept).toEqual([{ file: "chapters/chapter-01.md", chapter: "chapter-01", label: "ch01-p2", text: CALL }]);
+    expect(fs.existsSync(path.join(book.root, ".snapshots", "before-apply-1", "chapters", "chapter-01.md"))).toBe(true);
+    expect(chapter(book, 1)).toContain("The tower door is open.");
+  });
+
+  test("--snapshot= with no name is a usage error", () => {
+    const book = sentBook();
+    const result = story(book.dir, "apply", book.sent, "--path", "book", "--snapshot=");
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("--snapshot needs the version that was sent to the editor");
+  });
+
+  test.skipIf(READONLY_IGNORED)("a read-only chapter is refused before anything is written", () => {
+    const book = sentBook();
+    const call = paragraphWith(book, "You call for Tobias Wren.");
+    const file = returned(book, (xml) => xml.replace(call, withText(call, CALL.replace("You call", "You shout"))));
+    const chapterFile = path.join(book.root, "chapters", "chapter-01.md");
+    fs.chmodSync(chapterFile, 0o444);
+    const before = treeSnapshot(book.root);
+    const result = story(book.dir, "apply", file, "--path", "book");
+    fs.chmodSync(chapterFile, 0o644);
+    expect(result.code).toBe(4);
+    expect(result.stderr).toContain("Cannot write to chapters/chapter-01.md (permission denied); nothing was changed");
+    expect(treeSnapshot(book.root)).toEqual(before);
   });
 });

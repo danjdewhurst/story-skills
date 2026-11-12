@@ -352,6 +352,7 @@ export const FINDING_CODES = {
   "apply-hidden-text": "warning",
   "apply-content-left-out": "warning",
   "apply-not-written": "warning",
+  "apply-invisible-text": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",

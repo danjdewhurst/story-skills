@@ -844,7 +844,7 @@ story wordcount . --write
 story check .
 ```
 
-`apply` changes only the paragraphs whose text changed, and leaves every other byte of the chapter files as it was: frontmatter, headings, the outline, comments, and the markdown of each unchanged paragraph. It writes no heading, matter page, or scene file, and it never writes a paragraph whose markdown holds a link, code, or a comment; it lists those for you to make by hand. It saves the project as snapshot `before-apply-<n>` before it writes, so `story snapshot --restore before-apply-1` puts it back. Do not use `story import --force` for a returned file: it replaces the chapter files whole and loses their frontmatter.
+`apply` changes only the paragraphs the editor changed, added, cut, or moved, and leaves every other byte of the chapter files as it was: frontmatter, headings, the outline, comments, and the markdown of each unchanged paragraph. It writes no heading, matter page, or scene file, and it never rewrites a paragraph whose markdown holds a link, code, or a comment (it can move one whole); it lists those for you to make by hand. Without `--ref` or `--snapshot`, every paragraph you edited after sending goes back to the document's text, so name the version sent whenever you can. The report gives the file's SHA-256: check that the real run's matches the dry run's. It saves the project as snapshot `before-apply-<n>` before it writes, so `story snapshot --restore before-apply-1` puts it back. Do not use `story import --force` for a returned file: it replaces the chapter files whole and loses their frontmatter.
 
 ### Shunn standard manuscript format
 
