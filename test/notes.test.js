@@ -513,24 +513,27 @@ describe("readReview and placeNotes", () => {
     expect(placed.warnings.map((warning) => [warning.code, warning.file])).toEqual([["note-hidden-text", null]]);
   });
 
-  test("text hidden by a paragraph style, web-hidden, or special vanish is hidden, in the text and in comments", () => {
+  test("text hidden by a paragraph style or special vanish is hidden, in the text and in comments, and web-hidden text is not", () => {
     const styles = {
       name: "word/styles.xml",
-      content: `<?xml version="1.0"?><w:styles ${W}><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Ghost"><w:name w:val="Ghost"/><w:rPr><w:vanish/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Shown"><w:name w:val="Shown"/><w:basedOn w:val="Ghost"/><w:rPr><w:vanish w:val="0"/></w:rPr></w:style></w:styles>`
+      content: `<?xml version="1.0"?><w:styles ${W}><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Ghost"><w:name w:val="Ghost"/><w:rPr><w:vanish/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Shown"><w:name w:val="Shown"/><w:basedOn w:val="Ghost"/><w:rPr><w:vanish w:val="0"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="WebOnly"><w:name w:val="WebOnly"/><w:rPr><w:webHidden/></w:rPr></w:style></w:styles>`
     };
     const body = [
       '<w:p><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:r><w:t>Chapter 1</w:t></w:r></w:p>',
       `<w:p><w:commentRangeStart w:id="1"/><w:r><w:t xml:space="preserve">Line two</w:t></w:r><w:ins w:id="3" ${EDITOR}><w:r><w:rPr><w:webHidden/></w:rPr><w:t xml:space="preserve"> web</w:t></w:r><w:r><w:rPr><w:specVanish/></w:rPr><w:t xml:space="preserve"> special</w:t></w:r><w:r><w:t xml:space="preserve"> tab‑end spans</w:t></w:r></w:ins><w:commentRangeEnd w:id="1"/></w:p>`,
       '<w:p><w:pPr><w:pStyle w:val="Ghost"/></w:pPr><w:r><w:t>Hidden by its style.</w:t></w:r><w:r><w:rPr><w:vanish w:val="0"/></w:rPr><w:t> Shown again.</w:t></w:r></w:p>',
-      '<w:p><w:pPr><w:pStyle w:val="Shown"/></w:pPr><w:r><w:t>Shown by its own style.</w:t></w:r></w:p>'
+      '<w:p><w:pPr><w:pStyle w:val="Shown"/></w:pPr><w:r><w:t>Shown by its own style.</w:t></w:r></w:p>',
+      '<w:p><w:pPr><w:pStyle w:val="WebOnly"/></w:pPr><w:r><w:rPr><w:webHidden/></w:rPr><w:t>Web hidden only.</w:t></w:r></w:p>'
     ].join("");
     const comments = commentsXml('<w:comment w:id="1" w:author="Ed"><w:p><w:pPr><w:pStyle w:val="Ghost"/></w:pPr><w:r><w:t>Unseen note.</w:t></w:r></w:p><w:p><w:r><w:t>Seen note.</w:t></w:r></w:p></w:comment>');
     const review = readReview(zip([documentXml(body), styles, comments]));
     expect(review.paragraphs.map((paragraph) => [paragraph.hidden, paragraph.segments.map((segment) => segment.text).join("")])).toEqual([
       [false, "Chapter 1"],
-      [true, "Line two tab‑end spans"],
+      // w:webHidden hides text in Web Layout view only, so Word shows it.
+      [true, "Line two web tab‑end spans"],
       [true, " Shown again."],
-      [false, "Shown by its own style."]
+      [false, "Shown by its own style."],
+      [false, "Web hidden only."]
     ]);
     expect(review.comments.get("1")).toMatchObject({ hidden: true, text: "Unseen note.\nSeen note." });
     const placed = placeNotes(review, book, "review.docx");

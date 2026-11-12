@@ -21,18 +21,29 @@
 // write safely is reported instead: a changed heading, a section or chapter
 // it cannot place, a change on the title page or a matter page, a paragraph
 // whose markdown holds a link, code, or a comment, and a change of
-// formatting alone. When unsure, it writes less and reports more: a move
-// is made whole or not at all, a document that does not line up with the
-// book writes nothing, and a cut whose text the document still has
-// somewhere it cannot place is not made.
+// formatting alone. When unsure, it writes less and reports more. Edits
+// that go together are one unit, written whole or not at all: when one of
+// its edits cannot be written, none is, and each is reported. A paragraph
+// changed in place is a unit of its own; cuts and additions side by side,
+// with no paragraph kept or changed between them, are one (they cannot be
+// told from a rewrite); and units are joined by the two ends of a move, by
+// a sentence one edit takes out of a paragraph and another puts into one (a
+// join, a split, a sentence moved), and by a change that takes in or gives
+// out the whole text of a cut or an addition beside it. A document that
+// does not line up with the book writes nothing, a cut whose text the
+// document still has somewhere it cannot place is not made, and no sentence
+// is written where it would be in the chapters more often than the project
+// or the document has it.
 //
 // With a base (--ref or --snapshot, the version that was sent), the build
 // of the base is what the document is compared with, each chapter as sent
-// is found among the current chapters by its paragraphs, and each change is
+// is found among the current chapters by its paragraphs, and each unit is
 // merged three ways with what the project did since: applied only where the
-// project's paragraph is as it was sent. Without one, the current chapters
-// are the base, and a paragraph only the project has is kept and reported,
-// since an editor's cut and a paragraph added after sending look the same.
+// project's paragraphs it edits, and those its additions go beside, are as
+// they were sent and still side by side, else a conflict whole. Without
+// one, the current chapters are the base, and a paragraph only the project
+// has is kept and reported, since an editor's cut and a paragraph added
+// after sending look the same.
 import fs from "node:fs";
 import path from "node:path";
 import { wordBuild } from "./build.js";
@@ -412,16 +423,30 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
   });
 
   // Each pair's paragraphs aligned, as events on the sent chapters, with how
-  // well the two line up.
+  // well the two line up. The events between two paragraphs the document
+  // has as sent are one gap. In a gap, a paragraph paired with the one it
+  // replaces (a change) is a cell of its own, and the paragraphs added and
+  // cut between two changes are a run: one cell when the run both adds and
+  // cuts, since its cuts and additions cannot be told from a rewrite, else a
+  // cell each. Cells are joined into the units written whole or not at all
+  // by what links them (see linkUnits).
   const trackedCuts = view === "after" && tracked === "accept" ? trackedCutKeys(review) : new Map();
   const trackedJoins = view === "after" && tracked === "accept" ? trackedJoinKeys(review) : new Map();
+  const gaps = [];
+  const newGap = () => {
+    const gap = { id: gaps.length, events: [], refuse: null, trailing: false };
+    gaps.push(gap);
+    return gap;
+  };
+  const runs = [];
+  let cells = 0;
   let order = 0;
   const aligned = pairs.map(([sentIndex], pair) => {
     const left = sentSections[sentIndex].body;
     const right = bodies[pair];
     const ops = alignItems(left, right);
     const events = [];
-    const stats = { sent: 0, doc: 0, aligned: 0, chapter: false };
+    const stats = { sent: 0, doc: 0, aligned: 0, chapter: false, added: [] };
     const matchedHeadings = new Set();
     // The next sent item after each op, for placing an added paragraph.
     const nextSent = new Array(ops.length).fill(null);
@@ -430,6 +455,37 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
       nextSent[position] = next.left === undefined ? nextSent[position + 1] : left[next.left];
     }
     let anchor = sentSections[sentIndex].heading;
+    // A section paired by its paragraphs (its heading changed) whose text has
+    // the chapter's heading as a paragraph starts before the chapter does:
+    // the editor added the heading inside the chapter before, and the
+    // chapter's own heading lost its style or its page break. What comes
+    // before that paragraph is not this chapter's.
+    const docHeading = docSections[pairs[pair][1]].heading;
+    const lostAt = anchor === null || docHeading?.text === anchor.text ? -1 : right.findIndex((item) => !item.folded && item.text === anchor.text);
+    let gap = newGap();
+    // The run being read, and the change before it in its gap.
+    let run = null;
+    let lastChange = null;
+    const add = (event) => {
+      event.gap = gap;
+      event.order = order++;
+      gap.events.push(event);
+      events.push(event);
+      if (event.type === "insert" || event.type === "cut") {
+        if (run === null) {
+          run = { events: [], before: lastChange, after: null };
+          runs.push(run);
+        }
+        run.events.push(event);
+      } else {
+        event.cell = cells++;
+        if (run !== null) {
+          run.after = event;
+        }
+        run = null;
+        lastChange = event;
+      }
+    };
     ops.forEach((op, position) => {
       const sentItem = op.left === undefined ? null : left[op.left];
       const docItem = op.right === undefined ? null : right[op.right];
@@ -442,7 +498,10 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
         stats.aligned += counted && (op.type === "same" || (op.type === "change" && alike(sentItem, docItem))) ? 1 : 0;
       }
       if (op.type === "insert") {
-        events.push({ type: "insert", place: insertPlace(anchor, nextSent[position]), doc: docItem, order: order++ });
+        add({ type: "insert", place: insertPlace(anchor, nextSent[position]), doc: docItem, before: right[op.right - 1] ?? null, early: op.right <= lostAt });
+        if (!docItem.sceneBreak) {
+          stats.added.push(docItem.key);
+        }
         return;
       }
       anchor = sentItem;
@@ -450,32 +509,52 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
       const prose = chapter !== null && (sentItem.trace.kind === "paragraph" || sentItem.trace.kind === "scene-break");
       stats.chapter ||= prose;
       if (op.type === "same") {
+        if (gap.events.length > 0) {
+          gap = newGap();
+        }
+        run = null;
+        lastChange = null;
         if (docItem.foldedHeading) {
           matchedHeadings.add(docItem);
         }
         if (prose && !docItem.folded && !sentItem.sceneBreak && docItem.signature !== sentItem.signature && !(view === "before" && docItem.formatChange)) {
-          events.push({ type: "formatting", chapter, index: sentItem.trace.index, doc: docItem });
+          events.push({ type: "formatting", chapter, index: sentItem.trace.index, doc: docItem, gap: null, order: order++ });
         }
       } else if (op.type === "change") {
-        events.push(prose ? { type: "change", chapter, index: sentItem.trace.index, doc: docItem } : { type: "outside", sent: sentItem, doc: docItem });
+        add(prose ? { type: "change", chapter, index: sentItem.trace.index, sent: sentItem, doc: docItem } : { type: "outside", sent: sentItem, doc: docItem });
       } else if (prose) {
-        events.push({ type: "cut", chapter, index: sentItem.trace.index, sent: sentItem, evidence: takeOne(trackedCuts, sentItem.key) || takeOne(trackedJoins, sentItem.key) });
+        add({ type: "cut", chapter, index: sentItem.trace.index, sent: sentItem, evidence: takeOne(trackedCuts, sentItem.key) || takeOne(trackedJoins, sentItem.key) });
       }
     });
-    return { events, stats, matchedHeadings };
+    return { events, stats, matchedHeadings, lastGap: gap };
   });
+  for (const run of runs) {
+    const whole = run.events.some((event) => event.type === "cut") && run.events.some((event) => event.type === "insert");
+    const cell = whole ? cells++ : null;
+    for (const event of run.events) {
+      event.cell = cell ?? cells++;
+    }
+  }
 
   // A document from another book shares a heading or a scene break with
   // this one at most: judged on body paragraphs, too few of them line up,
   // and nothing is written. Each section that pairs with a chapter must
   // line up with it too.
   const total = aligned.reduce((sum, { stats }) => ({ sent: sum.sent + stats.sent, doc: sum.doc + stats.doc, aligned: sum.aligned + stats.aligned }), { sent: 0, doc: 0, aligned: 0 });
-  // The paragraphs of sections that pair with nothing line up with nothing.
+  // The paragraphs of sections that pair with nothing line up only where
+  // the document has them as added paragraphs (under a heading that lost its
+  // style or its page break, say).
+  const unpaired = new Map();
   sentSections.forEach((section, index) => {
     if (!pairedSent.has(index)) {
-      total.sent += section.body.filter((item) => !item.sceneBreak && item.trace.kind === "paragraph").length;
+      const own = section.body.filter((item) => !item.sceneBreak && item.trace.kind === "paragraph");
+      total.sent += own.length;
+      for (const item of own) {
+        addOne(unpaired, item.key);
+      }
     }
   });
+  total.aligned += aligned.reduce((sum, { stats }) => sum + stats.added.filter((key) => takeOne(unpaired, key)).length, 0);
   const matches = corresponds(total) && (docItems.length > 0 || total.sent === 0);
   if (!matches) {
     warnings.push(warn("apply-section-unplaced", `Only ${total.aligned} of the ${count(total.sent, "paragraph")} of this book's chapters and matter line up with ${shown}, which has ${count(total.doc, "paragraph")}, so nothing was written; check that it was built from this book (story build . --format docx)`));
@@ -531,16 +610,37 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
     warnings.push(warn("apply-chapters-reordered", `${shown} has its chapters or matter pages in another order than the book; story apply writes each chapter's own edits but never moves a chapter, so use story move to reorder them`));
   }
 
-  const events = aligned.flatMap(({ events: own }, pair) => (passing[pair] ? own : []));
-  for (const event of events.filter((entry) => entry.type === "outside")) {
-    notWritten.push({ type: "changed", reason: "outside", file: null, label: null, before: event.sent.text, text: event.doc.text, sceneBreak: false, to: null });
-  }
-  markMerges(events, sent);
-  const elsewhere = new Set(missingSections.flatMap((section) => section.body.map((item) => item.key)));
+  // A section that does not line up writes none of its edits, and each
+  // edit to a chapter is reported (but a change of formatting alone).
+  const events = aligned.flatMap(({ events: own }, pair) => own.filter((event) => passing[pair] || event.type !== "formatting"));
+  aligned.forEach(({ events: own }, pair) => {
+    for (const event of passing[pair] ? [] : own) {
+      if (event.gap !== null) {
+        event.gap.refuse = "section";
+      }
+    }
+  });
+  const lost = lostText(missingSections, { sentSections, pairs, aligned });
   const foldedKeys = new Set(bodies.flatMap((body) => body.filter((item) => item.folded && !item.sceneBreak).map((item) => item.key)));
-  const moves = findMoves(events, { elsewhere, notWritten, foldedKeys, tableKeys });
+  const moves = findMoves(events, { lost, foldedKeys, tableKeys });
+  const unitOf = linkUnits(cells, events, moves, runs);
+  markMerges(events, unitOf);
+  // An added paragraph is placed by the paragraphs of its unit beside it:
+  // the cuts of its run, and the change on either side when it is in the
+  // same unit (a split).
+  for (const run of runs) {
+    const cuts = run.events.filter((event) => event.type === "cut");
+    const by = new Map();
+    for (const event of run.events.filter((entry) => entry.sent === undefined)) {
+      const unit = unitOf(event);
+      if (!by.has(unit)) {
+        by.set(unit, [run.before, ...cuts, run.after].filter((entry) => entry !== null && unitOf(entry) === unit));
+      }
+      event.placeBy = by.get(unit);
+    }
+  }
 
-  const merged = mergeEvents({ project, current, base, sent, events, moves, chapterMap, sentFile, styled });
+  const merged = mergeEvents({ project, current, base, sent, events, moves, chapterMap, sentFile, styled, unitOf, docTexts: docItems.map((item) => item.text) });
   notWritten.push(...merged.notWritten);
   const missingNow = new Set([...missingChapters, ...merged.missing]);
   for (const sentChapter of sent.chapters.keys()) {
@@ -617,7 +717,7 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
     edits,
     conflicts: merged.chapters.flatMap((chapter) => chapter.conflicts.map((conflict) => ({ ...conflict, file: chapter.file, chapter: chapter.id }))),
     kept: merged.chapters.flatMap((chapter) => chapter.kept.map((kept) => ({ ...kept, file: chapter.file, chapter: chapter.id }))),
-    notWritten: notWritten.map(({ type, reason, file, label, before, text, sceneBreak, to }) => ({ type, reason, file, label, before, text, sceneBreak, to })),
+    notWritten: notWritten.map(({ type, reason, file, label, before, text, sceneBreak, to, with: goesWith = null }) => ({ type, reason, file, label, before, text, sceneBreak, to, with: goesWith })),
     writes: written.map((chapter) => chapter.write)
   };
 }
@@ -796,29 +896,61 @@ function takeOne(counts, key) {
   return true;
 }
 
-// A cut paragraph whose whole text is in the changed paragraph beside it
-// (and was not in that one as sent) was joined to it by the editor: the
-// cut is made even without a base, so its sentences are not there twice.
-function markMerges(events, sent) {
-  const changes = new Map(events.filter((event) => event.type === "change").map((event) => [`${event.chapter}:${event.index}`, event]));
-  for (const event of events) {
-    if (event.type !== "cut" || event.evidence || event.sent.sceneBreak || event.sent.text === "") {
-      continue;
+// What a section the document lost may have left in the sections it has:
+// the text of each paragraph of a section that pairs with nothing, its
+// heading's text (a chapter heading that lost its style or its page break
+// reads as a paragraph), and paragraphs alike to those. The last gap of the
+// section before a lost one is marked `trailing`, since what follows its
+// last paragraph as sent may be the lost section's text whatever it now
+// says.
+function lostText(missingSections, { sentSections, pairs, aligned }) {
+  const keys = new Set();
+  const headings = new Set();
+  const bags = [];
+  for (const section of missingSections) {
+    for (const item of section.body) {
+      if (!item.sceneBreak && item.text !== "") {
+        keys.add(item.key);
+        bags.push(wordBag(item.text));
+      }
     }
-    event.evidence = [event.index - 1, event.index + 1].some((index) => {
-      const change = changes.get(`${event.chapter}:${index}`);
-      return change !== undefined && change.doc.text.includes(event.sent.text) && !sent.chapters[event.chapter][index].text.includes(event.sent.text);
-    });
+    if (section.heading !== null) {
+      headings.add(section.heading.text);
+      const index = sentSections.indexOf(section);
+      let before = null;
+      pairs.forEach(([sentIndex], pair) => {
+        if (sentIndex < index && (before === null || sentIndex > pairs[before][0])) {
+          before = pair;
+        }
+      });
+      if (before !== null) {
+        aligned[before].lastGap.trailing = true;
+      }
+    }
   }
+  return {
+    keys,
+    // Whether an added paragraph may be the lost sections' text.
+    has: (item) => {
+      if (keys.has(item.key) || headings.has(item.text)) {
+        return true;
+      }
+      const own = bags.length === 0 ? null : wordBag(item.text);
+      return bags.some((bag) => paragraphSimilarity(bag, own) >= ALIKE_SHARE);
+    }
+  };
 }
 
 // Each added paragraph that is a cut one moved, as a move: { cut, insert,
 // refused }. A move is one edit, made whole or not at all; one that leaves
-// the chapters, or goes into a section that matches nothing, is refused
-// here. Every other added paragraph is checked, and a cut whose text the
-// document has somewhere it is not written (a table, or a section that
-// matches nothing) is refused.
-function findMoves(events, { elsewhere, notWritten, foldedKeys, tableKeys }) {
+// the chapters, goes into a section that matches nothing, or goes where a
+// lost section's text may be, is refused here. Every other added paragraph
+// is checked too: one that is text from a section the document lost, or
+// not chapter text, becomes { type: "refused", refused }, and one in a
+// section that matches nothing is `unplaced`. A cut whose text the document
+// has somewhere it is not written (a table, or a section that matches
+// nothing) is refused.
+function findMoves(events, { lost, foldedKeys, tableKeys }) {
   const cuts = new Map();
   for (const event of events) {
     if (event.type === "cut" && !event.sent.sceneBreak) {
@@ -826,28 +958,28 @@ function findMoves(events, { elsewhere, notWritten, foldedKeys, tableKeys }) {
     }
   }
   const moves = [];
-  const outside = (event, reason) => {
+  const refuse = (event, reason) => {
     event.type = "refused";
-    // A heading of a section that matches nothing is named with the section.
-    if (!event.doc.foldedHeading) {
-      notWritten.push({ type: "added", reason, file: null, label: null, before: null, text: event.doc.text, sceneBreak: event.doc.sceneBreak, to: null });
-    }
+    event.refused = reason;
   };
-  for (const event of events.filter((entry) => entry.type === "insert")) {
+  for (const event of events.filter((entry) => entry.type === "insert" && !entry.doc.foldedHeading)) {
+    const lostHere = event.gap.trailing || event.early || (!event.doc.sceneBreak && lost.has(event.doc));
     const queue = event.doc.sceneBreak ? undefined : cuts.get(event.doc.key);
     if (queue !== undefined && queue.length > 0) {
       const cut = queue.shift();
-      const move = { cut, insert: event, refused: event.place === null ? "outside" : event.doc.folded ? "unplaced" : null, conflict: null, plan: null };
+      const move = { cut, insert: event, refused: event.place === null ? "outside" : event.doc.folded ? "unplaced" : lostHere ? "elsewhere" : null };
       cut.move = move;
       event.move = move;
       moves.push(move);
-    } else if (elsewhere.has(event.doc.key) && !event.doc.sceneBreak) {
-      outside(event, "elsewhere");
+    } else if (!event.doc.sceneBreak && lost.keys.has(event.doc.key)) {
+      refuse(event, "elsewhere");
     } else if (event.place === null) {
-      outside(event, "outside");
+      refuse(event, "outside");
     } else if (event.doc.folded) {
       // Placed in a chapter, but from a section that matches nothing.
       event.unplaced = true;
+    } else if (lostHere) {
+      refuse(event, "elsewhere");
     }
   }
   for (const event of events) {
@@ -856,6 +988,98 @@ function findMoves(events, { elsewhere, notWritten, foldedKeys, tableKeys }) {
     }
   }
   return moves;
+}
+
+// The sentences of a paragraph's text, for following text from one edit to
+// another: split after a full stop, question or exclamation mark, or
+// ellipsis (and any closing quote or bracket) and the space after it, or
+// after an ideographic full stop.
+function sentencesOf(text) {
+  return new Set(String(text).split(/(?<=[。！？])|(?<=[.!?…][”’"'»)\]]*)\s+/u).map((sentence) => sentence.trim()).filter((sentence) => sentence !== ""));
+}
+
+// The units the cells make (see applyPlan), as a function from an event to
+// its unit's id: the cells of the two ends of a move are one unit, and so
+// are the cells of two edits where a sentence one takes out of a paragraph
+// the other puts into one (a join, a split, a sentence moved from one
+// paragraph to another), and of a change and a cut or addition beside it
+// whose whole text the change takes in or gives out (a join or a split
+// whose text has no sentence ends to follow). A unit is written whole or
+// not at all.
+function linkUnits(cells, events, moves, runs) {
+  const parent = Array.from({ length: cells }, (unused, id) => id);
+  const find = (id) => {
+    let root = id;
+    while (parent[root] !== root) {
+      root = parent[root];
+    }
+    while (parent[id] !== root) {
+      [parent[id], id] = [root, parent[id]];
+    }
+    return root;
+  };
+  const union = (left, right) => {
+    const [a, b] = [find(left), find(right)];
+    parent[Math.max(a, b)] = Math.min(a, b);
+  };
+  for (const move of moves) {
+    union(move.cut.cell, move.insert.cell);
+  }
+  const removed = new Map();
+  const added = new Map();
+  for (const event of events) {
+    if (event.cell === undefined || event.sent?.sceneBreak || event.doc?.sceneBreak) {
+      continue;
+    }
+    const before = event.sent === undefined ? new Set() : sentencesOf(event.sent.text);
+    const after = event.type === "cut" ? new Set() : sentencesOf(event.doc.text);
+    for (const sentence of before) {
+      if (!after.has(sentence)) {
+        listOf(removed, sentence).push(event.cell);
+      }
+    }
+    for (const sentence of after) {
+      if (!before.has(sentence)) {
+        listOf(added, sentence).push(event.cell);
+      }
+    }
+  }
+  for (const [sentence, from] of removed) {
+    for (const id of [...from, ...(added.get(sentence) ?? [])]) {
+      union(from[0], id);
+    }
+  }
+  const within = (outer, inner) => inner !== "" && outer.includes(inner);
+  for (const run of runs) {
+    for (const change of [run.before, run.after]) {
+      for (const event of change === null || change.sent.sceneBreak ? [] : run.events) {
+        const takesIn = event.type === "cut" && !event.sent.sceneBreak && within(change.doc.text, event.sent.text) && !within(change.sent.text, event.sent.text);
+        const givesOut = event.sent === undefined && !event.doc.sceneBreak && within(change.sent.text, event.doc.text) && !within(change.doc.text, event.doc.text);
+        if (takesIn || givesOut) {
+          union(change.cell, event.cell);
+        }
+      }
+    }
+  }
+  return (event) => find(event.cell);
+}
+
+// A cut paragraph whose whole text is in a changed paragraph of its unit
+// (and was not in that one as sent) was joined to it by the editor: the cut
+// is made even without a base, so its sentences are not there twice.
+function markMerges(events, unitOf) {
+  const changes = new Map();
+  for (const event of events) {
+    if (event.type === "change") {
+      listOf(changes, unitOf(event)).push(event);
+    }
+  }
+  for (const event of events) {
+    if (event.type !== "cut" || event.evidence || event.sent.sceneBreak || event.sent.text === "") {
+      continue;
+    }
+    event.evidence = (changes.get(unitOf(event)) ?? []).some((change) => change.doc.text.includes(event.sent.text) && !change.sent.text.includes(event.sent.text));
+  }
 }
 
 // Where a paragraph the document adds goes: after the last sent item before
@@ -1171,14 +1395,22 @@ function mapChapters(sent, current, hasBase) {
 
 // Turns the editor's changes on the sent chapters into edits on the current
 // ones, merged three ways when the sent version is a base, and plans the
-// file each changed chapter becomes. Moves are decided whole first, then
-// each chapter is planned; a chapter that cannot write a move's half drops
-// the move, and the chapters are planned again without it. Returns {
-// chapters, notWritten, missing }, `missing` the sent chapters with edits
-// and no current chapter.
-function mergeEvents({ project, current, base, sent, events, moves, chapterMap, sentFile, styled }) {
+// file each changed chapter becomes. Each event (a move is one) becomes a
+// step: an edit to write, nothing to do (the author made the same edit), a
+// paragraph kept (without a base), a conflict, or an edit refused, with
+// why. A unit (see linkUnits) with a conflict or a refused step writes none
+// of its steps, and each is reported: as a conflict when the unit has one,
+// else as not written, the steps refused with their own reason and the
+// rest with the reason of the step they go with. With a base, the
+// paragraphs a unit edits, and those its additions go beside, must still be
+// side by side, as sent. The units
+// left are planned chapter by chapter and read back; a unit with an edit
+// that does not read back is refused too, and its chapters are planned
+// again. Returns { chapters, notWritten, missing }, `missing` the sent
+// chapters with edits and no current chapter.
+function mergeEvents({ project, current, base, sent, events, moves, chapterMap, sentFile, styled, unitOf, docTexts }) {
   const hasBase = base !== null;
-  const notWritten = [];
+  const manuscript = current.manuscript;
   const missing = new Set();
   const sentsOf = new Map();
   chapterMap.forEach((index, sentChapter) => {
@@ -1186,6 +1418,27 @@ function mergeEvents({ project, current, base, sent, events, moves, chapterMap, 
       listOf(sentsOf, index).push(sentChapter);
     }
   });
+  // Each paragraph text of the current chapters, with the chapters it is in.
+  const holders = new Map();
+  current.chapters.forEach((items, index) => {
+    for (const item of items) {
+      if (!item.sceneBreak) {
+        listOf(holders, item.key).push(index);
+      }
+    }
+  });
+  // The paragraphs the author added since sending, anywhere in the book, by
+  // text, with how many: one the document adds too is not added again.
+  const authorAdded = new Map();
+  if (hasBase) {
+    const prose = (chapters) => keyCounts(chapters.flat().filter((item) => !item.sceneBreak));
+    const sentCounts = prose(sent.chapters);
+    for (const [key, times] of prose(current.chapters)) {
+      if (times > (sentCounts.get(key) ?? 0)) {
+        authorAdded.set(key, times - (sentCounts.get(key) ?? 0));
+      }
+    }
+  }
   const contexts = new Map();
   const contextOf = (sentChapter) => {
     const index = chapterMap[sentChapter];
@@ -1193,139 +1446,466 @@ function mergeEvents({ project, current, base, sent, events, moves, chapterMap, 
       return null;
     }
     if (!contexts.has(index)) {
-      contexts.set(index, chapterContext({ project, current, sent, index, sentChapters: sentsOf.get(index), hasBase, styled }));
+      contexts.set(index, chapterContext({ project, current, sent, index, sentChapters: sentsOf.get(index), hasBase, styled, holders }));
     }
     return contexts.get(index);
   };
-  const byChapter = new Map();
-  for (const event of events) {
-    if (!["change", "cut", "insert", "formatting"].includes(event.type) || event.move !== undefined) {
-      continue;
+
+  // What each event, and each move, comes to.
+  const sentInfo = (event, file) => (event.type === "insert"
+    ? { type: "added", file, label: null, before: null, text: event.doc.text, sceneBreak: event.doc.sceneBreak, to: null }
+    : { type: event.type === "cut" ? "cut" : "changed", file, label: null, before: event.sent.text, text: event.type === "cut" ? "" : event.doc.text, sceneBreak: event.type === "cut" && event.sent.sceneBreak, to: null });
+  const resolveEvent = (event) => {
+    // A heading the editor added is named with its section, and text outside
+    // the chapters in a section that does not line up is not this book's.
+    if (event.doc?.foldedHeading || (event.gap.refuse === "section" && (event.type === "outside" || event.refused === "outside"))) {
+      return { outcome: "quiet" };
+    }
+    if (event.type === "outside") {
+      return { outcome: "blocked", reason: "outside", bucket: 0, info: sentInfo(event, null) };
+    }
+    if (event.type === "refused") {
+      return { outcome: "blocked", reason: event.gap.refuse ?? event.refused, bucket: 1, info: sentInfo({ ...event, type: "insert" }, null) };
     }
     const sentChapter = event.type === "insert" ? event.place.chapter : event.chapter;
     const context = contextOf(sentChapter);
     if (context === null) {
-      if (event.type === "change" || event.type === "insert") {
+      if (event.gap.refuse === null) {
         missing.add(sentChapter);
-        notWritten.push({ type: event.type === "change" ? "changed" : "added", reason: "missing", file: sentFile(sentChapter), label: null, before: event.type === "change" ? sent.chapters[sentChapter][event.index].text : null, text: event.doc.text, sceneBreak: event.doc.sceneBreak, to: null });
       }
-      continue;
+      return { outcome: "blocked", reason: event.gap.refuse ?? "missing", bucket: 2, info: sentInfo(event, sentFile(sentChapter)) };
     }
-    listOf(byChapter, context.index).push(event);
-  }
-  // Each move whole: both halves placed, or it stays where it is.
-  for (const move of moves) {
+    const resolved = { context, ...(event.type === "change" ? resolveChange(context, event, hasBase) : event.type === "cut" ? resolveCut(context, event, hasBase) : resolveInsert(context, event, hasBase, authorAdded)) };
+    // A section that does not line up writes nothing.
+    return event.gap.refuse === "section" && resolved.outcome !== "done" ? { ...resolved, outcome: "blocked", reason: "section", ops: [] } : resolved;
+  };
+  const resolveMove = (move) => {
+    const { cut, insert } = move;
+    const from = contextOf(cut.chapter);
+    const to = insert.place === null ? null : contextOf(insert.place.chapter);
+    const now = from?.status[from.offsets.get(cut.chapter) + cut.index];
+    const present = now !== undefined && now.type !== "cut" && now.type !== "elsewhere";
+    const info = { type: "moved", file: from === null ? sentFile(cut.chapter) : from.file, label: present ? from.labels[now.current] : null, before: cut.sent.text, text: insert.doc.text, sceneBreak: false, to: null, project: present ? from.currentItems[now.current].text : now?.type === "elsewhere" ? cut.sent.text : "", document: insert.doc.text, base: cut.sent.text };
+    const step = { context: from, to, place: null, bucket: 3, info };
+    const refuse = (reason) => ({ ...step, outcome: "blocked", reason });
     if (move.refused !== null) {
-      continue;
+      return refuse(move.refused);
     }
-    const from = contextOf(move.cut.chapter);
-    const to = contextOf(move.insert.place.chapter);
     if (from === null || to === null) {
-      move.refused = "missing";
-      missing.add(from === null ? move.cut.chapter : move.insert.place.chapter);
-      continue;
+      if (cut.gap.refuse === null && insert.gap.refuse === null) {
+        missing.add(from === null ? cut.chapter : insert.place.chapter);
+      }
+      return refuse(cut.gap.refuse ?? insert.gap.refuse ?? "missing");
     }
-    const now = from.status[from.offsets.get(move.cut.chapter) + move.cut.index];
+    step.place = to.placeInsert(insert);
+    if (cut.gap.refuse === "section" || insert.gap.refuse === "section") {
+      return refuse("section");
+    }
+    // The project has it there already (this same move, made before): right
+    // after the paragraph it follows in the document, or first when it opens
+    // the section.
+    const standing = present ? { context: from, position: now.current } : now.type === "elsewhere" ? { context: contexts.get(now.chapter) ?? null, position: now.position } : null;
+    if (standing !== null && standing.context === to && (insert.before === null ? standing.position === 0 : standing.position > 0 && to.currentItems[standing.position - 1].key === insert.before.key)) {
+      return { outcome: "done" };
+    }
     if (now.type !== "same" || now.moved) {
-      move.conflict = now.type === "cut"
-        ? "the document moves a paragraph the project has cut since it was sent"
-        : now.moved ? "the document moves it, but the project moved it too since it was sent" : "the document moves it, but the project changed it since it was sent";
-      continue;
+      return {
+        ...step,
+        outcome: "conflict",
+        reason: now.type === "cut"
+          ? "the document moves a paragraph the project has cut since it was sent"
+          : now.type === "elsewhere" ? `the document moves a paragraph the project has moved to another chapter (now ${now.label}) since it was sent`
+            : now.moved ? "the document moves it, but the project moved it too since it was sent" : "the document moves it, but the project changed it since it was sent"
+      };
     }
+    // Links, code, and footnotes may not work in another chapter; a
+    // comment goes with the paragraph, unless it runs on past its lines.
     const why = from.reasonFor(now.current);
     if (why !== null && why !== "comment" && !(why === "markup" && from === to)) {
-      move.refused = why;
-      continue;
+      return refuse(why);
     }
-    const place = to.position(move.insert.place);
+    const block = from.source.blocks[from.source.itemBlock[now.current]];
+    if (block.openComment) {
+      return refuse("comment");
+    }
+    const { place } = step;
     if (place === null || !place.sure) {
-      move.refused = "anchor";
-      continue;
+      return refuse("anchor");
     }
     const slot = to.source.mapped ? insertSlot(to.source, place.position) : null;
     if (slot === null) {
-      move.refused = to.source.mapped ? "placement" : "unmapped";
-      continue;
+      return refuse(to.source.mapped ? "placement" : "unmapped");
     }
-    const block = from.source.blocks[from.source.itemBlock[now.current]];
-    move.plan = {
-      from,
-      to,
-      current: now.current,
-      position: place.position,
-      slot,
-      text: from.source.raw.slice(block.start, block.end),
-      planned: { key: from.currentItems[now.current].key, code: false, quote: from.source.quotes[now.current] }
+    const label = from.labels[now.current];
+    const where = place.position === 0 ? `start of ${to.key}` : `after ${to.labels[place.position - 1]}`;
+    const text = from.currentItems[now.current].text;
+    return {
+      ...step,
+      outcome: "write",
+      span: { context: from, at: from.offsets.get(cut.chapter) + cut.index, current: now.current },
+      anchor: place.anchor === null ? null : { context: to, ...place.anchor },
+      ops: [
+        { kind: "remove", context: from, position: now.current, whole: true, edit: { type: "cut", label, after: null, before: text, text: "", sceneBreak: false, move: { from: label, to: where } }, moveCut: true },
+        { kind: "insert", context: to, position: place.position, slot, order: insert.order, text: from.source.raw.slice(block.moveStart, block.moveEnd), planned: { key: from.currentItems[now.current].key, code: false, quote: from.source.quotes[now.current] }, edit: { type: "added", label: null, after: place.position > 0 ? to.labels[place.position - 1] : null, before: "", text, sceneBreak: false, move: { from: label, to: where } } }
+      ]
     };
+  };
+
+  const units = new Map();
+  const steps = [];
+  const addStep = (event, fields) => {
+    const id = unitOf(event);
+    if (!units.has(id)) {
+      units.set(id, { id, steps: [], refused: null });
+    }
+    const step = { event, unit: units.get(id), ops: [], outcome: "write", reason: null, context: null, order: event.order, insert: event.type === "insert", ...fields };
+    for (const op of step.ops) {
+      op.step = step;
+    }
+    step.unit.steps.push(step);
+    steps.push(step);
+    return step;
+  };
+  const formatting = [];
+  for (const event of events) {
+    if (event.type === "formatting") {
+      formatting.push(event);
+    } else if (event.move === undefined) {
+      addStep(event, resolveEvent(event));
+    }
   }
-  let results;
-  for (;;) {
-    results = new Map();
-    let dropped = false;
-    for (const [index, context] of [...contexts].sort((left, right) => left[0] - right[0])) {
-      const here = moves.filter((move) => move.plan !== null && (move.plan.from === context || move.plan.to === context));
-      const result = planChapter(context, byChapter.get(index) ?? [], here, { hasBase, manuscript: current.manuscript });
-      results.set(index, result);
-      for (const move of result.failedMoves) {
-        move.plan = null;
-        dropped = true;
+  for (const move of moves) {
+    addStep(move.cut, { ...resolveMove(move), move });
+  }
+
+  // With a base, the paragraphs as sent that a unit edits in one gap, and
+  // those its additions go beside, must still be side by side, in their
+  // order, for its edits to go in as one.
+  if (hasBase) {
+    const stretches = new Map();
+    for (const step of steps) {
+      const entries = [
+        ...(step.span === undefined ? [] : [{ ...step.span, gap: step.event.gap }]),
+        ...(step.anchor === undefined || step.anchor === null ? [] : [{ ...step.anchor, gap: (step.move?.insert ?? step.event).gap }])
+      ];
+      for (const entry of entries) {
+        listOf(stretches, `${step.unit.id} ${entry.gap.id} ${entry.context.index}`).push({ ...entry, step });
       }
     }
-    if (!dropped) {
-      break;
+    for (const list of stretches.values()) {
+      list.sort((left, right) => left.at - right.at);
+      const broken = list.find((entry, index) => index > 0 && !entry.context.sideBySide(list[index - 1].at, entry.at));
+      if (broken !== undefined && broken.step.outcome === "write") {
+        Object.assign(broken.step, { outcome: "conflict", reason: "the project has paragraphs in this passage, or its paragraphs in another order, that the version sent did not", ops: [] });
+      }
     }
   }
-  // The moves not made: a conflict, or one report each, where the
-  // paragraph stays.
-  for (const move of moves.filter((entry) => entry.plan === null)) {
-    const from = contextOf(move.cut.chapter);
-    const status = from?.status[from.offsets.get(move.cut.chapter) + move.cut.index];
-    const label = status === undefined || status.type === "cut" ? null : from.labels[status.current];
-    const to = moveTarget(move, contextOf);
-    if (move.conflict !== null) {
-      results.get(from.index).conflicts.push({ label, reason: move.conflict, project: status.type === "cut" ? "" : from.currentItems[status.current].text, document: move.insert.doc.text, base: move.cut.sent.text });
+  for (const unit of units.values()) {
+    unit.refused = unit.steps.find((step) => step.outcome === "conflict") ?? unit.steps.find((step) => step.outcome === "blocked") ?? null;
+  }
+  // No sentence may end up in the chapters more often than the project or
+  // the document has it: a unit that would write one again (a paragraph
+  // kept without a base, or one under a heading the document lost, that
+  // the document has joined to another) is refused.
+  const sentenceCounts = (texts) => {
+    const counts = new Map();
+    for (const text of texts) {
+      for (const sentence of sentencesOf(text)) {
+        addOne(counts, sentence);
+      }
+    }
+    return counts;
+  };
+  const projectSentences = sentenceCounts(current.chapters.flat().filter((item) => !item.sceneBreak).map((item) => item.text));
+  const documentSentences = sentenceCounts(docTexts);
+  for (const unit of units.values()) {
+    if (unit.refused !== null) {
       continue;
     }
-    notWritten.push({
-      type: "moved",
-      reason: move.refused,
-      file: from === null ? sentFile(move.cut.chapter) : from.file,
-      label,
-      before: move.cut.sent.text,
-      text: move.insert.doc.text,
-      sceneBreak: false,
-      to
-    });
+    // A paragraph with a link or code that the editor joined to another
+    // (a sentence of it, or its whole text, is in another) would lose them:
+    // its cut is not made.
+    const written = unit.steps.filter((step) => step.outcome === "write" && step.move === undefined);
+    const added = new Set(written.flatMap((step) => [...sentencesOf(step.info.text)]));
+    const joined = written.filter((step) => step.markup && ([...sentencesOf(step.info.before)].some((sentence) => added.has(sentence)) || written.some((other) => other.info.text.includes(step.info.before))));
+    for (const step of joined) {
+      Object.assign(step, { outcome: "blocked", reason: "markup", ops: [] });
+    }
+    if (joined.length > 0) {
+      unit.refused = joined[0];
+      continue;
+    }
+    const net = new Map();
+    for (const step of written) {
+      for (const sentence of sentencesOf(step.info.text)) {
+        addOne(net, sentence);
+      }
+      for (const sentence of step.info.type === "added" ? [] : sentencesOf(step.info.before)) {
+        net.set(sentence, (net.get(sentence) ?? 0) - 1);
+      }
+    }
+    const over = new Set([...net].filter(([sentence, more]) => more > 0 && (projectSentences.get(sentence) ?? 0) + more > Math.max(projectSentences.get(sentence) ?? 0, documentSentences.get(sentence) ?? 0)).map(([sentence]) => sentence));
+    const repeating = written.filter((step) => step.info.type !== "cut" && [...sentencesOf(step.info.text)].some((sentence) => over.has(sentence)));
+    for (const step of repeating) {
+      Object.assign(step, { outcome: "blocked", reason: "repeats", ops: [] });
+    }
+    unit.refused = repeating[0] ?? null;
+    for (const [sentence, more] of unit.refused === null ? net : []) {
+      projectSentences.set(sentence, (projectSentences.get(sentence) ?? 0) + more);
+    }
   }
-  const chapters = [...results].sort((left, right) => left[0] - right[0]).map(([, result]) => result);
+
+  // The units left, planned chapter by chapter and read back.
+  const opsOf = new Map();
+  for (const step of steps) {
+    for (const op of step.ops) {
+      listOf(opsOf, op.context.index).push(op);
+    }
+  }
+  const texts = new Map();
+  let dirty = new Set(opsOf.keys());
+  while (dirty.size > 0) {
+    const next = new Set();
+    const refuse = (step, reason) => {
+      if (step.outcome === "write") {
+        Object.assign(step, { outcome: "blocked", reason });
+      }
+      if (step.unit.refused === null) {
+        step.unit.refused = step;
+        for (const op of step.unit.steps.flatMap((entry) => entry.ops)) {
+          next.add(op.context.index);
+        }
+      }
+    };
+    for (const index of [...dirty].sort((left, right) => left - right)) {
+      const context = contexts.get(index);
+      const ops = opsOf.get(index).filter((op) => op.step.unit.refused === null);
+      const text = ops.length === 0 ? null : attemptChapter(context, ops, manuscript);
+      texts.set(index, text);
+      if (text !== null || ops.length === 0) {
+        continue;
+      }
+      // Each paragraph that does not read back as its own text on its own
+      // (markdown cannot set every run of emphasis, and a moved paragraph's
+      // link may need a definition it left behind) refuses its unit, and the
+      // chapter is planned again; failing that, every unit in the chapter is
+      // refused.
+      const unsafe = ops.filter((op) => op.kind !== "remove" && !readsAlone(context.source, op.text, op.planned.key, manuscript));
+      for (const op of unsafe.length > 0 ? unsafe : ops) {
+        refuse(op.step, unsafe.length > 0 ? "unsafe" : "chapter");
+      }
+      next.add(index);
+    }
+    dirty = next;
+  }
+
+  // The report.
+  for (const event of formatting) {
+    contextOf(event.chapter);
+  }
+  const results = new Map([...contexts].sort((left, right) => left[0] - right[0]).map(([index, context]) => [index, { file: context.file, id: context.id, key: context.key, edits: [], conflicts: [], kept: [], notWritten: [], write: null, entries: [] }]));
+  for (const [index, text] of texts) {
+    if (text !== null) {
+      const { source, file } = contexts.get(index);
+      results.get(index).write = { file, path: source.path, original: source.raw, text };
+    }
+  }
+  const plain = new Map();
+  const moveCuts = new Map();
+  const adds = new Map();
+  for (const step of steps.filter((entry) => entry.unit.refused === null && entry.outcome === "write")) {
+    for (const op of step.ops) {
+      if (op.kind === "insert") {
+        listOf(adds, op.context.index).push(op);
+      } else {
+        listOf(op.moveCut ? moveCuts : plain, op.context.index).push(op);
+      }
+    }
+  }
+  for (const [index, result] of results) {
+    result.edits = [...(plain.get(index) ?? []), ...(moveCuts.get(index) ?? []), ...(adds.get(index) ?? []).sort((left, right) => left.order - right.order)].map((op) => op.edit);
+  }
+  for (const event of formatting) {
+    const context = contextOf(event.chapter);
+    const now = context?.status[context.offsets.get(event.chapter) + event.index];
+    if (now?.type === "same") {
+      results.get(context.index).entries.push({ order: event.order, insert: false, entry: { type: "changed", reason: "formatting", file: context.file, label: context.labels[now.current], before: context.currentItems[now.current].text, text: event.doc.text, sceneBreak: false, to: null, with: null } });
+    }
+  }
+  const buckets = [[], [], [], []];
+  for (const step of steps) {
+    if (step.outcome === "quiet" || step.outcome === "done") {
+      continue;
+    }
+    if (step.outcome === "kept") {
+      results.get(step.context.index).kept.push({ label: step.info.label, text: step.info.before });
+      continue;
+    }
+    const refused = step.unit.refused;
+    if (refused === null) {
+      continue;
+    }
+    const info = step.move === undefined ? step.info : { ...step.info, to: moveTarget(step.reason ?? refused.reason, step.to, step.place) };
+    if (step.outcome === "conflict" || (step.outcome === "write" && refused.outcome === "conflict")) {
+      results.get(step.context.index).conflicts.push({
+        label: info.label,
+        reason: step.outcome === "conflict" ? step.reason : `the document's edit goes with ${editName(refused.info)}, which is a conflict, and story apply writes edits that go together all or none`,
+        project: info.project,
+        document: info.document,
+        base: info.base
+      });
+      continue;
+    }
+    const own = step.outcome === "blocked";
+    const entry = { type: info.type, reason: own ? step.reason : refused.reason, file: info.file, label: info.label, before: info.before, text: info.text, sceneBreak: info.sceneBreak, to: info.to, with: own ? null : editName(refused.info) };
+    if (step.bucket !== undefined) {
+      buckets[step.bucket].push(entry);
+    } else {
+      results.get(step.context.index).entries.push({ order: step.order, insert: step.insert, entry });
+    }
+  }
+  const chapters = [...results.values()];
   for (const result of chapters) {
-    notWritten.push(...result.notWritten);
+    result.notWritten = result.entries.sort((left, right) => Number(left.insert) - Number(right.insert) || left.order - right.order).map(({ entry }) => entry);
+    delete result.entries;
   }
-  return { chapters, notWritten, missing: [...missing] };
+  return { chapters, notWritten: [...buckets.flat(), ...chapters.flatMap((result) => result.notWritten)], missing: [...missing] };
+}
+
+// A change: written where the project's paragraph is as sent, nothing to do
+// where the author made the same change, a conflict where the author changed
+// it otherwise or it left the chapter.
+function resolveChange(context, event) {
+  const { status, labels, currentItems, source, styled } = context;
+  const at = context.offsets.get(event.chapter) + event.index;
+  const now = status[at];
+  const present = now.type === "same" || now.type === "changed";
+  const label = present ? labels[now.current] : null;
+  const projectText = present ? currentItems[now.current].text : now.type === "elsewhere" ? event.sent.text : "";
+  const info = { type: "changed", file: context.file, label, before: present ? projectText : null, text: event.doc.text, sceneBreak: false, to: null, project: projectText, document: event.doc.text, base: event.sent.text };
+  if (event.doc.folded) {
+    return { info, outcome: "blocked", reason: "unplaced" };
+  }
+  if (now.type === "changed") {
+    return currentItems[now.current].key === event.doc.key ? { info, outcome: "done" } : { info, outcome: "conflict", reason: "the document and the project both changed it since it was sent" };
+  }
+  if (now.type === "elsewhere") {
+    return { info, outcome: "conflict", reason: `the document changes a paragraph the project has moved to another chapter (now ${now.label}) since it was sent` };
+  }
+  if (!present) {
+    return { info, outcome: "conflict", reason: "the document changes a paragraph the project no longer has in this chapter (cut or moved since it was sent)" };
+  }
+  const span = { context, at, current: now.current };
+  const why = context.reasonFor(now.current);
+  if (why !== null) {
+    return { info, span, outcome: "blocked", reason: why };
+  }
+  const block = source.blocks[source.itemBlock[now.current]];
+  const quote = styled ? event.doc.quote : source.quotes[now.current];
+  const edit = { type: "changed", label, after: null, before: projectText, text: event.doc.text, sceneBreak: false, move: null, doc: event.doc };
+  return { info, span, ops: [{ kind: "replace", context, position: now.current, text: paragraphText(source, event.doc, typedIndent(source.raw.slice(block.start, block.end)), quote), planned: { key: event.doc.key, code: false, quote }, edit }] };
+}
+
+// A cut: made where the project's paragraph is as sent (without a base,
+// only one the document shows the editor made: a tracked deletion or a
+// join; any other is kept), nothing to do where the author cut it too, a
+// conflict where the author changed it or moved it to another chapter.
+function resolveCut(context, event, hasBase) {
+  const { status, labels, currentItems } = context;
+  const at = context.offsets.get(event.chapter) + event.index;
+  const now = status[at];
+  const present = now.type === "same" || now.type === "changed";
+  const label = present ? labels[now.current] : null;
+  const projectText = present ? currentItems[now.current].text : now.type === "elsewhere" ? event.sent.text : "";
+  const sceneBreak = event.sent.sceneBreak;
+  const info = { type: "cut", file: context.file, label, before: projectText, text: "", sceneBreak, to: null, project: projectText, document: "", base: event.sent.text };
+  if (now.type === "changed") {
+    return { info, outcome: "conflict", reason: "the document cuts it, but the project changed it since it was sent" };
+  }
+  if (now.type === "elsewhere") {
+    return { info, outcome: "conflict", reason: `the document cuts a paragraph the project has moved to another chapter (now ${now.label}) since it was sent` };
+  }
+  if (now.type === "cut") {
+    return { info, outcome: "done" };
+  }
+  const span = { context, at, current: now.current };
+  const refused = event.refused ?? null;
+  if (refused !== null) {
+    return { info, span, outcome: "blocked", reason: refused };
+  }
+  if (!hasBase && !event.evidence) {
+    return { info, outcome: "kept" };
+  }
+  // A block whose markup the Word text cannot carry can still be cut whole,
+  // unless its text goes into another paragraph (see mergeEvents).
+  const why = context.reasonFor(now.current);
+  if (why !== null && why !== "markup") {
+    return { info, span, outcome: "blocked", reason: why };
+  }
+  return { info, span, markup: why === "markup", ops: [{ kind: "remove", context, position: now.current, edit: { type: "cut", label, after: null, before: projectText, text: "", sceneBreak, move: null } }] };
+}
+
+// An added paragraph: placed by the paragraphs of its unit beside it that
+// the project still has as sent, else after the paragraph it follows as
+// sent; nothing to do where the author added the same paragraph there.
+function resolveInsert(context, event, hasBase, authorAdded) {
+  const place = context.placeInsert(event);
+  const label = place === null ? null : place.position > 0 ? `after ${context.labels[place.position - 1]}` : `start of ${context.key}`;
+  const info = { type: "added", file: context.file, label, before: null, text: event.doc.text, sceneBreak: event.doc.sceneBreak, to: null, project: "", document: event.doc.text, base: null };
+  // The author added it too: a paragraph anywhere in the book, a scene
+  // break in the same place.
+  if (hasBase && (event.doc.sceneBreak ? place !== null && context.authorAdded(place.position) : takeOne(authorAdded, event.doc.key))) {
+    return { info, outcome: "done" };
+  }
+  if (event.unplaced) {
+    return { info, outcome: "blocked", reason: "unplaced" };
+  }
+  if (place === null || !place.sure) {
+    return { info, outcome: "blocked", reason: "anchor" };
+  }
+  const { source } = context;
+  const slot = source.mapped ? insertSlot(source, place.position) : null;
+  if (slot === null) {
+    return { info, outcome: "blocked", reason: source.mapped ? "placement" : "unmapped" };
+  }
+  const quote = context.styled && event.doc.quote;
+  const edit = { type: "added", label: null, after: place.position > 0 ? context.labels[place.position - 1] : null, before: "", text: event.doc.text, sceneBreak: event.doc.sceneBreak, move: null, doc: event.doc };
+  return { info, anchor: place.anchor === null ? null : { context, ...place.anchor }, ops: [{ kind: "insert", context, position: place.position, slot, order: event.order, text: paragraphText(source, event.doc, source.indent, quote), planned: { key: event.doc.key, code: false, quote }, edit }] };
+}
+
+// An edit, named for a report on another that goes with it.
+function editName(info) {
+  if (info.type === "added") {
+    return info.label === null ? "a paragraph the document adds" : `the paragraph the document adds ${info.label}`;
+  }
+  const what = { changed: "change to", cut: "cut of", moved: "move of" }[info.type];
+  return info.label === null ? `a ${what.split(" ")[0]} of a paragraph` : `the ${what} ${info.label}`;
 }
 
 // Where a refused move would have taken its paragraph, in words.
-function moveTarget(move, contextOf) {
-  if (move.refused === "outside") {
+function moveTarget(reason, to, place) {
+  if (reason === "outside") {
     return "out of the chapters";
   }
-  if (move.refused === "unplaced") {
+  if (reason === "unplaced") {
     return "into a section that matches no chapter";
   }
-  const to = contextOf(move.insert.place.chapter);
+  if (reason === "elsewhere") {
+    return "into text the document may have from a chapter whose heading it lost";
+  }
   if (to === null) {
     return "into a chapter the project no longer has";
   }
-  const place = to.position(move.insert.place);
   return place === null ? `into ${to.file}` : place.position === 0 ? `to the start of ${to.key}` : `to after ${to.labels[place.position - 1]}`;
 }
 
 // What planning a chapter needs that no edit changes: the chapter as sent
 // (the sent chapters mapped to it, in order), how each sent paragraph
 // stands now (see statusOf), its paragraphs and their labels, and its
-// markdown. `position` turns a place among the sent paragraphs into one
-// among the current ones.
-function chapterContext({ project, current, sent, index, sentChapters, hasBase, styled }) {
+// markdown. `placeInsert` places an added paragraph among the current
+// paragraphs, and `authorAdded` says whether the author added a scene break
+// there since sending.
+function chapterContext({ project, current, sent, index, sentChapters, hasBase, styled, holders }) {
   const chapter = project.chapters[index];
   const currentItems = current.chapters[index];
   const key = current.manuscript.chapters[index].key;
@@ -1335,15 +1915,34 @@ function chapterContext({ project, current, sent, index, sentChapters, hasBase, 
     offsets.set(sentChapter, sentItems.length);
     sentItems.push(...sent.chapters[sentChapter]);
   }
-  const status = statusOf(sentItems, currentItems, hasBase);
+  // Where a sent paragraph the chapter lost is now, when another chapter
+  // has its text.
+  const elsewhere = (item) => {
+    const other = item.sceneBreak ? undefined : (holders.get(item.key) ?? []).find((chapterIndex) => chapterIndex !== index);
+    if (other === undefined) {
+      return null;
+    }
+    const items = current.chapters[other];
+    const position = items.findIndex((entry) => entry.key === item.key);
+    return { chapter: other, position, label: itemLabels(items, current.manuscript.chapters[other].key)[position] };
+  };
+  const status = statusOf(sentItems, currentItems, hasBase, elsewhere);
   const source = chapterSource(project, chapter, current.manuscript.chapters[index].body);
+  const runs = hasBase ? addedRuns(status, currentItems) : null;
+  const sentPosition = (event) => (offsets.has(event.chapter) ? offsets.get(event.chapter) + event.index : null);
+  // The positions of the paragraphs as sent each added paragraph is placed
+  // by (see applyPlan) that the project still has as they were, in order.
+  const spans = new Map();
+  // Per sent position, how many paragraphs up to it the project still has
+  // (as they were or changed) somewhere other than right after the one
+  // before them that it still has: see `sideBySide`.
+  let breaks = null;
   return {
     index,
     id: chapter.id,
     file: current.files[index],
     key,
     styled,
-    hasBase,
     currentItems,
     sentItems,
     offsets,
@@ -1351,17 +1950,74 @@ function chapterContext({ project, current, sent, index, sentChapters, hasBase, 
     source,
     labels: itemLabels(currentItems, key),
     reasonFor: (position) => (source.mapped ? source.blocks[source.itemBlock[position]].why : "unmapped"),
-    position: (place) => currentPosition(status, offsets.get(place.chapter) + place.position, hasBase)
+    // Next to the paragraphs it is placed by that the project still has as
+    // sent: before the first after it, else after the last before it. With
+    // none, after the paragraph it follows as sent (as it was, or changed
+    // since), or first, when that paragraph is still in the chapter; `sure`
+    // is false when the author moved it. `anchor` is the paragraph as sent it
+    // goes beside, { at, current }, which with a base must still be side by
+    // side with the rest of its unit (see sideBySide). Null when it left the
+    // chapter, or, at the start, when the chapter's first paragraph as sent
+    // is now in another chapter.
+    placeInsert(event) {
+      const at = offsets.get(event.place.chapter) + event.place.position;
+      if (!spans.has(event.placeBy)) {
+        spans.set(event.placeBy, event.placeBy
+          .filter((entry) => entry.type === "change" || entry.type === "cut")
+          .map(sentPosition)
+          .filter((position) => position !== null && status[position].type === "same")
+          .sort((left, right) => left - right));
+      }
+      const span = spans.get(event.placeBy);
+      // The first at or after it, found by halves: a run can hold thousands.
+      let low = 0;
+      let high = span.length;
+      while (low < high) {
+        const middle = (low + high) >> 1;
+        if (span[middle] < at) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      const near = low < span.length ? span[low] : span.at(-1);
+      if (near !== undefined) {
+        return { position: status[near].current + (near < at ? 1 : 0), sure: !status[near].moved, anchor: { at: near, current: status[near].current } };
+      }
+      if (at === 0) {
+        return status.length > 0 && status[0].type === "elsewhere" ? null : { position: 0, sure: true, anchor: null };
+      }
+      const previous = status[at - 1];
+      return previous.type === "same" || previous.type === "changed" ? { position: previous.current + 1, sure: !previous.moved, anchor: { at: at - 1, current: previous.current } } : null;
+    },
+    // Whether the paragraphs as sent from `from` to `to` (positions the
+    // project still has) are still side by side, in their order: each one
+    // between them that the project still has comes right after the one
+    // before it, so the author put nothing between them and moved none.
+    sideBySide(from, to) {
+      if (breaks === null) {
+        breaks = new Int32Array(status.length + 1);
+        let last = null;
+        status.forEach((entry, position) => {
+          const kept = entry.current !== undefined;
+          breaks[position + 1] = breaks[position] + (kept && last !== null && entry.current !== last + 1 ? 1 : 0);
+          last = kept ? entry.current : last;
+        });
+      }
+      return breaks[to + 1] === breaks[from + 1];
+    },
+    authorAdded: (position) => [runs.byStart.get(position), runs.byEnd.get(position)].some((counts) => counts !== undefined && takeOne(counts, BREAK_KEY))
   };
 }
 
 // How each sent paragraph stands in the current chapter: { type: "same" }
-// as sent, { type: "changed" } to other text or other formatting, or {
-// type: "cut" }, with `current` its position now and `moved` when the author
-// moved it since: a cut one whose text is once among the cut and once
-// among the paragraphs added since. Without a base the sent paragraphs are
-// the current ones.
-function statusOf(sentItems, currentItems, hasBase) {
+// as sent, { type: "changed" } to other text or other formatting, with
+// `current` its position now and `moved` when the author moved it since (a
+// cut one whose text is once among the cut and once among the paragraphs
+// added since); { type: "elsewhere", chapter, position, label } when
+// another chapter has its text now (`elsewhere` gives where, or null); else
+// { type: "cut" }. Without a base the sent paragraphs are the current ones.
+function statusOf(sentItems, currentItems, hasBase, elsewhere) {
   if (!hasBase) {
     return sentItems.map((item, position) => ({ type: "same", current: position, moved: false }));
   }
@@ -1389,205 +2045,45 @@ function statusOf(sentItems, currentItems, hasBase) {
       status[position] = stand(position, at, true);
     }
   }
+  sentItems.forEach((item, position) => {
+    const now = status[position].type === "cut" ? elsewhere(item) : null;
+    if (now !== null) {
+      status[position] = { type: "elsewhere", ...now };
+    }
+  });
   return status;
 }
 
-// The current position for a position among the sent paragraphs: just after
-// the current paragraph of the nearest sent one before it that still is
-// one, else first. `sure` is false when that paragraph moved since. With a
-// base, a place after a sent paragraph none of whose predecessors is left
-// is null: the start of the chapter is not where it was.
-function currentPosition(status, sentPosition, hasBase) {
-  for (let position = sentPosition - 1; position >= 0; position -= 1) {
-    if (status[position].type !== "cut") {
-      return { position: status[position].current + 1, sure: !status[position].moved };
-    }
-  }
-  return hasBase && sentPosition > 0 ? null : { position: 0, sure: true };
-}
-
-// The paragraphs the author added since sending, by where each run of them
-// starts, with each text's count: an added paragraph the author made too
-// is not added again.
+// The paragraphs the author added since sending, in runs between paragraphs
+// as sent, with each text's count, by where each run starts and by the
+// position just after it ends: a scene break the author added there too is
+// not added again.
 function addedRuns(status, currentItems) {
-  const fromSent = new Set(status.filter((entry) => entry.type !== "cut").map((entry) => entry.current));
-  const runs = new Map();
-  let start = null;
+  const fromSent = new Set(status.filter((entry) => entry.current !== undefined).map((entry) => entry.current));
+  const byStart = new Map();
+  const byEnd = new Map();
+  let run = null;
   currentItems.forEach((item, position) => {
     if (fromSent.has(position)) {
-      start = null;
+      run = null;
       return;
     }
-    if (start === null) {
-      start = position;
-      runs.set(start, new Map());
+    if (run === null) {
+      run = new Map();
+      byStart.set(position, run);
     }
-    addOne(runs.get(start), item.key);
+    addOne(run, item.key);
+    byEnd.set(position + 1, run);
   });
-  return runs;
+  return { byStart, byEnd };
 }
 
-// One chapter's edits: what the editor changed on the sent paragraphs,
-// mapped to the current paragraphs, the halves of the moves that touch it,
-// and the file text that results, checked by reading it back. Returns {
-// file, id, key, edits, conflicts, kept, notWritten, write, failedMoves },
-// `failedMoves` the moves whose half it could not write.
-function planChapter(context, events, moves, { hasBase, manuscript }) {
-  const { status, currentItems, labels, source, file, styled } = context;
-  const edits = [];
-  const conflicts = [];
-  const kept = [];
-  const notWritten = [];
-  const ops = [];
-  const runs = hasBase ? addedRuns(status, currentItems) : new Map();
-  const at = (event) => context.offsets.get(event.chapter) + event.index;
-  const after = (position) => (position > 0 ? labels[position - 1] : null);
-  const addedLabel = (position) => (position > 0 ? `after ${labels[position - 1]}` : `start of ${context.key}`);
-  const missed = (entry) => notWritten.push({ file, before: null, text: "", sceneBreak: false, to: null, ...entry });
-  for (const event of events) {
-    if (event.type === "insert") {
-      continue;
-    }
-    const sentItem = context.sentItems[at(event)];
-    const now = status[at(event)];
-    const label = now.type === "cut" ? null : labels[now.current];
-    const projectText = now.type === "cut" ? "" : currentItems[now.current].text;
-    if (event.type === "formatting") {
-      if (now.type === "same") {
-        missed({ type: "changed", reason: "formatting", label, before: projectText, text: event.doc.text });
-      }
-    } else if (event.type === "change") {
-      if (event.doc.folded) {
-        missed({ type: "changed", reason: "unplaced", label, before: now.type === "cut" ? null : projectText, text: event.doc.text });
-      } else if (now.type === "same") {
-        const why = context.reasonFor(now.current);
-        if (why !== null) {
-          missed({ type: "changed", reason: why, label, before: projectText, text: event.doc.text });
-        } else {
-          const block = source.blocks[source.itemBlock[now.current]];
-          const quote = styled ? event.doc.quote : source.quotes[now.current];
-          const edit = { type: "changed", label, after: null, before: projectText, text: event.doc.text, sceneBreak: false, move: null, doc: event.doc };
-          edits.push(edit);
-          ops.push({ kind: "replace", position: now.current, text: paragraphText(source, event.doc, typedIndent(source.raw.slice(block.start, block.end)), quote), planned: { key: event.doc.key, code: false, quote }, edit, doc: event.doc });
-        }
-      } else if (now.type === "changed") {
-        if (currentItems[now.current].key !== event.doc.key) {
-          conflicts.push({ label, reason: "the document and the project both changed it since it was sent", project: projectText, document: event.doc.text, base: sentItem.text });
-        }
-      } else {
-        conflicts.push({ label: null, reason: "the document changes a paragraph the project no longer has in this chapter (cut or moved since it was sent)", project: "", document: event.doc.text, base: sentItem.text });
-      }
-    } else if (now.type === "same") {
-      // A cut. Without a base, only one the document shows the editor made
-      // is made: a tracked deletion or a join.
-      const refused = event.refused ?? null;
-      const why = refused ?? context.reasonFor(now.current);
-      if (refused === null && !hasBase && !event.evidence) {
-        kept.push({ label, text: projectText });
-      } else if (why !== null && why !== "markup") {
-        // A block whose markup the Word text cannot carry can still be cut
-        // whole.
-        missed({ type: "cut", reason: why, label, before: projectText, sceneBreak: sentItem.sceneBreak });
-      } else {
-        const edit = { type: "cut", label, after: null, before: projectText, text: "", sceneBreak: sentItem.sceneBreak, move: null };
-        edits.push(edit);
-        ops.push({ kind: "remove", position: now.current, edit });
-      }
-    } else if (now.type === "changed") {
-      conflicts.push({ label, reason: "the document cuts it, but the project changed it since it was sent", project: projectText, document: "", base: sentItem.text });
-    }
-  }
-  // The moves' halves here, and the added paragraphs, in the document's
-  // order: placed after the current paragraph that follows the sent one
-  // they come after, or first.
-  const moveTo = (move) => (move.plan.position === 0 ? `start of ${move.plan.to.key}` : `after ${move.plan.to.labels[move.plan.position - 1]}`);
-  for (const move of moves.filter((entry) => entry.plan.from === context)) {
-    const edit = { type: "cut", label: labels[move.plan.current], after: null, before: currentItems[move.plan.current].text, text: "", sceneBreak: false, move: { from: labels[move.plan.current], to: moveTo(move) } };
-    edits.push(edit);
-    ops.push({ kind: "remove", position: move.plan.current, edit, move });
-  }
-  const added = [
-    ...events.filter((event) => event.type === "insert").map((event) => ({ order: event.order, event })),
-    ...moves.filter((move) => move.plan.to === context).map((move) => ({ order: move.insert.order, move }))
-  ].sort((left, right) => left.order - right.order);
-  for (const { event, move } of added) {
-    if (move !== undefined) {
-      const from = move.plan.from.labels[move.plan.current];
-      const edit = { type: "added", label: null, after: after(move.plan.position), before: "", text: move.plan.from.currentItems[move.plan.current].text, sceneBreak: false, move: { from, to: moveTo(move) } };
-      edits.push(edit);
-      ops.push({ kind: "insert", position: move.plan.position, slot: move.plan.slot, text: move.plan.text, planned: move.plan.planned, edit, move });
-      continue;
-    }
-    const place = context.position(event.place);
-    const entry = { type: "added", text: event.doc.text, sceneBreak: event.doc.sceneBreak };
-    if (place !== null && hasBase && takeOne(runs.get(place.position) ?? new Map(), event.doc.key)) {
-      // The author made the same addition.
-      continue;
-    }
-    if (event.unplaced) {
-      // A heading is named with its section (see applyPlan).
-      if (!event.doc.foldedHeading) {
-        missed({ ...entry, reason: "unplaced", label: place === null ? null : addedLabel(place.position) });
-      }
-      continue;
-    }
-    if (place === null || !place.sure) {
-      missed({ ...entry, reason: "anchor", label: place === null ? null : addedLabel(place.position) });
-      continue;
-    }
-    const slot = source.mapped ? insertSlot(source, place.position) : null;
-    if (slot === null) {
-      missed({ ...entry, reason: source.mapped ? "placement" : "unmapped", label: addedLabel(place.position) });
-      continue;
-    }
-    const quote = styled && event.doc.quote;
-    const edit = { type: "added", label: null, after: after(place.position), before: "", text: event.doc.text, sceneBreak: event.doc.sceneBreak, move: null, doc: event.doc };
-    edits.push(edit);
-    ops.push({ kind: "insert", position: place.position, slot, text: paragraphText(source, event.doc, source.indent, quote), planned: { key: event.doc.key, code: false, quote }, edit, doc: event.doc });
-  }
-  const result = { file, id: context.id, key: context.key, edits, conflicts, kept, notWritten, write: null, failedMoves: [] };
-  if (ops.length === 0) {
-    return result;
-  }
-  const attempt = () => {
-    const text = editedText(source, ops);
-    return readsBack(text, source, plannedKeys(context, ops), manuscript) ? text : null;
-  };
-  // Drops planned edits, reporting each as the edit it was: a move's half
-  // drops its whole move, which is reported once (see mergeEvents).
-  const dropped = new Set();
-  const drop = (gone, reason) => {
-    for (const op of gone) {
-      dropped.add(op.edit);
-      if (op.move === undefined) {
-        const { type, label, before, text: own, sceneBreak } = op.edit;
-        missed({ type, reason, label: type === "added" ? addedLabel(op.position) : label, before: before === "" ? null : before, text: own, sceneBreak });
-      } else {
-        op.move.refused = reason;
-        result.failedMoves.push(op.move);
-      }
-    }
-    ops.splice(0, ops.length, ...ops.filter((op) => !dropped.has(op.edit)));
-  };
-  let text = attempt();
-  if (text === null) {
-    // Each paragraph that does not read back as its own text on its own
-    // (markdown cannot set every run of emphasis, and a moved paragraph's
-    // link may need a definition it left behind) is left out, and the rest
-    // is tried once more; failing that, the chapter stays as it is, and
-    // each of its edits is reported.
-    drop(ops.filter((op) => op.kind !== "remove" && !readsAlone(source, op.text, op.planned.key, manuscript)), "unsafe");
-    text = ops.length === 0 ? null : attempt();
-    drop(text === null ? [...ops] : [], "chapter");
-  }
-  result.edits = edits.filter((edit) => !dropped.has(edit));
-  if (text !== null && result.failedMoves.length === 0) {
-    result.write = { file, path: context.source.path, original: source.raw, text };
-  } else if (result.failedMoves.length > 0) {
-    // Planned again without the move.
-    result.edits = [];
-  }
-  return result;
+// The chapter file with the ops made, when it reads back as planned, else
+// null. Paragraphs added at one place go in the document's order.
+function attemptChapter(context, ops, manuscript) {
+  const ordered = [...ops].sort((left, right) => (left.order ?? -1) - (right.order ?? -1));
+  const text = editedText(context.source, ordered);
+  return readsBack(text, context.source, plannedKeys(context, ordered), manuscript) ? text : null;
 }
 
 // Whether one paragraph's markdown reads back as its own text.
@@ -1661,7 +2157,8 @@ function chapterSource(project, chapter, builtBody) {
   let stripped = "";
   const offsets = [];
   let position = 0;
-  for (const range of [...commentRanges(prose), { start: prose.length, end: prose.length }]) {
+  const comments = commentRanges(prose);
+  for (const range of [...comments, { start: prose.length, end: prose.length }]) {
     for (let index = position; index < range.start; index += 1) {
       stripped += prose[index];
       offsets.push(index);
@@ -1718,7 +2215,7 @@ function chapterSource(project, chapter, builtBody) {
       itemBlock.push(blocks.length);
     }
     printed.push(...items);
-    blocks.push({ start, end, why });
+    blocks.push({ start, end, why, ...lineComments(raw, proseOffset, comments, start, end) });
   }
   // The typed indent most prose blocks open with, if any.
   const proseBlocks = blocks.filter((block, index) => block.why === null && !printed[itemBlock.indexOf(index)].sceneBreak);
@@ -1737,6 +2234,35 @@ function chapterSource(project, chapter, builtBody) {
     sceneBreak: sceneBreakLine(raw, blocks, printed, itemBlock),
     indent: uses * 2 >= proseBlocks.length ? indent : ""
   };
+}
+
+// What a block moves with: the comments on its first line before it and on
+// its last line after it, as { moveStart, moveEnd }, the range a moved block
+// takes along (its own when it has none), and `openComment` when such a
+// comment runs on past the line, so the block cannot move without leaving
+// part of it.
+function lineComments(raw, proseOffset, comments, start, end) {
+  const inComment = (at) => comments.some((range) => at - proseOffset >= range.start && at - proseOffset < range.end);
+  let openComment = false;
+  const edge = (from, step) => {
+    let at = from;
+    let found = false;
+    for (;;) {
+      const index = step < 0 ? at - 1 : at;
+      if (index < proseOffset || index >= raw.length) {
+        break;
+      }
+      const comment = inComment(index);
+      if (raw[index] === "\n" || raw[index] === "\r" || (!comment && raw[index] !== " " && raw[index] !== "\t")) {
+        openComment ||= comment;
+        break;
+      }
+      found ||= comment;
+      at += step;
+    }
+    return found ? at : from;
+  };
+  return { moveStart: edge(start, -1), moveEnd: edge(end, 1), openComment };
 }
 
 // The typed spaces a block opens with (an ideographic or no-break space),
@@ -1765,6 +2291,7 @@ function editedText(source, ops) {
   const after = new Map();
   const replaced = new Map();
   const removed = new Set();
+  const whole = new Set();
   for (const op of ops) {
     if (op.kind === "insert") {
       listOf(op.slot.side === "before" ? before : after, op.slot.block).push(op.text);
@@ -1772,8 +2299,14 @@ function editedText(source, ops) {
       replaced.set(itemBlock[op.position], op.text);
     } else {
       removed.add(itemBlock[op.position]);
+      if (op.whole) {
+        whole.add(itemBlock[op.position]);
+      }
     }
   }
+  // A moved block leaves with the comments on its lines.
+  const startOf = (index) => (whole.has(index) ? blocks[index].moveStart : blocks[index].start);
+  const endOf = (index) => (whole.has(index) ? blocks[index].moveEnd : blocks[index].end);
   if (blocks.length === 0) {
     const head = raw.slice(0, source.proseOffset) + raw.slice(source.proseOffset).replace(/\s+$/, "");
     return `${head}${separator}${after.get(null).join(separator)}${eol}`;
@@ -1804,12 +2337,12 @@ function editedText(source, ops) {
   let text = "";
   let wrote = false;
   let lastNew = false;
-  let pending = [raw.slice(source.proseOffset, blocks[0].start)];
+  let pending = [raw.slice(source.proseOffset, startOf(0))];
   blocks.forEach((block, index) => {
     const own = removed.has(index) ? [] : [{ text: replaced.get(index) ?? raw.slice(block.start, block.end), fresh: false }];
     const fresh = (texts) => (texts ?? []).map((entry) => ({ text: entry, fresh: true }));
     const content = [...fresh(before.get(index)), ...own, ...fresh(after.get(index))];
-    const gapAfter = index === blocks.length - 1 ? raw.slice(block.end) : raw.slice(block.end, blocks[index + 1].start);
+    const gapAfter = index === blocks.length - 1 ? raw.slice(endOf(index)) : raw.slice(endOf(index), startOf(index + 1));
     if (content.length === 0) {
       pending.push(gapAfter);
       return;
@@ -1907,7 +2440,7 @@ function sameKeys(left, right) {
 // Why a changed or added paragraph was not written, as "it ...".
 const NOT_WRITTEN_REASONS = {
   outside: "is not chapter text (the title page, a byline, or a matter page), which story apply does not write",
-  elsewhere: "is text from a chapter whose heading the document no longer has, so story apply cannot tell where it belongs",
+  elsewhere: "is text from a chapter whose heading the document no longer has, or where that text may be, so story apply cannot tell where it belongs",
   unplaced: "is in a section of the document that matches no chapter or matter page of this book, so story apply cannot tell where it belongs",
   missing: "is for a chapter the project no longer has, or has changed too much since the version sent to tell where it goes",
   anchor: "would follow a paragraph the project has cut or moved since the version sent, so story apply cannot tell where it belongs",
@@ -1919,11 +2452,15 @@ const NOT_WRITTEN_REASONS = {
   unmapped: "is in a chapter whose markdown story apply cannot map to its paragraphs",
   placement: "would go inside a block of several paragraphs written as one, or inside code",
   unsafe: "would not read back as the document's text once written as markdown (such as emphasis markdown cannot set)",
-  chapter: "is in a chapter whose edits, written together, would not read back as the document's text, so none of them was written"
+  chapter: "is in a chapter whose edits, written together, would not read back as the document's text, so none of them was written",
+  section: "is in a section of the document that does not line up with its chapter as sent, so none of that section's edits was written",
+  repeats: "holds text the project already has in a paragraph this edit does not change, which writing it would leave there twice"
 };
 
 // Why a cut the document makes was not made.
 const CUT_REASONS = {
+  missing: "it is in a chapter the project no longer has, or that has changed too much since the version sent to tell where it is",
+  section: "it is in a section of the document that does not line up with its chapter as sent, so none of that section's edits was written",
   table: "the document has its text in a table, which story apply does not read as prose",
   unplaced: "the document has its text in a section that matches no chapter or matter page of this book",
   comment: "it holds an HTML comment, which cutting it would lose",
@@ -1936,6 +2473,9 @@ const CUT_REASONS = {
 // Why a move the document makes was not made.
 const MOVE_REASONS = {
   outside: "that is not chapter text, which story apply does not write",
+  elsewhere: "it may be text from a chapter whose heading the document lost, so story apply cannot tell which chapter it goes to",
+  section: "a section of the document it touches does not line up with its chapter as sent",
+  comment: "a comment on its line runs on past it, so moving it would leave part of the comment",
   unplaced: "that section of the document matches no chapter or matter page of this book",
   missing: "the project no longer has that chapter, or it has changed too much since the version sent",
   anchor: "the paragraph it would follow has been cut or moved since the version sent, so story apply cannot tell where it belongs",
@@ -1948,8 +2488,37 @@ const MOVE_REASONS = {
   chapter: "a chapter it touches would not read back as the document's text with it"
 };
 
+// Why an edit refused stops the edits that go with it, as "it ...".
+const LINKED_REASONS = {
+  outside: "is not chapter text",
+  elsewhere: "may be text from a chapter whose heading the document lost",
+  unplaced: "is in a section that matches no chapter",
+  missing: "is in a chapter the project no longer has",
+  anchor: "follows a paragraph the project has cut or moved since the version sent",
+  markup: "holds markdown the Word text cannot carry",
+  comment: "holds an HTML comment",
+  block: "shares a block of markdown with other paragraphs",
+  code: "is code",
+  unmapped: "is in a chapter whose markdown story apply cannot map",
+  placement: "would go inside a block of several paragraphs, or inside code",
+  unsafe: "would not read back as the document's text",
+  chapter: "is in a chapter whose edits would not read back",
+  table: "has its text in a table in the document",
+  section: "is in a section that does not line up with its chapter",
+  repeats: "holds text the project already has elsewhere"
+};
+
+// What an entry that goes with a refused edit says: that edit, and why.
+function linkedWhy(entry) {
+  return `it goes with ${entry.with}, which was not written: it ${LINKED_REASONS[entry.reason]}. story apply writes edits that go together all or none`;
+}
+
 // What a not-written entry says about itself, after its label.
 function notWrittenWhy(entry) {
+  if (entry.with !== null) {
+    const what = { cut: "not cut", moved: `not moved ${entry.to}`, added: entry.sceneBreak ? "added scene break" : "added paragraph", changed: "not changed" }[entry.type];
+    return `${what}: ${linkedWhy(entry)}`;
+  }
   if (entry.type === "cut") {
     return `${entry.sceneBreak ? "scene break " : ""}not cut: ${CUT_REASONS[entry.reason]}`;
   }
@@ -1964,18 +2533,20 @@ function notWrittenWhy(entry) {
 
 function notWrittenMessage(entry, shown) {
   const where = entry.file === null ? `in ${shown}` : `in ${entry.file}`;
+  const linked = entry.with === null ? null : linkedWhy(entry);
   if (entry.type === "cut") {
-    return `${entry.label} ${where} was not cut, though ${shown} cuts it: ${CUT_REASONS[entry.reason]}. Cut it by hand if you want it: "${quote(entry.before)}"`;
+    return `${entry.label ?? "A paragraph"} ${where} was not cut, though ${shown} cuts it: ${linked ?? CUT_REASONS[entry.reason]}. Cut it by hand if you want it: "${quote(entry.before)}"`;
   }
   if (entry.type === "moved") {
-    return `${entry.label ?? "A paragraph"} ${where} stays where it is, though ${shown} moves it ${entry.to}: ${MOVE_REASONS[entry.reason]}. Move it by hand if you want it: "${quote(entry.before)}"`;
+    return `${entry.label ?? "A paragraph"} ${where} stays where it is, though ${shown} moves it ${entry.to}: ${linked ?? MOVE_REASONS[entry.reason]}. Move it by hand if you want it: "${quote(entry.before)}"`;
   }
   const text = entry.sceneBreak ? "" : `: "${quote(entry.text)}"`;
+  const why = linked ?? `it ${NOT_WRITTEN_REASONS[entry.reason]}`;
   if (entry.type === "added") {
     const what = entry.sceneBreak ? "A scene break" : "A paragraph";
-    return `${what} ${shown} adds${entry.label === null ? "" : ` ${entry.label}`}${entry.file === null ? "" : ` in ${entry.file}`} was not written: it ${NOT_WRITTEN_REASONS[entry.reason]}. Make it by hand if you want it${text}`;
+    return `${what} ${shown} adds${entry.label === null ? "" : ` ${entry.label}`}${entry.file === null ? "" : ` in ${entry.file}`} was not written: ${why}. Make it by hand if you want it${text}`;
   }
-  return `${entry.label === null ? `A change ${where}` : `${entry.label} ${where}`} was not written: it ${NOT_WRITTEN_REASONS[entry.reason]}. Make it by hand if you want it${text}`;
+  return `${entry.label === null ? `A change ${where}` : `${entry.label} ${where}`} was not written: ${why}. Make it by hand if you want it${text}`;
 }
 
 // Editor or project text in a message, inside double quotes: one line, cut
@@ -2037,7 +2608,7 @@ export function formatApply(result, where = ".") {
   if (result.conflicts.length > 0) {
     lines.push("## Conflicts: the project's text was kept", "");
     for (const conflict of result.conflicts) {
-      lines.push(`**${conflict.label ?? "(cut in the project)"}** · ${inline(conflict.file)} · ${conflict.reason}`, `> Project: ${conflict.project === "" ? "(cut)" : oneLine(conflict.project)}`, `> Document: ${conflict.document === "" ? "(cut)" : oneLine(conflict.document)}`, "");
+      lines.push(`**${conflict.label ?? (conflict.project === "" ? "(cut in the project)" : "(moved to another chapter in the project)")}** · ${inline(conflict.file)} · ${conflict.reason}`, `> Project: ${conflict.project === "" ? "(cut)" : oneLine(conflict.project)}`, `> Document: ${conflict.document === "" ? "(cut)" : oneLine(conflict.document)}`, "");
     }
   }
   if (result.kept.length > 0) {

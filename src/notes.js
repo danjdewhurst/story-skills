@@ -147,8 +147,8 @@ export function documentReview(documentXml, stylesXml) {
   return { ...documentParagraphs(documentXml, styles, new Map()), comments: new Map(), styles };
 }
 
-// Whether a run is hidden: its own `w:vanish`, `w:webHidden`, or
-// `w:specVanish`, else its character style's, else its paragraph style's
+// Whether a run is hidden: its own `w:vanish` or `w:specVanish`, else its
+// character style's, else its paragraph style's
 // (`paragraphStyle`, the style id of the paragraph it is in, or undefined
 // outside one).
 function runHidden(run, styles, paragraphStyle) {
@@ -159,8 +159,10 @@ function runHidden(run, styles, paragraphStyle) {
   return character.hidden ?? (styles === null || paragraphStyle === undefined ? null : styles.paragraph(paragraphStyle).hidden) ?? false;
 }
 
-// The run properties that hide text, as runHidden reads them.
-const HIDING = new Set(["w:vanish", "w:webHidden", "w:specVanish"]);
+// The run properties that hide text, as runHidden reads them. `w:webHidden`
+// hides text only in Word's Web Layout view, so Word shows it to the editor
+// and the author in every other view, and it is not one of them.
+const HIDING = new Set(["w:vanish", "w:specVanish"]);
 
 // A run's hidden state once one of HIDING is read: hidden when any is on.
 function hiddenAfter(current, attributes) {

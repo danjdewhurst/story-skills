@@ -168,7 +168,7 @@ flowchart LR
 | `src/compare.js` | Chapter-by-chapter comparison with an earlier draft. |
 | `src/similarity.js` | Shared-passage detection for `story similarity`: word shingles of the reference indexed once, each hit extended to the longest shared run, the passage's labels and text on both sides, and the report. `story.js` reads the `--against` file, folder, or git ref and labels chapters as the review copy does. |
 | `src/import.js` | Splits an existing manuscript into a new project and suggests entity candidates. |
-| `src/apply.js` | `story apply`: builds the Word file the editor got again in memory (`wordBuild` in `build.js`, with `docxEntries` or `shunnDocxEntries` in `packaging.js` tracing what each paragraph is), reads it and the returned file with the reader in `notes.js`, pairs their sections (folding a section that pairs with nothing into the one before) and aligns their paragraphs, refuses a document or section that does not line up with the book, decides each move whole, finds each chapter as sent among the current ones with `--ref` or `--snapshot` and merges the changes three ways, and maps each chapter paragraph to its markdown block so only changed paragraphs are rewritten. It checks that each edited chapter reads back as planned before writing, saves a `before-apply-<n>` snapshot, writes under the undo log like `split` (`recovers` in its registry entry), and puts back its own writes when one fails. |
+| `src/apply.js` | `story apply`: builds the Word file the editor got again in memory (`wordBuild` in `build.js`, with `docxEntries` or `shunnDocxEntries` in `packaging.js` tracing what each paragraph is), reads it and the returned file with the reader in `notes.js`, pairs their sections (folding a section that pairs with nothing into the one before) and aligns their paragraphs, refuses a document or section that does not line up with the book, groups the edits into units written whole or not at all (a change in place alone, cuts and additions side by side together, joined by a move's two ends, by edits a sentence moves between, and by a change that takes in or gives out the whole text of a cut or addition beside it), finds each chapter as sent among the current ones with `--ref` or `--snapshot` and merges each unit three ways, and maps each chapter paragraph to its markdown block so only changed paragraphs are rewritten. It checks that each edited chapter reads back as planned before writing, saves a `before-apply-<n>` snapshot, writes under the undo log like `split` (`recovers` in its registry entry), and puts back its own writes when one fails. |
 | `src/languages/` | Language packs: `index.js` resolves a BCP 47 tag to a pack (`languagePack`), reads story.md `language` (`projectLanguage`), and answers whether a pack has a word list (`checkList`, `checkSet`, `hasLists`, `skippedChecks`). `base.js` is the generic pack, `en.js` holds every English word list the analysis modules use, and `es.js`, `fr.js`, and `de.js` hold Spanish, French, and German lists. `style.js` applies a style sheet's `add-words` and `replace-words` (`withStyleLists`). `locale.js` sorts, cases, and formats numbers in a pack's language. See [Language packs](#language-packs). |
 | `src/version.js` | `VERSION`, printed by `story --version`. Bumped only by the release script. |
 | `src/workflows.js` | `workflowPinActions`: the `story doctor` P3 actions for copied GitHub Actions workflows (in the project and the git root above it) whose `STORY_VERSION` is older or newer than `VERSION` (in semver order) or that still set `STORY_REF`. It matches the env line by regex, reads which workflow, job, or step a `STORY_PACKAGE` override covers from indentation, and never parses YAML. `cliUpdateHint` names the update command for a newer pin from where the CLI's code runs: a compiled binary (Homebrew when its path resolves into the Cellar), an npx, bunx, Bun global, npm global, or project `node_modules` install, the bundled fallback, or a clone (on a branch or a detached HEAD). It never suggests `npx` or `bunx`, which read the project's package config. |
@@ -380,6 +380,27 @@ Bundled story-maintenance fallback is up to date.
 ```
 
 A failure prints `Coverage is below the gate:` followed by one line per gap, keyed by absolute path, such as `/path/to/story-skills/src/prose.js line coverage 410/412` (or `function coverage` or `has no coverage record`) for a 100% folder, or `/path/to/story-skills/scripts/release.js line coverage 80.0% (240/300) is below 85%` for a floor, and exits with status 1. A new script in `scripts/` or `evals/` needs a test that imports it, or it fails with `has no coverage record`. `bunfig.toml` sets `coverageSkipTestFiles = true` so test files do not count. The `coverage/` directory is gitignored.
+
+### The apply property test
+
+`story apply` writes an editor's Word file into the chapters, and must never lose, repeat, or misplace a writer's prose without a report entry that names the paragraph. [`test/apply-property.test.js`](https://github.com/danjdewhurst/story-skills/blob/main/test/apply-property.test.js) checks that on random books and edits. Each case writes a book of two to four chapters whose every sentence holds a token found nowhere else in the book (`zq17`), so sentences can be counted. Its paragraphs carry links, inline code, comments, block quotes, hard line breaks, emphasis, and scene breaks. The case builds the Word file, plain or `--shunn`, and saves the project as snapshot `sent`. It then edits the file as an editor might: it changes a sentence, rewrites, cuts, or adds a paragraph, moves one within its chapter or to another, moves a sentence to another paragraph, joins or splits paragraphs, adds a heading inside a chapter, takes a chapter heading's style or page break away, and types a scene break. Last, it edits the project as an author might: it changes a sentence, cuts, adds, or moves a paragraph, changes emphasis only, and splits or renumbers a chapter with `story split` and `story move`. It runs `apply` on copies of the project, with the snapshot as the base and without one, and checks each run that exits 0:
+
+- S1, no silent loss: a sentence the project lost is not in the document either, and a cut or change in the report covers it. With a base, a sentence the author wrote since sending is still there.
+- S2, no duplication: no sentence is in the project more often than it was before the run or than it is in the document.
+- S3, no invention: every sentence after the run was in the project or is in the document.
+- S4, accounting: a sentence new in the document and not written is named by a not-written, conflict, or kept entry.
+- S5, scope: chapter frontmatter and every file that is not a chapter keep their bytes, and a dry run changes nothing.
+- S6, stability: the same document applied again plans no edit the first run wrote.
+- S7: every chapter still parses, and `story validate` finds no new error.
+
+`bun run test` runs 40 cases of a fixed seed, and CI also runs seeds 1 to 5. A failure prints the seed, the case, the operations, and the report. To search further, or to replay one case:
+
+```shell
+STORY_PROPERTY_RUNS=300 STORY_PROPERTY_SEED=7 bun test ./test/apply-property.test.js
+STORY_PROPERTY_SEED=7 STORY_PROPERTY_CASE=42 STORY_PROPERTY_KEEP=/tmp/cases bun test ./test/apply-property.test.js
+```
+
+`STORY_PROPERTY_SEED=random` picks a seed and prints it, `STORY_PROPERTY_KEEP=<folder>` keeps each case's book and Word files there to run `apply` on by hand, and `STORY_PROPERTY_STATS=1` prints what the runs wrote and reported in all. Fix what a failure finds in `src/apply.js`, never by loosening a check or narrowing what the cases make.
 
 ### Replayed doc samples
 
@@ -629,8 +650,9 @@ Every job checks out with `persist-credentials: false`, since none pushes. The `
 5. `bun run eval:selftest`
 6. `bun run test:coverage` (the whole suite, then the coverage gate and `check:fallback`)
 7. `bun test test/validate-schema-property.test.js`, once for each `STORY_PROPERTY_SEED` from 1 to 5, so validate and the schema agree on more values than the suite's one seed draws
-8. `bun run test:examples`
-9. `node skills/story-maintenance/scripts/story.js --help`
+8. `bun test test/apply-property.test.js`, once for each `STORY_PROPERTY_SEED` from 1 to 5, so `story apply` keeps its invariants on more books and edits than the suite's one seed makes (see [The apply property test](#the-apply-property-test))
+9. `bun run test:examples`
+10. `node skills/story-maintenance/scripts/story.js --help`
 
 It runs the suite once: `test:coverage` runs it with the same 60-second test timeout as `bun run test`, so a separate `bun run test` step would only double the job's time.
 
