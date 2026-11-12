@@ -269,8 +269,8 @@ export const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null, h
 // italic, bold, hidden }: its heading level (from
 // a `heading N` name, the `Title` style, or an outline level, where level 9
 // is body text), whether it is a quote, and whether it sets italic, bold, or
-// hidden text (`w:vanish`, `w:webHidden`, or `w:specVanish`; story notes and
-// story apply read the last),
+// hidden text (`w:vanish` or `w:specVanish`, not `w:webHidden`, which hides
+// text only in Web Layout view; story notes and story apply read the last),
 // each from the style or the nearest style it is based on. Each style is
 // resolved once, so a long chain of styles costs no more than its length.
 export function readStyles(xml) {
@@ -316,7 +316,7 @@ export function readStyles(xml) {
       style.italic = isOn(token.attributes);
     } else if (token.name === "w:b" && inRunProperties) {
       style.bold = isOn(token.attributes);
-    } else if ((token.name === "w:vanish" || token.name === "w:webHidden" || token.name === "w:specVanish") && inRunProperties) {
+    } else if ((token.name === "w:vanish" || token.name === "w:specVanish") && inRunProperties) {
       style.hidden = style.hidden === true || isOn(token.attributes);
     }
   }

@@ -60,6 +60,14 @@ jobs:
             STORY_PROPERTY_SEED=$seed bun test test/validate-schema-property.test.js || exit 1
           done
 
+      # The same for story apply: more random books and edits look further
+      # for one that loses, repeats, or misplaces a writer's prose.
+      - name: Check story apply keeps its invariants on more seeds
+        run: |
+          for seed in 1 2 3 4 5; do
+            STORY_PROPERTY_SEED=$seed bun test test/apply-property.test.js || exit 1
+          done
+
       - name: Validate examples
         run: bun run test:examples
 

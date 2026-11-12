@@ -97,7 +97,10 @@ built file and comes back as edits the author accepts, which
    all of them.
    Show the author the report: each changed, added, cut, and moved
    paragraph on its label, the conflicts (where the author's text was
-   kept), the kept paragraphs, and what it did not write. Note the
+   kept), the kept paragraphs, and what it did not write. An edit that
+   "goes with" another was left out because an edit it belongs with (a
+   rewrite's other half, a join, a split, a move, or a moved sentence)
+   could not be written: make them by hand together, or neither. Note the
    report's `SHA-256` line and its counts (`Would change N, add N, and
    cut N paragraphs in N chapters`). Write nothing until the author
    approves.

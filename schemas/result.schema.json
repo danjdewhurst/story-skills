@@ -778,7 +778,7 @@
             "properties": {
               "file": { "type": "string", "minLength": 1 },
               "chapter": { "type": "string", "minLength": 1 },
-              "label": { "type": ["string", "null"], "description": "The project's paragraph, or null when the project cut it." },
+              "label": { "type": ["string", "null"], "description": "The project's paragraph; for a paragraph the document adds, after <label> or start of <key>; null when the project cut it or moved it to another chapter." },
               "reason": { "type": "string" },
               "project": { "type": "string", "description": "The project's text; empty when the project cut it." },
               "document": { "type": "string", "description": "The document's text; empty when the document cuts it." },
@@ -805,16 +805,17 @@
           "description": "Changes in the document that story apply reports but does not write.",
           "items": {
             "type": "object",
-            "required": ["type", "reason", "file", "label", "before", "text", "sceneBreak", "to"],
+            "required": ["type", "reason", "file", "label", "before", "text", "sceneBreak", "to", "with"],
             "properties": {
               "type": { "enum": ["changed", "added", "cut", "moved"], "description": "What the document does to the paragraph: changes it, adds it, cuts it, or moves it." },
-              "reason": { "enum": ["outside", "elsewhere", "unplaced", "missing", "anchor", "formatting", "markup", "comment", "block", "code", "unmapped", "placement", "unsafe", "chapter", "table"] },
+              "reason": { "enum": ["outside", "elsewhere", "unplaced", "missing", "anchor", "formatting", "markup", "comment", "block", "code", "unmapped", "placement", "unsafe", "chapter", "table", "section", "repeats"], "description": "Why it was not written; for an edit that goes with another (see with), why that one was not." },
               "file": { "type": ["string", "null"], "description": "The chapter file, or null for text outside the chapters." },
               "label": { "type": ["string", "null"], "description": "The paragraph's label; for an added one, after <label> or start of <key>; null when there is none." },
               "before": { "type": ["string", "null"], "description": "The project's text, when there is a paragraph." },
               "text": { "type": "string", "description": "The document's text; empty for a cut." },
               "sceneBreak": { "type": "boolean", "description": "True for a scene break added or cut." },
-              "to": { "type": ["string", "null"], "description": "For a move, where the document moves the paragraph; null otherwise." }
+              "to": { "type": ["string", "null"], "description": "For a move, where the document moves the paragraph; null otherwise." },
+              "with": { "type": ["string", "null"], "description": "The edit it goes with, which could not be written, such as \"the change to ch01-p2\"; null when this edit itself could not be. Edits that go together (a rewrite's cut and addition, a join, a split, a move's two ends, a sentence moved between paragraphs) are written together or not at all." }
             }
           }
         }
