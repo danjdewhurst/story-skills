@@ -4,6 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { xmlText, zipEntries } from "../src/docx.js";
 import { parseFrontmatter } from "../src/frontmatter.js";
+import { commentRanges } from "../src/markdown.js";
 import { writeZip } from "../src/packaging.js";
 import { makeTempDir, memoryIo } from "./helpers.js";
 
@@ -515,7 +516,19 @@ function tokenCounts(texts) {
 // The sentences of the project's chapters, by token, with how often each is
 // there.
 function projectTokens(root) {
-  return tokenCounts(chapterFiles(root).map((name) => parseFrontmatter(fs.readFileSync(path.join(root, "chapters", name), "utf8"), name).body.replace(/<!--[\s\S]*?-->/g, "")));
+  return tokenCounts(chapterFiles(root).map((name) => withoutComments(parseFrontmatter(fs.readFileSync(path.join(root, "chapters", name), "utf8"), name).body)));
+}
+
+// The text with its HTML comments left out, found as the project's own
+// parser finds them, so a sentence inside a comment is not counted.
+function withoutComments(text) {
+  let kept = "";
+  let position = 0;
+  for (const { start, end } of commentRanges(text)) {
+    kept += text.slice(position, start);
+    position = end;
+  }
+  return kept + text.slice(position);
 }
 
 function documentTokens(file) {
