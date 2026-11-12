@@ -14,6 +14,7 @@
 // and word/styles.xml (which marks headings and hidden text), each under
 // docx.js's limits. Nothing is written: the editor's text is material for
 // the author and the skills to weigh, so it is printed, never applied.
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { manuscriptParts } from "./build.js";
@@ -72,9 +73,10 @@ export function projectNotes(root, file, { cwd = process.cwd() } = {}) {
 }
 
 // The editor's returned Word file for `story <command>` (notes, apply), as
-// { review, shown, project }: what readReview reads from it, the file as
-// the user would name it, relative to where they are, or its full path when
-// it is outside that folder, and the project at `root`, scanned. A name
+// { review, shown, project, hash }: what readReview reads from it, the file
+// as the user would name it, relative to where they are, or its full path
+// when it is outside that folder, the project at `root`, scanned, and the
+// SHA-256 of the file's bytes, in hex. A name
 // that does not end in .docx is refused before the project is read, and the
 // project must parse. Every problem with the file is a usage error. The
 // file is only read.
@@ -100,15 +102,18 @@ export function readReturnedFile(file, { cwd, command, root }) {
     throw usageError(`Cannot read ${printable(file)}: it is ${stats.size} bytes, over the ${MAX_NOTES_FILE_BYTES} byte limit`);
   }
   let review;
+  let hash;
   try {
-    review = readReview(readFileBytes(filePath, MAX_NOTES_FILE_BYTES));
+    const bytes = readFileBytes(filePath, MAX_NOTES_FILE_BYTES);
+    hash = createHash("sha256").update(bytes).digest("hex");
+    review = readReview(bytes);
   } catch (error) {
     // Only a DocxError says the file is bad; anything else is a bug.
     throw error instanceof DocxError ? usageError(`Cannot read ${printable(file)}: ${error.message}`) : error;
   }
   const relative = path.relative(cwd, filePath);
   const shown = printable(relative === "" || relative.startsWith("..") || path.isAbsolute(relative) ? filePath : portablePath(relative));
-  return { review, shown, project };
+  return { review, shown, project, hash };
 }
 
 // The comments and tracked changes in a .docx, as { paragraphs, quoted,
@@ -142,9 +147,24 @@ export function documentReview(documentXml, stylesXml) {
   return { ...documentParagraphs(documentXml, styles, new Map()), comments: new Map(), styles };
 }
 
-// Whether a run is hidden: its own `w:vanish`, else its character style's.
-function runHidden(run, styles) {
-  return run.hidden ?? (run.style === null || styles === null ? EMPTY_STYLE : styles.character(run.style)).hidden ?? false;
+// Whether a run is hidden: its own `w:vanish`, `w:webHidden`, or
+// `w:specVanish`, else its character style's, else its paragraph style's
+// (`paragraphStyle`, the style id of the paragraph it is in, or undefined
+// outside one).
+function runHidden(run, styles, paragraphStyle) {
+  if (run.hidden !== null) {
+    return run.hidden;
+  }
+  const character = run.style === null || styles === null ? EMPTY_STYLE : styles.character(run.style);
+  return character.hidden ?? (styles === null || paragraphStyle === undefined ? null : styles.paragraph(paragraphStyle).hidden) ?? false;
+}
+
+// The run properties that hide text, as runHidden reads them.
+const HIDING = new Set(["w:vanish", "w:webHidden", "w:specVanish"]);
+
+// A run's hidden state once one of HIDING is read: hidden when any is on.
+function hiddenAfter(current, attributes) {
+  return current === true || isOn(attributes) ? true : false;
 }
 
 // Each comment in comments.xml, by id: { id, author, initials, date, text,
@@ -154,6 +174,7 @@ function readComments(xml, styles) {
   const comments = new Map();
   let comment = null;
   let paragraph = null;
+  let paragraphStyle = null;
   let run = null;
   let inRunProperties = false;
   let inText = false;
@@ -197,6 +218,7 @@ function readComments(xml, styles) {
     if (name === "w:p") {
       if (type !== "end") {
         paragraph = "";
+        paragraphStyle = null;
         comment.paraId = attributes["w14:paraId"] ?? comment.paraId;
       }
       if (type !== "start") {
@@ -209,7 +231,7 @@ function readComments(xml, styles) {
       if (type === "start") {
         run = { text: "", hidden: null, style: null };
       } else if (run !== null) {
-        if (runHidden(run, styles) && run.text.trim() !== "") {
+        if (runHidden(run, styles, paragraphStyle) && run.text.trim() !== "") {
           comment.hidden = true;
         }
         if (paragraph !== null) {
@@ -223,13 +245,17 @@ function readComments(xml, styles) {
       inRunProperties = type === "start";
       continue;
     }
+    if (run === null && name === "w:pStyle" && type !== "end") {
+      paragraphStyle = attributes["w:val"] ?? null;
+      continue;
+    }
     if (run === null || type === "end") {
       inText = name === "w:t" ? false : inText;
       continue;
     }
     if (inRunProperties) {
-      if (name === "w:vanish") {
-        run.hidden = isOn(attributes);
+      if (HIDING.has(name)) {
+        run.hidden = hiddenAfter(run.hidden, attributes);
       } else if (name === "w:rStyle") {
         run.style = attributes["w:val"] ?? null;
       }
@@ -333,7 +359,7 @@ function documentParagraphs(xml, styles, comments) {
     }
   };
   const add = (text, lineBreak = false) => {
-    const hidden = paragraph !== null && run !== null && runHidden(run, styles);
+    const hidden = paragraph !== null && run !== null && runHidden(run, styles, paragraph.style);
     if (hidden) {
       paragraph.hidden ||= text.trim() !== "";
     }
@@ -464,8 +490,8 @@ function documentParagraphs(xml, styles, comments) {
       continue;
     }
     if (inRunProperties) {
-      if (type !== "end" && name === "w:vanish") {
-        run.hidden = isOn(attributes);
+      if (type !== "end" && HIDING.has(name)) {
+        run.hidden = hiddenAfter(run.hidden, attributes);
       } else if (type !== "end" && name === "w:rStyle") {
         run.style = attributes["w:val"] ?? null;
       } else if (type !== "end" && (name === "w:i" || name === "w:b")) {
