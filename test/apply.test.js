@@ -1607,7 +1607,11 @@ describe("story apply: the file, the hash, and the undo log", () => {
       spy.mockRestore();
     }
     expect(result.code).toBe(4);
-    expect(result.stderr).toContain(`chapters/chapter-02.md changed on disk while story was updating it, so it was left as it is. Run the command again. story apply could not put back the chapters it had written: Cannot put back what story apply ${file} changed before it stopped part way: chapters/chapter-01.md has changed since`);
+    // The command is named with the file's full path, which Windows quotes
+    // for its backslashes, so the path itself is not compared.
+    expect(result.stderr).toContain("chapters/chapter-02.md changed on disk while story was updating it, so it was left as it is. Run the command again. story apply could not put back the chapters it had written: Cannot put back what story apply ");
+    expect(result.stderr).toContain(`${path.basename(file)}`);
+    expect(result.stderr).toContain(" changed before it stopped part way: chapters/chapter-01.md has changed since");
     expect(result.stderr).toContain("Snapshot before-apply-1 holds the project as it was before this apply: once that is done, story snapshot --restore before-apply-1 --path book puts it back");
     expect(fs.existsSync(path.join(book.root, UNDO_LOG))).toBe(true);
     expect(chapter(book, 1)).toContain("You shout for Tobias Wren.");
