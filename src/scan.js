@@ -274,6 +274,8 @@ export function scanProject(root) {
       arc: String(data.arc ?? ""),
       diedIn: String(data["died-in"] ?? ""),
       revivedIn: String(data["revived-in"] ?? ""),
+      // Read by ages.js against the story calendar; validate checks it.
+      born: data.born,
       relationships: asArray(data.relationships),
       locations: asArray(data.locations),
       aliases: asArray(data.aliases),

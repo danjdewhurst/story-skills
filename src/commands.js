@@ -52,6 +52,7 @@ import {
   formatProjectReport,
   fixProject,
   knowledgeAtChapter,
+  characterAgeAtChapter,
   mentionsReport,
   mergeChapters,
   migrateProject,
@@ -89,7 +90,7 @@ const STDIN_LABEL = "stdin";
 // --dry-run and --json, and an option only other kinds read is an error. A
 // chapter or scene takes no --id, as its id comes from its number.
 const ADD_KIND_OPTIONS = {
-  character: ["id", "role", "status", "location", "locations", "arc"],
+  character: ["id", "role", "status", "born", "location", "locations", "arc"],
   location: ["id", "type", "status", "region", "population", "controlled-by", "character", "characters", "coordinates"],
   system: ["id", "type", "prevalence"],
   faction: ["id", "type", "status", "member", "members", "character", "characters", "location", "locations"],
@@ -346,9 +347,9 @@ export const COMMANDS = [
     name: "knowledge",
     usage: "knowledge <id>",
     summary: [
-      "List what a character knew at a chapter, marked",
-      "reader-knowledge or character-knowledge, and the",
-      "changes its progressions made by then; requires --at"
+      "List a character's age at a chapter, what they knew,",
+      "marked reader-knowledge or character-knowledge, and",
+      "the changes its progressions made by then; requires --at"
     ],
     project: "flag",
     args: 1,
@@ -365,8 +366,12 @@ export const COMMANDS = [
       const project = scanProject(projectRoot);
       const entries = knowledgeAtChapter(projectRoot, characterId, atChapterId, project);
       const { state, changes } = entityStateAtChapter(projectRoot, "character", characterId, atChapterId, project);
+      const age = characterAgeAtChapter(project, characterId, atChapterId);
       if (wantsJson(parsed)) {
-        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, entries, state, changes } });
+        return writeJsonResult(io, { command: "knowledge", ok: true, data: { character: characterId, at: atChapterId, age, entries, state, changes } });
+      }
+      if (age !== null) {
+        io.stdout.write(`Age at ${atChapterId}: ${age.text}\n`);
       }
       if (entries.length === 0) {
         io.stdout.write(`No recorded knowledge for ${characterId} at ${atChapterId}\n`);

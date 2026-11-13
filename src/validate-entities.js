@@ -3,6 +3,7 @@
 import path from "node:path";
 import { idText } from "./continuity.js";
 import { chapterChronology } from "./chronology.js";
+import { bornProblem } from "./ages.js";
 import { characterLifeline, diesAgainIn } from "./deaths.js";
 import { validateProgressions } from "./progressions.js";
 import { FRONTMATTER_KEYS } from "./frontmatter-keys.js";
@@ -101,6 +102,10 @@ export function validateCharacters(project, errors, warnings) {
     requireScalar(data, "status", label, errors);
     validateEnum(data, "role", CHARACTER_ROLES, label, errors);
     validateEnum(data, "status", CHARACTER_STATUSES, label, errors);
+    const bornError = bornProblem(data.born, project.calendar);
+    if (bornError !== "") {
+      errors.push(err("invalid-date", `${label} born ${bornError}`, label));
+    }
     if (data["died-in"] !== undefined) {
       requireScalar(data, "died-in", label, errors);
     }

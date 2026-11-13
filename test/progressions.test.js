@@ -354,6 +354,7 @@ describe("progressions with --json and exit codes", () => {
     expect(envelope.data).toEqual({
       character: "mara-finn",
       at: "chapter-02",
+      age: null,
       entries: [],
       state: { name: "Mara Finn", role: "protagonist", status: "missing" },
       changes: [{ field: "status", value: "missing", from: "chapter-02", previous: "alive" }]

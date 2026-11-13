@@ -2,6 +2,7 @@
 name: Ines Achebe
 role: protagonist
 status: alive
+born: 2001-09-14
 aliases: []
 relationships:
   - character: folake-achebe

@@ -421,7 +421,7 @@ describe("cli", () => {
   test("each add kind lists exactly the options its builder reads", () => {
     // A value for every add option that differs from the builder's default.
     const values = {
-      id: "custom-id", number: "7", chapter: "chapter-01", scene: "9", type: "zz-type", role: "zz-role", status: "zz-status",
+      id: "custom-id", number: "7", chapter: "chapter-01", scene: "9", type: "zz-type", role: "zz-role", status: "zz-status", born: "1990",
       mode: "discovered", date: "2026-01-02", time: "dawn", "travel-hours": "3", "travel-mode": "horse", coordinates: "12,40", dilemma: "Stay or go", sequel: true,
       outcome: "yes-but", hook: "cliffhanger", beat: "Midpoint", location: "port", locations: "port", character: "mara", characters: "mara",
       mention: "ivo", mentions: "ivo", member: "mara", members: "mara", owner: "mara", arc: "long-road", arcs: "long-road",

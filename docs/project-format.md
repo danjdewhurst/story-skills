@@ -228,7 +228,7 @@ Keep to these rules, because anything else is an error:
 
 An error names the file and the line, and shows how to write the value instead, for example `chapters/chapter-02.md: Unsupported frontmatter line: author: me (line 4). Nested fields are not supported. Write a list of key: value items, such as relationships: then   - character: sera-voss`.
 
-Fields the tools do not know are kept and ignored. The example character files carry an `age` field, for instance. Add your own fields freely, but stay within the syntax above.
+Fields the tools do not know are kept and ignored. Some example character files carry an `age` field, for instance; record a [`born`](#birth-dates-and-ages) date instead to have the tools work out the age at each chapter. Add your own fields freely, but stay within the syntax above.
 
 Because an unknown field is ignored, a misspelt one drops its data silently, so `story validate` warns (`near-miss-key`) about a field that looks like a misspelling of one the file's kind defines: a different case, `_` or a space for `-`, a dropped hyphen, or a small typo: one wrong, missing, extra, or swapped letter, or two in a name of six letters or more that starts with the right letter. When two fields are equally close, such as `number` and `numbered` for `numberd`, it names the ones not set. On a chapter, `arcs_advanced` gives `chapters/chapter-03.md has arcs_advanced; did you mean arcs-advanced?` and `stauts` gives `did you mean status?`. It stays quiet when the intended field is also set, for fields shorter than four letters, for names far from every known field, and for a field another kind of file defines, such as `location` on a chapter.
 
@@ -652,6 +652,7 @@ arc: redemption
 | `name` | string | yes | Display name. |
 | `role` | enum | yes | `protagonist`, `antagonist`, `supporting`, `minor`, `narrator`, or `deuteragonist`. `story add` defaults to `supporting`. |
 | `status` | enum | yes | `alive`, `deceased`, `unknown`, `missing`, or `cut`. `story add` defaults to `alive`. |
+| `born` | date or year | no | Birth date: a day such as `2001-09-14` or a year alone such as `1968`, in the story calendar when the book has one. Set it with `story add character --born <date>`. See [Birth dates and ages](#birth-dates-and-ages). |
 | `aliases` | list of strings | no | Other names and titles. |
 | `relationships` | list of mappings | no | Each entry has `character` (a character id) and `type` (free text). See below. |
 | `locations` | list of location ids | no | Places the character is tied to. Each location must list the character in `notable-characters`. |
@@ -679,6 +680,28 @@ The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI f
 `voice-words` and `voice-avoid` have no flags either. `story validate` errors when either is not a list of strings, and [`story voices`](#dialogue-voices) reads both. The [line-editing](../skills/line-editing/SKILL.md) and [voice-style](../skills/voice-style/SKILL.md) skills propose them.
 
 `pronunciation` is also accepted on locations, systems, factions, artifacts, and glossary terms. `story validate` errors when it is not text. `story build --format narration` gathers every `pronunciation` into the script's pronunciation guide, leaving out cut characters. See the [adaptation skill](../skills/adaptation/SKILL.md).
+
+### Birth dates and ages
+
+`born` gives a character's birth date, so the tools can work out their age at each dated chapter. It is one of:
+
+- a day: `2001-09-14`, or under a [custom calendar](#custom-calendars) a day of that calendar, such as `3 Thaw 270 AE`;
+- a year alone, when the day does not matter: `1968`, or `270 AE` under a custom calendar. Without a calendar the year has four digits.
+
+```yaml
+---
+name: "Ines Achebe"
+role: protagonist
+status: alive
+born: 2001-09-14
+---
+```
+
+`story validate` reports a `born` that is not a day or a year (`invalid-date`). A progression cannot change it (`progression-fixed-field`). A character with no `born` has no age, and nothing is checked.
+
+The age at a chapter is in whole years from `born` to the chapter's story date: its own `date`, or its earliest dated scene that is not a flashback. A scene target in `story context` uses the scene's own date when it has one, so a flashback card shows the age in the flashback. A birthday counts on its day of the year, and a birthday on 29 February counts on 1 March in other years. A custom calendar counts its own years, and has no leap days. With a year alone, the age is a range, such as `57 or 58`. In the year of that birth it is `0, or not born yet`, and before a birth it is `not born yet`. An undated chapter has no age.
+
+`story context` puts the age on each character's card, `story knowledge` prints it first (and gives it as `age` with `--json`), and the [language server](editors.md) shows it in the hover. [`story continuity`](continuity.md#birth-dates) reports a character in a cast dated before their birth, a birth after the death, and a parent who is not born before their child. [`story series`](series.md) warns when a shared character's `born` contradicts an earlier book.
 
 ### Relationship types
 

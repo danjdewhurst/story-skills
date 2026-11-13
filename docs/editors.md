@@ -20,7 +20,7 @@ This page is for writers who draft in a code editor and want the checks there as
 | Problems as you type | Every [`story check`](cli-reference.md#check) finding, underlined where it points: `edran-vale` in a later chapter's `characters` list after he died, `planted: chapter-03` on a promise paid off in chapter 2. The project is checked again 300 ms after you stop typing, unsaved text included. |
 | Go to definition | On an id such as `sera-voss` in `pov:` or `characters:`, or in a markdown link, opens `characters/sera-voss.md`. |
 | Find references | Lists every chapter, scene, and file whose frontmatter names the entity, and every link to its file. |
-| Hover | Shows the entity's name, kind, and status. In a chapter, a character also shows what they know by then and how their progressions have changed them, so you do not reveal something they have not learned. |
+| Hover | Shows the entity's name, kind, and status. In a chapter, a character also shows their age when the chapter is dated and they have a `born` date, what they know by then, and how their progressions have changed them, so you do not reveal something they have not learned. |
 | Completion | In a field that takes ids, such as `characters:`, `pov:`, `locations:`, `planted:`, or `owner:`, offers the ids of the right kind. |
 | Rename | From its id in a frontmatter field or a link, renames a character, place, or other entity everywhere, as [`story rename`](cli-reference.md#rename) does. Type a new id (`ilse-varrow`) to change only the id, or a new name (`Ilse Varrow`) to change the name and the id with it. |
 | Quick fixes | Rebuild stale registries and update stale word counts from the warning itself. |

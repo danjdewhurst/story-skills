@@ -1,6 +1,7 @@
 import path from "node:path";
 import { chapterChronology, deathWindow, formatKnowledgeMark, knowledgeAudience } from "./chronology.js";
-import { idText, normalizeKnowledge } from "./continuity.js";
+import { idText, normalizeKnowledge, parseStoryDate } from "./continuity.js";
+import { characterAgeOn, formatAge } from "./ages.js";
 import { warn } from "./findings.js";
 import { projectPath } from "./files.js";
 import { entityStateAt } from "./progressions.js";
@@ -463,8 +464,11 @@ export function buildContext(project, targetId, readBody, options = {}) {
   }
   sections.push({ id: "pov", title: "POV knowledge and state", items: povItems });
 
-  // 4. Cards for the characters on the page, POV first.
+  // 4. Cards for the characters on the page, POV first. Ages are taken on
+  // the scene's own date when it has one (a flashback scene's age is the
+  // age in the flashback), else on the chapter's date.
   const cards = [];
+  const day = parseStoryDate(String(target.scene?.date ?? ""), project.calendar)?.days ?? chronology.days.get(target.chapter.id);
   for (const id of cast) {
     const character = characters.get(id);
     if (!character) {
@@ -479,6 +483,7 @@ export function buildContext(project, targetId, readBody, options = {}) {
       field("Id", id),
       field("Role", state.state.role ?? character.role),
       field("Status", state.status),
+      field("Age", formatAge(characterAgeOn(character, day, project.calendar))),
       field("Aliases", listOf(state.state.aliases)),
       field("Voice words", listOf(state.state["voice-words"])),
       field("Voice avoid", listOf(state.state["voice-avoid"])),

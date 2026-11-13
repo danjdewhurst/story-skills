@@ -184,6 +184,28 @@ died-in: chapter-02
 | error | `<scene> state-change has <id> learn something in <chapter>, after they died in <chapter>` | A scene `state-changes` entry with `character` and `knowledge` is learning in that scene's chapter, even when an earlier `knowledge-state` entry already records the fact. Drop the state change, or give the knowledge to a living character. |
 | warning | `continuity/state.md knowledge-state[<n>] has <id> learn something in <chapter>, but <id> died before the story (deceased with no died-in)` | Drop `learned-in` (pre-existing knowledge), or set `died-in` if they die during the story. |
 
+### Birth dates
+
+A character's [`born`](project-format.md#birth-dates-and-ages) date is checked against dated chapters and scenes and against their family. Each check reports only what is certain. A birth known only by its year falls on the first day of that year at the earliest and the last day at the latest. Without `born`, or without dated chapters, there are no birth findings.
+
+- **Before the birth.** A chapter or scene that lists the character as `pov` or in `characters` must not be dated before they are born. A chapter counts from its latest date, its own `date` or a scene's, so a character born partway through a chapter may be in its cast. A dated scene counts from its own date, flashbacks too. Put a parent's memory of a child not yet born in `mentions`.
+- **After the death.** `born` must not come after the date of the character's `died-in` chapter.
+- **Parents.** A `parent` relationship on a character names their child, and `child` names their parent. A parent must be born before their child. There is no minimum gap, since the right one depends on the world.
+
+```yaml
+# characters/ines-achebe.md
+name: Ines Achebe
+born: 2001-09-14
+```
+
+| Severity | Message | Fix |
+|----------|---------|-----|
+| error | `<chapter or scene> lists <id>, who is born <born>, in a chapter dated <date>; move them to mentions or fix the dates` (or `in a scene dated`) | Move the id to `mentions`, or correct `born` or the date. For time travel or a prophecy, add an [exemption](#exemptions). |
+| error | `<character> is born <born>, after dying in <chapter> (<date>); fix born or the chapter's date` | Correct `born`, `died-in`, or the chapter's date. |
+| error | `<parent> is born <born>, not before <child>, their child, born <born>; fix born or the relationship` | Correct one of the two `born` dates, or the relationship type. |
+
+`story context`, `story knowledge`, and the editor hover show each character's age at the chapter, so a draft does not have to work it out. See [Birth dates and ages](project-format.md#birth-dates-and-ages).
+
 ### Status progressions
 
 A character's [progressions](project-format.md#progressions) can change `status` partway through the story. The checker resolves the status at each chapter with the progressions that take effect by then, in the same story order as `died-in`: by date when both chapters are dated, else by chapter number. A progression from a planned `chapter-NN` with no file yet compares as an undated chapter with that number would, as it does for `story knowledge --at`: a death planned for chapter 20 affects nothing while the book stops at chapter 12, but one planned for an unwritten chapter 3 applies to a written chapter 4. A scene whose chapter does not exist keeps the frontmatter status.
@@ -629,7 +651,7 @@ Each entry sets a `reason`, and either a `pattern` or a `code` with a `file`, `c
 
 Prefer `code` with `file` (or `chapter`): the code names the rule and the file names the one place, so rewording a message never stops the entry from matching or makes it match something new. A `pattern` still works, alone or with the other keys, and every log written before `code`, `file`, and `chapter` existed behaves as it did. Copy the code and file from the finding, or from `story continuity --json`, where each diagnostic has `code`, `file`, and `chapter`.
 
-These findings carry a chapter: `posthumous-appearance`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `named-not-listed`, `mention-not-named`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, `route-too-fast`, and `travel-too-far`.
+These findings carry a chapter: `posthumous-appearance`, `appears-before-birth`, `deceased-in-cast`, `progression-deceased-in-cast`, `progression-death-conflict`, `pov-not-in-cast`, `pov-scene-mismatch`, `named-not-listed`, `mention-not-named`, `scene-cast-not-in-chapter`, `scene-location-not-in-chapter`, `cut-character-in-cast`, `posthumous-learning`, `deceased-learning`, `progression-deceased-learning`, `learner-not-in-cast`, `knowledge-not-recorded`, `state-tracks-dead-character`, `state-location-drift`, `object-not-recorded`, `state-object-drift`, `state-differs-by-path`, `gone-artifact-used`, `gone-artifact-mentioned`, `malformed-date`, `malformed-time`, `negative-travel-hours`, `travel-hours-undated`, `clock-backward`, `travel-too-fast`, `route-same-time`, `route-too-fast`, and `travel-too-far`.
 
 Their chapter is where the problem shows up: the chapter of the chapter or scene file the finding is about (a scene's `chapter` field), the `learned-in` chapter of a learning event, `current-chapter` for `state-tracks-dead-character`, `state-location-drift`, and `state-differs-by-path`, the chapter of the scene that last set the object for `object-not-recorded` and `state-object-drift`, and for `progression-death-conflict` the chapter of the death, the progression, or the revival it names. `story continuity --json` shows each finding's `chapter`. Findings about a whole character, promise, question, or clue, or about `story.md`, carry no chapter: match those with `file`. A scene with no `chapter` field gives its findings no chapter.
 
