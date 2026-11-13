@@ -9,7 +9,8 @@ import { SCHEMA_PATH } from "./check-schema.js";
 
 // Some patterns in schemas/story.schema.json are generated from the code
 // story validate runs rather than written by hand: a real YYYY-MM-DD day
-// (from parseClockDate), and the language tags writing-mode: vertical and
+// (from parseClockDate), a character's born (that day or a year alone, as
+// ages.js reads it), and the language tags writing-mode: vertical and
 // chapter-numerals: native allow (from supportsVertical, nativeNumerals,
 // and the tables they read). Running this
 // script writes them into the schema; test/schema.test.js fails when one
@@ -241,6 +242,7 @@ export function generatedPatterns() {
   return {
     "/$defs/realDate/pattern": `^\\s*${day}\\s*$`,
     "/$defs/realDateOrText/pattern": `^(?:(?!\\s*\\d{4}-\\d{2}-\\d{2}\\s*$)|\\s*${day}\\s*$)`,
+    "/$defs/bornDate/pattern": `^\\s*(?:(?:\\d{4}|${day})\\s*)?$`,
     "/properties/story/properties/publication-date/pattern": `^(?:\\s*(?:${day}\\s*)?$|\\s*\\[[Tt][Oo][Dd][Oo]\\b)`,
     "/properties/story/allOf/0/then/properties/language/pattern": `^\\s*${verticalLanguagePattern()}\\s*$`,
     "/properties/story/allOf/1/then/properties/language/pattern": `^\\s*${nativeNumeralsLanguagePattern()}\\s*$`

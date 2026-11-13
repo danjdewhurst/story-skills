@@ -513,6 +513,19 @@ describe("language server navigation", () => {
     expect(client.result("textDocument/references", { ...params, position: { line: 0, character: 0 } })).toBeNull();
   });
 
+  test("hover shows a character's age at a dated chapter", () => {
+    const root = storyProject();
+    edit(root, "characters/jonas-reed.md", (text) => text.replace("\nname:", "\nborn: 1990\nname:"));
+    edit(root, "chapters/chapter-02.md", (text) => text.replace("\nnumber: 2\n", "\nnumber: 2\ndate: 2026-03-01\n"));
+    const client = startServer();
+    const chapterTwo = client.open(root, "chapters/chapter-02.md");
+    const hover = client.result("textDocument/hover", { textDocument: { uri: uri(root, "chapters/chapter-02.md") }, position: at(chapterTwo, "jonas-reed", 1) });
+    expect(hover.contents.value).toContain("At chapter-02:\n- Age: 35 or 36\n");
+    const chapterOne = client.open(root, "chapters/chapter-01.md");
+    const undated = client.result("textDocument/hover", { textDocument: { uri: uri(root, "chapters/chapter-01.md") }, position: at(chapterOne, "jonas-reed", 1) });
+    expect(undated.contents.value).not.toContain("Age");
+  });
+
   test("hover shows the entity, and its state at the document's chapter", () => {
     const root = storyProject();
     const client = startServer();

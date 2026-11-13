@@ -121,6 +121,7 @@ export const OPTIONS = [
   { name: "aliases", value: "<names>", repeatable: true, commas: true, aliasOf: "alias" },
   { name: "region", value: "<name>", help: ["Region for add location"] },
   { name: "population", value: "<name>", help: ["Population for add location"] },
+  { name: "born", value: "<date>", help: ["Birth date for add character: a day", "(YYYY-MM-DD, or in the story.md calendar) or a", "year alone"] },
   { name: "coordinates", value: "<x,y>", help: ["Place on the story's map for add location, two", "numbers such as 12,40"] },
   { name: "controlled-by", value: "<id>", help: ["Controlling faction for add location"] },
   { name: "prevalence", value: "<name>", help: ["Prevalence for add system"] },

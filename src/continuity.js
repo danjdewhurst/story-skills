@@ -9,6 +9,7 @@ import { characterLifeline, progressionDeathAt, progressionDeathFrom, progressio
 import { auditMentions } from "./mentions.js";
 import { happensAfter } from "./progressions.js";
 import { distanceResolver, foldMode, hoursNeeded } from "./geography.js";
+import { readBorn } from "./ages.js";
 
 const CHEKHOV_CHAPTER_GAP = 3;
 // A mystery's central question is often the book, so the same three-chapter
@@ -47,6 +48,7 @@ export function checkContinuity(project) {
   };
 
   checkCharacterDeaths(project, context, errors, warnings);
+  checkBirths(project, context, errors);
   checkChapterCasts(project, warnings);
   checkSceneCasts(project, warnings);
   checkCutCharacters(project, warnings);
@@ -131,6 +133,86 @@ function checkCharacterDeaths(project, context, errors, warnings) {
     for (const scene of project.scenes) {
       if (window.deadIn(scene.chapter) && castIncludes(scene, character.id)) {
         errors.push(err("posthumous-appearance", `${relative(project, scene.file)} lists ${character.id}, who died in ${character.diedIn}; move posthumous appearances to mentions`, relative(project, scene.file), chapterOf(scene)));
+      }
+    }
+  }
+}
+
+// Birth dates (`born`, see ages.js) against dated chapters and scenes and
+// against each other. Each check reports only what is certain: a birth
+// known only by its year is born on the last day of that year at the
+// latest and the first day at the earliest. A chapter counts from its
+// latest date, its own or a scene's, so a character born partway through a
+// chapter may be in its cast; a dated scene counts from its own date.
+function checkBirths(project, context, errors) {
+  const calendar = project.calendar;
+  const births = new Map();
+  for (const character of project.characters) {
+    const born = readBorn(character.born, calendar);
+    if (born) {
+      births.set(character.id, born);
+    }
+  }
+  if (births.size === 0) {
+    return;
+  }
+  const latest = new Map();
+  const later = (chapterId, date) => {
+    const parsed = parseStoryDate(String(date ?? ""), calendar);
+    if (parsed && (!latest.has(chapterId) || parsed.days > latest.get(chapterId).days)) {
+      latest.set(chapterId, parsed);
+    }
+  };
+  for (const chapter of project.chapters) {
+    later(chapter.id, chapter.date);
+  }
+  for (const scene of project.scenes) {
+    later(idText(scene.chapter), scene.date);
+  }
+  const bornAfter = (born, day) => day < born.first;
+  for (const character of project.characters) {
+    const born = births.get(character.id);
+    if (!born) {
+      continue;
+    }
+    const label = relative(project, character.file);
+    const death = latest.get(character.diedIn);
+    if (death && bornAfter(born, death.days)) {
+      errors.push(err("born-after-death", `${label} is born ${born.text}, after dying in ${character.diedIn} (${death.text}); fix born or the chapter's date`, label));
+    }
+    for (const chapter of project.chapters) {
+      const day = latest.get(chapter.id);
+      if (day && bornAfter(born, day.days) && castIncludes(chapter, character.id)) {
+        errors.push(err("appears-before-birth", `${relative(project, chapter.file)} lists ${character.id}, who is born ${born.text}, in a chapter dated ${day.text}; move them to mentions or fix the dates`, relative(project, chapter.file), chapter.id));
+      }
+    }
+    for (const scene of project.scenes) {
+      const day = parseStoryDate(String(scene.date ?? ""), calendar);
+      if (day && bornAfter(born, day.days) && castIncludes(scene, character.id)) {
+        errors.push(err("appears-before-birth", `${relative(project, scene.file)} lists ${character.id}, who is born ${born.text}, in a scene dated ${day.text}; move them to mentions or fix the dates`, relative(project, scene.file), chapterOf(scene)));
+      }
+    }
+  }
+  // A `parent` relationship on A names A's child; a `child` relationship
+  // names A's parent. Each pair is reported once.
+  const reported = new Set();
+  for (const character of project.characters) {
+    for (const relationship of character.relationships) {
+      if (!relationship || typeof relationship !== "object" || Array.isArray(relationship)) {
+        continue;
+      }
+      const type = idText(relationship.type);
+      const other = idText(relationship.character);
+      const [parent, child] = type === "parent" ? [character.id, other] : type === "child" ? [other, character.id] : [];
+      if (parent === undefined || reported.has(`${parent}>${child}`) || !births.has(parent) || !births.has(child)) {
+        continue;
+      }
+      const parentBorn = births.get(parent);
+      const childBorn = births.get(child);
+      if (parentBorn.first >= childBorn.last) {
+        reported.add(`${parent}>${child}`);
+        const file = relative(project, context.characters.get(parent).file);
+        errors.push(err("parent-born-after-child", `${file} is born ${parentBorn.text}, not before ${child}, their child, born ${childBorn.text}; fix born or the relationship`, file));
       }
     }
   }

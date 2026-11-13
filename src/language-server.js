@@ -11,7 +11,7 @@ import { NESTED_TO_KINDS, REFERENCE_FIELD_KINDS, resolveLinkTarget } from "./mut
 import { previewChanges } from "./preview.js";
 import { PROGRESSION_KINDS } from "./progressions.js";
 import { SKIPPED_SCAN_DIRECTORIES, isKebabId, markdownFiles, scanProject } from "./scan.js";
-import { computeWordCounts, entityStateAtChapter, knowledgeAtChapter, projectCheck, reindexProject, renameEntity } from "./story.js";
+import { characterAgeAtChapter, computeWordCounts, entityStateAtChapter, knowledgeAtChapter, projectCheck, reindexProject, renameEntity } from "./story.js";
 import { VERSION } from "./version.js";
 
 // `story lsp`: a Language Server Protocol server over stdin and stdout. It
@@ -724,16 +724,18 @@ function describeEntity(entry, root, chapter, project) {
 }
 
 // The status of a character (or a location or a faction) by the chapter
-// the document is in, with what it knows and what its progressions changed,
-// as { status, lines }. null when the project cannot say: a chapter or the
+// the document is in, with its age, what it knows, and what its
+// progressions changed, as { status, lines }. null when the project cannot say: a chapter or the
 // state file fails to parse.
 function stateAtChapter(entry, root, chapter, project) {
   try {
     const knowledge = entry.kind === "character" ? knowledgeAtChapter(root, entry.id, chapter, project) : [];
     const { state, changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
+    const age = entry.kind === "character" ? characterAgeAtChapter(project, entry.id, chapter) : null;
     return {
       status: state.status,
       lines: [
+        ...(age === null ? [] : [`- Age: ${escapeMarkdown(age.text)}`]),
         ...knowledge.map((item) => `- Knows: ${escapeMarkdown(item.knows)} (${formatKnowledgeMark(item.learnedIn, item.audience, { atChapterId: chapter })})`),
         ...changes.map((change) => `- ${escapeMarkdown(String(change.field))}: ${change.value === "" ? "(cleared)" : escapeMarkdown(String(change.value))} (from ${escapeMarkdown(String(change.from))})`)
       ]

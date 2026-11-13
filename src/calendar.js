@@ -324,6 +324,40 @@ export function parseCalendarDate(value, calendar) {
   return { text: original, days };
 }
 
+// A year alone under the calendar, such as `301 AE` or `301` (the last
+// era), as `{ text, first, last }`: the day numbers of its first and last
+// days, which count as parseCalendarDate's do. `{ problem }` says why it is
+// not one.
+export function parseCalendarYear(value, calendar) {
+  const original = String(value).trim();
+  const match = /^(\d+)(?: (.+))?$/.exec(plainName(value));
+  if (!match) {
+    return { problem: "write a year alone as a number with an optional era, such as 301 AE" };
+  }
+  const year = Number(match[1]);
+  if (year < 1) {
+    return { problem: "years start at 1" };
+  }
+  const absolute = absoluteYear(year, match[2], calendar);
+  if (absolute.problem) {
+    return absolute;
+  }
+  const first = (absolute.year - 1) * calendar.yearDays;
+  const last = first + calendar.yearDays - 1;
+  if (!Number.isSafeInteger(first) || !Number.isSafeInteger(last)) {
+    return { problem: "the year is too far from year 1 to count its days" };
+  }
+  return { text: original, first, last };
+}
+
+// The year a day number falls in under the calendar, counted as
+// parseCalendarDate counts it (year 1 of the first forward era is 1, the
+// year before it 0), and the day of that year from 0.
+export function calendarYearDay(days, calendar) {
+  const index = Math.floor(days / calendar.yearDays);
+  return { year: index + 1, day: days - index * calendar.yearDays };
+}
+
 // Year 1 of the first forward era is year 1; a backward era's year 1 is
 // year 0, its year 2 is year -1, and so on.
 function absoluteYear(year, eraText, calendar) {

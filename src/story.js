@@ -5,6 +5,7 @@ import path from "node:path";
 import { checkContinuity, idText } from "./continuity.js";
 import { chapterChronology, knowledgeAudience } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt } from "./progressions.js";
+import { characterAgeOn, formatAge } from "./ages.js";
 import {
   parseFrontmatter,
   replaceFrontmatter,
@@ -213,6 +214,17 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
     throw projectError(chapterError.message);
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
+}
+
+// A character's age at a chapter, from their `born` date and the chapter's
+// story date (its own, or its earliest dated scene that is not a
+// flashback): `{ min, max, unborn, maybeUnborn, text }`, or null when either
+// date is unknown. See ages.js.
+export function characterAgeAtChapter(project, characterId, atChapterId) {
+  const character = project.characters.find((entry) => entry.id === characterId);
+  const day = chapterChronology(project).days.get(atChapterId);
+  const age = character ? characterAgeOn(character, day, project.calendar) : null;
+  return age ? { ...age, text: formatAge(age) } : null;
 }
 
 // `story context`: the drafting context for one chapter or scene, packed to a

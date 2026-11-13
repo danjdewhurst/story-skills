@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chapterChronology } from "./chronology.js";
+import { readBorn } from "./ages.js";
 import { idText } from "./continuity.js";
 import { characterLifeline, revivedBy } from "./deaths.js";
 import { err, warn } from "./findings.js";
@@ -435,6 +436,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
   for (const book of order) {
     const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
+    checkCanonBirths(book, earlierBooks, warnings);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
     checkKnownFacts(book, earlierBooks, errors);
@@ -473,6 +475,30 @@ function checkCanonNames(book, earlierBooks, warnings) {
       if (said !== "" && saidBefore !== "" && said !== saidBefore) {
         warnings.push(warn("canon-pronunciation-mismatch", `${bookFile(book, entity.file)} pronunciation "${said}" differs from "${saidBefore}" in ${bookFile(match.book, match.entity.file)}`, bookFile(book, entity.file)));
       }
+    }
+  }
+}
+
+// A character's `born` (see ages.js) is the same in every book, so the ages
+// each book works out agree. It is compared with the most recent earlier
+// book that gives one. A year in one book and a day in that year in another
+// agree: the later book only says more. Each value is read under its own
+// book's calendar; one that cannot be read is left to that book's validate.
+function checkCanonBirths(book, earlierBooks, warnings) {
+  const canon = new Map();
+  for (const earlier of earlierBooks) {
+    for (const character of earlier.project.characters) {
+      const born = readBorn(character.born, earlier.project.calendar);
+      if (born) {
+        canon.set(character.id, { book: earlier, character, born });
+      }
+    }
+  }
+  for (const character of book.project.characters) {
+    const born = readBorn(character.born, book.project.calendar);
+    const match = canon.get(character.id);
+    if (born && match && (born.last < match.born.first || born.first > match.born.last)) {
+      warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
     }
   }
 }

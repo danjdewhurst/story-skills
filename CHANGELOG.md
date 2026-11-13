@@ -8,6 +8,15 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ## [Unreleased]
 
+### Added
+
+- Characters can record a `born` date, and the tools work out their age at each dated chapter and check it. See [Birth dates and ages](docs/project-format.md#birth-dates-and-ages).
+  - `born` is a day (`2001-09-14`) or a year alone (`1968`), or a day or a year of the story calendar (`3 Thaw 270 AE`, `270 AE`). `story add character --born <date>` writes it, and `story validate` reports one that is neither (`invalid-date`). A progression cannot change it.
+  - `story context` puts the age on each character's card, on a scene's own date when it has one. `story knowledge` prints `Age at chapter-02: 24` first, and `--json` gives it as `age`. The editor hover shows it too. A year alone gives a range, such as `57 or 58`.
+  - `story continuity` reports a chapter or scene that lists a character and is dated before their birth (`appears-before-birth`), a birth after the date of the `died-in` chapter (`born-after-death`), and a parent born on or after their child (`parent-born-after-child`). These are errors that an exemption can dismiss. A chapter counts from its latest date, so a character born partway through it may be in its cast.
+  - `story series` warns when a shared character's `born` contradicts an earlier book (`canon-born-mismatch`). A year in one book and a day in that year in another agree.
+  - The `the-left-luggage-office` example gives Ines and her mother birth dates, and the `character-management` skill records `born` in place of a fixed age.
+
 ## [0.25.0] - 2026-11-12
 
 ### Added

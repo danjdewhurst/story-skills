@@ -2,6 +2,7 @@
 // kind.
 import path from "node:path";
 import { storyDateError, storyTimeError } from "./continuity.js";
+import { bornProblem } from "./ages.js";
 import { stringifyFrontmatter } from "./frontmatter.js";
 import { isTruthy, optionValues } from "./options.js";
 import { chapterHeading, kebabCase } from "./markdown.js";
@@ -51,7 +52,7 @@ export function buildEntity(project, kind, name, options) {
 
   switch (kind) {
     case "character":
-      return entityResult(project, kind, id, characterFile(name, options));
+      return entityResult(project, kind, id, characterFile(name, options, project.calendar));
     case "location":
       return entityResult(project, kind, id, locationFile(name, options));
     case "system":
@@ -82,11 +83,17 @@ function entityResult(project, kind, id, markdown) {
   return { id, markdown, file: path.join(project.root, config.dir, `${id}.md`) };
 }
 
-function characterFile(name, options) {
+function characterFile(name, options, calendar = null) {
+  const bornError = bornProblem(options.born, calendar);
+  if (bornError) {
+    throw usageError(`born ${bornError}`);
+  }
+  const born = String(options.born ?? "").trim();
   return `${stringifyFrontmatter({
     name,
     role: options.role ?? "supporting",
     status: options.status ?? "alive",
+    ...(born === "" ? {} : { born }),
     aliases: [],
     relationships: [],
     locations: listOption(options, "locations", "location"),

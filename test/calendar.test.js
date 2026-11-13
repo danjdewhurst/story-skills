@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import { dayHours, dayLengthKnown, parseCalendar, parseCalendarDate } from "../src/calendar.js";
+import { calendarYearDay, dayHours, dayLengthKnown, parseCalendar, parseCalendarDate, parseCalendarYear } from "../src/calendar.js";
 import { chapterChronology } from "../src/chronology.js";
 import { runCli } from "../src/cli.js";
 import { parseClockTime, parseStoryDate, storyDateError, storyTimeError } from "../src/continuity.js";
@@ -160,6 +160,19 @@ describe("custom calendar dates (#407)", () => {
     for (const text of ["3rd of Thaw, 412 After the Founding", "412-01-03 AF", "3 Thaw 412", "Seconday, 3 Thaw 412 AF"]) {
       expect(parseCalendarDate(text, vell).days).toBe(vellDays);
     }
+  });
+
+  test("a year alone spans its first to its last day, and its year and day come back", () => {
+    expect(parseCalendarYear("12 AE", calendar())).toEqual({ text: "12 AE", first: days("1 Thaw 12 AE"), last: days("2 Embertide 12 AE") });
+    expect(parseCalendarYear("3 BW", calendar()).first).toBe(days("1 Thaw 3 BW"));
+    // 12 AE follows the 300 years of the Age of Kings; 3 Bloom is day 32 of it.
+    expect(calendarYearDay(days("3 Bloom 12 AE"), calendar())).toEqual({ year: 312, day: 32 });
+    expect(calendarYearDay(days("1 Thaw 1 BW"), calendar()).day).toBe(0);
+    expect(calendarYearDay(days("2 Embertide 1 BW"), calendar()).day).toBe(121);
+    expect(parseCalendarYear("Thaw 12", calendar()).problem).toBe("write a year alone as a number with an optional era, such as 301 AE");
+    expect(parseCalendarYear("0 AE", calendar()).problem).toBe("years start at 1");
+    expect(parseCalendarYear("12 XX", calendar()).problem).toBe("XX is not one of the calendar's eras (BW, AK, AE)");
+    expect(parseCalendarYear("99999999999999999 AE", calendar()).problem).toBe("the year is too far from year 1 to count its days");
   });
 
   test("a calendar without eras takes a bare year", () => {

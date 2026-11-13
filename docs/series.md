@@ -251,6 +251,7 @@ Each book is compared with every book set earlier in the chronology: every book 
 | error | A later book's `knowledge-state` has a character learn a `fact` (an entry with `learned-in`) that the same character already knows in an earlier book. | Drop `learned-in` in the later book, or move the discovery. In a prequel, usually remove the knowledge from the prequel. |
 | warning | A shared entity's `name` (or a glossary term's `term`) differs from the most recent earlier book that defines it. | Keep `name` identical and put the variant in `aliases`. |
 | warning | A shared entity's `pronunciation` differs from the most recent earlier book that defines it, when both set one. | Use one respelling, so the narrator says the name the same way in every book. |
+| warning | A shared character's [`born`](project-format.md#birth-dates-and-ages) date contradicts the most recent earlier book that gives one (`canon-born-mismatch`). A year in one book and a day in that year in the other agree. | Use one birth date in every book, so the ages each book works out agree. |
 | warning | An artifact is `destroyed` in an earlier book but has another status in a later one. | Set `status: destroyed`, or account for the artifact's return in the text. |
 
 The name check compares each book with the most recent earlier book that defines the entity, so a rename carried consistently through a trilogy is reported once, not once per book.
@@ -294,7 +295,7 @@ The traversal also stops at 100 books, reporting an error when the limit is hit.
 
 ### What it cannot check
 
-The checker compares ids, statuses, names, pronunciations, and fact ids. It cannot judge knowledge that has no `fact` id, ages, dates, travel time, or tone. Check those by reading both books' `plot/timeline.md` files and their `Series Notes` and `Series Canon` sections.
+The checker compares ids, statuses, names, pronunciations, and fact ids. It compares `born` dates, so ages agree when every book dates its chapters, but it cannot judge knowledge that has no `fact` id, an age stated only in prose, dates, travel time, or tone. Check those by reading both books' `plot/timeline.md` files and their `Series Notes` and `Series Canon` sections.
 
 ## Checking series links
 
