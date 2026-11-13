@@ -469,11 +469,17 @@ describe("story series born check", () => {
     ]);
   });
 
-  test("does not compare books with different calendars", () => {
+  test("does not compare books with different calendars, and passes over a book on another calendar", () => {
     const [first] = series(makeTempDir(), [
       ["Book One", { characters: { mira: "born: 1968" } }],
       ["Book Two", { story: { calendar: CALENDAR }, characters: { mira: "born: 1968" } }]
     ]);
     expect(mismatches(first)).toEqual([]);
+    const [start] = series(makeTempDir(), [
+      ["Book One", { characters: { mira: "born: 1968" } }],
+      ["Book Two", { story: { calendar: CALENDAR }, characters: { mira: "born: 270 AE" } }],
+      ["Book Three", { characters: { mira: "born: 1975" } }]
+    ]);
+    expect(mismatches(start)).toEqual(["../book-three/characters/mira.md born 1975 differs from 1968 in characters/mira.md"]);
   });
 });

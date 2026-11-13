@@ -3619,7 +3619,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `revival-status-mismatch` | error | A revived character is still `status: deceased`, and no status progression after the revival makes them deceased again. |
 | `posthumous-appearance` | error | A chapter or scene lists a character after a written death. A `died-in` chapter still at `outline` is planned, so later casts are allowed. |
 | `appears-before-birth` | error | A chapter or scene lists a character, and is dated before their `born` date. A chapter counts from its latest date, its own or a scene's; flashback scenes do not count, and a chapter with no date of its own and an undated scene is not checked. |
-| `born-after-death` | error | A character's `born` date is after the date of their `died-in` chapter. |
+| `born-after-death` | error | A character's `born` date is after the latest date of their `died-in` chapter, read as for `appears-before-birth`. |
 | `parent-born-after-child` | error | A `parent` or `child` relationship names a parent whose `born` date is not before the child's. |
 | `deceased-in-cast` | warning | A chapter or scene lists a character who died before the story. |
 | `progression-deceased-in-cast` | warning | A chapter or scene lists a character, with no `died-in`, after a progression makes them `deceased`. |
