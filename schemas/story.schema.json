@@ -503,7 +503,7 @@
     },
     "progressions": {
       "type": "array",
-      "description": "Timeline-scoped changes to a character, location, or faction. The frontmatter describes the entity as the story opens; from the chapter in from onward (in story time), field holds value instead. Entries are listed in story order, and field names a single-value field, never a list field, id, progressions, died-in, or revived-in.",
+      "description": "Timeline-scoped changes to a character, location, or faction. The frontmatter describes the entity as the story opens; from the chapter in from onward (in story time), field holds value instead. Entries are listed in story order, and field names a single-value field, never a list field, id, progressions, died-in, or revived-in, nor born on a character.",
       "items": {
         "type": "object",
         "required": ["from", "field", "value"],

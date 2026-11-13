@@ -485,10 +485,11 @@ function checkCanonNames(book, earlierBooks, warnings) {
 // join, one book from each. A year in one book and a day in that year in
 // another agree: the later book only says more. Each value is read under
 // its own book's calendar; one that cannot be read is left to that book's
-// validate. Day numbers compare only under the same calendar, so a pair of
-// books with different calendars (or one with none) is not compared.
+// validate. Day numbers compare only under the same months and eras, so a
+// pair of books with different calendars (or one with none) is not
+// compared; only books on this book's calendar are candidates.
 function checkCanonBirths(book, earlierBooks, warnings, reachable) {
-  const calendarKey = (project) => JSON.stringify(project.calendar);
+  const calendarKey = (project) => JSON.stringify(project.calendar ? { months: project.calendar.months, eras: project.calendar.eras } : null);
   const canon = new Map();
   for (const earlier of earlierBooks) {
     for (const character of earlier.project.characters) {
@@ -503,12 +504,11 @@ function checkCanonBirths(book, earlierBooks, warnings, reachable) {
     if (!born) {
       continue;
     }
-    const entries = canon.get(character.id) ?? [];
+    const entries = (canon.get(character.id) ?? []).filter((entry) => calendarKey(entry.book.project) === calendarKey(book.project));
     // An entry is superseded when a later earlier book on its line gives one.
     const latest = entries.filter((entry) => !entries.some((other) => other !== entry && reachable.get(entry.book.key).has(other.book.key)));
     for (const match of latest) {
-      const comparable = calendarKey(book.project) === calendarKey(match.book.project);
-      if (comparable && (born.last < match.born.first || born.first > match.born.last)) {
+      if (born.last < match.born.first || born.first > match.born.last) {
         warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
       }
     }
