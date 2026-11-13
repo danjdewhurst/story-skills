@@ -292,8 +292,9 @@ export function createLanguageServer({ send, exit, schedule = setTimeout, cancel
       return null;
     }
     const { project } = reference;
-    const chapter = project.chapters.find((entry) => entry.file === context.file)?.id ?? (project.scenes.find((entry) => entry.file === context.file)?.chapter || null);
-    const value = reference.matches.map((entry) => describeEntity(entry, context.root, chapter, project)).join("\n\n---\n\n");
+    const scene = project.scenes.find((entry) => entry.file === context.file);
+    const chapter = project.chapters.find((entry) => entry.file === context.file)?.id ?? (scene?.chapter || null);
+    const value = reference.matches.map((entry) => describeEntity(entry, context.root, chapter, project, scene?.date)).join("\n\n---\n\n");
     return { contents: { kind: "markdown", value }, range: tokenRange(reference) };
   }
 
@@ -710,9 +711,9 @@ function fieldKinds(key) {
   return key !== null && Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : undefined;
 }
 
-function describeEntity(entry, root, chapter, project) {
+function describeEntity(entry, root, chapter, project, sceneDate) {
   const lines = [`**${escapeMarkdown(entry.name)}** · ${entry.kind} · \`${portablePath(path.relative(root, entry.file))}\``];
-  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project) : null;
+  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project, sceneDate) : null;
   const status = String((atChapter === null ? entry.entity.status : atChapter.status) ?? "");
   if (status !== "") {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
@@ -725,13 +726,15 @@ function describeEntity(entry, root, chapter, project) {
 
 // The status of a character (or a location or a faction) by the chapter
 // the document is in, with its age, what it knows, and what its
-// progressions changed, as { status, lines }. null when the project cannot say: a chapter or the
-// state file fails to parse.
-function stateAtChapter(entry, root, chapter, project) {
+// progressions changed, as { status, lines }. The age is taken on a scene's
+// own date when the document is a dated scene, as story context takes it.
+// null when the project cannot say: a chapter or the state file fails to
+// parse.
+function stateAtChapter(entry, root, chapter, project, sceneDate) {
   try {
     const knowledge = entry.kind === "character" ? knowledgeAtChapter(root, entry.id, chapter, project) : [];
     const { state, changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
-    const age = entry.kind === "character" ? characterAgeAtChapter(project, entry.id, chapter) : null;
+    const age = entry.kind === "character" ? characterAgeAtChapter(project, entry.id, chapter, sceneDate) : null;
     return {
       status: state.status,
       lines: [

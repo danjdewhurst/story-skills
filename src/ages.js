@@ -62,6 +62,10 @@ export function parseBorn(value, calendar = null) {
     const days = gregorianDays(Number(full[1]), Number(full[2]), Number(full[3]));
     return days === undefined ? { problem: `must be a real YYYY-MM-DD calendar day or a year, got ${text}` } : { text, first: days, last: days };
   }
+  // YAML reads `born: 0968` as the number 968, so its leading zero is lost.
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1000) {
+    return { problem: `must be a YYYY-MM-DD day or a YYYY year, got ${text}; quote a year before 1000, such as "${text.padStart(4, "0")}"` };
+  }
   if (/^\d{4}$/.test(text)) {
     const year = Number(text);
     return { text, first: gregorianDays(year, 1, 1), last: gregorianDays(year, 12, 31) };
@@ -98,14 +102,14 @@ function yearsBetween(born, at, calendar) {
 // The age on day `at` of someone born in the `born` span, as `{ min, max }`
 // whole years. min and max differ when only the year of birth is known.
 // `unborn` is true when the day is before the span (certainly not born
-// yet), and `maybeUnborn` when it falls inside it. null when either is
-// unknown.
+// yet, and min and max are null), and `maybeUnborn` when it falls inside
+// the span of a birth known only by its year. null when either is unknown.
 export function ageOn(born, at, calendar = null) {
   if (!born || at === undefined || at === null || !Number.isFinite(at)) {
     return null;
   }
   if (at < born.first) {
-    return { min: null, max: null, unborn: true, maybeUnborn: true };
+    return { min: null, max: null, unborn: true, maybeUnborn: false };
   }
   const max = yearsBetween(born.first, at, calendar);
   const min = at < born.last ? 0 : yearsBetween(born.last, at, calendar);

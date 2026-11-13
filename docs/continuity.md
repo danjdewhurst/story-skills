@@ -69,6 +69,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | The finding contains | Command | Explained in |
 |----------------------|---------|--------------|
 | `lists <id>, who died in`, `who died before the story`, `has died-in`, `died-in references missing chapter`, `learn something in` | `continuity` | [Deaths and posthumous appearances](#deaths-and-posthumous-appearances) |
+| `who is born`, `after dying in`, `their child, born` | `continuity` | [Birth dates](#birth-dates) |
 | `whose progressions make them deceased`, `sets status … while <id> is dead`, `when they die in`, `which still holds when they are revived` | `continuity` | [Status progressions](#status-progressions) |
 | `POV character <id> is not listed in characters`, `but its scenes are told by`, `does not list them in characters or mentions`, `does not list that location`, `who has status: cut`, `Chapter numbering skips` | `continuity` | [Casts and locations](#casts-and-locations) |
 | `in mentions but never names it` | `mentions` | [Story mentions](#story-mentions) |
@@ -188,8 +189,8 @@ died-in: chapter-02
 
 A character's [`born`](project-format.md#birth-dates-and-ages) date is checked against dated chapters and scenes and against their family. Each check reports only what is certain. A birth known only by its year falls on the first day of that year at the earliest and the last day at the latest. Without `born`, or without dated chapters, there are no birth findings.
 
-- **Before the birth.** A chapter or scene that lists the character as `pov` or in `characters` must not be dated before they are born. A chapter counts from its latest date, its own `date` or a scene's, so a character born partway through a chapter may be in its cast. A dated scene counts from its own date, flashbacks too. Put a parent's memory of a child not yet born in `mentions`.
-- **After the death.** `born` must not come after the date of the character's `died-in` chapter.
+- **Before the birth.** A chapter or scene that lists the character as `pov` or in `characters` must not be dated before they are born. A chapter counts from its latest date, its own `date` or a scene's, so a character born partway through a chapter may be in its cast. A flashback scene (one with `flashback-to`) does not date its chapter, and a chapter with no `date` of its own and an undated scene is not checked, since that scene may come after the birth. A dated scene counts from its own date, flashbacks too. Put a parent's memory of a child not yet born in `mentions`.
+- **After the death.** `born` must not come after the latest date of the character's `died-in` chapter, read as above.
 - **Parents.** A `parent` relationship on a character names their child, and `child` names their parent. A parent must be born before their child. There is no minimum gap, since the right one depends on the world.
 
 ```yaml

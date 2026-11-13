@@ -524,6 +524,11 @@ describe("language server navigation", () => {
     const chapterOne = client.open(root, "chapters/chapter-01.md");
     const undated = client.result("textDocument/hover", { textDocument: { uri: uri(root, "chapters/chapter-01.md") }, position: at(chapterOne, "jonas-reed", 1) });
     expect(undated.contents.value).not.toContain("Age");
+    // In a dated scene, the age is on the scene's own date, as story context takes it.
+    edit(root, "scenes/chapter-01-scene-01.md", (text) => text.replace("\nscene: 1\n", "\nscene: 1\ndate: 1995-01-01\n"));
+    const scene = client.open(root, "scenes/chapter-01-scene-01.md");
+    const sceneHover = client.result("textDocument/hover", { textDocument: { uri: uri(root, "scenes/chapter-01-scene-01.md") }, position: at(scene, "jonas-reed", 1) });
+    expect(sceneHover.contents.value).toContain("- Age: 4 or 5\n");
   });
 
   test("hover shows the entity, and its state at the document's chapter", () => {
