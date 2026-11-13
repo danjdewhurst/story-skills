@@ -2,7 +2,7 @@
 name: Grace Achebe
 role: supporting
 status: alive
-born: 1968
+born: 1966
 aliases: []
 relationships:
   - character: ines-achebe

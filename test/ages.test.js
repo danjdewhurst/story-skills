@@ -7,7 +7,10 @@ import { runCli } from "../src/cli.js";
 import { parseClockDate } from "../src/continuity.js";
 import { parseFrontmatter, replaceFrontmatter } from "../src/frontmatter.js";
 import { checkProjectContinuity, createStoryProject, seriesReport, validateProject } from "../src/story.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
+
+const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 
 const CALENDAR = [
   { month: "Thaw", days: 30 },
@@ -49,6 +52,20 @@ ${/^status:/m.test(frontmatter) ? "" : "status: alive\n"}${frontmatter}
   return root;
 }
 
+function scene(root, chapter, number, frontmatter) {
+  writeMarkdown(path.join(root, "scenes", `${chapter}-scene-0${number}.md`), `
+title: Scene ${number}
+chapter: ${chapter}
+scene: ${number}
+status: draft
+${frontmatter}
+`, "Words.\n");
+}
+
+function birthErrors(root) {
+  return checkProjectContinuity(root).errors.filter((finding) => ["appears-before-birth", "born-after-death", "parent-born-after-child"].includes(finding.code));
+}
+
 function setStory(root, fields) {
   const storyPath = path.join(root, "story.md");
   const markdown = fs.readFileSync(storyPath, "utf8");
@@ -78,6 +95,9 @@ describe("parseBorn", () => {
     expect(parseBorn("1990-02-30").problem).toBe("must be a real YYYY-MM-DD calendar day or a year, got 1990-02-30");
     expect(parseBorn("spring").problem).toBe("must be a YYYY-MM-DD day or a YYYY year, got spring");
     expect(parseBorn(["1990"]).problem).toBe("must be a date or a year, such as 1990-05-12 or 1990");
+    // YAML reads `born: 0968` as 968, so the leading zero is gone.
+    expect(parseBorn(968).problem).toBe('must be a YYYY-MM-DD day or a YYYY year, got 968; quote a year before 1000, such as "0968"');
+    expect(parseBorn("0968")).toEqual({ text: "0968", first: day("0968-01-01"), last: day("0968-12-31") });
   });
 
   test("reads a day or a year of the story calendar", () => {
@@ -107,6 +127,7 @@ describe("ages", () => {
     expect(age("1990", "2026-06-01")).toBe("35 or 36");
     expect(age("1990", "1990-06-01")).toBe("0, or not born yet");
     expect(age("1990", "1989-12-31")).toBe("not born yet");
+    expect(ageOn(parseBorn("2001-09-14"), day("2000-01-01"))).toEqual({ min: null, max: null, unborn: true, maybeUnborn: false });
     expect(ageOn(parseBorn("1990"), undefined)).toBeNull();
     expect(ageOn(null, day("2026-01-01"))).toBeNull();
   });
@@ -167,6 +188,54 @@ characters: []
     expect(codes(checkProjectContinuity(root).errors)).not.toContain("appears-before-birth");
   });
 
+  test("a flashback scene does not date its chapter, and an undated scene leaves the chapter unchecked", () => {
+    const root = book(makeTempDir(), "Flashbacks", {
+      characters: { mira: "born: 2001-09-14" },
+      chapters: { 1: "characters:\n  - mira", 2: "characters:\n  - mira", 3: "characters:\n  - mira" }
+    });
+    // Chapter 1: its only dated scene is a flashback.
+    scene(root, "chapter-01", 1, "date: 1995-03-01\nflashback-to: chapter-03\ncharacters: []");
+    scene(root, "chapter-01", 2, "characters:\n  - mira");
+    // Chapter 2: one present-day scene is dated before the birth, the other is not dated.
+    scene(root, "chapter-02", 1, "date: 2001-01-01\ncharacters: []");
+    scene(root, "chapter-02", 2, "characters:\n  - mira");
+    // Chapter 3: every scene is dated before the birth.
+    scene(root, "chapter-03", 1, "date: 2000-01-01\ncharacters: []");
+    scene(root, "chapter-03", 2, "date: 2001-09-13\ncharacters: []");
+    expect(birthErrors(root).map((finding) => finding.message)).toEqual([
+      "chapters/chapter-03.md lists mira, who is born 2001-09-14, in a chapter dated 2001-09-13; move them to mentions or fix the dates"
+    ]);
+  });
+
+  test("a pov counts as an appearance, and a birth on the day of the death is allowed", () => {
+    const root = book(makeTempDir(), "Pov", {
+      characters: { mira: "born: 2001-09-14", brief: "status: deceased\nborn: 2026-02-06\ndied-in: chapter-02" },
+      chapters: { 1: "date: 2001-09-13\npov: mira\ncharacters: []", 2: "date: 2026-02-06\ncharacters: []" }
+    });
+    expect(birthErrors(root).map((finding) => [finding.code, finding.chapter])).toEqual([["appears-before-birth", "chapter-01"]]);
+  });
+
+  test("reads either side of a parent and child pair, and a birth on the same day", () => {
+    const relation = (other, type) => `relationships:\n  - character: ${other}\n    type: ${type}`;
+    const root = book(makeTempDir(), "One Sided", {
+      characters: {
+        mum: `born: 1990\n${relation("kid", "parent")}`,
+        kid: "born: 1985-01-01",
+        dad: "born: 1960",
+        son: `born: 1990-01-01\n${relation("dad", "child")}`,
+        aunt: "born: 1995-05-05",
+        niece: `born: 1990-05-05\n${relation("aunt", "child")}`,
+        twin: `born: 2000-02-02\n${relation("twinkid", "parent")}`,
+        twinkid: "born: 2000-02-02"
+      }
+    });
+    expect(birthErrors(root).map((finding) => finding.message)).toEqual([
+      "characters/mum.md is born 1990, not before kid, their child, born 1985-01-01; fix born or the relationship",
+      "characters/aunt.md is born 1995-05-05, not before niece, their child, born 1990-05-05; fix born or the relationship",
+      "characters/twin.md is born 2000-02-02, not before twinkid, their child, born 2000-02-02; fix born or the relationship"
+    ]);
+  });
+
   test("reports a birth after the death, and a parent born after their child", () => {
     const root = book(makeTempDir(), "Families", {
       characters: {
@@ -213,6 +282,43 @@ exemptions:
   });
 });
 
+describe("born under a story calendar", () => {
+  function calendarBook(characters, chapters = {}) {
+    return book(makeTempDir(), "Embers", { story: { calendar: CALENDAR }, characters, chapters });
+  }
+
+  test("validate, add, continuity, context, and knowledge read born in the calendar", () => {
+    const root = calendarBook(
+      { kael: "born: 3 Bloom 270 AE", sera: "born: 270 AE", odd: "born: 3 Frost 270 AE" },
+      { 1: "date: 2 Bloom 300 AE\npov: kael\ncharacters:\n  - kael\n  - sera", 2: "date: 1 Thaw 260 AE\ncharacters:\n  - kael" }
+    );
+    expect(validateProject(root).errors.filter((finding) => finding.code === "invalid-date").map((finding) => finding.message)).toEqual([
+      "characters/odd.md born is not a day or a year of the story calendar: it names no calendar month (Thaw, Bloom)"
+    ]);
+    expect(birthErrors(root).map((finding) => finding.message)).toEqual([
+      "chapters/chapter-02.md lists kael, who is born 3 Bloom 270 AE, in a chapter dated 1 Thaw 260 AE; move them to mentions or fix the dates"
+    ]);
+    expect(run(["knowledge", "kael", "--at", "chapter-01", "--path", root], root).stdout).toStartWith("Age at chapter-01: 29\n");
+    const context = run(["context", "chapter-01", "--path", root], root).stdout;
+    expect(context).toContain("- Age: 29\n");
+    expect(context).toContain("- Age: 29 or 30\n");
+    expect(run(["add", "character", "Ivo", "--born", "5 Thaw 2 BW", "--path", root], root).code).toBe(0);
+    expect(String(parseFrontmatter(fs.readFileSync(path.join(root, "characters", "ivo.md"), "utf8")).data.born)).toBe("5 Thaw 2 BW");
+  });
+
+  test("an invalid calendar reads no born, so it reports nothing about it", () => {
+    const root = book(makeTempDir(), "Broken", {
+      story: { calendar: [{ era: "Only an era" }] },
+      characters: { kael: "born: 3 Bloom 270 AE" },
+      chapters: { 1: "date: 1 Thaw 260 AE\ncharacters:\n  - kael" }
+    });
+    const result = validateProject(root);
+    expect(codes(result.errors)).toContain("invalid-calendar");
+    expect(result.errors.filter((finding) => finding.message.includes(" born "))).toEqual([]);
+    expect(birthErrors(root)).toEqual([]);
+  });
+});
+
 describe("born in validate, add, and progressions", () => {
   test("validate reports a born value that is not a date or a year", () => {
     const root = book(makeTempDir(), "Bad Born", {
@@ -231,6 +337,20 @@ describe("born in validate, add, and progressions", () => {
     });
     const finding = validateProject(root).errors.find((entry) => entry.code === "progression-fixed-field");
     expect(finding.message).toContain("cannot change born; a birth date stays the same");
+  });
+
+  test("a location or faction progression may still name a born field of its own", () => {
+    const root = book(makeTempDir(), "Born Town");
+    writeMarkdown(path.join(root, "worldbuilding", "locations", "new-town.md"), `
+name: New Town
+type: city
+status: active
+progressions:
+  - from: chapter-02
+    field: born
+    value: rebuilt
+`, "# New Town\n");
+    expect(codes(validateProject(root).errors)).not.toContain("progression-fixed-field");
   });
 
   test("story add character --born writes the date, and refuses one that is not a date", () => {
@@ -261,6 +381,15 @@ describe("ages in knowledge and context", () => {
     expect(run(["knowledge", "mira", "--at", "chapter-01", "--path", root], root).stdout).toStartWith("Age at chapter-01: 24\n");
     const json = JSON.parse(run(["knowledge", "mira", "--at", "chapter-01", "--json", "--path", root], root).stdout);
     expect(json.data.age).toEqual({ min: 24, max: 24, unborn: false, maybeUnborn: false, text: "24" });
+    expect(validateAgainstSchema(json, resultSchema)).toEqual([]);
+    const ranged = JSON.parse(run(["knowledge", "tomas", "--at", "chapter-01", "--json", "--path", root], root).stdout);
+    expect(ranged.data.age).toEqual({ min: 57, max: 58, unborn: false, maybeUnborn: false, text: "57 or 58" });
+    expect(validateAgainstSchema(ranged, resultSchema)).toEqual([]);
+    const later = path.join(root, "characters", "ana.md");
+    fs.writeFileSync(later, fs.readFileSync(later, "utf8").replace("relationships: []", "born: 2030-01-01\nrelationships: []"));
+    const unborn = JSON.parse(run(["knowledge", "ana", "--at", "chapter-01", "--json", "--path", root], root).stdout);
+    expect(unborn.data.age).toEqual({ min: null, max: null, unborn: true, maybeUnborn: false, text: "not born yet" });
+    expect(validateAgainstSchema(unborn, resultSchema)).toEqual([]);
     // An undated chapter has no age to give.
     expect(run(["knowledge", "mira", "--at", "chapter-02", "--path", root], root).stdout).not.toContain("Age");
     expect(JSON.parse(run(["knowledge", "mira", "--at", "chapter-02", "--json", "--path", root], root).stdout).data.age).toBeNull();
@@ -287,15 +416,64 @@ characters:
 });
 
 describe("story series born check", () => {
-  test("warns when a shared character's birth date differs between books, and not when a later book says more", () => {
-    const cwd = makeTempDir();
-    const first = book(cwd, "Book One", { characters: { mira: "born: 2001", tomas: "born: 1968-03-01" } });
-    const second = book(cwd, "Book Two", { characters: { mira: "born: 2001-09-14", tomas: "born: 1969-03-01" } });
-    setStory(first, { series: "saga", precedes: ["../book-two"] });
-    setStory(second, { series: "saga", follows: ["../book-one"] });
-    const report = seriesReport(first);
-    expect(report.warnings.filter((finding) => finding.code === "canon-born-mismatch").map((finding) => finding.message)).toEqual([
+  function series(cwd, books) {
+    const roots = books.map(([title, options]) => book(cwd, title, options));
+    roots.forEach((root, index) => {
+      const fields = { series: "saga" };
+      if (index > 0) {
+        fields.follows = [`../${path.basename(roots[index - 1])}`];
+      }
+      if (index < roots.length - 1) {
+        fields.precedes = [`../${path.basename(roots[index + 1])}`];
+      }
+      setStory(root, fields);
+    });
+    return roots;
+  }
+  const mismatches = (root) => seriesReport(root).warnings.filter((finding) => finding.code === "canon-born-mismatch").map((finding) => finding.message);
+
+  test("warns when a shared character's birth date differs between books, earlier or later, and not when a later book says more", () => {
+    const [first] = series(makeTempDir(), [
+      ["Book One", { characters: { mira: "born: 2001", tomas: "born: 1968-03-01", ana: "born: 1970-01-01" } }],
+      ["Book Two", { characters: { mira: "born: 2001-09-14", tomas: "born: 1969-03-01", ana: "born: 1969-01-01" } }]
+    ]);
+    expect(mismatches(first)).toEqual([
+      "../book-two/characters/ana.md born 1969-01-01 differs from 1970-01-01 in characters/ana.md",
       "../book-two/characters/tomas.md born 1969-03-01 differs from 1968-03-01 in characters/tomas.md"
     ]);
+  });
+
+  test("compares with the most recent earlier book that gives one", () => {
+    const [first] = series(makeTempDir(), [
+      ["Book One", { characters: { mira: "born: 2001" } }],
+      ["Book Two", { characters: { mira: "born: 2002" } }],
+      ["Book Three", { characters: { mira: "born: 2002-03-03" } }]
+    ]);
+    expect(mismatches(first)).toEqual(["../book-two/characters/mira.md born 2002 differs from 2001 in characters/mira.md"]);
+  });
+
+  test("where two lines of books join, compares with the latest book on each line", () => {
+    const cwd = makeTempDir();
+    const [one, left, right, last] = [
+      ["Origin", "born: 2001"], ["Left", "born: 2001"], ["Right", "born: 2002"], ["Joined", "born: 2001-05-05"]
+    ].map(([title, born]) => book(cwd, title, { characters: { mira: born } }));
+    const link = (root, fields) => setStory(root, { series: "saga", ...fields });
+    const rel = (root) => `../${path.basename(root)}`;
+    link(one, { precedes: [rel(left), rel(right)] });
+    link(left, { follows: [rel(one)], precedes: [rel(last)] });
+    link(right, { follows: [rel(one)], precedes: [rel(last)] });
+    link(last, { follows: [rel(left), rel(right)] });
+    expect(mismatches(one).sort()).toEqual([
+      "../joined/characters/mira.md born 2001-05-05 differs from 2002 in ../right/characters/mira.md",
+      "../right/characters/mira.md born 2002 differs from 2001 in characters/mira.md"
+    ]);
+  });
+
+  test("does not compare books with different calendars", () => {
+    const [first] = series(makeTempDir(), [
+      ["Book One", { characters: { mira: "born: 1968" } }],
+      ["Book Two", { story: { calendar: CALENDAR }, characters: { mira: "born: 1968" } }]
+    ]);
+    expect(mismatches(first)).toEqual([]);
   });
 });

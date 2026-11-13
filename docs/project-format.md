@@ -686,7 +686,7 @@ The arc-craft fields `arc-type`, `lie`, `truth`, and `ghost-wound` have no CLI f
 `born` gives a character's birth date, so the tools can work out their age at each dated chapter. It is one of:
 
 - a day: `2001-09-14`, or under a [custom calendar](#custom-calendars) a day of that calendar, such as `3 Thaw 270 AE`;
-- a year alone, when the day does not matter: `1968`, or `270 AE` under a custom calendar. Without a calendar the year has four digits.
+- a year alone, when the day does not matter: `1968`, or `270 AE` under a custom calendar. Without a calendar the year has four digits; quote a year before 1000, such as `born: "0968"`, because YAML reads `0968` as the number 968.
 
 ```yaml
 ---
@@ -699,7 +699,7 @@ born: 2001-09-14
 
 `story validate` reports a `born` that is not a day or a year (`invalid-date`). A progression cannot change it (`progression-fixed-field`). A character with no `born` has no age, and nothing is checked.
 
-The age at a chapter is in whole years from `born` to the chapter's story date: its own `date`, or its earliest dated scene that is not a flashback. A scene target in `story context` uses the scene's own date when it has one, so a flashback card shows the age in the flashback. A birthday counts on its day of the year, and a birthday on 29 February counts on 1 March in other years. A custom calendar counts its own years, and has no leap days. With a year alone, the age is a range, such as `57 or 58`. In the year of that birth it is `0, or not born yet`, and before a birth it is `not born yet`. An undated chapter has no age.
+The age at a chapter is in whole years from `born` to the chapter's story date: its own `date`, or its earliest dated scene that is not a flashback. A scene target in `story context` uses the scene's own date when it has one, so a flashback card shows the age in the flashback. A birthday counts on its day of the year, and a birthday on 29 February counts on 1 March in other years. A custom calendar counts its own years, and has no leap days. With a year alone, the age is a range, such as `57 or 58`. In the year of that birth it is `0, or not born yet`, and before a birth it is `not born yet`. An undated chapter has no age. The editor hover in a dated scene uses the scene's date too.
 
 `story context` puts the age on each character's card, `story knowledge` prints it first (and gives it as `age` with `--json`), and the [language server](editors.md) shows it in the hover. [`story continuity`](continuity.md#birth-dates) reports a character in a cast dated before their birth, a birth after the death, and a parent who is not born before their child. [`story series`](series.md) warns when a shared character's `born` contradicts an earlier book.
 

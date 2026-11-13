@@ -17,6 +17,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story series` warns when a shared character's `born` contradicts an earlier book (`canon-born-mismatch`). A year in one book and a day in that year in another agree.
   - The `the-left-luggage-office` example gives Ines and her mother birth dates, and the `character-management` skill records `born` in place of a fixed age.
 
+### Changed
+
+- A `born` field on a character is now checked, so a free-text `born` that was kept and ignored before is now a `story validate` error.
+  - A value such as `born: Lagos, 1968` gives `invalid-date`. Move place or other notes to a field of your own, such as `birthplace`, and keep `born` for the date.
+  - A character progression can no longer change `born` (`progression-fixed-field`). Location and faction progressions are unchanged.
+
 ## [0.25.0] - 2026-11-12
 
 ### Added

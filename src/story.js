@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkContinuity, idText } from "./continuity.js";
+import { checkContinuity, idText, parseStoryDate } from "./continuity.js";
 import { chapterChronology, knowledgeAudience } from "./chronology.js";
 import { PROGRESSION_KINDS, entityStateAt } from "./progressions.js";
 import { characterAgeOn, formatAge } from "./ages.js";
@@ -218,11 +218,12 @@ export function entityStateAtChapter(root, kind, id, atChapterId, project = scan
 
 // A character's age at a chapter, from their `born` date and the chapter's
 // story date (its own, or its earliest dated scene that is not a
-// flashback): `{ min, max, unborn, maybeUnborn, text }`, or null when either
-// date is unknown. See ages.js.
-export function characterAgeAtChapter(project, characterId, atChapterId) {
+// flashback), or a scene's own `date` when given and readable, as story
+// context takes it: `{ min, max, unborn, maybeUnborn, text }`, or null when
+// either date is unknown. See ages.js.
+export function characterAgeAtChapter(project, characterId, atChapterId, sceneDate = undefined) {
   const character = project.characters.find((entry) => entry.id === characterId);
-  const day = chapterChronology(project).days.get(atChapterId);
+  const day = parseStoryDate(String(sceneDate ?? ""), project.calendar)?.days ?? chapterChronology(project).days.get(atChapterId);
   const age = character ? characterAgeOn(character, day, project.calendar) : null;
   return age ? { ...age, text: formatAge(age) } : null;
 }

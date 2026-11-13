@@ -436,7 +436,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
   for (const book of order) {
     const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
-    checkCanonBirths(book, earlierBooks, warnings);
+    checkCanonBirths(book, earlierBooks, warnings, reachable);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
     checkKnownFacts(book, earlierBooks, errors);
@@ -481,24 +481,36 @@ function checkCanonNames(book, earlierBooks, warnings) {
 
 // A character's `born` (see ages.js) is the same in every book, so the ages
 // each book works out agree. It is compared with the most recent earlier
-// book that gives one. A year in one book and a day in that year in another
-// agree: the later book only says more. Each value is read under its own
-// book's calendar; one that cannot be read is left to that book's validate.
-function checkCanonBirths(book, earlierBooks, warnings) {
+// book that gives one on each line of books leading here: where two lines
+// join, one book from each. A year in one book and a day in that year in
+// another agree: the later book only says more. Each value is read under
+// its own book's calendar; one that cannot be read is left to that book's
+// validate. Day numbers compare only under the same calendar, so a pair of
+// books with different calendars (or one with none) is not compared.
+function checkCanonBirths(book, earlierBooks, warnings, reachable) {
+  const calendarKey = (project) => JSON.stringify(project.calendar);
   const canon = new Map();
   for (const earlier of earlierBooks) {
     for (const character of earlier.project.characters) {
       const born = readBorn(character.born, earlier.project.calendar);
       if (born) {
-        canon.set(character.id, { book: earlier, character, born });
+        canon.set(character.id, [...(canon.get(character.id) ?? []), { book: earlier, character, born }]);
       }
     }
   }
   for (const character of book.project.characters) {
     const born = readBorn(character.born, book.project.calendar);
-    const match = canon.get(character.id);
-    if (born && match && (born.last < match.born.first || born.first > match.born.last)) {
-      warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
+    if (!born) {
+      continue;
+    }
+    const entries = canon.get(character.id) ?? [];
+    // An entry is superseded when a later earlier book on its line gives one.
+    const latest = entries.filter((entry) => !entries.some((other) => other !== entry && reachable.get(entry.book.key).has(other.book.key)));
+    for (const match of latest) {
+      const comparable = calendarKey(book.project) === calendarKey(match.book.project);
+      if (comparable && (born.last < match.born.first || born.first > match.born.last)) {
+        warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
+      }
     }
   }
 }

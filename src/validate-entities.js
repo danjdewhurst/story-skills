@@ -69,10 +69,12 @@ import {
 import { sampleProblem, sampleDuplicate, readEntityData, validateOptionalRegistry } from "./validate-files.js";
 import { storyIdMismatch, storyIdIsFallback, unusedTargetWarnings, validateReleaseDate } from "./validate-story.js";
 
-// Per kind, the fields a progression may not change because they hold lists,
-// and the fields whose values are checked against an allowed set.
+// Per kind, the fields a progression may not change because they hold lists
+// or never change, and the fields whose values are checked against an
+// allowed set.
 const PROGRESSION_RULES = {
   character: {
+    fixed: new Set(["born"]),
     lists: new Set(["aliases", "relationships", "locations", "tags", "voice-words", "voice-avoid"]),
     enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
   },

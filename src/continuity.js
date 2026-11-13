@@ -143,7 +143,10 @@ function checkCharacterDeaths(project, context, errors, warnings) {
 // known only by its year is born on the last day of that year at the
 // latest and the first day at the earliest. A chapter counts from its
 // latest date, its own or a scene's, so a character born partway through a
-// chapter may be in its cast; a dated scene counts from its own date.
+// chapter may be in its cast. A flashback scene does not date its chapter,
+// as in chapterChronology, and a chapter with no date of its own and an
+// undated scene has no latest date, since that scene may come after the
+// birth. A dated scene, flashbacks too, counts from its own date.
 function checkBirths(project, context, errors) {
   const calendar = project.calendar;
   const births = new Map();
@@ -156,18 +159,18 @@ function checkBirths(project, context, errors) {
   if (births.size === 0) {
     return;
   }
+  const scenes = project.scenes.map((scene) => ({ scene, day: parseStoryDate(String(scene.date ?? ""), calendar) }));
   const latest = new Map();
-  const later = (chapterId, date) => {
-    const parsed = parseStoryDate(String(date ?? ""), calendar);
-    if (parsed && (!latest.has(chapterId) || parsed.days > latest.get(chapterId).days)) {
-      latest.set(chapterId, parsed);
-    }
-  };
   for (const chapter of project.chapters) {
-    later(chapter.id, chapter.date);
-  }
-  for (const scene of project.scenes) {
-    later(idText(scene.chapter), scene.date);
+    const own = parseStoryDate(String(chapter.date ?? ""), calendar);
+    const told = scenes.filter(({ scene }) => idText(scene.chapter) === chapter.id && !scene.flashbackTo);
+    if (!own && told.some(({ day }) => !day)) {
+      continue;
+    }
+    const dates = [own, ...told.map(({ day }) => day)].filter(Boolean);
+    if (dates.length > 0) {
+      latest.set(chapter.id, dates.reduce((last, day) => (day.days > last.days ? day : last)));
+    }
   }
   const bornAfter = (born, day) => day < born.first;
   for (const character of project.characters) {
@@ -182,13 +185,12 @@ function checkBirths(project, context, errors) {
     }
     for (const chapter of project.chapters) {
       const day = latest.get(chapter.id);
-      if (day && bornAfter(born, day.days) && castIncludes(chapter, character.id)) {
+      if (day && castIncludes(chapter, character.id) && bornAfter(born, day.days)) {
         errors.push(err("appears-before-birth", `${relative(project, chapter.file)} lists ${character.id}, who is born ${born.text}, in a chapter dated ${day.text}; move them to mentions or fix the dates`, relative(project, chapter.file), chapter.id));
       }
     }
-    for (const scene of project.scenes) {
-      const day = parseStoryDate(String(scene.date ?? ""), calendar);
-      if (day && bornAfter(born, day.days) && castIncludes(scene, character.id)) {
+    for (const { scene, day } of scenes) {
+      if (day && castIncludes(scene, character.id) && bornAfter(born, day.days)) {
         errors.push(err("appears-before-birth", `${relative(project, scene.file)} lists ${character.id}, who is born ${born.text}, in a scene dated ${day.text}; move them to mentions or fix the dates`, relative(project, scene.file), chapterOf(scene)));
       }
     }

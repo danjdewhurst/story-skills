@@ -21,9 +21,9 @@ import { kebabCase } from "./markdown.js";
 export const PROGRESSION_KINDS = ["character", "location", "faction"];
 
 // Fields a progression may not change: the list itself, the filename id, and
-// the character death fields, which continuity reads as chapter references,
-// and a character's birth date, which never changes.
-const RESERVED_FIELDS = new Set(["progressions", "id", "born", "died-in", "revived-in"]);
+// the character death fields, which continuity reads as chapter references.
+// A kind's rules can name more in `fixed`, such as a character's birth date.
+const RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
 
 // A plain `field` / `value` pair, with the chapter it takes effect from.
 export function progressionEntry(item) {
@@ -157,7 +157,7 @@ export function validateProgressions(data, label, rules, chronology, errors) {
       errors.push(err("missing-field", `${entryLabel} is missing field`, label));
     } else if (field !== kebabCase(field)) {
       errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
-    } else if (RESERVED_FIELDS.has(field)) {
+    } else if (RESERVED_FIELDS.has(field) || rules.fixed?.has(field)) {
       errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : field === "born" ? "; a birth date stays the same, and story context works out the age at each chapter" : ""}`, label));
     } else if (rules.lists.has(field)) {
       errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));

@@ -9020,6 +9020,9 @@ function parseBorn(value, calendar = null) {
     const days = gregorianDays(Number(full[1]), Number(full[2]), Number(full[3]));
     return days === undefined ? { problem: `must be a real YYYY-MM-DD calendar day or a year, got ${text}` } : { text, first: days, last: days };
   }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1000) {
+    return { problem: `must be a YYYY-MM-DD day or a YYYY year, got ${text}; quote a year before 1000, such as "${text.padStart(4, "0")}"` };
+  }
   if (/^\d{4}$/.test(text)) {
     const year = Number(text);
     return { text, first: gregorianDays(year, 1, 1), last: gregorianDays(year, 12, 31) };
@@ -9049,7 +9052,7 @@ function ageOn(born, at, calendar = null) {
     return null;
   }
   if (at < born.first) {
-    return { min: null, max: null, unborn: true, maybeUnborn: true };
+    return { min: null, max: null, unborn: true, maybeUnborn: false };
   }
   const max = yearsBetween(born.first, at, calendar);
   const min = at < born.last ? 0 : yearsBetween(born.last, at, calendar);
@@ -9071,7 +9074,7 @@ function characterAgeOn(character, at, calendar = null) {
 
 // src/progressions.js
 var PROGRESSION_KINDS = ["character", "location", "faction"];
-var RESERVED_FIELDS = new Set(["progressions", "id", "born", "died-in", "revived-in"]);
+var RESERVED_FIELDS = new Set(["progressions", "id", "died-in", "revived-in"]);
 function progressionEntry(item) {
   if (!item || typeof item !== "object" || Array.isArray(item)) {
     return null;
@@ -9161,7 +9164,7 @@ function validateProgressions(data, label, rules, chronology, errors) {
       errors.push(err("missing-field", `${entryLabel} is missing field`, label));
     } else if (field !== kebabCase(field)) {
       errors.push(err("id-not-kebab", `${entryLabel} field ${field} must be kebab-case`, label));
-    } else if (RESERVED_FIELDS.has(field)) {
+    } else if (RESERVED_FIELDS.has(field) || rules.fixed?.has(field)) {
       errors.push(err("progression-fixed-field", `${entryLabel} cannot change ${field}${field === "died-in" || field === "revived-in" ? "; set it on the character and story continuity reads it by chapter" : field === "born" ? "; a birth date stays the same, and story context works out the age at each chapter" : ""}`, label));
     } else if (rules.lists.has(field)) {
       errors.push(err("progression-list-field", `${entryLabel} cannot change ${field}, which is a list; a progression holds a single value`, label));
@@ -9647,7 +9650,7 @@ function checkSharedCanon({ order, later }, errors, warnings) {
   for (const book of order) {
     const earlierBooks = order.filter((candidate) => reachable.get(candidate.key).has(book.key));
     checkCanonNames(book, earlierBooks, warnings);
-    checkCanonBirths(book, earlierBooks, warnings);
+    checkCanonBirths(book, earlierBooks, warnings, reachable);
     checkCanonDeaths(book, earlierBooks, errors);
     checkDestroyedArtifacts(book, earlierBooks, errors, warnings);
     checkKnownFacts(book, earlierBooks, errors);
@@ -9683,21 +9686,29 @@ function checkCanonNames(book, earlierBooks, warnings) {
     }
   }
 }
-function checkCanonBirths(book, earlierBooks, warnings) {
+function checkCanonBirths(book, earlierBooks, warnings, reachable) {
+  const calendarKey = (project) => JSON.stringify(project.calendar);
   const canon = new Map;
   for (const earlier of earlierBooks) {
     for (const character of earlier.project.characters) {
       const born = readBorn(character.born, earlier.project.calendar);
       if (born) {
-        canon.set(character.id, { book: earlier, character, born });
+        canon.set(character.id, [...canon.get(character.id) ?? [], { book: earlier, character, born }]);
       }
     }
   }
   for (const character of book.project.characters) {
     const born = readBorn(character.born, book.project.calendar);
-    const match = canon.get(character.id);
-    if (born && match && (born.last < match.born.first || born.first > match.born.last)) {
-      warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
+    if (!born) {
+      continue;
+    }
+    const entries = canon.get(character.id) ?? [];
+    const latest = entries.filter((entry) => !entries.some((other) => other !== entry && reachable.get(entry.book.key).has(other.book.key)));
+    for (const match of latest) {
+      const comparable = calendarKey(book.project) === calendarKey(match.book.project);
+      if (comparable && (born.last < match.born.first || born.first > match.born.last)) {
+        warnings.push(warn("canon-born-mismatch", `${bookFile(book, character.file)} born ${born.text} differs from ${match.born.text} in ${bookFile(match.book, match.character.file)}`, bookFile(book, character.file)));
+      }
     }
   }
 }
@@ -16329,18 +16340,18 @@ function checkBirths(project, context, errors) {
   if (births.size === 0) {
     return;
   }
+  const scenes = project.scenes.map((scene) => ({ scene, day: parseStoryDate(String(scene.date ?? ""), calendar) }));
   const latest = new Map;
-  const later = (chapterId, date) => {
-    const parsed = parseStoryDate(String(date ?? ""), calendar);
-    if (parsed && (!latest.has(chapterId) || parsed.days > latest.get(chapterId).days)) {
-      latest.set(chapterId, parsed);
-    }
-  };
   for (const chapter of project.chapters) {
-    later(chapter.id, chapter.date);
-  }
-  for (const scene of project.scenes) {
-    later(idText(scene.chapter), scene.date);
+    const own = parseStoryDate(String(chapter.date ?? ""), calendar);
+    const told = scenes.filter(({ scene }) => idText(scene.chapter) === chapter.id && !scene.flashbackTo);
+    if (!own && told.some(({ day }) => !day)) {
+      continue;
+    }
+    const dates = [own, ...told.map(({ day }) => day)].filter(Boolean);
+    if (dates.length > 0) {
+      latest.set(chapter.id, dates.reduce((last, day) => day.days > last.days ? day : last));
+    }
   }
   const bornAfter = (born, day) => day < born.first;
   for (const character of project.characters) {
@@ -16355,13 +16366,12 @@ function checkBirths(project, context, errors) {
     }
     for (const chapter of project.chapters) {
       const day = latest.get(chapter.id);
-      if (day && bornAfter(born, day.days) && castIncludes(chapter, character.id)) {
+      if (day && castIncludes(chapter, character.id) && bornAfter(born, day.days)) {
         errors.push(err("appears-before-birth", `${relative2(project, chapter.file)} lists ${character.id}, who is born ${born.text}, in a chapter dated ${day.text}; move them to mentions or fix the dates`, relative2(project, chapter.file), chapter.id));
       }
     }
-    for (const scene of project.scenes) {
-      const day = parseStoryDate(String(scene.date ?? ""), calendar);
-      if (day && bornAfter(born, day.days) && castIncludes(scene, character.id)) {
+    for (const { scene, day } of scenes) {
+      if (day && castIncludes(scene, character.id) && bornAfter(born, day.days)) {
         errors.push(err("appears-before-birth", `${relative2(project, scene.file)} lists ${character.id}, who is born ${born.text}, in a scene dated ${day.text}; move them to mentions or fix the dates`, relative2(project, scene.file), chapterOf(scene)));
       }
     }
@@ -24579,6 +24589,7 @@ function sectionText(value) {
 // src/validate-entities.js
 var PROGRESSION_RULES = {
   character: {
+    fixed: new Set(["born"]),
     lists: new Set(["aliases", "relationships", "locations", "tags", "voice-words", "voice-avoid"]),
     enums: new Map([["role", CHARACTER_ROLES], ["status", CHARACTER_STATUSES]])
   },
@@ -31614,9 +31625,9 @@ function entityStateAtChapter(root, kind, id, atChapterId, project = scanProject
   }
   return entityStateAt(entity.frontmatter, atChapterId, chapterChronology(project));
 }
-function characterAgeAtChapter(project, characterId, atChapterId) {
+function characterAgeAtChapter(project, characterId, atChapterId, sceneDate = undefined) {
   const character = project.characters.find((entry) => entry.id === characterId);
-  const day = chapterChronology(project).days.get(atChapterId);
+  const day = parseStoryDate(String(sceneDate ?? ""), project.calendar)?.days ?? chapterChronology(project).days.get(atChapterId);
   const age = character ? characterAgeOn(character, day, project.calendar) : null;
   return age ? { ...age, text: formatAge(age) } : null;
 }
@@ -33654,8 +33665,9 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
       return null;
     }
     const { project } = reference;
-    const chapter = project.chapters.find((entry) => entry.file === context.file)?.id ?? (project.scenes.find((entry) => entry.file === context.file)?.chapter || null);
-    const value = reference.matches.map((entry) => describeEntity(entry, context.root, chapter, project)).join(`
+    const scene = project.scenes.find((entry) => entry.file === context.file);
+    const chapter = project.chapters.find((entry) => entry.file === context.file)?.id ?? (scene?.chapter || null);
+    const value = reference.matches.map((entry) => describeEntity(entry, context.root, chapter, project, scene?.date)).join(`
 
 ---
 
@@ -34004,9 +34016,9 @@ function referenceKinds(lines, line, character) {
 function fieldKinds(key) {
   return key !== null && Object.hasOwn(REFERENCE_FIELD_KINDS, key) ? REFERENCE_FIELD_KINDS[key] : undefined;
 }
-function describeEntity(entry, root, chapter, project) {
+function describeEntity(entry, root, chapter, project, sceneDate) {
   const lines = [`**${escapeMarkdown(entry.name)}** · ${entry.kind} · \`${portablePath(path38.relative(root, entry.file))}\``];
-  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project) : null;
+  const atChapter = chapter !== null && PROGRESSION_KINDS.includes(entry.kind) ? stateAtChapter(entry, root, chapter, project, sceneDate) : null;
   const status = String((atChapter === null ? entry.entity.status : atChapter.status) ?? "");
   if (status !== "") {
     lines.push("", `Status: ${escapeMarkdown(status)}`);
@@ -34017,11 +34029,11 @@ function describeEntity(entry, root, chapter, project) {
   return lines.join(`
 `);
 }
-function stateAtChapter(entry, root, chapter, project) {
+function stateAtChapter(entry, root, chapter, project, sceneDate) {
   try {
     const knowledge = entry.kind === "character" ? knowledgeAtChapter(root, entry.id, chapter, project) : [];
     const { state, changes } = entityStateAtChapter(root, entry.kind, entry.id, chapter, project);
-    const age = entry.kind === "character" ? characterAgeAtChapter(project, entry.id, chapter) : null;
+    const age = entry.kind === "character" ? characterAgeAtChapter(project, entry.id, chapter, sceneDate) : null;
     return {
       status: state.status,
       lines: [
