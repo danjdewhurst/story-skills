@@ -188,11 +188,15 @@ characters: []
     expect(codes(checkProjectContinuity(root).errors)).not.toContain("appears-before-birth");
   });
 
-  test("a flashback scene does not date its chapter, and an undated scene leaves the chapter unchecked", () => {
+  test("a flashback scene does not date its chapter, and an undated scene leaves an undated chapter unchecked", () => {
     const root = book(makeTempDir(), "Flashbacks", {
+      count: 4,
       characters: { mira: "born: 2001-09-14" },
-      chapters: { 1: "characters:\n  - mira", 2: "characters:\n  - mira", 3: "characters:\n  - mira" }
+      chapters: { 1: "characters:\n  - mira", 2: "characters:\n  - mira", 3: "characters:\n  - mira", 4: "date: 2001-09-10\ncharacters:\n  - mira" }
     });
+    // Chapter 4 has its own date, so its undated scene happens on that date.
+    scene(root, "chapter-04", 1, "date: 2001-09-10\ncharacters: []");
+    scene(root, "chapter-04", 2, "characters:\n  - mira");
     // Chapter 1: its only dated scene is a flashback.
     scene(root, "chapter-01", 1, "date: 1995-03-01\nflashback-to: chapter-03\ncharacters: []");
     scene(root, "chapter-01", 2, "characters:\n  - mira");
@@ -203,7 +207,8 @@ characters: []
     scene(root, "chapter-03", 1, "date: 2000-01-01\ncharacters: []");
     scene(root, "chapter-03", 2, "date: 2001-09-13\ncharacters: []");
     expect(birthErrors(root).map((finding) => finding.message)).toEqual([
-      "chapters/chapter-03.md lists mira, who is born 2001-09-14, in a chapter dated 2001-09-13; move them to mentions or fix the dates"
+      "chapters/chapter-03.md lists mira, who is born 2001-09-14, in a chapter dated 2001-09-13; move them to mentions or fix the dates",
+      "chapters/chapter-04.md lists mira, who is born 2001-09-14, in a chapter dated 2001-09-10; move them to mentions or fix the dates"
     ]);
   });
 
