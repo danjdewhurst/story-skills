@@ -50,6 +50,7 @@ import {
 } from "./prose.js";
 import { skippedChecks } from "./languages/index.js";
 import { buildSeries, canonicalPath } from "./series.js";
+import { buildTranslation } from "./translation.js";
 import { warn } from "./findings.js";
 import { EXIT_CODES, projectError, usageError, withFlags } from "./exit-codes.js";
 import {
@@ -255,6 +256,15 @@ export function seriesReport(root) {
   // Linked books resolve relative to the real folder, so a book reached
   // through a symlinked path finds its siblings.
   return buildSeries(fs.realpathSync(projectRoot), scanProject);
+}
+
+// Compares a translation with the source project its story.md
+// translation-of names (see translation.js).
+export function translationReport(root, options = {}) {
+  const projectRoot = path.resolve(root);
+  requireStoryFile(projectRoot);
+  // The link resolves relative to the real folder, as series links do.
+  return buildTranslation(fs.realpathSync(projectRoot), scanProject, options);
 }
 
 // Compares the current chapters with an earlier draft: a git ref (read with

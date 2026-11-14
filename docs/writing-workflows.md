@@ -1796,14 +1796,16 @@ For a picture book, set `form: picture-book` in `story.md`, or start a new proje
 Prepare the book for a Spanish translation.
 ```
 
-Following the [translation reference](../skills/adaptation/references/translation.md), the skill turns the glossary into a term base (a `## Translations` section on each term, plus `pronunciation` where it helps) and checks translated names with `story names`. It copies the project to a new folder without `dist/`, sets `language`, removes `series`, `book-number`, `follows`, and `precedes` from the copied `story.md` (copied values break `story links` and `story series`), keeps every id as the English kebab-case id, and writes a target-language style sheet. After translation it checks the new project and compares the chapter sets:
+Following the [translation reference](../skills/adaptation/references/translation.md), the skill turns the glossary into a term base (a `## Translations` section on each term, plus `pronunciation` where it helps) and checks translated names with `story names`. It copies the project to a new folder without `dist/`, sets `language`, removes `series`, `book-number`, `follows`, and `precedes` from the copied `story.md` (copied values break `story links` and `story series`), sets `translation-of` to the source project, keeps every id as the English kebab-case id, and writes a target-language style sheet. It records the source version of each chapter with `story translation --record`. After each batch of translated chapters it checks the new project and compares it with the source:
 
 ```shell
 story reindex ../the-gannet-point-light-es
 story wordcount ../the-gannet-point-light-es --write
 story check ../the-gannet-point-light-es
-story compare ../the-gannet-point-light-es --against .
+story translation ../the-gannet-point-light-es
 ```
+
+`story translation` reports chapters, scenes, and ids in one edition only, chapters whose paragraph count differs, and source chapters changed since they were translated (see [Translations](series.md#translations)).
 
 ### Checks
 

@@ -11,7 +11,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
-- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `notes`, `apply`, `similarity`, `progress`, `timeline`, `prose`, `series`, `report`, `next`, `doctor`
+- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `notes`, `apply`, `similarity`, `progress`, `timeline`, `prose`, `series`, `translation`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
@@ -67,6 +67,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
 | | [`prose [path\|-]`](#prose) | Lint chapter prose, or a passage piped to stdin | No |
 | | [`series [path]`](#series) | Order linked books and check shared canon | No |
+| | [`translation [path]`](#translation) | Compare a translated edition with its source project: chapters, scenes, and ids, paragraph counts, and source chapters changed since translation | With `--record` |
 | | [`report [path]`](#report) | Summarise inventory, progress, and checks | No |
 | | [`next [path]`](#next) | Recommend the next actions | No |
 | | [`doctor [path]`](#doctor) | Show health checks and repair steps; `--fix` applies the safe ones | With `--fix` |
@@ -147,7 +148,7 @@ Every command except `init`, `import`, and `lsp` works on one story project: a d
 
 | Commands | How to give the project | Default |
 |---|---|---|
-| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
+| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `translation`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `notes`, `apply`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact` | `--path <path>` only, because their positionals are ids, names, a file, or an entity or diagram kind | Current directory |
 | `init`, `import`, `lsp` | Neither. `init` and `import` create a new project; use `--dir` to choose where. `lsp` checks the projects in the folders the editor opens | A directory named after the story id (`init`, `import`) |
 
@@ -222,7 +223,7 @@ pandoc draft.odt -t markdown | story import - --title "The Lost Coast"
 - Options can appear anywhere after the command: `story build --format epub .` and `story build . --format epub` are the same.
 - Value options take the next argument (`--out book.md`) or an inline value (`--out=book.md`). Use the inline form when the value itself starts with `--` or is `-h` or `-v`, which would otherwise be read as an option.
 - Positional arguments may start with a single dash, so `story add term "-ism"` works. A lone `--` ends the options: everything after it is positional, so `story init -- --Untitled` creates a story titled `--Untitled`. Put any options before the `--`.
-- Boolean flags (`--bylines`, `--force`, `--write`, `--log`, `--list`, `--shunn`, `--anonymous`, `--pdf`, `--spoilers`, `--include-pending`, `--init`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--stdio`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
+- Boolean flags (`--bylines`, `--force`, `--write`, `--log`, `--list`, `--shunn`, `--anonymous`, `--pdf`, `--spoilers`, `--include-pending`, `--init`, `--record`, `--baseline`, `--actionable`, `--fix`, `--strict`, `--stdio`, `--json`, `--dry-run`, `--prose`, `--sequel`, `--significance-delayed`, `--red-herring`, `--heading`) are true when present. They take a value only in the inline form: `true`, `false`, `yes`, `no`, `on`, `off`, `1`, or `0`, in any case. So `--write=false` turns writing off, while `--write=maybe` is an error. The word after a flag is never its value, and one of those boolean words there, in any case, is refused (exit 2) rather than read as an argument, since either reading could turn a dry run into a write. So `story add chapter --dry-run No Way Back` writes nothing and says `--dry-run No is ambiguous: write --dry-run=false to turn the flag off, or put --dry-run after No, or No after --, to keep No as an argument`; `story add chapter No Way Back --dry-run` and `story add chapter --dry-run -- No Way Back` preview the chapter.
 - Repeatable options collect every value. Only the plural list forms (`--characters`, `--locations`, `--mentions`, `--members`, `--arcs`, `--aliases`, `--themes`, and `--acts`) split on commas, so `--character ilse-marrow --character tobin-reyes` and `--characters ilse-marrow,tobin-reyes` produce the same list. A singular flag keeps each value whole, so `--alias "Rite of Ash, the"` is one alias. `--sources`, `--follows`, and `--precedes` keep each value whole too.
 - A singular flag and its plural alias combine, so `add chapter --character ivo-pell --characters mara-quill` lists both; `add` also drops repeated values from a list. `add character --arc` is single-valued and has no plural alias.
 - For options that are not repeatable, the last value wins: `--out a.md --out b.md` writes `b.md`.
@@ -281,7 +282,7 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
-- `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, and `series` write their report to stdout, then the same summary and finding lines to stderr.
+- `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, `series`, and `translation` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout, except `lsp`, which writes only protocol messages there for the editor.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
@@ -306,7 +307,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, which tests such a change, and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `translation`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, which tests such a change, and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
 
 Every result has the same envelope:
 
@@ -374,7 +375,7 @@ story build --format epub --json | jq -r '.writes[]'
 
 ### Previewing changes with --dry-run
 
-`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, `snapshot`, `passes` (with `--init`, `--start`, or `--done`), `progress --log`, `diagram --out`, `synopsis --out`, `export`, `build`, `init`, `import`, and `apply` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
+`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount --write`, `doctor --fix`, `snapshot`, `passes` (with `--init`, `--start`, or `--done`), `progress --log`, `translation --record`, `diagram --out`, `synopsis --out`, `export`, `build`, `init`, `import`, and `apply` take `--dry-run`. It lists the files the command would create, update, or delete, and the folders it would make, and changes nothing:
 
 <!-- replay: the-unraveled-thread -->
 ```text
@@ -391,7 +392,7 @@ update  worldbuilding/artifacts/vales-compass.md
 Dry run: story rename would make 9 changes; nothing was written
 ```
 
-The preview is the command itself, run on a temporary copy of the project that is deleted afterwards, so it lists exactly what the real run would change, the registries it reindexes included, and prints the same warnings and exits with the same code. A command the real run would refuse (an id that is taken, a file or folder you cannot write to) is refused the same way, naming the project's files. The project is only read: the dry run does not take the [lock](#where-commands-write) and does not wait for a command that holds it. The copy holds only what a write command reads: it leaves out `dist/`, `node_modules/`, dot-folders such as `.git/`, subfolders with their own `story.md`, and folders more than 10 levels deep, and every file other than a markdown file under 5 MiB is copied as a blank sparse file of the same size and permissions, so a folder of cover images or audio takes no space. Only the `story.md` cover keeps its first 12 bytes, which tell `validate` what kind of image it is. In a [series](series.md), the books the project links to through `follows` and `precedes`, and those its sibling books link to (up to the series limit of 100 books), are copied the same way, each at its own path relative to the copy, with symlinks kept, so cross-book links and series checks resolve as in the real run. These copies are scratch files too, so no linked book is written. A markdown link that leads outside the project, directly or through a symlink, to a file or folder that exists gets an empty stand-in at its path beside the copy, so the dry run reports it as `link-outside-project`, or accepts a link into a linked book, just as the real run does.
+The preview is the command itself, run on a temporary copy of the project that is deleted afterwards, so it lists exactly what the real run would change, the registries it reindexes included, and prints the same warnings and exits with the same code. A command the real run would refuse (an id that is taken, a file or folder you cannot write to) is refused the same way, naming the project's files. The project is only read: the dry run does not take the [lock](#where-commands-write) and does not wait for a command that holds it. The copy holds only what a write command reads: it leaves out `dist/`, `node_modules/`, dot-folders such as `.git/`, subfolders with their own `story.md`, and folders more than 10 levels deep, and every file other than a markdown file under 5 MiB is copied as a blank sparse file of the same size and permissions, so a folder of cover images or audio takes no space. Only the `story.md` cover keeps its first 12 bytes, which tell `validate` what kind of image it is. In a [series](series.md), the books the project links to through `follows` and `precedes`, and those its sibling books link to (up to the series limit of 100 books), are copied the same way, each at its own path relative to the copy, with symlinks kept, so cross-book links and series checks resolve as in the real run. So is the source project a [translation](#translation)'s `translation-of` names. These copies are scratch files too, so no linked book is written. A markdown link that leads outside the project, directly or through a symlink, to a file or folder that exists gets an empty stand-in at its path beside the copy, so the dry run reports it as `link-outside-project`, or accepts a link into a linked book, just as the real run does.
 
 `export`, `build`, `diagram --out`, `synopsis --out`, and `init` only write files they never read back, so their dry run needs no copy: the command runs on the project itself, and each write, delete, and new folder is checked as the real run checks it (a path outside the project, a symlink, a file or folder you cannot write to) and listed instead of made. An `--out` outside the project is listed relative to it, such as `create  ../outbox/book.md`. A build lists every file it would rewrite as `update`, even one that would come out byte-identical, and a codex rebuild lists the stale pages, and the entity folders they leave empty, that it would delete. `build --pdf --dry-run` finds the PDF engine, as the real build does, and names it without running it:
 
@@ -407,7 +408,7 @@ Dry run: story build would make 2 changes; nothing was written
 
 `apply --dry-run` works out the edits on the project itself, as the real run does, and prints the same report and warnings, with `Would change` in place of `Changed`. It lists no files and takes no snapshot; with `--json`, `data.changes` lists the chapter files it would update.
 
-With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` report `dryRun` and `changes` on every run. The rest of `data` is the real run's, so `import --dry-run --json` gives the entity candidates and `build --pdf --dry-run --json` the engine in `data.engine`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, `doctor` without `--fix`, `snapshot --list`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
+With `--json`, the changes are `data.changes`, `data.dryRun` is `true`, and `writes` is empty (see [JSON output](#json-output)); `passes`, `translation`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` report `dryRun` and `changes` on every run. The rest of `data` is the real run's, so `import --dry-run --json` gives the entity candidates and `build --pdf --dry-run --json` the engine in `data.engine`. `passes` and `progress` print their report after the preview, as it would be after the change. `--dry-run` is a usage error where the command would write nothing: `wordcount` without `--write`, `passes` without `--init`, `--start`, or `--done`, `progress` without `--log`, `doctor` without `--fix`, `translation` without `--record`, `snapshot --list`, and `diagram` or `synopsis` without `--out`. `cli-defaults` in `story.md` cannot set `dry-run`.
 
 ### Where commands write
 
@@ -424,7 +425,7 @@ Refusing to access path outside project root: ~/stories/outside.md
 
 An absolute `--out` path is written where you say. Only the command line can give one: a `cli-defaults` `out` in `story.md` must be a path inside the project, with no `..` that climbs out of it. Generated and rewritten files are written whole or not at all: the new contents go to a hidden temporary file beside the target (`.chapter-01.md.story-<random>.tmp`), which is flushed to disk and then renamed over it. The folder is flushed after the rename, and after a file is deleted from it or a folder made in it, so a power loss cannot keep a command's later changes and lose earlier ones (Windows cannot open a folder to flush it, so there this step is skipped). The temporary file gets a fresh random name and is created only when nothing is at that name, so a symlink or other file already there is never written through. If something is at that name all the same, the target is left as it is and the error says so (`Cannot write to chapters/chapter-01.md: something is already at the name of its temporary file (.chapter-01.md.story-<random>.tmp, in the same folder), so it was left as it is. Run the command again`); a rerun picks a new name. A full disk, a failed write, or a killed process leaves the old file intact rather than truncated, and the error names the target, not the temporary file (`Cannot write to chapters/chapter-01.md: no space left on the device`). An existing file keeps its permissions and a read-only one is refused (`Cannot write to dist/manuscript.md: permission denied`), and the folder must be writable too. A target that is a hard link, such as an `--out` path linked to a chapter, is replaced rather than written through, so the linked file is left unchanged. If a process is killed before the rename, `story validate` warns about the leftover temporary file (`<path> was left by an interrupted write to <target>; delete it once the files beside it look right`). It also warns about a symlink, folder, or other entry that is not a regular file at a temporary file's name, which story never makes, without following a symlink. The warning says how to clear each: delete a symlink itself, not what it points to (`<path> has the name of a story temporary file but is a symlink, which story never makes; delete the link itself, not what it points to`), and check a folder's files before you delete it. The CLI also refuses to write through symlinks or into symlinked project directories, and it never reads a project text file that is a symlink, a device or FIFO, or larger than 5 MiB (see [Scanning limits and safety](project-format.md#scanning-limits-and-safety)). Scans skip `dist/`, `node_modules/`, and dot-directories, so build output never feeds back into checks.
 
-Commands that change project files (`add`, `rename`, `remove`, `move`, `split`, `merge`, `reindex`, `migrate`, `wordcount --write`, `progress --log`, `passes --init`, `--start`, and `--done`, `doctor --fix`, `snapshot` (saving and restoring), and `init --force` and `import --force` into an existing folder, with or without a `story.md`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). `init --follows` and `--precedes` also hold the lock of each book they add a backlink to, taking every lock in the order of the folders' paths, so two runs that need the same books never each hold one and wait for the other. If one of those books' lock cannot be created, `init` refuses before it makes anything. The same commands without the flag that makes them write (`wordcount`, `progress`, `passes`, `snapshot --list`, `doctor`) only read, and neither take the lock nor wait for it. `build`, `export`, `synopsis`, and `diagram --out` write only generated files and take no lock. Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. On Linux a lock also records its command's boot, pid namespace, and process start time, so a lock from an earlier boot is taken over, and so is one with the running command's own process number but another start time in the same namespace (a container often gives `story` the same one every run, so an earlier run left it). A lock from another pid namespace on the same machine, such as another container that shares the host name and the project folder, cannot be checked by process number, nor can a lock with the running command's own number that records none of this (one written by an older `story`, or on macOS or Windows). These, and a lock from another machine, such as a container, a cloud agent, or a shared folder, go by age: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A `.story.lock` that is not a regular file of at most 4 KiB, such as a symlink to `/dev/zero` in a cloned project, is never read: it counts as held, so the command refuses with the same message. When the lock file cannot be created for another reason, such as a project folder the user cannot write to, nothing would keep a second command out, so a command that needs to write refuses with exit code 4 before its first write: `Cannot create the project lock .story.lock (permission denied), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again`. One that finds nothing to change, such as `reindex` on registries that are up to date, still succeeds. Every rewrite and delete also checks that the file still holds what the command read (and, for a file it creates, that nothing has taken the name), so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`). When `move` or `rename` finds the file it is moving saved meanwhile, it keeps that file, removes the copy it had just written at the new path, and says `changed on disk while story was deleting it`, so running the command again moves the file with the save. `merge` does the same with the chapter it merges away: it puts the merged chapter back, and running it again merges the save. When `init --follows` finds the linked book's `story.md` saved meanwhile, the new book is already made, so it says to run the same `init` with `--force` to add the backlink.
+Commands that change project files (`add`, `rename`, `remove`, `move`, `split`, `merge`, `reindex`, `migrate`, `wordcount --write`, `progress --log`, `passes --init`, `--start`, and `--done`, `translation --record`, `doctor --fix`, `snapshot` (saving and restoring), and `init --force` and `import --force` into an existing folder, with or without a `story.md`) hold a lock file, `.story.lock` in the project root, while they run (a [`--dry-run`](#previewing-changes-with---dry-run) only reads the project and takes none). `init --follows` and `--precedes` also hold the lock of each book they add a backlink to, taking every lock in the order of the folders' paths, so two runs that need the same books never each hold one and wait for the other. If one of those books' lock cannot be created, `init` refuses before it makes anything. The same commands without the flag that makes them write (`wordcount`, `progress`, `passes`, `translation`, `snapshot --list`, `doctor`) only read, and neither take the lock nor wait for it. `build`, `export`, `synopsis`, and `diagram --out` write only generated files and take no lock. Each plans its rewrites from what it read, so two at once, such as two agent sessions or an editor hook running `reindex` while you run `rename`, could lose each other's reference updates or bring back a deleted file in ways `story reindex` cannot repair. A second command waits up to 10 seconds for the first to finish (set `STORY_LOCK_WAIT_MS` to change that; `0` refuses at once), then refuses with the project unchanged: `another story command (process 4242) is modifying this project; nothing was changed. Run write commands one at a time. If no story command is running, delete .story.lock in the project folder and try again`. A lock left by a command that was killed is taken over, since its process is gone. On Linux a lock also records its command's boot, pid namespace, and process start time, so a lock from an earlier boot is taken over, and so is one with the running command's own process number but another start time in the same namespace (a container often gives `story` the same one every run, so an earlier run left it). A lock from another pid namespace on the same machine, such as another container that shares the host name and the project folder, cannot be checked by process number, nor can a lock with the running command's own number that records none of this (one written by an older `story`, or on macOS or Windows). These, and a lock from another machine, such as a container, a cloud agent, or a shared folder, go by age: one older than 10 minutes, by both the time written in it and the file's modification time, is taken over, and a newer one is left in place with the same message, which tells you to delete `.story.lock`. A `.story.lock` that is not a regular file of at most 4 KiB, such as a symlink to `/dev/zero` in a cloned project, is never read: it counts as held, so the command refuses with the same message. When the lock file cannot be created for another reason, such as a project folder the user cannot write to, nothing would keep a second command out, so a command that needs to write refuses with exit code 4 before its first write: `Cannot create the project lock .story.lock (permission denied), which keeps two story commands from changing the project at once; nothing was changed. Make the project folder writable and try again`. One that finds nothing to change, such as `reindex` on registries that are up to date, still succeeds. Every rewrite and delete also checks that the file still holds what the command read (and, for a file it creates, that nothing has taken the name), so a chapter an editor saves meanwhile is left as saved (`chapters/chapter-01.md changed on disk while story was updating it, so it was left as it is. Run the command again`). When `move` or `rename` finds the file it is moving saved meanwhile, it keeps that file, removes the copy it had just written at the new path, and says `changed on disk while story was deleting it`, so running the command again moves the file with the save. `merge` does the same with the chapter it merges away: it puts the merged chapter back, and running it again merges the save. When `init --follows` finds the linked book's `story.md` saved meanwhile, the new book is already made, so it says to run the same `init` with `--force` to add the backlink.
 
 A file-system failure reads `Cannot <action> <path>: <reason>`, with the path relative to the current directory when it is inside it. The action is `open`, `list`, `check`, `replace`, `create the folder`, `delete`, `copy`, or `write to`, and the reason is `permission denied`, `no such file or folder`, `it is a folder, not a file`, `a part of the path is not a folder`, `the file system is read-only`, `no space left on the device`, `the disk quota is exceeded`, `the file is too large`, `an input/output error`, `the file is in use`, or `the name is too long`.
 
@@ -727,7 +728,7 @@ Checks that the project is structurally sound:
 - `revision-passes` in `story.md` is a list of kebab-case passes with a `pending`, `in-progress`, or `done` status
 - `progressions` on characters, locations, and factions are well formed and in story order: each entry has a `from` chapter, a kebab-case `field` that is not a list field, and a single `value` allowed for that field, and no two entries change the same field from the same chapter; a character progression to `status: deceased` without a matching `died-in` is a warning (see [Progressions](project-format.md#progressions))
 - `style-sheet.md`, `progress.md`, `continuity/exemptions.md`, and the `story.md` `cover` image are well formed, when present
-- `follows`, `precedes`, and `cover` in `story.md` use `/`, not a Windows `\`, which resolves on Windows but not on Linux or macOS CI (warning: `story.md follows ..\ser1 uses a backslash; write ../ser1 so the path works on every system`); `story links` reports the same in series links, and in markdown links in `plot/timeline.md` and arc bodies, as errors
+- `follows`, `precedes`, `translation-of`, and `cover` in `story.md` use `/`, not a Windows `\`, which resolves on Windows but not on Linux or macOS CI (warning: `story.md follows ..\ser1 uses a backslash; write ../ser1 so the path works on every system`); `story links` reports the same in series links and `translation-of`, and in markdown links in `plot/timeline.md` and arc bodies, as errors
 
 Errors exit 1; warnings alone exit 0.
 
@@ -842,6 +843,7 @@ Checks that references between entities point at entities that exist and that tw
 - the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status` is `planned` or `abandoned`, an `open` or `abandoned` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files, and markdown links in the bodies of `matter/` pages
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
+- the `translation-of` link in `story.md`, which must be a relative path, with `/`, to another story project (see [translation](#translation))
 
 With `characters/old-bram.md` listing two locations, where `dock-nine` does not exist and `gull-harbour` does not list Bram back:
 
@@ -1776,6 +1778,60 @@ Series is consistent: 0 errors, 0 warnings, 0 dismissed
 ```
 
 See [Series](series.md).
+
+### translation
+
+```text
+story translation [path] [--record] [--chapter <id>] [--dry-run] [--json]
+```
+
+Compares a translated edition with the source project that `translation-of` in its `story.md` names, such as `translation-of: ../book-en`. It compares structure only, never meaning. It reports:
+
+- chapters, scenes, and entity ids (characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, glossary terms, and matter pages) that one project has and the other does not, as errors. Research notes are not compared.
+- chapters whose number of prose paragraphs differs from the source chapter, as warnings. A translated chapter with no prose yet is not counted.
+- source chapters that changed since they were translated, as warnings, when the translated chapter records a `source-hash`. A chapter without one is not checked.
+
+A `source-hash` is the first 12 hex digits of a SHA-256 of the source chapter's title and prose paragraphs, as [`compare`](#compare) reads them. So a change to the outline, an HTML comment, or the line wrapping inside a paragraph does not count. `--record` writes the current `source-hash` of each source chapter into the translated chapter with the same id. `--chapter <id>` writes only that chapter's. `--record` holds the [project lock](#where-commands-write), and `--dry-run` with it lists the chapters it would change. The source project is only read.
+
+| Option | Effect |
+|---|---|
+| `--record` | Record each source chapter's current `source-hash` in the translated chapter, then report |
+| `--chapter <id>` | With `--record`, record only this chapter, which both projects must have |
+| `--dry-run` | With `--record`, list the chapters it would change, and change nothing (see [Previewing changes](#previewing-changes-with---dry-run)) |
+
+After you copy the source project, record the version each chapter is translated from. After you carry a source change across, record that chapter again:
+
+```shell
+story translation --record
+story translation --record --chapter chapter-03
+```
+
+A translation of a 14-chapter book with one source chapter revised, a character missing from the source, and a translated chapter with an extra paragraph:
+
+```text
+# Translation: Bo y la luna perdida (es)
+
+Source: ../book-en - Bo and the Missing Moon (en)
+
+Chapters:
+- chapter-01: 4 paragraphs (source 4), source unchanged
+- chapter-02: 3 paragraphs (source 3), source changed
+- chapter-03: 4 paragraphs (source 3), source unchanged
+...
+
+Only in the source:
+- None
+
+Only in the translation:
+- character bo (characters/bo.md)
+
+Translation check failed: 1 errors, 2 warnings, 0 dismissed
+error: characters/bo.md has character bo, which the source ../book-en does not; give it the source's id, or add it to the source first
+warning: ../book-en/chapters/chapter-02.md changed since chapters/chapter-02.md was translated (source-hash b8e54b8795be, now 8adeab03841b); carry the change across, then run story translation --record --chapter chapter-02 [translation-source-changed]
+warning: chapters/chapter-03.md has 4 paragraphs; the source ../book-en/chapters/chapter-03.md has 3 [translation-paragraph-count]
+```
+
+Any error exits 1. A project without `translation-of` exits 3. The `--json` data has `source`, `sourceTitle`, `sourceLanguage`, `chapters` (each with `paragraphs`, `sourceParagraphs`, `sourceHash`, `recordedHash`, and `sourceChanged`, which is `null` when the chapter records no `source-hash`), `missing` and `extra` (each entry a `kind`, `id`, and `file`), `recorded`, `dryRun`, and `changes`. See [Translations](series.md#translations).
 
 ### report
 
@@ -3464,7 +3520,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 **Codes by command**
 
-- [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series)
+- [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series) · [translation](#codes-translation)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [mentions](#codes-mentions) · [names](#codes-names)
 - [context](#codes-context) · [progress and next](#codes-progress-and-next) · [compare](#codes-compare) · [notes](#codes-notes) · [apply](#codes-apply) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
 - [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [impact](#codes-impact) · [snapshot --restore](#codes-snapshot---restore) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
@@ -3606,6 +3662,11 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `series-link-not-sibling` | error | A linked book is not a sibling folder of this one. |
 | `series-missing-backlink` | error | A linked book does not link back. |
 | `series-link-other-series` | error | A linked book belongs to another series. |
+| `translation-of-backslash` | error | `translation-of` uses a backslash. |
+| `translation-of-absolute` | error | `translation-of` is an absolute path. |
+| `translation-of-self` | error | `translation-of` points at this project. |
+| `translation-of-unreadable` | error | The source project's `story.md` cannot be read. |
+| `translation-of-not-project` | error | The folder `translation-of` names has no `story.md`. |
 
 ### Codes: continuity
 
@@ -3710,6 +3771,17 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `canon-destroyed-status` | warning | An artifact destroyed in an earlier book has another status. |
 | `canon-destroyed-artifact-used` | error | A scene uses an artifact destroyed in an earlier book. |
 | `canon-fact-relearned` | error | A character learns a fact they knew in an earlier book. |
+
+### Codes: translation
+
+`translation` also reports the `translation-of` link codes of [links](#codes-links), and `unreadable-file` for a file in either project, a source file named with the source path.
+
+| Code | Level | Reported when |
+|---|---|---|
+| `translation-missing` | error | The source has a chapter, scene, or entity id that the translation does not. |
+| `translation-extra` | error | The translation has a chapter, scene, or entity id that the source does not. |
+| `translation-paragraph-count` | warning | A translated chapter with prose has another number of paragraphs than its source chapter. |
+| `translation-source-changed` | warning | A source chapter changed since the `source-hash` its translated chapter records. |
 
 ### Codes: prose
 
@@ -3948,6 +4020,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--init` | | `passes` | Boolean; adds the missing default passes |
 | `--start` | `<pass>` | `passes` | Kebab-case pass name; marks it `in-progress` |
 | `--done` | `<pass>` | `passes` | Kebab-case pass name; marks it `done` |
+| `--record` | | `translation` | Boolean; records each source chapter's current `source-hash` in the translated chapter |
 | `--max-filter-words` | `<n>` | `prose` | Number 0 or more; default 10 per 1,000 narration words |
 | `--max-adverbs` | `<n>` | `prose` | Number 0 or more; default 12 per 1,000 narration words |
 | `--baseline` | | `prose` | Boolean; on by default when `style-sheet.md` lists `samples` |
@@ -3959,11 +4032,11 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--strict` | | `check`, `impact` | Boolean; fails on warnings as well as errors (for `impact`, on the warnings the change adds or gives) |
 | `--stdio` | | `lsp` | Boolean; accepted for editors that pass it, as the server always uses stdin and stdout |
 | `--json` | | Every command except `lsp` | Boolean; prints one JSON result object instead of the text output (see [JSON output](#json-output)) |
-| `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `apply`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
+| `--dry-run` | | `init`, `import`, `migrate`, `reindex`, `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `translation`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `apply`, `export`, `build`, `synopsis` | Boolean; lists what the command would change and changes nothing. `wordcount`, `progress`, `doctor`, `diagram`, `passes`, `translation`, and `synopsis` take it only with the flag that makes them write, and `snapshot` not with `--list` (see [Previewing changes](#previewing-changes-with---dry-run)) |
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot`, `impact` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--prose` | | `rename`, `impact` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
 | `--number` | `<n>` | `add chapter`, `move chapter`, `impact` | Required for `move chapter` |
-| `--chapter` | `<id>` | `add scene`, `move scene`, `impact` | |
+| `--chapter` | `<id>` | `add scene`, `move scene`, `translation`, `impact` | For `translation`, only with `--record`: the one chapter to record |
 | `--scene` | `<n>` | `add scene`, `move scene`, `impact` | |
 | `--type` | `<name>` | `add location`, `system`, `faction`, `artifact`, `arc` | |
 | `--role` | `<name>` | `add character` | |

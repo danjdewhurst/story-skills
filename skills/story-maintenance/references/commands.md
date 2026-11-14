@@ -45,6 +45,8 @@ story apply returned.docx --path . --ref sent-to-editor-1
 story similarity . --against ../book-one
 story similarity . --snapshot draft-1
 story series .
+story translation .
+story translation . --record --chapter chapter-03
 story init 'The Last Ember' --form novel
 story init 'Embers of the Vale' --follows ../the-last-ember
 story import draft.md --title 'Title'

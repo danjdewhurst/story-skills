@@ -194,6 +194,14 @@ function exampleCopy(edit = () => {}) {
 // `clean` and a text taken from its chapter, outside the project. notes
 // reads a Word build of the copy, outside the project too.
 function runArgs(clean) {
+  // translation compares the copy with a copy of itself beside it, which
+  // its story.md names as the source.
+  const source = path.join(path.dirname(clean), "translation-source");
+  if (!fs.existsSync(source)) {
+    fs.cpSync(clean, source, { recursive: true });
+    const story = path.join(clean, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/\n---/, "\ntranslation-of: ../translation-source\n---"), "utf8");
+  }
   const reference = path.join(path.dirname(clean), "reference.txt");
   fs.copyFileSync(path.join(clean, "chapters", "chapter-01.md"), reference);
   const returned = path.join(path.dirname(clean), "returned.docx");

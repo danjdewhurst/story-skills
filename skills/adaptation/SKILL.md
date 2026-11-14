@@ -196,18 +196,32 @@ Follow `references/translation.md`.
    with `story names`.
 2. Copy the source project to a new folder (without `dist/`), set
    `language`, remove `series`, `book-number`, `follows`, and `precedes`
-   from the copied `story.md`, and keep every id as the English
-   kebab-case id.
-3. Write a style sheet for the target language in the new project.
-4. After translation, run the checks in both projects and compare the
-   chapter sets:
+   from the copied `story.md`, set `translation-of` to the path from the
+   new folder to the source (`translation-of: ../book-en`), and keep
+   every id as the English kebab-case id.
+3. Record the source version of every chapter, so later source changes
+   show up: `story translation ../book-es --record`.
+4. Write a style sheet for the target language in the new project.
+5. After each batch of translated chapters, run the checks in the
+   translation and compare it with the source:
 
    ```shell
    story reindex ../book-es
    story wordcount ../book-es --write
    story check ../book-es
-   story compare ../book-es --against .
+   story translation ../book-es --json
    ```
+
+   Read `missing` and `extra` in the result: a chapter, scene, or id in
+   one edition only is an error to fix (copy the new source file across,
+   or give a renamed id the source's id). A `translation-paragraph-count`
+   warning names a chapter to check for a dropped or split paragraph; ask
+   the user before you merge or split paragraphs to match. A
+   `translation-source-changed` warning names a source chapter revised
+   since it was translated: carry the change across, then record it with
+   `story translation ../book-es --record --chapter <chapter-id>`. Never
+   record a chapter whose change you have not carried across. The check
+   compares structure only, not meaning.
 
 ## Conventions
 
@@ -229,7 +243,8 @@ Follow `references/translation.md`.
   its own `language`, `isbn`, and metadata. Its `story.md` has no
   `series`, `book-number`, `follows`, or `precedes`; those are for
   different books, and copied values break `story links` and
-  `story series`.
+  `story series`. It names its source with `translation-of`, and each
+  translated chapter records its source version in `source-hash`.
 - When the source manuscript changes, list the adaptation files the change
   affects and update them.
 

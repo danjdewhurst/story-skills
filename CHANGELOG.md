@@ -16,6 +16,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story continuity` reports a chapter or scene that lists a character and is dated before their birth (`appears-before-birth`), a birth after the date of the `died-in` chapter (`born-after-death`), and a parent born on or after their child (`parent-born-after-child`). These are errors that an exemption can dismiss. A chapter counts from its latest date, so a character born partway through it may be in its cast.
   - `story series` warns when a shared character's `born` contradicts an earlier book (`canon-born-mismatch`). A year in one book and a day in that year in another agree.
   - The `the-left-luggage-office` example gives Ines and her mother birth dates, and the `character-management` skill records `born` in place of a fixed age.
+- A translated edition can name its source project with `translation-of`, and `story translation` reports where the two have drifted apart. See [Translations](docs/series.md#translations).
+  - `translation-of` in `story.md` is a relative path with `/`, such as `../book-en`. `story links` reports an absolute path, a backslash, a link to the project itself, and a folder with no `story.md` as errors (`translation-of-absolute`, `translation-of-backslash`, `translation-of-self`, `translation-of-not-project`, `translation-of-unreadable`).
+  - `story translation [path]` compares structure, never meaning. Chapters, scenes, and entity ids in one edition only are errors (`translation-missing`, `translation-extra`). A chapter whose paragraph count differs from the source (`translation-paragraph-count`) and a source chapter changed since it was translated (`translation-source-changed`) are warnings. `--json` gives the chapters, the `missing` and `extra` ids, and each chapter's hashes.
+  - A translated chapter's new `source-hash` field records the source chapter it was made from. `story translation --record` writes it for every chapter, or for one with `--chapter <id>`, and takes the project lock and `--dry-run` like the other write commands.
+  - The `adaptation` skill sets `translation-of`, records the source hashes, and runs `story translation` in place of comparing the editions by hand.
 
 ### Changed
 

@@ -14,6 +14,7 @@ This page is for writers working on more than one book in the same world: sequel
 - [The series-continuity skill](#the-series-continuity-skill)
 - [Maintenance checklist](#maintenance-checklist)
 - [Short-story collections and anthologies](#short-story-collections-and-anthologies)
+- [Translations](#translations)
 
 ## How a series is modelled
 
@@ -504,10 +505,39 @@ Leave `author` out of `story.md` when the editor is the book's only credit. The 
 - A build covers the whole project, so a single story's submission manuscript comes from its own project, not from the collection.
 - Poetry and nonfiction collections are outside the story project model: the EPUB, HTML, and Shunn builds join the lines of a paragraph, so a poem loses its line breaks.
 
+## Translations
+
+A translated edition is its own story project, not a book in the series. The [adaptation skill](../skills/adaptation/references/translation.md) copies the source project to a new folder, sets `language`, and keeps every id. In the copy, `story.md` leaves out the source's `series`, `book-number`, `follows`, and `precedes`, and names the source project with `translation-of`:
+
+```yaml
+---
+title: Bo y la luna perdida
+language: es
+translation-of: ../book-en
+---
+```
+
+`translation-of` is a path from the translation's folder to the source, with `/`. `story links` reports an absolute path, a backslash, a path to the translation itself, and a folder with no `story.md` as errors.
+
+`story translation` compares the two projects. It compares structure, never meaning:
+
+- Chapters, scenes, and entity ids that one edition has and the other does not are errors. A chapter the source added after the copy, or an id renamed in one edition only, shows here. Research notes are not compared.
+- A translated chapter with another number of prose paragraphs than its source chapter is a warning. A chapter with no prose yet is skipped.
+- A source chapter that changed since it was translated is a warning, when the translated chapter records a `source-hash`.
+
+`story translation --record` writes each source chapter's current hash into the translated chapter's `source-hash`. Run it once after the copy, so every chapter records the version it is translated from. When the source changes, `story translation` names each changed chapter. Carry the change across, then record that chapter again:
+
+```shell
+story translation ../book-es
+story translation ../book-es --record --chapter chapter-03
+```
+
+The hash covers the chapter's title and prose paragraphs, so an edit to the outline, an HTML comment, or line wrapping is not a change. `--record` takes the [project lock](cli-reference.md#where-commands-write), and `--dry-run` lists the chapters it would change. The source project is only read. See [`story translation`](cli-reference.md#translation).
+
 ## See also
 
 - [Project format reference](project-format.md#story-file): the `series`, `book-number`, `follows`, and `precedes` fields
-- [CLI reference](cli-reference.md#series): `story series` options and output
+- [CLI reference](cli-reference.md#series): `story series` options and output, and [`story translation`](cli-reference.md#translation) for a translated edition
 - [Continuity and analysis](continuity.md#continuity-state): `knowledge-state` and `fact` ids within one book
 - [Skills catalogue](skills.md#series-continuity): the `series-continuity` skill
 - [Documentation index](README.md): every page, by audience and task

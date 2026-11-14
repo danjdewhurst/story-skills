@@ -106,6 +106,15 @@ const OK_ARGS = {
   list: () => ["list", "characters", "--where", "name"],
   voices: () => ["voices"],
   series: () => ["series"],
+  // A copy of the project beside it is its source, so the editions match.
+  translation: (cwd) => {
+    const story = path.join(cwd, "story.md");
+    if (fs.existsSync(story)) {
+      fs.cpSync(cwd, path.join(cwd, "..", "source"), { recursive: true });
+      fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace("\nschema-version:", "\ntranslation-of: ../source\nschema-version:"), "utf8");
+    }
+    return ["translation"];
+  },
   passes: () => ["passes", "--init"],
   snapshot: () => ["snapshot", "draft"],
   report: () => ["report"],
@@ -214,6 +223,7 @@ const LOCKED = {
   wordcount: ["wordcount", "--write"],
   progress: ["progress", "--log"],
   passes: ["passes", "--init"],
+  translation: ["translation", "--record"],
   migrate: ["migrate"],
   doctor: ["doctor", "--fix"],
   add: ["add", "character", "Tobin Reed"],

@@ -34,7 +34,7 @@ export function validatePortablePaths(project, warnings) {
     return;
   }
   const data = project.story.data;
-  for (const field of ["follows", "precedes", "cover"]) {
+  for (const field of ["follows", "precedes", "cover", "translation-of"]) {
     const values = Array.isArray(data[field]) ? data[field] : [data[field]];
     for (const value of values.filter((item) => typeof item === "string" && item.includes("\\"))) {
       warnings.push(warn("backslash-path", `story.md ${field} ${value} uses a backslash; write ${portableSlashes(value)} so the path works on every system`, "story.md"));
