@@ -403,7 +403,7 @@
         "title": { "type": "string", "pattern": "\\S" },
         "number": { "type": "integer", "minimum": 1 },
         "numbered": { "type": "boolean", "description": "false builds the chapter under its title alone (a Prologue or Epilogue) and leaves it out of the printed chapter count." },
-        "verse": { "type": "boolean", "description": "true makes the chapter verse: builds keep every line break, a blank line is a stanza break, wordcount and progress count its lines, and the fiction-only advisories (pacing, hooks, POV, scene records) skip it. A poetry-collection sets it for every chapter, and false turns it off for one." },
+        "verse": { "type": "boolean", "description": "true makes the chapter verse: the EPUB, HTML, print, DOCX, Shunn, and ink builds keep every line break, a blank line is a stanza break, wordcount and progress count its lines, and the fiction-only advisories (pacing, hooks, POV, scene records) skip it. A poetry-collection sets it for every chapter, and false turns it off for one." },
         "author": { "$ref": "#/$defs/names", "description": "The author of this chapter, for a story in a collection or anthology: a name or a list of names. Builds print it under the heading with the byline label, it never counts toward word counts, and the EPUB lists it as a contributor." },
         "status": { "enum": ["outline", "draft", "revised", "final", "complete"] },
         "pov": { "type": "string" },

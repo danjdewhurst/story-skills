@@ -828,7 +828,7 @@ chapters/chapter-02.md: 2875
 Total: 5995 characters
 ```
 
-A [verse chapter](project-format.md#verse-chapters), which is every chapter of a `poetry-collection` and any chapter with `verse: true`, also gives its lines: each line of text, not counting blank lines (stanza breaks), scene-break lines, headings, fence lines, and comments. A `Lines:` total follows when the book has verse. In `--json`, a verse chapter's entry has `lineCount` and `data.lines` is the total; a book without verse has neither. `--write` still records words only. On [`examples/tide-tables`](../examples/tide-tables/):
+A [verse chapter](project-format.md#verse-chapters), which is every chapter of a `poetry-collection` and any chapter with `verse: true`, also gives its lines, each line the builds print: blank lines (stanza breaks), scene breaks, comments, fence lines, a lone `>`, and a line that is only an image are not counted, and a code block counts once. A `Lines:` total follows when the book has verse. In `--json`, a verse chapter's entry has `lineCount` and `data.lines` is the total; a book without verse has neither. `--write` still records words only. On [`examples/tide-tables`](../examples/tide-tables/):
 
 <!-- replay: tide-tables -->
 ```shell
@@ -2179,7 +2179,7 @@ It warns about:
 - three or more chapters in a row that end on `resolution`
 - with three or more written chapters, a chapter over twice or under half the median length
 
-A [verse chapter](project-format.md#verse-chapters) is left out of every one of these findings and of the median: its row shows `(verse)` in the hook column, and in `--json` each row has `verse` and `data.totals.verseChapters` counts them. The first line then reads `0 of 1 prose chapter with hooks (3 verse chapters left out)`.
+A [verse chapter](project-format.md#verse-chapters) is left out of every one of these findings and of the median, though it still ends a run: its row shows `(verse)` in the hook column, and in `--json` each row has `verse` and `data.totals.verseChapters` counts them. The first line then reads `0 of 1 prose chapter with hooks (3 verse chapters left out)`.
 
 Sequels are left out of the outcome counts. `pacing` exits 1 only when a file it reads fails to read or parse, or when a `severity` entry in `story.md` promotes one of its warnings to an error.
 
@@ -4068,7 +4068,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--themes` | `<a,b>` | `init`, `import`, `add arc` | Comma-separated; repeatable |
 | `--pov` | `<style\|id>` | `init`, `import`, `add chapter`, `add scene` | A POV style for `init` and `import`; a POV character id for `add chapter` and `add scene`, which also adds it to `characters` |
 | `--tense` | `<tense>` | `init`, `import` | `past`, `present`, `future`, `mixed` |
-| `--form` | `<form>` | `init` | `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`, `poetry-collection`; sets `target-words` |
+| `--form` | `<form>` | `init` | `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`, `poetry-collection`; sets `target-words`, except for `serial` and `poetry-collection` |
 | `--synopsis` | `<text>` | `init`, `import` | |
 | `--language` | `<tag>` | `import` | A BCP 47 tag such as `fr`; defaults to the language of an existing `story.md`, else English, and is written to a new `story.md` |
 | `--bylines` | | `import` | Boolean; sets each chapter's `author` from its by-line (taken out of the prose) or its file's frontmatter `author` |
