@@ -23134,7 +23134,8 @@ function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
   const kept = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
-  const text = kept.join(verse && !kept.includes("") ? `
+  const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
+  const text = kept.join(plainBreaks ? `
 ` : "\\\n");
   const block = escapeBlockStart(text);
   return quote ? block.split(`
@@ -27814,6 +27815,7 @@ function fillStoryProject(root, title, cwd, options) {
   const storyInherited = { ...inheritedStoryFields(inherited), ...options.language === undefined ? {} : { language: options.language.trim() } };
   const pack = languagePack(projectLanguage(storyInherited));
   const unit = countUnit(storyInherited, pack);
+  const poetryDefault = options.form === VERSE_FORM && options.genre === undefined;
   const storyWritten = writeStarterFile(path30.join(root, "story.md"), storyBible({
     title,
     storyId,
@@ -27821,8 +27823,8 @@ function fillStoryProject(root, title, cwd, options) {
     bookNumber: series.bookNumber,
     follows: series.follows,
     precedes: series.precedes,
-    genre: options.genre ?? (options.form === VERSE_FORM ? "poetry" : inherited.genre ?? "fiction"),
-    subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
+    genre: options.genre ?? (poetryDefault ? "poetry" : inherited.genre ?? "fiction"),
+    subGenre: options.subGenre ?? (poetryDefault ? "general" : inherited["sub-genre"] ?? "general"),
     settingEra: options.settingEra ?? "unspecified",
     themes,
     pov: options.pov ?? inherited.pov ?? "third-person-limited",

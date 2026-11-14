@@ -54,12 +54,13 @@ function returned(book, edit, { parts = [], name = "returned.docx" } = {}) {
   return file;
 }
 
-// A copy of an example with chapter 1 changed by `edit` before the build.
-function sentEdited(edit, { example = "the-gull-rock-light", args = [] } = {}) {
+// A copy of an example with one chapter (`chapterFile`, chapter 1 by
+// default) changed by `edit` before the build.
+function sentEdited(edit, { example = "the-gull-rock-light", args = [], chapterFile = "chapter-01.md" } = {}) {
   const dir = makeTempDir();
   const root = path.join(dir, "book");
   fs.cpSync(path.join(repoRoot, "examples", example), root, { recursive: true });
-  const file = path.join(root, "chapters", "chapter-01.md");
+  const file = path.join(root, "chapters", chapterFile);
   fs.writeFileSync(file, edit(fs.readFileSync(file, "utf8")));
   return sentBook({ root, args });
 }
@@ -177,6 +178,15 @@ describe("story apply: writing edits", () => {
     const result = story(book.dir, "apply", file, "--path", "book");
     expect(result.code).toBe(0);
     expect(chapter(book, 2)).toBe(original.replace("The boats swing round on their ropes\n", "The dinghies swing round on their ropes\n"));
+  });
+
+  test("a stanza line shaped like a scene break keeps its backslash when the stanza is edited", () => {
+    const book = sentEdited((text) => text.replace("The boats swing round on their ropes\n", "The boats swing round on their ropes\\\n\\*\\*\\*\\\n"), { example: "tide-tables", chapterFile: "chapter-02.md" });
+    const target = paragraphWith(book, "The boats swing round");
+    const file = returned(book, (xml) => xml.replace(target, target.replace("The boats swing round", "The dinghies swing round")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect([result.code, codes(result.stderr)]).toEqual([0, []]);
+    expect(chapter(book, 2)).toContain("The dinghies swing round on their ropes\\\n\\*\\*\\*\\\nand face no way in particular.");
   });
 
   test("writes a changed paragraph and keeps the frontmatter and every other paragraph byte for byte", () => {
