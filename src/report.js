@@ -247,7 +247,9 @@ export function projectActions(root, options = {}) {
   const days = options.days ?? DEFAULT_FOLLOW_UP_DAYS;
   const followUps = submissionFollowUps(project.root, { today, days, overrides: options.overrides });
   if (followUps > 0) {
-    const list = `story submissions ${shellWord(options.displayPath ?? ".")}${days === DEFAULT_FOLLOW_UP_DAYS ? "" : ` --days ${days}`}`;
+    // The suggested command carries next's window and today, since
+    // submissions takes its own cli-defaults and the local date.
+    const list = `story submissions ${shellWord(options.displayPath ?? ".")} --days ${days}${options.date === undefined ? "" : ` --date ${shellWord(today)}`}`;
     releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${plural(days, "day")} or more for a reply: run ${list} to list ${followUps === 1 ? "it" : "them"}.`));
   }
   return {
