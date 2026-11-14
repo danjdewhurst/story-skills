@@ -178,6 +178,7 @@ function fillStoryProject(root, title, cwd, options) {
   const storyInherited = { ...inheritedStoryFields(inherited), ...(options.language === undefined ? {} : { language: options.language.trim() }) };
   const pack = languagePack(projectLanguage(storyInherited));
   const unit = countUnit(storyInherited, pack);
+  const poetryDefault = options.form === VERSE_FORM && options.genre === undefined;
   const storyWritten = writeStarterFile(path.join(root, "story.md"), storyBible({
     title,
     storyId,
@@ -186,9 +187,10 @@ function fillStoryProject(root, title, cwd, options) {
     follows: series.follows,
     precedes: series.precedes,
     // A poetry collection is poetry unless the writer says otherwise, even
-    // when it follows a book of another genre.
-    genre: options.genre ?? (options.form === VERSE_FORM ? "poetry" : inherited.genre ?? "fiction"),
-    subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
+    // when it follows a book of another genre, whose sub-genre it then
+    // does not take either.
+    genre: options.genre ?? (poetryDefault ? "poetry" : inherited.genre ?? "fiction"),
+    subGenre: options.subGenre ?? (poetryDefault ? "general" : inherited["sub-genre"] ?? "general"),
     settingEra: options.settingEra ?? "unspecified",
     themes,
     pov: options.pov ?? inherited.pov ?? "third-person-limited",

@@ -11,6 +11,7 @@
 // compression deflate.js replaces. The XML is read with a small scanner
 // that refuses a document type declaration, so no entity is ever expanded.
 import zlib from "node:zlib";
+import { isSceneBreakLine } from "./markdown.js";
 import { crc32 } from "./packaging.js";
 
 // A part bigger than this inflated is refused: a novel's document.xml is a
@@ -650,7 +651,8 @@ function paragraphBlocks(paragraph, styles, chapterLine) {
 
 // In a `verse` chapter (see isVerseChapter) every line break is kept, so a
 // hard break needs no backslash, unless a blank line inside the paragraph
-// would end it.
+// would end it, or a line shaped like a scene break (`***`), which only a
+// backslash at a line end keeps in the paragraph.
 function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
   const lines = plain.split(LINE_BREAK).map((line) => line.trim()).filter((line) => line !== "");
@@ -681,7 +683,8 @@ function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
   const kept = inlineMarkdown(runs).split(LINE_BREAK).map((line) => line.trim()).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1));
-  const text = kept.join(verse && !kept.includes("") ? "\n" : "\\\n");
+  const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
+  const text = kept.join(plainBreaks ? "\n" : "\\\n");
   const block = escapeBlockStart(text);
   return quote ? block.split("\n").map((line) => `> ${line}`).join("\n") : block;
 }
