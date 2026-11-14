@@ -12,7 +12,7 @@ All output shown was captured by running the commands against copies of the exam
 - [Front and back matter](#front-and-back-matter)
 - [Publishing metadata in story.md](#publishing-metadata-in-storymd)
 - [Export a markdown manuscript](#export-a-markdown-manuscript)
-- [Build a book](#build-a-book): [story authors in collections and anthologies](#story-authors-in-collections-and-anthologies), [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story), [story bible site](#story-bible-site-codex)
+- [Build a book](#build-a-book): [story authors in collections and anthologies](#story-authors-in-collections-and-anthologies), [EPUB](#epub), [DOCX](#docx), [Shunn](#shunn-standard-manuscript-format), [HTML review copy](#html-review-copy), [print interior](#print-interior), [PDF output](#pdf-output), [narration script](#narration-script), [screenplay skeleton](#screenplay-skeleton-fountain), [retailer metadata sheet](#retailer-metadata-sheet), [Twine story](#twine-story), [ink story](#ink-story), [story bible site](#story-bible-site-codex), [serial episodes](#serial-episodes-post)
 - [Build a synopsis](#build-a-synopsis)
 - [Output paths and what is disposable](#output-paths-and-what-is-disposable)
 - [Common errors](#common-errors)
@@ -30,7 +30,7 @@ All output shown was captured by running the commands against copies of the exam
 flowchart LR
   draft["Existing draft<br/>(.md, .markdown, .txt, .docx, .odt, .epub)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
-  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
+  project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/, posts/"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
 ```
 
@@ -491,7 +491,7 @@ A value that fails validation does not stop a build: builds never validate the p
 
 ### Build labels
 
-Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the footnotes heading, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, the Fountain title page, and the codex site's page names, headings, table columns, and notes. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, Mandarin `cmn`, and the other Chinese languages in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional, and a script subtag wins, then a region, so `yue-Hans` and `yue-CN` are Simplified and `cmn-Hant` and `cmn-TW` Traditional, as their typesetting is), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
+Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the footnotes heading, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, the Fountain title page, the post build's author's note label, and the codex site's page names, headings, table columns, and notes. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, Mandarin `cmn`, and the other Chinese languages in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional, and a script subtag wins, then a region, so `yue-Hans` and `yue-CN` are Simplified and `cmn-Hant` and `cmn-TW` Traditional, as their typesetting is), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
 
 Each pack follows its language's conventions. Chapter headings read `Kapitel 1: Die Glocke`, `Chapitre 1 : La Cloche` (a no-break space before the colon), `Глава 1. Колокол`, or `第1章　風` (an ideographic space). Numbers keep Latin digits in every language unless `chapter-numerals: native` asks for the language's own in chapter headings (see [Chapter numerals](#chapter-numerals)), with the language's separators in the Shunn word count (`Environ 87 000 mots` in French). Where a name would need a grammatical case or a suffix to agree with the words around it, as in Polish, Russian, Ukrainian, Turkish, and Korean, the labels set it after a colon or on its own instead. Where a word about one person, such as a character, an author, an editor, a narrator, or the reader, would take that person's gender, as in Arabic, Hebrew, and Hindi, the labels use a noun for the action, the passive, or the name alone (`تحرير`, `בעריכת`, `संपादन`), and Hebrew asks the reader in the plural, its usual neutral form. Words about a group, such as the listeners a narration addresses (`استمعتم`, `האזנתם`), keep the plural's usual masculine form. Have a native reader check the labels before you publish.
 
@@ -516,6 +516,7 @@ labels:
 | `published-by` | `Published by {publisher}` | The generated copyright page. |
 | `scene-break` | `Scene break` | What screen readers announce for a scene break in the HTML and print builds. |
 | `footnotes` | `Notes` | The heading over a chapter's footnotes in the HTML, print, and Shunn builds (see [Footnotes](#footnotes)). |
+| `author-note` | `Author's note` | The label over a chapter's `author-note` in the [post build](#serial-episodes-post). |
 | `cover-alt` | `Cover of {title}` | The EPUB cover's alt text when `cover-alt` is not set. |
 | `start-of-content` | `Start of Content` | The EPUB landmark that points at the first chapter. |
 | `accessibility-summary` | `Text-only book with a navigable table of contents, …` | The EPUB accessibility summary. |
@@ -704,6 +705,7 @@ The warning is harmless, and the default `dist/` path avoids it. `story build` w
 | `ink` | ink story for inkle's Inky and inklecate: one knot per chapter, with chapter `choices` as choices | `dist/<story-id>.ink` | No |
 | `ics` | iCalendar file of the writing schedule: the deadline, serial release dates, and daily target, to import into a calendar app or subscribe to | `dist/<story-id>.ics` | No prose at all |
 | `codex` | Story bible as a static site of linked HTML pages: characters, places, factions, artifacts, systems, arcs, timeline, threads, and progress | `dist/codex/` (a folder) | No prose at all |
+| `post` | Each chapter as a serial episode to paste into a serial site or newsletter: an HTML fragment and a plain-text file, with the chapter's `author-note` after it | `dist/posts/` (a folder) | No |
 
 The story id is the kebab-case title from `story.md` (see [Identifiers and filenames](project-format.md#identifiers-and-filenames) for titles without ASCII letters or digits). Build every format of the example *The Last Ember* like this:
 
@@ -733,12 +735,12 @@ Built 1 chapters as fountain to ~/stories/the-last-ember/dist/the-last-ember.fou
 warning: No setting (interior, exterior, or both) for whispering-vale: their scene headings are forced without INT. or EXT. [scene-no-setting]
 ```
 
-The confirmation counts chapters, even for the metadata sheet and the screenplay skeleton. A `codex` build counts its pages instead, and an `ics` build its calendar events.
+The confirmation counts chapters, even for the metadata sheet and the screenplay skeleton. A `codex` build counts its pages instead, an `ics` build its calendar events, and a `post` build its episodes.
 
 | Option | Effect |
 |--------|--------|
 | `[path]` or `--path <path>` | Project root. Defaults to the current directory. |
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex`. Case-insensitive. Defaults to `markdown`. |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, or `post`. Case-insensitive. Defaults to `markdown`. |
 | `--shunn` | With `--format docx`, apply Shunn formatting. An error with every other format. |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. Case-insensitive. Defaults to `5.5x8.5`. An error with every other format. |
 | `--paper <letter\|a4>` | With `--format shunn --pdf` or `--format docx --shunn`, the manuscript's paper: `letter` (US Letter) or `a4`. Case-insensitive. Defaults to `letter`. An error with every other build, including the Shunn markdown file, which has no pages. See [Paper size](#paper-size). |
@@ -746,12 +748,14 @@ The confirmation counts chapters, even for the metadata sheet and the screenplay
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to use: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one. |
 | `--spoilers` | With `--format codex`, include notes, statuses, deaths, knowledge, clues, and resolutions. An error with every other format. |
 | `--include-pending` | With a build that includes matter, keep the pages whose `permission` is `pending` or cannot be read, which are otherwise left out. An error with every other build. See [Front and back matter](#front-and-back-matter). |
-| `--out <file>` | Output file instead of the default in `dist/`; for `codex`, a folder. |
+| `--chapter <chapter>` | With `--format post`, build only this chapter, by id or number. An error with every other format. See [Serial episodes](#serial-episodes-post). |
+| `--from <chapter>`, `--to <chapter>` | With `--format post`, build only the chapters from `--from` to `--to`, by id or number. An error with every other format. |
+| `--out <file>` | Output file instead of the default in `dist/`; for `codex` and `post`, a folder. |
 
 Any other format is an error:
 
 ```text
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex, post
 ```
 
 For a book PDF, build the [print interior](#print-interior) with `--pdf`. For a manuscript PDF, build the [Shunn manuscript](#shunn-standard-manuscript-format) with `--pdf`. Both need a paged-media engine installed; see [PDF output](#pdf-output).
@@ -1399,6 +1403,52 @@ Like every build, the codex is deterministic and carries no date: the progress p
 
 To publish the codex with GitHub Pages, see [Story bible on GitHub Pages](automation.md#story-bible-on-github-pages).
 
+### Serial episodes (post)
+
+`story build --format post` writes each chapter as an episode that you paste into a serial site, such as Royal Road, Wattpad, or AO3, or into a newsletter. Each chapter gets two files in `dist/posts/`:
+
+```text
+dist/posts/
+  01-the-ticket.html   the episode as an HTML fragment
+  01-the-ticket.txt    the same episode as plain text
+  02-the-umbrella.html
+  02-the-umbrella.txt
+```
+
+The name is the chapter number and the chapter id. The number has a leading zero to the width of the highest chapter number, so the files sort in reading order. A chapter id must be kebab-case to build its posts.
+
+The HTML file is a fragment: it has no `<head>`, no page wrapper, and no class or style that a site removes. Paste it into the site's HTML or source view. It keeps italics (`<em>`), bold (`<strong>`), scene breaks (`<hr>`), block quotes, and hard line breaks (`<br>`), as the [review copy](#html-review-copy) renders them. The chapter heading is not in the file, because a serial site takes the title in its own field. A chapter `author` (see [Story authors in collections and anthologies](#story-authors-in-collections-and-anthologies)) goes first as a byline. Links print as their text, as in every build, so write a web address in full.
+
+The text file has the same episode for a site or a newsletter that takes plain text. A blank line separates the paragraphs. A hard line break is a line break, a quoted paragraph has an indent of four spaces, and a scene break is the `build-style` [`scene-break`](#build-styles) (`* * *` by default). Plain text has no italics or bold, so their marks are removed. Use the HTML file to keep them.
+
+**Author's note.** A serial episode often ends with a note to readers. Put it in the chapter's `author-note` field, as markdown text:
+
+```yaml
+author-note: |
+  Thank you for reading! The next episode is out on *Friday*.
+
+  Support the serial at https://example.com/support
+```
+
+The post build prints the note after the episode, under a rule and the `author-note` label (`Author's note` in English; see [Build labels](#build-labels)). No other build prints it, and it never counts toward word counts.
+
+**One episode at a time.** On a release day, build only the episode that is due. `--chapter` takes a chapter id or number. `--from` and `--to` take a range, and either one alone runs to the last chapter or from the first:
+
+```shell
+story build . --format post --chapter 3
+story build . --format post --from 3 --to 5
+```
+
+[`story next`](cli-reference.md#next) names the next episode due. With `jq`, build it in one step:
+
+```shell
+story build . --format post --chapter "$(story next . --json | jq -r '.data.release.next.chapter')"
+```
+
+When the next episode has no chapter yet, `chapter` is `null`, and the build stops with an error.
+
+A build writes the posts of the chapters that you select and keeps the posts of every other current chapter. It deletes the posts of a chapter that is gone, renamed, or renumbered, also when you build one chapter only. `--out` names the folder. A folder that holds the project, is project source, or holds a file that is not a post is refused, so `--out dist` with other builds in it is refused and not cleared. Hidden files, such as `.DS_Store`, are kept and do not count. The build stops at the files: it does not post to a site.
+
 ### Build styles
 
 The EPUB, the HTML review copy, and the print interior share one look: Georgia, centred chapter headings, indented paragraphs, and asterisks for scene breaks. A `build-style` block in `story.md` changes it. Pick a preset, override any part of it, and add a stylesheet of your own if you need more:
@@ -1687,7 +1737,7 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `... matter file names must be kebab-case to build` | A `matter/` file name is not kebab-case | Rename the file to a kebab-case name, such as `about-me.md`, then run `story reindex .`. |
 | `story.md cover <path> ...` | The cover path is missing, outside the project, holds a control character, or is not a supported image, or the file cannot be read or its contents are not the image its extension names | Fix `cover` in `story.md`, or remove it; save the cover again, or rename it to match its format. |
 | `<file>: a matter page needs a title to build` | A `matter/` page with text has a blank `title` | Give the page a `title`. |
-| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex`. |
+| `Unsupported build format: <name>. ...` | An unknown `--format` | Use `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, or `post`. |
 | `Refusing to write the codex into <path>: it holds other files. ...` | `--format codex` with an `--out` folder that already holds files from something else, such as `dist` | Use a new or empty folder, such as `dist/codex`. |
 | `Cannot build twee until these are fixed: ...` or `Cannot build ink ...` | A chapter's `choices` is malformed or leads to a missing chapter, a chapter file name is not kebab-case, or `ifid` is malformed | Fix each listed problem; `story validate` and `story links` report most of them too. |
 | `Unsupported trim size: <size>. ...` | An unknown `--trim` with `--format print` | Use `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5`. |

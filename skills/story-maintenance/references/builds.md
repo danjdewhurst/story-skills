@@ -41,6 +41,15 @@ See the `publishing` skill.
 - A book with no deadline, release schedule, or daily target has nothing to put in the file, so the build stops with exit 3. Set the field the user wants in `story.md` first; do not invent a deadline.
 - Each event's UID comes from the story id and the event, so the user can import the rebuilt file again and the events update rather than repeat. For a calendar that updates itself, the user publishes the file at a URL and subscribes to it, such as on the GitHub Pages site of the review-copy workflow (docs/manuscripts.md#writing-schedule-calendar-icalendar). A Pages site is public, so ask before you publish the calendar there: it shows the deadline, the release dates, the chapter titles, and the daily target with its first day, which can be the first session date in `progress.md`.
 
+## post
+
+`build --format post` when the user posts a serial to a site such as Royal Road, Wattpad, or AO3, or sends it as a newsletter. It writes two files for each chapter to `dist/posts/`: `NN-<chapter-id>.html`, an HTML fragment with no `<head>`, page wrapper, heading, class, or style, that keeps italics, bold, scene breaks (`<hr>`), block quotes, and hard line breaks, and `NN-<chapter-id>.txt`, the same episode as plain text. The number has leading zeros to the width of the highest chapter number, so the files sort in reading order.
+
+- On a release day, build only the episode due: `story build . --format post --chapter <id-or-number>`. `story next . --json` gives it as `data.release.next.chapter`, which is `null` when that episode has no chapter yet. `--from` and `--to` build a range. These flags are an error with any other format.
+- A chapter's `author-note` (markdown text in its frontmatter) prints after the episode under the `author-note` label. No other build prints it, and no word count includes it. Write only a note the user gives you.
+- The heading is not in the files, because serial sites take the title in their own field. Links print as their text, as in every build, so tell the user to write a web address in full.
+- A rebuild deletes the posts of a chapter that is gone, renamed, or renumbered, and keeps the posts of every other chapter. `--out` names the folder, and a folder that holds files that are not posts is refused. The build does not upload anything.
+
 ## twee
 
 `build --format twee` for a Twine story (Twee 3) of a branching book: one passage per chapter, named by its id, with a `[[text->chapter-NN]]` link for each entry in the chapter's `choices` frontmatter (`text` and `to`).
