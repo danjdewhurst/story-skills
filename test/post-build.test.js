@@ -10,7 +10,8 @@ const EPISODE = `The bell rang *twice* and then **stopped**.
 
 > A letter, old and creased.
 >
-> It said: come home.
+> It said:\\
+> come home.
 
 Roses are red,\\
 violets are blue.
@@ -37,7 +38,9 @@ function invoke(cwd, argv) {
   return { code, out: io.output(), err: io.error() };
 }
 
-const posts = (root, folder = path.join("dist", "posts")) => fs.readdirSync(path.join(root, folder)).sort();
+// The folder's files, without the manifest that every build writes.
+const posts = (root, folder = path.join("dist", "posts")) => fs.readdirSync(path.join(root, folder)).filter((name) => name !== ".story-posts.json").sort();
+const manifest = (root, folder = path.join("dist", "posts")) => JSON.parse(fs.readFileSync(path.join(root, folder, ".story-posts.json"), "utf8"));
 const read = (root, name, folder = path.join("dist", "posts")) => fs.readFileSync(path.join(root, folder, name), "utf8");
 
 const NOTE = 'author-note: "Thanks for reading! Next episode on *Friday*.\\n\\nSupport me at https://example.com"\n';
@@ -53,7 +56,7 @@ describe("build --format post", () => {
     expect(read(root, "01-chapter-01.html")).toBe(`<p>The bell rang <em>twice</em> and then <strong>stopped</strong>.</p>
 <blockquote>
 <p>A letter, old and creased.</p>
-<p>It said: come home.</p>
+<p>It said:<br>come home.</p>
 </blockquote>
 <p>Roses are red,<br>violets are blue.</p>
 <hr>
@@ -67,7 +70,8 @@ describe("build --format post", () => {
 
     A letter, old and creased.
 
-    It said: come home.
+    It said:
+    come home.
 
 Roses are red,
 violets are blue.
@@ -108,6 +112,22 @@ Support me at https://example.com
     chapter(root, 101, { id: "coda" });
     buildBook(root, { format: "post" });
     expect(posts(root)).toEqual(["002-the-tide.html", "002-the-tide.txt", "010-the-bell.html", "010-the-bell.txt", "101-coda.html", "101-coda.txt"]);
+    // The width comes from every chapter, not the ones built.
+    fs.rmSync(path.join(root, "dist"), { recursive: true });
+    buildBook(root, { format: "post", chapter: "2" });
+    expect(posts(root)).toEqual(["002-the-tide.html", "002-the-tide.txt"]);
+  });
+
+  test("prints a chapter's own author first, and refuses a chapter id that cannot name a file", () => {
+    const root = project();
+    chapter(root, 1, { extra: 'author: "Ann & Bo"\n' });
+    buildBook(root, { format: "post" });
+    expect(read(root, "01-chapter-01.html")).toBe("<p><em>by Ann &amp; Bo</em></p>\n<p>Episode 1 begins.</p>\n");
+    expect(read(root, "01-chapter-01.txt")).toBe("by Ann & Bo\n\nEpisode 1 begins.\n");
+    const other = project();
+    chapter(other, 1, { id: "Chapter_One" });
+    expect(() => buildBook(other, { format: "post" })).toThrow("chapters/Chapter_One.md: chapter ids must be kebab-case to build posts");
+    expect(fs.existsSync(path.join(other, "dist"))).toBe(false);
   });
 
   test("builds one chapter with --chapter, or a range with --from and --to, by id or number", () => {
@@ -143,30 +163,82 @@ Support me at https://example.com
     expect(fs.existsSync(path.join(root, "dist"))).toBe(false);
   });
 
-  test("a rebuild removes the posts of a renamed or renumbered chapter, and keeps hidden files", () => {
+  test("a full rebuild removes the posts it wrote for a renamed or renumbered chapter, and nothing else", () => {
     const root = project();
     chapter(root, 1);
     chapter(root, 2);
     buildBook(root, { format: "post" });
-    fs.writeFileSync(path.join(root, "dist", "posts", ".DS_Store"), "", "utf8");
+    expect(manifest(root)).toEqual({ generator: "story build --format post", files: ["01-chapter-01.html", "01-chapter-01.txt", "02-chapter-02.html", "02-chapter-02.txt"] });
+    // Files the build did not write stay, whatever their names.
+    for (const name of [".DS_Store", "2024-taxes.txt", "07-reader-notes.html"]) {
+      fs.writeFileSync(path.join(root, "dist", "posts", name), "mine\n", "utf8");
+    }
     fs.renameSync(path.join(root, "chapters", "chapter-02.md"), path.join(root, "chapters", "the-tide.md"));
-    // Building chapter 1 alone still clears the renamed chapter's old posts.
-    buildBook(root, { format: "post", chapter: "1" });
-    expect(posts(root)).toEqual([".DS_Store", "01-chapter-01.html", "01-chapter-01.txt"]);
-    buildBook(root, { format: "post" });
-    expect(posts(root)).toEqual([".DS_Store", "01-chapter-01.html", "01-chapter-01.txt", "02-the-tide.html", "02-the-tide.txt"]);
+    // A build of some chapters removes nothing.
+    expect(buildBook(root, { format: "post", chapter: "1" }).removed).toBe(0);
+    expect(posts(root)).toEqual([".DS_Store", "01-chapter-01.html", "01-chapter-01.txt", "02-chapter-02.html", "02-chapter-02.txt", "07-reader-notes.html", "2024-taxes.txt"]);
+    const full = invoke(root, ["build", "--format", "post"]);
+    expect(full.out).toBe(`Built 2 posts (HTML and text) to ${path.join(root, "dist", "posts")}, and removed 2 stale files\n`);
+    expect(posts(root)).toEqual([".DS_Store", "01-chapter-01.html", "01-chapter-01.txt", "02-the-tide.html", "02-the-tide.txt", "07-reader-notes.html", "2024-taxes.txt"]);
+    // A renumbering that widens the numbers renames every post, and only a
+    // full build clears the old names.
+    writeMarkdown(path.join(root, "chapters", "the-tide.md"), 'title: "Part 2"\nnumber: 100\nstatus: draft\n', "## Chapter Text\n\nEpisode 2 begins.\n");
+    buildBook(root, { format: "post", chapter: "100" });
+    expect(posts(root)).toContain("02-the-tide.html");
+    expect(posts(root)).toContain("100-the-tide.html");
+    expect(buildBook(root, { format: "post" }).removed).toBe(4);
+    expect(posts(root)).toEqual([".DS_Store", "001-chapter-01.html", "001-chapter-01.txt", "07-reader-notes.html", "100-the-tide.html", "100-the-tide.txt", "2024-taxes.txt"]);
+    expect(read(root, "2024-taxes.txt")).toBe("mine\n");
   });
 
-  test("refuses a folder that holds anything but posts, and writes to the folder --out names", () => {
+  test("refuses a folder with files and no manifest, and writes to the folder --out names", () => {
     const root = project();
     chapter(root, 1);
     fs.mkdirSync(path.join(root, "site"));
-    fs.writeFileSync(path.join(root, "site", "index.html"), "<p>mine</p>\n", "utf8");
+    fs.writeFileSync(path.join(root, "site", "01-intro.html"), "<p>mine</p>\n", "utf8");
     expect(() => buildBook(root, { format: "post", out: "site" })).toThrow("Refusing to write the posts into site: it holds other files. Use a new or empty folder, such as dist/posts");
-    expect(read(root, "index.html", "site")).toBe("<p>mine</p>\n");
+    expect(read(root, "01-intro.html", "site")).toBe("<p>mine</p>\n");
+    // A manifest some other tool wrote does not count.
+    fs.writeFileSync(path.join(root, "site", ".story-posts.json"), '{"files":["01-intro.html"]}', "utf8");
+    expect(() => buildBook(root, { format: "post", out: "site" })).toThrow("it holds other files");
     expect(() => buildBook(root, { format: "post", out: "." })).toThrow("Refusing to write the posts to .: it holds the project");
+    fs.mkdirSync(path.join(root, "dist"));
+    fs.writeFileSync(path.join(root, "dist", "book.md"), "", "utf8");
+    expect(() => buildBook(root, { format: "post", out: "dist/book.md" })).toThrow("--out dist/book.md is not a folder: give a folder for --format post");
+    expect(() => buildBook(root, { format: "post", out: "chapters" })).toThrow("it is project source");
     expect(buildBook(root, { format: "post", out: "release/episodes" }).outFile).toBe(path.join(root, "release", "episodes"));
     expect(posts(root, path.join("release", "episodes"))).toEqual(["01-chapter-01.html", "01-chapter-01.txt"]);
+  });
+
+  test("never removes a symlink or a folder in a listed post's place, or a file the manifest names outside the folder", () => {
+    const root = project();
+    chapter(root, 1);
+    chapter(root, 2);
+    buildBook(root, { format: "post" });
+    const folder = path.join(root, "dist", "posts");
+    fs.writeFileSync(path.join(root, "keep.txt"), "mine\n", "utf8");
+    fs.writeFileSync(path.join(folder, ".story-posts.json"), JSON.stringify({ generator: "story build --format post", files: ["01-chapter-01.html", "../../keep.txt", "02-chapter-02.html", "02-chapter-02.txt"] }), "utf8");
+    fs.rmSync(path.join(folder, "02-chapter-02.html"));
+    fs.mkdirSync(path.join(folder, "02-chapter-02.html"));
+    fs.rmSync(path.join(root, "chapters", "chapter-02.md"));
+    expect(buildBook(root, { format: "post" }).removed).toBe(1);
+    expect(fs.statSync(path.join(folder, "02-chapter-02.html")).isDirectory()).toBe(true);
+    expect(fs.existsSync(path.join(folder, "02-chapter-02.txt"))).toBe(false);
+    expect(fs.readFileSync(path.join(root, "keep.txt"), "utf8")).toBe("mine\n");
+  });
+
+  test("a --dry-run lists the stale posts a full rebuild would remove, and changes nothing", () => {
+    const root = project();
+    chapter(root, 1);
+    chapter(root, 2);
+    buildBook(root, { format: "post" });
+    fs.rmSync(path.join(root, "chapters", "chapter-02.md"));
+    const run = invoke(root, ["build", "--format", "post", "--dry-run", "--json"]);
+    expect(run.code).toBe(0);
+    const changes = JSON.parse(run.out).data.changes;
+    expect(changes).toContainEqual({ action: "delete", path: "dist/posts/02-chapter-02.html" });
+    expect(changes).toContainEqual({ action: "delete", path: "dist/posts/02-chapter-02.txt" });
+    expect(posts(root)).toEqual(["01-chapter-01.html", "01-chapter-01.txt", "02-chapter-02.html", "02-chapter-02.txt"]);
   });
 
   test("labels the note in the book's language and sets the text scene break from build-style", () => {
@@ -194,8 +266,10 @@ Support me at https://example.com
     expect(run.code).toBe(0);
     const envelope = JSON.parse(run.out);
     expect(envelope.data).toMatchObject({ format: "post", outFile: path.join(root, "dist", "posts"), chapters: 1, posts: 1, pages: null, events: null });
-    expect(envelope.writes.sort()).toEqual([path.join(root, "dist", "posts", "02-chapter-02.html"), path.join(root, "dist", "posts", "02-chapter-02.txt")]);
+    expect(envelope.writes.sort()).toEqual([".story-posts.json", "02-chapter-02.html", "02-chapter-02.txt"].map((name) => path.join(root, "dist", "posts", name)));
     expect(validateAgainstSchema(envelope, JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8")))).toEqual([]);
+    const one = invoke(root, ["build", "--format", "post", "--chapter", "1"]);
+    expect(one.out).toBe(`Built 1 post (HTML and text) to ${path.join(root, "dist", "posts")}\n`);
     const text = invoke(root, ["build", "--format", "post"]);
     expect(text.out).toBe(`Built 2 posts (HTML and text) to ${path.join(root, "dist", "posts")}\n`);
   });
@@ -209,6 +283,23 @@ describe("chapter author-note", () => {
     const errors = messages(validateProject(root).errors);
     expect(errors).toContain('chapters/chapter-01.md frontmatter field author-note must be text: quote it as author-note: "1984"');
     expect(errors).toContain("chapters/chapter-02.md frontmatter field author-note must be a scalar");
+  });
+
+  test("a comment in the note stays private, and a closing scene break does not double the note's rule", () => {
+    const root = project();
+    chapter(root, 1, { body: "The end.\n\n* * *", extra: 'author-note: "<!-- check the date -->More on Friday."\n' });
+    buildBook(root, { format: "post" });
+    expect(read(root, "01-chapter-01.html")).toBe("<p>The end.</p>\n<hr>\n<p><strong>Author's note</strong></p>\n<p>More on Friday.</p>\n");
+    expect(read(root, "01-chapter-01.txt")).toBe("The end.\n\n---\n\nAuthor's note\n\nMore on Friday.\n");
+  });
+
+  test("cli-defaults cannot set the chapters a build posts", () => {
+    const root = project("cli-defaults:\n  - command: build\n    format: post\n    chapter: 1\n");
+    chapter(root, 1);
+    expect(messages(validateProject(root).errors)).toContain("story.md cli-defaults[0] sets chapter, which names one target and cannot be a default");
+    const run = invoke(root, ["build", "--format", "markdown"]);
+    expect(run.code).toBe(3);
+    expect(run.err).toContain("sets chapter, which names one target and cannot be a default");
   });
 
   test("a text note is valid", () => {

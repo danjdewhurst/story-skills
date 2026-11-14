@@ -45,10 +45,10 @@ See the `publishing` skill.
 
 `build --format post` when the user posts a serial to a site such as Royal Road, Wattpad, or AO3, or sends it as a newsletter. It writes two files for each chapter to `dist/posts/`: `NN-<chapter-id>.html`, an HTML fragment with no `<head>`, page wrapper, heading, class, or style, that keeps italics, bold, scene breaks (`<hr>`), block quotes, and hard line breaks, and `NN-<chapter-id>.txt`, the same episode as plain text. The number has leading zeros to the width of the highest chapter number, so the files sort in reading order.
 
-- On a release day, build only the episode due: `story build . --format post --chapter <id-or-number>`. `story next . --json` gives it as `data.release.next.chapter`, which is `null` when that episode has no chapter yet. `--from` and `--to` build a range. These flags are an error with any other format.
+- On a release day, build only the episode due: `story build . --format post --chapter <id-or-number>`. A number is the chapter's `number` field, not the printed number after an unnumbered prologue. `story next . --json` gives it as `data.release.next.chapter`, which is `null` when that episode has no chapter yet. `--from` and `--to` build a range. These flags are an error with any other format.
 - A chapter's `author-note` (markdown text in its frontmatter) prints after the episode under the `author-note` label. No other build prints it, and no word count includes it. Write only a note the user gives you.
 - The heading is not in the files, because serial sites take the title in their own field. Links print as their text, as in every build, so tell the user to write a web address in full.
-- A rebuild deletes the posts of a chapter that is gone, renamed, or renumbered, and keeps the posts of every other chapter. `--out` names the folder, and a folder that holds files that are not posts is refused. The build does not upload anything.
+- The folder's hidden `.story-posts.json` lists the posts the build wrote. A build of every chapter deletes the listed posts of a chapter that is gone, renamed, or renumbered. A build of some chapters deletes nothing, so after a renumbering, or when chapter 100 adds a digit to every name, build every chapter once. No build deletes a file it did not write. `--out` names the folder, and a folder that has files and no manifest is refused. The build does not upload anything.
 
 ## twee
 

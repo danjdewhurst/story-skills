@@ -66,7 +66,8 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - Each chapter gets two files in `dist/posts/`, named by number and id so they sort in reading order (`03-chapter-03.html`, `03-chapter-03.txt`): an HTML fragment with no `<head>`, page wrapper, or heading, that keeps italics, bold, scene breaks, block quotes, and hard line breaks, and the same episode as plain text.
   - `--chapter <id|n>` builds only the episode due, and `--from` and `--to` build a range. They are an error with any other format.
   - A new chapter field, `author-note`, holds a note to readers. The post build prints it after the episode under a new `author-note` label, which every language pack translates. No other build prints it, and no word count includes it. `story validate` asks for text.
-  - A rebuild deletes the posts of a chapter that is gone, renamed, or renumbered, and keeps every other chapter's. A folder that holds files that are not posts is refused. `--json` gives the episodes written as `data.posts`, which is `null` for every other format.
+  - A hidden `.story-posts.json` manifest lists the posts the build wrote. A build of every chapter deletes the listed posts of a chapter that is gone, renamed, or renumbered, and a build of some chapters deletes nothing. No build deletes a file it did not write, and a folder with files and no manifest is refused. `--json` gives the episodes written as `data.posts`, which is `null` for every other format.
+  - `cli-defaults` cannot set `--chapter`, `--from`, or `--to` for `build`, because they name one target.
   - The `the-left-luggage-office` example has an author's note on its first episode, and the `publishing`, `genre-craft`, and `story-maintenance` skills post serial episodes with it.
 
 ### Changed

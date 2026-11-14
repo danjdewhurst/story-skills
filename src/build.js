@@ -488,11 +488,13 @@ function removeStaleCodexPages(directory, written) {
 // plain-text file beside it, named by chapter number and id
 // (03-the-bell.html, 03-the-bell.txt) so they sort in reading order.
 // --chapter, or --from and --to, build only the episodes due. A chapter's
-// author-note prints after the episode; no other build reads it. A rebuild
-// removes the posts an earlier build wrote for a chapter that is gone,
-// renamed, or renumbered, and keeps every current chapter's, built this
-// time or not; a folder that holds anything else is refused rather than
-// mixed into.
+// author-note prints after the episode; no other build reads it. The
+// folder's manifest (POST_MANIFEST) lists the posts the build wrote, so a
+// build of every chapter removes the ones it lists for a chapter that is
+// gone, renamed, or renumbered, and never a file it did not write. A build
+// of some chapters removes nothing, so the posts of the chapters it leaves
+// out stay under the names they had. A folder with files and no manifest
+// is refused rather than mixed into.
 function buildPosts(project, out, selection) {
   const { meta, chapters, warnings } = bookChapters(project);
   const all = project.chapters;
@@ -505,9 +507,12 @@ function buildPosts(project, out, selection) {
       throw projectError(`${relative(project, chapter.file)}: chapter ids must be kebab-case to build posts, since they name the files`);
     }
   }
+  const sceneBreak = projectBuildStyle(project).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
   const output = resolveOutputDirectory(project, out, POST_FOLDER);
-  const sceneBreak = buildStyle(project.story.data).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
-  const files = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  // A --dry-run writes nothing, so a new folder is not there to read.
+  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postManifest(output.directory) ?? [] : [];
+  const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  const written = [];
   const empty = [];
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
@@ -518,18 +523,27 @@ function buildPosts(project, out, selection) {
     }
     writeFile(path.join(output.directory, `${name(chapter)}.html`), postHtml(episode), output.writeOptions);
     writeFile(path.join(output.directory, `${name(chapter)}.txt`), postText(episode, sceneBreak), output.writeOptions);
+    written.push(`${name(chapter)}.html`, `${name(chapter)}.txt`);
   }
-  // A --dry-run writes nothing, so a new folder is not there to list.
-  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postFiles(output.directory) : [];
-  for (const file of listed) {
-    if (!files.has(file)) {
+  // Only a plain file the manifest lists is removed, so a symlink or a
+  // folder put in a post's place is left alone.
+  const isPost = (file) => lstatIfExists(path.join(output.directory, file))?.isFile() === true;
+  const removed = [];
+  if (selected.length === all.length) {
+    for (const file of listed.filter((entry) => !current.has(entry) && isPost(entry))) {
       removeFile(path.join(output.directory, file));
+      removed.push(file);
     }
   }
+  // The manifest goes last, so a build that fails partway leaves the old
+  // one, which still names every post it wrote. A partial build keeps the
+  // posts the manifest listed, for the next full build to clear.
+  const kept = selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])];
+  writeFile(path.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: kept.sort() }, null, 2)}\n`, output.writeOptions);
   // bookChapters warns about every empty chapter; a post build names only
   // the ones it built.
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
-  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, warnings: [...others, ...empty] };
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty] };
 }
 
 // The chapters --chapter, or --from and --to, pick, as indexes into the
@@ -552,18 +566,38 @@ function postRange(chapters, { chapter, from, to }) {
 // or .txt.
 const POST_FILE = /^\d+-[a-z0-9]+(?:-[a-z0-9]+)*\.(?:html|txt)$/;
 
-// The posts in a folder, by name: plain files only, so a symlink or a
-// folder with a post's name is never one.
-function postFiles(directory) {
-  return fs.readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && POST_FILE.test(entry.name))
-    .map((entry) => entry.name);
+// The hidden file in the posts folder that lists the posts the build wrote,
+// as JSON: { generator, files }. It marks the folder as the post build's,
+// and only the files it lists are ever removed, so a file the writer puts
+// in the folder stays. It is hidden, and the posts carry no mark, so what a
+// writer pastes holds nothing but the episode.
+const POST_MANIFEST = ".story-posts.json";
+const POST_GENERATOR = "story build --format post";
+// More than any manifest the build writes: a larger file is not one.
+const POST_MANIFEST_BYTES = 1024 * 1024;
+
+// The post files a folder's manifest lists, or null when the folder has no
+// manifest the post build wrote: a plain file (never a symlink, which is
+// not followed) with the generator. Only names a post can have are kept,
+// so a manifest cannot name a file elsewhere.
+function postManifest(directory) {
+  const file = path.join(directory, POST_MANIFEST);
+  if (lstatIfExists(file)?.isFile() !== true) {
+    return null;
+  }
+  try {
+    const data = JSON.parse(readFilePrefix(file, POST_MANIFEST_BYTES).toString("utf8"));
+    if (data?.generator !== POST_GENERATOR || !Array.isArray(data.files)) {
+      return null;
+    }
+    return data.files.filter((name) => typeof name === "string" && POST_FILE.test(name));
+  } catch {
+    return null;
+  }
 }
 
-// A folder an earlier post build wrote: nothing in it but posts, besides
-// the hidden files an operating system adds (.DS_Store).
 function isPostFolder(directory) {
-  return fs.readdirSync(directory, { withFileTypes: true }).every((entry) => entry.name.startsWith(".") || (entry.isFile() && POST_FILE.test(entry.name)));
+  return postManifest(directory) !== null;
 }
 
 // story.md build-style for the EPUB, review copy, and print interior, with

@@ -50,7 +50,7 @@ export const OPTIONS = [
   { name: "list", help: ["List the saved snapshots for snapshot"] },
   { name: "restore", value: "<name>", help: ["Put a snapshot back over the project for", "snapshot, after saving the project as it is;", "deletes markdown files the snapshot lacks"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init,", "import, and lsp"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex)"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex or post)"] },
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, ics, codex, post) or grid", "(markdown, csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "paper", value: "<letter|a4>", help: ["Paper for build --format shunn --pdf and", "--format docx --shunn (letter, a4; default letter)"] },

@@ -1371,7 +1371,7 @@ export const COMMANDS = [
       io.stdout.write(result.format === "codex"
         ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
         : result.format === "post"
-          ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}\n`
+          ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}${result.removed > 0 ? `, and removed ${plural(result.removed, "stale file")}` : ""}\n`
           : result.format === "ics"
             ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}\n`
             : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);

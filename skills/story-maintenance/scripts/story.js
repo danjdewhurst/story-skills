@@ -13545,7 +13545,7 @@ var OPTIONS = [
   { name: "list", help: ["List the saved snapshots for snapshot"] },
   { name: "restore", value: "<name>", help: ["Put a snapshot back over the project for", "snapshot, after saving the project as it is;", "deletes markdown files the snapshot lacks"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init,", "import, and lsp"] },
-  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex)"] },
+  { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex or post)"] },
   { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, ics, codex, post) or grid", "(markdown, csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "paper", value: "<letter|a4>", help: ["Paper for build --format shunn --pdf and", "--format docx --shunn (letter, a4; default letter)"] },
@@ -23135,7 +23135,7 @@ function formatRow(row) {
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
-var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], submissions: ["date"], translation: ["chapter"] };
+var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], submissions: ["date"], translation: ["chapter"], build: ["chapter", "from", "to"] };
 var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
@@ -33145,21 +33145,21 @@ var DEFAULT_TEXT_SCENE_BREAK = "* * *";
 var TEXT_NOTE_RULE = "---";
 function postHtml(episode) {
   const block = (markup) => ({ quote: false, markup });
-  const prose = (body) => htmlParagraphs(body).map((paragraph) => paragraph === null ? block("<hr>") : { quote: paragraph.quote, markup: `<p>${paragraph.html}</p>` });
+  const prose = (paragraphs) => paragraphs.map((paragraph) => paragraph === null ? block("<hr>") : { quote: paragraph.quote, markup: `<p>${paragraph.html}</p>` });
   const blocks = [];
   if (episode.byline !== "") {
     blocks.push(block(`<p><em>${escapeHtml(episode.byline)}</em></p>`));
   }
-  blocks.push(...prose(episode.body));
+  blocks.push(...prose(episodeParagraphs(episode)));
   if (episode.authorNote !== "") {
-    blocks.push(block("<hr>"), block(`<p><strong>${escapeHtml(fillLabel(episode.labels, "author-note"))}</strong></p>`), ...prose(episode.authorNote));
+    blocks.push(block("<hr>"), block(`<p><strong>${escapeHtml(fillLabel(episode.labels, "author-note"))}</strong></p>`), ...prose(htmlParagraphs(episode.authorNote)));
   }
   return blocks.length === 0 ? "" : `${withBlockquotes(blocks).join(`
 `)}
 `;
 }
 function postText(episode, sceneBreak = DEFAULT_TEXT_SCENE_BREAK) {
-  const prose = (body) => htmlParagraphs(body).map((paragraph) => {
+  const prose = (paragraphs) => paragraphs.map((paragraph) => {
     if (paragraph === null) {
       return sceneBreak;
     }
@@ -33171,21 +33171,28 @@ function postText(episode, sceneBreak = DEFAULT_TEXT_SCENE_BREAK) {
   if (episode.byline !== "") {
     blocks.push(episode.byline);
   }
-  blocks.push(...prose(episode.body));
+  blocks.push(...prose(episodeParagraphs(episode)));
   if (episode.authorNote !== "") {
-    blocks.push(TEXT_NOTE_RULE, fillLabel(episode.labels, "author-note"), ...prose(episode.authorNote));
+    blocks.push(TEXT_NOTE_RULE, fillLabel(episode.labels, "author-note"), ...prose(htmlParagraphs(episode.authorNote)));
   }
   return blocks.length === 0 ? "" : `${blocks.join(`
 
 `)}
 `;
 }
+function episodeParagraphs(episode) {
+  const paragraphs = htmlParagraphs(episode.body);
+  while (episode.authorNote !== "" && paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === null) {
+    paragraphs.pop();
+  }
+  return paragraphs;
+}
 function authorNoteText(value) {
   if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
     return "";
   }
-  return String(value).replace(/\r\n?/g, `
-`).trim();
+  return scanComments(String(value).replace(/\r\n?/g, `
+`)).text.trim();
 }
 
 // src/narration.js
@@ -33696,9 +33703,11 @@ function buildPosts(project, out, selection) {
       throw projectError(`${relative(project, chapter.file)}: chapter ids must be kebab-case to build posts, since they name the files`);
     }
   }
+  const sceneBreak = projectBuildStyle(project).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
   const output = resolveOutputDirectory(project, out, POST_FOLDER);
-  const sceneBreak = buildStyle(project.story.data).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
-  const files = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postManifest(output.directory) ?? [] : [];
+  const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  const written = [];
   const empty = [];
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
@@ -33709,15 +33718,21 @@ function buildPosts(project, out, selection) {
     }
     writeFile(path38.join(output.directory, `${name(chapter)}.html`), postHtml(episode), output.writeOptions);
     writeFile(path38.join(output.directory, `${name(chapter)}.txt`), postText(episode, sceneBreak), output.writeOptions);
+    written.push(`${name(chapter)}.html`, `${name(chapter)}.txt`);
   }
-  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postFiles(output.directory) : [];
-  for (const file of listed) {
-    if (!files.has(file)) {
+  const isPost = (file) => lstatIfExists(path38.join(output.directory, file))?.isFile() === true;
+  const removed = [];
+  if (selected.length === all.length) {
+    for (const file of listed.filter((entry) => !current.has(entry) && isPost(entry))) {
       removeFile(path38.join(output.directory, file));
+      removed.push(file);
     }
   }
+  const kept = selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])];
+  writeFile(path38.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: kept.sort() }, null, 2)}
+`, output.writeOptions);
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
-  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, warnings: [...others, ...empty] };
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty] };
 }
 function postRange(chapters, { chapter, from, to }) {
   if (chapter !== undefined) {
@@ -33732,11 +33747,26 @@ function postRange(chapters, { chapter, from, to }) {
   return { start, end };
 }
 var POST_FILE = /^\d+-[a-z0-9]+(?:-[a-z0-9]+)*\.(?:html|txt)$/;
-function postFiles(directory) {
-  return fs24.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && POST_FILE.test(entry.name)).map((entry) => entry.name);
+var POST_MANIFEST = ".story-posts.json";
+var POST_GENERATOR = "story build --format post";
+var POST_MANIFEST_BYTES = 1024 * 1024;
+function postManifest(directory) {
+  const file = path38.join(directory, POST_MANIFEST);
+  if (lstatIfExists(file)?.isFile() !== true) {
+    return null;
+  }
+  try {
+    const data = JSON.parse(readFilePrefix(file, POST_MANIFEST_BYTES).toString("utf8"));
+    if (data?.generator !== POST_GENERATOR || !Array.isArray(data.files)) {
+      return null;
+    }
+    return data.files.filter((name) => typeof name === "string" && POST_FILE.test(name));
+  } catch {
+    return null;
+  }
 }
 function isPostFolder(directory) {
-  return fs24.readdirSync(directory, { withFileTypes: true }).every((entry) => entry.name.startsWith(".") || entry.isFile() && POST_FILE.test(entry.name));
+  return postManifest(directory) !== null;
 }
 function projectBuildStyle(project) {
   const errors = [];
@@ -41771,7 +41801,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex" ? `Built a codex of ${result.pages} pages to ${result.outFile}
-` : result.format === "post" ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}
+` : result.format === "post" ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}${result.removed > 0 ? `, and removed ${plural(result.removed, "stale file")}` : ""}
 ` : result.format === "ics" ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}
 ` : `Built ${result.chapters} chapters as ${as} to ${result.outFile}
 `);
