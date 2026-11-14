@@ -28,8 +28,9 @@ export function formula(version, sums) {
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
     throw new Error(`version must be X.Y.Z, not ${version}`);
   }
+  // Homebrew on Linux runs on glibc, so the formula never names a musl build.
   const block = (os, arch) => {
-    const target = TARGETS.find((entry) => entry.os === os && entry.arch === arch);
+    const target = TARGETS.find((entry) => entry.os === os && entry.arch === arch && !entry.libc);
     const file = archiveName(version, target);
     const sha = sums[file];
     if (!sha) {

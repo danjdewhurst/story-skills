@@ -117,6 +117,10 @@ jobs:
           - { target: darwin-x64, runner: macos-15-intel }
           - { target: linux-x64, runner: ubuntu-latest }
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          # The musl builds smoke-test in an Alpine container on a Linux
+          # runner of the same architecture.
+          - { target: linux-x64-musl, runner: ubuntu-latest }
+          - { target: linux-arm64-musl, runner: ubuntu-24.04-arm }
           - { target: windows-x64, runner: windows-latest }
     env:
       TAG: ${{ needs.verify.outputs.tag }}
@@ -140,7 +144,9 @@ jobs:
           no-cache: true
 
       # --smoke runs the binary on this runner: --version must match the
-      # package, and validate must pass on an example.
+      # package, --help must print the usage, and validate must pass on an
+      # example. A musl binary runs in the Alpine image that
+      # scripts/build-binaries.js pins by digest.
       - name: Build and smoke-test the binary
         run: bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke --out dist/binaries
 
@@ -200,7 +206,7 @@ jobs:
         run: node scripts/build-skill-zips.js --out dist/binaries
 
       # One checksums file for every archive and skill zip, in sha256sum format:
-      # five binaries, one zip per skill folder, and all-skills.zip.
+      # seven binaries, one zip per skill folder, and all-skills.zip.
       - name: Write the checksums
         working-directory: dist/binaries
         run: |
@@ -212,7 +218,7 @@ jobs:
           mv "$RUNNER_TEMP/$sums" "$sums"
           cat "$sums"
           skills="$(find ../../skills -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l)"
-          [ "$(wc -l < "$sums")" -eq "$((5 + skills + 1))" ]
+          [ "$(wc -l < "$sums")" -eq "$((7 + skills + 1))" ]
 
       # Signed SLSA build provenance for each archive, skill zip, and the checksums file,
       # so `gh attestation verify <file> --repo danjdewhurst/story-skills`

@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { COMPILE_SAFETY_FLAGS, TARGETS, archiveName, buildTarget, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeTest, verifyZip } from "../scripts/build-binaries.js";
+import { ALPINE_IMAGE, COMPILE_SAFETY_FLAGS, TARGETS, alpineSpawn, archiveName, buildTarget, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeRunner, smokeTest, verifyZip } from "../scripts/build-binaries.js";
 import { formula, parseChecksums } from "../scripts/homebrew-formula.js";
 import { writeZip } from "../src/packaging.js";
 import { VERSION } from "../src/version.js";
@@ -17,15 +17,21 @@ const noise = (blocks) => Buffer.concat(Array.from({ length: blocks }, (_, index
 
 describe("standalone binaries (#296)", () => {
   test("every release target has an archive name the formula and release share", () => {
-    expect(TARGETS.map((target) => target.name)).toEqual(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "windows-x64"]);
+    expect(TARGETS.map((target) => target.name)).toEqual(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "linux-x64-musl", "linux-arm64-musl", "windows-x64"]);
     expect(TARGETS.map((target) => archiveName("1.2.3", target))).toEqual([
       "story-skills_1.2.3_darwin_arm64.tar.gz",
       "story-skills_1.2.3_darwin_x64.tar.gz",
       "story-skills_1.2.3_linux_x64.tar.gz",
       "story-skills_1.2.3_linux_arm64.tar.gz",
+      "story-skills_1.2.3_linux_x64_musl.tar.gz",
+      "story-skills_1.2.3_linux_arm64_musl.tar.gz",
       "story-skills_1.2.3_windows_x64.zip"
     ]);
-    expect(TARGETS.map(executableName)).toEqual(["story", "story", "story", "story", "story.exe"]);
+    // The workflows find a target's archive by its name with - as _.
+    for (const target of TARGETS) {
+      expect(archiveName("1.2.3", target)).toStartWith(`story-skills_1.2.3_${target.name.replaceAll("-", "_")}.`);
+    }
+    expect(TARGETS.map(executableName)).toEqual(["story", "story", "story", "story", "story", "story", "story.exe"]);
     expect(checksumsName("1.2.3")).toBe("story-skills_1.2.3_checksums.txt");
   });
 
@@ -48,15 +54,59 @@ describe("standalone binaries (#296)", () => {
     expect(() => parseArgs(["--host"], "freebsd", "x64")).toThrow("no release target for freebsd-x64");
     expect(() => parseArgs(["--out"])).toThrow("--out needs a folder");
     expect(hostTarget("linux", "arm64").name).toBe("linux-arm64");
+    expect(hostTarget("linux", "x64").name).toBe("linux-x64");
   });
 
-  test("the smoke test checks the version and a validate run", () => {
-    const ok = (stdout) => () => ({ status: 0, stdout, stderr: "" });
+  test("musl builds use Bun's musl targets and smoke-test in Alpine on a Linux machine of their architecture (#893)", () => {
+    const named = (name) => TARGETS.find((target) => target.name === name);
+    expect(named("linux-x64-musl").bun).toBe("bun-linux-x64-musl-baseline");
+    expect(named("linux-arm64-musl").bun).toBe("bun-linux-arm64-musl");
+    expect(smokeRunner(named("linux-x64"), "linux", "x64")).toBe("host");
+    expect(smokeRunner(named("linux-x64-musl"), "linux", "x64")).toBe("alpine");
+    expect(smokeRunner(named("linux-arm64-musl"), "linux", "x64")).toBeNull();
+    expect(smokeRunner(named("linux-arm64-musl"), "linux", "arm64")).toBe("alpine");
+    expect(smokeRunner(named("linux-x64-musl"), "darwin", "x64")).toBeNull();
+    expect(parseArgs(["--target", "linux-x64-musl", "--smoke"], "linux", "x64").smoke).toBe(true);
+    expect(() => parseArgs(["--target", "linux-arm64-musl", "--smoke"], "linux", "x64")).toThrow("needs this machine's target (linux-x64 or linux-x64-musl)");
+    expect(() => parseArgs(["--target", "linux-x64-musl", "--smoke"], "darwin", "arm64")).toThrow("needs this machine's target (darwin-arm64)");
+    expect(ALPINE_IMAGE).toMatch(/^alpine:\d+\.\d+@sha256:[0-9a-f]{64}$/);
+  });
+
+  test("the Alpine runner mounts the executable, the arguments' paths, and the working folder", () => {
+    const calls = [];
+    const spawn = (command, args) => {
+      calls.push({ command, args });
+      return { status: 0, stdout: "", stderr: "" };
+    };
+    const run = alpineSpawn(TARGETS.find((target) => target.name === "linux-arm64-musl"), spawn);
+    run("/work/story", ["validate", "/repo/examples/x"]);
+    run("/work/story", ["--version"], { cwd: "/tmp/folder" });
+    expect(calls[0].command).toBe("docker");
+    expect(calls[0].args).toEqual([
+      "run", "--rm", "--platform", "linux/arm64",
+      "--volume", "/work:/work:ro", "--volume", "/repo/examples/x:/repo/examples/x:ro",
+      ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', "/work/story", "validate", "/repo/examples/x"
+    ]);
+    expect(calls[1].args).toEqual([
+      "run", "--rm", "--platform", "linux/arm64",
+      "--volume", "/work:/work:ro", "--volume", "/tmp/folder:/tmp/folder", "--workdir", "/tmp/folder",
+      ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', "/work/story", "--version"
+    ]);
+    alpineSpawn(TARGETS.find((target) => target.name === "linux-x64-musl"), spawn)("/w/story", []);
+    expect(calls[2].args.slice(0, 4)).toEqual(["run", "--rm", "--platform", "linux/amd64"]);
+  });
+
+  test("the smoke test checks the version, a validate run, and the usage", () => {
+    const ok = (stdout) => (command, args) => ({ status: 0, stdout: args[0] === "--help" ? "Usage: story <command> [options]\n" : stdout, stderr: "" });
     expect(() => smokeTest("story", VERSION, ok(`${VERSION}\n`))).not.toThrow();
     expect(() => smokeTest("story", VERSION, ok("0.0.1\n"))).toThrow(`--version printed "0.0.1\\n" (exit 0), expected ${VERSION}`);
+    // A loader error, such as a missing libstdc++, is in the message.
+    expect(() => smokeTest("story", VERSION, () => ({ status: 127, stdout: "", stderr: "Error loading shared library libstdc++.so.6\n" }))).toThrow("(exit 127), expected " + VERSION + ": Error loading shared library libstdc++.so.6");
     let calls = 0;
     const failingValidate = () => (calls++ === 0 ? { status: 0, stdout: `${VERSION}\n` } : { status: 1, stdout: "", stderr: "boom" });
     expect(() => smokeTest("story", VERSION, failingValidate)).toThrow("validate");
+    const noUsage = (command, args) => ({ status: 0, stdout: args[0] === "--help" ? "" : `${VERSION}\n`, stderr: "" });
+    expect(() => smokeTest("story", VERSION, noUsage)).toThrow("--help did not print the usage");
   });
 
   test("the binary is compiled without bunfig.toml or .env autoload, and the smoke test checks it", () => {
@@ -84,7 +134,7 @@ describe("standalone binaries (#296)", () => {
         const marker = JSON.parse(script.match(/writeFileSync\((".*?"),/)[1]);
         fs.writeFileSync(marker, "ran");
       }
-      return { status: 0, stdout: `${VERSION}\n`, stderr: "" };
+      return { status: 0, stdout: args[0] === "--help" ? "Usage: story <command>\n" : `${VERSION}\n`, stderr: "" };
     };
     expect(() => smokeTest("story", VERSION, preloading)).toThrow("ran the preload script");
   });
@@ -120,7 +170,7 @@ describe("standalone binaries (#296)", () => {
     expect(ruby).toContain("class StorySkills < Formula");
     expect(ruby).toContain('version "1.2.3"');
     for (const [index, target] of TARGETS.entries()) {
-      if (target.os === "windows") {
+      if (target.os === "windows" || target.libc === "musl") {
         expect(ruby).not.toContain(archiveName("1.2.3", target));
         continue;
       }
@@ -146,7 +196,7 @@ describe("standalone binaries (#296)", () => {
   test("CI and the publish workflow build and smoke-test each target on its own OS", () => {
     for (const file of [".github/workflows/ci.yml", ".github/workflows/publish.yml"]) {
       const workflow = readRepo(file);
-      for (const [target, runner] of [["darwin-arm64", "macos-latest"], ["darwin-x64", "macos-15-intel"], ["linux-x64", "ubuntu-latest"], ["linux-arm64", "ubuntu-24.04-arm"], ["windows-x64", "windows-latest"]]) {
+      for (const [target, runner] of [["darwin-arm64", "macos-latest"], ["darwin-x64", "macos-15-intel"], ["linux-x64", "ubuntu-latest"], ["linux-arm64", "ubuntu-24.04-arm"], ["linux-x64-musl", "ubuntu-latest"], ["linux-arm64-musl", "ubuntu-24.04-arm"], ["windows-x64", "windows-latest"]]) {
         expect(workflow).toContain(`- { target: ${target}, runner: ${runner} }`);
       }
       expect(workflow).toContain('bun scripts/build-binaries.js --target "${{ matrix.target }}" --smoke');

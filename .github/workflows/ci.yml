@@ -354,6 +354,10 @@ jobs:
           - { target: darwin-x64, runner: macos-15-intel }
           - { target: linux-x64, runner: ubuntu-latest }
           - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          # The musl builds smoke-test in an Alpine container on a Linux
+          # runner of the same architecture.
+          - { target: linux-x64-musl, runner: ubuntu-latest }
+          - { target: linux-arm64-musl, runner: ubuntu-24.04-arm }
           - { target: windows-x64, runner: windows-latest }
     defaults:
       run:

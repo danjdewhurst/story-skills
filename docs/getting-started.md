@@ -162,7 +162,7 @@ This step is optional. Install the CLI if you want to run checks yourself in a t
 
 Run a clone or the bundled copy from your project folder, so `.` is the project; for `init` and `import`, which create a project, run it from the folder that should hold the new one, or pass `--dir`. `npx story-skills` and `bunx story-skills` run a `story-skills` in the current folder's `node_modules/.bin` before the published one, and Bun reads `bunfig.toml` and `.env` from the current folder. So in a project you do not trust, such as a story repository you cloned, use a global install or a standalone binary instead of `npx`, `bunx`, or a clone run with Bun.
 
-The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against. The checksums file lists every archive, so check only the one you downloaded:
+The standalone binaries come with releases after 0.17.0, for macOS (Apple silicon and Intel), Linux (x64 and arm64), and Windows (x64). Releases after 0.25.0 also have Linux binaries for musl systems such as Alpine (x64 and arm64). Each release has one archive per system, `story-skills_<version>_<os>_<arch>.tar.gz` (a `.zip` for Windows, and `story-skills_<version>_linux_<arch>_musl.tar.gz` for musl), holding the `story` executable, and a `story-skills_<version>_checksums.txt` to check it against. The checksums file lists every archive, so check only the one you downloaded:
 
 ```shell
 sha256sum -c --ignore-missing story-skills_<version>_checksums.txt        # Linux
@@ -195,7 +195,7 @@ if (($userPath -split ";") -notcontains $dir) {
 }
 ```
 
-On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The Linux binaries need glibc, so on Alpine and other musl systems use the npm package instead. The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
+On macOS, a binary downloaded in a browser is quarantined and, being unnotarised, refused by Gatekeeper; clear the flag with `xattr -d com.apple.quarantine story`, or install with Homebrew, which does not quarantine it. The plain Linux binaries need glibc. On Alpine and other musl systems, use the `_musl` archive, which needs the C++ runtime library: install it with `apk add libstdc++` (Homebrew installs the glibc binary). The binary replaces only the CLI: it runs the same code and reports the same version as the npm package, and it needs no Node. The skills still need Claude Code, Codex, or another agent (see [Install the skills](#install-the-skills)).
 
 Check the installed version:
 
