@@ -522,7 +522,7 @@ function buildPosts(project, out, selection) {
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
     const label = relative(project, chapter.file);
-    const episode = { byline: book.byline, body: book.body, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    const episode = { byline: book.byline, body: book.body, verse: book.verse === true, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
     if (wordCount(book.body) === 0) {
       empty.push(warn("empty-chapter", `${label} has no prose yet and is built as an empty post`, label));
     }
