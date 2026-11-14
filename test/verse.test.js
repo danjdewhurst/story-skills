@@ -242,6 +242,16 @@ describe("poetry collections and verse chapters", () => {
     expect(joined).toContain("pacing-resolution-run");
     expect(joined).toContain("pacing-easy-wins");
 
+    // A run long enough before the poem is still reported.
+    const before = project("novel", [{ fields: "hook: question", body: "word" }, { fields: "verse: true", body: "a poem" }]);
+    for (const scene of [1, 2, 3, 4]) {
+      writeMarkdown(path.join(before, "scenes", `chapter-01-scene-0${scene}.md`), `title: S${scene}\nchapter: chapter-01\nscene: ${scene}\nstatus: draft\noutcome: yes`, "# Scene\n");
+    }
+    expect(messages(pacingReport(before).warnings)).toEqual([
+      "4 scenes in a row end in an outright yes (chapter-01-scene-01 to chapter-01-scene-04): raise the cost with yes-but or no-and",
+      "4 scene units in a row with no sequel (chapter-01-scene-01 to chapter-01-scene-04): give the POV character room to react and decide"
+    ]);
+
     expect(formatPacing(pacingReport(project("poetry-collection", [{ body: "one" }, { body: "two" }])))).toContain("Median chapter: none (no prose chapters)\n");
   });
 
