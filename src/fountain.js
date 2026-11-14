@@ -38,7 +38,8 @@ const FORM_NOUNS = {
   novel: "novel",
   serial: "serial",
   "picture-book": "picture book",
-  "chapter-book": "book"
+  "chapter-book": "book",
+  "poetry-collection": "poetry collection"
 };
 
 // input: { title, authors, form, pack, hoursPerDay, chapters: [{ id, heading, scenes: [scene] }] }

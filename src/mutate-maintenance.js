@@ -416,7 +416,9 @@ export function computeWordCounts(root, options = {}) {
       title: chapter.title,
       file: projectPath(project.root, chapter.file),
       wordCount: chapter.wordCount,
-      ...(characters ? { characterCount: chapter.count } : {})
+      ...(characters ? { characterCount: chapter.count } : {}),
+      // A verse chapter also counts its lines (see verseLineCount).
+      ...(chapter.verse ? { lineCount: chapter.lineCount } : {})
     });
 
     // A project counted in characters records character-count beside
@@ -438,11 +440,14 @@ export function computeWordCounts(root, options = {}) {
   }
 
   // `total` is in the count unit: a book counted in characters says so with
-  // `unit`, and its chapters carry characterCount.
+  // `unit`, and its chapters carry characterCount. A book with verse
+  // chapters adds `lines`, their lines in all.
+  const verse = chapters.filter((chapter) => chapter.lineCount !== undefined);
   return {
     ...(characters ? { unit: "characters" } : {}),
     chapters,
-    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0)
+    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0),
+    ...(verse.length > 0 ? { lines: verse.reduce((sum, chapter) => sum + chapter.lineCount, 0) } : {})
   };
 }
 

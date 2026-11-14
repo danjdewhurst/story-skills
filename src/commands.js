@@ -290,10 +290,12 @@ export const COMMANDS = [
         throw usageError("--dry-run previews wordcount --write: add --write", "write");
       }
       return runWrite(context, "wordcount", (projectRoot) => computeWordCounts(projectRoot, { write }), (result) => {
-        // A project counted in characters prints characters, and says so.
+        // A project counted in characters prints characters, and says so. A
+        // verse chapter adds its lines, and the book their total.
         const characters = result.unit === "characters";
-        return result.chapters.map((chapter) => `${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}\n`).join("")
-          + `Total: ${result.total}${characters ? " characters" : ""}\n`;
+        return result.chapters.map((chapter) => `${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}${chapter.lineCount === undefined ? "" : ` (${plural(chapter.lineCount, "line")})`}\n`).join("")
+          + `Total: ${result.total}${characters ? " characters" : ""}\n`
+          + (result.lines === undefined ? "" : `Lines: ${result.lines}\n`);
       });
     }
   },

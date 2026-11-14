@@ -67,9 +67,10 @@ describe("story pacing", () => {
       sequels: 1,
       outcomes: { yes: 0, no: 0, "yes-but": 1, "no-and": 1 },
       hook: "question",
-      status: "draft"
+      status: "draft",
+      verse: false
     });
-    expect(report.totals).toEqual({ scenes: 2, sequels: 1, outcomesRecorded: 2, setbacks: 2, hooks: 1 });
+    expect(report.totals).toEqual({ scenes: 2, sequels: 1, outcomesRecorded: 2, setbacks: 2, hooks: 1, verseChapters: 0 });
     expect(messages(report.warnings)).toEqual([]);
 
     const text = formatPacing(report);

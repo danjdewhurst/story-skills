@@ -301,8 +301,10 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   }
 }
 
+// POV is a fiction measure, so a verse chapter (see isVerseChapter) and its
+// scenes are not checked for it.
 function checkChapterCasts(project, warnings) {
-  for (const chapter of project.chapters) {
+  for (const chapter of project.chapters.filter((entry) => !entry.verse)) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
       warnings.push(warn("pov-not-in-cast", `${relative(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative(project, chapter.file), chapter.id));
     }
@@ -319,7 +321,7 @@ function checkSceneCasts(project, warnings) {
 
   for (const scene of project.scenes) {
     const label = relative(project, scene.file);
-    if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
+    if (scene.pov && chapters.get(scene.chapter)?.verse !== true && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
       warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label, chapterOf(scene)));
     }
 

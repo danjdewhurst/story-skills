@@ -815,6 +815,16 @@ export function wordCount(markdown) {
   return splitWords(markdown).length;
 }
 
+// The lines of a verse chapter: every line of the prose with text on it.
+// Pass prose with comments removed (see chapterProse). Blank lines (the
+// stanza breaks), scene-break lines, headings, and code fence lines are
+// not lines of the poem, so they are not counted.
+export function verseLineCount(prose) {
+  return String(prose).replace(/\r\n?/g, "\n").split("\n")
+    .filter((line) => line.trim() !== "" && !isSceneBreakLine(line) && !isHeadingLine(line.trimStart()) && !/^ {0,3}(?:`{3,}|~{3,})/.test(line))
+    .length;
+}
+
 // Created on first use, so a project counted in words never needs it.
 let graphemes;
 

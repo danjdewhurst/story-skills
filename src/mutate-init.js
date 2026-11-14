@@ -14,7 +14,7 @@ import {
 } from "./files.js";
 import { withProjectLocks } from "./lock.js";
 import { kebabCase } from "./markdown.js";
-import { COUNT_UNITS, STORY_FORMS, countUnit } from "./forms.js";
+import { COUNT_UNITS, STORY_FORMS, VERSE_FORM, countUnit } from "./forms.js";
 import { isLanguageTag, languagePack, projectLanguage } from "./languages/index.js";
 import {
   areSiblingBooks,
@@ -185,7 +185,8 @@ function fillStoryProject(root, title, cwd, options) {
     bookNumber: series.bookNumber,
     follows: series.follows,
     precedes: series.precedes,
-    genre: options.genre ?? inherited.genre ?? "fiction",
+    // A poetry collection is poetry unless the writer says otherwise.
+    genre: options.genre ?? inherited.genre ?? (options.form === VERSE_FORM ? "poetry" : "fiction"),
     subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
     settingEra: options.settingEra ?? "unspecified",
     themes,

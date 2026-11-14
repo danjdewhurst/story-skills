@@ -3,7 +3,8 @@
 // conventions; character ranges come from the language pack (see
 // ../docs/project-format.md for their sources). They are advisory, so a
 // book outside its form's range is a warning, not an error. Serials have no
-// range because installments vary.
+// range because installments vary, and a poetry collection has none
+// because a book of poems is measured in poems and pages, not words.
 
 export const STORY_FORMS = new Map([
   ["flash", { min: 1, max: 1500, target: 1000 }],
@@ -13,8 +14,25 @@ export const STORY_FORMS = new Map([
   ["novel", { min: 40000, max: 200000, target: 80000 }],
   ["serial", { min: null, max: null, target: null }],
   ["picture-book", { min: 1, max: 1000, target: 500 }],
-  ["chapter-book", { min: 4000, max: 15000, target: 10000 }]
+  ["chapter-book", { min: 4000, max: 15000, target: 10000 }],
+  ["poetry-collection", { min: null, max: null, target: null }]
 ]);
+
+// The form whose every chapter is verse (see isVerseChapter).
+export const VERSE_FORM = "poetry-collection";
+
+// True when a chapter is verse: its own `verse: true`, or a chapter of a
+// poetry collection without `verse: false`. A verse chapter keeps every
+// line break in the builds, counts its lines, and is left out of the
+// fiction-only advisories (pacing, hooks, POV, scene records). A `verse`
+// that is not true or false is a validate error and reads as unset.
+export function isVerseChapter(storyData, chapterData) {
+  const own = chapterData?.verse;
+  if (typeof own === "boolean") {
+    return own;
+  }
+  return storyData?.form === VERSE_FORM;
+}
 
 // The units a length is counted in, by story.md `count-unit`: the noun the
 // output prints, the chapter field that records the count, and the target

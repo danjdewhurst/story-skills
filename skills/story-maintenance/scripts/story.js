@@ -2293,7 +2293,7 @@ var FRONTMATTER_KEYS = {
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
-  chapter: ["id", "title", "number", "numbered", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "source-hash", "choices"],
+  chapter: ["id", "title", "number", "numbered", "verse", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "source-hash", "choices"],
   scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "travel-mode", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
@@ -11177,6 +11177,11 @@ function trimBlankLines(text) {
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
+function verseLineCount(prose) {
+  return String(prose).replace(/\r\n?/g, `
+`).split(`
+`).filter((line) => line.trim() !== "" && !isSceneBreakLine(line) && !isHeadingLine(line.trimStart()) && !/^ {0,3}(?:`{3,}|~{3,})/.test(line)).length;
+}
 var graphemes2;
 function characterCount(markdown) {
   const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split(`
@@ -13220,7 +13225,7 @@ var OPTIONS = [
   { name: "themes", value: "<a,b>", repeatable: true, commas: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book); sets a default target-words"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book, poetry-collection); sets a default", "target-words"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
   { name: "language", value: "<tag>", help: ["Manuscript language for import, a BCP 47 tag", "such as fr; defaults to the existing story.md"] },
   { name: "bylines", help: ["For import, read each chapter's author from a", 'leading by-line ("by Ada Writer", taken out of', "the prose) or its file's frontmatter author"] },
@@ -14300,8 +14305,17 @@ var STORY_FORMS = new Map([
   ["novel", { min: 40000, max: 200000, target: 80000 }],
   ["serial", { min: null, max: null, target: null }],
   ["picture-book", { min: 1, max: 1000, target: 500 }],
-  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }]
+  ["chapter-book", { min: 4000, max: 15000, target: 1e4 }],
+  ["poetry-collection", { min: null, max: null, target: null }]
 ]);
+var VERSE_FORM = "poetry-collection";
+function isVerseChapter(storyData, chapterData) {
+  const own = chapterData?.verse;
+  if (typeof own === "boolean") {
+    return own;
+  }
+  return storyData?.form === VERSE_FORM;
+}
 var COUNT_UNITS = new Map([
   ["words", { name: "words", noun: "word", title: "Words", countField: "word-count", targetField: "target-words", dailyTargetField: "daily-target-words" }],
   ["characters", { name: "characters", noun: "character", title: "Characters", countField: "character-count", targetField: "target-characters", dailyTargetField: "daily-target-characters" }]
@@ -14801,13 +14815,14 @@ function relative(project, file) {
 
 // src/scan-fields.js
 import path9 from "node:path";
-function chapterLength(unit, data, markdown) {
+function chapterLength(unit, data, markdown, verse = false) {
   const prose = chapterProse(markdown.body);
   const words = wordCount(prose);
   const declared = data[unit.countField];
   const target = data[unit.targetField];
   return {
     wordCount: words,
+    lineCount: verse ? verseLineCount(prose) : null,
     count: unit.name === "characters" ? characterCount(prose) : words,
     declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
     countMissing: declared === undefined,
@@ -16159,7 +16174,8 @@ function scanProject(root) {
       declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       wordCountMissing: data["word-count"] === undefined,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
-      ...chapterLength(unit, data, markdown),
+      verse: isVerseChapter(story.data, data),
+      ...chapterLength(unit, data, markdown, isVerseChapter(story.data, data)),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
@@ -16955,7 +16971,7 @@ function checkProgressionDeath(character, label, chronology, warnings) {
   }
 }
 function checkChapterCasts(project, warnings) {
-  for (const chapter of project.chapters) {
+  for (const chapter of project.chapters.filter((entry) => !entry.verse)) {
     if (chapter.pov && !chapter.characters.includes(chapter.pov) && !chapter.mentions.includes(chapter.pov)) {
       warnings.push(warn("pov-not-in-cast", `${relative2(project, chapter.file)} POV character ${chapter.pov} is not listed in characters`, relative2(project, chapter.file), chapter.id));
     }
@@ -16969,7 +16985,7 @@ function checkSceneCasts(project, warnings) {
   const chapters = new Map(project.chapters.map((chapter) => [chapter.id, chapter]));
   for (const scene of project.scenes) {
     const label = relative2(project, scene.file);
-    if (scene.pov && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
+    if (scene.pov && chapters.get(scene.chapter)?.verse !== true && !scene.characters.includes(scene.pov) && !scene.mentions.includes(scene.pov)) {
       warnings.push(warn("pov-not-in-cast", `${label} POV character ${scene.pov} is not listed in characters`, label, chapterOf(scene)));
     }
     const chapter = chapters.get(scene.chapter);
@@ -18839,13 +18855,16 @@ function buildPacing(project) {
   const rows = [];
   const units = [];
   for (const chapter of chapters) {
+    const verse = chapter.verse === true;
     const scenes = project.scenes.filter((scene) => scene.chapter === chapter.id).sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
     const outcomes = { yes: 0, no: 0, "yes-but": 0, "no-and": 0 };
     for (const scene of scenes) {
       if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
         outcomes[scene.outcome] += 1;
       }
-      units.push(scene);
+      if (!verse) {
+        units.push(scene);
+      }
     }
     rows.push({
       id: chapter.id,
@@ -18856,9 +18875,10 @@ function buildPacing(project) {
       sequels: scenes.filter((scene) => scene.sequel).length,
       outcomes,
       hook: chapter.hook,
-      status: chapter.status
+      status: chapter.status,
+      verse
     });
-    if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
+    if (!verse && chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
       warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`, files.get(chapter.id)));
     }
   }
@@ -18881,7 +18901,7 @@ function buildPacing(project) {
   flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
   flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
   let resolutions = [];
-  for (const row of rows) {
+  for (const row of rows.filter((entry) => !entry.verse)) {
     if (row.hook === "resolution") {
       resolutions.push(row);
     } else {
@@ -18890,7 +18910,7 @@ function buildPacing(project) {
     }
   }
   flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
-  const written = rows.filter((row) => inUnit(row) > 0);
+  const written = rows.filter((row) => !row.verse && inUnit(row) > 0);
   const median = medianOf(written.map(inUnit));
   if (written.length >= 3) {
     for (const row of written) {
@@ -18905,14 +18925,15 @@ function buildPacing(project) {
   return {
     unit: characterBook ? "characters" : "words",
     rows,
-    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => row.words > 0).map((row) => row.words))) : formatMedian(median),
+    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => !row.verse && row.words > 0).map((row) => row.words))) : formatMedian(median),
     medianCharacterCount: characterBook ? formatMedian(median) : null,
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
       outcomesRecorded: recorded.length,
       setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
-      hooks: rows.filter((row) => row.hook !== "").length
+      hooks: rows.filter((row) => !row.verse && row.hook !== "").length,
+      verseChapters: rows.filter((row) => row.verse).length
     },
     warnings
   };
@@ -18942,8 +18963,9 @@ function formatPacing(pacing) {
   const { totals } = pacing;
   const characterBook = pacing.unit === "characters";
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round(totals.setbacks * 100 / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
+  const verse = totals.verseChapters ?? 0;
   const lines = [
-    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
+    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length - verse, verse > 0 ? "prose chapter" : "chapter")} with hooks${verse > 0 ? ` (${plural(verse, "verse chapter")} left out)` : ""}`,
     `Outcomes: ${setbackShare}`,
     characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
@@ -18965,7 +18987,7 @@ function formatPacing(pacing) {
   const cellText = (column, text) => column.left ? text.padEnd(column.width) : text.padStart(column.width);
   lines.push(`${columns.map((column) => column.title.padEnd(column.width)).join("  ")}  Hook`);
   for (const row of pacing.rows) {
-    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.hook || "-"}`);
+    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.verse ? "(verse)" : row.hook || "-"}`);
   }
   return `${lines.join(`
 `)}
@@ -19845,7 +19867,7 @@ function cleanSessions(value) {
   }
   return sessions.sort((left, right) => left.date.localeCompare(right.date, "en"));
 }
-function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
+function computeProgress({ unit = "words", words, characters = null, lines = null, verseChapters = 0, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => characterBook ? entry.characters ?? null : entry.words;
   const length = characterBook ? characters : words;
@@ -19855,6 +19877,8 @@ function computeProgress({ unit = "words", words, characters = null, target, dea
     unit,
     words,
     characterCount: characterBook ? characters : null,
+    lines,
+    verseChapters,
     target: target ?? null,
     percent: target ? length * 100 / target : null,
     remaining: target ? Math.max(0, target - length) : null,
@@ -19976,6 +20000,9 @@ function formatProgress(progress) {
   } else {
     lines.push(`Progress: ${formatNumber3(count(progress))} of ${formatNumber3(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
     lines.push(`Remaining: ${plural2(progress.remaining, noun, formatNumber3)}`);
+  }
+  if (progress.lines !== null && progress.lines !== undefined) {
+    lines.push(`Lines: ${formatNumber3(progress.lines)} in ${plural2(progress.verseChapters, "verse chapter", formatNumber3)}`);
   }
   if (progress.deadline) {
     const { date, daysLeft, perDay } = progress.deadline;
@@ -21078,9 +21105,9 @@ function epubAccessibilityMeta(hasCover, labels) {
     `<meta property="schema:accessibilitySummary">${summary}</meta>`
   ].join("");
 }
-function xhtmlParagraphs(body, markup) {
+function xhtmlParagraphs(body, markup, verse = false) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
+  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
@@ -21093,7 +21120,7 @@ function chapterXhtml(chapter, root, head, markup) {
   const heading = chapter.heading;
   const title = String(chapter.title ?? "").trim() || heading;
   const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
 }
 function matterXhtml(entry, placement, root, head, markup) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
@@ -21102,7 +21129,7 @@ function matterXhtml(entry, placement, root, head, markup) {
 }
 function htmlBook(manuscript, ownIndent = false) {
   const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
-  const paragraphs = (body) => markdownParagraphs(body, ownIndent).map((paragraph) => {
+  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
     }
@@ -21135,7 +21162,7 @@ function htmlBook(manuscript, ownIndent = false) {
       byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body)
+      paragraphs: paragraphs(chapter.body, chapter.verse)
     })),
     ...manuscript.back.map(matter("back"))
   ];
@@ -21162,7 +21189,7 @@ function docxEntries(manuscript, trace = null) {
   const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
   note(traceEntry("title", null));
   credits.forEach(() => note(traceEntry("credit", null)));
-  const pushSection = (heading, body, byline, part) => {
+  const pushSection = (heading, body, byline, part, verse = false) => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
       note(traceEntry("heading", part));
@@ -21171,7 +21198,7 @@ function docxEntries(manuscript, trace = null) {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
       note(traceEntry("byline", part));
     }
-    markdownParagraphs(body, true).forEach((paragraph, index) => {
+    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
       bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
       note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
     });
@@ -21179,7 +21206,7 @@ function docxEntries(manuscript, trace = null) {
   const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
   manuscript.front.forEach(pushMatter("front"));
   manuscript.chapters.forEach((chapter, index) => {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index });
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
   });
   manuscript.back.forEach(pushMatter("back"));
   return docxPackageEntries(script, bodyParts.join(""));
@@ -21374,7 +21401,7 @@ function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = n
   let sections = 0;
   manuscript.chapters.forEach((chapter, chapterIndex) => {
     const part = { placement: "body", chapter: chapterIndex };
-    const body = markdownParagraphs(chapter.body, true);
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       note(traceEntry("heading", part));
@@ -21410,7 +21437,7 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body, true);
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -21451,7 +21478,7 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body, true);
+    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
@@ -21685,7 +21712,7 @@ function runMarkup(run, escape, lineBreak) {
   return markup;
 }
 var LINE_BREAK3 = "";
-function markdownParagraphs(markdown, ownIndent = false) {
+function markdownParagraphs(markdown, ownIndent = false, verse = false) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -21698,7 +21725,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
       if (index === texts.length - 1) {
         return text;
       }
-      if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
+      if (verse && !lines[index].code || lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
         return `${text}${LINE_BREAK3}`;
       }
       return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
@@ -21738,8 +21765,8 @@ function markdownParagraphs(markdown, ownIndent = false) {
   flush();
   return paragraphs;
 }
-function wordParagraphs(body) {
-  return markdownParagraphs(body, true).map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) });
+function wordParagraphs(body, verse = false) {
+  return markdownParagraphs(body, true, verse).map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) });
 }
 var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
 var ZIP_UTF8_NAME_FLAG = 2048;
@@ -24200,7 +24227,8 @@ var FORM_NOUNS = {
   novel: "novel",
   serial: "serial",
   "picture-book": "picture book",
-  "chapter-book": "book"
+  "chapter-book": "book",
+  "poetry-collection": "poetry collection"
 };
 function fountainScript(input) {
   const pack = input.pack ?? languagePack();
@@ -24557,6 +24585,9 @@ function validateChapters(project, errors, warnings) {
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
+    }
+    if (data.verse !== undefined && typeof data.verse !== "boolean") {
+      errors.push(err("field-not-boolean", `${label} verse must be true or false`, label));
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
       errors.push(err("unnumbered-without-title", `${label} is unnumbered (numbered: false), so it needs a title to print as its heading`, label));
     }
@@ -25501,7 +25532,7 @@ function validateProjectOf(project) {
       const one = chapter.footnotes.length === 1;
       warnings.push(warn("unsupported-footnote", `${file} has ${one ? "a footnote" : `${chapter.footnotes.length} footnotes`} (${one ? "line" : "lines"} ${chapter.footnotes.join(", ")}): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work ${one ? "the note" : "each note"} into the prose or a back-matter page`, file));
     }
-    if (!project.scenes.some((scene) => scene.chapter === chapter.id)) {
+    if (!chapter.verse && !project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
     }
   }
@@ -25896,7 +25927,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
         hasScene = true;
       }
     }
-    if (!hasScene && !scenesOverridden.has(file)) {
+    if (!hasScene && !chapter.verse && !scenesOverridden.has(file)) {
       chaptersWithoutScenes.push(chapter);
     }
     if (Number.isInteger(chapter.number) && chapter.number > 0) {
@@ -27558,7 +27589,8 @@ function computeWordCounts(root, options = {}) {
       title: chapter.title,
       file: projectPath(project.root, chapter.file),
       wordCount: chapter.wordCount,
-      ...characters ? { characterCount: chapter.count } : {}
+      ...characters ? { characterCount: chapter.count } : {},
+      ...chapter.verse ? { lineCount: chapter.lineCount } : {}
     });
     if (options.write && needsCount(chapter)) {
       const markdown = readMarkdown(chapter.file, project.root);
@@ -27573,10 +27605,12 @@ function computeWordCounts(root, options = {}) {
   if (options.write) {
     reindexProject(project.root);
   }
+  const verse = chapters.filter((chapter) => chapter.lineCount !== undefined);
   return {
     ...characters ? { unit: "characters" } : {},
     chapters,
-    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0)
+    total: chapters.reduce((sum, chapter) => sum + (characters ? chapter.characterCount : chapter.wordCount), 0),
+    ...verse.length > 0 ? { lines: verse.reduce((sum, chapter) => sum + chapter.lineCount, 0) } : {}
   };
 }
 function migrateProject(root) {
@@ -27772,7 +27806,7 @@ function fillStoryProject(root, title, cwd, options) {
     bookNumber: series.bookNumber,
     follows: series.follows,
     precedes: series.precedes,
-    genre: options.genre ?? inherited.genre ?? "fiction",
+    genre: options.genre ?? inherited.genre ?? (options.form === VERSE_FORM ? "poetry" : "fiction"),
     subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
     settingEra: options.settingEra ?? "unspecified",
     themes,
@@ -32164,6 +32198,7 @@ function bookChapters(project, action = "build") {
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
+      verse: chapter.verse === true,
       body: trimBlankLines(chapterProse(markdown.body).replace(/\r\n?/g, `
 `))
     };
@@ -32869,6 +32904,7 @@ function projectProgress(root, options = {}) {
       unit: unit.name,
       words,
       characters: counts.characters ?? null,
+      ...verseLines(project),
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
@@ -32880,6 +32916,10 @@ function projectProgress(root, options = {}) {
     }),
     release: releaseData(release)
   };
+}
+function verseLines(project) {
+  const verse = project.chapters.filter((chapter) => chapter.verse);
+  return { lines: verse.length === 0 ? null : verse.reduce((sum, chapter) => sum + chapter.lineCount, 0), verseChapters: verse.length };
 }
 function progressLogFile(sessions, unit) {
   const counts = unit.name === "characters" ? "word and character counts" : "word count";
@@ -37672,7 +37712,7 @@ function attemptChapter(context, ops, manuscript) {
 }
 function readsAlone(source, text, key, manuscript) {
   return sameKeys2(readKeys(text.split(source.eol).join(`
-`), manuscript), [key]);
+`), manuscript, source.verse), [key]);
 }
 function itemLabels(items, key) {
   let number = 0;
@@ -37756,7 +37796,8 @@ function chapterSource(project, chapter, builtBody) {
       groupsOfLines.at(-1).push(line);
     }
   }
-  const expected = wordParagraphs(builtBody);
+  const verse = chapter.verse === true;
+  const expected = wordParagraphs(builtBody, verse);
   const blocks = [];
   const itemBlock = [];
   const printed = [];
@@ -37769,7 +37810,7 @@ function chapterSource(project, chapter, builtBody) {
     const items = wordParagraphs(code ? `${fence}
 ${strippedText}
 ${fence}` : strippedText.replace(/\r\n?/g, `
-`));
+`), verse);
     const start = proseOffset + offsets[first.start];
     const end = proseOffset + offsets[last.start + last.text.length - 1] + 1;
     const text = raw.slice(start, end);
@@ -37786,6 +37827,7 @@ ${fence}` : strippedText.replace(/\r\n?/g, `
   return {
     raw,
     path: chapter.file,
+    verse,
     proseOffset,
     mapped: sameKeys2(printed, expected),
     codes: expected.map((paragraph) => paragraph.code === true),
@@ -37930,15 +37972,15 @@ function readsBack(text, source, planned, manuscript) {
   const { raw, proseOffset } = source;
   const body = () => parseFrontmatter(text, "chapter").body;
   return text.slice(0, proseOffset) === raw.slice(0, proseOffset) && text.length - body().length + proseStart(body()) === proseOffset && sameKeys2(printedKeys(trimBlankLines(chapterProse(body()).replace(/\r\n?/g, `
-`)), manuscript), planned);
+`)), manuscript, source.verse), planned);
 }
-function printedKeys(body, manuscript) {
-  const paragraphs = wordParagraphs(body);
-  return readKeys(body, manuscript).map((key, index) => plannedKey({ key, code: paragraphs[index]?.code === true, quote: paragraphs[index]?.quote === true }));
+function printedKeys(body, manuscript, verse = false) {
+  const paragraphs = wordParagraphs(body, verse);
+  return readKeys(body, manuscript, verse).map((key, index) => plannedKey({ key, code: paragraphs[index]?.code === true, quote: paragraphs[index]?.quote === true }));
 }
-function readKeys(body, manuscript) {
+function readKeys(body, manuscript, verse = false) {
   const trace = [];
-  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "" }] }, trace);
+  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] }, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
   return itemsOf(documentReview(part("word/document.xml"), part("word/styles.xml")), "after").filter((item, index) => trace[index].kind === "paragraph" || trace[index].kind === "scene-break").map((item) => item.key);
 }
@@ -38337,9 +38379,10 @@ var COMMANDS = [
       }
       return runWrite(context, "wordcount", (projectRoot) => computeWordCounts(projectRoot, { write }), (result) => {
         const characters = result.unit === "characters";
-        return result.chapters.map((chapter) => `${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}
+        return result.chapters.map((chapter) => `${chapter.file}: ${characters ? chapter.characterCount : chapter.wordCount}${chapter.lineCount === undefined ? "" : ` (${plural(chapter.lineCount, "line")})`}
 `).join("") + `Total: ${result.total}${characters ? " characters" : ""}
-`;
+` + (result.lines === undefined ? "" : `Lines: ${result.lines}
+`);
       });
     }
   },

@@ -220,10 +220,11 @@ function epubAccessibilityMeta(hasCover, labels) {
   ].join("");
 }
 
-// `markup` is { styled, sceneBreak, ownIndent } from writeEpub.
-function xhtmlParagraphs(body, markup) {
+// `markup` is { styled, sceneBreak, ownIndent } from writeEpub; `verse`
+// keeps every line break (see markdownParagraphs).
+function xhtmlParagraphs(body, markup, verse = false) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body, markup.ownIndent).map((paragraph) => ({
+  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
   }))).join("");
@@ -239,7 +240,7 @@ function chapterXhtml(chapter, root, head, markup) {
   // XHTML needs a non-blank <title>; an untitled chapter uses its heading.
   const title = String(chapter.title ?? "").trim() || heading;
   const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup)}`, markup.styled ? "chapter" : "");
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
 }
 
 function matterXhtml(entry, placement, root, head, markup) {
@@ -255,7 +256,7 @@ function matterXhtml(entry, placement, root, head, markup) {
 export function htmlBook(manuscript, ownIndent = false) {
   // A book counted in characters also counts each part's characters.
   const characters = (body) => (manuscript.unit === "characters" ? { characters: characterCount(body) } : {});
-  const paragraphs = (body) => markdownParagraphs(body, ownIndent).map((paragraph) => {
+  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
     if (paragraph.sceneBreak) {
       return null;
     }
@@ -289,7 +290,7 @@ export function htmlBook(manuscript, ownIndent = false) {
       byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body)
+      paragraphs: paragraphs(chapter.body, chapter.verse)
     })),
     ...manuscript.back.map(matter("back"))
   ];
@@ -327,7 +328,7 @@ export function docxEntries(manuscript, trace = null) {
   const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
   note(traceEntry("title", null));
   credits.forEach(() => note(traceEntry("credit", null)));
-  const pushSection = (heading, body, byline, part) => {
+  const pushSection = (heading, body, byline, part, verse = false) => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
       note(traceEntry("heading", part));
@@ -337,7 +338,7 @@ export function docxEntries(manuscript, trace = null) {
       note(traceEntry("byline", part));
     }
     // Normal indents every first line (see docxStyles).
-    markdownParagraphs(body, true).forEach((paragraph, index) => {
+    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
       bodyParts.push(paragraph.sceneBreak
         ? paragraphXml(script, "* * *", "SceneBreak")
         : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
@@ -347,7 +348,7 @@ export function docxEntries(manuscript, trace = null) {
   const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
   manuscript.front.forEach(pushMatter("front"));
   manuscript.chapters.forEach((chapter, index) => {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index });
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
   });
   manuscript.back.forEach(pushMatter("back"));
   return docxPackageEntries(script, bodyParts.join(""));
@@ -692,7 +693,7 @@ export function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, tr
   manuscript.chapters.forEach((chapter, chapterIndex) => {
     const part = { placement: "body", chapter: chapterIndex };
     // A Shunn manuscript indents every first line half an inch.
-    const body = markdownParagraphs(chapter.body, true);
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       note(traceEntry("heading", part));
@@ -734,7 +735,7 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   for (const chapter of manuscript.chapters) {
     // The Shunn format's own half-inch indent, as in the DOCX and PDF, so a
     // typed one goes here too.
-    const body = markdownParagraphs(chapter.body, true);
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -787,7 +788,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body, true);
+    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>\n`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
@@ -1067,8 +1068,11 @@ export const LINE_BREAK = "\uE001";
 // (story validate warns, see footnoteLines). A build that indents first
 // lines itself passes `ownIndent`, and a paragraph's typed indent (the
 // ideographic space a Japanese paragraph opens with) goes, so the two never
-// add up; the other builds keep it as the paragraph's only indent.
-function markdownParagraphs(markdown, ownIndent = false) {
+// add up; the other builds keep it as the paragraph's only indent. In a
+// `verse` chapter (see isVerseChapter) every line break inside a paragraph
+// is a hard break, as if each line but a stanza's last ended in a
+// backslash, so a blank line is a stanza break; code keeps its own lines.
+function markdownParagraphs(markdown, ownIndent = false, verse = false) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -1086,7 +1090,7 @@ function markdownParagraphs(markdown, ownIndent = false) {
       }
       // Plain string tests: a pattern for the spaces backtracks
       // quadratically on a long run of them inside the line.
-      if (lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
+      if ((verse && !lines[index].code) || lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
         return `${text}${LINE_BREAK}`;
       }
       // A soft break is a space, except between Chinese or Japanese
@@ -1151,8 +1155,8 @@ function markdownParagraphs(markdown, ownIndent = false) {
 // strong, em } with LINE_BREAK for each hard break. story apply reads a
 // chapter's source through this to know what each of its paragraphs
 // prints.
-export function wordParagraphs(body) {
-  return markdownParagraphs(body, true).map((paragraph) => (paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) }));
+export function wordParagraphs(body, verse = false) {
+  return markdownParagraphs(body, true, verse).map((paragraph) => (paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) }));
 }
 
 // Every entry is stamped 1980-01-01 00:00, the earliest valid MS-DOS date
