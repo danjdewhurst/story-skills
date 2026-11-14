@@ -259,18 +259,25 @@ export function buildTranslation(root, scan, options = {}) {
 
   const missing = [];
   const extra = [];
+  // A file that fails to read or parse is left out of its project's scan,
+  // and its unreadable-file error already names it. Its counterpart in the
+  // other edition, at the same path, is not reported as missing or extra:
+  // copying the source file across would overwrite the translated one.
+  const broken = (scanned) => new Set(scanned.fileErrors.map((error) => error.file));
+  const ownBroken = broken(project);
+  const sourceBroken = broken(source);
   for (const [key, kind] of COMPARED_KINDS) {
     const ownIds = new Map(project[key].map((entity) => [entity.id, entity]));
     const sourceIds = new Map(source[key].map((entity) => [entity.id, entity]));
     for (const [id, entity] of sourceIds) {
-      if (!ownIds.has(id)) {
+      if (!ownIds.has(id) && !ownBroken.has(projectPath(source.root, entity.file))) {
         const file = sourceFile(entity.file);
         missing.push({ kind, id, file });
         errors.push(err("translation-missing", `${kind} ${id} is in the source (${file}) but not in the translation; copy it across and translate it`, file));
       }
     }
     for (const [id, entity] of ownIds) {
-      if (!sourceIds.has(id) && !ONLY_MISSING.has(kind)) {
+      if (!sourceIds.has(id) && !ONLY_MISSING.has(kind) && !sourceBroken.has(projectPath(project.root, entity.file))) {
         const file = ownFile(entity.file);
         extra.push({ kind, id, file });
         errors.push(err("translation-extra", `${file} has ${kind} ${id}, which the source ${label} does not; give it the source's id, or add it to the source first`, file));
