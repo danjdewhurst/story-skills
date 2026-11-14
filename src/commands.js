@@ -1325,12 +1325,13 @@ export const COMMANDS = [
       "sheet), fountain (screenplay scene skeleton),",
       "twee (Twine story from chapter choices), ink",
       "(ink story from chapter choices), ics (calendar of",
-      "the deadline, release dates, and daily target), or",
+      "the deadline, release dates, and daily target),",
       "codex (story bible as linked HTML pages in",
-      "dist/codex/)"
+      "dist/codex/), or post (each chapter as a serial",
+      "episode to paste, HTML and text, in dist/posts/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
+    options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "chapter", "from", "to", ...WRITE_OPTIONS],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -1353,7 +1354,10 @@ export const COMMANDS = [
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
         spoilers: isTruthy(parsed.options.spoilers),
-        includePending: isTruthy(parsed.options["include-pending"])
+        includePending: isTruthy(parsed.options["include-pending"]),
+        chapter: parsed.options.chapter,
+        from: parsed.options.from,
+        to: parsed.options.to
       }));
       const findings = checkedWarnings(result.warnings, overrides);
       if (wantsJson(parsed)) {
@@ -1366,9 +1370,11 @@ export const COMMANDS = [
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex"
         ? `Built a codex of ${result.pages} pages to ${result.outFile}\n`
-        : result.format === "ics"
-          ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}\n`
-          : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
+        : result.format === "post"
+          ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}\n`
+          : result.format === "ics"
+            ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}\n`
+            : `Built ${result.chapters} chapters as ${as} to ${result.outFile}\n`);
       return writeFindings(io, findings);
     }
   },
@@ -1934,6 +1940,7 @@ function buildData(result) {
     chapters: result.chapters,
     pages: result.pages ?? null,
     events: result.events ?? null,
+    posts: result.posts ?? null,
     pdf: result.pdf === true,
     engine: result.engine ?? null
   };

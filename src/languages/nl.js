@@ -14,6 +14,7 @@ export default {
     "published-by": "Uitgegeven door {publisher}",
     "scene-break": "Scènewisseling",
     footnotes: "Noten",
+    "author-note": "Noot van de auteur",
     "cover-alt": "Omslag van {title}",
     "start-of-content": "Begin van de inhoud",
     "accessibility-summary": "Boek met alleen tekst, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",

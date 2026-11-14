@@ -84,7 +84,7 @@ function expectTextParity({ parent, cwd, base, argv, command = argv[0], rewrites
   return { preview, real, planned };
 }
 
-const BUILD_FORMATS = ["markdown", "epub", "docx", "shunn", "html", "print", "narration", "metadata", "fountain", "codex"];
+const BUILD_FORMATS = ["markdown", "epub", "docx", "shunn", "html", "print", "narration", "metadata", "fountain", "codex", "post"];
 
 describe("--dry-run for builds and exports", () => {
   for (const format of BUILD_FORMATS) {

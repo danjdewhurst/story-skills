@@ -16,6 +16,7 @@ export default {
     "published-by": "Wydawca: {publisher}",
     "scene-break": "Zmiana sceny",
     footnotes: "Przypisy",
+    "author-note": "Notka autorska",
     "cover-alt": "Okładka książki „{title}”",
     "start-of-content": "Początek treści",
     "accessibility-summary": "Książka wyłącznie tekstowa z nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",

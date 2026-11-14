@@ -43,6 +43,7 @@ export default {
     "published-by": "Publicado por {publisher}",
     "scene-break": "Cambio de escena",
     footnotes: "Notas",
+    "author-note": "Nota de autor",
     "cover-alt": "Portada de {title}",
     "start-of-content": "Inicio del contenido",
     "accessibility-summary": "Libro solo de texto con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",

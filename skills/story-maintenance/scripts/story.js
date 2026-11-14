@@ -2309,7 +2309,7 @@ var FRONTMATTER_KEYS = {
   faction: ["pronunciation", "id", "name", "type", "status", "members", "locations", "tags", "progressions"],
   artifact: ["pronunciation", "id", "name", "type", "status", "owner", "location", "tags"],
   arc: ["id", "name", "type", "status", "characters", "themes", "acts", "mice-threads"],
-  chapter: ["id", "title", "number", "numbered", "verse", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "source-hash", "collected-from", "collected-hash", "choices"],
+  chapter: ["id", "title", "number", "numbered", "verse", "author", "status", "pov", "word-count", "target-words", "character-count", "target-characters", "arcs-advanced", "characters", "mentions", "locations", "mode", "date", "time", "strand", "episode-question", "hook", "beat", "release-date", "time-skip", "source-hash", "collected-from", "collected-hash", "author-note", "choices"],
   scene: ["id", "title", "chapter", "scene", "status", "pov", "location", "characters", "mentions", "arcs-advanced", "state-changes", "date", "time", "travel-hours", "travel-mode", "sequel", "outcome", "dilemma", "flashback-to", "setting"],
   question: ["id", "title", "status", "introduced", "resolved", "characters"],
   promise: ["id", "title", "status", "planted", "payoff", "arcs", "characters"],
@@ -2673,6 +2673,7 @@ var ar_default = {
     "published-by": "الناشر: {publisher}",
     "scene-break": "فاصل بين المشاهد",
     footnotes: "الحواشي",
+    "author-note": "ملاحظة ختامية",
     "cover-alt": "غلاف كتاب {title}",
     "start-of-content": "بداية المحتوى",
     "accessibility-summary": "كتاب نصي فقط، فيه فهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
@@ -2883,6 +2884,7 @@ var de_default = {
     "published-by": "Erschienen bei {publisher}",
     "scene-break": "Szenenwechsel",
     footnotes: "Anmerkungen",
+    "author-note": "Nachbemerkung",
     "cover-alt": "Cover von {title}",
     "start-of-content": "Beginn des Inhalts",
     "accessibility-summary": "Buch, das nur aus Text besteht, mit navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
@@ -4288,6 +4290,7 @@ var en_default = {
     "published-by": "Published by {publisher}",
     "scene-break": "Scene break",
     footnotes: "Notes",
+    "author-note": "Author's note",
     "cover-alt": "Cover of {title}",
     "start-of-content": "Start of Content",
     "accessibility-summary": "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.",
@@ -4465,6 +4468,7 @@ var es_default = {
     "published-by": "Publicado por {publisher}",
     "scene-break": "Cambio de escena",
     footnotes: "Notas",
+    "author-note": "Nota de autor",
     "cover-alt": "Portada de {title}",
     "start-of-content": "Inicio del contenido",
     "accessibility-summary": "Libro solo de texto con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
@@ -5201,6 +5205,7 @@ var fa_default = {
     "published-by": "ناشر: {publisher}",
     "scene-break": "تغییر صحنه",
     footnotes: "پانوشت‌ها",
+    "author-note": "یادداشت نویسنده",
     "cover-alt": "جلد کتاب {title}",
     "start-of-content": "آغاز محتوا",
     "accessibility-summary": "کتابی فقط متنی، با فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
@@ -5360,6 +5365,7 @@ var fr_default = {
     "published-by": "Publié par {publisher}",
     "scene-break": "Changement de scène",
     footnotes: "Notes",
+    "author-note": "Note d’auteur",
     "cover-alt": "Couverture de {title}",
     "start-of-content": "Début du contenu",
     "accessibility-summary": "Livre entièrement textuel, avec une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
@@ -6558,6 +6564,7 @@ var he_default = {
     "published-by": "בהוצאת {publisher}",
     "scene-break": "מעבר סצנה",
     footnotes: "הערות",
+    "author-note": "אחרית דבר",
     "cover-alt": "כריכת הספר {title}",
     "start-of-content": "תחילת התוכן",
     "accessibility-summary": "ספר טקסט בלבד, עם תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
@@ -6707,6 +6714,7 @@ var hi_default = {
     "published-by": "प्रकाशक: {publisher}",
     "scene-break": "दृश्य परिवर्तन",
     footnotes: "टिप्पणियाँ",
+    "author-note": "लेखकीय टिप्पणी",
     "cover-alt": "{title} का आवरण",
     "start-of-content": "सामग्री का आरंभ",
     "accessibility-summary": "केवल पाठ वाली पुस्तक, जिसमें नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
@@ -6855,6 +6863,7 @@ var it_default = {
     "published-by": "Pubblicato da {publisher}",
     "scene-break": "Cambio di scena",
     footnotes: "Note",
+    "author-note": "Nota d’autore",
     "cover-alt": "Copertina di {title}",
     "start-of-content": "Inizio del contenuto",
     "accessibility-summary": "Libro di solo testo con indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
@@ -7014,6 +7023,7 @@ var ja_default = {
     "published-by": "発行所：{publisher}",
     "scene-break": "場面転換",
     footnotes: "注",
+    "author-note": "あとがき",
     "cover-alt": "『{title}』の表紙",
     "start-of-content": "本文",
     "accessibility-summary": "テキストのみの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
@@ -7164,6 +7174,7 @@ var ko_default = {
     "published-by": "펴낸곳: {publisher}",
     "scene-break": "장면 전환",
     footnotes: "주",
+    "author-note": "작가의 말",
     "cover-alt": "『{title}』 표지",
     "start-of-content": "본문",
     "accessibility-summary": "텍스트로만 된 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
@@ -7312,6 +7323,7 @@ var nl_default = {
     "published-by": "Uitgegeven door {publisher}",
     "scene-break": "Scènewisseling",
     footnotes: "Noten",
+    "author-note": "Noot van de auteur",
     "cover-alt": "Omslag van {title}",
     "start-of-content": "Begin van de inhoud",
     "accessibility-summary": "Boek met alleen tekst, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
@@ -7460,6 +7472,7 @@ var pl_default = {
     "published-by": "Wydawca: {publisher}",
     "scene-break": "Zmiana sceny",
     footnotes: "Przypisy",
+    "author-note": "Notka autorska",
     "cover-alt": "Okładka książki „{title}”",
     "start-of-content": "Początek treści",
     "accessibility-summary": "Książka wyłącznie tekstowa z nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
@@ -7644,6 +7657,7 @@ var pt_default = {
     "published-by": "Publicado por {publisher}",
     "scene-break": "Mudança de cena",
     footnotes: "Notas",
+    "author-note": "Nota de autor",
     "cover-alt": "Capa de {title}",
     "start-of-content": "Início do conteúdo",
     "accessibility-summary": "Livro só de texto, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
@@ -7792,6 +7806,7 @@ var ru_default = {
     "published-by": "Издатель: {publisher}",
     "scene-break": "Смена сцены",
     footnotes: "Примечания",
+    "author-note": "Авторское примечание",
     "cover-alt": "Обложка книги «{title}»",
     "start-of-content": "Начало текста",
     "accessibility-summary": "Книга, содержащая только текст, с навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
@@ -7945,6 +7960,7 @@ var sv_default = {
     "published-by": "Utgiven av {publisher}",
     "scene-break": "Scenbyte",
     footnotes: "Noter",
+    "author-note": "Författarens kommentar",
     "cover-alt": "Omslag till {title}",
     "start-of-content": "Början av innehållet",
     "accessibility-summary": "Bok med enbart text, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
@@ -8101,6 +8117,7 @@ var tr_default = {
     "published-by": "Yayıncı: {publisher}",
     "scene-break": "Sahne geçişi",
     footnotes: "Notlar",
+    "author-note": "Yazarın notu",
     "cover-alt": "Kapak: {title}",
     "start-of-content": "İçeriğin başlangıcı",
     "accessibility-summary": "Gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan, yalnızca metinden oluşan kitap.",
@@ -8249,6 +8266,7 @@ var uk_default = {
     "published-by": "Видавець: {publisher}",
     "scene-break": "Зміна сцени",
     footnotes: "Примітки",
+    "author-note": "Авторська примітка",
     "cover-alt": "Обкладинка книжки «{title}»",
     "start-of-content": "Початок тексту",
     "accessibility-summary": "Книжка, що містить лише текст, із навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
@@ -8409,6 +8427,7 @@ var zh_default = {
     "published-by": "出版者：{publisher}",
     "scene-break": "场景转换",
     footnotes: "注释",
+    "author-note": "作者的话",
     "cover-alt": "《{title}》封面",
     "start-of-content": "正文",
     "accessibility-summary": "纯文本图书，包含可导航的目录、每章的标题和单一的逻辑阅读顺序。",
@@ -8553,6 +8572,7 @@ var labels = {
   "published-by": "出版者：{publisher}",
   "scene-break": "場景轉換",
   footnotes: "注釋",
+  "author-note": "作者的話",
   "cover-alt": "《{title}》封面",
   "start-of-content": "正文",
   "accessibility-summary": "純文字圖書，包含可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
@@ -13526,7 +13546,7 @@ var OPTIONS = [
   { name: "restore", value: "<name>", help: ["Put a snapshot back over the project for", "snapshot, after saving the project as it is;", "deletes markdown files the snapshot lacks"] },
   { name: "path", value: "<path>", help: ["Project root for every command except init,", "import, and lsp"] },
   { name: "out", value: "<file>", help: ["Output path for export/build/synopsis/diagram", "(a folder for build --format codex)"] },
-  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, ics, codex) or grid", "(markdown, csv)"] },
+  { name: "format", value: "<name>", help: ["Output format for build (markdown, epub, docx,", "shunn, html, print, narration, metadata,", "fountain, twee, ink, ics, codex, post) or grid", "(markdown, csv)"] },
   { name: "trim", value: "<size>", help: ["Trim size for build --format print (5x8,", "5.25x8, 5.5x8.5, 6x9, a5; default 5.5x8.5)"] },
   { name: "paper", value: "<letter|a4>", help: ["Paper for build --format shunn --pdf and", "--format docx --shunn (letter, a4; default letter)"] },
   { name: "stamp", value: "<label>", help: ["Build label printed in build --format html (a", "date, commit, or review round)"] },
@@ -13537,8 +13557,8 @@ var OPTIONS = [
   { name: "pdf-engine", value: "<name|path>", help: ["PDF engine for build --pdf: prince, weasyprint,", "pagedjs-cli, chrome, or the path to one"] },
   { name: "spoilers", help: ["Include notes, statuses, deaths, knowledge,", "clues, and resolutions in build --format codex"] },
   { name: "include-pending", help: ["Keep matter pages whose permission is pending in", "export and build (left out by default)"] },
-  { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows"] },
-  { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows"] },
+  { name: "from", value: "<chapter>", help: ["First chapter (id or number) grid shows or build", "--format post builds"] },
+  { name: "to", value: "<chapter>", help: ["Last chapter (id or number) grid shows or build", "--format post builds"] },
   { name: "where", value: "<filter>", repeatable: true, help: ["Filter for list: key=value (a list contains it),", "key!=value, key (set), or !key (unset);", "repeatable, and every filter must match"] },
   { name: "query", value: "<name>", help: ["Run a story.md query for list: its kind and", "filters, and any --where as well"] },
   { name: "at", value: "<chapter-id>", help: ["Chapter id for knowledge: what the character knew", "and how their progressions had changed them; for", "split, where to split: a scene break number, a", "heading, or a line of the text"] },
@@ -13563,7 +13583,7 @@ var OPTIONS = [
   { name: "id", value: "<kebab-id>", help: ["Explicit id for add, rename, or snapshot, for a", "name with letters an id cannot spell"] },
   { name: "prose", help: ["For rename: also replace the entity's name and", "given name in drafted chapter prose (not its", "aliases)"] },
   { name: "number", value: "<n>", help: ["Chapter number for add chapter or move chapter"] },
-  { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene; the", "one chapter translation --record writes"] },
+  { name: "chapter", value: "<id>", help: ["Chapter id for add scene or move scene; the", "one chapter translation --record writes; the one", "chapter (id or number) build --format post builds"] },
   { name: "scene", value: "<n>", help: ["Scene number for add scene or move scene"] },
   { name: "type", value: "<name>", help: ["Entity type for add"] },
   { name: "role", value: "<name>", help: ["Character role for add character"] },
@@ -16517,6 +16537,26 @@ function htmlBook(manuscript, ownIndent = false) {
     ...parts.some((part) => part.notes !== undefined) ? { notes: true } : {},
     parts
   };
+}
+function postBody(body, { key, verse = false } = {}) {
+  const ref = (number, reference) => `${key}-fnref${number}${reference === 1 ? "" : `-${reference}`}`;
+  const media = { note: (note) => `<sup><a href="#${key}-fn${note.number}" id="${ref(note.number, note.reference)}">${note.number}</a></sup>` };
+  const lines = (runs) => runs.map((run) => run.note === undefined ? run.text : `[${run.note.number}]`).join("").split(LINE_BREAK3).join(`
+`);
+  const html = (runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join("");
+  const parsed = bookBody(body, { verse });
+  const paragraphs = parsed.paragraphs.filter((paragraph) => !paragraph.figure || paragraph.runs.length > 0).map((paragraph) => paragraph.sceneBreak ? null : { html: html(paragraph.runs), lines: lines(paragraph.runs), quote: paragraph.quote });
+  const notes = parsed.notes.map((note) => ({
+    number: note.number,
+    id: `${key}-fn${note.number}`,
+    backlink: ref(note.number, 1),
+    html: note.paragraphs.map(html),
+    lines: note.paragraphs.map(lines)
+  }));
+  return { paragraphs, notes };
+}
+function htmlParagraphs(body, ownIndent = false, verse = false) {
+  return postBody(body, { key: "", verse }).paragraphs;
 }
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   writeZip(outFile, docxEntries(manuscript), writeOptions);
@@ -25344,7 +25384,7 @@ var TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat", "collected-from", "collected-hash", "source-hash"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat", "collected-from", "collected-hash", "source-hash", "author-note"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -26310,6 +26350,9 @@ function validateChapters(project, errors, warnings) {
     }
     for (const field of ["collected-from", "collected-hash"]) {
       requireScalar(data, field, label, errors);
+    }
+    if (data["author-note"] !== undefined) {
+      requireScalar(data, "author-note", label, errors);
     }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
@@ -33097,6 +33140,54 @@ function icsCalendar({ title, events, stamp }) {
 `;
 }
 
+// src/posts.js
+var DEFAULT_TEXT_SCENE_BREAK = "* * *";
+var TEXT_NOTE_RULE = "---";
+function postHtml(episode) {
+  const block = (markup) => ({ quote: false, markup });
+  const prose = (body) => htmlParagraphs(body).map((paragraph) => paragraph === null ? block("<hr>") : { quote: paragraph.quote, markup: `<p>${paragraph.html}</p>` });
+  const blocks = [];
+  if (episode.byline !== "") {
+    blocks.push(block(`<p><em>${escapeHtml(episode.byline)}</em></p>`));
+  }
+  blocks.push(...prose(episode.body));
+  if (episode.authorNote !== "") {
+    blocks.push(block("<hr>"), block(`<p><strong>${escapeHtml(fillLabel(episode.labels, "author-note"))}</strong></p>`), ...prose(episode.authorNote));
+  }
+  return blocks.length === 0 ? "" : `${withBlockquotes(blocks).join(`
+`)}
+`;
+}
+function postText(episode, sceneBreak = DEFAULT_TEXT_SCENE_BREAK) {
+  const prose = (body) => htmlParagraphs(body).map((paragraph) => {
+    if (paragraph === null) {
+      return sceneBreak;
+    }
+    return paragraph.quote ? paragraph.lines.split(`
+`).map((line) => `    ${line}`).join(`
+`) : paragraph.lines;
+  });
+  const blocks = [];
+  if (episode.byline !== "") {
+    blocks.push(episode.byline);
+  }
+  blocks.push(...prose(episode.body));
+  if (episode.authorNote !== "") {
+    blocks.push(TEXT_NOTE_RULE, fillLabel(episode.labels, "author-note"), ...prose(episode.authorNote));
+  }
+  return blocks.length === 0 ? "" : `${blocks.join(`
+
+`)}
+`;
+}
+function authorNoteText(value) {
+  if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
+    return "";
+  }
+  return String(value).replace(/\r\n?/g, `
+`).trim();
+}
+
 // src/narration.js
 var NARRATION_WORDS_PER_MINUTE = 155;
 var NARRATION_CHARACTERS_PER_MINUTE = 300;
@@ -33349,6 +33440,14 @@ function buildBook(root, options = {}) {
   if (options.spoilers && format !== "codex") {
     throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
+  for (const [flag, value] of [["chapter", options.chapter], ["from", options.from], ["to", options.to]]) {
+    if (value !== undefined && format !== "post") {
+      throw usageError(`--${flag} applies only to --format post`, [flag, "format"]);
+    }
+  }
+  if (options.chapter !== undefined && (options.from !== undefined || options.to !== undefined)) {
+    throw usageError("--chapter builds one chapter: give it alone, or give a range with --from and --to", ["chapter", options.from === undefined ? "to" : "from"]);
+  }
   const printsMatter = !NO_MATTER_FORMATS.has(format) && !options.shunn;
   if (options.includePending && !printsMatter) {
     throw usageError(`--include-pending applies only to builds that print matter pages; --format ${format}${options.shunn ? " --shunn" : ""} prints none`, ["include-pending", "format", "shunn"]);
@@ -33360,6 +33459,9 @@ function buildBook(root, options = {}) {
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
+  }
+  if (format === "post") {
+    return buildPosts(project, options.out, { chapter: options.chapter, from: options.from, to: options.to });
   }
   const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const defaultOut = `dist/${fileStem(project.storyId)}.${extension}`;
@@ -33515,7 +33617,7 @@ function buildCodex(project, out, spoilers) {
     throw projectError(`Cannot build the codex: fix this file first (story validate reports it):
 - ${progressError.message}`);
   }
-  const output = resolveOutputDirectory(project, out, "dist/codex");
+  const output = resolveOutputDirectory(project, out, CODEX_FOLDER);
   const pages = codexPages(project, { spoilers });
   const written = new Set;
   for (const page of pages) {
@@ -33526,11 +33628,13 @@ function buildCodex(project, out, spoilers) {
   removeStaleCodexPages(output.directory, written);
   return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
 }
-function resolveOutputDirectory(project, out, defaultRelativePath) {
-  return withFlags("out", () => outputDirectory(project, out, defaultRelativePath));
+var CODEX_FOLDER = { format: "codex", noun: "the codex", folder: "dist/codex", isOwn: (directory) => isCodexFolder(directory) };
+var POST_FOLDER = { format: "post", noun: "the posts", folder: "dist/posts", isOwn: (directory) => isPostFolder(directory) };
+function resolveOutputDirectory(project, out, kind) {
+  return withFlags("out", () => outputDirectory(project, out, kind));
 }
-function outputDirectory(project, out, defaultRelativePath) {
-  const rawOut = out ?? defaultRelativePath;
+function outputDirectory(project, out, kind) {
+  const rawOut = out ?? kind.folder;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a folder path");
   }
@@ -33538,7 +33642,7 @@ function outputDirectory(project, out, defaultRelativePath) {
   const enforceRoot = !path38.isAbsolute(String(rawOut));
   const toRoot = path38.relative(directory, project.root);
   if (!toRoot.startsWith("..") && !path38.isAbsolute(toRoot)) {
-    throw refusedError(`Refusing to write the codex to ${rawOut}: it holds the project. Use a folder such as dist/codex instead`);
+    throw refusedError(`Refusing to write ${kind.noun} to ${rawOut}: it holds the project. Use a folder such as ${kind.folder} instead`);
   }
   let stats;
   try {
@@ -33548,10 +33652,10 @@ function outputDirectory(project, out, defaultRelativePath) {
     throw withDefaultExitCode(error, EXIT_CODES.refused);
   }
   if (stats !== null && !stats.isDirectory()) {
-    throw usageError(`--out ${rawOut} is not a folder: give a folder for --format codex`);
+    throw usageError(`--out ${rawOut} is not a folder: give a folder for --format ${kind.format}`);
   }
-  if (stats !== null && fs24.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
-    throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
+  if (stats !== null && fs24.readdirSync(directory).length > 0 && !kind.isOwn(directory)) {
+    throw refusedError(`Refusing to write ${kind.noun} into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as ${kind.folder}`);
   }
   return { directory, writeOptions: enforceRoot ? { root: project.root, flags: "out" } : { flags: "out" } };
 }
@@ -33579,6 +33683,60 @@ function removeStaleCodexPages(directory, written) {
       removeDirectory(folder);
     }
   }
+}
+function buildPosts(project, out, selection) {
+  const { meta, chapters, warnings } = bookChapters(project);
+  const all = project.chapters;
+  const range = postRange(all, selection);
+  const width = Math.max(2, String(Math.max(...all.map((chapter) => chapter.number))).length);
+  const name = (chapter) => `${String(chapter.number).padStart(width, "0")}-${chapter.id}`;
+  const selected = all.slice(range.start, range.end + 1);
+  for (const chapter of selected) {
+    if (!isKebabId(chapter.id)) {
+      throw projectError(`${relative(project, chapter.file)}: chapter ids must be kebab-case to build posts, since they name the files`);
+    }
+  }
+  const output = resolveOutputDirectory(project, out, POST_FOLDER);
+  const sceneBreak = buildStyle(project.story.data).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
+  const files = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  const empty = [];
+  for (const [offset, chapter] of selected.entries()) {
+    const book = chapters[range.start + offset];
+    const label = relative(project, chapter.file);
+    const episode = { byline: book.byline, body: book.body, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    if (wordCount(book.body) === 0) {
+      empty.push(warn("empty-chapter", `${label} has no prose yet and is built as an empty post`, label));
+    }
+    writeFile(path38.join(output.directory, `${name(chapter)}.html`), postHtml(episode), output.writeOptions);
+    writeFile(path38.join(output.directory, `${name(chapter)}.txt`), postText(episode, sceneBreak), output.writeOptions);
+  }
+  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postFiles(output.directory) : [];
+  for (const file of listed) {
+    if (!files.has(file)) {
+      removeFile(path38.join(output.directory, file));
+    }
+  }
+  const others = warnings.filter((finding) => finding.code !== "empty-chapter");
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, warnings: [...others, ...empty] };
+}
+function postRange(chapters, { chapter, from, to }) {
+  if (chapter !== undefined) {
+    const index = chapterIndex2(chapters, chapter, "--chapter");
+    return { start: index, end: index };
+  }
+  const start = from === undefined ? 0 : chapterIndex2(chapters, from, "--from");
+  const end = to === undefined ? chapters.length - 1 : chapterIndex2(chapters, to, "--to");
+  if (start > end) {
+    throw usageError(`--from ${from ?? chapters[0].id} comes after --to ${to ?? chapters.at(-1).id}: give the earlier chapter first`, ["from", "to"]);
+  }
+  return { start, end };
+}
+var POST_FILE = /^\d+-[a-z0-9]+(?:-[a-z0-9]+)*\.(?:html|txt)$/;
+function postFiles(directory) {
+  return fs24.readdirSync(directory, { withFileTypes: true }).filter((entry) => entry.isFile() && POST_FILE.test(entry.name)).map((entry) => entry.name);
+}
+function isPostFolder(directory) {
+  return fs24.readdirSync(directory, { withFileTypes: true }).every((entry) => entry.name.startsWith(".") || entry.isFile() && POST_FILE.test(entry.name));
 }
 function projectBuildStyle(project) {
   const errors = [];
@@ -34211,7 +34369,7 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
     writeOptions: shouldEnforceRoot ? { root: project.root, flags: "out" } : { flags: "out" }
   };
 }
-var NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics"]);
+var NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics", "post"]);
 var BUILD_EXTENSIONS = {
   markdown: "md",
   epub: "epub",
@@ -34225,7 +34383,8 @@ var BUILD_EXTENSIONS = {
   twee: "twee",
   ink: "ink",
   ics: "ics",
-  codex: ""
+  codex: "",
+  post: ""
 };
 var SHUNN_DOCX_EXTENSION = "shunn.docx";
 var PDF_EXTENSIONS = { print: "pdf", shunn: "shunn.pdf" };
@@ -41570,12 +41729,13 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       "sheet), fountain (screenplay scene skeleton),",
       "twee (Twine story from chapter choices), ink",
       "(ink story from chapter choices), ics (calendar of",
-      "the deadline, release dates, and daily target), or",
+      "the deadline, release dates, and daily target),",
       "codex (story bible as linked HTML pages in",
-      "dist/codex/)"
+      "dist/codex/), or post (each chapter as a serial",
+      "episode to paste, HTML and text, in dist/posts/)"
     ],
     project: "positional",
-    options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", ...WRITE_OPTIONS],
+    options: ["out", "format", "shunn", "anonymous", "trim", "paper", "stamp", "note-url", "pdf", "pdf-engine", "spoilers", "include-pending", "chapter", "from", "to", ...WRITE_OPTIONS],
     run({ parsed, io, cwd, root, overrides, defaulted }) {
       const pdf = isTruthy(parsed.options.pdf);
       const dryRun = isTruthy(parsed.options["dry-run"]);
@@ -41595,7 +41755,10 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
         pdfEngine: pdf || !defaulted.has("pdf-engine") ? parsed.options["pdf-engine"] : undefined,
         cwd,
         spoilers: isTruthy(parsed.options.spoilers),
-        includePending: isTruthy(parsed.options["include-pending"])
+        includePending: isTruthy(parsed.options["include-pending"]),
+        chapter: parsed.options.chapter,
+        from: parsed.options.from,
+        to: parsed.options.to
       }));
       const findings = checkedWarnings(result.warnings, overrides);
       if (wantsJson(parsed)) {
@@ -41608,6 +41771,7 @@ ${choiceChanges(result, false)}`, (result) => choiceChanges(result, true));
       }
       const as = result.pdf ? `${result.format} PDF (${result.engine})` : result.format;
       io.stdout.write(result.format === "codex" ? `Built a codex of ${result.pages} pages to ${result.outFile}
+` : result.format === "post" ? `Built ${plural(result.posts, "post")} (HTML and text) to ${result.outFile}
 ` : result.format === "ics" ? `Built a calendar of ${plural(result.events, "event")} to ${result.outFile}
 ` : `Built ${result.chapters} chapters as ${as} to ${result.outFile}
 `);
@@ -42023,6 +42187,7 @@ function buildData(result) {
     chapters: result.chapters,
     pages: result.pages ?? null,
     events: result.events ?? null,
+    posts: result.posts ?? null,
     pdf: result.pdf === true,
     engine: result.engine ?? null
   };

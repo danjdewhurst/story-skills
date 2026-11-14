@@ -19,6 +19,7 @@ export default {
     "published-by": "الناشر: {publisher}",
     "scene-break": "فاصل بين المشاهد",
     footnotes: "الحواشي",
+    "author-note": "ملاحظة ختامية",
     "cover-alt": "غلاف كتاب {title}",
     "start-of-content": "بداية المحتوى",
     "accessibility-summary": "كتاب نصي فقط، فيه فهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",

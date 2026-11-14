@@ -12,6 +12,8 @@ import { PROGRESS_FILE, cleanSessions, writingDays } from "./progress.js";
 import { parseClockDate } from "./continuity.js";
 import { icsCalendar, scheduleEvents } from "./ics.js";
 import { releaseDates } from "./release-schedule.js";
+import { chapterIndex } from "./grid.js";
+import { authorNoteText, DEFAULT_TEXT_SCENE_BREAK, postHtml, postText } from "./posts.js";
 import {
   chapterHeading,
   chapterProse,
@@ -144,6 +146,14 @@ export function buildBook(root, options = {}) {
   if (options.spoilers && format !== "codex") {
     throw usageError("--spoilers applies only to --format codex", ["spoilers", "format"]);
   }
+  for (const [flag, value] of [["chapter", options.chapter], ["from", options.from], ["to", options.to]]) {
+    if (value !== undefined && format !== "post") {
+      throw usageError(`--${flag} applies only to --format post`, [flag, "format"]);
+    }
+  }
+  if (options.chapter !== undefined && (options.from !== undefined || options.to !== undefined)) {
+    throw usageError("--chapter builds one chapter: give it alone, or give a range with --from and --to", ["chapter", options.from === undefined ? "to" : "from"]);
+  }
   // Every build reads the book as it would print, without the matter pages
   // whose permission is not cleared. Only one that prints matter warns about
   // them: the metadata sheet's checklist names them instead.
@@ -158,6 +168,9 @@ export function buildBook(root, options = {}) {
   const project = scanProject(root);
   if (format === "codex") {
     return buildCodex(project, options.out, Boolean(options.spoilers));
+  }
+  if (format === "post") {
+    return buildPosts(project, options.out, { chapter: options.chapter, from: options.from, to: options.to });
   }
   const extension = options.pdf ? PDF_EXTENSIONS[format] : options.shunn ? SHUNN_DOCX_EXTENSION : BUILD_EXTENSIONS[format];
   const defaultOut = `dist/${fileStem(project.storyId)}.${extension}`;
@@ -373,7 +386,7 @@ function buildCodex(project, out, spoilers) {
   if (progressError) {
     throw projectError(`Cannot build the codex: fix this file first (story validate reports it):\n- ${progressError.message}`);
   }
-  const output = resolveOutputDirectory(project, out, "dist/codex");
+  const output = resolveOutputDirectory(project, out, CODEX_FOLDER);
   const pages = codexPages(project, { spoilers });
   // Each page replaces its old copy in one rename, and stale pages go only
   // once every new one is written, so the folder always holds a whole
@@ -388,14 +401,20 @@ function buildCodex(project, out, spoilers) {
   return { outFile: output.directory, chapters: project.chapters.length, format: "codex", pages: pages.length, warnings: [] };
 }
 
-// The codex folder: outside the project's source and not holding the
-// project, and either new, empty, or an earlier codex.
-function resolveOutputDirectory(project, out, defaultRelativePath) {
-  return withFlags("out", () => outputDirectory(project, out, defaultRelativePath));
+// The builds that write a folder rather than one file: what they call it,
+// their default folder, and how to tell a folder an earlier build of theirs
+// wrote, which a rebuild may write into.
+const CODEX_FOLDER = { format: "codex", noun: "the codex", folder: "dist/codex", isOwn: (directory) => isCodexFolder(directory) };
+const POST_FOLDER = { format: "post", noun: "the posts", folder: "dist/posts", isOwn: (directory) => isPostFolder(directory) };
+
+// A build's folder: outside the project's source and not holding the
+// project, and either new, empty, or an earlier build of the same format.
+function resolveOutputDirectory(project, out, kind) {
+  return withFlags("out", () => outputDirectory(project, out, kind));
 }
 
-function outputDirectory(project, out, defaultRelativePath) {
-  const rawOut = out ?? defaultRelativePath;
+function outputDirectory(project, out, kind) {
+  const rawOut = out ?? kind.folder;
   if (String(rawOut).trim() === "") {
     throw usageError("--out needs a folder path");
   }
@@ -403,7 +422,7 @@ function outputDirectory(project, out, defaultRelativePath) {
   const enforceRoot = !path.isAbsolute(String(rawOut));
   const toRoot = path.relative(directory, project.root);
   if (!toRoot.startsWith("..") && !path.isAbsolute(toRoot)) {
-    throw refusedError(`Refusing to write the codex to ${rawOut}: it holds the project. Use a folder such as dist/codex instead`);
+    throw refusedError(`Refusing to write ${kind.noun} to ${rawOut}: it holds the project. Use a folder such as ${kind.folder} instead`);
   }
   let stats;
   try {
@@ -413,10 +432,10 @@ function outputDirectory(project, out, defaultRelativePath) {
     throw withDefaultExitCode(error, EXIT_CODES.refused);
   }
   if (stats !== null && !stats.isDirectory()) {
-    throw usageError(`--out ${rawOut} is not a folder: give a folder for --format codex`);
+    throw usageError(`--out ${rawOut} is not a folder: give a folder for --format ${kind.format}`);
   }
-  if (stats !== null && fs.readdirSync(directory).length > 0 && !isCodexFolder(directory)) {
-    throw refusedError(`Refusing to write the codex into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as dist/codex`);
+  if (stats !== null && fs.readdirSync(directory).length > 0 && !kind.isOwn(directory)) {
+    throw refusedError(`Refusing to write ${kind.noun} into ${projectPath(project.root, directory)}: it holds other files. Use a new or empty folder, such as ${kind.folder}`);
   }
   return { directory, writeOptions: enforceRoot ? { root: project.root, flags: "out" } : { flags: "out" } };
 }
@@ -462,6 +481,89 @@ function removeStaleCodexPages(directory, written) {
       removeDirectory(folder);
     }
   }
+}
+
+// `build --format post`: each chapter as a serial episode, dist/posts/ by
+// default: an HTML fragment to paste into a serial site or newsletter and a
+// plain-text file beside it, named by chapter number and id
+// (03-the-bell.html, 03-the-bell.txt) so they sort in reading order.
+// --chapter, or --from and --to, build only the episodes due. A chapter's
+// author-note prints after the episode; no other build reads it. A rebuild
+// removes the posts an earlier build wrote for a chapter that is gone,
+// renamed, or renumbered, and keeps every current chapter's, built this
+// time or not; a folder that holds anything else is refused rather than
+// mixed into.
+function buildPosts(project, out, selection) {
+  const { meta, chapters, warnings } = bookChapters(project);
+  const all = project.chapters;
+  const range = postRange(all, selection);
+  const width = Math.max(2, String(Math.max(...all.map((chapter) => chapter.number))).length);
+  const name = (chapter) => `${String(chapter.number).padStart(width, "0")}-${chapter.id}`;
+  const selected = all.slice(range.start, range.end + 1);
+  for (const chapter of selected) {
+    if (!isKebabId(chapter.id)) {
+      throw projectError(`${relative(project, chapter.file)}: chapter ids must be kebab-case to build posts, since they name the files`);
+    }
+  }
+  const output = resolveOutputDirectory(project, out, POST_FOLDER);
+  const sceneBreak = buildStyle(project.story.data).sceneBreak || DEFAULT_TEXT_SCENE_BREAK;
+  const files = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
+  const empty = [];
+  for (const [offset, chapter] of selected.entries()) {
+    const book = chapters[range.start + offset];
+    const label = relative(project, chapter.file);
+    const episode = { byline: book.byline, body: book.body, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    if (wordCount(book.body) === 0) {
+      empty.push(warn("empty-chapter", `${label} has no prose yet and is built as an empty post`, label));
+    }
+    writeFile(path.join(output.directory, `${name(chapter)}.html`), postHtml(episode), output.writeOptions);
+    writeFile(path.join(output.directory, `${name(chapter)}.txt`), postText(episode, sceneBreak), output.writeOptions);
+  }
+  // A --dry-run writes nothing, so a new folder is not there to list.
+  const listed = lstatIfExists(output.directory)?.isDirectory() === true ? postFiles(output.directory) : [];
+  for (const file of listed) {
+    if (!files.has(file)) {
+      removeFile(path.join(output.directory, file));
+    }
+  }
+  // bookChapters warns about every empty chapter; a post build names only
+  // the ones it built.
+  const others = warnings.filter((finding) => finding.code !== "empty-chapter");
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, warnings: [...others, ...empty] };
+}
+
+// The chapters --chapter, or --from and --to, pick, as indexes into the
+// project's chapters in reading order; every chapter without them. Each
+// takes a chapter id or number, as story grid's --from and --to do.
+function postRange(chapters, { chapter, from, to }) {
+  if (chapter !== undefined) {
+    const index = chapterIndex(chapters, chapter, "--chapter");
+    return { start: index, end: index };
+  }
+  const start = from === undefined ? 0 : chapterIndex(chapters, from, "--from");
+  const end = to === undefined ? chapters.length - 1 : chapterIndex(chapters, to, "--to");
+  if (start > end) {
+    throw usageError(`--from ${from ?? chapters[0].id} comes after --to ${to ?? chapters.at(-1).id}: give the earlier chapter first`, ["from", "to"]);
+  }
+  return { start, end };
+}
+
+// A file the post build writes: the chapter number, then its id, as .html
+// or .txt.
+const POST_FILE = /^\d+-[a-z0-9]+(?:-[a-z0-9]+)*\.(?:html|txt)$/;
+
+// The posts in a folder, by name: plain files only, so a symlink or a
+// folder with a post's name is never one.
+function postFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && POST_FILE.test(entry.name))
+    .map((entry) => entry.name);
+}
+
+// A folder an earlier post build wrote: nothing in it but posts, besides
+// the hidden files an operating system adds (.DS_Store).
+function isPostFolder(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).every((entry) => entry.name.startsWith(".") || (entry.isFile() && POST_FILE.test(entry.name)));
 }
 
 // story.md build-style for the EPUB, review copy, and print interior, with
@@ -1264,7 +1366,7 @@ function outputPath(project, out, defaultRelativePath, enforceRoot) {
 // The formats that print no matter pages, as docx --shunn prints none.
 // Every other format prints them, so a new one leaves out and warns about
 // the pages whose permission is not cleared unless it is listed here.
-const NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics"]);
+const NO_MATTER_FORMATS = new Set(["shunn", "metadata", "fountain", "twee", "ink", "codex", "ics", "post"]);
 
 // The file extension of each build format; its keys are the formats
 // --format accepts, besides BUILD_FORMAT_ALIASES.
@@ -1282,7 +1384,10 @@ export const BUILD_EXTENSIONS = {
   ink: "ink",
   ics: "ics",
   // A folder of pages, dist/codex/, rather than one file.
-  codex: ""
+  codex: "",
+  // A folder of episodes, dist/posts/: an HTML fragment and a text file
+  // for each chapter.
+  post: ""
 };
 
 // The file extension of a --format docx --shunn build, so it does not

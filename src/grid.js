@@ -79,7 +79,7 @@ export function buildGrid(project, options = {}) {
 }
 
 // A --from or --to value: a chapter id, or a chapter number.
-function chapterIndex(chapters, value, flag) {
+export function chapterIndex(chapters, value, flag) {
   const text = String(value).trim();
   let index = chapters.findIndex((chapter) => chapter.id === text);
   if (index === -1 && /^\d+$/.test(text)) {

@@ -214,6 +214,8 @@ export default {
     // The heading over a chapter's footnotes in the HTML, print, and
     // Shunn builds.
     footnotes: "Notes",
+    // The label over a chapter's author-note in build --format post.
+    "author-note": "Author's note",
     // EPUB: the cover's fallback alt text, the body-matter landmark, and the
     // accessibility summary without and with a cover, and with images in the
     // prose.

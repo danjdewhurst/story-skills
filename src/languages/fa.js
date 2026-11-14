@@ -15,6 +15,7 @@ export default {
     "published-by": "ناشر: {publisher}",
     "scene-break": "تغییر صحنه",
     footnotes: "پانوشت‌ها",
+    "author-note": "یادداشت نویسنده",
     "cover-alt": "جلد کتاب {title}",
     "start-of-content": "آغاز محتوا",
     "accessibility-summary": "کتابی فقط متنی، با فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",

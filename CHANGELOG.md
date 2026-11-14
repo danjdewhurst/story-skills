@@ -62,6 +62,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - What either leaves out, such as comments, footnotes, images, tables, lists, an EPUB contents page, or EPUB documents outside the reading order, is named in a new `import-content-left-out` warning. Word documents keep `docx-content-left-out`.
   - A folder import reads `.odt` and `.epub` files too. A password-protected, damaged, or ZIP64 file is refused, and so is an EPUB locked with DRM or one whose package names a path outside the file or a URL. The parts of one file may come to 64 MB unpacked together.
   - See [Importing an OpenDocument text or an EPUB](docs/manuscripts.md#importing-an-opendocument-text-or-an-epub).
+- `story build --format post` writes each chapter as a serial episode to paste into a serial site or newsletter. See [Serial episodes](docs/manuscripts.md#serial-episodes-post).
+  - Each chapter gets two files in `dist/posts/`, named by number and id so they sort in reading order (`03-chapter-03.html`, `03-chapter-03.txt`): an HTML fragment with no `<head>`, page wrapper, or heading, that keeps italics, bold, scene breaks, block quotes, and hard line breaks, and the same episode as plain text.
+  - `--chapter <id|n>` builds only the episode due, and `--from` and `--to` build a range. They are an error with any other format.
+  - A new chapter field, `author-note`, holds a note to readers. The post build prints it after the episode under a new `author-note` label, which every language pack translates. No other build prints it, and no word count includes it. `story validate` asks for text.
+  - A rebuild deletes the posts of a chapter that is gone, renamed, or renumbered, and keeps every other chapter's. A folder that holds files that are not posts is refused. `--json` gives the episodes written as `data.posts`, which is `null` for every other format.
+  - The `the-left-luggage-office` example has an author's note on its first episode, and the `publishing`, `genre-craft`, and `story-maintenance` skills post serial episodes with it.
 
 ### Changed
 

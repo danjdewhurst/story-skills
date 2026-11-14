@@ -15,6 +15,7 @@ export default {
     "published-by": "Yayıncı: {publisher}",
     "scene-break": "Sahne geçişi",
     footnotes: "Notlar",
+    "author-note": "Yazarın notu",
     "cover-alt": "Kapak: {title}",
     "start-of-content": "İçeriğin başlangıcı",
     "accessibility-summary": "Gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan, yalnızca metinden oluşan kitap.",

@@ -18,6 +18,7 @@ export default {
     "published-by": "Издатель: {publisher}",
     "scene-break": "Смена сцены",
     footnotes: "Примечания",
+    "author-note": "Авторское примечание",
     "cover-alt": "Обложка книги «{title}»",
     "start-of-content": "Начало текста",
     "accessibility-summary": "Книга, содержащая только текст, с навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",

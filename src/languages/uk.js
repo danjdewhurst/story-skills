@@ -18,6 +18,7 @@ export default {
     "published-by": "Видавець: {publisher}",
     "scene-break": "Зміна сцени",
     footnotes: "Примітки",
+    "author-note": "Авторська примітка",
     "cover-alt": "Обкладинка книжки «{title}»",
     "start-of-content": "Початок тексту",
     "accessibility-summary": "Книжка, що містить лише текст, із навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
