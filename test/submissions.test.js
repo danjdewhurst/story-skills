@@ -122,7 +122,7 @@ describe("story submissions", () => {
     const result = invoke(cwd, ["submissions", root, "--date", TODAY]);
     expect(result.code).toBe(1);
     expect(result.err).toContain("Submissions check failed: 5 errors, 0 warnings, 0 dismissed\n");
-    expect(result.err).toContain('error: submission/tracker.md line 11 (Bad Status): Status "sent" is not a tracker status; use one of queried, submitted, held, requested-partial, requested-full, offer, declined, no-response, withdrawn\n');
+    expect(result.err).toContain('error: submission/tracker.md line 11 (Bad Status): Status "sent" is not a tracker status; use one of queried, requested-partial, requested-full, offer, declined, no-response, withdrawn\n');
     expect(result.err).toContain('error: submission/tracker.md line 12 (Bad Date): Date Sent "2026-13-01" must be a real YYYY-MM-DD calendar day\n');
     expect(result.err).toContain('error: submission/tracker.md line 13 (Bad Reply): Response Date "June 5" must be a real YYYY-MM-DD calendar day\n');
     expect(result.err).toContain("error: submission/tracker.md line 14: Status is empty;");
@@ -203,7 +203,7 @@ describe("story submissions", () => {
 
   test("only the statuses that await a reply wait, each counted once", () => {
     const { cwd, root } = project();
-    writeTracker(root, `${BOOK_HEADER}${SUBMISSION_STATUSES.map((status, index) => `| Agent ${index} | 2026-01-01 | query | ${index === 0 ? "Queried" : status} | | |`).join("\n")}\n`);
+    writeTracker(root, `| Market | Date Sent | Type | Status |\n|---|---|---|---|\n${SUBMISSION_STATUSES.map((status, index) => `| Market ${index} | 2026-01-01 | simultaneous | ${index === 0 ? "Queried" : status} |`).join("\n")}\n`);
     const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
     expect(code).toBe(0);
     expect(envelope.data.counts).toEqual(Object.fromEntries(SUBMISSION_STATUSES.map((status) => [status, 1])));
@@ -215,6 +215,30 @@ describe("story submissions", () => {
     // No frontmatter: rows count from line 3.
     expect(envelope.data.rows[0].line).toBe(3);
     expect(envelope.data).toMatchObject({ waiting: 5, overdue: 5 });
+  });
+
+  test("a book's table refuses the short-fiction statuses submitted and held", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker([
+      "| Ada Byrne | 2026-01-01 | query | held | | |",
+      "| Tom Reyes | 2026-01-01 | query | Submitted | | |",
+      "| Lena Okafor | 2026-01-01 | query | queried | | |"
+    ]));
+    const result = invoke(cwd, ["submissions", root, "--date", TODAY]);
+    expect(result.code).toBe(1);
+    const books = "a book's tracker uses one of queried, requested-partial, requested-full, offer, declined, no-response, withdrawn";
+    expect(result.err).toContain(`error: submission/tracker.md line 11 (Ada Byrne): Status "held" is for short fiction, in a table with a Market, Type, or Rights Offered column; ${books}\n`);
+    expect(result.err).toContain(`error: submission/tracker.md line 12 (Tom Reyes): Status "submitted" is for short fiction, in a table with a Market, Type, or Rights Offered column; ${books}\n`);
+    const { envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    // Neither row is counted or waiting; only the query is due.
+    expect(envelope.data.counts).toMatchObject({ queried: 1, submitted: 0, held: 0 });
+    expect(envelope.data).toMatchObject({ waiting: 1, overdue: 1 });
+    expect(envelope.diagnostics.map((entry) => entry.code)).toEqual(["submission-invalid-status", "submission-invalid-status", "submission-overdue"]);
+    // The same rows in a short-fiction table, marked by any one of its columns, pass.
+    for (const header of ["Market", "Type", "Rights Offered"]) {
+      writeTracker(root, `| ${header === "Market" ? "Market" : "Name"} | Date Sent | ${header === "Market" ? "Notes" : header} | Status |\n|---|---|---|---|\n| A | 2026-10-01 | x | held |\n| B | 2026-10-01 | x | submitted |\n`);
+      expect(json(cwd, ["submissions", root, "--date", TODAY]).envelope.diagnostics).toEqual([]);
+    }
   });
 
   test("strips marks from every column, and skips only the template's placeholder row", () => {

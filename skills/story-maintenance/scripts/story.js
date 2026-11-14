@@ -21863,6 +21863,9 @@ function formatSimilarity(report) {
 import path15 from "node:path";
 var SUBMISSION_TRACKER = "submission/tracker.md";
 var SUBMISSION_STATUSES = ["queried", "submitted", "held", "requested-partial", "requested-full", "offer", "declined", "no-response", "withdrawn"];
+var SHORT_FICTION_STATUSES = new Set(["submitted", "held"]);
+var BOOK_STATUSES = SUBMISSION_STATUSES.filter((status) => !SHORT_FICTION_STATUSES.has(status));
+var SHORT_FICTION_HEADERS = ["market", "type", "rights offered"];
 var WAITING_STATUSES = new Set(["queried", "submitted", "held", "requested-partial", "requested-full"]);
 var DEFAULT_FOLLOW_UP_DAYS = 90;
 var MAX_TRACKER_ROWS = 1e4;
@@ -22019,7 +22022,7 @@ function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }) {
       if (placeholderRow(cells.cells)) {
         continue;
       }
-      result.rows.push(checkRow(trackerRow(table.headers, cells), todayDays, days, result));
+      result.rows.push(checkRow(trackerRow(table.headers, cells), shortFiction(table.headers), todayDays, days, result));
     }
   }
   result.waiting = result.rows.filter((row) => row.waitingSince !== null).length;
@@ -22027,16 +22030,24 @@ function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }) {
   result.ok = result.errors.length === 0;
   return result;
 }
-function checkRow(row, todayDays, days, result) {
+function shortFiction(headers) {
+  return SHORT_FICTION_HEADERS.some((header) => headers.includes(header));
+}
+function checkRow(row, isShortFiction, todayDays, days, result) {
   const label = rowLabel(row);
   const status = (row.status ?? "").toLowerCase();
   row.status = status;
+  const allowed = isShortFiction ? SUBMISSION_STATUSES : BOOK_STATUSES;
+  let valid = false;
   if (status === "") {
-    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
-  } else if (!SUBMISSION_STATUSES.includes(status)) {
-    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
+    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
+  } else if (!isShortFiction && SHORT_FICTION_STATUSES.has(status)) {
+    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is for short fiction, in a table with a Market, Type, or Rights Offered column; a book's tracker uses one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
+  } else if (!allowed.includes(status)) {
+    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${allowed.join(", ")}`, SUBMISSION_TRACKER));
   } else {
     result.counts[status] += 1;
+    valid = true;
   }
   const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
   const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
@@ -22049,7 +22060,7 @@ function checkRow(row, todayDays, days, result) {
   row.waitingSince = null;
   row.waitingDays = null;
   row.overdue = false;
-  if (WAITING_STATUSES.has(status) && since !== undefined) {
+  if (valid && WAITING_STATUSES.has(status) && since !== undefined) {
     row.waitingSince = since.text;
     row.waitingDays = todayDays - since.days;
     row.overdue = row.waitingDays >= days;
