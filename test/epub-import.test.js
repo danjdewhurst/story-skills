@@ -78,7 +78,9 @@ describe("epubMarkdown", () => {
       "<p>Fish &amp; chips &mdash; &lt;b&gt; &ldquo;quoted&rdquo;&nbsp;now &#x2014; *stars* and _under_.</p>",
       "<div>Loose text in a div.<p>A paragraph inside it.</p>And after.</div>",
       "<p>Chapter 2</p>",
-      "<pre>one\ntwo</pre>"
+      "<pre>one\ntwo</pre>",
+      "<pre>\nif (ready) {\n    go(\"now\",  later);\n\treturn;\n}  </pre>",
+      "<pre>  <em>Lead</em> word<br/>  after</pre>"
     ].join("\n");
     const { text, notes } = markdown([body]);
     expect(text).toBe([
@@ -95,7 +97,9 @@ describe("epubMarkdown", () => {
       "A paragraph inside it.",
       "And after.",
       "# Chapter 2",
-      "one\\\ntwo"
+      "one\\\ntwo",
+      "if (ready) {\\\n\u00a0\u00a0\u00a0\u00a0go(\"now\", \u00a0later);\\\n\u00a0\u00a0\u00a0\u00a0return;\\\n}",
+      "\u00a0\u00a0*Lead* word\\\n\u00a0\u00a0after"
     ].join("\n\n") + "\n");
     expect(notes).toEqual([]);
   });
@@ -210,13 +214,21 @@ describe("epubMarkdown", () => {
   });
 
   test("never reads a path outside the archive or a URL", () => {
-    for (const href of ["../../secret.xhtml", "/etc/passwd", "http://example.com/a.xhtml", "file:///etc/passwd", "text\\d1.xhtml", "%2E%2E/%2E%2E/x.xhtml", "text/%E0%A4%A.xhtml"]) {
+    for (const href of ["../../secret.xhtml", "/etc/passwd", "http://example.com/a.xhtml", "file:///etc/passwd", "text\\d1.xhtml", "%2E%2E/%2E%2E/x.xhtml", "../../100%.xhtml", "/100%.xhtml", "http://example.com/100%.xhtml"]) {
       const opf = packageXml([{ id: "d1", href }]);
       expect(() => markdown(["<p>Text.</p>"], { opf, entries: [{ name: "secret.xhtml", content: xhtml("<p>Secret.</p>") }] })).toThrow("which is not a path inside the file");
     }
     expect(archivePath("OEBPS/", "text/../text/./d1.xhtml#start")).toBe("OEBPS/text/d1.xhtml");
     expect(archivePath("OEBPS/", "../d1.xhtml")).toBe("d1.xhtml");
     expect(archivePath("", "../d1.xhtml")).toBe(null);
+  });
+
+  test("reads an href with a % that is not an escape as written", () => {
+    expect(archivePath("OEBPS/", "text/100%.xhtml#top")).toBe("OEBPS/text/100%.xhtml");
+    expect(archivePath("OEBPS/", "text/%E0%A4%A.xhtml")).toBe("OEBPS/text/%E0%A4%A.xhtml");
+    const opf = packageXml([{ id: "d1", href: "text/100%.xhtml" }, { id: "d2", href: "text/half%20way.xhtml" }]);
+    const book = markdown([], { opf, entries: [{ name: "OEBPS/text/100%.xhtml", content: xhtml('<p>All of it. <a href="half%20way.xhtml">On</a></p>') }, { name: "OEBPS/text/half way.xhtml", content: xhtml("<p>Half way.</p>") }] });
+    expect(book.text).toBe("All of it. On\n\nHalf way.\n");
   });
 
   test("refuses a document locked with DRM, and reads one whose fonts alone are obfuscated", () => {

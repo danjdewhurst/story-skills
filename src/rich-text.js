@@ -38,8 +38,10 @@ export const HARD_BREAK = LINE_BREAK;
 // which splits it. `level` is its heading level (0 for body text), and
 // `quote` makes body text a block quote. `chapterLine` tells a chapter
 // line ("Chapter 3", "Prologue") from prose: it returns null, or { bare }
-// where bare is true when the line has no title of its own.
-export function paragraphBlocks(runs, level, quote, chapterLine) {
+// where bare is true when the line has no title of its own. A
+// `preformatted` paragraph keeps the no-break spaces that open or end its
+// lines, so an indented line keeps its indent.
+export function paragraphBlocks(runs, level, quote, chapterLine, { preformatted = false } = {}) {
   const pieces = [[]];
   for (const run of runs) {
     const parts = run.text.replace(/\u00ad/g, "").split(PARAGRAPH_BREAK);
@@ -50,7 +52,7 @@ export function paragraphBlocks(runs, level, quote, chapterLine) {
       pieces.at(-1).push({ ...run, text: part });
     });
   }
-  return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
+  return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine, false, preformatted)).filter((block) => block !== "");
 }
 
 // The bytes a block adds to the markdown: its own, and the blank line
@@ -93,7 +95,7 @@ export function markdownBlocks(maxBytes = Infinity) {
 // hard break needs no backslash, unless a blank line inside the paragraph
 // would end it, or a line shaped like a scene break (`***`), which only a
 // backslash at a line end keeps in the paragraph.
-function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
+function blockMarkdown(runs, level, quote, chapterLine, verse = false, preformatted = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
   const lines = plain.split(LINE_BREAK).map((line) => line.trim()).filter((line) => line !== "");
   if (lines.length === 0) {
@@ -122,7 +124,11 @@ function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   if (level > 0) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
-  const kept = inlineMarkdown(runs).split(LINE_BREAK).map((line) => line.trim()).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1));
+  // A preformatted line keeps the no-break spaces that indent it (the
+  // reader turns every space that opens a line into one), and loses only
+  // the white space that ends it, which shows nothing.
+  const trim = preformatted ? (line) => line.trimEnd() : (line) => line.trim();
+  const kept = inlineMarkdown(runs).split(LINE_BREAK).map(trim).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1));
   const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
   const text = kept.join(plainBreaks ? "\n" : "\\\n");
   const block = escapeBlockStart(text);

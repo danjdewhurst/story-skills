@@ -23658,7 +23658,7 @@ function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
   return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
 }
 var HARD_BREAK = LINE_BREAK4;
-function paragraphBlocks(runs, level, quote, chapterLine) {
+function paragraphBlocks(runs, level, quote, chapterLine, { preformatted = false } = {}) {
   const pieces = [[]];
   for (const run of runs) {
     const parts = run.text.replace(/\u00ad/g, "").split(PARAGRAPH_BREAK);
@@ -23669,7 +23669,7 @@ function paragraphBlocks(runs, level, quote, chapterLine) {
       pieces.at(-1).push({ ...run, text: part });
     });
   }
-  return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
+  return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine, false, preformatted)).filter((block) => block !== "");
 }
 function blockBytes(block) {
   return Buffer.byteLength(block, "utf8") + 2;
@@ -23700,7 +23700,7 @@ function markdownBlocks(maxBytes = Infinity) {
     }
   };
 }
-function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
+function blockMarkdown(runs, level, quote, chapterLine, verse = false, preformatted = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
   const lines = plain.split(LINE_BREAK4).map((line) => line.trim()).filter((line) => line !== "");
   if (lines.length === 0) {
@@ -23721,7 +23721,8 @@ function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   if (level > 0) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
-  const kept = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
+  const trim = preformatted ? (line) => line.trimEnd() : (line) => line.trim();
+  const kept = inlineMarkdown(runs).split(LINE_BREAK4).map(trim).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
   const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
   const text = kept.join(plainBreaks ? `
 ` : "\\\n");
@@ -24156,7 +24157,7 @@ function epubMarkdown(bytes, { chapterLine = () => null, partHeading = () => fal
           paragraphs += 1;
           linked += allLinks ? 1 : 0;
         }
-        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine);
+        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine, { preformatted: paragraph.runs.every((run) => run.pre) });
         const bytes = found.reduce((total, block) => total + blockBytes(block), 0);
         keptBytes += allLinks ? 0 : bytes;
         linkedBytes += allLinks ? bytes : 0;
@@ -24212,7 +24213,7 @@ function archivePath(base, href) {
   try {
     decoded = decodeURIComponent(bare);
   } catch {
-    return null;
+    decoded = bare;
   }
   if (decoded === "" || /^[a-z][a-z0-9+.-]*:/i.test(decoded) || decoded.startsWith("/") || decoded.includes("\\")) {
     return null;
@@ -24396,6 +24397,11 @@ function styleEmphasis(style) {
     bold: fontWeight === undefined ? null : fontWeight === "bold" || fontWeight === "bolder" || /^\d+$/.test(fontWeight) && Number(fontWeight) >= 600
   };
 }
+function preformattedSpaces(text, startsLine) {
+  const spaced = text.replace(/\t/g, "    ");
+  const indented = startsLine ? spaced.replace(/^ +/, (spaces) => " ".repeat(spaces.length)) : spaced;
+  return indented.replace(/ {2,}/g, (spaces) => ` ${" ".repeat(spaces.length - 1)}`);
+}
 function xhtmlParagraphs2(xml, notes, leadsToDocument, emit) {
   const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false, link: false }];
   let paragraph = null;
@@ -24414,7 +24420,7 @@ function xhtmlParagraphs2(xml, notes, leadsToDocument, emit) {
     if (paragraph === null) {
       paragraph = { runs: [], level: frame.level, quote: frame.quote };
     }
-    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link });
+    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link, pre: frame.pre });
   };
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
     if (skipping > 0) {
@@ -24429,7 +24435,8 @@ function xhtmlParagraphs2(xml, notes, leadsToDocument, emit) {
     }
     if (token.type === "text") {
       const frame = frames.at(-1);
-      add(frame.pre ? token.text.split(/\r\n?|\n/).map(proseText).join(LINE_BREAK4) : proseText(token.text.replace(/\t/g, " ")));
+      const startsLine = paragraph === null || paragraph.runs.at(-1).text.endsWith(LINE_BREAK4);
+      add(frame.pre ? token.text.split(/\r\n?|\n/).map((line, index) => preformattedSpaces(proseText(line), index > 0 || startsLine)).join(LINE_BREAK4) : proseText(token.text.replace(/\t/g, " ")));
       continue;
     }
     const name = localName(token.name).toLowerCase();
