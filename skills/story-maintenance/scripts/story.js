@@ -13998,8 +13998,9 @@ function formatValue(value) {
 var CHECK_KEYS = ["id", "kind", "where", "level", "message"];
 var CHECK_LEVELS = ["error", "warning"];
 var MAX_CHECK_MESSAGE = 200;
+var MAX_CHECK_ID = 64;
 function checkLabel(item, index) {
-  return typeof item.id === "string" && KEBAB_NAME.test(item.id) ? `story.md check ${item.id}` : `story.md checks[${index}]`;
+  return typeof item.id === "string" && KEBAB_NAME.test(item.id) && item.id.length <= MAX_CHECK_ID ? `story.md check ${item.id}` : `story.md checks[${index}]`;
 }
 function checkDefinitionFindings(project) {
   const errors = [];
@@ -14043,6 +14044,8 @@ function checkProblems(project, item, index, knownFor) {
     errors.push(err("field-not-text", `${label} id ${String(item.id)} is not text: quote it, such as id: "${String(item.id)}"`, "story.md"));
   } else if (typeof item.id !== "string" || !KEBAB_NAME.test(item.id)) {
     errors.push(err("id-not-kebab", `${label} id ${quoted(item.id)} must be kebab-case, such as chapter-needs-hook`, "story.md"));
+  } else if (item.id.length > MAX_CHECK_ID) {
+    errors.push(err("invalid-check", `${label} id is longer than ${MAX_CHECK_ID} characters: keep it to a short name, such as chapter-needs-hook`, "story.md"));
   }
   const spec = readFilterSpec(project, item, label, knownFor);
   for (const problem of spec.problems) {
@@ -22414,9 +22417,19 @@ function parseCommandDefaults(command, item, label, errors) {
   }
   return values;
 }
+var MAX_GUESSES = 5;
+var MAX_GUESSED_CODE = 64;
 function parseSeverity(raw, errors, checks) {
   const severity = {};
   const codes = severityCodes();
+  let guesses = 0;
+  const guess = (code, candidates) => {
+    if (code.length > MAX_GUESSED_CODE || guesses >= MAX_GUESSES) {
+      return "";
+    }
+    guesses += 1;
+    return suggestion(code, candidates.filter((candidate) => candidate.length <= MAX_GUESSED_CODE));
+  };
   for (const [index, item] of listItems(raw, "severity", errors)) {
     const label = `story.md severity[${index}]`;
     const extra = Object.keys(item).filter((key) => key !== "warning" && key !== "level");
@@ -22436,8 +22449,7 @@ function parseSeverity(raw, errors, checks) {
       const id = customCodeId(code);
       if (!checks.has(id)) {
         const defined = [...checks.keys()].map((check) => `custom-${check}`);
-        const guess = code.length <= 64 && defined.length <= 100 ? suggestion(code, defined.filter((candidate) => candidate.length <= 64)) : "";
-        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess}`);
+        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess(code, defined.slice(0, 100))}`);
         continue;
       }
       if (checks.get(id) === "error") {
@@ -22449,7 +22461,7 @@ function parseSeverity(raw, errors, checks) {
       continue;
     }
     if (!codes.includes(code) && !isCustomCode(code)) {
-      errors.push(`${label} names unknown warning ${code}${suggestion(code, codes)}`);
+      errors.push(`${label} names unknown warning ${code}${guess(code, codes)}`);
       continue;
     }
     if (!SEVERITY_LEVELS.includes(item.level)) {

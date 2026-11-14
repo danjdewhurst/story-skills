@@ -189,9 +189,25 @@ function parseCommandDefaults(command, item, label, errors) {
 
 // `checks` maps each story.md check id to its level, so an entry can name
 // the custom-<id> code of a check that reports a warning.
+//
+// A guess at the code meant compares the code with every candidate, so it
+// is made only for a short code, against at most 100 check ids, and only
+// for the first few unknown codes: story.md comes from the project, and
+// every command reads it.
+const MAX_GUESSES = 5;
+const MAX_GUESSED_CODE = 64;
+
 function parseSeverity(raw, errors, checks) {
   const severity = {};
   const codes = severityCodes();
+  let guesses = 0;
+  const guess = (code, candidates) => {
+    if (code.length > MAX_GUESSED_CODE || guesses >= MAX_GUESSES) {
+      return "";
+    }
+    guesses += 1;
+    return suggestion(code, candidates.filter((candidate) => candidate.length <= MAX_GUESSED_CODE));
+  };
   for (const [index, item] of listItems(raw, "severity", errors)) {
     const label = `story.md severity[${index}]`;
     const extra = Object.keys(item).filter((key) => key !== "warning" && key !== "level");
@@ -212,12 +228,8 @@ function parseSeverity(raw, errors, checks) {
     if (isCustomCode(code)) {
       const id = customCodeId(code);
       if (!checks.has(id)) {
-        // A guess compares the code with every check id, so it is made only
-        // for a short code among a few checks: story.md comes from the
-        // project, and every command reads it.
         const defined = [...checks.keys()].map((check) => `custom-${check}`);
-        const guess = code.length <= 64 && defined.length <= 100 ? suggestion(code, defined.filter((candidate) => candidate.length <= 64)) : "";
-        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess}`);
+        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess(code, defined.slice(0, 100))}`);
         continue;
       }
       if (checks.get(id) === "error") {
@@ -229,7 +241,7 @@ function parseSeverity(raw, errors, checks) {
       continue;
     }
     if (!codes.includes(code) && !isCustomCode(code)) {
-      errors.push(`${label} names unknown warning ${code}${suggestion(code, codes)}`);
+      errors.push(`${label} names unknown warning ${code}${guess(code, codes)}`);
       continue;
     }
     if (!SEVERITY_LEVELS.includes(item.level)) {
