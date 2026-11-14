@@ -5,12 +5,14 @@
 import { Buffer } from "node:buffer";
 import { deflateRaw } from "./deflate.js";
 import { readFileBytes, writeFile } from "./files.js";
+import { projectError } from "./exit-codes.js";
+import { imageSize, proseImageBytes } from "./scan-cover.js";
 import { cssString, DROP_CAP_RULE, escapeHtml, headingRule, withBlockquotes } from "./html.js";
 import { CLASSIC_STYLE, styleFonts } from "./build-style.js";
 import { fillLabel, languagePack } from "./languages/index.js";
 import { formatNumber, pluralLabelKey } from "./languages/locale.js";
 import { characterReference } from "./entities.js";
-import { autolinkEnd, breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
+import { autolinkEnd, breaksParagraph, characterCount, codeSpanCloser, collapseSourceSpace, flattenHeadings, footnoteLabel, footnoteMarkers, FOOTNOTE_MARKER, IMAGE_AT, IMAGE_START, IMAGE_TOKEN, isHeadingLine, isSceneBreakLine, plainLinks, softBreak, splitFences, splitFootnotes, trimSourceSpace, withoutFenceMarkers, wordCount } from "./markdown.js";
 import { creditLines, publishingMeta } from "./publishing.js";
 import { typesetting, writtenTag } from "./typesetting.js";
 
@@ -46,7 +48,10 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   // stylesheet is extra.css, linked after it so it can override them.
   const style = manuscript.style ?? CLASSIC_STYLE;
   const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
-  const stylesheet = epubStylesheet(type, style, bylines);
+  // A book whose prose places an image sets it no wider than the page, and
+  // a figure centred, in any reading system.
+  const placesImages = [...manuscript.front, ...manuscript.chapters, ...manuscript.back].some((entry) => [...(entry.images?.values() ?? [])].some((image) => image !== null));
+  const stylesheet = `${epubStylesheet(type, style, bylines)}${placesImages ? EPUB_IMAGE_RULES : ""}`;
   const extra = style.cssText ?? "";
   const head = [
     stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
@@ -55,7 +60,27 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   // A styled book marks its scene breaks and its chapter and matter bodies
   // for the stylesheet; an unstyled one keeps the plain markup.
   // Only indented paragraphs set a first-line indent of their own.
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
+  // Each image file the prose places is stored once, as images/figure-N,
+  // numbered in reading order.
+  const figures = new Map();
+  // Whether every image placed has alt text, for the accessibility claims.
+  let described = true;
+  const figure = (image) => {
+    if (!figures.has(image.filePath)) {
+      const number = figures.size + 1;
+      figures.set(image.filePath, { id: `figure-${number}`, href: `images/figure-${number}.${image.extension}`, image });
+    }
+    return figures.get(image.filePath).href;
+  };
+  const markup = {
+    styled: style.styled,
+    sceneBreak: style.sceneBreak ?? "* * *",
+    ownIndent: style.paragraphs === "indented",
+    image: (image) => {
+      described &&= image.alt !== "";
+      return `<img src="${figure(image)}" alt="${xmlEscape(image.alt)}"/>`;
+    }
+  };
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
@@ -103,8 +128,11 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
     meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
   ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
-  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
+  // Compressed already, as the cover is, so stored as they are.
+  const figureEntries = [...figures.values()].map((entry) => ({ name: `OEBPS/${entry.href}`, content: proseImageBytes(entry.image), stored: true }));
+  const figureItems = [...figures.values()].map((entry) => `<item id="${entry.id}" href="${entry.href}" media-type="${entry.image.mediaType}"/>`);
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels, figures.size > 0, described);
+  const items = [...figureItems, ...documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`)];
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = buildTimestamp();
   writeZip(outFile, [
@@ -117,6 +145,7 @@ export function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...(stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }]),
     ...(extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }]),
     ...coverEntries,
+    ...figureEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
@@ -206,13 +235,17 @@ function navXhtml(title, documents, root, labels, head = "") {
 
 // EPUB Accessibility 1.1 discovery metadata for a text-only book with a
 // table of contents and a single reading order. The summary is in the
-// book's language, from `labels`.
-function epubAccessibilityMeta(hasCover, labels) {
-  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...(hasCover ? ["alternativeText"] : [])];
-  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
+// book's language, from `labels`. A cover or images in the prose
+// (`hasImages`) add a visual access mode, and alternative text when every
+// image has alt text (`described`); the cover always has its own.
+function epubAccessibilityMeta(hasCover, labels, hasImages = false, described = true) {
+  const visual = hasCover || hasImages;
+  const alternative = (hasCover && !hasImages) || (hasImages && described);
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...(alternative ? ["alternativeText"] : [])];
+  const summary = xmlEscape(fillLabel(labels, hasImages && described ? "accessibility-summary-images" : hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
   return [
     `<meta property="schema:accessMode">textual</meta>`,
-    ...(hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : []),
+    ...(visual ? [`<meta property="schema:accessMode">visual</meta>`] : []),
     `<meta property="schema:accessModeSufficient">textual</meta>`,
     ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
     `<meta property="schema:accessibilityHazard">none</meta>`,
@@ -220,14 +253,48 @@ function epubAccessibilityMeta(hasCover, labels) {
   ].join("");
 }
 
-// `markup` is { styled, sceneBreak, ownIndent } from writeEpub; `verse`
-// keeps every line break (see markdownParagraphs).
-function xhtmlParagraphs(body, markup, verse = false) {
+// `markup` is { styled, sceneBreak, ownIndent, image } from writeEpub,
+// where `image` gives an image's <img>; `images` are the part's (see
+// bookBody), and `verse` keeps every line break (see markdownParagraphs). Each footnote marker links to its note, an EPUB footnote
+// aside at the end of the document, whose number links back to the first
+// marker, so a reading system can show the note where it is referenced.
+function xhtmlParagraphs(body, markup, images = null, verse = false) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
-  }))).join("");
+  const { paragraphs, notes } = bookBody(body, { ownIndent: markup.ownIndent, images, verse });
+  const media = {
+    image: markup.image,
+    note: (note) => `<a epub:type="noteref" role="doc-noteref" id="${xhtmlNoteRef(note.number, note.reference)}" href="#note-${note.number}"><sup>${note.number}</sup></a>`
+  };
+  const content = withBlockquotes(paragraphs.filter(shownParagraph).map((paragraph) => {
+    const inline = paragraph.sceneBreak ? "" : paragraph.runs.map((run) => runMarkup(run, xmlEscape, "<br/>", media)).join("");
+    return {
+      quote: Boolean(paragraph.quote),
+      markup: paragraph.sceneBreak ? sceneBreak : paragraph.figure ? `<figure>${inline}</figure>` : `<p>${inline}</p>`
+    };
+  })).join("");
+  const asides = notes.map((note) => {
+    const texts = note.paragraphs.length === 0 ? [[]] : note.paragraphs;
+    const noteParagraphs = texts.map((runs, index) => `<p>${index === 0 ? `<a role="doc-backlink" href="#${xhtmlNoteRef(note.number, 1)}">${note.number}.</a> ` : ""}${runs.map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`);
+    return `<aside epub:type="footnote" role="doc-footnote" id="note-${note.number}">${noteParagraphs.join("")}</aside>`;
+  });
+  return content + asides.join("");
+}
+
+// The EPUB rules for a book whose prose places images: none wider than
+// the page, and a figure centred on a line of its own.
+const EPUB_IMAGE_RULES = `figure { margin: 1em 0; text-align: center; }
+img { max-width: 100%; height: auto; }
+`;
+
+// The id of a footnote marker in an EPUB document: the first reference to
+// note 1 is noteref-1, the second noteref-1-2.
+function xhtmlNoteRef(number, reference) {
+  return reference === 1 ? `noteref-${number}` : `noteref-${number}-${reference}`;
+}
+
+// Whether a paragraph prints: a figure only with an image left in it.
+function shownParagraph(paragraph) {
+  return !paragraph.figure || paragraph.runs.length > 0;
 }
 
 function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
@@ -240,13 +307,13 @@ function chapterXhtml(chapter, root, head, markup) {
   // XHTML needs a non-blank <title>; an untitled chapter uses its heading.
   const title = String(chapter.title ?? "").trim() || heading;
   const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.images, chapter.verse)}`, markup.styled ? "chapter" : "");
 }
 
 function matterXhtml(entry, placement, root, head, markup) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup, entry.images)}`, markup.styled ? "matter" : "");
 }
 
 // The manuscript as HTML parts for the review and print builds. Paragraph
@@ -256,18 +323,48 @@ function matterXhtml(entry, placement, root, head, markup) {
 export function htmlBook(manuscript, ownIndent = false) {
   // A book counted in characters also counts each part's characters.
   const characters = (body) => (manuscript.unit === "characters" ? { characters: characterCount(body) } : {});
-  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
-    if (paragraph.sceneBreak) {
-      return null;
+  // An image is set in the page itself, as a data: URI, so the review copy
+  // and the print interior stay one file; each file is read once.
+  const sources = new Map();
+  const image = (entry) => {
+    if (!sources.has(entry.filePath)) {
+      sources.set(entry.filePath, `data:${entry.mediaType};base64,${Buffer.from(proseImageBytes(entry)).toString("base64")}`);
     }
-    const runs = inlineRuns(paragraph.text, paragraph.code);
-    return {
-      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      // Plain text, one line, for matching labels and quoting in note links.
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
-      quote: paragraph.quote
+    return `<img src="${sources.get(entry.filePath)}" alt="${escapeHtml(entry.alt)}">`;
+  };
+  // A part's paragraphs, and its footnotes when it has any: each marker
+  // links to its note, `<key>-fn<n>`, whose number links back to the first
+  // marker, `<key>-fnref<n>`, since the review copy and print interior are
+  // one page each.
+  const content = (key, body, images, verse = false) => {
+    const parsed = bookBody(body, { ownIndent, images: images ?? null, verse });
+    const ref = (number, reference) => `${key}-fnref${number}${reference === 1 ? "" : `-${reference}`}`;
+    const media = {
+      image,
+      note: (note) => `<sup class="noteref"><a href="#${key}-fn${note.number}" id="${ref(note.number, note.reference)}" role="doc-noteref">${note.number}</a></sup>`
     };
-  });
+    const paragraphs = parsed.paragraphs.filter(shownParagraph).map((paragraph) => {
+      if (paragraph.sceneBreak) {
+        return null;
+      }
+      const { runs } = paragraph;
+      return {
+        html: runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join(""),
+        // Plain text, one line, for matching labels and quoting in note links.
+        text: runs.map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim(),
+        quote: paragraph.quote,
+        // A line of nothing but images, which takes no paragraph label.
+        ...(paragraph.figure ? { figure: true } : {})
+      };
+    });
+    const notes = parsed.notes.map((note) => ({
+      number: note.number,
+      id: `${key}-fn${note.number}`,
+      backlink: ref(note.number, 1),
+      html: note.paragraphs.map((runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""))
+    }));
+    return { paragraphs, ...(notes.length > 0 ? { notes } : {}) };
+  };
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
     kind: entry.copyright ? `${placement} copyright-page` : placement,
@@ -277,7 +374,7 @@ export function htmlBook(manuscript, ownIndent = false) {
     heading: entry.heading,
     words: wordCount(entry.body),
     ...characters(entry.body),
-    paragraphs: paragraphs(entry.body)
+    ...content(`${placement}-${entry.id}`, entry.body, entry.images)
   });
   const parts = [
     ...manuscript.front.map(matter("front")),
@@ -290,7 +387,7 @@ export function htmlBook(manuscript, ownIndent = false) {
       byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body, chapter.verse)
+      ...content(chapter.key, chapter.body, chapter.images, chapter.verse)
     })),
     ...manuscript.back.map(matter("back"))
   ];
@@ -304,6 +401,10 @@ export function htmlBook(manuscript, ownIndent = false) {
     writingMode: manuscript.meta.writingMode,
     labels: manuscript.meta.labels,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    // Whether any part sets an image or has footnotes, for their rules in
+    // the stylesheet.
+    ...(sources.size > 0 ? { images: true } : {}),
+    ...(parts.some((part) => part.notes !== undefined) ? { notes: true } : {}),
     parts
   };
 }
@@ -328,7 +429,7 @@ export function docxEntries(manuscript, trace = null) {
   const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
   note(traceEntry("title", null));
   credits.forEach(() => note(traceEntry("credit", null)));
-  const pushSection = (heading, body, byline, part, verse = false) => {
+  const pushSection = (heading, body, byline, part, images, verse = false) => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
       note(traceEntry("heading", part));
@@ -337,21 +438,96 @@ export function docxEntries(manuscript, trace = null) {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
       note(traceEntry("byline", part));
     }
-    // Normal indents every first line (see docxStyles).
-    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
+    // Normal indents every first line (see docxStyles). A figure (a line
+    // of nothing but images) is no paragraph of the text, as the other
+    // builds read it, so it takes no index. Each footnote marker is a Word
+    // footnote holding its note.
+    let index = 0;
+    const { paragraphs, notes } = bookBody(body, { ownIndent: true, images, verse });
+    const sectionMedia = { drawing: media.drawing, footnote: (reference) => media.footnote(notes[reference.number - 1]) };
+    paragraphs.filter(shownParagraph).forEach((paragraph) => {
+      if (paragraph.figure) {
+        bodyParts.push(paragraphXml(script, "", "Figure", paragraph.runs, sectionMedia));
+        // A paragraph added after a figure goes after the text before it.
+        note(traceEntry("figure", part, index - 1));
+        return;
+      }
       bodyParts.push(paragraph.sceneBreak
         ? paragraphXml(script, "* * *", "SceneBreak")
-        : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
+        : paragraphXml(script, "", paragraph.quote ? "Quote" : "", paragraph.runs, sectionMedia));
       note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+      index += 1;
     });
   };
-  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
+  const media = docxMedia(script);
+  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id }, entry.images ?? null);
   manuscript.front.forEach(pushMatter("front"));
-  manuscript.chapters.forEach((chapter, index) => {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
+  manuscript.chapters.forEach((chapter, chapterIndex) => {
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: chapterIndex }, chapter.images ?? null, chapter.verse);
   });
   manuscript.back.forEach(pushMatter("back"));
-  return docxPackageEntries(script, bodyParts.join(""));
+  return docxPackageEntries(script, bodyParts.join(""), "", [], media);
+}
+
+// The images and footnotes a Word build sets. Each image file is stored
+// once as word/media/imageN with a relationship from the document,
+// numbered in reading order, and `drawing` gives the run content that sets
+// one. `footnote` adds a note ({ paragraphs } of runs) to word/footnotes.xml
+// and gives its id: Word numbers footnotes itself, through the whole
+// document, so each marker is a footnote of its own, a note referenced
+// twice included.
+function docxMedia(script) {
+  const images = new Map();
+  const footnotes = [];
+  let drawings = 0;
+  return {
+    images: () => [...images.values()],
+    footnotes: () => footnotes,
+    footnote(note) {
+      const id = footnotes.length + 1;
+      const mark = `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/>${script.rtl}</w:rPr><w:footnoteRef/></w:r><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:t xml:space="preserve"> </w:t></w:r>`;
+      const paragraphs = (note.paragraphs.length === 0 ? [[]] : note.paragraphs).map((runs, index) => paragraphXml(script, "", "FootnoteText", runs, null, index === 0 ? mark : ""));
+      footnotes.push(`<w:footnote w:id="${id}">${paragraphs.join("")}</w:footnote>`);
+      return id;
+    },
+    drawing(image) {
+      if (!images.has(image.filePath)) {
+        const number = images.size + 1;
+        const content = proseImageBytes(image);
+        images.set(image.filePath, {
+          relationship: `rIdImage${number}`,
+          name: `image${number}.${image.extension}`,
+          extension: image.extension,
+          mediaType: image.mediaType,
+          content,
+          size: imageSize(content, image.mediaType)
+        });
+      }
+      drawings += 1;
+      return docxDrawingXml(images.get(image.filePath), image.alt, drawings);
+    }
+  };
+}
+
+// EMUs, Word's drawing unit: 914400 to the inch, so 9525 to a pixel at
+// 96 dpi. An image is set at its size at 96 dpi, scaled down to fit 6in by
+// 8in, inside the text of a Letter or A4 page; an image whose header gives
+// no size is set at 4in by 3in.
+const EMU_PER_PIXEL = 9525;
+const MAX_IMAGE_EMU = { width: 6 * 914400, height: 8 * 914400 };
+
+// An inline picture, as Word writes one: the extent, the drawing's
+// properties with the alt text as its description, and the picture itself,
+// a blip that embeds the image part.
+function docxDrawingXml(entry, alt, id) {
+  const natural = entry.size === null
+    ? { width: 4 * 914400, height: 3 * 914400 }
+    : { width: entry.size.width * EMU_PER_PIXEL, height: entry.size.height * EMU_PER_PIXEL };
+  const scale = Math.min(1, MAX_IMAGE_EMU.width / natural.width, MAX_IMAGE_EMU.height / natural.height);
+  const cx = Math.max(1, Math.round(natural.width * scale));
+  const cy = Math.max(1, Math.round(natural.height * scale));
+  const description = xmlEscape(alt);
+  return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="Picture ${id}" descr="${description}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="${entry.name}" descr="${description}"/><pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr></pic:nvPicPr><pic:blipFill><a:blip r:embed="${entry.relationship}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
 }
 
 // What one paragraph of a Word build is: `kind` is "title", "credit",
@@ -430,19 +606,37 @@ function shunnPaper(name) {
 // `headers` are the section's headers, as { type, content }: `type` is
 // "default" or "first", and `content` the header part's paragraphs. Each is
 // written as word/headerN.xml, with its content type and relationship.
-function docxPackageEntries(script, body, page = "", headers = []) {
+// `media`, from docxMedia, adds the images the body sets: each as
+// word/media/imageN, stored as it is (compressed already), with the
+// default content type of its extension and a relationship.
+function docxPackageEntries(script, body, page = "", headers = [], media = null) {
   const headerName = (index) => `header${index + 1}.xml`;
   const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
   const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
-  // The relationships namespace only when a header reference uses it.
-  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  const images = media?.images() ?? [];
+  const footnotes = media?.footnotes() ?? [];
+  // Word's separator lines above the notes come first, as Word writes them.
+  const footnoteEntries = footnotes.length === 0 ? [] : [{
+    name: "word/footnotes.xml",
+    content: `<?xml version="1.0" encoding="UTF-8"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>${footnotes.join("")}</w:footnotes>`
+  }];
+  const footnoteType = footnotes.length === 0 ? "" : `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>`;
+  const footnoteRelationship = footnotes.length === 0 ? "" : `<Relationship Id="rIdFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>`;
+  const imageTypes = [...new Map(images.map((image) => [image.extension, image.mediaType]))].map(([extension, type]) => `<Default Extension="${extension}" ContentType="${type}"/>`).join("");
+  const imageRelationships = images.map((image) => `<Relationship Id="${image.relationship}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${image.name}"/>`).join("");
+  // The relationships namespace only when a header or image uses it, and
+  // the drawing one only with an image.
+  const relationshipsNamespace = headers.length === 0 && images.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  const drawingNamespace = images.length === 0 ? "" : ` xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`;
   return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${imageTypes}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}${footnoteType}</Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
-    { name: "word/styles.xml", content: docxStyles(script) },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}${imageRelationships}${footnoteRelationship}</Relationships>` },
+    { name: "word/styles.xml", content: docxStyles(script, { figure: images.length > 0, footnotes: footnotes.length > 0 }) },
     ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
+    ...images.map((image) => ({ name: `word/media/${image.name}`, content: image.content, stored: true })),
+    ...footnoteEntries,
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}${drawingNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
   ];
 }
 
@@ -451,7 +645,10 @@ function docxPackageEntries(script, body, page = "", headers = []) {
 // without blank lines; titles, credits, headings, and scene breaks cancel
 // the indent. The credit lines under the title sit together at 14pt, as
 // the print title page sets them, with space after the last.
-function docxStyles(script) {
+// `figure` adds the style of a line of nothing but images, centred with
+// space around it, and `footnotes` the styles of a footnote's text, 10pt
+// and single spaced, and of its raised number.
+function docxStyles(script, { figure = false, footnotes = false } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">`
     + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`
     + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>`
@@ -461,6 +658,8 @@ function docxStyles(script) {
     + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>`
     + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>`
     + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>`
+    + (figure ? `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Figure"><w:name w:val="Figure"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` : "")
+    + (footnotes ? `<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/></w:pPr><w:rPr><w:sz w:val="20"/>${script.sizeCs ? `<w:szCs w:val="20"/>` : ""}</w:rPr></w:style><w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>` : "")
     + `</w:styles>`;
 }
 
@@ -477,8 +676,26 @@ const SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
 // `script` is docxScript's settings for the book's language. Run properties
 // keep the order the WordprocessingML schema gives them: font, bold,
 // italic, size, then direction.
-function shunnRunProperties(script, { strong = false, em = false } = {}) {
-  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
+function shunnRunProperties(script, { strong = false, em = false, superscript = false } = {}) {
+  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${superscript ? `<w:vertAlign w:val="superscript"/>` : ""}${script.rtl}</w:rPr>`;
+}
+
+// A paragraph's runs in a Shunn manuscript, which has no footnotes: each
+// marker is its note's number, raised, and the notes follow the chapter
+// (see shunnNotes).
+function shunnRunsXml(script, runs) {
+  return runs.map((run) => (run.note === undefined ? shunnRunXml(script, run.text, run) : shunnRunXml(script, String(run.note.number), { ...run, superscript: true }))).join("");
+}
+
+// A chapter's footnotes as a Shunn manuscript sets them, since standard
+// manuscript format has none: after the chapter, a centred heading (the
+// `footnotes` label) and each note numbered, as { heading, notes }, where
+// each note is its paragraphs of runs, the first opening with its number.
+function shunnNotes(notes, labels) {
+  return {
+    heading: fillLabel(labels, "footnotes"),
+    notes: notes.map((note) => (note.paragraphs.length === 0 ? [[]] : note.paragraphs).map((runs, index) => (index === 0 ? [{ text: `${note.number}. `, strong: false, em: false }, ...runs] : runs)))
+  };
 }
 
 function shunnRunXml(script, text, decoration) {
@@ -693,7 +910,7 @@ export function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, tr
   manuscript.chapters.forEach((chapter, chapterIndex) => {
     const part = { placement: "body", chapter: chapterIndex };
     // A Shunn manuscript indents every first line half an inch.
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    const { paragraphs: body, notes } = bookBody(chapter.body, { ownIndent: true, verse: chapter.verse });
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       note(traceEntry("heading", part));
@@ -711,9 +928,19 @@ export function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, tr
     body.forEach((paragraph, index) => {
       paragraphs.push(paragraph.sceneBreak
         ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true)
-        : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+        : shunnParagraphXml(script, shunnRunsXml(script, paragraph.runs), false, paragraph.quote));
       note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
     });
+    if (notes.length > 0) {
+      const set = shunnNotes(notes, manuscript.meta?.labels);
+      // A paragraph added among the notes goes at the end of the chapter.
+      paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, set.heading), true));
+      note(traceEntry("notes", part, body.length - 1));
+      for (const noteParagraph of set.notes.flat()) {
+        paragraphs.push(shunnParagraphXml(script, shunnRunsXml(script, noteParagraph), false));
+        note(traceEntry("note", part, body.length - 1));
+      }
+    }
   });
 
   const paper = shunnPaper(paperName);
@@ -734,8 +961,29 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
   let sections = 0;
   for (const chapter of manuscript.chapters) {
     // The Shunn format's own half-inch indent, as in the DOCX and PDF, so a
-    // typed one goes here too.
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    // typed one goes here too. A footnote marker is its note's number in
+    // brackets, and the notes follow the chapter.
+    const { text, notes: definitions } = splitFootnotes(chapter.body);
+    const body = markdownParagraphs(text, true, chapter.verse);
+    const numbers = new Map();
+    const numbered = (paragraph) => {
+      if (paragraph.code || definitions.size === 0) {
+        return paragraph.text;
+      }
+      let result = "";
+      let position = 0;
+      for (const marker of footnoteMarkers(paragraph.text)) {
+        const label = footnoteLabel(marker.label);
+        if (definitions.has(label)) {
+          if (!numbers.has(label)) {
+            numbers.set(label, numbers.size + 1);
+          }
+          result += `${paragraph.text.slice(position, marker.start)}[${numbers.get(label)}]`;
+          position = marker.end;
+        }
+      }
+      return result + paragraph.text.slice(position);
+    };
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -754,7 +1002,15 @@ export function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {})
       }
       // Hard breaks stay backslash breaks; a quote keeps its markers.
       const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK).join(`\\\n${prefix}`)}`, "");
+      lines.push(`${prefix}${numbered(paragraph).split(LINE_BREAK).join(`\\\n${prefix}`)}`, "");
+    }
+    if (numbers.size > 0) {
+      lines.push(fillLabel(manuscript.meta?.labels, "footnotes"), "");
+      for (const [label, number] of numbers) {
+        const noteBody = markdownParagraphs(definitions.get(label).text).filter((paragraph) => !paragraph.sceneBreak);
+        const texts = (noteBody.length === 0 ? [""] : noteBody.map((paragraph) => paragraph.text.split(LINE_BREAK).join("\\\n   ")));
+        lines.push(texts.map((noteText, index) => `${index === 0 ? `${number}. ` : "   "}${noteText}`).join("\n\n"), "");
+      }
     }
   }
 
@@ -779,19 +1035,30 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   // book, as the DOCX sets it.
   const headBox = type.rtl ? "@top-left" : "@top-right";
   const sceneBreak = meta.shortForm ? "#" : "* * *";
+  // A footnote marker is its note's number, raised; the notes follow the
+  // chapter (see shunnNotes).
+  const media = { note: (note) => `<sup>${note.number}</sup>` };
+  const inline = (runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join("");
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
     markup: paragraph.sceneBreak
       ? `<p class="break">${escapeHtml(sceneBreak)}</p>`
-      : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+      : `<p>${inline(paragraph.runs)}</p>`
   });
+  const notesMarkup = (notes) => {
+    if (notes.length === 0) {
+      return "";
+    }
+    const set = shunnNotes(notes, manuscript.meta?.labels);
+    return `\n<p class="break">${escapeHtml(set.heading)}</p>\n${set.notes.flat().map((runs) => `<p>${inline(runs)}</p>`).join("\n")}`;
+  };
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
+    const { paragraphs, notes } = bookBody(chapter.body, { ownIndent: true, verse: chapter.verse });
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
-      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>\n`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}\n</section>`);
+      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>\n${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>\n`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}${notesMarkup(notes)}\n</section>`);
       continue;
     }
     if (paragraphs.length === 0) {
@@ -800,7 +1067,7 @@ export function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
     if (sections++ > 0) {
       body.push(`<p class="break">#</p>`);
     }
-    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n"));
+    body.push(`${withBlockquotes(paragraphs.map(paragraphMarkup)).join("\n")}${notesMarkup(notes)}`);
   }
   const dir = type.rtl ? ` dir="rtl"` : "";
   return `<!DOCTYPE html>
@@ -848,15 +1115,24 @@ function docxTextXml(text) {
   return String(text).split(LINE_BREAK).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
 
-function paragraphXml(script, text, style = "", runs = [{ text }]) {
+// `media` sets each image and footnote run (see docxMedia); without it
+// one is left out. `lead` is run XML that opens the paragraph, such as a
+// footnote's own mark.
+function paragraphXml(script, text, style = "", runs = [{ text }], media = null, lead = "") {
   const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
   const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
   const runXml = runs.map((run) => {
+    if (run.image !== undefined) {
+      return media === null ? "" : `<w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}${media.drawing(run.image)}</w:r>`;
+    }
+    if (run.note !== undefined) {
+      return media === null ? "" : `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/>${script.rtl}</w:rPr><w:footnoteReference w:id="${media.footnote(run.note)}"/></w:r>`;
+    }
     const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
     const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
     return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
   });
-  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+  return `<w:p>${styleXml}${lead}${runXml.join("")}</w:p>`;
 }
 
 // Markdown emphasis: **bold** / __bold__, *italic* / _italic_, and both
@@ -867,13 +1143,19 @@ function paragraphXml(script, text, style = "", runs = [{ text }]) {
 // and an autolink (`<https://example.com>`) its address, both as plain text,
 // so `&#42;` is never emphasis. Code from a fence (`code`) is printed as
 // written, with none of this read in it. Returns runs of { text, strong, em }.
-function inlineRuns(text, code = false) {
+function inlineRuns(text, code = false, images = [], notes = null) {
   if (code) {
     return [{ text, strong: false, em: false }];
   }
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
+  const flushBuffer = () => {
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+  };
   const isSpace = (char) => char === undefined || char === LINE_BREAK || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
   for (let index = 0; index < text.length;) {
@@ -897,10 +1179,32 @@ function inlineRuns(text, code = false) {
         // One space comes off each end of a span that is not all spaces.
         // Plain string tests: a regex for this backtracks quadratically on a
         // long span.
-        const code = text.slice(index + run, end - run);
+        const code = text.slice(index + run, end - run).replace(IMAGE_TOKEN, "");
         buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
         index = end;
       }
+      continue;
+    }
+    // A footnote marker whose note `notes` defines is a run of its own.
+    if (char === "[" && text[index + 1] === "^" && notes !== null && notes.size > 0) {
+      FOOTNOTE_MARKER.lastIndex = index;
+      const marker = FOOTNOTE_MARKER.exec(text);
+      if (marker !== null && notes.has(footnoteLabel(marker[1]))) {
+        flushBuffer();
+        nodes.push({ note: footnoteLabel(marker[1]) });
+        index += marker[0].length;
+        continue;
+      }
+    }
+    // An image a build places (see markdownParagraphs) is a run of its
+    // own. Its mark is always whole: markdownParagraphs makes each one and
+    // turns a typed mark character into U+FFFD.
+    if (char === IMAGE_START) {
+      IMAGE_AT.lastIndex = index;
+      const image = IMAGE_AT.exec(text);
+      flushBuffer();
+      nodes.push({ image: images[Number(image[1])] });
+      index += image[0].length;
       continue;
     }
     const reference = char === "&" ? characterReference(text, index) : null;
@@ -924,10 +1228,7 @@ function inlineRuns(text, code = false) {
     while (text[end] === char) {
       end += 1;
     }
-    if (buffer !== "") {
-      nodes.push({ text: buffer });
-      buffer = "";
-    }
+    flushBuffer();
     const before = text[index - 1];
     const after = text[end];
     const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
@@ -1001,14 +1302,22 @@ function inlineRuns(text, code = false) {
 
   const runs = [];
   for (const node of nodes) {
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    if (node.image !== undefined) {
+      runs.push({ text: "", strong, em, image: node.image });
+      continue;
+    }
+    if (node.note !== undefined) {
+      runs.push({ text: "", strong, em, note: node.note });
+      continue;
+    }
     const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
     if (value === "") {
       continue;
     }
-    const strong = (node.strong ?? 0) > 0;
-    const em = (node.em ?? 0) > 0;
     const previous = runs[runs.length - 1];
-    if (previous && previous.strong === strong && previous.em === em) {
+    if (previous && previous.image === undefined && previous.note === undefined && previous.strong === strong && previous.em === em) {
       previous.text += value;
     } else {
       runs.push({ text: value, strong, em });
@@ -1034,7 +1343,16 @@ export function inlineHtml(text) {
 
 // HTML or XHTML markup for one run; `escape` is the matching text escaper
 // and `lineBreak` the matching break element.
-function runMarkup(run, escape, lineBreak) {
+// `media` sets the runs that are no text: { image, note }, each giving
+// the markup for a run's `image` or `note`; a run it has no setter for is
+// left out.
+function runMarkup(run, escape, lineBreak, media = {}) {
+  if (run.image !== undefined) {
+    return media.image === undefined ? "" : media.image(run.image);
+  }
+  if (run.note !== undefined) {
+    return media.note === undefined ? "" : media.note(run.note);
+  }
   let markup = escape(run.text).split(LINE_BREAK).join(lineBreak);
   if (run.em) {
     markup = `<em>${markup}</em>`;
@@ -1064,15 +1382,20 @@ export const LINE_BREAK = "\uE001";
 // setextSceneBreakLines). Fence lines go and the code stays, with no breaks
 // in it, and a fence's paragraphs stand apart from the prose around them;
 // outside code, links print as their text and images are left out,
-// as word counts treat them (see plainLinks). Footnotes stay as written
-// (story validate warns, see footnoteLines). A build that indents first
+// as word counts treat them (see plainLinks). Footnotes are read before
+// this (see bookBody). A build that indents first
 // lines itself passes `ownIndent`, and a paragraph's typed indent (the
 // ideographic space a Japanese paragraph opens with) goes, so the two never
 // add up; the other builds keep it as the paragraph's only indent. In a
 // `verse` chapter (see isVerseChapter) every line break inside a paragraph
 // is a hard break, as if each line but a stanza's last ended in a
 // backslash, so a blank line is a stanza break; code keeps its own lines.
-function markdownParagraphs(markdown, ownIndent = false, verse = false) {
+// A build that places images passes `media`, { images, keep }: each image
+// `keep` takes stays in the text as a mark (see plainLinks) and is added to
+// `images`, and a line of nothing but such images is a paragraph of its
+// own, { figure: true, text, quote }, so the paragraphs around it are the
+// ones the other builds read, where that line is blank.
+function markdownParagraphs(markdown, ownIndent = false, verse = false, media = null) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -1115,7 +1438,8 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
   };
   // Each line, and whether it is code: closed backtick fences lose their
   // fence lines, and the code between them has no breaks.
-  const source = splitFences(markdown.replace(/\r\n?/g, "\n")).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text))
+  // A typed image mark stands for no image.
+  const source = splitFences(markdown.replace(/\r\n?/g, "\n").replace(/[\uE002\uE003]/g, "\uFFFD")).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text, media?.images ?? null, media?.keep))
     .split("\n")
     .map((line) => ({ line, code: part.fenced })));
   for (const { line: sourceLine, code } of source) {
@@ -1132,6 +1456,11 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
     if (!code && breaksParagraph(line)) {
       flush();
       paragraphs.push({ sceneBreak: true });
+      continue;
+    }
+    if (!code && line.includes(IMAGE_START) && line.replace(IMAGE_TOKEN, "").trim() === "") {
+      flush();
+      paragraphs.push({ figure: true, text: line.trim(), quote: Boolean(marker), code: false });
       continue;
     }
     // A quote interrupts a plain paragraph; an unmarked line after a quoted
@@ -1152,10 +1481,11 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
 // them: each line of text of each paragraph, read as markdownParagraphs
 // reads a verse chapter. Blank lines (the stanza breaks), scene breaks, a
 // lone block-quote marker, fence lines, and a line that is only an image
-// print nothing, so they are not counted; a code block counts once. Pass
-// prose with comments removed (see chapterProse).
+// print nothing, so they are not counted; a code block counts once, and a
+// footnote's definition, a note, not the poem, not at all (see
+// splitFootnotes). Pass prose with comments removed (see chapterProse).
 export function verseLineCount(prose) {
-  return markdownParagraphs(String(prose).replace(/\r\n?/g, "\n"), false, true)
+  return markdownParagraphs(splitFootnotes(String(prose).replace(/\r\n?/g, "\n")).text, false, true)
     .filter((paragraph) => !paragraph.sceneBreak)
     .reduce((sum, paragraph) => sum + paragraph.text.split(LINE_BREAK).filter((line) => line.trim() !== "").length, 0);
 }
@@ -1167,8 +1497,97 @@ export function verseLineCount(prose) {
 // strong, em } with LINE_BREAK for each hard break. story apply reads a
 // chapter's source through this to know what each of its paragraphs
 // prints.
-export function wordParagraphs(body, verse = false) {
-  return markdownParagraphs(body, true, verse).map((paragraph) => (paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) }));
+// A footnote marker prints nothing in the text: its number is Word's own.
+// `verse` reads a verse chapter, and `defined` (a Map from footnoteLabel to
+// the note) adds the notes a whole chapter defines, for a part of one.
+export function wordParagraphs(body, verse = false, defined = null) {
+  return bookBody(body, { ownIndent: true, defined, verse }).paragraphs.map((paragraph) => (paragraph.sceneBreak ? { sceneBreak: true } : { quote: paragraph.quote, code: paragraph.code, runs: textRuns(paragraph.runs) }));
+}
+
+// Runs without the footnote markers, the text runs on either side of one
+// joined when they are set alike.
+function textRuns(runs) {
+  const joined = [];
+  for (const run of runs.filter((entry) => entry.note === undefined)) {
+    const previous = joined.at(-1);
+    if (previous !== undefined && previous.strong === run.strong && previous.em === run.em) {
+      joined[joined.length - 1] = { ...previous, text: previous.text + run.text };
+    } else {
+      joined.push(run);
+    }
+  }
+  return joined;
+}
+
+// A chapter or matter body as the builds set it: { paragraphs, notes }.
+// `paragraphs` has one entry per paragraph markdownParagraphs reads,
+// { sceneBreak: true } or { quote, code, figure, runs }, where `runs` are
+// inlineRuns' { text, strong, em }; an image run's `image` is the image
+// `imageOf` found for its destination, with its alt text as plain text,
+// and a footnote marker's run has `note`, { number, reference }: the
+// note's number and which reference to it this is, from 1. `imageOf` (a
+// Map from each destination to the image or null) comes from the build;
+// without it, or for an image it maps to null, the image is left out as
+// the other builds leave it out, and a figure (a line of nothing but
+// images) whose images are all left out is not a paragraph. `notes` are
+// the footnotes the prose references, numbered in the order of their
+// first marker, each { number, label, paragraphs } with its text as
+// paragraphs of runs; a definition is no paragraph, and one nothing
+// references is left out (see splitFootnotes). `ownIndent` is
+// markdownParagraphs', and so is `verse`. `defined` adds the labels of
+// notes defined elsewhere, so a marker to one is no text either.
+function bookBody(body, { ownIndent = false, images: imageOf = null, defined = null, verse = false } = {}) {
+  const images = [];
+  const media = imageOf === null ? null : { images, keep: (image) => (imageOf.get(image.destination) ?? null) !== null };
+  const { text, notes: definitions } = splitFootnotes(body);
+  // The body's own definitions win; `defined` is looked up second, never
+  // copied, so a chapter read a block at a time stays linear.
+  const known = defined === null ? definitions : {
+    size: definitions.size + defined.size,
+    has: (label) => definitions.has(label) || defined.has(label),
+    get: (label) => definitions.get(label) ?? defined.get(label)
+  };
+  const notes = [];
+  const numbers = new Map();
+  const paragraphs = markdownParagraphs(text, ownIndent, verse, media).map((paragraph) => {
+    if (paragraph.sceneBreak) {
+      return { sceneBreak: true };
+    }
+    const runs = inlineRuns(paragraph.text, paragraph.code, images, known)
+      .map((run) => {
+        if (run.image !== undefined) {
+          return { ...run, image: { ...imageOf.get(run.image.destination), alt: imageAlt(run.image.alt) } };
+        }
+        if (run.note === undefined) {
+          return run;
+        }
+        if (!numbers.has(run.note)) {
+          const definition = known.get(run.note);
+          numbers.set(run.note, notes.length);
+          notes.push({ number: notes.length + 1, label: definition.label, references: 0, paragraphs: noteParagraphs(definition.text) });
+        }
+        const note = notes[numbers.get(run.note)];
+        note.references += 1;
+        return { ...run, note: { number: note.number, reference: note.references } };
+      })
+      // A figure is its images; the spaces between them are layout.
+      .filter((run) => !paragraph.figure || run.image !== undefined);
+    return { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), figure: Boolean(paragraph.figure), runs };
+  });
+  return { paragraphs, notes: notes.map(({ number, label, paragraphs: noteText }) => ({ number, label, paragraphs: noteText })) };
+}
+
+// A footnote's text, markdown paragraphs apart by a blank line, as
+// paragraphs of runs. An image in it is left out, and a footnote marker in
+// it prints as written.
+function noteParagraphs(text) {
+  return markdownParagraphs(text).filter((paragraph) => !paragraph.sceneBreak).map((paragraph) => inlineRuns(paragraph.text, paragraph.code));
+}
+
+// An image's alt text, written as markdown, as plain text: what its links,
+// emphasis, and escapes print, on one line, as CommonMark reads alt text.
+function imageAlt(alt) {
+  return inlineRuns(plainLinks(alt)).map((run) => run.text).join("").split(LINE_BREAK).join(" ").replace(/\s+/g, " ").trim();
 }
 
 // Every entry is stamped 1980-01-01 00:00, the earliest valid MS-DOS date
@@ -1182,8 +1601,10 @@ const ZIP_DOS_DATE = (0 << 9) | (1 << 5) | 1;
 const ZIP_UTF8_NAME_FLAG = 0x0800;
 const ZIP_STORED = 0;
 const ZIP_DEFLATED = 8;
+const ZIP_MAX_BYTES = 0xffffffff;
 
-export function writeZip(outFile, entries, writeOptions = {}) {
+// `maxBytes` is the most the archive may hold: 4 GiB, as it has no ZIP64.
+export function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;
@@ -1191,6 +1612,11 @@ export function writeZip(outFile, entries, writeOptions = {}) {
   for (const entry of entries) {
     const name = Buffer.from(entry.name, "utf8");
     const content = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(entry.content, "utf8");
+    // The archive has no ZIP64 records, so every size and offset must fit
+    // in 32 bits.
+    if (offset + content.length > maxBytes) {
+      throw projectError(`Cannot write the build: its archive would pass 4 GiB, more than a ZIP without ZIP64 can hold; use fewer or smaller images`);
+    }
     const crc = crc32(content);
     // Entries marked stored are not compressed: the EPUB mimetype, which
     // must not be, and cover images, which are compressed already.

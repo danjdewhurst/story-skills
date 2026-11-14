@@ -11,8 +11,9 @@ import { assertSafeProjectDirectory, lstatIfExists, readTextFile } from "./files
 import {
   chapterProse,
   countTodoMarkers,
-  footnoteLines,
+  footnoteUses,
   hasUnclosedComment,
+  imageLines,
   outlineRunsIntoProse,
   setextSceneBreakLines,
   titleCaseSlug
@@ -148,7 +149,9 @@ export {
 export {
   coverIsReady,
   coverImage,
-  IMAGE_SIGNATURE_BYTES
+  IMAGE_SIGNATURE_BYTES,
+  proseImage,
+  remoteImage
 } from "./scan-cover.js";
 
 export {
@@ -213,6 +216,21 @@ export function existingStoryData(root) {
   } catch {
     return {};
   }
+}
+
+// The images in a chapter's or matter page's prose, as { destination, line }
+// with the file's line number, for validate to check (see imageLines).
+function fileImages(markdown) {
+  return imageLines(markdown.body).map((image) => ({ ...image, line: fileLines(markdown, [image.line])[0] }));
+}
+
+// The footnote definitions and markers in a chapter's or matter page's
+// prose, as { definitions, markers }, each { label, line } with the file's
+// line number, for validate to pair (see footnoteUses).
+function fileFootnotes(markdown) {
+  const { definitions, markers } = footnoteUses(markdown.body);
+  const withLine = ({ label, line }) => ({ label, line: fileLines(markdown, [line])[0] });
+  return { definitions: definitions.map(withLine), markers: markers.map(withLine) };
 }
 
 export function scanProject(root) {
@@ -365,7 +383,8 @@ export function scanProject(root) {
       outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       setextBreaks: fileLines(markdown, setextSceneBreakLines(markdown.body)),
-      footnotes: fileLines(markdown, footnoteLines(markdown.body)),
+      footnotes: fileFootnotes(markdown),
+      images: fileImages(markdown),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       // Raw: a real-world YYYY-MM-DD day, or undefined; validate reports
@@ -475,7 +494,9 @@ export function scanProject(root) {
         // on a copyright page's ISBN line, which builds print as written. The
         // title counts too: the EPUB contents name a page without a heading.
         // Builds leave out an empty page, markers and all.
-        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title)
+        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title),
+        images: empty ? [] : fileImages(markdown),
+        footnotes: empty ? { definitions: [], markers: [] } : fileFootnotes(markdown)
       };
     }, scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),

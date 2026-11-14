@@ -362,7 +362,7 @@ function copyProject(source, target, roots, depth = 0) {
       // target exists would otherwise be a file link, and unusable.
       fs.symlinkSync(linkTarget(fs.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyRegularFile(from, to, Boolean(roots.cover) && realPath(from).toLowerCase() === roots.cover);
+      copyRegularFile(from, to, IMAGE_EXTENSIONS.test(entry.name) || (Boolean(roots.cover) && realPath(from).toLowerCase() === roots.cover));
     }
     // A FIFO, socket, or device is never read by a command, so it is not
     // copied (reading a FIFO would block).
@@ -394,12 +394,14 @@ export function mirrorFolderNames(source, copy) {
 
 // Write commands read the text of markdown files only (and import the
 // .gitignore it keeps, and rename its marker), and no file over the read
-// limit; of any other file (the story.md cover) they check at most the size
-// and, for the cover, the first bytes, which say what kind of image it is.
-// So only readable markdown, the .gitignore, and the marker are copied
-// whole, and the undo log a stopped command left (see copyUndoLog). Every other file is a sparse file of the same size, which
-// takes no disk space, and only the cover (`keepHead`) keeps its first bytes,
-// so no other file's contents reach the scratch folder. An unreadable file
+// limit; of any other file (the story.md cover, an image in the prose) they
+// check at most the size and, for an image, the first bytes, which say
+// what kind of image it is. So only readable markdown, the .gitignore, and
+// the marker are copied whole, and the undo log a stopped command left (see
+// copyUndoLog). Every other file is a sparse file of the same size, which
+// takes no disk space, and only the cover and files named as images
+// (`keepHead`) keep their first bytes, so no other file's contents reach
+// the scratch folder. An unreadable file
 // stays unreadable. The copy is read as a command reads it, so a file
 // swapped for a FIFO or a symlink since the folder was listed is refused
 // rather than followed or waited on.
@@ -437,6 +439,10 @@ function copyUndoLog(from, to) {
 }
 
 const LINE_FEED = Buffer.from("\n");
+
+// A file named as an image the prose or the cover may place (see
+// proseImage), whose first bytes a check reads.
+const IMAGE_EXTENSIONS = /\.(?:gif|jpe?g|png|webp)$/i;
 
 // The lowercase real path of the cover the story.md at `root` names, as
 // coverImage resolves it, or null when there is none to read.

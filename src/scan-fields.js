@@ -28,7 +28,7 @@ export function chapterLength(unit, data, markdown, verse = false) {
 
 // File line numbers of body line indexes (counted from 0), such as those of
 // the `---` scene breaks markdown viewers read as heading underlines (see
-// setextSceneBreakLines) and of footnote definitions (see footnoteLines).
+// setextSceneBreakLines) and of footnotes (see footnoteUses).
 // The body is the end of the raw file, so the lines above it are the
 // frontmatter's.
 export function fileLines(markdown, indexes) {

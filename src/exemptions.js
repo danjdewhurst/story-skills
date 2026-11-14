@@ -1,6 +1,6 @@
 import path from "node:path";
 import { readTextFile } from "./files.js";
-import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, err, exemptionCodes, isCustomCode } from "./findings.js";
+import { CHAPTER_CODES, FINDING_CODES, PROJECTLESS_CODES, RETIRED_CODES, err, exemptionCodes, isCustomCode } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { nearMissKeys } from "./frontmatter-keys.js";
 import { kebabCase } from "./markdown.js";
@@ -136,6 +136,10 @@ function codeError(code, label) {
   // A story.md check's code: story validate checks that story.md defines
   // the check, since this log is read without story.md.
   if (isCustomCode(code)) {
+    return null;
+  }
+  // A retired code never fires, so an entry for it matches nothing.
+  if (Object.hasOwn(RETIRED_CODES, code)) {
     return null;
   }
   if (!Object.hasOwn(FINDING_CODES, code)) {

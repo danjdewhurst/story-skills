@@ -25,14 +25,18 @@ export const TRIM_SIZES = new Map([
 export const DEFAULT_TRIM = "5.5x8.5";
 
 // A part's paragraphs with their review-copy labels: `<key>-p<n>`, counting
-// prose paragraphs only, so a scene break (null) takes no number. The review
-// copy and `story compare --anchor` both label paragraphs with this, so the
-// two can never disagree.
+// prose paragraphs only, so a scene break (null) takes no number, and a
+// figure (a line of nothing but images) none either: it is { figure, label:
+// null, paragraph }. The review copy and `story compare --anchor` both label
+// paragraphs with this, so the two can never disagree.
 export function labelledParagraphs(part) {
   let count = 0;
   return part.paragraphs.map((paragraph) => {
     if (paragraph === null) {
       return null;
+    }
+    if (paragraph.figure) {
+      return { figure: true, label: null, paragraph };
     }
     count += 1;
     return { label: `${part.key}-p${count}`, paragraph };
@@ -43,7 +47,7 @@ export function labelledParagraphs(part) {
 // { label, key, text } with the paragraph's plain text.
 export function paragraphLabels(book) {
   return book.parts.flatMap((part) => labelledParagraphs(part)
-    .filter((entry) => entry !== null)
+    .filter((entry) => entry !== null && !entry.figure)
     .map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
 }
 
@@ -115,6 +119,10 @@ export function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STY
         body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
         continue;
       }
+      if (entry.figure) {
+        body.push({ quote: entry.paragraph.quote, markup: `<figure>${entry.paragraph.html}</figure>` });
+        continue;
+      }
       const { label: anchor, paragraph } = entry;
       const note = noteUrl === ""
         ? ""
@@ -123,7 +131,7 @@ export function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STY
     }
     const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
     const partByline = (part.byline ?? "") === "" ? "" : `<p class="byline">${escapeHtml(part.byline)}</p>\n`;
-    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${partByline}${withBlockquotes(body).join("\n")}\n</section>`);
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}\n${partByline}${withBlockquotes(body).join("\n")}${footnotesHtml(part, labels, "h3")}\n</section>`);
   }
   const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join("\n");
   // The note under the title, a sentence at a time: the labels' text is
@@ -163,7 +171,7 @@ blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
 .scene-break { border: 0; text-align: center; margin: 2rem 0; }
 .scene-break::after { content: "${cssString(style.sceneBreak ?? "* * *")}"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
+${book.images ? IMAGE_RULES : ""}${book.notes ? REVIEW_NOTE_RULES : ""}@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
 ${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
 p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 @media (max-width: 52rem) { .note-link { position: static; display: block; width: fit-content; margin-top: -1.4em; margin-inline-start: auto; opacity: 0.6; } }
@@ -190,6 +198,38 @@ ${sections.join("\n")}
 </html>
 `;
 }
+
+// Images in the review copy and the print interior: a figure (a line of
+// nothing but images) centred on a line of its own, and every image no
+// wider than the text.
+const IMAGE_RULES = `figure { margin: 1rem 0; text-align: center; }
+img { max-width: 100%; height: auto; }
+`;
+
+// A part's footnotes, set after its text under a heading (`tag`) in the
+// book's language: each note's number links back to its first marker.
+function footnotesHtml(part, labels, tag) {
+  if (part.notes === undefined) {
+    return "";
+  }
+  const notes = part.notes.map((note) => {
+    const paragraphs = (note.html.length === 0 ? [""] : note.html).map((html, index) => `<p>${index === 0 ? `<a href="#${note.backlink}" role="doc-backlink">${note.number}.</a> ` : ""}${html}</p>`);
+    return `<div class="footnote" id="${note.id}" role="doc-footnote">${paragraphs.join("")}</div>`;
+  });
+  return `\n<aside class="footnotes"><${tag}>${escapeHtml(fillLabel(labels, "footnotes"))}</${tag}>\n${notes.join("\n")}\n</aside>`;
+}
+
+// Footnotes in the review copy and the print interior: the notes set
+// smaller under a rule, and the markers as plain raised numbers.
+const REVIEW_NOTE_RULES = `.footnotes { margin-top: 2rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); font-size: 0.9rem; }
+.footnotes h3 { font-size: 1rem; margin: 0 0 0.75rem; }
+.noteref a, .footnote a { color: var(--accent); text-decoration: none; }
+`;
+const PRINT_NOTE_RULES = `.footnotes { margin-top: 1.5em; font-size: 9pt; }
+.footnotes h2 { font-size: 9pt; font-weight: normal; text-align: center; margin: 0 0 0.5em; }
+.footnotes p { text-indent: 0; text-align: start; margin: 0 0 0.3em; }
+.noteref a, .footnote a { color: inherit; text-decoration: none; }
+`;
 
 // The review copy set in vertical columns, right to left: lines run down
 // the page, so the reading column becomes a band across it, and spacing,
@@ -330,6 +370,12 @@ export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) 
         first = true;
         continue;
       }
+      if (paragraph.figure) {
+        // A figure is no paragraph, so the one after it still opens the
+        // section or scene.
+        paragraphs.push({ quote: paragraph.quote, markup: `<figure>${paragraph.html}</figure>` });
+        continue;
+      }
       paragraphs.push({ quote: paragraph.quote, markup: first ? `<p class="first">${paragraph.html}</p>` : `<p>${paragraph.html}</p>` });
       first = false;
     }
@@ -342,7 +388,7 @@ export function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) 
       ? `<h1>${escapeHtml(part.title)}</h1>${(part.byline ?? "") === "" ? "" : `\n<p class="byline">${escapeHtml(part.byline)}</p>`}`
       : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
     // Matter kinds already carry their placement (front, back copyright-page).
-    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${withBlockquotes(paragraphs).join("\n")}\n</section>`);
+    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}\n${withBlockquotes(paragraphs).join("\n")}${footnotesHtml(part, book.labels, "h2")}\n</section>`);
   }
   // Only the copyright page moves ahead of the contents; other front matter
   // keeps its order after it.
@@ -402,7 +448,9 @@ ${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4
 ` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
 ${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
 ` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
-blockquote { margin: 0.8em 1.5em; }
+${book.images ? `figure { margin: 0.8em 0; text-align: center; break-inside: avoid; }
+img { max-width: 100%; height: auto; }
+` : ""}${book.notes ? PRINT_NOTE_RULES : ""}blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
 section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }

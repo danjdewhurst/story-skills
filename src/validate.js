@@ -58,7 +58,9 @@ import {
   validateDeadline,
   validateReleaseCadence,
   validateDailyTarget,
-  validateCover
+  validateCover,
+  validateFootnotes,
+  validateProseImages
 } from "./validate-story.js";
 import { sessionsWithoutCharacters, validateExemptions, validateProgressLog } from "./validate-logs.js";
 import {
@@ -221,10 +223,9 @@ export function validateProjectOf(project) {
       warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
     }
 
-    if (chapter.footnotes.length > 0) {
-      const one = chapter.footnotes.length === 1;
-      warnings.push(warn("unsupported-footnote", `${file} has ${one ? "a footnote" : `${chapter.footnotes.length} footnotes`} (${one ? "line" : "lines"} ${chapter.footnotes.join(", ")}): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work ${one ? "the note" : "each note"} into the prose or a back-matter page`, file));
-    }
+    validateProseImages(project, file, chapter.images, warnings);
+
+    validateFootnotes(file, chapter.footnotes, warnings);
 
     // A poem needs no scene records (see isVerseChapter).
     if (!chapter.verse && !project.scenes.some((scene) => scene.chapter === chapter.id)) {

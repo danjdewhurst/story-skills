@@ -766,7 +766,11 @@ var FINDING_CODES = {
   "unclosed-comment": "warning",
   "ambiguous-scene-break": "warning",
   "outline-without-chapter-text": "warning",
-  "unsupported-footnote": "warning",
+  "missing-footnote": "warning",
+  "unused-footnote": "warning",
+  "invalid-image": "warning",
+  "remote-image": "warning",
+  "image-left-out": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
   "beat-too-long": "warning",
@@ -1074,6 +1078,9 @@ var FINDING_CODES = {
 function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
 }
+var RETIRED_CODES = {
+  "unsupported-footnote": "builds set footnotes"
+};
 var PROJECTLESS_CODES = ["kept-story-options", "docx-content-left-out", "unsplit-chapter-lines", "unused-chapter-text"];
 function severityCodes() {
   return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
@@ -2664,10 +2671,12 @@ var ar_default = {
     "all-rights-reserved": "جميع الحقوق محفوظة.",
     "published-by": "الناشر: {publisher}",
     "scene-break": "فاصل بين المشاهد",
+    footnotes: "الحواشي",
     "cover-alt": "غلاف كتاب {title}",
     "start-of-content": "بداية المحتوى",
     "accessibility-summary": "كتاب نصي فقط، فيه فهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
     "accessibility-summary-cover": "كتاب نصي مع صورة غلاف موصوفة، وفهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
+    "accessibility-summary-images": "كتاب نصي مع صور موصوفة، وفهرس محتويات قابل للتنقل، وعنوان لكل فصل، وترتيب قراءة منطقي واحد.",
     "review-title": "{title}: نسخة المراجعة",
     "review-intro": "نسخة المراجعة.",
     "review-intro-build": "نسخة المراجعة، الإصدار {build}.",
@@ -2872,10 +2881,12 @@ var de_default = {
     "all-rights-reserved": "Alle Rechte vorbehalten.",
     "published-by": "Erschienen bei {publisher}",
     "scene-break": "Szenenwechsel",
+    footnotes: "Anmerkungen",
     "cover-alt": "Cover von {title}",
     "start-of-content": "Beginn des Inhalts",
     "accessibility-summary": "Buch, das nur aus Text besteht, mit navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
     "accessibility-summary-cover": "Buch mit Text und beschriebenem Coverbild, navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
+    "accessibility-summary-images": "Buch mit Text und beschriebenen Bildern, navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",
     "review-title": "{title}: Leseexemplar",
     "review-intro": "Leseexemplar.",
     "review-intro-build": "Leseexemplar, Fassung {build}.",
@@ -4275,10 +4286,12 @@ var en_default = {
     "all-rights-reserved": "All rights reserved.",
     "published-by": "Published by {publisher}",
     "scene-break": "Scene break",
+    footnotes: "Notes",
     "cover-alt": "Cover of {title}",
     "start-of-content": "Start of Content",
     "accessibility-summary": "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.",
     "accessibility-summary-cover": "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    "accessibility-summary-images": "Text book with described images, a navigable table of contents, headings for each chapter, and a single logical reading order.",
     "review-title": "{title}: review copy",
     "review-intro": "Review copy.",
     "review-intro-build": "Review copy, build {build}.",
@@ -4450,10 +4463,12 @@ var es_default = {
     "all-rights-reserved": "Todos los derechos reservados.",
     "published-by": "Publicado por {publisher}",
     "scene-break": "Cambio de escena",
+    footnotes: "Notas",
     "cover-alt": "Portada de {title}",
     "start-of-content": "Inicio del contenido",
     "accessibility-summary": "Libro solo de texto con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
     "accessibility-summary-cover": "Libro con texto e imagen de portada descrita, con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
+    "accessibility-summary-images": "Libro con texto e imágenes descritas, con un índice navegable, encabezados para cada capítulo y un único orden de lectura lógico.",
     "review-title": "{title}: copia de revisión",
     "review-intro": "Copia de revisión.",
     "review-intro-build": "Copia de revisión, versión {build}.",
@@ -5184,10 +5199,12 @@ var fa_default = {
     "all-rights-reserved": "همهٔ حقوق محفوظ است.",
     "published-by": "ناشر: {publisher}",
     "scene-break": "تغییر صحنه",
+    footnotes: "پانوشت‌ها",
     "cover-alt": "جلد کتاب {title}",
     "start-of-content": "آغاز محتوا",
     "accessibility-summary": "کتابی فقط متنی، با فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
     "accessibility-summary-cover": "کتابی متنی با تصویر جلد توصیف‌شده، فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
+    "accessibility-summary-images": "کتابی متنی با تصاویر توصیف‌شده، فهرست مطالب پیمایش‌پذیر، عنوانی برای هر فصل و یک ترتیب خواندن منطقی واحد.",
     "review-title": "{title}: نسخهٔ بازبینی",
     "review-intro": "نسخهٔ بازبینی.",
     "review-intro-build": "نسخهٔ بازبینی، ویرایش {build}.",
@@ -5341,10 +5358,12 @@ var fr_default = {
     "all-rights-reserved": "Tous droits réservés.",
     "published-by": "Publié par {publisher}",
     "scene-break": "Changement de scène",
+    footnotes: "Notes",
     "cover-alt": "Couverture de {title}",
     "start-of-content": "Début du contenu",
     "accessibility-summary": "Livre entièrement textuel, avec une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
     "accessibility-summary-cover": "Livre textuel avec une image de couverture décrite, une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
+    "accessibility-summary-images": "Livre textuel avec des images décrites, une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",
     "review-title": "{title} : exemplaire de relecture",
     "review-intro": "Exemplaire de relecture.",
     "review-intro-build": "Exemplaire de relecture, version {build}.",
@@ -6537,10 +6556,12 @@ var he_default = {
     "all-rights-reserved": "כל הזכויות שמורות.",
     "published-by": "בהוצאת {publisher}",
     "scene-break": "מעבר סצנה",
+    footnotes: "הערות",
     "cover-alt": "כריכת הספר {title}",
     "start-of-content": "תחילת התוכן",
     "accessibility-summary": "ספר טקסט בלבד, עם תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
     "accessibility-summary-cover": "ספר טקסט עם תמונת כריכה מתוארת, תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
+    "accessibility-summary-images": "ספר טקסט עם תמונות מתוארות, תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",
     "review-title": "{title}: עותק לקריאה",
     "review-intro": "עותק לקריאה.",
     "review-intro-build": "עותק לקריאה, גרסה {build}.",
@@ -6684,10 +6705,12 @@ var hi_default = {
     "all-rights-reserved": "सर्वाधिकार सुरक्षित।",
     "published-by": "प्रकाशक: {publisher}",
     "scene-break": "दृश्य परिवर्तन",
+    footnotes: "टिप्पणियाँ",
     "cover-alt": "{title} का आवरण",
     "start-of-content": "सामग्री का आरंभ",
     "accessibility-summary": "केवल पाठ वाली पुस्तक, जिसमें नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
     "accessibility-summary-cover": "पाठ वाली पुस्तक, जिसमें वर्णित आवरण चित्र, नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
+    "accessibility-summary-images": "पाठ वाली पुस्तक, जिसमें वर्णित चित्र, नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",
     "review-title": "{title}: समीक्षा प्रति",
     "review-intro": "समीक्षा प्रति।",
     "review-intro-build": "समीक्षा प्रति, संस्करण {build}।",
@@ -6830,10 +6853,12 @@ var it_default = {
     "all-rights-reserved": "Tutti i diritti riservati.",
     "published-by": "Pubblicato da {publisher}",
     "scene-break": "Cambio di scena",
+    footnotes: "Note",
     "cover-alt": "Copertina di {title}",
     "start-of-content": "Inizio del contenuto",
     "accessibility-summary": "Libro di solo testo con indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
     "accessibility-summary-cover": "Libro testuale con immagine di copertina descritta, indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
+    "accessibility-summary-images": "Libro testuale con immagini descritte, indice navigabile, un titolo per ogni capitolo e un unico ordine di lettura logico.",
     "review-title": "{title}: copia di revisione",
     "review-intro": "Copia di revisione.",
     "review-intro-build": "Copia di revisione, versione {build}.",
@@ -6987,10 +7012,12 @@ var ja_default = {
     "all-rights-reserved": "本書の無断転載・複製を禁じます。",
     "published-by": "発行所：{publisher}",
     "scene-break": "場面転換",
+    footnotes: "注",
     "cover-alt": "『{title}』の表紙",
     "start-of-content": "本文",
     "accessibility-summary": "テキストのみの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
     "accessibility-summary-cover": "説明付きの表紙画像があるテキストの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
+    "accessibility-summary-images": "説明付きの画像があるテキストの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
     "review-title": "{title}（レビュー用原稿）",
     "review-intro": "レビュー用の原稿です。",
     "review-intro-build": "レビュー用の原稿です（ビルド {build}）。",
@@ -7135,10 +7162,12 @@ var ko_default = {
     "all-rights-reserved": "이 책의 무단 전재와 복제를 금합니다.",
     "published-by": "펴낸곳: {publisher}",
     "scene-break": "장면 전환",
+    footnotes: "주",
     "cover-alt": "『{title}』 표지",
     "start-of-content": "본문",
     "accessibility-summary": "텍스트로만 된 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
     "accessibility-summary-cover": "설명이 있는 표지 이미지가 포함된 텍스트 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
+    "accessibility-summary-images": "설명이 있는 이미지가 포함된 텍스트 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",
     "review-title": "{title}: 검토용 원고",
     "review-intro": "검토용 원고입니다.",
     "review-intro-build": "검토용 원고입니다(빌드 {build}).",
@@ -7281,10 +7310,12 @@ var nl_default = {
     "all-rights-reserved": "Alle rechten voorbehouden.",
     "published-by": "Uitgegeven door {publisher}",
     "scene-break": "Scènewisseling",
+    footnotes: "Noten",
     "cover-alt": "Omslag van {title}",
     "start-of-content": "Begin van de inhoud",
     "accessibility-summary": "Boek met alleen tekst, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
     "accessibility-summary-cover": "Boek met tekst en een beschreven omslagafbeelding, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
+    "accessibility-summary-images": "Boek met tekst en beschreven afbeeldingen, met een navigeerbare inhoudsopgave, een kop voor elk hoofdstuk en één logische leesvolgorde.",
     "review-title": "{title}: leesexemplaar",
     "review-intro": "Leesexemplaar.",
     "review-intro-build": "Leesexemplaar, versie {build}.",
@@ -7427,10 +7458,12 @@ var pl_default = {
     "all-rights-reserved": "Wszelkie prawa zastrzeżone.",
     "published-by": "Wydawca: {publisher}",
     "scene-break": "Zmiana sceny",
+    footnotes: "Przypisy",
     "cover-alt": "Okładka książki „{title}”",
     "start-of-content": "Początek treści",
     "accessibility-summary": "Książka wyłącznie tekstowa z nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
     "accessibility-summary-cover": "Książka tekstowa z opisaną ilustracją na okładce, nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
+    "accessibility-summary-images": "Książka tekstowa z opisanymi ilustracjami, nawigowalnym spisem treści, nagłówkiem każdego rozdziału i jedną logiczną kolejnością czytania.",
     "review-title": "{title}: egzemplarz do recenzji",
     "review-intro": "Egzemplarz do recenzji.",
     "review-intro-build": "Egzemplarz do recenzji, wersja {build}.",
@@ -7609,10 +7642,12 @@ var pt_default = {
     "all-rights-reserved": "Todos os direitos reservados.",
     "published-by": "Publicado por {publisher}",
     "scene-break": "Mudança de cena",
+    footnotes: "Notas",
     "cover-alt": "Capa de {title}",
     "start-of-content": "Início do conteúdo",
     "accessibility-summary": "Livro só de texto, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
     "accessibility-summary-cover": "Livro com texto e imagem de capa descrita, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
+    "accessibility-summary-images": "Livro com texto e imagens descritas, com índice navegável, um título para cada capítulo e uma única ordem de leitura lógica.",
     "review-title": "{title}: cópia de revisão",
     "review-intro": "Cópia de revisão.",
     "review-intro-build": "Cópia de revisão, versão {build}.",
@@ -7755,10 +7790,12 @@ var ru_default = {
     "all-rights-reserved": "Все права защищены.",
     "published-by": "Издатель: {publisher}",
     "scene-break": "Смена сцены",
+    footnotes: "Примечания",
     "cover-alt": "Обложка книги «{title}»",
     "start-of-content": "Начало текста",
     "accessibility-summary": "Книга, содержащая только текст, с навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
     "accessibility-summary-cover": "Текстовая книга с описанным изображением обложки, навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
+    "accessibility-summary-images": "Текстовая книга с описанными изображениями, навигационным оглавлением, заголовком у каждой главы и единым логическим порядком чтения.",
     "review-title": "{title}: экземпляр для рецензирования",
     "review-intro": "Экземпляр для рецензирования.",
     "review-intro-build": "Экземпляр для рецензирования, версия {build}.",
@@ -7906,10 +7943,12 @@ var sv_default = {
     "all-rights-reserved": "Alla rättigheter förbehållna.",
     "published-by": "Utgiven av {publisher}",
     "scene-break": "Scenbyte",
+    footnotes: "Noter",
     "cover-alt": "Omslag till {title}",
     "start-of-content": "Början av innehållet",
     "accessibility-summary": "Bok med enbart text, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
     "accessibility-summary-cover": "Bok med text och en beskriven omslagsbild, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
+    "accessibility-summary-images": "Bok med text och beskrivna bilder, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",
     "review-title": "{title}: läsexemplar",
     "review-intro": "Läsexemplar.",
     "review-intro-build": "Läsexemplar, version {build}.",
@@ -8060,10 +8099,12 @@ var tr_default = {
     "all-rights-reserved": "Tüm hakları saklıdır.",
     "published-by": "Yayıncı: {publisher}",
     "scene-break": "Sahne geçişi",
+    footnotes: "Notlar",
     "cover-alt": "Kapak: {title}",
     "start-of-content": "İçeriğin başlangıcı",
     "accessibility-summary": "Gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan, yalnızca metinden oluşan kitap.",
     "accessibility-summary-cover": "Açıklamalı kapak görseli, gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan metin tabanlı kitap.",
+    "accessibility-summary-images": "Açıklamalı görseller, gezinilebilir içindekiler tablosu, her bölüm için bir başlık ve tek bir mantıksal okuma sırası olan metin tabanlı kitap.",
     "review-title": "{title}: okuma nüshası",
     "review-intro": "Okuma nüshası.",
     "review-intro-build": "Okuma nüshası, sürüm {build}.",
@@ -8206,10 +8247,12 @@ var uk_default = {
     "all-rights-reserved": "Усі права захищено.",
     "published-by": "Видавець: {publisher}",
     "scene-break": "Зміна сцени",
+    footnotes: "Примітки",
     "cover-alt": "Обкладинка книжки «{title}»",
     "start-of-content": "Початок тексту",
     "accessibility-summary": "Книжка, що містить лише текст, із навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
     "accessibility-summary-cover": "Текстова книжка з описаним зображенням обкладинки, навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
+    "accessibility-summary-images": "Текстова книжка з описаними зображеннями, навігаційним змістом, заголовком кожного розділу та єдиним логічним порядком читання.",
     "review-title": "{title}: примірник для рецензування",
     "review-intro": "Примірник для рецензування.",
     "review-intro-build": "Примірник для рецензування, версія {build}.",
@@ -8364,10 +8407,12 @@ var zh_default = {
     "all-rights-reserved": "版权所有，侵权必究。",
     "published-by": "出版者：{publisher}",
     "scene-break": "场景转换",
+    footnotes: "注释",
     "cover-alt": "《{title}》封面",
     "start-of-content": "正文",
     "accessibility-summary": "纯文本图书，包含可导航的目录、每章的标题和单一的逻辑阅读顺序。",
     "accessibility-summary-cover": "文本图书，包含带描述的封面图片、可导航的目录、每章的标题和单一的逻辑阅读顺序。",
+    "accessibility-summary-images": "文本图书，包含带描述的图片、可导航的目录、每章的标题和单一的逻辑阅读顺序。",
     "review-title": "{title}（审阅本）",
     "review-intro": "审阅本。",
     "review-intro-build": "审阅本，版本 {build}。",
@@ -8506,10 +8551,12 @@ var labels = {
   "all-rights-reserved": "版權所有，翻印必究。",
   "published-by": "出版者：{publisher}",
   "scene-break": "場景轉換",
+  footnotes: "注釋",
   "cover-alt": "《{title}》封面",
   "start-of-content": "正文",
   "accessibility-summary": "純文字圖書，包含可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
   "accessibility-summary-cover": "文字圖書，包含附描述的封面圖片、可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
+  "accessibility-summary-images": "文字圖書，包含附描述的圖片、可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",
   "review-title": "{title}（審閱本）",
   "review-intro": "審閱本。",
   "review-intro-build": "審閱本，版本 {build}。",
@@ -10702,8 +10749,20 @@ var URL_PLACEHOLDER = "";
 var COUNTED_WORD = new RegExp(`${URL_PLACEHOLDER}|${WORD_PATTERN.source}`, "gu");
 var EMPHASIS_UNDERSCORES = /(?<![\p{L}\p{M}\p{N}_])_+|(?<!_)_+(?![\p{L}\p{N}_])/gu;
 var URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\]`]*[^\s<>()[\]`.,;:!?'"\u2019\u201d*_~]|(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}][\p{L}\p{N}._%+-]*@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu;
-function plainLinks(text) {
-  return splitFences(String(text)).map((part) => part.fenced ? part.text : withoutLinks(part.text)).join("");
+function plainLinks(text, images = null, keep = () => true) {
+  return splitFences(String(text)).map((part) => part.fenced ? part.text : withoutLinks(part.text, images, keep)).join("");
+}
+function proseImages(text) {
+  const images = [];
+  plainLinks(text, images);
+  return images;
+}
+var IMAGE_START = "";
+var IMAGE_END = "";
+var IMAGE_TOKEN = /\uE002(\d+)\uE003/g;
+var IMAGE_AT = /\uE002(\d+)\uE003/y;
+function imageToken(index) {
+  return `${IMAGE_START}${index}${IMAGE_END}`;
 }
 var ESCAPABLE = /[!-/:-@[-`{-~]/;
 var BACKSLASH_ESCAPE = /\\([!-/:-@[-`{-~])/g;
@@ -10718,11 +10777,15 @@ function autolinkEnd(text, index) {
   }
   return index + match[0].length;
 }
-function withoutLinks(source) {
+function withoutLinks(source, images, keep) {
   let result = "";
   let position = 0;
-  for (const [start, end] of linkCuts(source)) {
+  for (const [start, end, image] of linkCuts(source)) {
     result += source.slice(position, start);
+    if (images !== null && image !== undefined && keep(image)) {
+      result += imageToken(images.length);
+      images.push(image);
+    }
     position = end;
   }
   return result + source.slice(position);
@@ -10755,16 +10818,19 @@ function linkCuts(source) {
       } else if (character === "]" && openers.length > 0) {
         const opener = openers.pop();
         let linkEnd = -1;
+        const destination = {};
         if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
           groups ??= parenGroups(source, start, end);
-          linkEnd = inlineLinkEnd(source, index + 1, end, groups);
+          linkEnd = inlineLinkEnd(source, index + 1, end, groups, destination);
         }
         if (linkEnd === -1) {
           index += 1;
           continue;
         }
         if (opener.image) {
-          cuts.push([opener.start, linkEnd]);
+          const written = source.slice(destination.start, destination.end);
+          const target = (written.startsWith("<") ? written.slice(1, -1) : written).replace(BACKSLASH_ESCAPE, "$1");
+          cuts.push([opener.start, linkEnd, { alt: source.slice(opener.start + 2, index), destination: target }]);
         } else {
           cuts.push([opener.start, opener.start + 1], [index, linkEnd]);
           inactive = openers.length;
@@ -10778,9 +10844,9 @@ function linkCuts(source) {
   cuts.sort((left, right) => left[0] - right[0]);
   const removed = [];
   let position = 0;
-  for (const [start, end] of cuts) {
+  for (const [start, end, image] of cuts) {
     if (end > position) {
-      removed.push([Math.max(start, position), end]);
+      removed.push(image === undefined ? [Math.max(start, position), end] : [start, end, image]);
       position = end;
     }
   }
@@ -10840,7 +10906,7 @@ function parenGroups(source, start, end) {
   }
   return groups;
 }
-function inlineLinkEnd(source, open, limit, groups) {
+function inlineLinkEnd(source, open, limit, groups, destination = {}) {
   const escaped = (index) => source[index] === "\\" && ESCAPABLE.test(source[index + 1] ?? "");
   let index = skipLinkSpace(source, open + 1, limit);
   if (source[index] === "<") {
@@ -10872,6 +10938,8 @@ function inlineLinkEnd(source, open, limit, groups) {
     }
   }
   const destinationEnd = index;
+  destination.start = skipLinkSpace(source, open + 1, limit);
+  destination.end = destinationEnd;
   index = skipLinkSpace(source, index, limit);
   const quote = { '"': '"', "'": "'", "(": ")" }[source[index]];
   if (index > destinationEnd && quote !== undefined) {
@@ -10911,7 +10979,7 @@ function flattenHeadings(text) {
 }
 function splitWords(markdown) {
   const urls = [];
-  const normalized = countedText(plainLinks(String(markdown))).replace(/\uE000/g, " ").replace(URL_OR_EMAIL, (match) => {
+  const normalized = countedText(plainLinks(splitFootnotes(String(markdown)).text)).replace(/\uE000/g, " ").replace(URL_OR_EMAIL, (match) => {
     urls.push(match);
     return ` ${URL_PLACEHOLDER} `;
   }).replace(BACKSLASH_ESCAPE, "$1").replace(EMPHASIS_UNDERSCORES, " ").replace(/[#>*~|`]/g, " ").replace(/(?<!\p{N}):|:(?!\p{N})/gu, " ");
@@ -11092,35 +11160,232 @@ function setextSceneBreakLines(markdownBody) {
   }
   return found;
 }
-var FOOTNOTE_DEFINITION = /^ *\[\^[^\]\n]+\]:/;
-function footnoteLines(markdownBody) {
+var FOOTNOTE_DEFINITION = /^ *\[\^([^[\]\s]{1,999})\]:[ \t]*/;
+var FOOTNOTE_MARKER = /\[\^([^[\]\s]{1,999})\]/y;
+function footnoteLabel(label) {
+  return String(label).toLowerCase();
+}
+function footnoteBlocks(prose, masked = maskMarkup(prose)) {
+  const lines = String(prose).split(`
+`);
+  const maskedLines = String(masked).split(`
+`);
+  const blocks = [];
+  let html = null;
+  let paragraph = false;
+  let note = null;
+  for (const [index, line] of maskedLines.entries()) {
+    const marker = /^(?: {0,3}>[ \t]?)*/.exec(line)[0];
+    const content = expandTabs(line.slice(marker.length));
+    const text = () => expandTabs(lines[index].slice(Math.min(marker.length, lines[index].length))).trim();
+    if (html !== null) {
+      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
+      continue;
+    }
+    if (content.trim() === "") {
+      paragraph = false;
+      if (note !== null) {
+        note.blank = true;
+      }
+      continue;
+    }
+    const indent = indentOf(content);
+    if (note !== null) {
+      const opens = marker !== "" && !note.quoted || indent <= 3 && (FOOTNOTE_DEFINITION.test(content) || breaksParagraph(content) || ATX_HEADING.test(content) || htmlBlock(content, true) !== null);
+      if (!note.blank && !opens) {
+        note.paragraphs.at(-1).push(text());
+        note.end = index + 1;
+        continue;
+      }
+      note = null;
+    }
+    if (indent > 3) {
+      continue;
+    }
+    const block = htmlBlock(content, paragraph);
+    if (block !== null) {
+      html = block.end !== null && block.end.test(content) ? null : block;
+      paragraph = false;
+      continue;
+    }
+    const definition = FOOTNOTE_DEFINITION.exec(content);
+    if (definition !== null) {
+      const original = expandTabs(lines[index].slice(Math.min(marker.length, lines[index].length)));
+      note = { label: definition[1], start: index, end: index + 1, paragraphs: [[original.slice(definition[0].length).trim()]], blank: false, quoted: marker !== "" };
+      blocks.push(note);
+      paragraph = false;
+      continue;
+    }
+    paragraph = true;
+  }
+  return blocks.map(({ label, start, end, paragraphs }) => ({ label, start, end, paragraphs: paragraphs.map((lines) => lines.filter((line) => line !== "")).filter((lines) => lines.length > 0) }));
+}
+function footnoteDefinitionLines(prose) {
+  const lines = new Set;
+  if (!String(prose).includes("[^")) {
+    return lines;
+  }
+  for (const block of footnoteBlocks(String(prose))) {
+    for (let index = block.start;index < block.end; index += 1) {
+      lines.add(index);
+    }
+  }
+  return lines;
+}
+function splitFootnotes(prose) {
+  const source = String(prose);
+  const notes = new Map;
+  if (!source.includes("[^")) {
+    return { text: source, notes };
+  }
+  const blocks = footnoteBlocks(source);
+  if (blocks.length === 0) {
+    return { text: source, notes };
+  }
+  const lines = source.split(`
+`);
+  for (const block of blocks) {
+    for (let index = block.start;index < block.end; index += 1) {
+      lines[index] = "";
+    }
+    const label = footnoteLabel(block.label);
+    if (!notes.has(label)) {
+      notes.set(label, { label: block.label, text: block.paragraphs.map((paragraph) => paragraph.join(`
+`)).join(`
+
+`) });
+    }
+  }
+  return { text: lines.join(`
+`), notes };
+}
+function footnoteMarkers(text) {
+  const source = String(text);
+  const found = [];
+  if (!source.includes("[^")) {
+    return found;
+  }
+  const closeSpan = codeSpanCloser(source);
+  for (let index = 0;index < source.length; ) {
+    const character = source[index];
+    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+      index += 2;
+    } else if (character === "`") {
+      let run = index;
+      while (source[run] === "`") {
+        run += 1;
+      }
+      const close = closeSpan(index, run - index);
+      index = close === -1 ? run : close;
+    } else if (character === "<" && autolinkEnd(source, index) !== -1) {
+      index = autolinkEnd(source, index);
+    } else if (character === "[" && source[index + 1] === "^") {
+      FOOTNOTE_MARKER.lastIndex = index;
+      const marker = FOOTNOTE_MARKER.exec(source);
+      if (marker === null) {
+        index += 1;
+      } else {
+        found.push({ label: marker[1], start: index, end: index + marker[0].length });
+        index += marker[0].length;
+      }
+    } else {
+      index += 1;
+    }
+  }
+  return found;
+}
+function withoutFootnotes(text) {
+  const { text: prose, notes } = splitFootnotes(text);
+  if (notes.size === 0) {
+    return prose;
+  }
+  return splitFences(prose).map((part) => {
+    if (part.fenced) {
+      return part.text;
+    }
+    let result = "";
+    let position = 0;
+    for (const marker of footnoteMarkers(part.text)) {
+      if (notes.has(footnoteLabel(marker.label))) {
+        result += part.text.slice(position, marker.start);
+        position = marker.end;
+      }
+    }
+    return result + part.text.slice(position);
+  }).join("");
+}
+function footnoteUses(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, `
 `);
   const masked = maskMarkup(body);
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split(`
 `).length - 1;
-  const found = [];
-  let html = null;
-  let paragraph = false;
-  for (const [index, line] of masked.slice(start).split(`
-`).entries()) {
-    const content = expandTabs(line.slice(/^(?: {0,3}>[ \t]?)*/.exec(line)[0].length));
-    if (html !== null) {
-      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
-    } else if (content.trim() === "") {
-      paragraph = false;
-    } else if (indentOf(content) <= 3) {
-      const block = htmlBlock(content, paragraph);
-      const footnote = block === null && FOOTNOTE_DEFINITION.test(content);
-      if (block !== null) {
-        html = block.end !== null && block.end.test(content) ? null : block;
-      }
-      if (footnote) {
-        found.push(first + index);
-      }
-      paragraph = block === null && !footnote;
+  const prose = body.slice(start);
+  const maskedProse = masked.slice(start);
+  if (!prose.includes("[^")) {
+    return { definitions: [], markers: [] };
+  }
+  const blocks = footnoteBlocks(prose, maskedProse);
+  const definitions = blocks.map((block) => ({ label: block.label, line: first + block.start }));
+  const lines = maskedProse.split(`
+`);
+  for (const block of blocks) {
+    for (let index = block.start;index < block.end; index += 1) {
+      lines[index] = " ".repeat(lines[index].length);
     }
+  }
+  const unlinked = lines.join(`
+`);
+  const cuts = unlinked.includes("](") ? linkCuts(unlinked) : [];
+  const linkEdges = new Set(cuts.map(([cutStart]) => cutStart));
+  const images = cuts.filter((cut) => cut[2] !== undefined);
+  let nextImage = 0;
+  const inImage = (at) => {
+    while (nextImage < images.length && images[nextImage][1] <= at) {
+      nextImage += 1;
+    }
+    return nextImage < images.length && images[nextImage][0] <= at;
+  };
+  const searched = maskLinkTargets(unlinked).text;
+  const markers = [];
+  let line = first;
+  let position = 0;
+  for (const marker of footnoteMarkers(searched).filter(({ start, end }) => !linkEdges.has(start) && !linkEdges.has(end - 1) && !inImage(start))) {
+    for (;position < marker.start; position += 1) {
+      line += searched[position] === `
+` ? 1 : 0;
+    }
+    markers.push({ label: marker.label, line });
+  }
+  return { definitions, markers };
+}
+function imageLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, `
+`);
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const prose = masked.slice(start);
+  const first = masked.slice(0, start).split(`
+`).length - 1;
+  const found = [];
+  const noteLines = new Map;
+  for (const block of prose.includes("[^") ? footnoteBlocks(body.slice(start), prose) : []) {
+    for (let index = block.start;index < block.end; index += 1) {
+      noteLines.set(first + index, block.label);
+    }
+  }
+  let line = first;
+  let position = 0;
+  for (const [cutStart, , image] of prose.includes("](") ? linkCuts(prose) : []) {
+    if (image === undefined) {
+      continue;
+    }
+    for (;position < cutStart; position += 1) {
+      line += prose[position] === `
+` ? 1 : 0;
+    }
+    found.push(noteLines.has(line) ? { destination: image.destination, line, note: noteLines.get(line) } : { destination: image.destination, line });
   }
   return found;
 }
@@ -11187,7 +11452,7 @@ function wordCount(markdown) {
 }
 var graphemes2;
 function characterCount(markdown) {
-  const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split(`
+  const lines = plainLinks(splitFootnotes(String(markdown).replace(/\uE000/g, " ")).text).split(`
 `);
   const text = countedText(lines.map((line) => isSceneBreak(line) ? "" : line).join(`
 `)).replace(BACKSLASH_ESCAPE, "$1").replace(/[#>*_~|`\s]+/gu, "");
@@ -13591,6 +13856,9 @@ function codeError(code, label) {
   if (isCustomCode(code)) {
     return null;
   }
+  if (Object.hasOwn(RETIRED_CODES, code)) {
+    return null;
+  }
   if (!Object.hasOwn(FINDING_CODES, code)) {
     return err("exemption-unknown-code", `${label} code ${code} is not a finding code${suggestion(code, Object.keys(FINDING_CODES))}`, EXEMPTIONS_FILE);
   }
@@ -14819,10 +15087,10 @@ function relative(project, file) {
 }
 
 // src/scan-fields.js
-import path10 from "node:path";
+import path11 from "node:path";
 
 // src/packaging.js
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 
 // src/deflate.js
 import { Buffer as Buffer2 } from "node:buffer";
@@ -15181,8 +15449,205 @@ function canonicalCodes(lengths) {
   });
 }
 
-// src/build-style.js
+// src/scan-cover.js
+import fs4 from "node:fs";
 import path9 from "node:path";
+import { Buffer as Buffer3 } from "node:buffer";
+var COVER_MEDIA_TYPES = {
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp"
+};
+var MAX_COVER_BYTES = 50 * 1024 * 1024;
+function assertFileSizeWithinLimit(filePath, limit = MAX_SCAN_FILE_BYTES) {
+  const size = fs4.statSync(filePath).size;
+  if (size > limit) {
+    throw projectError("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + limit + " byte limit");
+  }
+}
+function coverIsReady(project) {
+  if (project.story.data.cover === undefined) {
+    return false;
+  }
+  try {
+    coverImage(project);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function coverImage(project) {
+  const cover = String(project.story.data.cover).trim();
+  if (PATH_CONTROL_CHARACTERS.test(cover)) {
+    throw controlCharacterError("cover", cover);
+  }
+  return checkedImage(project, cover, path9.resolve(project.root, cover), `story.md cover ${cover}`);
+}
+function proseImage(project, file, destination) {
+  const written = String(destination);
+  const shown = `${file} image ${JSON.stringify(written).slice(1, -1)}`;
+  let target = written.replace(/[?#][\s\S]*$/, "");
+  try {
+    target = decodeURIComponent(target);
+  } catch {}
+  if (PATH_CONTROL_CHARACTERS.test(target)) {
+    throw projectError(`${shown} must not contain control characters`);
+  }
+  if (target.trim() === "") {
+    throw projectError(`${shown} names no file`);
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+    throw projectError(`${shown} must be a file inside the project, not a URL`);
+  }
+  const filePath = target.startsWith("/") || target.startsWith("\\") ? path9.resolve(project.root, `.${target}`) : path9.resolve(project.root, path9.dirname(file), target);
+  return checkedImage(project, target, filePath, shown);
+}
+function remoteImage(destination) {
+  return /^(?:https?:)?\/\//i.test(String(destination).trim());
+}
+function checkedImage(project, written, filePath, shown) {
+  const mediaType = COVER_MEDIA_TYPES[path9.extname(written).toLowerCase()];
+  if (mediaType === undefined) {
+    throw projectError(`${shown} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
+  }
+  if (!isPathInside(project.root, filePath)) {
+    throw projectError(`${shown} must be inside the project`);
+  }
+  const named = (check) => {
+    try {
+      return check();
+    } catch (error) {
+      if (shown.startsWith("story.md cover ")) {
+        throw error;
+      }
+      const reason = FILE_ERROR_REASONS[error.code];
+      const message = reason ? `Cannot read: ${reason}` : String(error.message).split(filePath).join(written).split(project.root).join(".").replace(`${written}: `, "");
+      throw projectError(`${shown}: ${message}`);
+    }
+  };
+  const stats = named(() => lstatIfExists(filePath));
+  if (!stats) {
+    throw projectError(`${shown} does not exist`);
+  }
+  named(() => assertSafeProjectPath(filePath, project.root));
+  if (!stats.isFile()) {
+    throw projectError(`${shown} is not a file`);
+  }
+  named(() => assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES));
+  let held;
+  try {
+    held = coverFormat(filePath);
+  } catch (error) {
+    const reason = FILE_ERROR_REASONS[error.code];
+    throw projectError(`${shown}: ${reason ? `Cannot read: ${reason}` : String(error.message).replace(`${filePath}: `, "")}`);
+  }
+  if (held !== mediaType) {
+    throw projectError(held === null ? `${shown} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature` : `${shown} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
+  }
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path9.extname(written).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES, size: stats.size, root: project.root, shown };
+}
+function proseImageBytes(image) {
+  let bytes;
+  try {
+    assertSafeProjectPath(image.filePath, image.root);
+    bytes = readFileBytes(image.filePath, image.maxBytes);
+  } catch (error) {
+    const reason = FILE_ERROR_REASONS[error.code];
+    throw projectError(`${image.shown} changed while the build read it: ${reason ? `Cannot read: ${reason}` : String(error.message).split(image.filePath).join("the image").split(image.root).join(".")}`);
+  }
+  if (formatOfBytes(bytes) !== image.mediaType) {
+    throw projectError(`${image.shown} changed while the build read it: build again`);
+  }
+  return bytes;
+}
+var IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
+var IMAGE_SIGNATURE_BYTES = 12;
+function coverFormat(filePath) {
+  return formatOfBytes(readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES));
+}
+function formatOfBytes(bytes) {
+  const head = Buffer3.from(bytes).subarray(0, IMAGE_SIGNATURE_BYTES);
+  const ascii = (start, end) => head.subarray(start, end).toString("latin1");
+  if (head.subarray(0, 8).equals(Buffer3.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return "image/png";
+  }
+  if (head.subarray(0, 3).equals(Buffer3.from([255, 216, 255]))) {
+    return "image/jpeg";
+  }
+  if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
+    return "image/gif";
+  }
+  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") {
+    return "image/webp";
+  }
+  return null;
+}
+function imageSize(bytes, mediaType) {
+  const data = Buffer3.from(bytes);
+  const size = (width, height) => width > 0 && height > 0 ? { width, height } : null;
+  if (mediaType === "image/png") {
+    return data.length >= 24 && data.toString("latin1", 12, 16) === "IHDR" ? size(data.readUInt32BE(16), data.readUInt32BE(20)) : null;
+  }
+  if (mediaType === "image/gif") {
+    return data.length >= 10 ? size(data.readUInt16LE(6), data.readUInt16LE(8)) : null;
+  }
+  if (mediaType === "image/webp") {
+    return webpSize(data, size);
+  }
+  if (mediaType === "image/jpeg") {
+    return jpegSize(data, size);
+  }
+  return null;
+}
+function webpSize(data, size) {
+  if (data.length < 30) {
+    return null;
+  }
+  const chunk = data.toString("latin1", 12, 16);
+  if (chunk === "VP8 ") {
+    return size(data.readUInt16LE(26) & 16383, data.readUInt16LE(28) & 16383);
+  }
+  if (chunk === "VP8L") {
+    const bits = data.readUInt32LE(21);
+    return size((bits & 16383) + 1, (bits >>> 14 & 16383) + 1);
+  }
+  if (chunk === "VP8X") {
+    return size(data.readUIntLE(24, 3) + 1, data.readUIntLE(27, 3) + 1);
+  }
+  return null;
+}
+var JPEG_FRAMES = new Set([192, 193, 194, 195, 197, 198, 199, 201, 202, 203, 205, 206, 207]);
+function jpegSize(data, size) {
+  let index = 2;
+  while (index + 4 <= data.length) {
+    if (data[index] !== 255) {
+      return null;
+    }
+    const marker = data[index + 1];
+    if (marker === 255) {
+      index += 1;
+      continue;
+    }
+    if (marker === 216 || marker === 1 || marker >= 208 && marker <= 215) {
+      index += 2;
+      continue;
+    }
+    if (marker === 217 || marker === 218) {
+      return null;
+    }
+    const length = data.readUInt16BE(index + 2);
+    if (JPEG_FRAMES.has(marker)) {
+      return index + 9 <= data.length ? size(data.readUInt16BE(index + 7), data.readUInt16BE(index + 5)) : null;
+    }
+    index += 2 + length;
+  }
+  return null;
+}
+
+// src/build-style.js
+import path10 from "node:path";
 var BUILD_STYLE_PRESETS = ["classic", "modern", "elegant"];
 var HEADING_STYLES = ["centered", "small-caps", "left"];
 var PARAGRAPH_STYLES = ["indented", "block"];
@@ -15247,7 +15712,7 @@ function styleSheetFile(root, value) {
   if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
     throw projectError(`story.md build-style css ${css} must be a .css file`);
   }
-  const filePath = path9.resolve(root, css);
+  const filePath = path10.resolve(root, css);
   if (!isPathInside(root, filePath)) {
     throw projectError(`story.md build-style css ${css} must be inside the project`);
   }
@@ -15341,12 +15806,15 @@ function labelledParagraphs(part) {
     if (paragraph === null) {
       return null;
     }
+    if (paragraph.figure) {
+      return { figure: true, label: null, paragraph };
+    }
     count += 1;
     return { label: `${part.key}-p${count}`, paragraph };
   });
 }
 function paragraphLabels(book) {
-  return book.parts.flatMap((part) => labelledParagraphs(part).filter((entry) => entry !== null).map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
+  return book.parts.flatMap((part) => labelledParagraphs(part).filter((entry) => entry !== null && !entry.figure).map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
 }
 function openingWords(text, count = 6) {
   const source = String(text);
@@ -15388,6 +15856,10 @@ function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = 
         body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
         continue;
       }
+      if (entry.figure) {
+        body.push({ quote: entry.paragraph.quote, markup: `<figure>${entry.paragraph.html}</figure>` });
+        continue;
+      }
       const { label: anchor, paragraph } = entry;
       const note = noteUrl === "" ? "" : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="${escapeHtml(label("note-title", { label: anchor }))}" target="_blank" rel="noopener">${escapeHtml(label("note"))}</a>`;
       body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
@@ -15397,7 +15869,7 @@ function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = 
 `;
     sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
 ${partByline}${withBlockquotes(body).join(`
-`)}
+`)}${footnotesHtml(part, labels, "h3")}
 </section>`);
   }
   const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join(`
@@ -15437,7 +15909,7 @@ blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
 .scene-break { border: 0; text-align: center; margin: 2rem 0; }
 .scene-break::after { content: "${cssString(style.sceneBreak ?? "* * *")}"; color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
+${book.images ? IMAGE_RULES : ""}${book.notes ? REVIEW_NOTE_RULES : ""}@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
 ${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
 p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
 @media (max-width: 52rem) { .note-link { position: static; display: block; width: fit-content; margin-top: -1.4em; margin-inline-start: auto; opacity: 0.6; } }
@@ -15466,6 +15938,32 @@ ${sections.join(`
 </html>
 `;
 }
+var IMAGE_RULES = `figure { margin: 1rem 0; text-align: center; }
+img { max-width: 100%; height: auto; }
+`;
+function footnotesHtml(part, labels, tag) {
+  if (part.notes === undefined) {
+    return "";
+  }
+  const notes = part.notes.map((note) => {
+    const paragraphs = (note.html.length === 0 ? [""] : note.html).map((html, index) => `<p>${index === 0 ? `<a href="#${note.backlink}" role="doc-backlink">${note.number}.</a> ` : ""}${html}</p>`);
+    return `<div class="footnote" id="${note.id}" role="doc-footnote">${paragraphs.join("")}</div>`;
+  });
+  return `
+<aside class="footnotes"><${tag}>${escapeHtml(fillLabel(labels, "footnotes"))}</${tag}>
+${notes.join(`
+`)}
+</aside>`;
+}
+var REVIEW_NOTE_RULES = `.footnotes { margin-top: 2rem; padding-top: 0.5rem; border-top: 1px solid var(--rule); font-size: 0.9rem; }
+.footnotes h3 { font-size: 1rem; margin: 0 0 0.75rem; }
+.noteref a, .footnote a { color: var(--accent); text-decoration: none; }
+`;
+var PRINT_NOTE_RULES = `.footnotes { margin-top: 1.5em; font-size: 9pt; }
+.footnotes h2 { font-size: 9pt; font-weight: normal; text-align: center; margin: 0 0 0.5em; }
+.footnotes p { text-indent: 0; text-align: start; margin: 0 0 0.3em; }
+.noteref a, .footnote a { color: inherit; text-decoration: none; }
+`;
 var REVIEW_VERTICAL = `html { writing-mode: vertical-rl; }
 main { max-width: none; max-height: 38rem; margin: auto 0; padding: 1rem 2rem 1rem 6rem; }
 header h1 { margin: 0; margin-block: 2rem 0.25rem; }
@@ -15571,6 +16069,10 @@ function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
         first = true;
         continue;
       }
+      if (paragraph.figure) {
+        paragraphs.push({ quote: paragraph.quote, markup: `<figure>${paragraph.html}</figure>` });
+        continue;
+      }
       paragraphs.push({ quote: paragraph.quote, markup: first ? `<p class="first">${paragraph.html}</p>` : `<p>${paragraph.html}</p>` });
       first = false;
     }
@@ -15581,7 +16083,7 @@ function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
 <p class="byline">${escapeHtml(part.byline)}</p>`}` : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
     sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
 ${withBlockquotes(paragraphs).join(`
-`)}
+`)}${footnotesHtml(part, book.labels, "h2")}
 </section>`);
   }
   const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
@@ -15632,7 +16134,9 @@ ${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4
 ` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
 ${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
 ` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
-blockquote { margin: 0.8em 1.5em; }
+${book.images ? `figure { margin: 0.8em 0; text-align: center; break-inside: avoid; }
+img { max-width: 100%; height: auto; }
+` : ""}${book.notes ? PRINT_NOTE_RULES : ""}blockquote { margin: 0.8em 1.5em; }
 blockquote p { text-indent: 0; text-align: start; }
 section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
 section.front:not(.copyright-page) p { text-align: center; }
@@ -15738,13 +16242,31 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
   const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
   const style = manuscript.style ?? CLASSIC_STYLE;
   const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
-  const stylesheet = epubStylesheet(type, style, bylines);
+  const placesImages = [...manuscript.front, ...manuscript.chapters, ...manuscript.back].some((entry) => [...entry.images?.values() ?? []].some((image) => image !== null));
+  const stylesheet = `${epubStylesheet(type, style, bylines)}${placesImages ? EPUB_IMAGE_RULES : ""}`;
   const extra = style.cssText ?? "";
   const head = [
     stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
     extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
   ].join("");
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
+  const figures = new Map;
+  let described = true;
+  const figure = (image) => {
+    if (!figures.has(image.filePath)) {
+      const number = figures.size + 1;
+      figures.set(image.filePath, { id: `figure-${number}`, href: `images/figure-${number}.${image.extension}`, image });
+    }
+    return figures.get(image.filePath).href;
+  };
+  const markup = {
+    styled: style.styled,
+    sceneBreak: style.sceneBreak ?? "* * *",
+    ownIndent: style.paragraphs === "indented",
+    image: (image) => {
+      described &&= image.alt !== "";
+      return `<img src="${figure(image)}" alt="${xmlEscape(image.alt)}"/>`;
+    }
+  };
   const documents = [];
   const pushMatter = (placement) => (entry) => documents.push({
     id: `${placement}-${entry.id}`,
@@ -15782,8 +16304,10 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
     meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
   ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
-  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
+  const figureEntries = [...figures.values()].map((entry) => ({ name: `OEBPS/${entry.href}`, content: proseImageBytes(entry.image), stored: true }));
+  const figureItems = [...figures.values()].map((entry) => `<item id="${entry.id}" href="${entry.href}" media-type="${entry.image.mediaType}"/>`);
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels, figures.size > 0, described);
+  const items = [...figureItems, ...documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`)];
   const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
   const modified = buildTimestamp();
   writeZip(outFile, [
@@ -15794,6 +16318,7 @@ function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
     ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
     ...extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }],
     ...coverEntries,
+    ...figureEntries,
     ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
   ], writeOptions);
 }
@@ -15857,24 +16382,49 @@ function navXhtml(title, documents, root, labels, head = "") {
   const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
   return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
 }
-function epubAccessibilityMeta(hasCover, labels) {
-  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
+function epubAccessibilityMeta(hasCover, labels, hasImages = false, described = true) {
+  const visual = hasCover || hasImages;
+  const alternative = hasCover && !hasImages || hasImages && described;
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...alternative ? ["alternativeText"] : []];
+  const summary = xmlEscape(fillLabel(labels, hasImages && described ? "accessibility-summary-images" : hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
   return [
     `<meta property="schema:accessMode">textual</meta>`,
-    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
+    ...visual ? [`<meta property="schema:accessMode">visual</meta>`] : [],
     `<meta property="schema:accessModeSufficient">textual</meta>`,
     ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
     `<meta property="schema:accessibilityHazard">none</meta>`,
     `<meta property="schema:accessibilitySummary">${summary}</meta>`
   ].join("");
 }
-function xhtmlParagraphs(body, markup, verse = false) {
+function xhtmlParagraphs(body, markup, images = null, verse = false) {
   const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
-  }))).join("");
+  const { paragraphs, notes } = bookBody(body, { ownIndent: markup.ownIndent, images, verse });
+  const media = {
+    image: markup.image,
+    note: (note) => `<a epub:type="noteref" role="doc-noteref" id="${xhtmlNoteRef(note.number, note.reference)}" href="#note-${note.number}"><sup>${note.number}</sup></a>`
+  };
+  const content = withBlockquotes(paragraphs.filter(shownParagraph).map((paragraph) => {
+    const inline = paragraph.sceneBreak ? "" : paragraph.runs.map((run) => runMarkup(run, xmlEscape, "<br/>", media)).join("");
+    return {
+      quote: Boolean(paragraph.quote),
+      markup: paragraph.sceneBreak ? sceneBreak : paragraph.figure ? `<figure>${inline}</figure>` : `<p>${inline}</p>`
+    };
+  })).join("");
+  const asides = notes.map((note) => {
+    const texts = note.paragraphs.length === 0 ? [[]] : note.paragraphs;
+    const noteParagraphs = texts.map((runs, index) => `<p>${index === 0 ? `<a role="doc-backlink" href="#${xhtmlNoteRef(note.number, 1)}">${note.number}.</a> ` : ""}${runs.map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`);
+    return `<aside epub:type="footnote" role="doc-footnote" id="note-${note.number}">${noteParagraphs.join("")}</aside>`;
+  });
+  return content + asides.join("");
+}
+var EPUB_IMAGE_RULES = `figure { margin: 1em 0; text-align: center; }
+img { max-width: 100%; height: auto; }
+`;
+function xhtmlNoteRef(number, reference) {
+  return reference === 1 ? `noteref-${number}` : `noteref-${number}-${reference}`;
+}
+function shownParagraph(paragraph) {
+  return !paragraph.figure || paragraph.runs.length > 0;
 }
 function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
   const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
@@ -15884,26 +16434,49 @@ function chapterXhtml(chapter, root, head, markup) {
   const heading = chapter.heading;
   const title = String(chapter.title ?? "").trim() || heading;
   const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.images, chapter.verse)}`, markup.styled ? "chapter" : "");
 }
 function matterXhtml(entry, placement, root, head, markup) {
   const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
   const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup, entry.images)}`, markup.styled ? "matter" : "");
 }
 function htmlBook(manuscript, ownIndent = false) {
   const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
-  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
-    if (paragraph.sceneBreak) {
-      return null;
+  const sources = new Map;
+  const image = (entry) => {
+    if (!sources.has(entry.filePath)) {
+      sources.set(entry.filePath, `data:${entry.mediaType};base64,${Buffer4.from(proseImageBytes(entry)).toString("base64")}`);
     }
-    const runs = inlineRuns(paragraph.text, paragraph.code);
-    return {
-      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
-      quote: paragraph.quote
+    return `<img src="${sources.get(entry.filePath)}" alt="${escapeHtml(entry.alt)}">`;
+  };
+  const content = (key, body, images, verse = false) => {
+    const parsed = bookBody(body, { ownIndent, images: images ?? null, verse });
+    const ref = (number, reference) => `${key}-fnref${number}${reference === 1 ? "" : `-${reference}`}`;
+    const media = {
+      image,
+      note: (note) => `<sup class="noteref"><a href="#${key}-fn${note.number}" id="${ref(note.number, note.reference)}" role="doc-noteref">${note.number}</a></sup>`
     };
-  });
+    const paragraphs = parsed.paragraphs.filter(shownParagraph).map((paragraph) => {
+      if (paragraph.sceneBreak) {
+        return null;
+      }
+      const { runs } = paragraph;
+      return {
+        html: runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join(""),
+        text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
+        quote: paragraph.quote,
+        ...paragraph.figure ? { figure: true } : {}
+      };
+    });
+    const notes = parsed.notes.map((note) => ({
+      number: note.number,
+      id: `${key}-fn${note.number}`,
+      backlink: ref(note.number, 1),
+      html: note.paragraphs.map((runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""))
+    }));
+    return { paragraphs, ...notes.length > 0 ? { notes } : {} };
+  };
   const matter = (placement) => (entry) => ({
     key: `${placement}-${entry.id}`,
     kind: entry.copyright ? `${placement} copyright-page` : placement,
@@ -15913,7 +16486,7 @@ function htmlBook(manuscript, ownIndent = false) {
     heading: entry.heading,
     words: wordCount(entry.body),
     ...characters(entry.body),
-    paragraphs: paragraphs(entry.body)
+    ...content(`${placement}-${entry.id}`, entry.body, entry.images)
   });
   const parts = [
     ...manuscript.front.map(matter("front")),
@@ -15926,7 +16499,7 @@ function htmlBook(manuscript, ownIndent = false) {
       byline: chapter.byline ?? "",
       words: wordCount(chapter.body),
       ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body, chapter.verse)
+      ...content(chapter.key, chapter.body, chapter.images, chapter.verse)
     })),
     ...manuscript.back.map(matter("back"))
   ];
@@ -15939,6 +16512,8 @@ function htmlBook(manuscript, ownIndent = false) {
     writingMode: manuscript.meta.writingMode,
     labels: manuscript.meta.labels,
     words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    ...sources.size > 0 ? { images: true } : {},
+    ...parts.some((part) => part.notes !== undefined) ? { notes: true } : {},
     parts
   };
 }
@@ -15953,7 +16528,7 @@ function docxEntries(manuscript, trace = null) {
   const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
   note(traceEntry("title", null));
   credits.forEach(() => note(traceEntry("credit", null)));
-  const pushSection = (heading, body, byline, part, verse = false) => {
+  const pushSection = (heading, body, byline, part, images, verse = false) => {
     if (heading !== null) {
       bodyParts.push(paragraphXml(script, heading, "Heading1"));
       note(traceEntry("heading", part));
@@ -15962,18 +16537,70 @@ function docxEntries(manuscript, trace = null) {
       bodyParts.push(paragraphXml(script, byline, "Byline"));
       note(traceEntry("byline", part));
     }
-    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
-      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
+    let index = 0;
+    const { paragraphs, notes } = bookBody(body, { ownIndent: true, images, verse });
+    const sectionMedia = { drawing: media.drawing, footnote: (reference) => media.footnote(notes[reference.number - 1]) };
+    paragraphs.filter(shownParagraph).forEach((paragraph) => {
+      if (paragraph.figure) {
+        bodyParts.push(paragraphXml(script, "", "Figure", paragraph.runs, sectionMedia));
+        note(traceEntry("figure", part, index - 1));
+        return;
+      }
+      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, "", paragraph.quote ? "Quote" : "", paragraph.runs, sectionMedia));
       note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+      index += 1;
     });
   };
-  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
+  const media = docxMedia(script);
+  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id }, entry.images ?? null);
   manuscript.front.forEach(pushMatter("front"));
-  manuscript.chapters.forEach((chapter, index) => {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
+  manuscript.chapters.forEach((chapter, chapterIndex) => {
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: chapterIndex }, chapter.images ?? null, chapter.verse);
   });
   manuscript.back.forEach(pushMatter("back"));
-  return docxPackageEntries(script, bodyParts.join(""));
+  return docxPackageEntries(script, bodyParts.join(""), "", [], media);
+}
+function docxMedia(script) {
+  const images = new Map;
+  const footnotes = [];
+  let drawings = 0;
+  return {
+    images: () => [...images.values()],
+    footnotes: () => footnotes,
+    footnote(note) {
+      const id = footnotes.length + 1;
+      const mark = `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/>${script.rtl}</w:rPr><w:footnoteRef/></w:r><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:t xml:space="preserve"> </w:t></w:r>`;
+      const paragraphs = (note.paragraphs.length === 0 ? [[]] : note.paragraphs).map((runs, index) => paragraphXml(script, "", "FootnoteText", runs, null, index === 0 ? mark : ""));
+      footnotes.push(`<w:footnote w:id="${id}">${paragraphs.join("")}</w:footnote>`);
+      return id;
+    },
+    drawing(image) {
+      if (!images.has(image.filePath)) {
+        const number = images.size + 1;
+        const content = proseImageBytes(image);
+        images.set(image.filePath, {
+          relationship: `rIdImage${number}`,
+          name: `image${number}.${image.extension}`,
+          extension: image.extension,
+          mediaType: image.mediaType,
+          content,
+          size: imageSize(content, image.mediaType)
+        });
+      }
+      drawings += 1;
+      return docxDrawingXml(images.get(image.filePath), image.alt, drawings);
+    }
+  };
+}
+var EMU_PER_PIXEL = 9525;
+var MAX_IMAGE_EMU = { width: 6 * 914400, height: 8 * 914400 };
+function docxDrawingXml(entry, alt, id) {
+  const natural = entry.size === null ? { width: 4 * 914400, height: 3 * 914400 } : { width: entry.size.width * EMU_PER_PIXEL, height: entry.size.height * EMU_PER_PIXEL };
+  const scale = Math.min(1, MAX_IMAGE_EMU.width / natural.width, MAX_IMAGE_EMU.height / natural.height);
+  const cx = Math.max(1, Math.round(natural.width * scale));
+  const cy = Math.max(1, Math.round(natural.height * scale));
+  const description = xmlEscape(alt);
+  return `<w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="Picture ${id}" descr="${description}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${id}" name="${entry.name}" descr="${description}"/><pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr></pic:nvPicPr><pic:blipFill><a:blip r:embed="${entry.relationship}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>`;
 }
 function traceEntry(kind, part, index = null) {
   return { kind, part, index };
@@ -16017,28 +16644,50 @@ function shunnPaper(name) {
   }
   return paper;
 }
-function docxPackageEntries(script, body, page = "", headers = []) {
+function docxPackageEntries(script, body, page = "", headers = [], media = null) {
   const headerName = (index) => `header${index + 1}.xml`;
   const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
   const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
-  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  const images = media?.images() ?? [];
+  const footnotes = media?.footnotes() ?? [];
+  const footnoteEntries = footnotes.length === 0 ? [] : [{
+    name: "word/footnotes.xml",
+    content: `<?xml version="1.0" encoding="UTF-8"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:footnote w:type="separator" w:id="-1"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>${footnotes.join("")}</w:footnotes>`
+  }];
+  const footnoteType = footnotes.length === 0 ? "" : `<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>`;
+  const footnoteRelationship = footnotes.length === 0 ? "" : `<Relationship Id="rIdFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>`;
+  const imageTypes = [...new Map(images.map((image) => [image.extension, image.mediaType]))].map(([extension, type]) => `<Default Extension="${extension}" ContentType="${type}"/>`).join("");
+  const imageRelationships = images.map((image) => `<Relationship Id="${image.relationship}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/${image.name}"/>`).join("");
+  const relationshipsNamespace = headers.length === 0 && images.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  const drawingNamespace = images.length === 0 ? "" : ` xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"`;
   return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${imageTypes}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}${footnoteType}</Types>` },
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
-    { name: "word/styles.xml", content: docxStyles(script) },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}${imageRelationships}${footnoteRelationship}</Relationships>` },
+    { name: "word/styles.xml", content: docxStyles(script, { figure: images.length > 0, footnotes: footnotes.length > 0 }) },
     ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
+    ...images.map((image) => ({ name: `word/media/${image.name}`, content: image.content, stored: true })),
+    ...footnoteEntries,
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}${drawingNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
   ];
 }
-function docxStyles(script) {
-  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/>${script.sizeCs ? `<w:szCs w:val="28"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>` + `</w:styles>`;
+function docxStyles(script, { figure = false, footnotes = false } = {}) {
+  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/>${script.sizeCs ? `<w:szCs w:val="28"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>` + (figure ? `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Figure"><w:name w:val="Figure"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` : "") + (footnotes ? `<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/></w:pPr><w:rPr><w:sz w:val="20"/>${script.sizeCs ? `<w:szCs w:val="20"/>` : ""}</w:rPr></w:style><w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>` : "") + `</w:styles>`;
 }
 var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
 var SHUNN_SIZE = `<w:sz w:val="24"/>`;
 var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunProperties(script, { strong = false, em = false } = {}) {
-  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
+function shunnRunProperties(script, { strong = false, em = false, superscript = false } = {}) {
+  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${superscript ? `<w:vertAlign w:val="superscript"/>` : ""}${script.rtl}</w:rPr>`;
+}
+function shunnRunsXml(script, runs) {
+  return runs.map((run) => run.note === undefined ? shunnRunXml(script, run.text, run) : shunnRunXml(script, String(run.note.number), { ...run, superscript: true })).join("");
+}
+function shunnNotes(notes, labels) {
+  return {
+    heading: fillLabel(labels, "footnotes"),
+    notes: notes.map((note) => (note.paragraphs.length === 0 ? [[]] : note.paragraphs).map((runs, index) => index === 0 ? [{ text: `${note.number}. `, strong: false, em: false }, ...runs] : runs))
+  };
 }
 function shunnRunXml(script, text, decoration) {
   return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
@@ -16165,7 +16814,7 @@ function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = n
   let sections = 0;
   manuscript.chapters.forEach((chapter, chapterIndex) => {
     const part = { placement: "body", chapter: chapterIndex };
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    const { paragraphs: body, notes } = bookBody(chapter.body, { ownIndent: true, verse: chapter.verse });
     if (!meta.shortForm) {
       paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
       note(traceEntry("heading", part));
@@ -16181,9 +16830,18 @@ function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = n
       note(traceEntry("separator", null));
     }
     body.forEach((paragraph, index) => {
-      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, shunnRunsXml(script, paragraph.runs), false, paragraph.quote));
       note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
     });
+    if (notes.length > 0) {
+      const set = shunnNotes(notes, manuscript.meta?.labels);
+      paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, set.heading), true));
+      note(traceEntry("notes", part, body.length - 1));
+      for (const noteParagraph of set.notes.flat()) {
+        paragraphs.push(shunnParagraphXml(script, shunnRunsXml(script, noteParagraph), false));
+        note(traceEntry("note", part, body.length - 1));
+      }
+    }
   });
   const paper = shunnPaper(paperName);
   const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
@@ -16201,7 +16859,27 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
   }
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    const { text, notes: definitions } = splitFootnotes(chapter.body);
+    const body = markdownParagraphs(text, true, chapter.verse);
+    const numbers = new Map;
+    const numbered = (paragraph) => {
+      if (paragraph.code || definitions.size === 0) {
+        return paragraph.text;
+      }
+      let result = "";
+      let position = 0;
+      for (const marker of footnoteMarkers(paragraph.text)) {
+        const label = footnoteLabel(marker.label);
+        if (definitions.has(label)) {
+          if (!numbers.has(label)) {
+            numbers.set(label, numbers.size + 1);
+          }
+          result += `${paragraph.text.slice(position, marker.start)}[${numbers.get(label)}]`;
+          position = marker.end;
+        }
+      }
+      return result + paragraph.text.slice(position);
+    };
     if (!meta.shortForm) {
       lines.push("\f", `# ${chapter.heading}`, "");
       const byline = shunnChapterByline(chapter, meta);
@@ -16219,8 +16897,18 @@ function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
         continue;
       }
       const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK3).join(`\\
+      lines.push(`${prefix}${numbered(paragraph).split(LINE_BREAK3).join(`\\
 ${prefix}`)}`, "");
+    }
+    if (numbers.size > 0) {
+      lines.push(fillLabel(manuscript.meta?.labels, "footnotes"), "");
+      for (const [label, number] of numbers) {
+        const noteBody = markdownParagraphs(definitions.get(label).text).filter((paragraph) => !paragraph.sceneBreak);
+        const texts = noteBody.length === 0 ? [""] : noteBody.map((paragraph) => paragraph.text.split(LINE_BREAK3).join("\\\n   "));
+        lines.push(texts.map((noteText, index) => `${index === 0 ? `${number}. ` : "   "}${noteText}`).join(`
+
+`), "");
+      }
     }
   }
   writeFile(outFile, `${lines.join(`
@@ -16235,20 +16923,32 @@ function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
   const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
   const headBox = type.rtl ? "@top-left" : "@top-right";
   const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const media = { note: (note) => `<sup>${note.number}</sup>` };
+  const inline = (runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join("");
   const paragraphMarkup = (paragraph) => ({
     quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inline(paragraph.runs)}</p>`
   });
+  const notesMarkup = (notes) => {
+    if (notes.length === 0) {
+      return "";
+    }
+    const set = shunnNotes(notes, manuscript.meta?.labels);
+    return `
+<p class="break">${escapeHtml(set.heading)}</p>
+${set.notes.flat().map((runs) => `<p>${inline(runs)}</p>`).join(`
+`)}`;
+  };
   const body = [];
   let sections = 0;
   for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
+    const { paragraphs, notes } = bookBody(chapter.body, { ownIndent: true, verse: chapter.verse });
     if (!meta.shortForm) {
       const byline = shunnChapterByline(chapter, meta);
       body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
 ${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
 `}${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`)}
+`)}${notesMarkup(notes)}
 </section>`);
       continue;
     }
@@ -16258,8 +16958,8 @@ ${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
     if (sections++ > 0) {
       body.push(`<p class="break">#</p>`);
     }
-    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`));
+    body.push(`${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+`)}${notesMarkup(notes)}`);
   }
   const dir = type.rtl ? ` dir="rtl"` : "";
   return `<!DOCTYPE html>
@@ -16310,23 +17010,35 @@ ${body.join(`
 function docxTextXml(text) {
   return String(text).split(LINE_BREAK3).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
 }
-function paragraphXml(script, text, style = "", runs = [{ text }]) {
+function paragraphXml(script, text, style = "", runs = [{ text }], media = null, lead = "") {
   const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
   const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
   const runXml = runs.map((run) => {
+    if (run.image !== undefined) {
+      return media === null ? "" : `<w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}${media.drawing(run.image)}</w:r>`;
+    }
+    if (run.note !== undefined) {
+      return media === null ? "" : `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/>${script.rtl}</w:rPr><w:footnoteReference w:id="${media.footnote(run.note)}"/></w:r>`;
+    }
     const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
     const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
     return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
   });
-  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+  return `<w:p>${styleXml}${lead}${runXml.join("")}</w:p>`;
 }
-function inlineRuns(text, code = false) {
+function inlineRuns(text, code = false, images = [], notes = null) {
   if (code) {
     return [{ text, strong: false, em: false }];
   }
   const nodes = [];
   const closeSpan = codeSpanCloser(text);
   let buffer = "";
+  const flushBuffer = () => {
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+  };
   const isSpace = (char) => char === undefined || char === LINE_BREAK3 || /\s/u.test(char);
   const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
   for (let index = 0;index < text.length; ) {
@@ -16346,10 +17058,28 @@ function inlineRuns(text, code = false) {
         buffer += "`".repeat(run);
         index += run;
       } else {
-        const code = text.slice(index + run, end - run);
+        const code = text.slice(index + run, end - run).replace(IMAGE_TOKEN, "");
         buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
         index = end;
       }
+      continue;
+    }
+    if (char === "[" && text[index + 1] === "^" && notes !== null && notes.size > 0) {
+      FOOTNOTE_MARKER.lastIndex = index;
+      const marker = FOOTNOTE_MARKER.exec(text);
+      if (marker !== null && notes.has(footnoteLabel(marker[1]))) {
+        flushBuffer();
+        nodes.push({ note: footnoteLabel(marker[1]) });
+        index += marker[0].length;
+        continue;
+      }
+    }
+    if (char === IMAGE_START) {
+      IMAGE_AT.lastIndex = index;
+      const image = IMAGE_AT.exec(text);
+      flushBuffer();
+      nodes.push({ image: images[Number(image[1])] });
+      index += image[0].length;
       continue;
     }
     const reference = char === "&" ? characterReference(text, index) : null;
@@ -16373,10 +17103,7 @@ function inlineRuns(text, code = false) {
     while (text[end] === char) {
       end += 1;
     }
-    if (buffer !== "") {
-      nodes.push({ text: buffer });
-      buffer = "";
-    }
+    flushBuffer();
     const before = text[index - 1];
     const after = text[end];
     const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
@@ -16442,14 +17169,22 @@ function inlineRuns(text, code = false) {
   }
   const runs = [];
   for (const node of nodes) {
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    if (node.image !== undefined) {
+      runs.push({ text: "", strong, em, image: node.image });
+      continue;
+    }
+    if (node.note !== undefined) {
+      runs.push({ text: "", strong, em, note: node.note });
+      continue;
+    }
     const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
     if (value === "") {
       continue;
     }
-    const strong = (node.strong ?? 0) > 0;
-    const em = (node.em ?? 0) > 0;
     const previous = runs[runs.length - 1];
-    if (previous && previous.strong === strong && previous.em === em) {
+    if (previous && previous.image === undefined && previous.note === undefined && previous.strong === strong && previous.em === em) {
       previous.text += value;
     } else {
       runs.push({ text: value, strong, em });
@@ -16465,7 +17200,13 @@ function canPairEmphasis(opener, closer) {
 function inlineHtml(text) {
   return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
 }
-function runMarkup(run, escape, lineBreak) {
+function runMarkup(run, escape, lineBreak, media = {}) {
+  if (run.image !== undefined) {
+    return media.image === undefined ? "" : media.image(run.image);
+  }
+  if (run.note !== undefined) {
+    return media.note === undefined ? "" : media.note(run.note);
+  }
   let markup = escape(run.text).split(LINE_BREAK3).join(lineBreak);
   if (run.em) {
     markup = `<em>${markup}</em>`;
@@ -16476,7 +17217,7 @@ function runMarkup(run, escape, lineBreak) {
   return markup;
 }
 var LINE_BREAK3 = "";
-function markdownParagraphs(markdown, ownIndent = false, verse = false) {
+function markdownParagraphs(markdown, ownIndent = false, verse = false, media = null) {
   const paragraphs = [];
   let lines = [];
   let quote = false;
@@ -16502,7 +17243,7 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
     paragraphs.push(!code && !text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote, code });
   };
   const source = splitFences(markdown.replace(/\r\n?/g, `
-`)).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text)).split(`
+`).replace(/[\uE002\uE003]/g, "�")).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text, media?.images ?? null, media?.keep)).split(`
 `).map((line) => ({ line, code: part.fenced })));
   for (const { line: sourceLine, code } of source) {
     const heading = isHeadingLine(sourceLine);
@@ -16518,6 +17259,11 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
       paragraphs.push({ sceneBreak: true });
       continue;
     }
+    if (!code && line.includes(IMAGE_START) && line.replace(IMAGE_TOKEN, "").trim() === "") {
+      flush();
+      paragraphs.push({ figure: true, text: line.trim(), quote: Boolean(marker), code: false });
+      continue;
+    }
     if (lines.length > 0 && marker && !quote) {
       flush();
     }
@@ -16530,29 +17276,86 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
   return paragraphs;
 }
 function verseLineCount(prose) {
-  return markdownParagraphs(String(prose).replace(/\r\n?/g, `
-`), false, true).filter((paragraph) => !paragraph.sceneBreak).reduce((sum, paragraph) => sum + paragraph.text.split(LINE_BREAK3).filter((line) => line.trim() !== "").length, 0);
+  return markdownParagraphs(splitFootnotes(String(prose).replace(/\r\n?/g, `
+`)).text, false, true).filter((paragraph) => !paragraph.sceneBreak).reduce((sum, paragraph) => sum + paragraph.text.split(LINE_BREAK3).filter((line) => line.trim() !== "").length, 0);
 }
-function wordParagraphs(body, verse = false) {
-  return markdownParagraphs(body, true, verse).map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) });
+function wordParagraphs(body, verse = false, defined = null) {
+  return bookBody(body, { ownIndent: true, defined, verse }).paragraphs.map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: paragraph.quote, code: paragraph.code, runs: textRuns(paragraph.runs) });
+}
+function textRuns(runs) {
+  const joined = [];
+  for (const run of runs.filter((entry) => entry.note === undefined)) {
+    const previous = joined.at(-1);
+    if (previous !== undefined && previous.strong === run.strong && previous.em === run.em) {
+      joined[joined.length - 1] = { ...previous, text: previous.text + run.text };
+    } else {
+      joined.push(run);
+    }
+  }
+  return joined;
+}
+function bookBody(body, { ownIndent = false, images: imageOf = null, defined = null, verse = false } = {}) {
+  const images = [];
+  const media = imageOf === null ? null : { images, keep: (image) => (imageOf.get(image.destination) ?? null) !== null };
+  const { text, notes: definitions } = splitFootnotes(body);
+  const known = defined === null ? definitions : {
+    size: definitions.size + defined.size,
+    has: (label) => definitions.has(label) || defined.has(label),
+    get: (label) => definitions.get(label) ?? defined.get(label)
+  };
+  const notes = [];
+  const numbers = new Map;
+  const paragraphs = markdownParagraphs(text, ownIndent, verse, media).map((paragraph) => {
+    if (paragraph.sceneBreak) {
+      return { sceneBreak: true };
+    }
+    const runs = inlineRuns(paragraph.text, paragraph.code, images, known).map((run) => {
+      if (run.image !== undefined) {
+        return { ...run, image: { ...imageOf.get(run.image.destination), alt: imageAlt(run.image.alt) } };
+      }
+      if (run.note === undefined) {
+        return run;
+      }
+      if (!numbers.has(run.note)) {
+        const definition = known.get(run.note);
+        numbers.set(run.note, notes.length);
+        notes.push({ number: notes.length + 1, label: definition.label, references: 0, paragraphs: noteParagraphs(definition.text) });
+      }
+      const note = notes[numbers.get(run.note)];
+      note.references += 1;
+      return { ...run, note: { number: note.number, reference: note.references } };
+    }).filter((run) => !paragraph.figure || run.image !== undefined);
+    return { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), figure: Boolean(paragraph.figure), runs };
+  });
+  return { paragraphs, notes: notes.map(({ number, label, paragraphs: noteText }) => ({ number, label, paragraphs: noteText })) };
+}
+function noteParagraphs(text) {
+  return markdownParagraphs(text).filter((paragraph) => !paragraph.sceneBreak).map((paragraph) => inlineRuns(paragraph.text, paragraph.code));
+}
+function imageAlt(alt) {
+  return inlineRuns(plainLinks(alt)).map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim();
 }
 var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
 var ZIP_UTF8_NAME_FLAG = 2048;
 var ZIP_STORED = 0;
 var ZIP_DEFLATED = 8;
-function writeZip(outFile, entries, writeOptions = {}) {
+var ZIP_MAX_BYTES = 4294967295;
+function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer3.from(entry.name, "utf8");
-    const content = Buffer3.isBuffer(entry.content) ? entry.content : Buffer3.from(entry.content, "utf8");
+    const name = Buffer4.from(entry.name, "utf8");
+    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
+    if (offset + content.length > maxBytes) {
+      throw projectError(`Cannot write the build: its archive would pass 4 GiB, more than a ZIP without ZIP64 can hold; use fewer or smaller images`);
+    }
     const crc = crc32(content);
     const deflated = entry.stored ? null : deflateRaw(content);
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer3.alloc(30);
+    const localHeader = Buffer4.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -16565,7 +17368,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer3.alloc(46);
+    const centralHeader = Buffer4.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -16590,7 +17393,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer3.alloc(22);
+  const end = Buffer4.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -16599,7 +17402,7 @@ function writeZip(outFile, entries, writeOptions = {}) {
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer3.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -16670,20 +17473,20 @@ function chapterNumber(value, file) {
   return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
 }
 function chapterNumberFromFile(file) {
-  const match = CHAPTER_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = CHAPTER_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? Number.parseInt(match[1], 10) : 0;
 }
 function sceneNumberFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? Number.parseInt(match[2], 10) : 0;
 }
 function sceneChapterFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path11.basename(file));
   return match ? match[1] : "";
 }
 
 // src/scan-entity-files.js
-import path11 from "node:path";
+import path12 from "node:path";
 function buildEntity(project, kind, name, options) {
   const requestedId = requestedEntityId(kind, options.id);
   if (kind === "chapter") {
@@ -16737,7 +17540,7 @@ function buildEntity(project, kind, name, options) {
 }
 function entityResult(project, kind, id, markdown) {
   const config = entityConfig(kind);
-  return { id, markdown, file: path11.join(project.root, config.dir, `${id}.md`) };
+  return { id, markdown, file: path12.join(project.root, config.dir, `${id}.md`) };
 }
 function characterFile(name, options, calendar = null) {
   const bornError = bornProblem(options.born, calendar);
@@ -17313,88 +18116,6 @@ function extractMarkdownLinkTargets(body) {
   }
   return targets;
 }
-// src/scan-cover.js
-import fs4 from "node:fs";
-import path12 from "node:path";
-import { Buffer as Buffer4 } from "node:buffer";
-var COVER_MEDIA_TYPES = {
-  ".gif": "image/gif",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".png": "image/png",
-  ".webp": "image/webp"
-};
-var MAX_COVER_BYTES = 50 * 1024 * 1024;
-function assertFileSizeWithinLimit(filePath, limit = MAX_SCAN_FILE_BYTES) {
-  const size = fs4.statSync(filePath).size;
-  if (size > limit) {
-    throw projectError("Refusing to read oversized file " + filePath + ": " + size + " bytes exceeds the " + limit + " byte limit");
-  }
-}
-function coverIsReady(project) {
-  if (project.story.data.cover === undefined) {
-    return false;
-  }
-  try {
-    coverImage(project);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function coverImage(project) {
-  const cover = String(project.story.data.cover).trim();
-  if (PATH_CONTROL_CHARACTERS.test(cover)) {
-    throw controlCharacterError("cover", cover);
-  }
-  const mediaType = COVER_MEDIA_TYPES[path12.extname(cover).toLowerCase()];
-  if (mediaType === undefined) {
-    throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
-  }
-  const filePath = path12.resolve(project.root, cover);
-  if (!isPathInside(project.root, filePath)) {
-    throw projectError(`story.md cover ${cover} must be inside the project`);
-  }
-  const stats = lstatIfExists(filePath);
-  if (!stats) {
-    throw projectError(`story.md cover ${cover} does not exist`);
-  }
-  assertSafeProjectPath(filePath, project.root);
-  if (!stats.isFile()) {
-    throw projectError(`story.md cover ${cover} is not a file`);
-  }
-  assertFileSizeWithinLimit(filePath, MAX_COVER_BYTES);
-  let held;
-  try {
-    held = coverFormat(filePath);
-  } catch (error) {
-    const reason = FILE_ERROR_REASONS[error.code];
-    throw projectError(`story.md cover ${cover}: ${reason ? `Cannot read: ${reason}` : String(error.message).replace(`${filePath}: `, "")}`);
-  }
-  if (held !== mediaType) {
-    throw projectError(held === null ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature` : `story.md cover ${cover} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
-  }
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path12.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
-}
-var IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
-var IMAGE_SIGNATURE_BYTES = 12;
-function coverFormat(filePath) {
-  const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
-  const ascii = (start, end) => head.subarray(start, end).toString("latin1");
-  if (head.subarray(0, 8).equals(Buffer4.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
-    return "image/png";
-  }
-  if (head.subarray(0, 3).equals(Buffer4.from([255, 216, 255]))) {
-    return "image/jpeg";
-  }
-  if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
-    return "image/gif";
-  }
-  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") {
-    return "image/webp";
-  }
-  return null;
-}
 // src/twee.js
 import crypto3 from "node:crypto";
 var TWEE_LINK_UNSAFE = /[[\]|\r\n]|->|<-|<$/;
@@ -17862,6 +18583,14 @@ function existingStoryData(root) {
     return {};
   }
 }
+function fileImages(markdown) {
+  return imageLines(markdown.body).map((image) => ({ ...image, line: fileLines(markdown, [image.line])[0] }));
+}
+function fileFootnotes(markdown) {
+  const { definitions, markers } = footnoteUses(markdown.body);
+  const withLine = ({ label, line }) => ({ label, line: fileLines(markdown, [line])[0] });
+  return { definitions: definitions.map(withLine), markers: markers.map(withLine) };
+}
 function scanProject(root) {
   const projectRoot = path14.resolve(root);
   const scanErrors = [];
@@ -17987,7 +18716,8 @@ function scanProject(root) {
       outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),
       setextBreaks: fileLines(markdown, setextSceneBreakLines(markdown.body)),
-      footnotes: fileLines(markdown, footnoteLines(markdown.body)),
+      footnotes: fileFootnotes(markdown),
+      images: fileImages(markdown),
       date: String(data.date ?? ""),
       time: String(data.time ?? ""),
       releaseDate: data["release-date"],
@@ -18084,7 +18814,9 @@ function scanProject(root) {
         heading: data.heading !== false,
         permission: typeof data.permission === "string" ? data.permission : "",
         empty,
-        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title)
+        todoMarkers: empty ? 0 : countTodoMarkers(prose) + countTodoMarkers(title),
+        images: empty ? [] : fileImages(markdown),
+        footnotes: empty ? { definitions: [], markers: [] } : fileFootnotes(markdown)
       };
     }, scanErrors).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id, "en")),
     exemptions: readExemptions(projectRoot, scanErrors),
@@ -22513,6 +23245,9 @@ function parseSeverity(raw, errors, checks) {
       errors.push(`${label} names ${code}, which story init or story import reports before there is a story.md to read: severity cannot change it`);
       continue;
     }
+    if (Object.hasOwn(RETIRED_CODES, code)) {
+      continue;
+    }
     if (!codes.includes(code) && !isCustomCode(code)) {
       errors.push(`${label} names unknown warning ${code}${guess(code, codes)}`);
       continue;
@@ -24130,6 +24865,64 @@ function validateDailyTarget(data, errors) {
     errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
   }
 }
+function validateProseImages(project, file, images, warnings) {
+  const uses = new Map;
+  for (const image of images.filter((entry) => entry.note !== undefined)) {
+    warnings.push(warn("image-left-out", `${file} image ${image.destination} (line ${image.line}) is in footnote [^${image.note}], which builds set as text only, so it is left out`, file));
+  }
+  for (const image of images.filter((entry) => entry.note === undefined)) {
+    if (!uses.has(image.destination)) {
+      uses.set(image.destination, []);
+    }
+    uses.get(image.destination).push(image);
+  }
+  for (const [destination, entries] of uses) {
+    const at = `${entries.length === 1 ? "line" : "lines"} ${listedLines(entries)}`;
+    if (remoteImage(destination)) {
+      warnings.push(warn("remote-image", `${file} image ${destination} (${at}) is a web address, which builds do not fetch, so it is left out: save the image in the project and name its path`, file));
+      continue;
+    }
+    try {
+      proseImage(project, file, destination);
+    } catch (error) {
+      warnings.push(warn("invalid-image", `${error.message} (${at}), so builds leave it out`, file));
+    }
+  }
+}
+function listedLines(entries) {
+  const shown = entries.slice(0, 10).map((entry) => entry.line).join(", ");
+  return entries.length > 10 ? `${shown}, and ${entries.length - 10} more` : shown;
+}
+function validateFootnotes(file, footnotes, warnings) {
+  const lines = (entries) => `${entries.length === 1 ? "line" : "lines"} ${listedLines(entries)}`;
+  const byLabel = (entries) => {
+    const groups = new Map;
+    for (const entry of entries) {
+      const label = footnoteLabel(entry.label);
+      if (!groups.has(label)) {
+        groups.set(label, []);
+      }
+      groups.get(label).push(entry);
+    }
+    return groups;
+  };
+  const definitions = byLabel(footnotes.definitions);
+  const markers = byLabel(footnotes.markers);
+  for (const [label, entries] of markers) {
+    if (!definitions.has(label)) {
+      const marker = `[^${entries[0].label}]`;
+      warnings.push(warn("missing-footnote", `${file} has footnote marker ${marker} (${lines(entries)}) with no ${marker}: note, so builds print the marker as written: add the note or remove the marker`, file));
+    }
+  }
+  for (const [label, entries] of definitions) {
+    const marker = `[^${entries[0].label}]`;
+    if (!markers.has(label)) {
+      warnings.push(warn("unused-footnote", `${file} defines footnote ${marker} (${lines(entries)}), which no ${marker} marker in the prose references, so builds leave it out`, file));
+    } else if (entries.length > 1) {
+      warnings.push(warn("unused-footnote", `${file} defines footnote ${marker} again (${lines(entries.slice(1))}), and builds use only the first definition, on line ${entries[0].line}`, file));
+    }
+  }
+}
 function validateCover(project, errors) {
   const cover = project.story.data.cover;
   if (cover === undefined) {
@@ -24969,6 +25762,8 @@ function validateMatter(project, errors, warnings) {
     if (matter.todoMarkers > 0) {
       warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: ask the author to supply the text`, label));
     }
+    validateProseImages(project, label, matter.images, warnings);
+    validateFootnotes(label, matter.footnotes, warnings);
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;
@@ -25565,10 +26360,8 @@ function validateProjectOf(project) {
       const one = chapter.setextBreaks.length === 1;
       warnings.push(warn("ambiguous-scene-break", `${file} has ${one ? "a --- scene break" : `${chapter.setextBreaks.length} --- scene breaks`} right under a line of text (${one ? "line" : "lines"} ${chapter.setextBreaks.join(", ")}): builds print ${one ? "a scene break" : "scene breaks"}, but markdown viewers read ${one ? "it as a heading underline" : "them as heading underlines"}, so put a blank line above ${one ? "it" : "each"}`, file));
     }
-    if (chapter.footnotes.length > 0) {
-      const one = chapter.footnotes.length === 1;
-      warnings.push(warn("unsupported-footnote", `${file} has ${one ? "a footnote" : `${chapter.footnotes.length} footnotes`} (${one ? "line" : "lines"} ${chapter.footnotes.join(", ")}): builds print footnote markers ([^1]) and notes as written, where markdown viewers show footnotes, so work ${one ? "the note" : "each note"} into the prose or a back-matter page`, file));
-    }
+    validateProseImages(project, file, chapter.images, warnings);
+    validateFootnotes(file, chapter.footnotes, warnings);
     if (!chapter.verse && !project.scenes.some((scene) => scene.chapter === chapter.id)) {
       warnings.push(warn("no-scene-records", `${file} has no machine-readable scene records`, file));
     }
@@ -26754,7 +27547,7 @@ function copyProject(source, target, roots, depth = 0) {
     } else if (entry.isSymbolicLink()) {
       fs13.symlinkSync(linkTarget(fs13.readlinkSync(from), roots), to, isFolder(from) ? "dir" : "file");
     } else if (entry.isFile() && entry.name !== LOCK_FILE && entry.name !== TAKEOVER_FILE) {
-      copyRegularFile(from, to, Boolean(roots.cover) && realPath2(from).toLowerCase() === roots.cover);
+      copyRegularFile(from, to, IMAGE_EXTENSIONS.test(entry.name) || Boolean(roots.cover) && realPath2(from).toLowerCase() === roots.cover);
     }
   }
   fs13.chmodSync(target, copyMode(source, true));
@@ -26799,6 +27592,7 @@ function copyUndoLog(from, to) {
 }
 var LINE_FEED = Buffer7.from(`
 `);
+var IMAGE_EXTENSIONS = /\.(?:gif|jpe?g|png|webp)$/i;
 function coverOf(root) {
   const cover = existingStoryData(root)?.cover;
   const text = typeof cover === "string" ? cover.trim() : "";
@@ -31486,8 +32280,8 @@ function pronunciationGuide(project) {
   return guide.sort((left, right) => compare(left.name, right.name) || left.kind.localeCompare(right.kind, "en"));
 }
 function narrationBody(body) {
-  const text = flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, `
-`))).replace(/\\\n/g, `
+  const text = flattenHeadings(plainLinks(withoutFootnotes(String(body).replace(/\r\n?/g, `
+`)))).replace(/\\\n/g, `
 `).replace(/^[^\S\n]+$/gm, "");
   return separateSceneBreaks(text).split(/\n{2,}/).map(trimSourceSpace).filter((paragraph) => paragraph !== "").map((paragraph) => isSceneBreakLine(paragraph) ? "[pause]" : paragraph).join(`
 
@@ -31706,6 +32500,7 @@ function buildBook(root, options = {}) {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true, titles: true }));
   } else if (format === "html" || format === "print") {
+    withImages(project, manuscript, PAGE_IMAGES);
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
@@ -31714,12 +32509,14 @@ function buildBook(root, options = {}) {
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions);
   } else if (format === "epub") {
+    withImages(project, manuscript);
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions, paper);
   } else {
+    withImages(project, manuscript);
     writeDocx(output.outFile, manuscript, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   }
@@ -31727,10 +32524,15 @@ function buildBook(root, options = {}) {
 }
 function wordBuild(project, { shunn = false } = {}) {
   const manuscript = manuscriptParts(project, "apply", { includePending: true, warnLeftOut: false });
+  if (!shunn) {
+    withImages(project, manuscript);
+  }
   const trace = [];
-  const entries = shunn ? shunnDocxEntries(manuscript, shunnMeta(project), DEFAULT_PAPER, trace) : docxEntries(manuscript, trace);
+  const meta = shunn ? shunnMeta(project) : null;
+  const entries = shunn ? shunnDocxEntries(manuscript, meta, DEFAULT_PAPER, trace) : docxEntries(manuscript, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
-  return { document: part("word/document.xml"), styles: part("word/styles.xml"), trace, manuscript };
+  const footnotes = entries.find((entry) => entry.name === "word/footnotes.xml")?.content ?? null;
+  return { document: part("word/document.xml"), styles: part("word/styles.xml"), footnotes, trace, manuscript: shunn ? { ...manuscript, shunnMeta: meta } : manuscript };
 }
 function buildCalendar(project, output) {
   const data = project.story.data;
@@ -31785,6 +32587,9 @@ function buildPdf(project, format, { trim, paper, parts }, output, options) {
   const manuscript = manuscriptParts(project, "build", parts);
   assertMatterTitles(project, manuscript);
   const style = projectBuildStyle(project);
+  if (format === "print") {
+    withImages(project, manuscript, PAGE_IMAGES);
+  }
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project, options.anonymous), paper);
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
   const warnings = format === "print" ? [...manuscript.warnings, ...matterTodoWarnings(project, manuscript)] : manuscript.warnings;
@@ -32239,6 +33044,7 @@ function bookChapters(project, action = "build") {
     const authors = nameList(markdown.data.author);
     const entry = {
       number: chapter.number,
+      file: chapter.file,
       title,
       authors,
       byline: chapterByline(authors, meta.labels),
@@ -32255,6 +33061,55 @@ function bookChapters(project, action = "build") {
     }
   }
   return { meta, chapters, warnings };
+}
+var MAX_PAGE_IMAGE_BYTES = 360 * 1024 * 1024;
+var MAX_ARCHIVE_IMAGE_BYTES = 1024 * 1024 * 1024;
+var PAGE_IMAGES = { limit: MAX_PAGE_IMAGE_BYTES, perUse: true };
+function withImages(project, manuscript, { limit = MAX_ARCHIVE_IMAGE_BYTES, perUse = false } = {}) {
+  const placed = new Map;
+  let total = 0;
+  for (const entry of [...manuscript.front, ...manuscript.chapters, ...manuscript.back]) {
+    if (entry.file === undefined) {
+      continue;
+    }
+    const file = relative(project, entry.file);
+    const images = new Map;
+    const { text, notes } = splitFootnotes(entry.body);
+    for (const note of notes.values()) {
+      for (const { destination } of proseImages(note.text)) {
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} is in footnote [^${note.label}], which builds set as text only, so it is left out`, file));
+      }
+    }
+    const uses = new Map;
+    for (const { destination } of proseImages(text)) {
+      uses.set(destination, (uses.get(destination) ?? 0) + 1);
+    }
+    for (const [destination, count] of uses) {
+      if (remoteImage(destination)) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} is a web address, which builds do not fetch, so it is left out`, file));
+        continue;
+      }
+      let image;
+      try {
+        image = proseImage(project, file, destination);
+      } catch (error) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${error.message}, so it is left out`, file));
+        continue;
+      }
+      const cost = perUse ? image.size * count : placed.has(image.filePath) ? 0 : image.size;
+      if (total + cost > limit) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} would take this build's images past ${limit / 1024 / 1024} MiB, so it is left out`, file));
+        continue;
+      }
+      placed.set(image.filePath, image.size);
+      total += cost;
+      images.set(destination, image);
+    }
+    entry.images = images;
+  }
 }
 function manuscriptParts(project, action = "build", { includePending = false, warnLeftOut = true } = {}) {
   const { meta, chapters, warnings } = bookChapters(project, action);
@@ -35781,7 +36636,14 @@ function readReview(bytes) {
   if (extendedXml !== null) {
     threadComments(comments, extendedXml);
   }
-  return { ...documentParagraphs(document, styles, comments), comments, styles };
+  return { ...documentParagraphs(document, styles, comments), comments, styles, footnoteTexts: footnoteTexts(part("word/footnotes.xml")) };
+}
+function footnoteTexts(xml) {
+  if (xml === null || xml === undefined) {
+    return [];
+  }
+  const entities = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return [...String(xml).matchAll(/<w:footnote\b([^>]*)>([\s\S]*?)<\/w:footnote>/g)].filter((match) => !/\bw:type="(?:separator|continuationSeparator|continuationNotice)"/.test(match[1])).map((match) => [...match[2].matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map((text) => text[1]).join("").replace(/&(amp|lt|gt|quot|apos);/g, (whole, name) => entities[name]).replace(/\s+/g, " ").trim());
 }
 function documentReview(documentXml, stylesXml) {
   const styles = readStyles(stylesXml);
@@ -35935,6 +36797,11 @@ function documentParagraphs(xml, styles, comments) {
   const open = new Map;
   const changes = [];
   const leftOut = new Set;
+  const leftOutCounts = new Map;
+  const leaveOut = (kind) => {
+    leftOut.add(kind);
+    leftOutCounts.set(kind, (leftOutCounts.get(kind) ?? 0) + 1);
+  };
   let tables = 0;
   let paragraph = null;
   let run = null;
@@ -35992,7 +36859,7 @@ function documentParagraphs(xml, styles, comments) {
     if (type === "start" && SKIPPED2.has(name)) {
       const kind = LEFT_OUT.get(name);
       if (kind !== undefined) {
-        leftOut.add(kind);
+        leaveOut(kind);
       }
       skip = { name, depth: 1 };
       continue;
@@ -36003,7 +36870,7 @@ function documentParagraphs(xml, styles, comments) {
       continue;
     }
     if ((name === "w:footnoteReference" || name === "w:endnoteReference") && type !== "end") {
-      leftOut.add("footnotes");
+      leaveOut("footnotes");
       continue;
     }
     if (type === "text") {
@@ -36109,7 +36976,7 @@ function documentParagraphs(xml, styles, comments) {
       }
     }
   }
-  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0), leftOut };
+  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0), leftOut, leftOutCounts };
 }
 var LEFT_OUT = new Map([["w:drawing", "images"], ["w:pict", "images"], ["w:object", "images"], ["w:txbxContent", "text-boxes"]]);
 function skipped(skip, token) {
@@ -36598,7 +37465,7 @@ function readBuild(project, shunn) {
     }
   }
   const files = project.chapters.map((chapter) => relative(project, chapter.file));
-  return { items, chapters, manuscript: build.manuscript, project, files, ids: project.chapters.map((chapter) => chapter.id) };
+  return { items, chapters, manuscript: build.manuscript, project, files, ids: project.chapters.map((chapter) => chapter.id), leftOutCounts: review.leftOutCounts, footnoteTexts: footnoteTexts(build.footnotes) };
 }
 function itemsOf(review, view) {
   const dropped = view === "before" ? "inserted" : "deleted";
@@ -36916,7 +37783,19 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
   if (review.comments.size > 0) {
     warnings.push(warn("apply-content-left-out", `${shown} has ${count3(review.comments.size, "comment")}, which story apply does not write into the chapters; story notes lists them`));
   }
-  const leftOut = [...review.leftOut].sort().map((kind) => LEFT_OUT_NAMES[kind]);
+  const leftOut = [...review.leftOut].filter((kind) => (review.leftOutCounts?.get(kind) ?? 1) > (sent.leftOutCounts.get(kind) ?? 0)).sort().map((kind) => LEFT_OUT_NAMES[kind]);
+  const builtNotes = new Map;
+  for (const text of sent.footnoteTexts) {
+    builtNotes.set(text, (builtNotes.get(text) ?? 0) + 1);
+  }
+  const changedNotes = (review.footnoteTexts ?? []).filter((text) => {
+    const left = builtNotes.get(text) ?? 0;
+    builtNotes.set(text, left - 1);
+    return left <= 0;
+  });
+  if (!leftOut.includes(LEFT_OUT_NAMES.footnotes) && changedNotes.length > 0) {
+    warnings.push(warn("apply-content-left-out", `${shown} has ${count3(changedNotes.length, "footnote")} whose text is not in the ${base ? "version sent" : "project's footnotes (or the project changed them since sending; pass --ref or --snapshot to tell)"}, which story apply does not write: copy the changes into the footnote definitions by hand`));
+  }
   if (leftOut.length > 0) {
     warnings.push(warn("apply-content-left-out", `${shown} has ${joinList(leftOut)}, which story apply leaves out of the chapters, as story import does`));
   }
@@ -38171,9 +39050,19 @@ function chapterSource(project, chapter, builtBody) {
     });
   }
   const read = (line) => flattenHeadings(line.shown).replace(/^(?:[ \t]*>[ \t]?)+/, "");
+  const noteLines = footnoteDefinitionLines(stripped);
+  const noteStarts = new Set;
+  for (let index = 0, start = 0;start <= stripped.length; index += 1) {
+    if (noteLines.has(index)) {
+      noteStarts.add(start);
+    }
+    const newline = stripped.indexOf(`
+`, start);
+    start = newline === -1 ? stripped.length + 1 : newline + 1;
+  }
   const groupsOfLines = [];
   for (const line of lines) {
-    if (read(line).trim() === "") {
+    if (noteStarts.has(line.start) || read(line).trim() === "") {
       groupsOfLines.push(null);
     } else if (!line.code && breaksParagraph(read(line))) {
       groupsOfLines.push([line], null);
@@ -38185,6 +39074,7 @@ function chapterSource(project, chapter, builtBody) {
   }
   const verse = chapter.verse === true;
   const expected = wordParagraphs(builtBody, verse);
+  const defined = splitFootnotes(builtBody).notes;
   const blocks = [];
   const itemBlock = [];
   const printed = [];
@@ -38197,7 +39087,7 @@ function chapterSource(project, chapter, builtBody) {
     const items = wordParagraphs(code ? `${fence}
 ${strippedText}
 ${fence}` : strippedText.replace(/\r\n?/g, `
-`), verse);
+`), verse, defined);
     const start = proseOffset + offsets[first.start];
     const end = proseOffset + offsets[last.start + last.text.length - 1] + 1;
     const text = raw.slice(start, end);
@@ -38367,7 +39257,8 @@ function printedKeys(body, manuscript, verse = false) {
 }
 function readKeys(body, manuscript, verse = false) {
   const trace = [];
-  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] }, trace);
+  const book = { ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] };
+  const entries = manuscript.shunnMeta ? shunnDocxEntries(book, manuscript.shunnMeta, DEFAULT_PAPER, trace) : docxEntries(book, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
   return itemsOf(documentReview(part("word/document.xml"), part("word/styles.xml")), "after").filter((item, index) => trace[index].kind === "paragraph" || trace[index].kind === "scene-break").map((item) => item.key);
 }

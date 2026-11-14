@@ -85,7 +85,11 @@ export const FINDING_CODES = {
   "unclosed-comment": "warning",
   "ambiguous-scene-break": "warning",
   "outline-without-chapter-text": "warning",
-  "unsupported-footnote": "warning",
+  "missing-footnote": "warning",
+  "unused-footnote": "warning",
+  "invalid-image": "warning",
+  "remote-image": "warning",
+  "image-left-out": "warning",
   "no-scene-records": "warning",
   "empty-chapter": "warning",
   "beat-too-long": "warning",
@@ -419,6 +423,15 @@ export const FINDING_CODES = {
 export function codesAt(level) {
   return Object.keys(FINDING_CODES).filter((code) => FINDING_CODES[code] === level);
 }
+
+// Codes the CLI no longer reports, with the release notes' reason. A
+// story.md severity entry or an exemption that names one is not an error:
+// it changes nothing, as an entry for a warning that never fires does.
+export const RETIRED_CODES = {
+  // The builds set footnotes now; missing-footnote and unused-footnote
+  // check the markers and definitions instead.
+  "unsupported-footnote": "builds set footnotes"
+};
 
 // Warnings that story init and story import report while making a project,
 // before any story.md or exemption log is read, so neither can change them.
