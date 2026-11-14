@@ -174,7 +174,8 @@ describe("build-binaries entry point", () => {
         return { status: 0, stdout: "", stderr: "" };
       }
       // The smoke test runs the built executable.
-      return { status: 0, stdout: args[0] === "--version" ? `${VERSION}\n` : "Project is valid", stderr: "" };
+      const stdout = { "--version": `${VERSION}\n`, "--help": "Usage: story <command> [options]\n" }[args[0]] ?? "Project is valid";
+      return { status: 0, stdout, stderr: "" };
     };
   }
 

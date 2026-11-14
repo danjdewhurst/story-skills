@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Builds standalone `story` executables with `bun build --compile`, so
 // writers without Node can run the CLI. Each target is archived as the
-// release assets name it (story-skills_<version>_<os>_<arch>.tar.gz, or .zip
-// for Windows), and a checksums file lists the SHA-256 of each archive. The
+// release assets name it (story-skills_<version>_<os>_<arch>.tar.gz, with
+// _musl before the extension for the musl Linux builds, or .zip for
+// Windows), and a checksums file lists the SHA-256 of each archive. The
 // executables run the same source as `bin/story.js`, so `story --version`
 // matches package.json.
 //
@@ -12,7 +13,9 @@
 // With no --target it builds every target, cross-compiling from this
 // machine; --host builds only the machine's own target. --smoke runs the
 // host target's executable before archiving it: `--version` must print the
-// package version, and `validate` must pass on an example project. Archives land in
+// package version, `--help` must print the usage, and `validate` must pass on
+// an example project. On Linux, --smoke also runs the musl target of the
+// machine's architecture, in an Alpine container (Docker). Archives land in
 // dist/binaries/ unless --out says otherwise. Needs bun and tar; the
 // Windows zip is written with the CLI's own zip writer, then read back with
 // node:zlib to check it.
@@ -30,21 +33,30 @@ export const PACKAGE_NAME = "story-skills";
 
 // Release targets: the name used in archive names and the Bun target. The
 // x64 targets use Bun's baseline builds, which run on CPUs without AVX2; the
-// default x64 builds crash there with "Illegal instruction".
+// default x64 builds crash there with "Illegal instruction". The plain Linux
+// builds need glibc; the musl builds are for Alpine and other musl systems,
+// and need its libstdc++ package (`apk add libstdc++`).
 export const TARGETS = [
   { name: "darwin-arm64", os: "darwin", arch: "arm64", bun: "bun-darwin-arm64" },
   { name: "darwin-x64", os: "darwin", arch: "x64", bun: "bun-darwin-x64-baseline" },
   { name: "linux-x64", os: "linux", arch: "x64", bun: "bun-linux-x64-baseline" },
   { name: "linux-arm64", os: "linux", arch: "arm64", bun: "bun-linux-arm64" },
+  { name: "linux-x64-musl", os: "linux", arch: "x64", libc: "musl", bun: "bun-linux-x64-musl-baseline" },
+  { name: "linux-arm64-musl", os: "linux", arch: "arm64", libc: "musl", bun: "bun-linux-arm64-musl" },
   { name: "windows-x64", os: "windows", arch: "x64", bun: "bun-windows-x64-baseline" }
 ];
+
+// The Alpine image the musl smoke test runs in, pinned by the digest of its
+// multi-arch index so x64 and arm64 hosts pull the same release.
+export const ALPINE_IMAGE = "alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf";
 
 export function executableName(target) {
   return target.os === "windows" ? "story.exe" : "story";
 }
 
 export function archiveName(version, target) {
-  return `${PACKAGE_NAME}_${version}_${target.os}_${target.arch}.${target.os === "windows" ? "zip" : "tar.gz"}`;
+  const libc = target.libc ? `_${target.libc}` : "";
+  return `${PACKAGE_NAME}_${version}_${target.os}_${target.arch}${libc}.${target.os === "windows" ? "zip" : "tar.gz"}`;
 }
 
 export function checksumsName(version) {
@@ -64,9 +76,23 @@ export function sha256File(file) {
 }
 
 // The target this machine runs, or null for a platform with no release.
+// On Linux it is the glibc build.
 export function hostTarget(platform = process.platform, arch = process.arch) {
   const osName = { darwin: "darwin", linux: "linux", win32: "windows" }[platform];
-  return TARGETS.find((target) => target.os === osName && target.arch === arch) ?? null;
+  return TARGETS.find((target) => target.os === osName && target.arch === arch && !target.libc) ?? null;
+}
+
+// How --smoke runs `target` on this machine: "host" runs it directly,
+// "alpine" runs a musl build in an Alpine container on a Linux machine of
+// the same architecture, and null means it cannot run here.
+export function smokeRunner(target, platform = process.platform, arch = process.arch) {
+  if (target === hostTarget(platform, arch)) {
+    return "host";
+  }
+  if (target.libc === "musl" && platform === "linux" && target.arch === arch) {
+    return "alpine";
+  }
+  return null;
 }
 
 export function parseArgs(argv, platform = process.platform, arch = process.arch) {
@@ -103,10 +129,11 @@ export function parseArgs(argv, platform = process.platform, arch = process.arch
   if (options.targets.length === 0) {
     options.targets = [...TARGETS];
   }
-  // A smoke test runs the binary, so it needs this machine's own target;
-  // a CI matrix entry on the wrong runner must fail, not pass untested.
-  if (options.smoke && !options.targets.includes(hostTarget(platform, arch))) {
-    throw new Error(`--smoke runs the binary here, so it needs this machine's target (${hostTarget(platform, arch)?.name ?? `${platform}-${arch}, which has no release`}) among the targets`);
+  // A smoke test runs the binary, so it needs a target this machine can
+  // run; a CI matrix entry on the wrong runner must fail, not pass untested.
+  if (options.smoke && !options.targets.some((target) => smokeRunner(target, platform, arch) !== null)) {
+    const runnable = TARGETS.filter((target) => smokeRunner(target, platform, arch) !== null).map((target) => target.name);
+    throw new Error(`--smoke runs the binary here, so it needs this machine's target (${runnable.length > 0 ? runnable.join(" or ") : `${platform}-${arch}, which has no release`}) among the targets`);
   }
   return options;
 }
@@ -125,18 +152,22 @@ function run(command, args, cwd, spawn = spawnSync) {
 export const COMPILE_SAFETY_FLAGS = ["--no-compile-autoload-bunfig", "--no-compile-autoload-dotenv"];
 
 // Runs a compiled executable the way a user would: it must report the
-// package version and validate an example project. It then runs the
-// executable in a folder whose bunfig.toml names a preload script, which
-// must not run.
+// package version, print the usage, and validate an example project. It then
+// runs the executable in a folder whose bunfig.toml names a preload script,
+// which must not run.
 export function smokeTest(executable, version, spawn = spawnSync) {
   const versionRun = spawn(executable, ["--version"], { encoding: "utf8" });
   if (versionRun.error || versionRun.status !== 0 || versionRun.stdout.trim() !== version) {
-    throw new Error(`${executable} --version printed ${JSON.stringify(versionRun.stdout ?? "")} (exit ${versionRun.status}), expected ${version}${versionRun.error ? `: ${versionRun.error.message}` : ""}`);
+    throw new Error(`${executable} --version printed ${JSON.stringify(versionRun.stdout ?? "")} (exit ${versionRun.status}), expected ${version}${versionRun.error ? `: ${versionRun.error.message}` : ""}${versionRun.stderr ? `: ${versionRun.stderr.trim()}` : ""}`);
   }
   const example = path.join(repoRoot, "examples", "the-last-ember");
   const validateRun = spawn(executable, ["validate", example], { encoding: "utf8" });
   if (validateRun.error || validateRun.status !== 0) {
     throw new Error(`${executable} validate ${example} failed (exit ${validateRun.status}): ${validateRun.stderr || validateRun.error?.message}`);
+  }
+  const helpRun = spawn(executable, ["--help"], { encoding: "utf8" });
+  if (helpRun.error || helpRun.status !== 0 || !String(helpRun.stdout ?? "").startsWith("Usage: story ")) {
+    throw new Error(`${executable} --help did not print the usage (exit ${helpRun.status}): ${helpRun.stderr || helpRun.error?.message || JSON.stringify(helpRun.stdout ?? "")}`);
   }
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "story-autoload-"));
   try {
@@ -153,6 +184,25 @@ export function smokeTest(executable, version, spawn = spawnSync) {
   } finally {
     fs.rmSync(folder, { recursive: true, force: true });
   }
+}
+
+// Stands in for `spawn` to run a musl executable in an Alpine container, so
+// smokeTest's checks run there unchanged. The executable's folder and every
+// absolute path among the arguments are mounted read-only at the same path,
+// and the working folder read-write. The container installs libstdc++, which
+// the musl builds need, as a user of the binary on Alpine must.
+export function alpineSpawn(target, spawn = spawnSync) {
+  const platform = `linux/${target.arch === "x64" ? "amd64" : target.arch}`;
+  return (executable, args, options = {}) => {
+    const readOnly = [path.dirname(executable), ...args.filter((arg) => path.isAbsolute(arg))];
+    const mounts = [...new Set(readOnly)].flatMap((folder) => ["--volume", `${folder}:${folder}:ro`]);
+    const workdir = options.cwd ? ["--volume", `${options.cwd}:${options.cwd}`, "--workdir", options.cwd] : [];
+    return spawn(
+      "docker",
+      ["run", "--rm", "--platform", platform, ...mounts, ...workdir, ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', executable, ...args],
+      { encoding: "utf8" }
+    );
+  };
 }
 
 // Reads back a one-entry zip from the zip writer before it is published.
@@ -177,9 +227,13 @@ export function buildTarget(target, version, out, { smoke = false, spawn = spawn
   try {
     const executable = executableName(target);
     run("bun", ["build", "./bin/story.js", "--compile", ...COMPILE_SAFETY_FLAGS, `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot, spawn);
-    if (smoke && target === hostTarget()) {
+    const runner = smoke ? smokeRunner(target) : null;
+    if (runner === "host") {
       smokeTest(path.join(work, executable), version, spawn);
-      log(`Smoke-tested ${target.name}: --version ${version}, validate passed`);
+      log(`Smoke-tested ${target.name}: --version ${version}, validate and --help passed`);
+    } else if (runner === "alpine") {
+      smokeTest(path.join(work, executable), version, alpineSpawn(target, spawn));
+      log(`Smoke-tested ${target.name} in ${ALPINE_IMAGE}: --version ${version}, validate and --help passed`);
     }
     const archive = path.join(out, archiveName(version, target));
     fs.rmSync(archive, { force: true });

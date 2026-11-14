@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
+import { TARGETS } from "../scripts/build-binaries.js";
 import { ALL_SKILLS_ZIP, MAX_DESCRIPTION_LENGTH, buildSkillZips, listFiles, parseArgs, skillEntries, skillNames } from "../scripts/build-skill-zips.js";
 import { makeTempDir, UNZIP_ON_PATH } from "./helpers.js";
 
@@ -160,7 +161,8 @@ describe("skill zips for claude.ai and release downloads (#394)", () => {
     expect(pack).toBeGreaterThan(publish.indexOf("pattern: binary-*"));
     expect(pack).toBeLessThan(publish.indexOf("sha256sum story-skills_"));
     expect(publish).toContain('sha256sum story-skills_"$version"_* *.zip');
-    expect(publish).toContain('[ "$(wc -l < "$sums")" -eq "$((5 + skills + 1))" ]');
+    // One line per binary, one per skill folder, and all-skills.zip.
+    expect(publish).toContain(`[ "$(wc -l < "$sums")" -eq "$((${TARGETS.length} + skills + 1))" ]`);
     expect(publish).toContain("subject-path: dist/binaries/*\n");
   });
 

@@ -46,6 +46,10 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story init --form poetry-collection` sets `genre: poetry` and no word target, since the form has no word range. `story validate` reports a `verse` that is not true or false (`field-not-boolean`).
   - The `verse-craft` skill now makes and keeps a poetry collection, where it used to say not to run `story init` for one, and the new [`tide-tables`](examples/tide-tables/) example is a collection of three poems. Nonfiction stays outside the story project model, as [Series](docs/series.md#poetry-collections) now says.
 
+- Releases now have standalone `story` binaries for Alpine and other musl Linux systems, on x64 and arm64. See [Install the story CLI](docs/getting-started.md#install-the-story-cli).
+  - The archives are `story-skills_<version>_linux_x64_musl.tar.gz` and `story-skills_<version>_linux_arm64_musl.tar.gz`, in the checksums file and attested like the others. They need `libstdc++` (`apk add libstdc++`).
+  - Each one is smoke-tested in an Alpine container before release. The glibc Linux binaries and the Homebrew formula are unchanged.
+
 ### Changed
 
 - A `born` field on a character is now checked, so a free-text `born` that was kept and ignored before is now a `story validate` error.
