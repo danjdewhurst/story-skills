@@ -27309,6 +27309,10 @@ function validateProjectOf(project) {
     if (chapter.unclosedComment) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
     }
+    const authorNote = chapter.frontmatter?.["author-note"];
+    if (typeof authorNote === "string" && hasUnclosedComment(authorNote)) {
+      warnings.push(warn("unclosed-comment", `${file} author-note opens an HTML comment (<!--) that never closes, so the text after it shows in build --format post`, file));
+    }
     if (chapter.outlineRunsOn) {
       warnings.push(warn("outline-without-chapter-text", `${file} has an ## Outline with no ## Chapter Text heading and no --- line below it, so builds read the prose as starting after the outline's last list item: put ## Chapter Text above the prose`, file));
     }
@@ -33709,6 +33713,8 @@ function buildPosts(project, out, selection) {
   const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
   const written = [];
   const empty = [];
+  const planned = selected.flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]);
+  writePostManifest(output, [...new Set([...listed, ...planned])]);
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
     const label = relative(project, chapter.file);
@@ -33728,9 +33734,7 @@ function buildPosts(project, out, selection) {
       removed.push(file);
     }
   }
-  const kept = selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])];
-  writeFile(path38.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: kept.sort() }, null, 2)}
-`, output.writeOptions);
+  writePostManifest(output, selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])]);
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
   return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty] };
 }
@@ -33765,8 +33769,12 @@ function postManifest(directory) {
     return null;
   }
 }
+function writePostManifest(output, files) {
+  writeFile(path38.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: [...files].sort() }, null, 2)}
+`, output.writeOptions);
+}
 function isPostFolder(directory) {
-  return postManifest(directory) !== null;
+  return postManifest(directory) !== null || fs24.readdirSync(directory).every((name) => name.startsWith("."));
 }
 function projectBuildStyle(project) {
   const errors = [];

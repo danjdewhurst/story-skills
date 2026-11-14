@@ -17,6 +17,7 @@ import { validatePasses } from "./passes.js";
 import { queryFindings } from "./list.js";
 import { checkDefinitionFindings } from "./custom-checks.js";
 import { plural } from "./plural.js";
+import { hasUnclosedComment } from "./markdown.js";
 import { isBookNumber } from "./series.js";
 import { err, warn } from "./findings.js";
 import {
@@ -212,6 +213,11 @@ export function validateProjectOf(project) {
 
     if (chapter.unclosedComment) {
       warnings.push(warn("unclosed-comment", `${file} opens an HTML comment (<!--) that never closes, so the text after it shows in builds and word counts`, file));
+    }
+
+    const authorNote = chapter.frontmatter?.["author-note"];
+    if (typeof authorNote === "string" && hasUnclosedComment(authorNote)) {
+      warnings.push(warn("unclosed-comment", `${file} author-note opens an HTML comment (<!--) that never closes, so the text after it shows in build --format post`, file));
     }
 
     if (chapter.outlineRunsOn) {
