@@ -72,8 +72,14 @@ export function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
   refuseLocked(packagePath);
 
   const notes = new Set();
+  const parts = spineParts(read(packageEntry), packagePath, entries, notes);
+  // The whole spine is measured before any of it is inflated, so a file
+  // over the limit costs no more than its directory.
+  if (parts.reduce((total, part) => total + entries.get(part).size, 0) > left) {
+    throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+  }
   const blocks = [];
-  for (const part of spineParts(read(packageEntry), packagePath, entries, notes)) {
+  for (const part of parts) {
     refuseLocked(part);
     for (const paragraph of xhtmlParagraphs(read(entries.get(part)), notes)) {
       blocks.push(...paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine));

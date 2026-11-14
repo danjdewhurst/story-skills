@@ -24032,8 +24032,12 @@ function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
   };
   refuseLocked(packagePath);
   const notes = new Set;
+  const parts = spineParts(read(packageEntry), packagePath, entries, notes);
+  if (parts.reduce((total, part) => total + entries.get(part).size, 0) > left) {
+    throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+  }
   const blocks = [];
-  for (const part of spineParts(read(packageEntry), packagePath, entries, notes)) {
+  for (const part of parts) {
     refuseLocked(part);
     for (const paragraph of xhtmlParagraphs2(read(entries.get(part)), notes)) {
       blocks.push(...paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine));
@@ -34892,9 +34896,9 @@ var MAX_IMPORT_ARCHIVE_BYTES = 64 * 1024 * 1024;
 var MAX_IMPORT_FILES = 500;
 var IMPORT_FILE = /\.(?:md|markdown|txt|docx|odt|epub)$/i;
 var ARCHIVE_READERS = new Map([
-  ["docx", { read: docxMarkdown, code: "docx-content-left-out" }],
-  ["odt", { read: odtMarkdown, code: "import-content-left-out" }],
-  ["epub", { read: epubMarkdown, code: "import-content-left-out" }]
+  ["docx", { read: docxMarkdown, word: true }],
+  ["odt", { read: odtMarkdown, word: false }],
+  ["epub", { read: epubMarkdown, word: false }]
 ]);
 function archiveReader(name) {
   return ARCHIVE_READERS.get(/\.([a-z]+)$/i.exec(name)?.[1].toLowerCase()) ?? null;
@@ -35184,7 +35188,7 @@ function readSourceDocument(name, filePath, rules) {
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
-  return { name, path: filePath, text: converted.text, notes: converted.notes, noteCode: reader.code };
+  return { name, path: filePath, text: converted.text, notes: converted.notes, word: reader.word };
 }
 function chapterLineReader(rules) {
   return (text) => {
@@ -35280,7 +35284,8 @@ function splitChapters(documents, warnings, rules, bylines) {
   const chapters = [];
   for (const document of documents) {
     for (const note of document.notes ?? []) {
-      warnings.push({ ...warn(document.noteCode, `${shownText2(document.name)}: ${note.message}`), source: document.path });
+      const message = `${shownText2(document.name)}: ${note.message}`;
+      warnings.push({ ...document.word ? warn("docx-content-left-out", message) : warn("import-content-left-out", message), source: document.path });
     }
     const source = document.text.replace(/\r\n?/g, `
 `);

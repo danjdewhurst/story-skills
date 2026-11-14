@@ -193,21 +193,24 @@ describe("epubMarkdown", () => {
     expect(markdown([xhtml("<p>Text.</p>", { doctype: "<!-- made by hand -->\n<!doctype html>" })]).text).toBe("Text.\n");
   });
 
-  test("stops once the parts it reads come to more than its limit", () => {
-    // Each document is mostly one comment, which the scanner skips, so the
-    // test costs little more than the inflating.
-    const size = 22 * 1024 * 1024;
-    const filler = `<!--${"x".repeat(size)}-->`;
-    const parts = [1, 2, 3].map((index) => ({ name: `OEBPS/text/d${index}.xhtml`, content: Buffer.from(xhtml(`<p>Part ${index}.</p>${filler}`)) }));
+  test("refuses a spine whose parts come to more than its limit before it inflates any", () => {
+    // Each document says it is 30 MB unpacked, under the part limit, but
+    // holds a few bytes: the limit is checked against the directory, so
+    // none is ever inflated, or found to be damaged.
+    const declared = 30 * 1024 * 1024;
+    const parts = [1, 2, 3].map((index) => ({ name: `OEBPS/text/d${index}.xhtml`, content: Buffer.from(xhtml(`<p>Part ${index}.</p>`)), size: declared }));
     const opf = packageXml(parts.map((_, index) => ({ id: `d${index + 1}`, href: `text/d${index + 1}.xhtml` })));
-    expect(parts.reduce((total, part) => total + part.content.length, 0)).toBeGreaterThan(MAX_EPUB_TEXT_BYTES);
+    expect(declared * parts.length).toBeGreaterThan(MAX_EPUB_TEXT_BYTES);
     const zip = rawZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts]);
     expect(() => epubMarkdown(zip)).toThrow(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+    // The same file with honest sizes reads.
+    const honest = rawZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts.map(({ size, ...part }) => part)]);
+    expect(epubMarkdown(honest).text).toBe("Part 1.\n\nPart 2.\n\nPart 3.\n");
   });
 });
 
-// A zip of deflated entries, written by hand so a large test part is
-// compressed by node:zlib rather than the build's own deflate.
+// A zip of deflated entries, written by hand so an entry can declare a
+// size other than its own (`size`).
 function rawZip(entries) {
   const locals = [];
   const centrals = [];
@@ -228,7 +231,7 @@ function rawZip(entries) {
     central.writeUInt16LE(8, 10);
     central.writeUInt32LE(crc, 16);
     central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(entry.content.length, 24);
+    central.writeUInt32LE(entry.size ?? entry.content.length, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt32LE(offset, 42);
     locals.push(local, name, data);
