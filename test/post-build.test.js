@@ -210,6 +210,22 @@ Support me at https://example.com
     expect(posts(root, path.join("release", "episodes"))).toEqual(["01-chapter-01.html", "01-chapter-01.txt"]);
   });
 
+  test("writes into a folder of hidden files, and a build stopped partway leaves a folder it still owns", () => {
+    const root = project();
+    chapter(root, 1);
+    chapter(root, 2);
+    const folder = path.join(root, "dist", "posts");
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, ".gitkeep"), "", "utf8");
+    buildBook(root, { format: "post", chapter: "1" });
+    expect(posts(root)).toEqual([".gitkeep", "01-chapter-01.html", "01-chapter-01.txt"]);
+    // A manifest naming posts not yet written, as a stopped build leaves it.
+    fs.writeFileSync(path.join(folder, ".story-posts.json"), JSON.stringify({ generator: "story build --format post", files: ["01-chapter-01.html", "01-chapter-01.txt", "02-old-name.html"] }), "utf8");
+    fs.writeFileSync(path.join(folder, "02-old-name.html"), "<p>old</p>\n", "utf8");
+    expect(buildBook(root, { format: "post" }).removed).toBe(1);
+    expect(posts(root)).toEqual([".gitkeep", "01-chapter-01.html", "01-chapter-01.txt", "02-chapter-02.html", "02-chapter-02.txt"]);
+  });
+
   test("never removes a symlink or a folder in a listed post's place, or a file the manifest names outside the folder", () => {
     const root = project();
     chapter(root, 1);
@@ -291,6 +307,13 @@ describe("chapter author-note", () => {
     buildBook(root, { format: "post" });
     expect(read(root, "01-chapter-01.html")).toBe("<p>The end.</p>\n<hr>\n<p><strong>Author's note</strong></p>\n<p>More on Friday.</p>\n");
     expect(read(root, "01-chapter-01.txt")).toBe("The end.\n\n---\n\nAuthor's note\n\nMore on Friday.\n");
+  });
+
+  test("validate warns about a comment in the note that never closes", () => {
+    const root = project();
+    chapter(root, 1, { extra: 'author-note: "<!-- ask about the date\\nMore on Friday."\n' });
+    const warnings = validateProject(root).warnings.filter((finding) => finding.code === "unclosed-comment");
+    expect(messages(warnings)).toEqual(["chapters/chapter-01.md author-note opens an HTML comment (<!--) that never closes, so the text after it shows in build --format post"]);
   });
 
   test("cli-defaults cannot set the chapters a build posts", () => {

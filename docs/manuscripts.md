@@ -1430,7 +1430,7 @@ author-note: |
   Support the serial at https://example.com/support
 ```
 
-The post build prints the note after the episode, under a rule and the `author-note` label (`Author's note` in English; see [Build labels](#build-labels)). No other build prints it, and it never counts toward word counts.
+An HTML comment in the note stays private, as in the prose, and `story validate` warns about one that never closes (`unclosed-comment`). The post build prints the note after the episode, under a rule and the `author-note` label (`Author's note` in English; see [Build labels](#build-labels)). No other build prints it, and it never counts toward word counts.
 
 **One episode at a time.** On a release day, build only the episode that is due. `--chapter` takes a chapter id or the chapter's `number` field. In a book with an unnumbered prologue, that number is not the printed chapter number. `--from` and `--to` take a range, and either one alone runs to the last chapter or from the first:
 
@@ -1447,7 +1447,7 @@ story build . --format post --chapter "$(story next . --json | jq -r '.data.rele
 
 When the next episode has no chapter yet, `chapter` is `null`, and the build stops with an error.
 
-A build writes the posts of the chapters that you select. It also writes `.story-posts.json`, a hidden manifest that lists the posts it wrote, so the next build knows which files are its own. A build of every chapter deletes the posts that the manifest lists for a chapter that is gone, renamed, or renumbered, and says how many files it removed. A build of some chapters deletes nothing, so the posts of the other chapters stay. When a chapter number gains a digit (chapter 100), every file name changes: build every chapter once to write the new names and remove the old ones. No build deletes a file that it did not write, so a file that you put in the folder stays. `--out` names the folder. A folder that holds the project, is project source, or has files and no manifest is refused, so `--out dist` with other builds in it is refused and not cleared. The build stops at the files: it does not post to a site.
+A build writes the posts of the chapters that you select. It also writes `.story-posts.json`, a hidden manifest that lists the posts it wrote, so the next build knows which files are its own. A build of every chapter deletes the posts that the manifest lists for a chapter that is gone, renamed, or renumbered, and says how many files it removed. A build of some chapters deletes nothing, so the posts of the other chapters stay. When a chapter number gains a digit (chapter 100), every file name changes: build every chapter once to write the new names and remove the old ones. No build deletes a file that it did not write, so a file that you put in the folder stays. `--out` names the folder. A folder that holds the project, is project source, or has files and no manifest is refused (hidden files, such as `.DS_Store` or `.gitkeep`, do not count), so `--out dist` with other builds in it is refused and not cleared. The build stops at the files: it does not post to a site.
 
 ### Build styles
 

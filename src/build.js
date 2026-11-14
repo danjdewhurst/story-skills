@@ -514,6 +514,11 @@ function buildPosts(project, out, selection) {
   const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
   const written = [];
   const empty = [];
+  // The manifest names every post this build will write before it writes
+  // one, so a build stopped partway leaves a folder later builds still
+  // take for their own, and posts they can still clear.
+  const planned = selected.flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]);
+  writePostManifest(output, [...new Set([...listed, ...planned])]);
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
     const label = relative(project, chapter.file);
@@ -535,11 +540,9 @@ function buildPosts(project, out, selection) {
       removed.push(file);
     }
   }
-  // The manifest goes last, so a build that fails partway leaves the old
-  // one, which still names every post it wrote. A partial build keeps the
-  // posts the manifest listed, for the next full build to clear.
-  const kept = selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])];
-  writeFile(path.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: kept.sort() }, null, 2)}\n`, output.writeOptions);
+  // A partial build keeps the posts the manifest listed, for the next full
+  // build to clear.
+  writePostManifest(output, selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])]);
   // bookChapters warns about every empty chapter; a post build names only
   // the ones it built.
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
@@ -596,8 +599,15 @@ function postManifest(directory) {
   }
 }
 
+function writePostManifest(output, files) {
+  writeFile(path.join(output.directory, POST_MANIFEST), `${JSON.stringify({ generator: POST_GENERATOR, files: [...files].sort() }, null, 2)}\n`, output.writeOptions);
+}
+
+// A folder the post build may write into: one with its manifest, or one
+// that holds only hidden entries (.DS_Store, .gitkeep, a manifest that no
+// longer parses), which no build counts or removes.
 function isPostFolder(directory) {
-  return postManifest(directory) !== null;
+  return postManifest(directory) !== null || fs.readdirSync(directory).every((name) => name.startsWith("."));
 }
 
 // story.md build-style for the EPUB, review copy, and print interior, with

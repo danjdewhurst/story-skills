@@ -3665,7 +3665,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `stale-registry` | warning | A registry (`_index.md`) does not list a file. Run `story reindex`. |
 | `stale-word-count` | warning | A chapter's `word-count` is missing or differs from its prose. Run `story wordcount --write`. |
 | `todo-markers` | warning | Chapter prose has `[TODO` markers, which every build prints. |
-| `unclosed-comment` | warning | Chapter prose opens an HTML comment that never closes. |
+| `unclosed-comment` | warning | Chapter prose, or a chapter's `author-note`, opens an HTML comment that never closes. |
 | `ambiguous-scene-break` | warning | A `---` scene break in chapter prose sits right under a line of text, in the same block quote or list item. Builds print a scene break, but CommonMark (a markdown viewer, or the markdown export opened in one) reads the `---` as a heading underline. Put a blank line above it. |
 | `outline-without-chapter-text` | warning | A chapter has a `## Outline` with no `## Chapter Text` heading and no `---` line below it, and prose after the outline. The prose then starts after the outline's last list item, so add a `## Chapter Text` heading above the prose. |
 | `invalid-image` | warning | An image in chapter or matter prose (`![alt](path)`) is not an image file inside the project, so builds leave it out: the file is missing, outside the project, a symlink, not a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file, larger than 50 MiB, or not the image its extension names. The path is read from the file that holds the image. See [Images](manuscripts.md#images). |
