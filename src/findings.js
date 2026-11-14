@@ -321,6 +321,11 @@ export const FINDING_CODES = {
   "context-file-skipped": "warning",
   // story progress and story next
   "release-undrafted": "warning",
+  // story submissions, and story next for submission-overdue
+  "submission-tracker-no-table": "error",
+  "submission-invalid-status": "error",
+  "submission-invalid-date": "error",
+  "submission-overdue": "warning",
   // story compare
   "story-missing-at-ref": "warning",
   // story similarity
