@@ -17,8 +17,8 @@
 // host target's executable before archiving it: `--version` must print the
 // package version, `--help` must print the usage, and `validate` must pass on
 // an example project. On Linux, --smoke also runs the musl target of the
-// machine's architecture, in an Alpine container, so on Linux --smoke with no
-// --target needs Docker. Archives land in
+// machine's architecture when it is among the targets, in an Alpine container
+// (Docker); with neither --target nor --host, it is. Archives land in
 // dist/binaries/ unless --out says otherwise. Needs bun and tar; the
 // Windows zip is written with the CLI's own zip writer, then read back with
 // node:zlib to check it.
