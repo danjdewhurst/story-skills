@@ -384,7 +384,12 @@ A short story in Japanese, set in vertical columns
 A short story in Arabic, built right to left
 
 </td>
-<td width="50%" valign="top"></td>
+<td width="50%" valign="top">
+
+**[tide-tables](examples/tide-tables/)**<br>
+A poetry collection that keeps every line break in its builds
+
+</td>
 </tr>
 </table>
 
