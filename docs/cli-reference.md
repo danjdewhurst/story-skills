@@ -1598,9 +1598,9 @@ Progress checked: 0 errors, 0 warnings, 0 dismissed
 story submissions [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
 ```
 
-Reads `submission/tracker.md`, the tracker the [`submission`](skills.md) skill keeps, and lists its rows, counts each status from the table, checks each row, and flags the submissions still waiting for a reply after `--days` days. It never writes: every row comes from the author.
+Reads `submission/tracker.md`, the tracker the [`submission`](skills.md) skill keeps, and lists its rows, counts each status from the table, checks each row, and flags the submissions still waiting for a reply `--days` days or more. It never writes: every row comes from the author.
 
-The tracker is a markdown table whose header has a `Status` and a `Date Sent` column, after optional YAML frontmatter. Columns are found by their header, in any order and letter case, so both the book tracker (`Agent/Publisher`, `Date Sent`, `Materials`, `Status`, `Response Date`, `Notes`) and the short-fiction tracker (`Market`, `Story`, `Date Sent`, `Type`, `Rights Offered`, `Status`, `Response Date`, `Notes`) are read. As in GitHub tables, a row needs no outer pipes; the table ends at the first blank line or line with no `|`. Other tables, such as `## Publication History`, a hand-kept `## Summary`, and tables in backtick code fences are left alone, and so is the template's `*No submissions yet*` row. Emphasis and code marks around a cell, such as `**2026-06-01**` or `` `queried` ``, are taken off.
+The tracker is a markdown table whose header has a `Status` and a `Date Sent` column, after optional YAML frontmatter. Columns are found by their header, in any order and letter case, so both the book tracker (`Agent/Publisher`, `Date Sent`, `Materials`, `Status`, `Response Date`, `Notes`) and the short-fiction tracker (`Market`, `Story`, `Date Sent`, `Type`, `Rights Offered`, `Status`, `Response Date`, `Notes`) are read. As in GitHub tables, a row needs no outer pipes; the table ends at the first blank line or line with no `|`. Other tables, such as `## Publication History`, a hand-kept `## Summary`, and tables in backtick code fences are left alone, and so is the template's `*No submissions yet*` row. Emphasis and code marks around a whole cell, such as `**2026-06-01**` or `` `queried` ``, are taken off; a cell such as `*Requested* full, see *email*` keeps its marks.
 
 Each row is checked:
 
@@ -1608,7 +1608,7 @@ Each row is checked:
 - `Date Sent` is a real `YYYY-MM-DD` day, and `Response Date` is one too or blank. Anything else is a [`submission-invalid-date`](#codes-submissions) error. A date after today, usually a mistyped year, is a [`submission-date-in-future`](#codes-submissions) warning: such a row would never come due.
 - A row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) waits from the later of its `Date Sent` and `Response Date`, so a request for the full manuscript waits from the day the request came. A row that has waited `--days` days or more is a [`submission-overdue`](#codes-submissions) warning. A row whose warning a `severity` entry turns `off` or an [exemption](continuity.md#exemptions) dismisses is not counted as due a follow-up, in the text, `--json`, and `next`.
 
-A project with no `submission/tracker.md` prints a short note and exits 0. A tracker with no tracker table is a [`submission-tracker-no-table`](#codes-submissions) error, and one with more than 10,000 table rows a [`submission-tracker-too-large`](#codes-submissions) error, with no row read. Errors exit 1; warnings alone exit 0. A tracker whose frontmatter does not parse, or a `submission` folder that is a symlink, exits 3.
+A project with no `submission/tracker.md` prints a short note and exits 0. A tracker with no tracker table is a [`submission-tracker-no-table`](#codes-submissions) error, and one with more than 10,000 tracker rows a [`submission-tracker-too-large`](#codes-submissions) error, with no row checked. Errors exit 1; warnings alone exit 0. A tracker whose frontmatter does not parse, or a `submission` folder that is a symlink, exits 3.
 
 | Option | Effect |
 |---|---|
@@ -1948,7 +1948,7 @@ story next [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
 
 Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within `release-warn-days` days (default 3), or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
 
-When `submission/tracker.md` has rows that have waited `--days` days (default 90) or more for a reply, as [`submissions`](#submissions) counts them, `next` adds one action: `[P2] Follow up on submissions: 2 submissions in submission/tracker.md have waited 90 days or more for a reply: run story submissions . to list them.` With another `--days`, the suggested command carries it, such as `story submissions . --days 60`. `next` reads its own `days` in `cli-defaults`, not the `submissions` entry. A `severity` entry that turns [`submission-overdue`](#codes-submissions) off, or an exemption that dismisses it, leaves the row out. A tracker that cannot be read gives no action; `story submissions` reports the problem.
+When `submission/tracker.md` has rows that have waited `--days` days (default 90) or more for a reply, as [`submissions`](#submissions) counts them, `next` adds one action: `[P2] Follow up on submissions: 2 submissions in submission/tracker.md have waited 90 days or more for a reply: run story submissions . --days 90 to list them.` The suggested command carries `next`'s `--days`, and its `--date` when you gave one, because `submissions` reads its own `days` in `cli-defaults`, not the `next` entry. A `severity` entry that turns [`submission-overdue`](#codes-submissions) off, or an exemption that dismisses it, leaves the row out. A tracker that cannot be read gives no action; `story submissions` reports the problem.
 
 | Priority | Actions |
 |---|---|
@@ -3914,7 +3914,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | Code | Level | Reported when |
 |---|---|---|
 | `submission-tracker-no-table` | error | `submission/tracker.md` has no table with a `Status` and a `Date Sent` column. |
-| `submission-tracker-too-large` | error | `submission/tracker.md` has more than 10,000 table rows. No row is read, so a cloned project cannot fill the output or the memory `--json` needs. |
+| `submission-tracker-too-large` | error | `submission/tracker.md` has more than 10,000 rows in its tracker tables. Reading stops there and no row is checked, so a cloned project cannot fill the output or the memory `--json` needs. |
 | `submission-invalid-status` | error | A tracker row's `Status` is empty or not one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`. |
 | `submission-invalid-date` | error | A tracker row's `Date Sent` is empty or not a real `YYYY-MM-DD` day, or its `Response Date` is neither blank nor such a day. |
 | `submission-date-in-future` | warning | A tracker row's `Date Sent` or `Response Date` is after today (`--date`). A mistyped year keeps the row from ever coming due. |

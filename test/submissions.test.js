@@ -222,11 +222,12 @@ describe("story submissions", () => {
     writeTracker(root, bookTracker([
       "| *No submissions yet* | | | | | |",
       "| **Ada Byrne** | 2026-10-01 | _query_ | queried | | `fast` |",
+      "| _Uncanny_ / _Fireside_ | 2026-10-01 | query | queried | | *Requested* full, see *email* |",
       "| *Emphasised Only* | | | | | |"
     ]));
     const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
     expect(code).toBe(1);
-    expect(envelope.data.rows.map((row) => [row.name, row.materials, row.notes])).toEqual([["Ada Byrne", "query", "fast"], ["Emphasised Only", "", ""]]);
+    expect(envelope.data.rows.map((row) => [row.name, row.materials, row.notes])).toEqual([["Ada Byrne", "query", "fast"], ["_Uncanny_ / _Fireside_", "query", "*Requested* full, see *email*"], ["Emphasised Only", "", ""]]);
     expect(envelope.diagnostics.map((entry) => entry.code)).toEqual(["submission-invalid-status", "submission-invalid-date"]);
   });
 
@@ -293,7 +294,7 @@ describe("story submissions", () => {
     const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
     expect(code).toBe(1);
     expect(envelope.data.rows).toEqual([]);
-    expect(envelope.diagnostics).toEqual([expect.objectContaining({ code: "submission-tracker-too-large", message: "submission/tracker.md has 10001 table rows, more than the 10000 a tracker can hold: split it, or move old rows to another file" })]);
+    expect(envelope.diagnostics).toEqual([expect.objectContaining({ code: "submission-tracker-too-large", message: "submission/tracker.md has more than 10000 tracker rows: split it, or move old rows to another file" })]);
     expect(invoke(cwd, ["next", root, "--date", TODAY]).out).not.toContain("Follow up on submissions");
   });
 
@@ -325,8 +326,8 @@ describe("story next and the submission tracker", () => {
     writeTracker(root, bookTracker(ROWS));
     const text = invoke(cwd, ["next", root, "--date", TODAY]);
     expect(text.code).toBe(0);
-    expect(text.out).toContain(`- [P2] Follow up on submissions: 1 submission in submission/tracker.md has waited 90 days or more for a reply: run story submissions ${shellWord(root)} to list it.\n`);
-    expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "20"]).out).toContain(`3 submissions in submission/tracker.md have waited 20 days or more for a reply: run story submissions ${shellWord(root)} --days 20 to list them.`);
+    expect(text.out).toContain(`- [P2] Follow up on submissions: 1 submission in submission/tracker.md has waited 90 days or more for a reply: run story submissions ${shellWord(root)} --days 90 --date 2026-11-14 to list it.\n`);
+    expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "20"]).out).toContain(`3 submissions in submission/tracker.md have waited 20 days or more for a reply: run story submissions ${shellWord(root)} --days 20 --date 2026-11-14 to list them.`);
     expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "200"]).out).not.toContain("Follow up on submissions");
 
     const story = path.join(root, "story.md");

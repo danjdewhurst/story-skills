@@ -38,8 +38,9 @@ export const DEFAULT_FOLLOW_UP_DAYS = 90;
 export const MAX_TRACKER_ROWS = 10000;
 
 // Each row's submission-overdue finding, so recountOverdue can tell which
-// rows story.md severity or an exemption has dismissed.
-const OVERDUE_FINDINGS = new WeakMap();
+// rows story.md severity or an exemption has dismissed. A symbol key is
+// copied with the row and left out of --json.
+const OVERDUE_FINDING = Symbol("overdue finding");
 const MAX_FOLLOW_UP_DAYS = 3650;
 
 // The days from --days after which a submission still waiting for a reply
@@ -79,14 +80,25 @@ function tableCells(line) {
 
 const MARKS = new Set(["*", "_", "`"]);
 
-// A cell without the emphasis or code marks around its text: the same mark
-// taken off both ends while it is on both, so **2026-06-01** and `queried`
-// read as their text. A loop rather than a backreference keeps a long run of
-// marks linear.
+// A cell without the emphasis or code marks around its whole text, so
+// **2026-06-01** and `queried` read as their text. A run of one mark is
+// taken off only when the same run ends the cell and the mark appears
+// nowhere between, so *Requested* full, see *email* keeps its marks. Each
+// pass takes off every copy of one mark, so there are at most three, and
+// each is linear.
 function plainCell(cell) {
   let text = cell.trim();
   while (text.length >= 2 && MARKS.has(text[0]) && text.at(-1) === text[0]) {
-    text = text.slice(1, -1).trim();
+    const mark = text[0];
+    let run = 0;
+    while (run < text.length && text[run] === mark) {
+      run += 1;
+    }
+    const inner = text.slice(run, text.length - run);
+    if (run * 2 > text.length || text.slice(text.length - run) !== mark.repeat(run) || inner.includes(mark)) {
+      break;
+    }
+    text = inner.trim();
   }
   return text;
 }
@@ -104,26 +116,37 @@ function hasCellBreak(line) {
 
 // The tracker tables in `lines` (the file's lines, frontmatter included,
 // with `start` the first line after it), each as { headers, rows }, where a
-// row is { line, cells } with line counted from 1.
+// row is { line, cells } with line counted from 1. `tooLarge` is true, and
+// the reading stops, once the tracker tables hold more than MAX_TRACKER_ROWS
+// rows, so a huge file is refused before its rows are split into cells.
 function trackerTables(lines, start) {
   const fenced = fencedLineIndexes(lines);
   const tables = [];
+  let total = 0;
   for (let index = start; index < lines.length - 1; index += 1) {
     if (fenced.has(index) || !hasCellBreak(lines[index]) || !DELIMITER_ROW.test(lines[index + 1].trim())) {
       continue;
     }
     const headers = tableCells(lines[index]).map(headerName);
+    const tracker = headers.includes("status") && headers.includes("date sent");
     const rows = [];
     let next = index + 2;
     for (; next < lines.length && !fenced.has(next) && lines[next].trim() !== "" && hasCellBreak(lines[next]); next += 1) {
+      if (!tracker) {
+        continue;
+      }
+      total += 1;
+      if (total > MAX_TRACKER_ROWS) {
+        return { tables, tooLarge: true };
+      }
       rows.push({ line: next + 1, cells: tableCells(lines[next]) });
     }
-    if (headers.includes("status") && headers.includes("date sent")) {
+    if (tracker) {
       tables.push({ headers, rows });
     }
     index = next - 1;
   }
-  return tables;
+  return { tables, tooLarge: false };
 }
 
 // The template's placeholder row, `| *No submissions yet* | | | ... |`: that
@@ -203,15 +226,14 @@ export function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }
     return result;
   }
   const { start, lines } = trackerLines(text);
-  const tables = trackerTables(lines, start);
-  if (tables.length === 0) {
-    result.errors.push(err("submission-tracker-no-table", `${SUBMISSION_TRACKER} has no tracker table: add one with a Status and a Date Sent column, as the submission skill's tracker template has`, SUBMISSION_TRACKER));
-  }
-  const rowCount = tables.reduce((total, table) => total + table.rows.length, 0);
-  if (rowCount > MAX_TRACKER_ROWS) {
-    result.errors.push(err("submission-tracker-too-large", `${SUBMISSION_TRACKER} has ${rowCount} table rows, more than the ${MAX_TRACKER_ROWS} a tracker can hold: split it, or move old rows to another file`, SUBMISSION_TRACKER));
+  const { tables, tooLarge } = trackerTables(lines, start);
+  if (tooLarge) {
+    result.errors.push(err("submission-tracker-too-large", `${SUBMISSION_TRACKER} has more than ${MAX_TRACKER_ROWS} tracker rows: split it, or move old rows to another file`, SUBMISSION_TRACKER));
     result.ok = false;
     return result;
+  }
+  if (tables.length === 0) {
+    result.errors.push(err("submission-tracker-no-table", `${SUBMISSION_TRACKER} has no tracker table: add one with a Status and a Date Sent column, as the submission skill's tracker template has`, SUBMISSION_TRACKER));
   }
   const todayDays = parseClockDate(today).days;
   for (const table of tables) {
@@ -259,7 +281,7 @@ function checkRow(row, todayDays, days, result) {
     row.overdue = row.waitingDays >= days;
     if (row.overdue) {
       const finding = warn("submission-overdue", `${label}: ${status}, waiting ${plural(row.waitingDays, "day")} for a reply since ${since.text} (${days} or more is due a follow-up): follow up, or record the reply`, SUBMISSION_TRACKER);
-      OVERDUE_FINDINGS.set(row, finding);
+      row[OVERDUE_FINDING] = finding;
       result.warnings.push(finding);
     }
   }
@@ -296,7 +318,7 @@ function rowDate(row, field, column, label, result, { required }) {
 // a follow-up, in the rows, the overdue count, and story next alike.
 export function recountOverdue(report) {
   const active = new Set([...report.errors, ...report.warnings]);
-  const rows = report.rows.map((row) => ({ ...row, overdue: row.overdue && active.has(OVERDUE_FINDINGS.get(row)) }));
+  const rows = report.rows.map((row) => ({ ...row, overdue: row.overdue && active.has(row[OVERDUE_FINDING]) }));
   return { ...report, rows, overdue: rows.filter((row) => row.overdue).length };
 }
 
