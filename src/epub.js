@@ -98,7 +98,7 @@ export function epubMarkdown(bytes, { chapterLine = () => null, partHeading = ()
           paragraphs += 1;
           linked += allLinks ? 1 : 0;
         }
-        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine);
+        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine, { preformatted: paragraph.runs.every((run) => run.pre) });
         const bytes = found.reduce((total, block) => total + blockBytes(block), 0);
         keptBytes += allLinks ? 0 : bytes;
         linkedBytes += allLinks ? bytes : 0;
@@ -161,14 +161,16 @@ function rootfilePath(xml) {
 // one inside the archive: a URL, an absolute path, a backslash, or `..`
 // that climbs above the archive's root. `base` is the folder the path is
 // relative to, ending in `/` (or "" for the root). A fragment or query is
-// dropped, and percent escapes are decoded.
+// dropped, and percent escapes are decoded. An href with a `%` that is not
+// an escape, such as `100%.xhtml`, as some ebook tools write one, is read
+// as written, and goes through the same checks.
 export function archivePath(base, href) {
   const bare = href.replace(/[?#][^]*$/, "");
   let decoded;
   try {
     decoded = decodeURIComponent(bare);
   } catch {
-    return null;
+    decoded = bare;
   }
   if (decoded === "" || /^[a-z][a-z0-9+.-]*:/i.test(decoded) || decoded.startsWith("/") || decoded.includes("\\")) {
     return null;
@@ -345,6 +347,16 @@ function styleEmphasis(style) {
   };
 }
 
+// The spaces of preformatted text that the writer would otherwise
+// collapse, as no-break spaces, which markdown and the builds keep: those
+// that indent a line (when `text` starts one), and each after the first in
+// a run. A tab is four spaces.
+function preformattedSpaces(text, startsLine) {
+  const spaced = text.replace(/\t/g, "    ");
+  const indented = startsLine ? spaced.replace(/^ +/, (spaces) => "\u00a0".repeat(spaces.length)) : spaced;
+  return indented.replace(/ {2,}/g, (spaces) => ` ${"\u00a0".repeat(spaces.length - 1)}`);
+}
+
 // Hands each paragraph of one XHTML document to `emit` as { runs, level,
 // quote }, with runs of { text, italic, bold, link }, where link marks text
 // inside a link whose href `leadsToDocument` accepts. Text is read only
@@ -370,7 +382,7 @@ function xhtmlParagraphs(xml, notes, leadsToDocument, emit) {
       paragraph = { runs: [], level: frame.level, quote: frame.quote };
     }
     // A heading's own bold or italic is its style, not emphasis.
-    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link });
+    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link, pre: frame.pre });
   };
 
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
@@ -386,7 +398,10 @@ function xhtmlParagraphs(xml, notes, leadsToDocument, emit) {
     }
     if (token.type === "text") {
       const frame = frames.at(-1);
-      add(frame.pre ? token.text.split(/\r\n?|\n/).map(proseText).join(LINE_BREAK) : proseText(token.text.replace(/\t/g, " ")));
+      // Preformatted text starts a line at the start of its paragraph or
+      // after a line break, and after each line end of its own.
+      const startsLine = paragraph === null || paragraph.runs.at(-1).text.endsWith(LINE_BREAK);
+      add(frame.pre ? token.text.split(/\r\n?|\n/).map((line, index) => preformattedSpaces(proseText(line), index > 0 || startsLine)).join(LINE_BREAK) : proseText(token.text.replace(/\t/g, " ")));
       continue;
     }
     const name = localName(token.name).toLowerCase();
