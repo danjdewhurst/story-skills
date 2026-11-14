@@ -142,9 +142,9 @@ function optionRow(name) {
 }
 
 // The default output each build gives, keyed by format plus the flag that
-// changes it ("docx --shunn"). The codex is a folder, not a file extension.
+// changes it ("docx --shunn"). The codex and the posts are folders, not file extensions.
 const DEFAULT_OUTPUTS = {
-  ...Object.fromEntries(buildFormats.map((format) => [format, format === "codex" ? "dist/codex/" : `dist/<story-id>.${BUILD_EXTENSIONS[format]}`])),
+  ...Object.fromEntries(buildFormats.map((format) => [format, format === "codex" ? "dist/codex/" : format === "post" ? "dist/posts/" : `dist/<story-id>.${BUILD_EXTENSIONS[format]}`])),
   "docx --shunn": `dist/<story-id>.${SHUNN_DOCX_EXTENSION}`,
   ...Object.fromEntries(Object.entries(PDF_EXTENSIONS).map(([format, extension]) => [`${format} --pdf`, `dist/<story-id>.${extension}`]))
 };

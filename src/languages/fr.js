@@ -55,6 +55,7 @@ export default {
     "published-by": "Publié par {publisher}",
     "scene-break": "Changement de scène",
     footnotes: "Notes",
+    "author-note": "Note d’auteur",
     "cover-alt": "Couverture de {title}",
     "start-of-content": "Début du contenu",
     "accessibility-summary": "Livre entièrement textuel, avec une table des matières navigable, un titre pour chaque chapitre et un ordre de lecture logique unique.",

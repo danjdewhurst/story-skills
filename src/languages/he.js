@@ -19,6 +19,7 @@ export default {
     "published-by": "בהוצאת {publisher}",
     "scene-break": "מעבר סצנה",
     footnotes: "הערות",
+    "author-note": "אחרית דבר",
     "cover-alt": "כריכת הספר {title}",
     "start-of-content": "תחילת התוכן",
     "accessibility-summary": "ספר טקסט בלבד, עם תוכן עניינים ניתן לניווט, כותרת לכל פרק וסדר קריאה לוגי יחיד.",

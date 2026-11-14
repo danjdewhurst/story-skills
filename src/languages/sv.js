@@ -21,6 +21,7 @@ export default {
     "published-by": "Utgiven av {publisher}",
     "scene-break": "Scenbyte",
     footnotes: "Noter",
+    "author-note": "Författarens kommentar",
     "cover-alt": "Omslag till {title}",
     "start-of-content": "Början av innehållet",
     "accessibility-summary": "Bok med enbart text, med navigerbar innehållsförteckning, en rubrik för varje kapitel och en enda logisk läsordning.",

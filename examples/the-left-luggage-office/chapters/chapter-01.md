@@ -17,6 +17,10 @@ time: "23:49"
 episode-question: "Will Ines hand the blue suitcase to the man holding its ticket?"
 target-words: 500
 hook: cliffhanger
+author-note: |
+  Thank you for reading the first episode! A new one comes out every *Friday*.
+
+  Who do you think left the suitcase? Tell me in the comments.
 word-count: 423
 ---
 

@@ -15,6 +15,7 @@ const labels = {
   "published-by": "出版者：{publisher}",
   "scene-break": "場景轉換",
   footnotes: "注釋",
+  "author-note": "作者的話",
   "cover-alt": "《{title}》封面",
   "start-of-content": "正文",
   "accessibility-summary": "純文字圖書，包含可導覽的目錄、每章的標題和單一的邏輯閱讀順序。",

@@ -18,6 +18,7 @@ export default {
     "published-by": "प्रकाशक: {publisher}",
     "scene-break": "दृश्य परिवर्तन",
     footnotes: "टिप्पणियाँ",
+    "author-note": "लेखकीय टिप्पणी",
     "cover-alt": "{title} का आवरण",
     "start-of-content": "सामग्री का आरंभ",
     "accessibility-summary": "केवल पाठ वाली पुस्तक, जिसमें नेविगेट करने योग्य विषय-सूची, हर अध्याय का शीर्षक और एक ही तार्किक पठन क्रम है।",

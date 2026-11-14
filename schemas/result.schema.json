@@ -1177,13 +1177,14 @@
     },
     "data-build": {
       "type": "object",
-      "required": ["format", "outFile", "chapters", "pages", "events", "pdf", "engine", "dryRun", "changes"],
+      "required": ["format", "outFile", "chapters", "pages", "events", "posts", "pdf", "engine", "dryRun", "changes"],
       "properties": {
-        "format": { "enum": ["markdown", "epub", "docx", "shunn", "html", "print", "narration", "metadata", "fountain", "twee", "ink", "ics", "codex"], "description": "The format built; md reads as markdown." },
-        "outFile": { "type": "string", "minLength": 1, "description": "The absolute path of the file written (or, with --dry-run, that would be written); for codex, the folder of pages." },
-        "chapters": { "$ref": "#/$defs/count" },
+        "format": { "enum": ["markdown", "epub", "docx", "shunn", "html", "print", "narration", "metadata", "fountain", "twee", "ink", "ics", "codex", "post"], "description": "The format built; md reads as markdown." },
+        "outFile": { "type": "string", "minLength": 1, "description": "The absolute path of the file written (or, with --dry-run, that would be written); for codex, the folder of pages, and for post, the folder of posts." },
+        "chapters": { "$ref": "#/$defs/count", "description": "The chapters built; for post, the chapters --chapter, --from, and --to picked." },
         "pages": { "type": ["integer", "null"], "minimum": 0, "description": "codex: the pages written; null for every other format." },
         "events": { "type": ["integer", "null"], "minimum": 1, "description": "ics: the calendar events written; null for every other format." },
+        "posts": { "type": ["integer", "null"], "minimum": 1, "description": "post: the episodes written, each as an .html and a .txt file; null for every other format." },
         "pdf": { "type": "boolean", "description": "True for --pdf." },
         "engine": { "enum": ["prince", "weasyprint", "pagedjs-cli", "chrome", null], "description": "--pdf: the engine that rendered the PDF, or with --dry-run the one found and not run; null without --pdf." },
         "dryRun": { "type": "boolean", "description": "True for a --dry-run, which changed nothing: changes lists what the command would do, and writes is empty." },

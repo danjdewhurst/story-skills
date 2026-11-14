@@ -357,6 +357,9 @@ export function validateChapters(project, errors, warnings) {
     for (const field of ["collected-from", "collected-hash"]) {
       requireScalar(data, field, label, errors);
     }
+    if (data["author-note"] !== undefined) {
+      requireScalar(data, "author-note", label, errors);
+    }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     // Free text: beat sheets name their beats differently, and writers adapt

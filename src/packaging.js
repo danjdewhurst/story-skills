@@ -409,6 +409,40 @@ export function htmlBook(manuscript, ownIndent = false) {
   };
 }
 
+// A chapter body as the post build sets it: { paragraphs, notes }, read
+// through bookBody as the other builds read it. `verse` keeps every line
+// break. Images are left out (a pasted fragment cannot carry them; the
+// post build warns), and a figure left with none is no paragraph. Each
+// paragraph is null for a scene break, otherwise { html, lines, quote }:
+// the inline HTML, with each footnote marker a raised number linking to
+// its note, and the plain text, with each hard break as a line break and
+// each marker as [n]. Each note is { number, id, backlink, html, lines },
+// its paragraphs as HTML and as plain text; `key` (the chapter id) makes
+// the ids `<key>-fn<n>` and `<key>-fnref<n>`, as the review copy names them.
+export function postBody(body, { key, verse = false } = {}) {
+  const ref = (number, reference) => `${key}-fnref${number}${reference === 1 ? "" : `-${reference}`}`;
+  const media = { note: (note) => `<sup><a href="#${key}-fn${note.number}" id="${ref(note.number, note.reference)}">${note.number}</a></sup>` };
+  const lines = (runs) => runs.map((run) => (run.note === undefined ? run.text : `[${run.note.number}]`)).join("").split(LINE_BREAK).join("\n");
+  const html = (runs) => runs.map((run) => runMarkup(run, escapeHtml, "<br>", media)).join("");
+  const parsed = bookBody(body, { verse });
+  const paragraphs = parsed.paragraphs.filter((paragraph) => !paragraph.figure || paragraph.runs.length > 0).map((paragraph) => (paragraph.sceneBreak
+    ? null
+    : { html: html(paragraph.runs), lines: lines(paragraph.runs), quote: paragraph.quote }));
+  const notes = parsed.notes.map((note) => ({
+    number: note.number,
+    id: `${key}-fn${note.number}`,
+    backlink: ref(note.number, 1),
+    html: note.paragraphs.map(html),
+    lines: note.paragraphs.map(lines)
+  }));
+  return { paragraphs, notes };
+}
+
+// A body's paragraphs as the post build sets them (see postBody).
+export function htmlParagraphs(body, ownIndent = false, verse = false) {
+  return postBody(body, { key: "", verse }).paragraphs;
+}
+
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
   writeZip(outFile, docxEntries(manuscript), writeOptions);
 }

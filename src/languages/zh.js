@@ -37,6 +37,7 @@ export default {
     "published-by": "出版者：{publisher}",
     "scene-break": "场景转换",
     footnotes: "注释",
+    "author-note": "作者的话",
     "cover-alt": "《{title}》封面",
     "start-of-content": "正文",
     "accessibility-summary": "纯文本图书，包含可导航的目录、每章的标题和单一的逻辑阅读顺序。",

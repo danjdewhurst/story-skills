@@ -19,6 +19,7 @@ export default {
     "published-by": "펴낸곳: {publisher}",
     "scene-break": "장면 전환",
     footnotes: "주",
+    "author-note": "작가의 말",
     "cover-alt": "『{title}』 표지",
     "start-of-content": "본문",
     "accessibility-summary": "텍스트로만 된 책으로, 탐색할 수 있는 차례, 장마다 제목, 하나의 논리적인 읽기 순서를 갖추고 있습니다.",

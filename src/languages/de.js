@@ -55,6 +55,7 @@ export default {
     "published-by": "Erschienen bei {publisher}",
     "scene-break": "Szenenwechsel",
     footnotes: "Anmerkungen",
+    "author-note": "Nachbemerkung",
     "cover-alt": "Cover von {title}",
     "start-of-content": "Beginn des Inhalts",
     "accessibility-summary": "Buch, das nur aus Text besteht, mit navigierbarem Inhaltsverzeichnis, einer Überschrift für jedes Kapitel und einer einzigen logischen Lesereihenfolge.",

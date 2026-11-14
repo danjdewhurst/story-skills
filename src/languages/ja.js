@@ -38,6 +38,7 @@ export default {
     "published-by": "発行所：{publisher}",
     "scene-break": "場面転換",
     footnotes: "注",
+    "author-note": "あとがき",
     "cover-alt": "『{title}』の表紙",
     "start-of-content": "本文",
     "accessibility-summary": "テキストのみの書籍です。ナビゲーション可能な目次、各章の見出し、単一の論理的な読み順を備えています。",
