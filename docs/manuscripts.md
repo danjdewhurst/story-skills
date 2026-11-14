@@ -23,7 +23,7 @@ All output shown was captured by running the commands against copies of the exam
 |---------|-------|--------|----------------|
 | `story import <source\|->` | A manuscript file, a folder of chapter files, or a manuscript piped to stdin (`-`) | A new story project | `./<title-in-kebab-case>/` |
 | `story export [path]` | `story.md`, `chapters/`, `matter/` | One markdown manuscript | `dist/manuscript.md` |
-| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, (for narration) `pronunciation` fields in the bible, and (for fountain) scene, location, and character records | One book file, script, or sheet | `dist/<story-id>.<ext>` |
+| `story build [path]` | `story.md`, `chapters/`, `matter/`, the cover image, the images the prose places, (for narration) `pronunciation` fields in the bible, and (for fountain) scene, location, and character records | One book file, script, or sheet | `dist/<story-id>.<ext>` |
 | `story synopsis [path]` | `story.md` and `plot/arcs/` | A synopsis scaffold | Printed to stdout |
 
 ```mermaid
@@ -463,7 +463,7 @@ A value that fails validation does not stop a build: builds never validate the p
 
 ### Build labels
 
-Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, the Fountain title page, and the codex site's page names, headings, table columns, and notes. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, Mandarin `cmn`, and the other Chinese languages in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional, and a script subtag wins, then a region, so `yue-Hans` and `yue-CN` are Simplified and `cmn-Hant` and `cmn-TW` Traditional, as their typesetting is), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
+Every piece of text a build generates for readers is in the book's `language`: chapter headings, the contents heading, the generated copyright page, the name screen readers announce for a scene break, the footnotes heading, the EPUB cover alt text, landmark, and accessibility summary, the HTML review copy's title, note, and link names, the Shunn title block, the narration script's spoken credits, the Fountain title page, and the codex site's page names, headings, table columns, and notes. The language packs translate these labels for Arabic (`ar`), Chinese (`zh`, Mandarin `cmn`, and the other Chinese languages in Simplified characters; `zh-Hant`, `zh-TW`, `zh-HK`, `zh-MO`, Cantonese `yue` or `zh-yue`, and Classical Chinese `lzh` get Traditional, and a script subtag wins, then a region, so `yue-Hans` and `yue-CN` are Simplified and `cmn-Hant` and `cmn-TW` Traditional, as their typesetting is), Dutch (`nl`), French (`fr`), German (`de`), Hebrew (`he`), Hindi (`hi`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Persian (`fa`), Polish (`pl`), Portuguese (`pt`, in Brazilian Portuguese; `pt-PT` changes the few labels that differ, such as `Direitos de autor` and `ligação`), Russian (`ru`), Spanish (`es`), Swedish (`sv`), Turkish (`tr`), and Ukrainian (`uk`). Any other language gets the English labels.
 
 Each pack follows its language's conventions. Chapter headings read `Kapitel 1: Die Glocke`, `Chapitre 1 : La Cloche` (a no-break space before the colon), `Глава 1. Колокол`, or `第1章　風` (an ideographic space). Numbers keep Latin digits in every language unless `chapter-numerals: native` asks for the language's own in chapter headings (see [Chapter numerals](#chapter-numerals)), with the language's separators in the Shunn word count (`Environ 87 000 mots` in French). Where a name would need a grammatical case or a suffix to agree with the words around it, as in Polish, Russian, Ukrainian, Turkish, and Korean, the labels set it after a colon or on its own instead. Where a word about one person, such as a character, an author, an editor, a narrator, or the reader, would take that person's gender, as in Arabic, Hebrew, and Hindi, the labels use a noun for the action, the passive, or the name alone (`تحرير`, `בעריכת`, `संपादन`), and Hebrew asks the reader in the plural, its usual neutral form. Words about a group, such as the listeners a narration addresses (`استمعتم`, `האזנתם`), keep the plural's usual masculine form. Have a native reader check the labels before you publish.
 
@@ -487,10 +487,12 @@ labels:
 | `all-rights-reserved` | `All rights reserved.` | The generated copyright page. |
 | `published-by` | `Published by {publisher}` | The generated copyright page. |
 | `scene-break` | `Scene break` | What screen readers announce for a scene break in the HTML and print builds. |
+| `footnotes` | `Notes` | The heading over a chapter's footnotes in the HTML, print, and Shunn builds (see [Footnotes](#footnotes)). |
 | `cover-alt` | `Cover of {title}` | The EPUB cover's alt text when `cover-alt` is not set. |
 | `start-of-content` | `Start of Content` | The EPUB landmark that points at the first chapter. |
 | `accessibility-summary` | `Text-only book with a navigable table of contents, …` | The EPUB accessibility summary. |
 | `accessibility-summary-cover` | `Text book with a described cover image, …` | The same, for a book with a cover. |
+| `accessibility-summary-images` | `Text book with described images, …` | The same, for a book whose prose places images (see [Images](#images)). |
 | `review-title` | `{title}: review copy` | The HTML review copy's page title. |
 | `review-intro`, `review-intro-build` | `Review copy.`, `Review copy, build {build}.` | The first sentence of the review copy's note, without and with `--stamp`. |
 | `review-labels` | `Every paragraph has a label such as {label} (chapter 3, paragraph 12).` | The review copy's note. |
@@ -781,7 +783,7 @@ OEBPS/front-epigraph.xhtml
 OEBPS/chapter-01.xhtml
 ```
 
-Chapter documents are named `chapter-NN.xhtml`, and matter documents `front-<id>.xhtml` or `back-<id>.xhtml`; a [generated copyright page](#the-generated-copyright-page) is `front-copyright.xhtml`. A `.jpeg` cover is stored as `images/cover.jpg`.
+Chapter documents are named `chapter-NN.xhtml`, and matter documents `front-<id>.xhtml` or `back-<id>.xhtml`; a [generated copyright page](#the-generated-copyright-page) is `front-copyright.xhtml`. A `.jpeg` cover is stored as `images/cover.jpg`. Each image the prose places is stored once as `images/figure-N` with its extension, numbered in reading order (see [Images](#images)).
 
 The package metadata comes from `story.md`:
 
@@ -792,7 +794,7 @@ The package metadata comes from `story.md`:
 
 The look of the text is left to the reading system unless `story.md` has a [build style](#build-styles), which adds `style.css` and, with `css`, the writer's own `extra.css`.
 
-Each document is tagged for reading systems: chapters as `bodymatter chapter`, matter pages as `frontmatter` or `backmatter`, a copyright page as `copyright-page`, and the cover page as `cover`. A hidden landmarks list points at the first chapter, so readers open at the story. The package also carries EPUB Accessibility discovery metadata: a textual access mode (plus a visual one when there is a cover), a table of contents, a single reading order, structural navigation, no hazards, and, when there is a cover, a described cover image.
+Each document is tagged for reading systems: chapters as `bodymatter chapter`, matter pages as `frontmatter` or `backmatter`, a copyright page as `copyright-page`, and the cover page as `cover`. A hidden landmarks list points at the first chapter, so readers open at the story. The package also carries EPUB Accessibility discovery metadata: a textual access mode (plus a visual one when there is a cover or an image in the prose), a table of contents, a single reading order, structural navigation, no hazards, and, when there is a cover or an image, alternative text. The summary says the book has a described cover image, or described images when the prose places any.
 
 The copy of *The Last Ember* with the fields from [The generated copyright page](#the-generated-copyright-page) and no cover produces this metadata (abridged):
 
@@ -1437,13 +1439,57 @@ The markdown export copies prose as written, and the narration script nearly doe
 | Three or more `-`, `*`, `_`, or `~` on a line of their own, optionally spaced (`---`, `***`, `* * *`, `~~~`) or backslash-escaped as Pandoc writes them (`\* \* \*`), or a lone `#` on a line of its own | Scene break, written as `* * *`. The line ends the paragraph above it even with no blank line between them, as a CommonMark thematic break does, unless it is indented by four columns or more, or is in a fenced code block: then it is text, as in CommonMark. A `---` right under a line of text is a scene break here too, but CommonMark, and so a markdown viewer or the markdown export, reads it as an underline that makes the text above a heading: `story validate` warns with `ambiguous-scene-break`, and a blank line above the `---` settles it. |
 | `#` heading markers | Removed; the heading text becomes an ordinary paragraph, also in the narration script. A heading with no text (`## `) is dropped. |
 | `` `code` `` spans and `` ``` `` fenced code | The code as plain text, without backticks or fence lines. No emphasis, escape, link, character reference, or autolink is read inside, and a fence's lines make paragraphs of their own, where even a lone `***` line is text (the `.shunn.md` build keeps a span's backticks) |
-| `[text](target)` links and `![alt](image)` images | The link's text only; images are left out. Links are read as CommonMark reads them: the target may hold parentheses in pairs and a title, so `[Foo](https://en.wikipedia.org/wiki/Foo_(bar))` and `[Foo](https://example.com "Title (x)")` both print `Foo`. Text that is not a link, such as `[Aside](not a link)`, prints as written, and so does a link inside code. A link never runs across a blank line, a scene break, a heading, or the start of a block quote. |
+| `[text](target)` links and `![alt](image)` images | The link's text only. An image of a file inside the project is placed in the EPUB, DOCX, HTML, and print builds with its alt text, and left out of the Shunn builds (see [Images](#images)). Links are read as CommonMark reads them: the target may hold parentheses in pairs and a title, so `[Foo](https://en.wikipedia.org/wiki/Foo_(bar))` and `[Foo](https://example.com "Title (x)")` both print `Foo`. Text that is not a link, such as `[Aside](not a link)`, prints as written, and so does a link inside code. A link never runs across a blank line, a scene break, a heading, or the start of a block quote. |
 | `&mdash;`, `&nbsp;`, `&#8212;`, `&#x2014;`, and other HTML character references | The character the reference names (`—`, a no-break space), as in CommonMark: any name in the HTML5 list, or a decimal or hexadecimal number, ending in `;`. Anything else, such as `&copy` without the `;`, prints as written, and a reference to a control character other than a tab or line break prints the replacement character U+FFFD. Word and character counts read references the same way; the `.shunn.md` build keeps them as written. |
 | `<https://example.com>` and `<name@example.com>` autolinks | The address, without the angle brackets, with nothing in it read as markdown (the `.shunn.md` build keeps them). Word and character counts read it the same way. |
-| `[^1]` footnote markers and `[^1]: The note.` footnote definitions | Printed as written: builds have no footnotes. `story validate` warns with `unsupported-footnote` when chapter prose defines a footnote, since a markdown viewer shows one there; work the note into the prose or a back-matter page. |
+| `[^1]` footnote markers and `[^1]: The note.` footnote definitions | Footnotes, numbered in each chapter in the order of their first marker: linked notes after the chapter in EPUB, HTML, and print, real footnotes in DOCX, and numbered notes under a Notes heading in the Shunn builds (see [Footnotes](#footnotes)). A marker with no definition prints as written. |
 | `>` blockquote paragraphs | A block quotation, indented on both sides: `<blockquote>` in EPUB, HTML, and print, the `Quote` style in DOCX, a half-inch block indent in the Shunn DOCX, and kept `>` markers in the `.shunn.md` build. Consecutive quoted paragraphs share one quotation, and nested `>>` markers are read as one level. |
 
-Lists, tables, reference-style links (`[text][label]`), and HTML tags other than comments are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, and scene breaks.
+Lists, tables, reference-style links (`[text][label]`), and HTML tags other than comments are not converted and appear as their literal text. Keep book prose to paragraphs, emphasis, scene breaks, images, and footnotes.
+
+### Images
+
+An image in chapter or matter prose, `![alt text](path)`, is placed in the EPUB, DOCX, HTML, and print builds, with its alt text. Use it for a picture book's finished spreads, a chapter book's spot illustrations, a map, or a frontispiece on a matter page:
+
+```markdown
+![Bo and Nana Bracken at the door of the sett, looking up at the moon](../art/spread-01.png)
+
+Every night, before bed, Bo and Nana Bracken stood at the door of the sett and looked up.
+```
+
+The path is read as a markdown viewer reads it: from the file that holds the image, so a chapter in `chapters/` names `../art/spread-01.png`, or from the project root when it starts with `/` (`/art/spread-01.png`). `%20` and other %-escapes are decoded, a query or fragment (`?raw=true`, `#top`) is left off, and a path with spaces can go in angle brackets (`![Map](<../art/the map.png>)`). The image must be what an [EPUB cover](#epub) must be: a `.gif`, `.jpeg`, `.jpg`, `.png`, or `.webp` file inside the project, no larger than 50 MiB, not a symlink, and holding the image its extension names. Alt text is read as plain text, so emphasis in it prints as its words.
+
+- **A line of its own.** An image alone on its line (or several images, with nothing else) is set as a figure, centred on a line of its own, and splits the paragraph around it. An image inside a line of text is set inline, in the line.
+- **EPUB.** Each image file is stored once, as `images/figure-N`, listed in the manifest, and set with `<img alt="...">`; a figure is a `<figure>`. `style.css` keeps every image within the page and centres a figure. The accessibility metadata adds a visual access mode, and alternative text when every image has alt text.
+- **DOCX.** Each image file is stored once in `word/media/` and set as an inline picture with the alt text as its description, at its size at 96 dpi, scaled down to fit 6 by 8 inches. A figure takes the centred `Figure` style. Older versions of Word do not show WebP images.
+- **HTML and print.** Each image is set in the page as a `data:` URI, so the review copy and the print interior stay one file each, no wider than the text. A figure takes no paragraph label in the review copy, so the labels of the paragraphs around it do not change.
+- **Left out.** The Shunn builds, the narration script, and word counts leave images out, as before, and the markdown build keeps them as written.
+
+`story validate` reports an image that is not such a file with an `invalid-image` warning that gives its lines, and warns with `remote-image` about a web address (`http://`, `https://`, or `//`): builds never fetch one, so save the image in the project. A build that cannot place an image leaves it out and goes on, with an `image-left-out` warning; to stop instead, promote either warning with [`severity`](cli-reference.md#defaults-and-severity-from-storymd). So does an image in a footnote, which builds set as text only, and an image that would take a build's images past 360 MiB in the HTML and print builds, which set the whole image in the page at each use, or 1 GiB in an EPUB or DOCX, which store each file once. `story validate` warns about an image in a footnote too:
+
+```text
+warning: chapters/chapter-01.md image ../art/spread-01.png does not exist, so it is left out [image-left-out]
+```
+
+### Footnotes
+
+A footnote is a marker in the prose and a definition anywhere in the same chapter or matter page, as GitHub and Pandoc write them:
+
+```markdown
+The keeper logged the light at dusk.[^log]
+
+[^log]: The lighthouse log, kept since 1822, records every lighting.
+```
+
+A definition runs on over the lines below it until a blank line, so a note is one paragraph; use a backslash at a line's end for a line break in it. GitHub and Pandoc read a line indented four spaces after a blank line as the note's next paragraph, but builds read it as prose, since a writer may indent every paragraph. Labels match in any letter case, hold no spaces, and need not be numbers: the builds number the notes in each chapter from 1, in the order of their first marker, so a note referenced twice keeps its number. A definition is no paragraph of the text, and its words do not count toward the word count.
+
+- **EPUB.** Each marker is a raised number linked to the note (`epub:type="noteref"`), and the notes follow the chapter as footnote asides (`epub:type="footnote"`), which most reading systems show as a pop-up. Each note's number links back to its first marker.
+- **HTML and print.** The notes follow the chapter under a Notes heading, each linked to and from its first marker. The notes take no paragraph labels in the review copy.
+- **DOCX.** Real Word footnotes, at the foot of the page. Word numbers footnotes through the whole document, not per chapter, and a marker that repeats a note gets a footnote of its own with the same text.
+- **Shunn.** Standard manuscript format has no footnotes, so each marker is the note's number, raised in the DOCX and PDF and in brackets (`[1]`) in the `.shunn.md` build, and the notes follow the chapter under a centred Notes heading.
+- **Narration and markdown.** The narration script drops the markers and leaves the notes out. The markdown build keeps the markdown as written, in one file, so two chapters that both use `[^1]` share one label there: a markdown viewer links both markers to the first note. Give notes labels unique to the book (`[^lamp-log]`) if the markdown build is read in a viewer.
+
+The heading is the `footnotes` [label](#build-labels) in the book's language (`Notes` in English). `story validate` warns with `missing-footnote` about a marker with no definition, which builds print as written, and with `unused-footnote` about a definition no marker references, which builds leave out, or a label defined twice, where builds use the first definition.
 
 ### Typesetting other scripts
 
@@ -1474,7 +1520,7 @@ Traditional Mongolian (`mn-Mong`) is vertical too, but its columns run left to r
 
 ### Reproducible builds
 
-Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, twee, ink, and codex builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are compressed by the CLI's own deflate encoder rather than the runtime's zlib, so Bun, Node, and the bundled fallback write the same bytes, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires, and the cover image, compressed already, is stored as it is. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
+Builds are deterministic: the same sources produce byte-identical files. The HTML, print, narration, metadata, twee, ink, and codex builds contain no dates or timestamps (an HTML build prints a `--stamp` label only when you pass one), so a diff between two builds shows only what changed in the book. EPUB and DOCX packages date every ZIP entry 1980-01-01, and drop control characters that XML does not allow. Entries are compressed by the CLI's own deflate encoder rather than the runtime's zlib, so Bun, Node, and the bundled fallback write the same bytes, and their names carry the ZIP UTF-8 name flag; the EPUB `mimetype` entry stays first and uncompressed as the OCF container format requires, and the cover and the images the prose places, compressed already, are stored as they are. The EPUB `dcterms:modified` date comes from the `SOURCE_DATE_EPOCH` environment variable (whole seconds since the Unix epoch) when it is set, and is `2000-01-01T00:00:00Z` otherwise, including when the value is not a whole number of seconds or falls after the year 9999:
 
 ```shell
 SOURCE_DATE_EPOCH=1700000000 story build . --format epub

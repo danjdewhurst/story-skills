@@ -140,6 +140,10 @@ Follow `references/picture-book.md`.
    scene record and a `hook` for its page-turn beat, and set `story.md`
    to `status: revising` once all spreads are drafted; see "Spreads And
    The CLI Checks" in the reference for the warnings this clears.
+4. When the finished art exists, place each spread's image in its
+   chapter with `![alt text](../art/spread-01.png)` on a line of its own,
+   so the EPUB, DOCX, HTML, and print builds lay it out with the text;
+   see "Placing The Finished Art" in the reference.
 
 ### 4. Comics or graphic novel script
 
