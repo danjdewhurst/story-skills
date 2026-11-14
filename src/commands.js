@@ -271,12 +271,12 @@ export const COMMANDS = [
     options: ["force", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    change({ parsed, root }) {
+    change({ parsed, root, cwd }) {
       // The stories are read beside the collection itself, also when
       // --dry-run writes to a copy of it.
       const sourceRoot = root();
       const force = isTruthy(parsed.options.force);
-      return (projectRoot) => collectStories(projectRoot, { sourceRoot, force });
+      return (projectRoot) => collectStories(projectRoot, { sourceRoot, force, cwd });
     },
     run(context) {
       return runWrite(context, "collect", this.change(context),

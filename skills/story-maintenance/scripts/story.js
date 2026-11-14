@@ -34173,18 +34173,18 @@ function collectionStories(root, data) {
   }
   return { stories, errors };
 }
-function collectStories(root, { sourceRoot = root, force = false } = {}) {
+function collectStories(root, { sourceRoot = root, force = false, cwd = process.cwd() } = {}) {
   return withUndo(root, ["collect", ...force ? ["--force"] : []], (plan) => writeCollection(plan), {
     beforeLog() {
-      const plan = planCollection(root, sourceRoot, force);
+      const plan = planCollection(root, sourceRoot, force, cwd);
       if (plan.edited.length > 0) {
-        plan.snapshot = snapshotBeforeCollect(plan.project.root, sourceRoot);
+        plan.snapshot = snapshotBeforeCollect(plan.project.root, sourceRoot, cwd);
       }
       return plan;
     }
   });
 }
-function planCollection(root, sourceRoot, force) {
+function planCollection(root, sourceRoot, force, cwd) {
   const project = scanProject(root);
   assertProjectParses(project, "collect");
   const data = project.story.data;
@@ -34224,7 +34224,7 @@ ${errors.map((error) => `- ${error.message}`).join(`
     }
     const number = next;
     next += 1;
-    const content = storyContent(story, ownAuthors);
+    const content = storyContent(story, ownAuthors, cwd);
     const previous = collected.find((entry) => entry.real === story.real && !claimed.has(entry));
     if (previous) {
       claimed.add(previous);
@@ -34321,20 +34321,25 @@ ${problems.map((problem) => `- ${problem}`).join(`
 Keep scenes, characters, and other records that name chapters in each story's own project, or point them at another chapter first`);
   }
 }
-function snapshotBeforeCollect(root, sourceRoot) {
+function snapshotBeforeCollect(root, sourceRoot, cwd) {
   if (path41.resolve(root) !== path41.resolve(sourceRoot)) {
     mirrorFolderNames(path41.join(sourceRoot, SNAPSHOTS_DIR), path41.join(root, SNAPSHOTS_DIR));
   }
   const id = nextSnapshotId(root, "before-collect-");
   const snapshot = snapshotProject(root, { name: id, id, unparsed: true });
-  return { id: snapshot.id, dir: snapshot.dir, restore: `story snapshot --restore ${snapshot.id}` };
+  const where = path41.relative(cwd, sourceRoot).split(path41.sep).join("/");
+  return { id: snapshot.id, dir: snapshot.dir, restore: `story snapshot --restore ${snapshot.id}${where === "" ? "" : ` --path ${shellWord(where)}`}` };
 }
-function storyContent(story, ownAuthors) {
+function storyContent(story, ownAuthors, cwd) {
   const project = scanProject(story.root);
   const label = `story ${outputText(story.path)}`;
-  const interrupted = interruptedChange(story.root);
+  if (lockedByAnother(story.root)) {
+    throw refusedError(`Cannot collect: another story command is changing ${label}; nothing was changed. Run story collect again when it finishes`);
+  }
+  const interrupted = lstatIfExists(path41.join(story.root, UNDO_LOG))?.isFile() ? interruptedChange(story.root) : null;
   if (interrupted !== null) {
-    throw refusedError(`Cannot collect: ${outputText(interrupted.command)} stopped part way in ${label}, so collect would read a change made only in part; nothing was changed. Run story doctor --fix --path ${shellWord(story.path)} to put it back, or run that command again there to finish it`);
+    const where = path41.relative(cwd, story.root).split(path41.sep).join("/") || ".";
+    throw refusedError(`Cannot collect: ${outputText(interrupted.command)} stopped part way in ${label}, so collect would read a change made only in part; nothing was changed. Run story doctor --fix --path ${shellWord(where)} to put it back, or run that command again there to finish it`);
   }
   try {
     assertProjectParses(project, `collect ${label}`);
@@ -34369,7 +34374,7 @@ function isIntact(markdown) {
   const prose = chapterProseText(markdown.body);
   const body = markdown.body.replace(/\r\n?/g, `
 `).replace(/^\n+/, "");
-  return markdown.data["collected-hash"] === contentHash(JSON.stringify([title, authors, prose])) && body === importedChapterBody(markdown.data, prose);
+  return markdown.data["collected-hash"] === contentHash(JSON.stringify([title, authors, prose])) && [true, false].some((numbered) => body === importedChapterBody({ ...markdown.data, numbered }, prose));
 }
 function chapterText2({ story, number, content, previous }, unit) {
   const words = wordCount(scanComments(content.prose).text);
@@ -34384,8 +34389,11 @@ function chapterText2({ story, number, content, previous }, unit) {
   } else {
     data.author = content.authors.length === 1 ? content.authors[0] : content.authors;
   }
-  return replaceFrontmatter(previous.markdown.rawMarkdown, data, `
-${importedChapterBody(data, content.prose)}`);
+  const body = `
+${importedChapterBody(data, content.prose)}`;
+  const crlf = /^---\r\n/.test(previous.markdown.rawMarkdown);
+  return replaceFrontmatter(previous.markdown.rawMarkdown, data, crlf ? body.replace(/\r?\n/g, `\r
+`) : body);
 }
 function handWrittenCopies(project, handWritten, writes) {
   const titles = new Map(writes.map((entry) => [entry.content.title.toLowerCase(), entry]));
@@ -38745,10 +38753,10 @@ var COMMANDS = [
     options: ["force", ...WRITE_OPTIONS],
     writes: true,
     recovers: true,
-    change({ parsed, root }) {
+    change({ parsed, root, cwd }) {
       const sourceRoot = root();
       const force = isTruthy(parsed.options.force);
-      return (projectRoot) => collectStories(projectRoot, { sourceRoot, force });
+      return (projectRoot) => collectStories(projectRoot, { sourceRoot, force, cwd });
     },
     run(context) {
       return runWrite(context, "collect", this.change(context), (result) => formatCollect(result, false), (result) => formatCollect(result, true));

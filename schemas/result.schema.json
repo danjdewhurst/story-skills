@@ -1293,7 +1293,7 @@
     },
     "data-collect": {
       "type": "object",
-      "required": ["stories", "removed", "dryRun", "changes"],
+      "required": ["stories", "removed", "snapshot", "dryRun", "changes"],
       "properties": {
         "undone": { "$ref": "#/$defs/data-write/properties/undone" },
         "stories": {
@@ -1325,6 +1325,16 @@
               "file": { "type": "string", "minLength": 1 },
               "replacedEdit": { "type": "boolean", "description": "True when --force removed a chapter edited in the collection." }
             }
+          }
+        },
+        "snapshot": {
+          "type": ["object", "null"],
+          "required": ["id", "dir", "restore"],
+          "description": "The snapshot --force saved before it replaced or removed chapters edited in the collection (with --dry-run, the one it would save); null otherwise.",
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "description": "before-collect-<n>." },
+            "dir": { "type": "string", "minLength": 1, "description": ".snapshots/<id>, relative to the collection." },
+            "restore": { "type": "string", "minLength": 1, "description": "The story snapshot --restore command that puts the collection back, with --path from where collect ran." }
           }
         },
         "dryRun": { "$ref": "#/$defs/data-write/properties/dryRun" },

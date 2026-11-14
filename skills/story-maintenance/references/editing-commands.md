@@ -86,5 +86,5 @@ See the `research` skill.
 - It changes only chapters with `collected-from`. A chapter the user wrote in the collection keeps its file and number, and the stories fill the other numbers. A `collect-hand-written-copy` warning names a hand-written chapter with a story's title, most likely an old copy: ask the user before you delete it.
 - A story taken out of `stories` has its chapter removed. Reorder `stories` to reorder the book.
 - It refuses, and writes nothing, when a `stories` entry is not a story project (the `collection-story-*` codes, which `story links` also reports), and when a collected chapter was edited in the collection. Make that edit in the story project instead. `--force` discards the edit after it saves snapshot `before-collect-<n>`, so ask the user first and tell them the snapshot name.
-- It refuses to move or remove a chapter that a scene, a character's `died-in`, or another record in the collection names. Keep those records in each story's own project.
+- It refuses to move or remove a chapter that a scene, or a frontmatter field such as a character's `died-in`, names. Keep those records in each story's own project.
 - Run `story collect . --dry-run` first when the user wants to see the changes. Then run `story reindex .`, `story wordcount . --write`, and `story check .`.

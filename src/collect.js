@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { err, outputText, warn } from "./findings.js";
-import { contentHash, currentText, isPathInside, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
+import { UNDO_LOG, contentHash, currentText, isPathInside, lstatIfExists, projectPath, readTextFile, removeFile, writeFile } from "./files.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { importedChapterBody, importedChapterData, importedChapterText } from "./import.js";
 import { languagePack, projectLanguage } from "./languages/index.js";
@@ -24,6 +24,7 @@ import { canonicalPath } from "./series.js";
 import { reindexProject } from "./mutate-maintenance.js";
 import { assertWritable, withUndo } from "./mutate-writes.js";
 import { interruptedChange } from "./undo.js";
+import { lockedByAnother } from "./lock.js";
 import { removeEntityReferences } from "./mutate-references.js";
 import { mirrorFolderNames } from "./preview.js";
 import { SNAPSHOTS_DIR, nextSnapshotId, snapshotProject } from "./snapshots.js";
@@ -132,19 +133,19 @@ export function collectionStories(root, data) {
 // collection since collect wrote it, after saving the collection as
 // snapshot before-collect-<n>. Everything is read and checked before the
 // first write.
-export function collectStories(root, { sourceRoot = root, force = false } = {}) {
+export function collectStories(root, { sourceRoot = root, force = false, cwd = process.cwd() } = {}) {
   return withUndo(root, ["collect", ...(force ? ["--force"] : [])], (plan) => writeCollection(plan), {
     beforeLog() {
-      const plan = planCollection(root, sourceRoot, force);
+      const plan = planCollection(root, sourceRoot, force, cwd);
       if (plan.edited.length > 0) {
-        plan.snapshot = snapshotBeforeCollect(plan.project.root, sourceRoot);
+        plan.snapshot = snapshotBeforeCollect(plan.project.root, sourceRoot, cwd);
       }
       return plan;
     }
   });
 }
 
-function planCollection(root, sourceRoot, force) {
+function planCollection(root, sourceRoot, force, cwd) {
   const project = scanProject(root);
   assertProjectParses(project, "collect");
   const data = project.story.data;
@@ -186,7 +187,7 @@ function planCollection(root, sourceRoot, force) {
     }
     const number = next;
     next += 1;
-    const content = storyContent(story, ownAuthors);
+    const content = storyContent(story, ownAuthors, cwd);
     // The first chapter collected from the story is its chapter; a second
     // copy is replaced like any chapter of a story gone.
     const previous = collected.find((entry) => entry.real === story.real && !claimed.has(entry));
@@ -300,27 +301,34 @@ function assertNoChapterReferences(project, writes, leaving, ownFiles) {
 // edits it replaces exist nowhere else. A --dry-run runs on a copy without
 // .snapshots/, so the copy is given the collection's snapshot folder names
 // first and numbers the snapshot as the real run would.
-function snapshotBeforeCollect(root, sourceRoot) {
+function snapshotBeforeCollect(root, sourceRoot, cwd) {
   if (path.resolve(root) !== path.resolve(sourceRoot)) {
     mirrorFolderNames(path.join(sourceRoot, SNAPSHOTS_DIR), path.join(root, SNAPSHOTS_DIR));
   }
   const id = nextSnapshotId(root, "before-collect-");
   const snapshot = snapshotProject(root, { name: id, id, unparsed: true });
-  return { id: snapshot.id, dir: snapshot.dir, restore: `story snapshot --restore ${snapshot.id}` };
+  const where = path.relative(cwd, sourceRoot).split(path.sep).join("/");
+  return { id: snapshot.id, dir: snapshot.dir, restore: `story snapshot --restore ${snapshot.id}${where === "" ? "" : ` --path ${shellWord(where)}`}` };
 }
 
 // The chapter a story becomes: its story.md title, its writer when that is
 // not the collection's own author, and the prose of its chapters in order,
 // each the text under ## Chapter Text as import reads it, joined by a scene
 // break. `hash` covers all three, so a change to any shows.
-function storyContent(story, ownAuthors) {
+function storyContent(story, ownAuthors, cwd) {
   const project = scanProject(story.root);
   const label = `story ${outputText(story.path)}`;
-  // A story another command stopped part way in would be read half made,
-  // whatever the command, collect included (a story can be a collection).
-  const interrupted = interruptedChange(story.root);
+  // A story another command is changing, or stopped part way in, would be
+  // read half made, whatever the command, collect included (a story can be
+  // a collection). A link or folder at the log's path was not left by a
+  // command, and validate reports it.
+  if (lockedByAnother(story.root)) {
+    throw refusedError(`Cannot collect: another story command is changing ${label}; nothing was changed. Run story collect again when it finishes`);
+  }
+  const interrupted = lstatIfExists(path.join(story.root, UNDO_LOG))?.isFile() ? interruptedChange(story.root) : null;
   if (interrupted !== null) {
-    throw refusedError(`Cannot collect: ${outputText(interrupted.command)} stopped part way in ${label}, so collect would read a change made only in part; nothing was changed. Run story doctor --fix --path ${shellWord(story.path)} to put it back, or run that command again there to finish it`);
+    const where = path.relative(cwd, story.root).split(path.sep).join("/") || ".";
+    throw refusedError(`Cannot collect: ${outputText(interrupted.command)} stopped part way in ${label}, so collect would read a change made only in part; nothing was changed. Run story doctor --fix --path ${shellWord(where)} to put it back, or run that command again there to finish it`);
   }
   try {
     assertProjectParses(project, `collect ${label}`);
@@ -370,8 +378,10 @@ function isIntact(markdown) {
   const authors = nameList(markdown.data.author).map((name) => name.replace(/\s+/g, " "));
   const prose = chapterProseText(markdown.body);
   const body = markdown.body.replace(/\r\n?/g, "\n").replace(/^\n+/, "");
+  // The heading may be either form, so `numbered: false` set on the
+  // chapter, as the collections guide suggests, is not an edit.
   return markdown.data["collected-hash"] === contentHash(JSON.stringify([title, authors, prose]))
-    && body === importedChapterBody(markdown.data, prose);
+    && [true, false].some((numbered) => body === importedChapterBody({ ...markdown.data, numbered }, prose));
 }
 
 // The chapter file for a story at its number. A new chapter has the
@@ -395,7 +405,11 @@ function chapterText({ story, number, content, previous }, unit) {
   } else {
     data.author = content.authors.length === 1 ? content.authors[0] : content.authors;
   }
-  return replaceFrontmatter(previous.markdown.rawMarkdown, data, `\n${importedChapterBody(data, content.prose)}`);
+  // A file checked out with CRLF line ends keeps them in its body too, so
+  // a run with nothing changed leaves it as it is.
+  const body = `\n${importedChapterBody(data, content.prose)}`;
+  const crlf = /^---\r\n/.test(previous.markdown.rawMarkdown);
+  return replaceFrontmatter(previous.markdown.rawMarkdown, data, crlf ? body.replace(/\r?\n/g, "\r\n") : body);
 }
 
 // A chapter written by hand that has a collected story's title is most
