@@ -13561,7 +13561,7 @@ function exemptionProblems(entry, label = "exemption") {
   }
   const narrowed = ["pattern", "file", "chapter"].some((key) => entry[key] !== undefined);
   if (entry.code !== undefined && codeProblem === null && !narrowed) {
-    const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : "";
+    const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : isCustomCode(entry.code) ? `, or, for a warning check, set severity ${entry.code} to off in story.md` : "";
     problems.push(err("exemption-too-broad", `${label} sets only code, which would dismiss every ${entry.code} finding: add file, chapter, or pattern to narrow it${severity}`, EXEMPTIONS_FILE));
   } else if (entry.code === undefined && entry.pattern === undefined && narrowed) {
     problems.push(err("exemption-too-broad", `${label} sets ${entry.file === undefined ? "chapter" : entry.chapter === undefined ? "file" : "file and chapter"} without code or pattern, which would dismiss every finding about it: add the finding's code`, EXEMPTIONS_FILE));
@@ -13941,6 +13941,9 @@ function shownFilter(text) {
 function shownQuery({ item, index }) {
   return typeof item.name === "string" && KEBAB_NAME.test(item.name) ? item.name : `queries[${index}]`;
 }
+function shownCheck({ item, index }) {
+  return typeof item.id === "string" && KEBAB_NAME.test(item.id) ? item.id : `checks[${index}]`;
+}
 function isMapping(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -13994,6 +13997,7 @@ function formatValue(value) {
 // src/custom-checks.js
 var CHECK_KEYS = ["id", "kind", "where", "level", "message"];
 var CHECK_LEVELS = ["error", "warning"];
+var MAX_CHECK_MESSAGE = 200;
 function checkLabel(item, index) {
   return typeof item.id === "string" && KEBAB_NAME.test(item.id) ? `story.md check ${item.id}` : `story.md checks[${index}]`;
 }
@@ -14057,6 +14061,8 @@ function checkProblems(project, item, index, knownFor) {
     errors.push(err("missing-field", `${label} is missing message`, "story.md"));
   } else if (typeof item.message !== "string" || item.message.trim() === "") {
     errors.push(err("invalid-check", `${label} message must be text, such as message: has no hook`, "story.md"));
+  } else if (item.message.trim().length > MAX_CHECK_MESSAGE) {
+    errors.push(err("invalid-check", `${label} message is longer than ${MAX_CHECK_MESSAGE} characters: keep it to a short phrase, such as has no hook`, "story.md"));
   }
   return { errors, warnings, spec };
 }
@@ -14072,11 +14078,14 @@ function usableChecks(project) {
     if (!isMapping(item)) {
       return;
     }
-    const problems = checkProblems(project, item, index, knownFor);
-    if (problems.errors.length > 0 || seen.has(item.id)) {
+    if (seen.has(item.id)) {
       return;
     }
     seen.add(item.id);
+    const problems = checkProblems(project, item, index, knownFor);
+    if (problems.errors.length > 0) {
+      return;
+    }
     checks.push({ id: item.id, entry: problems.spec.entry, filters: problems.spec.filters, level: item.level, message: oneLine(item.message.trim()) });
   });
   return checks;
@@ -22427,7 +22436,8 @@ function parseSeverity(raw, errors, checks) {
       const id = customCodeId(code);
       if (!checks.has(id)) {
         const defined = [...checks.keys()].map((check) => `custom-${check}`);
-        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${suggestion(code, defined)}`);
+        const guess = code.length <= 64 && defined.length <= 100 ? suggestion(code, defined.filter((candidate) => candidate.length <= 64)) : "";
+        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess}`);
         continue;
       }
       if (checks.get(id) === "error") {
@@ -26896,18 +26906,26 @@ function followQueryFilters(root, plan, kind, oldId, newId) {
   const filePath = path28.join(root, "story.md");
   const text = plan.get(filePath) ?? readTextFile(filePath);
   const data = parseFrontmatter(text, filePath).data;
-  const found = queryFiltersNaming(data.queries, entityReferenceContext(root, kind, oldId).isReferenceKey, oldId);
-  if (found.length === 0) {
-    return;
+  const isReferenceKey = entityReferenceContext(root, kind, oldId).isReferenceKey;
+  const changed = {};
+  for (const field of ["queries", "checks"]) {
+    const found = queryFiltersNaming(data[field], isReferenceKey, oldId);
+    if (found.length === 0) {
+      continue;
+    }
+    const entries = [...data[field]];
+    for (const { index, item, positions } of found) {
+      entries[index] = { ...item, where: item.where.map((filter, position) => positions.includes(position) ? retargetFilter(filter, newId) : filter) };
+    }
+    changed[field] = entries;
   }
-  const queries = [...data.queries];
-  for (const { index, item, positions } of found) {
-    queries[index] = { ...item, where: item.where.map((filter, position) => positions.includes(position) ? retargetFilter(filter, newId) : filter) };
+  if (Object.keys(changed).length === 0) {
+    return;
   }
   if (!plan.has(filePath)) {
     plan.originals?.set(filePath, text);
   }
-  plan.set(filePath, replaceFrontmatter(text, { ...data, queries }));
+  plan.set(filePath, replaceFrontmatter(text, { ...data, ...changed }));
 }
 function adoptedReferenceFiles(root, kind, id, excludedFile, rename = renameIdText, narrow = (context) => context) {
   const context = narrow(entityReferenceContext(root, kind, id));
@@ -28436,13 +28454,13 @@ function removeNow(root, options) {
     removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
-  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries);
+  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries, project.story.data.checks);
   if (choosers.length > 0) {
     warnings.push(warn("choices-dropped", branchGraph(scanProject(project.root)).branching || !wasBranching ? `${choosers.join(", ")} had choices leading to ${id}, which remove dropped; a chapter left with no choices is an ending, so check where ${choosers.length === 1 ? "it leads" : "they lead"} now` : `${choosers.join(", ")} had the last choices in the book, leading to ${id}, which remove dropped; with no choices left the book is linear again and each chapter continues to the next, so add choices back to keep it branching`, choosers.length === 1 ? choosers[0] : null));
   }
   return { kind, id, file, alreadyGone, changed: [file].concat(reindexed.changed), warnings };
 }
-function leftoverReferenceWarnings(root, kind, id, queries) {
+function leftoverReferenceWarnings(root, kind, id, queries, checks) {
   const warnings = [];
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-leftover-probe`;
@@ -28467,6 +28485,11 @@ function leftoverReferenceWarnings(root, kind, id, queries) {
   if (named.length > 0) {
     const listed = named.map((entry) => `${shownQuery(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
     warnings.push(warn("stale-query", `story.md ${named.length === 1 ? "query" : "queries"} ${listed} still ${named.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${named.length === 1 ? "that filter" : "those filters"}`, "story.md"));
+  }
+  const checked = queryFiltersNaming(checks, context.isReferenceKey, id);
+  if (checked.length > 0) {
+    const listed = checked.map((entry) => `${shownCheck(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
+    warnings.push(warn("stale-query", `story.md ${checked.length === 1 ? "check" : "checks"} ${listed} still ${checked.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${checked.length === 1 ? "that filter" : "those filters"}`, "story.md"));
   }
   if (stale.length > 0) {
     const values = stale.flatMap(({ keys }) => keys);
@@ -38326,7 +38349,7 @@ var COMMANDS = [
       "location routes, durable state, chapter numbering",
       "(chapter-numbering-start, chapter-numbering-gap), and",
       "open promises in a complete story",
-      "(complete-with-open-promise), and the story.md",
+      "(complete-with-open-promise), plus the story.md",
       "checks (custom-<id>).",
       "Findings matching continuity/exemptions.md are",
       "reported as dismissed"

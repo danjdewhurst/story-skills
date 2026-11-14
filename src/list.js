@@ -423,6 +423,11 @@ export function shownQuery({ item, index }) {
   return typeof item.name === "string" && KEBAB_NAME.test(item.name) ? item.name : `queries[${index}]`;
 }
 
+// A check from queryFiltersNaming, named as messages name it.
+export function shownCheck({ item, index }) {
+  return typeof item.id === "string" && KEBAB_NAME.test(item.id) ? item.id : `checks[${index}]`;
+}
+
 export function isMapping(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }

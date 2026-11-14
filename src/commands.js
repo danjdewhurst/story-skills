@@ -315,7 +315,7 @@ export const COMMANDS = [
       "location routes, durable state, chapter numbering",
       "(chapter-numbering-start, chapter-numbering-gap), and",
       "open promises in a complete story",
-      "(complete-with-open-promise), and the story.md",
+      "(complete-with-open-promise), plus the story.md",
       "checks (custom-<id>).",
       "Findings matching continuity/exemptions.md are",
       "reported as dismissed"

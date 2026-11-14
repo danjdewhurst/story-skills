@@ -112,7 +112,9 @@ export function exemptionProblems(entry, label = "exemption") {
   // dismisses every error and warning about that file or chapter.
   const narrowed = ["pattern", "file", "chapter"].some((key) => entry[key] !== undefined);
   if (entry.code !== undefined && codeProblem === null && !narrowed) {
-    const severity = FINDING_CODES[entry.code] === "warning" ? `, or set severity ${entry.code} to off in story.md` : "";
+    const severity = FINDING_CODES[entry.code] === "warning"
+      ? `, or set severity ${entry.code} to off in story.md`
+      : isCustomCode(entry.code) ? `, or, for a warning check, set severity ${entry.code} to off in story.md` : "";
     problems.push(err("exemption-too-broad", `${label} sets only code, which would dismiss every ${entry.code} finding: add file, chapter, or pattern to narrow it${severity}`, EXEMPTIONS_FILE));
   } else if (entry.code === undefined && entry.pattern === undefined && narrowed) {
     problems.push(err("exemption-too-broad", `${label} sets ${entry.file === undefined ? "chapter" : entry.chapter === undefined ? "file" : "file and chapter"} without code or pattern, which would dismiss every finding about it: add the finding's code`, EXEMPTIONS_FILE));

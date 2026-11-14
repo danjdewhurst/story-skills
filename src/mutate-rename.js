@@ -15,7 +15,7 @@ import { escapeRegExp, kebabCase } from "./markdown.js";
 import { canonicalPath, discoverSeriesBooks, seriesLinkPath, seriesLinks } from "./series.js";
 import { warn } from "./findings.js";
 import { EXEMPTIONS_FILE } from "./exemptions.js";
-import { queryFiltersNaming, shownFilter, shownQuery } from "./list.js";
+import { queryFiltersNaming, shownCheck, shownFilter, shownQuery } from "./list.js";
 import { refusedError, usageError } from "./exit-codes.js";
 import { MENTION_KINDS, proseRenames } from "./mentions.js";
 import {
@@ -325,9 +325,9 @@ function removeNow(root, options) {
     removeFile(file, { force: true, root: project.root, unchangedFrom: original });
   });
   const reindexed = reindexProject(project.root);
-  // remove never rewrites story.md's frontmatter, so its queries are as
-  // scanned.
-  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries);
+  // remove never rewrites story.md's frontmatter, so its queries and checks
+  // are as scanned.
+  const warnings = leftoverReferenceWarnings(project.root, kind, id, project.story.data.queries, project.story.data.checks);
   if (choosers.length > 0) {
     // With the last choice gone the book is linear again: every chapter
     // continues to the next, endings included.
@@ -340,10 +340,11 @@ function removeNow(root, options) {
 
 // What remove leaves for the author: body links and bare chapter or scene ids
 // (the ones `story links` checks, plus links in a registry's own sections),
-// which it never edits; story.md `queries` filters naming the id; exemption
+// which it never edits; story.md `queries` and `checks` filters naming the
+// id; exemption
 // patterns naming it, which no longer match anything; and references another
 // kind's entity with the id may mean (see ambiguousReferenceWarnings).
-function leftoverReferenceWarnings(root, kind, id, queries) {
+function leftoverReferenceWarnings(root, kind, id, queries, checks) {
   const warnings = [];
   const context = entityReferenceContext(root, kind, id);
   const probe = `${id}-leftover-probe`;
@@ -373,6 +374,11 @@ function leftoverReferenceWarnings(root, kind, id, queries) {
   if (named.length > 0) {
     const listed = named.map((entry) => `${shownQuery(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
     warnings.push(warn("stale-query", `story.md ${named.length === 1 ? "query" : "queries"} ${listed} still ${named.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${named.length === 1 ? "that filter" : "those filters"}`, "story.md"));
+  }
+  const checked = queryFiltersNaming(checks, context.isReferenceKey, id);
+  if (checked.length > 0) {
+    const listed = checked.map((entry) => `${shownCheck(entry)} (${entry.positions.map((position) => shownFilter(entry.item.where[position])).join(", ")})`).join(", ");
+    warnings.push(warn("stale-query", `story.md ${checked.length === 1 ? "check" : "checks"} ${listed} still ${checked.length === 1 ? "filters" : "filter"} on ${kind} ${id}, which remove does not change: update or delete ${checked.length === 1 ? "that filter" : "those filters"}`, "story.md"));
   }
   if (stale.length > 0) {
     const values = stale.flatMap(({ keys }) => keys);
