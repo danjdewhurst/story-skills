@@ -6,7 +6,8 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { createStoryProject, validateLinks, validateProject } from "../src/story.js";
 import { UNDO_LOG } from "../src/files.js";
-import { makeTempDir, memoryIo, treeSnapshot, writeMarkdown } from "./helpers.js";
+import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
+import { SYMLINKS_SUPPORTED, makeTempDir, memoryIo, treeSnapshot, writeMarkdown } from "./helpers.js";
 
 // story collect (#885): a collection's story.md `stories` names its story
 // projects, and collect rewrites the collection's chapters from them.
@@ -130,7 +131,7 @@ describe("story collect (#885)", () => {
 
   test("warns about a hand-written chapter that has a story's title", () => {
     const { collection } = shelf();
-    chapter(collection, 1, "Low Tide", "An old copy.");
+    chapter(collection, 1, "LOW TIDE", "An old copy.");
     const result = run(collection);
     expect(result.code).toBe(0);
     expect(result.err).toContain("chapters/chapter-01.md has the title of story ../low-tide but no collected-from, so story collect left it and wrote the story as chapter-02");
@@ -196,12 +197,13 @@ describe("story collect (#885)", () => {
     expect(result.err).toContain("story.md has no stories list");
   });
 
-  test("checks the stories list stays beside the collection", () => {
+  test("checks the stories list names sibling story projects", () => {
     const { parent, collection } = shelf();
-    const outside = makeTempDir();
-    project(outside, "far", "Far");
-    fs.symlinkSync(path.join(outside, "far"), path.join(parent, "linked"));
-    setStories(collection, ["../low-tide", "../low-tide/", ".", "chapters", "/tmp/story", "..\\salt", `${path.relative(collection, outside)}/far`, "../linked"]);
+    fs.mkdirSync(path.join(parent, "drafts"));
+    project(path.join(parent, "drafts"), "deep", "Deep");
+    fs.writeFileSync(path.join(parent, "notes.md"), "Notes.\n", "utf8");
+    fs.mkdirSync(path.join(parent, "empty"));
+    setStories(collection, ["../low-tide", "../low-tide/", ".", "chapters", "/tmp/story", "..\\salt", "../drafts/deep", "../notes.md", "../empty", "../missing"]);
     const codes = validateLinks(collection).errors.map((error) => error.code);
     expect(codes).toEqual([
       "collection-story-duplicate",
@@ -210,11 +212,40 @@ describe("story collect (#885)", () => {
       "collection-story-outside",
       "collection-story-backslash",
       "collection-story-outside",
-      "collection-story-outside"
+      "collection-story-not-project",
+      "collection-story-not-project",
+      "collection-story-not-project"
     ]);
     const storyPath = path.join(collection, "story.md");
     fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^stories:\n(?: {2}- .*\n)*/m, "stories: ../salt\n"), "utf8");
     expect(validateProject(collection).errors.map((error) => error.code)).toContain("field-not-list");
+  });
+
+  test("a NUL or a line break in a stories entry is a finding, not a crash", () => {
+    const { collection } = shelf();
+    setStories(collection, ['"../a\u0000b"', '"../a\\nb"']);
+    const links = validateLinks(collection);
+    expect(links.errors.map((error) => error.code)).toEqual(["collection-story-not-project", "collection-story-not-project"]);
+    expect(links.errors[1].message).toContain("story.md stories ../a\\u000ab holds a control character");
+    expect(run(collection).code).toBe(3);
+  });
+
+  test("an unreadable story.md and too many stories are findings", () => {
+    const { lowTide, collection } = shelf();
+    fs.writeFileSync(path.join(lowTide, "story.md"), "---\ntitle: A\ntitle: B\n---\n", "utf8");
+    setStories(collection, ["../low-tide"]);
+    expect(validateLinks(collection).errors.map((error) => error.code)).toEqual(["collection-story-unreadable"]);
+    setStories(collection, Array.from({ length: 501 }, (_, index) => `../story-${index}`));
+    expect(validateLinks(collection).errors.map((error) => error.code)).toEqual(["collection-too-many-stories"]);
+  });
+
+  test.skipIf(!SYMLINKS_SUPPORTED)("a symlinked story folder that leads out of the parent folder is outside", () => {
+    const { parent, collection } = shelf();
+    const outside = makeTempDir();
+    project(outside, "far", "Far");
+    fs.symlinkSync(path.join(outside, "far"), path.join(parent, "linked"), "dir");
+    setStories(collection, ["../linked", `${path.relative(collection, outside).split(path.sep).join("/")}/far`]);
+    expect(validateLinks(collection).errors.map((error) => error.code)).toEqual(["collection-story-outside", "collection-story-outside"]);
   });
 
   test("a story with no chapters is an error", () => {
@@ -224,6 +255,132 @@ describe("story collect (#885)", () => {
     const result = run(collection);
     expect(result.code).toBe(3);
     expect(result.err).toContain("story ../lantern has no chapters yet");
+  });
+
+  test("a second run with nothing changed writes nothing, also for a story by another writer", () => {
+    const { collection } = shelf();
+    run(collection);
+    const before = treeSnapshot(collection);
+    const json = JSON.parse(run(collection, "--json").out);
+    expect(json.data.changes).toEqual([]);
+    expect(treeSnapshot(collection)).toEqual(before);
+    expect(run(collection).out).toStartWith("Collected 2 stories: no story changed since the last run\n");
+  });
+
+  test("keeps a collected chapter's frontmatter text, comments and all", () => {
+    const { salt, collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-02.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: draft", "status: final # checked").replace('pov: ""', "pov: ruth").replace("characters: []", "characters: [ruth]"), "utf8");
+    chapter(salt, 2, "Evening", "The pans were dry at last.");
+    expect(run(collection).code).toBe(0);
+    const text = readChapter(collection, 2);
+    expect(text).toContain("pov: ruth\n");
+    expect(text).toContain("characters: [ruth]\n");
+    expect(text).toContain("status: final # checked\n");
+    expect(text).toContain("The pans were dry at last.");
+    expect(parseFrontmatter(text).data.author).toBe("Ben Other");
+  });
+
+  test("refuses to drop text added above ## Chapter Text in a collected chapter", () => {
+    const { collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-01.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("## Chapter Text", "## Outline\n\n- Editor note: keep\n\n## Chapter Text"), "utf8");
+    const result = run(collection);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("chapters/chapter-01.md was changed in the collection");
+  });
+
+  test("refuses to drop an edited chapter of a story taken out of the list; --force saves a snapshot first", () => {
+    const { collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-01.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("The tide went out.", "The tide went far out."), "utf8");
+    setStories(collection, ["../salt"]);
+    const before = treeSnapshot(collection);
+    expect(run(collection).code).toBe(4);
+    expect(treeSnapshot(collection)).toEqual(before);
+    const json = JSON.parse(run(collection, "--force", "--json").out);
+    expect(json.ok).toBe(true);
+    expect(json.data.removed).toEqual([{ path: "../low-tide", chapter: "chapter-01", file: "chapters/chapter-01.md", replacedEdit: true }]);
+    expect(json.data.stories[0]).toMatchObject({ path: "../salt", chapter: "chapter-01", from: "chapter-02", status: "unchanged", replacedEdit: false });
+    expect(json.data.snapshot).toEqual({ id: "before-collect-1", dir: ".snapshots/before-collect-1", restore: "story snapshot --restore before-collect-1" });
+    expect(fs.readFileSync(path.join(collection, ".snapshots", "before-collect-1", "chapters", "chapter-01.md"), "utf8")).toContain("The tide went far out.");
+    expect(validateAgainstSchema(json, JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8")))).toEqual([]);
+  });
+
+  test("a story whose folder is renamed keeps its chapter and the fields set on it", () => {
+    const { parent, collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-02.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: draft", "status: final"), "utf8");
+    fs.renameSync(path.join(parent, "salt"), path.join(parent, "salt-works"));
+    setStories(collection, ["../low-tide", "../salt-works"]);
+    const json = JSON.parse(run(collection, "--json").out);
+    expect(json.data.stories[1]).toMatchObject({ path: "../salt-works", status: "unchanged", from: null });
+    expect(json.data.removed).toEqual([]);
+    expect(parseFrontmatter(readChapter(collection, 2)).data).toMatchObject({ status: "final", "collected-from": "../salt-works" });
+  });
+
+  test("refuses to move or remove a collected chapter that scenes or other records name", () => {
+    const { collection } = shelf();
+    run(collection);
+    writeMarkdown(path.join(collection, "characters", "ruth.md"), "id: ruth\nname: Ruth\nrole: supporting\nstatus: deceased\ndied-in: chapter-02", "# Ruth\n");
+    setStories(collection, ["../salt", "../low-tide"]);
+    const before = treeSnapshot(collection);
+    const result = run(collection);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("- chapter-02 (story ../salt) would move to chapter-01, but characters/ruth.md names it");
+    expect(treeSnapshot(collection)).toEqual(before);
+  });
+
+  test("a story project with a stopped change, or a chapter that does not parse, is refused", () => {
+    const { lowTide, collection } = shelf();
+    fs.writeFileSync(path.join(lowTide, UNDO_LOG), `${JSON.stringify({ command: "story collect", started: "2026-11-14T00:00:00Z" })}\n`, { mode: 0o600 });
+    const stopped = run(collection);
+    expect(stopped.code).toBe(4);
+    expect(stopped.err).toContain("story collect stopped part way in story ../low-tide");
+    fs.rmSync(path.join(lowTide, UNDO_LOG));
+    fs.writeFileSync(path.join(lowTide, "chapters", "chapter-01.md"), "---\ntitle: One\ntitle: Again\n---\nText.\n", "utf8");
+    const broken = run(collection);
+    expect(broken.code).toBe(3);
+    expect(broken.err).toContain("story ../low-tide");
+    expect(chapterFiles(collection)).toEqual([]);
+  });
+
+  test("refuses a hand-written chapter file in the way of a story's number", () => {
+    const { collection } = shelf();
+    writeMarkdown(path.join(collection, "chapters", "chapter-01.md"), "number: 7\nstatus: draft\ntitle: Odd", "## Chapter Text\n\nOdd.\n");
+    const before = treeSnapshot(collection);
+    const result = run(collection);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("chapters/chapter-01.md is in the way of story ../low-tide");
+    expect(treeSnapshot(collection)).toEqual(before);
+  });
+
+  test("a second chapter collected from the same story is removed", () => {
+    const { collection } = shelf();
+    run(collection);
+    fs.copyFileSync(path.join(collection, "chapters", "chapter-02.md"), path.join(collection, "chapters", "chapter-03.md"));
+    const file = path.join(collection, "chapters", "chapter-03.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("number: 2", "number: 3").replace("# Chapter 2: Salt", "# Chapter 3: Salt"), "utf8");
+    const json = JSON.parse(run(collection, "--json").out);
+    expect(json.data.removed.map((entry) => entry.chapter)).toEqual(["chapter-03"]);
+    expect(chapterFiles(collection)).toEqual(["chapter-01.md", "chapter-02.md"]);
+  });
+
+  test("credits a story's authors list, and counts characters in a book that does", () => {
+    const { parent, collection } = shelf();
+    const pair = project(parent, "pair", "Pair", "authors:\n  - Dee Writer\n  - Eve Poet\n");
+    chapter(pair, 1, "Pair", "两个人。");
+    setStories(collection, ["../pair"]);
+    const storyPath = path.join(collection, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("title: Salt and Lantern\n", "title: Salt and Lantern\ncount-unit: characters\n"), "utf8");
+    expect(run(collection).code).toBe(0);
+    const data = parseFrontmatter(readChapter(collection, 1)).data;
+    expect(data.author).toEqual(["Dee Writer", "Eve Poet"]);
+    expect(data["character-count"]).toBe(4);
   });
 
   test("leaves no undo log after a run", () => {

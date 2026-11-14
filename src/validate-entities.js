@@ -354,6 +354,9 @@ export function validateChapters(project, errors, warnings) {
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
     }
+    for (const field of ["collected-from", "collected-hash"]) {
+      requireScalar(data, field, label, errors);
+    }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
     // Free text: beat sheets name their beats differently, and writers adapt

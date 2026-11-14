@@ -10,6 +10,7 @@ import { MAX_READ_BYTES, MAX_UNDO_LINE_BYTES, TEMPORARY_FILE_PATTERN, UNDO_LOG, 
 import { LOCK_FILE } from "../src/lock.js";
 import { interruptedChange, undoInterruptedChange } from "../src/undo.js";
 import { createEntity, createStoryProject, mergeChapters, moveEntity, removeEntity, renameEntity, splitChapter, validateProject } from "../src/story.js";
+import { collectStories } from "../src/collect.js";
 import { makeTempDir, memoryIo, otherLivePid, whileWriting, writeMarkdown } from "./helpers.js";
 
 function invoke(cwd, argv) {
@@ -85,6 +86,30 @@ function branching() {
   return root;
 }
 
+// A collection collected once from three sibling story projects, then
+// changed so the next collect rewrites one chapter, moves another, and
+// removes a third. The stories stay where they are, so a copy of the
+// collection collects from them (`sourceRoot`).
+let shelfCollection = null;
+function shelf() {
+  const parent = makeTempDir();
+  const titles = ["Low Tide", "Salt", "Lantern"];
+  for (const title of titles) {
+    const story = createStoryProject({ cwd: parent, title }).root;
+    createEntity(story, { kind: "chapter", name: title, status: "draft" });
+    setProse(story, "chapter-01", `${title} begins.\n`);
+  }
+  const root = createStoryProject({ cwd: parent, title: "Shelf" }).root;
+  const storyPath = path.join(root, "story.md");
+  const withStories = (list) => fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^stories:\n(?: {2}- .*\n)*/m, "").replace(/^title: Shelf\n/m, `title: Shelf\nstories:\n${list.map((entry) => `  - ../${entry}\n`).join("")}`), "utf8");
+  withStories(["low-tide", "salt", "lantern"]);
+  expect(collectStories(root).stories).toHaveLength(3);
+  setProse(path.join(parent, "salt"), "chapter-01", "Salt changed.\n");
+  withStories(["salt", "lantern"]);
+  shelfCollection = root;
+  return root;
+}
+
 // Each command that keeps an undo log, as the API runs it, as typed, and as
 // its log names it.
 const COMMANDS = {
@@ -93,6 +118,7 @@ const COMMANDS = {
   move: { run: (root) => moveEntity(root, { kind: "chapter", id: "chapter-02", number: "5" }), argv: ["move", "chapter", "chapter-02", "--number", "5"], name: "story move chapter chapter-02 --number 5" },
   rename: { run: (root) => renameEntity(root, { kind: "character", id: "mara-quill", name: "Mara Tide" }), argv: ["rename", "character", "mara-quill", "Mara Tide"], name: "story rename character mara-quill 'Mara Tide'" },
   remove: { run: (root) => removeEntity(root, { kind: "character", id: "mara-quill" }), argv: ["remove", "character", "mara-quill"], name: "story remove character mara-quill" },
+  collect: { run: (root) => collectStories(root, { sourceRoot: shelfCollection }), name: "story collect", fixture: shelf },
   "split in a branching book": { run: (root) => splitChapter(root, { id: "chapter-02", at: "1" }), name: "story split chapter-02 --at 1", fixture: branching },
   "merge in a branching book": { run: (root) => mergeChapters(root, { id: "chapter-02", next: "chapter-03" }), name: "story merge chapter-02 chapter-03", fixture: branching }
 };

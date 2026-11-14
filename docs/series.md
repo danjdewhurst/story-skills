@@ -435,7 +435,7 @@ salt-and-lantern/
 
 **Assemble the book in a collection project.** When the stories are finished, gather them into a project of their own:
 
-1. Create the collection beside the stories with `story init "Salt and Lantern"`, and name the stories in its `story.md`, in reading order:
+1. Create the collection beside the stories with `story init "Salt and Lantern" --dir collection`, and name the stories in its `story.md`, in reading order:
 
    ```yaml
    # collection/story.md
@@ -459,7 +459,7 @@ salt-and-lantern/
 
    Each story becomes one chapter, as `story import` makes one from the story's chapter file: titled by the story's `story.md` title, with the prose under `## Chapter Text` in each of its chapters, joined by a `* * *` scene break when it has several. A story by another writer gets their name in its chapter's `author`, from the story's `author`; a story by the collection's own author does not, so the book credits them once.
 
-   The story project stays the only place a story is edited. After an edit, run `story collect .` again: it rewrites the chapters of the stories that changed, says which ones did, and keeps the rest. Reorder `stories` to reorder the book, and take a story out of the list to remove its chapter. `--dry-run` shows what would change first. collect marks each chapter it writes with `collected-from` and `collected-hash`, and changes only those chapters, so a chapter you write in the collection yourself is never touched. An edit made to a collected chapter in the collection is refused until you make it in the story project, or replace it with `--force`. A missing story project is an error, and nothing is written. See [`collect`](cli-reference.md#collect) for the full rules.
+   The story project stays the only place a story is edited. After an edit, run `story collect .` again: it rewrites the chapters of the stories that changed, says which ones did, and keeps the rest. Reorder `stories` to reorder the book, and take a story out of the list to remove its chapter. `--dry-run` shows what would change first. collect marks each chapter it writes with `collected-from` and `collected-hash`, and changes only those chapters, so a chapter you write in the collection yourself is never touched. An edit made to a collected chapter in the collection is refused until you make it in the story project, or replace it with `--force`. Keep scenes, characters, and other records that name chapters in each story's own project: collect does not rewrite them when a chapter moves, so it refuses while one names a chapter it would move or remove. A missing story project is an error, and nothing is written. See [`collect`](cli-reference.md#collect) for the full rules.
 
    To import stories that are not story projects, such as an anthology's submissions as plain markdown or text files, copy them into one folder, named so the files sort in reading order (`01-low-tide.md`, `02-salt.md`), and import the folder:
 
@@ -479,7 +479,7 @@ salt-and-lantern/
      - chapter-heading: "{title}"
    ```
 
-   Every build then heads each story with its title, and the EPUB, HTML, and print contents list the story titles. Setting `numbered: false` on every chapter gives the same headings. The chapter `number` still sets the order; reorder stories with `story move chapter --number`.
+   Every build then heads each story with its title, and the EPUB, HTML, and print contents list the story titles. Setting `numbered: false` on every chapter gives the same headings. The chapter `number` still sets the order. In a collection that names its `stories`, reorder the list and run `story collect .`; for chapters you imported, reorder them with `story move chapter --number`.
 
 4. Add the book's pages as matter: a dedication, an introduction, and the previously-published acknowledgements as a back-matter page.
 

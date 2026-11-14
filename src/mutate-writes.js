@@ -27,13 +27,17 @@ import { assertNoInterruptedChange, safeCommandName, undoInterruptedChange } fro
 // since putting it back would change what this one was asked to do (a
 // remove of the chapter a stopped split made). `words` are the command's
 // arguments and flags, which name it as typed: ["split", "chapter-03",
-// "--at", "2"] is story split chapter-03 --at 2.
-export function withUndo(root, words, run) {
+// "--at", "2"] is story split chapter-03 --at 2. `beforeLog` runs once the
+// stopped run is put back and before the log opens, for writes the log
+// cannot hold, such as the snapshot collect --force saves; its result is
+// passed to `run`.
+export function withUndo(root, words, run, { beforeLog = () => undefined } = {}) {
   const command = undoCommand(words);
   assertNoInterruptedChange(root, command);
   const undone = undoInterruptedChange(root);
   try {
-    const result = withUndoLog(root, command, run);
+    const prepared = beforeLog();
+    const result = withUndoLog(root, command, () => run(prepared));
     return undone === null ? result : { ...result, undone };
   } catch (error) {
     if (undone !== null) {

@@ -685,9 +685,10 @@ Each story becomes one chapter, as [`import`](#import) makes one from the story'
 collect marks each chapter it writes with two fields: `collected-from`, the `stories` entry, and `collected-hash`, a hash of the title, author, and prose it wrote. It rewrites or removes only chapters with `collected-from`:
 
 - Each story takes, in list order, the lowest chapter number that no hand-written chapter holds. A chapter you wrote yourself, such as an interlude, keeps its file and number.
-- A story's chapter moves with the list: reorder `stories` and run `collect` again. A collected chapter keeps the fields collect does not own, such as `status`, `pov`, and `characters`.
-- A story taken out of `stories` has its chapter removed.
-- A collected chapter edited in the collection since collect wrote it, so that its title, author, or prose no longer matches its `collected-hash`, is refused with exit code 4 and nothing is changed: `Cannot collect: chapters/chapter-02.md was changed in the collection since story collect wrote it, and collect would replace that edit; nothing was changed. Make the edit in the story project, then run story collect --force to replace the chapter`. `--force` replaces it, and the report says so.
+- A story's chapter moves with the list: reorder `stories` and run `collect` again. A collected chapter keeps the fields collect does not own, such as `status`, `pov`, and `characters`, with their text, comments included. collect writes its body, the heading and `## Chapter Text`, whole.
+- A story taken out of `stories` has its chapter removed. A story whose folder you rename keeps its chapter, and the fields on it, when the chapter still holds what collect wrote: update `stories` and run `collect`.
+- collect does not rewrite what names a chapter. When a chapter it would move or remove is named by a scene, a character's `died-in`, a clue, a timeline row, or any other record in the collection, it refuses with exit code 4 and lists them. Keep those records in each story's own project.
+- A collected chapter edited in the collection since collect wrote it is refused with exit code 4 and nothing is changed: its title, author, or prose no longer matches its `collected-hash`, or text was added above `## Chapter Text`. The message is `Cannot collect: chapters/chapter-02.md was changed in the collection since story collect wrote it, and collect would replace that edit; nothing was changed. Make the edit in the story project instead. story collect --force discards it, after saving the collection as snapshot before-collect-<n>`. `--force` first saves the collection as snapshot `before-collect-<n>`, then replaces or removes the edited chapters; the report names the snapshot and its `story snapshot --restore` command.
 - A hand-written chapter with a story's title, such as a copy from before the collection named its stories, is left, with a `collect-hand-written-copy` warning, so you can delete it.
 
 Each line of the report gives a story's chapter and whether the story is `added`, `changed` since the last run, or `unchanged`:
@@ -698,9 +699,9 @@ Collected 2 stories:
 - ../salt: chapter-02 "Salt" (changed)
 ```
 
-`stories` must be a list. An entry that is not a story project folder beside the collection is an error, as a missing linked book is for [`series`](#series), and collect then writes nothing: a missing folder or `story.md` (`collection-story-not-project`), an absolute path or one outside the folder that holds the collection, symlinks followed (`collection-story-outside`), the collection itself or a folder inside it (`collection-story-self`), a story named twice (`collection-story-duplicate`), and a backslash (`collection-story-backslash`). [`links`](#links), and so [`check`](#check), report the same errors. A story with no chapters, or a story project that holds a file that does not parse or the undo log of a stopped command, is refused too. A `story.md` without `stories` is refused with exit code 3; `stories: []` removes every collected chapter.
+`stories` must be a list. An entry that is not a story project folder beside the collection is an error, as a missing linked book is for [`series`](#series), and collect then writes nothing: a missing folder or `story.md` (`collection-story-not-project`), an absolute path or a folder that is not a sibling of the collection, symlinks followed (`collection-story-outside`), the collection itself or a folder inside it (`collection-story-self`), a story named twice (`collection-story-duplicate`), and a backslash (`collection-story-backslash`). [`links`](#links), and so [`check`](#check), report the same errors. A story with no chapters, or a story project that holds a file that does not parse or the undo log of any stopped command, is refused too. A `story.md` without `stories` is refused with exit code 3; `stories: []` removes every collected chapter.
 
-collect holds the collection's [project lock](#where-commands-write) and keeps an [undo log](#interrupted-changes), so one stopped part way is put back by running it again or by `story doctor --fix`. It reads the story projects without changing them. `--dry-run` lists the report and the changes without writing. With `--json`, `data.stories` lists each story's `path`, `title`, `chapter`, `file`, `status`, `from` (the chapter id it moved from, or `null`), and `replacedEdit`, and `data.removed` the chapters removed. See [Short-story collections and anthologies](series.md#short-story-collections-and-anthologies) for the layout.
+collect holds the collection's [project lock](#where-commands-write) and keeps an [undo log](#interrupted-changes), so one stopped part way is put back by running it again or by `story doctor --fix`. It reads the story projects without changing them. `--dry-run` lists the report and the changes without writing. With `--json`, `data.stories` lists each story's `path`, `title`, `chapter`, `file`, `status`, `from` (the chapter id it moved from, or `null`), and `replacedEdit`, `data.removed` the chapters removed, and `data.snapshot` the snapshot `--force` saved (`id`, `dir`, and `restore`), or `null`. See [Short-story collections and anthologies](series.md#short-story-collections-and-anthologies) for the layout.
 
 ### migrate
 
@@ -3784,10 +3785,10 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `translation-of-not-project` | error | The folder `translation-of` names has no `story.md`. |
 | `translation-of-invalid` | error | `translation-of` has a control character, climbs above the file system root, or names a folder that holds this project. |
 | `collection-story-backslash` | error | A `stories` entry uses a backslash. |
-| `collection-story-outside` | error | A `stories` entry is an absolute path, or is not inside the folder that holds the collection. |
+| `collection-story-outside` | error | A `stories` entry is an absolute path, or is not a sibling folder of the collection. |
 | `collection-story-self` | error | A `stories` entry names the collection or a folder inside it. |
 | `collection-story-duplicate` | error | Two `stories` entries name the same story project. |
-| `collection-story-not-project` | error | A `stories` entry has no `story.md`. |
+| `collection-story-not-project` | error | A `stories` entry has no `story.md`, or holds a control character. |
 | `collection-story-unreadable` | error | A story's `story.md` cannot be read. |
 | `collection-too-many-stories` | error | `stories` names more than 500 story projects. |
 

@@ -1216,7 +1216,12 @@ export function importedChapterData(title, number, counts, unnumbered = false, a
 // A chapter file as import writes it: the frontmatter, the chapter's
 // heading from its title and number, and the prose under ## Chapter Text.
 export function importedChapterText(data, prose) {
-  return `${stringifyFrontmatter(data)}# ${data.numbered === false ? data.title : chapterHeading(data.number, data.title)}
+  return `${stringifyFrontmatter(data)}${importedChapterBody(data, prose)}`;
+}
+
+// The body of that chapter file, after its frontmatter.
+export function importedChapterBody(data, prose) {
+  return `# ${data.numbered === false ? data.title : chapterHeading(data.number, data.title)}
 
 ## Chapter Text
 
