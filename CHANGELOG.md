@@ -34,6 +34,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story validate` reports a broken entry: an unknown kind, a filter it cannot read, a repeated id (`duplicate-check`), a bad level, or an empty message or one over 200 characters (`invalid-check`), a missing field, and a filter on a key no file sets (`check-unknown-key`, a warning). `story continuity` skips a broken entry.
   - `story rename`, `move`, and `merge` point a check's filters at the new id, as they do for saved queries, and `story remove` lists the check filters it leaves (`stale-query`).
   - The `harbor-of-second-light` example has two checks, and `schemas/story.schema.json` and `schemas/result.schema.json` accept `custom-<id>` codes.
+- A poetry collection can now be a story project, with `form: poetry-collection`, and a chapter with `verse: true` is a poem in any book. See [Verse chapters](docs/project-format.md#verse-chapters).
+  - In a verse chapter, every line break is kept in the EPUB, HTML, print, DOCX, and Shunn builds, and a blank line is a stanza break, so a poem needs no trailing backslashes. A backslash still works and never prints. Every chapter of a poetry collection is verse, and `verse: false` makes one prose. `story apply` reads a returned Word file of a verse chapter the same way.
+  - `story wordcount` gives each verse chapter's lines (`chapters/chapter-01.md: 62 (11 lines)`) and a `Lines:` total, and `story progress` adds `Lines: 31 in 3 verse chapters`. In `--json`, `wordcount` adds `lineCount` and `lines`, `progress` adds `lines` and `verseChapters`, and `pacing` adds `verse` on each row and `totals.verseChapters`. `wordcount --write` still records words only.
+  - The fiction-only checks skip a verse chapter: `no-scene-records`, `pov-not-in-cast`, `pov-scene-mismatch`, every `story pacing` finding, and the scene-file action in `story next`.
+  - `story init --form poetry-collection` sets `genre: poetry` and no word target, since the form has no word range. `story validate` reports a `verse` that is not true or false (`field-not-boolean`).
+  - The `verse-craft` skill now makes and keeps a poetry collection, where it used to say not to run `story init` for one, and the new [`tide-tables`](examples/tide-tables/) example is a collection of three poems. Nonfiction stays outside the story project model, as [Series](docs/series.md#poetry-collections) now says.
 
 ### Changed
 

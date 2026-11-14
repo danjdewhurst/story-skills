@@ -414,6 +414,9 @@ tense: past
 | `serial` | no range | none |
 | `picture-book` | up to 1,000 | 500 |
 | `chapter-book` | 4,000 to 15,000 | 10,000 |
+| `poetry-collection` | no range | none |
+
+A poetry collection is measured in poems and pages, not words, so it has no range and `story init --form poetry-collection` writes no target. It also sets `genre: poetry` unless `--genre` names another, and every chapter of it is a poem: see [Verse chapters](#verse-chapters).
 
 The ranges are advisory. `story validate` warns when `target-words` falls outside the form's range, and, when the story `status` is `complete`, when the manuscript's prose does:
 
@@ -433,7 +436,7 @@ Japanese has no official lines. 中編 is usually about 100 to 300 sheets of 400
 | `short-story` | 2,000 to 25,000 | 10,000 | 4,000 to 40,000 | 20,000 |
 | `novella` | 25,000 to 130,000 | 60,000 | 40,000 to 120,000 | 80,000 |
 | `novel` | 130,000 and up | 200,000 | 120,000 and up | 150,000 |
-| `novelette`, `serial`, `picture-book`, `chapter-book` | not checked | none | not checked | none |
+| `novelette`, `serial`, `picture-book`, `chapter-book`, `poetry-collection` | not checked | none | not checked | none |
 
 Another language counted in characters (`count-unit: characters`) has no ranges, so its length is not checked against its form.
 
@@ -996,6 +999,7 @@ word-count: 1489
 | `number` | integer ≥ 1 | yes | Must match the filename and be unique. When it is set to something other than a positive integer, `story validate` errors, the reports and diagrams use the number in the file name, and `story export` and `story build` refuse to run. |
 | `author` | string or list of strings | no | The writer of this chapter's story in a collection or anthology. Builds print it under the heading with the `byline` label (`by Ines Calder`), the narration script speaks it after the heading with the `narration-byline` label (`Written by Ines Calder.`), it never counts toward word counts, and the EPUB lists it as a contributor. See [Story authors in collections and anthologies](manuscripts.md#story-authors-in-collections-and-anthologies). |
 | `numbered` | boolean | no | `false` builds the chapter under its title alone, for a Prologue, Interlude, or Epilogue, and leaves it out of the printed chapter count, so the next chapter is still `Chapter 1`. It then needs a title. Default `true`. `story import` sets it for Prologue-style and `{.unnumbered}` headings. |
+| `verse` | boolean | no | `true` makes the chapter a poem: builds keep every line break, and the fiction-only checks skip it. Default `true` in a `poetry-collection`, where `false` makes one chapter prose, and `false` in every other form. See [Verse chapters](#verse-chapters). |
 | `status` | enum | yes | `outline`, `draft`, `revised`, `final`, or `complete` (default `outline`). |
 | `pov` | character id | no | Point-of-view character. |
 | `locations` | list of location ids | no | Where the chapter takes place. |
@@ -1019,6 +1023,16 @@ word-count: 1489
 | `choices` | list of mappings | no | For a branching story: the choices that end the chapter, each `text` (what the reader picks) and `to` (the chapter it leads to). See [Branching chapters](#branching-chapters). |
 
 `story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. A `pov` also listed in `mentions` narrates without appearing, as a ghost or posthumous narrator does, so it is not a posthumous appearance. It also warns when the `pov` character is in neither `characters` nor `mentions`, when chapter numbers skip, and when a drafted chapter's prose names a character it lists in none of `pov`, `characters`, or `mentions` (see [`story mentions`](continuity.md#story-mentions)). `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
+
+### Verse chapters
+
+A verse chapter is a poem. Every chapter of a `form: poetry-collection` book is verse, and `verse: true` makes one chapter of any other form verse, such as a ballad between the chapters of a novel. `verse: false` makes one chapter of a poetry collection prose. A `verse` that is not `true` or `false` is a `field-not-boolean` error. In a verse chapter:
+
+- Every line break in the chapter text is kept in the EPUB, HTML, print, and DOCX builds and the Shunn builds, as the [hard line break](manuscripts.md#how-prose-is-converted-for-epub-docx-shunn-html-and-print) a backslash makes, and a blank line is a stanza break, so no backslashes are needed. A backslash at a line end still works and never prints. Code keeps its own lines. The markdown build copies the chapter text as written, and a matter page is never verse.
+- `story wordcount` adds the poem's lines after its words (`chapters/chapter-01.md: 62 (11 lines)`) and a `Lines:` total, and `story progress` adds `Lines: 31 in 3 verse chapters`. In `--json`, a verse chapter's `wordcount` entry has `lineCount` and the result has `lines`, and `progress` has `lines` (null in a book without verse) and `verseChapters`. A line is a line of text: blank lines, scene-break lines, headings, fence lines, and comments are not counted. `story wordcount --write` still records words only.
+- The fiction-only advisories skip it: `story validate` does not ask for scene records (`no-scene-records`), `story continuity` does not check its `pov` or its scenes' `pov` (`pov-not-in-cast`, `pov-scene-mismatch`), `story next` does not suggest scene files for it, and [`story pacing`](#pacing) leaves it out of its hook, scene outcome, sequel, and length findings. A poetry collection has no word range, so `form-length-range` never fires. A `target-words` you set on a verse chapter is still measured.
+
+`story init 'Title' --form poetry-collection` starts a collection, and [`examples/tide-tables`](../examples/tide-tables/) is a small one. Nonfiction is outside the story project model.
 
 ### Branching chapters
 
@@ -1680,6 +1694,8 @@ Several read-only commands turn the fields above into views and advisory finding
 - three or more chapters in a row end on `resolution`, and
 - once three chapters have prose, a chapter is over twice or under half the median length.
 
+A [verse chapter](#verse-chapters) is listed with `(verse)` in the hook column and `verse: true` in `--json`, but it is left out of every finding and of the median: its scenes, hook, and length are fiction measures. The first line then counts hooks among the prose chapters and says how many verse chapters it left out.
+
 The [scene-craft](../skills/scene-craft/SKILL.md) and [chapter-writing](../skills/chapter-writing/SKILL.md) skills set `outcome` and `hook`.
 
 ### Clue grid
@@ -1744,7 +1760,7 @@ These enumerations are shared by `story validate` and by the flags that set them
 |-------|--------|
 | Story `status` | `planning`, `drafting`, `in-progress`, `revising`, `complete`, `abandoned` |
 | Story `tense` | `past`, `present`, `future`, `mixed` |
-| Story `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, `chapter-book` |
+| Story `form` | `flash`, `short-story`, `novelette`, `novella`, `novel`, `serial`, `picture-book`, `chapter-book`, `poetry-collection` |
 | Story `count-unit` | `words`, `characters` |
 | Story `draft-mode` | `discovered`, `outlined` |
 | Story `writing-mode` | `horizontal`, `vertical` |
