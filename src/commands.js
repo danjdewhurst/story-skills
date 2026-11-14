@@ -8,6 +8,7 @@ import { formatList } from "./list.js";
 import { formatComparison, formatLabelMapping } from "./compare.js";
 import { applySeverity, findingOverrides, readCliConfig } from "./config.js";
 import { FINDING_CODES, isCustomCode, outputText, warn } from "./findings.js";
+import { collectStories, formatCollect } from "./collect.js";
 import { importManuscript } from "./import.js";
 import { serveLanguageServer } from "./language-server.js";
 import { assertExistingAncestorInsideRoot, assertSafeProjectDirectory, currentText, lstatIfExists, planChanges, recordChanges } from "./files.js";
@@ -256,6 +257,31 @@ export const COMMANDS = [
         }
       }
       return 0;
+    }
+  },
+  {
+    name: "collect",
+    usage: "collect [path]",
+    summary: [
+      "Rewrite a collection's chapters from the story",
+      "projects its story.md stories list names, and",
+      "report which stories changed"
+    ],
+    project: "positional",
+    options: ["force", ...WRITE_OPTIONS],
+    writes: true,
+    recovers: true,
+    change({ parsed, root }) {
+      // The stories are read beside the collection itself, also when
+      // --dry-run writes to a copy of it.
+      const sourceRoot = root();
+      const force = isTruthy(parsed.options.force);
+      return (projectRoot) => collectStories(projectRoot, { sourceRoot, force });
+    },
+    run(context) {
+      return runWrite(context, "collect", this.change(context),
+        (result) => formatCollect(result, false),
+        (result) => formatCollect(result, true));
     }
   },
   {

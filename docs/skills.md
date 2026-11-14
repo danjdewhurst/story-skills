@@ -1025,7 +1025,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 **References.**
 
 - [`continuity-checks.md`](../skills/story-maintenance/references/continuity-checks.md): the rules behind each check command, `continuity` (deaths and revivals, ledgers, `continuity/state.md`, prop custody, clock and route plausibility, exemptions), `clues`, `add clue`, `pacing`, `voices`, `prose`, `names`, `timeline`, `knowledge`, `context`, `passes`, `compare`, `similarity`, and `series`.
-- [`editing-commands.md`](../skills/story-maintenance/references/editing-commands.md): how `add`, `rename`, `remove`, `move`, `split`, `merge`, `add matter`, `add research`, and `import` behave, what they rewrite or refuse, and what to check after them.
+- [`editing-commands.md`](../skills/story-maintenance/references/editing-commands.md): how `add`, `rename`, `remove`, `move`, `split`, `merge`, `add matter`, `add research`, `import`, and `collect` behave, what they rewrite or refuse, and what to check after them.
 - [`builds.md`](../skills/story-maintenance/references/builds.md): what each `story build` format writes and the flags and `story.md` fields it reads: `html` review copies, `print` interiors and `--pdf`, `narration`, `metadata`, `twee`, `ink`, `codex`, `epub`, and `shunn`, and the `build-style` block.
 - [`commands.md`](../skills/story-maintenance/references/commands.md): example command lines for every `story` command, for the exact form of one. `story --help` lists the commands and `story <command> --help` their flags.
 

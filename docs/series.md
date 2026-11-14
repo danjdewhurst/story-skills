@@ -416,14 +416,14 @@ story series .
 
 ## Short-story collections and anthologies
 
-There is no `collection` or `anthology` form. A collection works today as two layers: each story is its own project, and the collection is one more project with each story as a chapter.
+There is no `collection` or `anthology` form. A collection works as two layers: each story is its own project, and the collection is one more project with each story as a chapter, which `story collect` writes from the story projects its `stories` list names.
 
 ```text
 salt-and-lantern/
 ├── low-tide/          # one story: form: short-story
 ├── salt/              # one story: form: flash
 └── collection/        # the book: one chapter per story, no form
-    ├── story.md
+    ├── story.md            # stories: [../low-tide, ../salt]
     ├── chapters/
     │   ├── chapter-01.md   # title: Low Tide
     │   └── chapter-02.md   # title: Salt
@@ -435,21 +435,39 @@ salt-and-lantern/
 
 **Assemble the book in a collection project.** When the stories are finished, gather them into a project of their own:
 
-1. Copy each story's chapter file into one folder, named so the files sort in reading order (`01-low-tide.md`, `02-salt.md`), and import the folder:
+1. Create the collection beside the stories with `story init "Salt and Lantern"`, and name the stories in its `story.md`, in reading order:
 
-   ```shell
-   story import stories/ --title "Salt and Lantern" --dir collection
+   ```yaml
+   # collection/story.md
+   title: Salt and Lantern
+   stories:
+     - ../low-tide
+     - ../salt
    ```
 
-   A chapter file in Story Skills' own layout imports as one chapter, titled by its `title` frontmatter and keeping its `author` (see [Importing a folder of chapter files](manuscripts.md#importing-a-folder-of-chapter-files)). This works best when each story is a single chapter, with section breaks as scene breaks (`* * *`). A story split into several chapters imports as several chapters, so join its prose into one file first. You can also create the chapters with `story add chapter "Low Tide"` and paste each story's prose under `## Chapter Text`.
+   Then collect them:
 
-   For an anthology whose stories arrive as plain markdown or text files, add `--bylines` to credit each story's writer in its chapter's `author` (see **Anthologies** below):
+   ```shell
+   story collect .
+   ```
+
+   ```text
+   Collected 2 stories:
+   - ../low-tide: chapter-01 "Low Tide" (added)
+   - ../salt: chapter-02 "Salt" (added)
+   ```
+
+   Each story becomes one chapter, as `story import` makes one from the story's chapter file: titled by the story's `story.md` title, with the prose under `## Chapter Text` in each of its chapters, joined by a `* * *` scene break when it has several. A story by another writer gets their name in its chapter's `author`, from the story's `author`; a story by the collection's own author does not, so the book credits them once.
+
+   The story project stays the only place a story is edited. After an edit, run `story collect .` again: it rewrites the chapters of the stories that changed, says which ones did, and keeps the rest. Reorder `stories` to reorder the book, and take a story out of the list to remove its chapter. `--dry-run` shows what would change first. collect marks each chapter it writes with `collected-from` and `collected-hash`, and changes only those chapters, so a chapter you write in the collection yourself is never touched. An edit made to a collected chapter in the collection is refused until you make it in the story project, or replace it with `--force`. A missing story project is an error, and nothing is written. See [`collect`](cli-reference.md#collect) for the full rules.
+
+   To import stories that are not story projects, such as an anthology's submissions as plain markdown or text files, copy them into one folder, named so the files sort in reading order (`01-low-tide.md`, `02-salt.md`), and import the folder:
 
    ```shell
    story import stories/ --title "Salt and Lantern" --dir collection --bylines
    ```
 
-   A story's by-line, a line such as `By Ben Other` alone in its paragraph at the top of the story, becomes its `author` and is taken out of the prose; `By Ada Writer and Ben Other` gives a list. A story without one takes its file's frontmatter `author`. A line that is not clearly a by-line, such as `By Christmas he was at sea.`, stays in the prose; set those authors by hand. Without `--bylines`, the by-line stays in the prose, so a story that opens with "By the time..." is never mistaken for one. See [`import`](cli-reference.md#import) for the full rules.
+   `--bylines` credits each story's writer in its chapter's `author` (see **Anthologies** below). A story's by-line, a line such as `By Ben Other` alone in its paragraph at the top of the story, becomes its `author` and is taken out of the prose; `By Ada Writer and Ben Other` gives a list. A story without one takes its file's frontmatter `author`. A line that is not clearly a by-line, such as `By Christmas he was at sea.`, stays in the prose; set those authors by hand. Without `--bylines`, the by-line stays in the prose, so a story that opens with "By the time..." is never mistaken for one. A chapter file in Story Skills' own layout imports as one chapter, titled by its `title` frontmatter and keeping its `author` (see [Importing a folder of chapter files](manuscripts.md#importing-a-folder-of-chapter-files)). See [`import`](cli-reference.md#import) for the full rules. These chapters are copies, so `story collect` leaves them alone.
 
 2. Leave `form` out of the collection's `story.md`. `story import`, and `story init` without `--form`, leave it unset. Every form describes a single work: `short-story` or `flash` would run the whole book together in the Shunn builds, and `novel` would apply a novel's word-count range.
 
@@ -502,7 +520,6 @@ Leave `author` out of `story.md` when the editor is the book's only credit. The 
 
 **What does not work yet:**
 
-- No command assembles story projects into a collection. The collection's chapters are copies, so an edit to a story after assembly must be made in both projects, or the chapter imported again.
 - A build covers the whole project, so a single story's submission manuscript comes from its own project, not from the collection.
 - Nonfiction collections, such as a book of essays, stay out of scope. A nonfiction book needs a different entity model from characters, scenes, and continuity, and the story project model does not give one.
 
@@ -559,8 +576,9 @@ The hash covers the chapter's title and prose paragraphs, so an edit to the outl
 
 ## See also
 
-- [Project format reference](project-format.md#story-file): the `series`, `book-number`, `follows`, and `precedes` fields
+- [Project format reference](project-format.md#story-file): the `series`, `book-number`, `follows`, `precedes`, and `stories` fields
 - [CLI reference](cli-reference.md#series): `story series` options and output, and [`story translation`](cli-reference.md#translation) for a translated edition
+- [CLI reference](cli-reference.md#collect): `story collect`, which assembles a collection from its story projects
 - [Continuity and analysis](continuity.md#continuity-state): `knowledge-state` and `fact` ids within one book
 - [Skills catalogue](skills.md#series-continuity): the `series-continuity` skill
 - [Documentation index](README.md): every page, by audience and task

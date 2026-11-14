@@ -288,8 +288,9 @@ nowhere else, and an exclusive market needs a story with no open
 submissions. For a market that reads anonymously, add `--anonymous` to the Shunn
 build, which leaves out every name, the running head's surname included.
 To assemble a collection, follow its "Assemble a collection" section:
-choose the stories, find the linking threads, propose an order, and draft
-the acknowledgements from the publication history.
+choose the stories, find the linking threads, propose an order, assemble
+the book with `story collect .` from the collection's `stories` list, and
+draft the acknowledgements from the publication history.
 
 ## Conventions
 

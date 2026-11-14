@@ -217,6 +217,7 @@ These are the commands writers use most:
 |---------|---------|
 | `story init "The Last Ember"` | Scaffold a story project |
 | `story import draft.md --title "The Lost Coast"` | Split an existing manuscript into a project and list its recurring names |
+| `story collect .` | Rewrite a short-story collection's chapters from the story projects its `stories` list names |
 | `story add character "Sera Voss"` | Create a file for a character, place, scene, promise, clue, or other entity |
 | `story rename character sera-voss "Sera Vale"` | Rename an entity and update its references in frontmatter and links |
 | `story check [path] --strict` | Run validation, link checks, and continuity in one scan; `--strict` also fails on warnings |
