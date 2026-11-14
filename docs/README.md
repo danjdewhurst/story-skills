@@ -55,7 +55,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | [Continuity and analysis](continuity.md) | The continuity engine (including travel times over location routes), exemptions, and the `knowledge`, `context`, `timeline`, `prose`, `voices`, `pacing`, `clues`, `grid`, `names`, `diagram`, `progress`, `compare`, `report`, `next`, and `doctor` commands |
 | [Writing in other languages](languages.md) | What works in each language and script: counting in words or characters, dialogue and sentences, word lists, build labels, fonts, right-to-left and vertical text, ids, and adding a language pack |
 | [Series](series.md) | Linking sequels and prequels, `story series`, carrying characters and facts between books, and laying out a short-story collection, anthology, or poetry collection |
-| [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, Twine and ink stories, story bible site (codex), and synopsis output |
+| [Import, export, and builds](manuscripts.md) | Importing an existing draft, front and back matter, publishing metadata, and building markdown, EPUB, DOCX, Shunn, HTML review copy, print interior, narration script, retailer metadata sheet, Fountain screenplay skeleton, Twine and ink stories, story bible site (codex), serial episodes to post, and synopsis output |
 | [Editor integration](editors.md) | `story lsp` in VS Code, Neovim, Helix, Emacs, and other editors: findings as you type, go to definition, references, hover, id completion, rename, and quick fixes |
 | [Automation and CI](automation.md) | The GitHub Actions templates (checks, scheduled drafting, and the review copy with its reader-note issue form), exit codes and output streams, and pre-commit hooks |
 
@@ -108,6 +108,7 @@ Pick the route that matches what you came to do. Each one takes four pages; read
 | Build an EPUB, DOCX, or submission manuscript | [Import, export, and builds](manuscripts.md#build-a-book) |
 | Build an HTML review copy, a print interior, a narration script, a retailer metadata sheet, or a screenplay skeleton | [Import, export, and builds](manuscripts.md) |
 | Browse or share the story bible as a website | [Story bible site](manuscripts.md#story-bible-site-codex) |
+| Post a serial episode to a serial site or newsletter | [Serial episodes](manuscripts.md#serial-episodes-post) |
 | Self-publish: metadata, ISBNs, copyright page, print, launch | [Writing workflows](writing-workflows.md), [Import, export, and builds](manuscripts.md), and the publishing entry in the [Skills catalogue](skills.md) |
 | Adapt the book for audio, screen, comics, or translation | [Writing workflows](writing-workflows.md) and the adaptation entry in the [Skills catalogue](skills.md) |
 | Run the checks on every pull request | [Automation and CI](automation.md) |

@@ -96,6 +96,7 @@ story build . --format metadata
 story build . --format twee
 story build . --format ink
 story build . --format ics
+story build . --format post --chapter 3
 story knowledge sera-voss --at chapter-04
 story continuity . --json
 story context chapter-04 --budget 6000

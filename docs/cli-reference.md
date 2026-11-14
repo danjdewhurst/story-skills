@@ -90,7 +90,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`remove <kind> <id>`](#remove) | Delete an entity and scrub references | Yes |
 | | [`impact <command> <args...>`](#impact) | Test a `rename`, `remove`, `move`, `split`, `merge`, or a character's death on a copy of the project, and list the check findings it would add and clear | No |
 | Output | [`export [path]`](#export) | Write a combined manuscript markdown file | Yes |
-| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex` output in `dist/` | Yes |
+| | [`build [path]`](#build) | Build `markdown`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, or `post` output in `dist/` | Yes |
 | | [`synopsis [path]`](#synopsis) | Print or write a 1- or 3-page synopsis from arcs | With `--out` |
 | Editor | [`lsp`](#lsp) | Run the language server an editor starts, for live diagnostics, navigation, completion, rename, and quick fixes | No |
 
@@ -320,7 +320,7 @@ Every result has the same envelope:
 | `ok` | `true` exactly when the command exits `0`. |
 | `data` | The command's result: counts for `validate`, `links`, and `continuity`, and for `check` also `strict` and a `checks` summary; the report, grid, or profile for the others. `null` when the command stopped before producing one. Fields a project does not set are `null`, not missing. |
 | `diagnostics` | One entry per finding, in the order the text output prints them: `severity` (`error`, `warning`, or `dismissed`), `file` (the project file the finding is about, `stdin` for a finding about a passage piped to `prose -` or `voices -`, or `null` when it is about no one file), `message` (the line the text output prints after `error:` or `warning:`, without the trailing `[code]`), `code` (the finding's rule, from [Finding codes](#finding-codes)), and `check` (the check that raised it: `validate`, `links`, `continuity`, or the command's own name). A dismissed finding also has `exemption`, the reason from `continuity/exemptions.md`, or `severity <code> is off in story.md`, and `exemptionIndex`, the position of the matching entry in the `exemptions` list (`0` for the first), or `null` for a `severity` entry. Every diagnostic has `chapter`, the chapter id for the `continuity` findings that [carry one](continuity.md#exemptions), else `null`. An `import` finding about the manuscript rather than a project file has `file` `null` and `source`, the manuscript file's absolute path, or `stdin` for one piped in. |
-| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, every file a write command changed, the manuscript `export` wrote, the file `build` wrote (every page, for a codex), and every file `init` or `import` wrote, a linked book's `story.md` included; a real `init` or `import` that fails partway lists the files it had already written. `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` also list these changes in `data.changes`, as the write commands do. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
+| `writes` | Absolute paths of the files the command created or rewrote: the progress log for `progress --log`, the `--out` file for `diagram` and `synopsis`, `story.md` when `passes` changes it, every file a write command changed, the manuscript `export` wrote, the file `build` wrote (every page, for a codex, and both files of every episode, for posts), and every file `init` or `import` wrote, a linked book's `story.md` included; a real `init` or `import` that fails partway lists the files it had already written. `passes`, `progress`, `diagram`, `synopsis`, `export`, `build`, `init`, and `import` also list these changes in `data.changes`, as the write commands do. Empty for a [`--dry-run`](#previewing-changes-with---dry-run), and for every other command. |
 
 `check` puts the same `checks` summary in `data`, beside the error, warning, and dismissed counts of its own diagnostics; see [check](#check).
 
@@ -362,7 +362,7 @@ The write commands (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reinde
 `export`, `build`, `init`, and `import` put what they wrote in `data`, with `dryRun` and `changes` as above. `changes` is relative to the project root for `export` and `build`, and to the new project's folder for `init` and `import`, so a file outside it starts with `../`. The warnings they print after their output are their diagnostics, such as [`empty-chapter`](#codes-validate), [`substitute-story-id`](#codes-validate), or [`derived-ifid`](#codes-build-and-export) from a build, [`kept-story-options`](#codes-init-and-import) from `init` and `import`, and `unsplit-chapter-lines` from `import`, which is about the manuscript, so its `file` is `null` and its `source` names the manuscript file. For `export` and `build`, a warning a [`severity`](#defaults-and-severity-from-storymd) entry promotes makes `ok` false and exits 1, as in a text run.
 
 - `export`: `outFile` (the absolute path of the manuscript) and `chapters`.
-- `build`: `format` (`md` reads as `markdown`), `outFile` (the folder, for `codex`), `chapters`, `pages` (the pages of a `codex`, else `null`), `pdf` (`true` with `--pdf`), and `engine` (the PDF engine that rendered it, or with `--dry-run` the one found and not run, else `null`).
+- `build`: `format` (`md` reads as `markdown`), `outFile` (the folder, for `codex` and `post`), `chapters` (for `post`, the chapters it built), `pages` (the pages of a `codex`, else `null`), `events` (the events of an `ics` calendar, else `null`), `posts` (the episodes a `post` build wrote, else `null`), `pdf` (`true` with `--pdf`), and `engine` (the PDF engine that rendered it, or with `--dry-run` the one found and not run, else `null`).
 - `init` and `import`: `root` (the project's absolute path), `storyId`, `keptStory` (`true` when `--force` kept an existing `story.md`; after `import`, run `story links`, since the old chapters were replaced), `ignoredOptions` (the options the kept `story.md` did not take: `title`, or a flag such as `--genre`), and `gitignore` (`created`, `kept`, or `missing-dist` for a kept `.gitignore` that does not ignore `dist/`, which a text run reports as a `note:`).
 - `init` adds `linkedBooks`, the absolute paths of the books `--follows` or `--precedes` linked to, whose `story.md` got the backlink.
 - `import` adds `chapters` (the chapter files written), `unit` (`words` or `characters`), `words`, `characterCount` (for a book [counted in characters](project-format.md#counting-in-characters), else `null`), and `candidates`, the entity candidates as `{ "name", "count" }`.
@@ -396,7 +396,7 @@ Dry run: story rename would make 9 changes; nothing was written
 
 The preview is the command itself, run on a temporary copy of the project that is deleted afterwards, so it lists exactly what the real run would change, the registries it reindexes included, and prints the same warnings and exits with the same code. A command the real run would refuse (an id that is taken, a file or folder you cannot write to) is refused the same way, naming the project's files. The project is only read: the dry run does not take the [lock](#where-commands-write) and does not wait for a command that holds it. The copy holds only what a write command reads: it leaves out `dist/`, `node_modules/`, dot-folders such as `.git/`, subfolders with their own `story.md`, and folders more than 10 levels deep, and every file other than a markdown file under 5 MiB is copied as a blank sparse file of the same size and permissions, so a folder of cover images or audio takes no space. Only the `story.md` cover and files named as images (`.gif`, `.jpeg`, `.jpg`, `.png`, `.webp`) keep their first 12 bytes, which tell `validate` what kind of image each is. In a [series](series.md), the books the project links to through `follows` and `precedes`, and those its sibling books link to (up to the series limit of 100 books), are copied the same way, each at its own path relative to the copy, with symlinks kept, so cross-book links and series checks resolve as in the real run. So is the source project a [translation](#translation)'s `translation-of` names. These copies are scratch files too, so no linked book is written. A markdown link that leads outside the project, directly or through a symlink, to a file or folder that exists gets an empty stand-in at its path beside the copy, so the dry run reports it as `link-outside-project`, or accepts a link into a linked book, just as the real run does.
 
-`export`, `build`, `diagram --out`, `synopsis --out`, and `init` only write files they never read back, so their dry run needs no copy: the command runs on the project itself, and each write, delete, and new folder is checked as the real run checks it (a path outside the project, a symlink, a file or folder you cannot write to) and listed instead of made. An `--out` outside the project is listed relative to it, such as `create  ../outbox/book.md`. A build lists every file it would rewrite as `update`, even one that would come out byte-identical, and a codex rebuild lists the stale pages, and the entity folders they leave empty, that it would delete. `build --pdf --dry-run` finds the PDF engine, as the real build does, and names it without running it:
+`export`, `build`, `diagram --out`, `synopsis --out`, and `init` only write files they never read back, so their dry run needs no copy: the command runs on the project itself, and each write, delete, and new folder is checked as the real run checks it (a path outside the project, a symlink, a file or folder you cannot write to) and listed instead of made. An `--out` outside the project is listed relative to it, such as `create  ../outbox/book.md`. A build lists every file it would rewrite as `update`, even one that would come out byte-identical, and a codex rebuild lists the stale pages, and the entity folders they leave empty, that it would delete, as a post rebuild lists the stale posts. `build --pdf --dry-run` finds the PDF engine, as the real build does, and names it without running it:
 
 ```text
 $ story build --format print --pdf --dry-run
@@ -3378,14 +3378,14 @@ warning: manuscript.md is not part of the story project model and is ignored [st
 ### build
 
 ```text
-story build [path] [--format <name>] [--shunn] [--anonymous] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--out <file>] [--dry-run] [--json]
+story build [path] [--format <name>] [--shunn] [--anonymous] [--trim <size>] [--paper <letter|a4>] [--stamp <label>] [--note-url <url>] [--pdf] [--pdf-engine <name|path>] [--spoilers] [--include-pending] [--chapter <chapter>] [--from <chapter>] [--to <chapter>] [--out <file>] [--dry-run] [--json]
 ```
 
 Builds a disposable book file in `dist/`. Builds are deterministic: the same sources give byte-identical output. EPUB timestamps and the iCalendar `DTSTAMP` use `SOURCE_DATE_EPOCH` when it is set to whole seconds with a year no later than 9999, and a fixed date otherwise. Default file names cap the story id at 100 characters.
 
 | Option | Effect | Default |
 |---|---|---|
-| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, or `codex` | `markdown` |
+| `--format <name>` | `markdown` (or `md`), `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, or `post` | `markdown` |
 | `--shunn` | With `--format docx`, apply Shunn manuscript formatting. An error with any other format | Off |
 | `--anonymous` | With `--format shunn` (and its `--pdf`) or `--format docx --shunn`, leave every name out, for a market that reads blind: the byline, editor credit, contact lines, story bylines, and the running head's surname. An error with any other build, and it cannot be a `cli-defaults` entry. See [Anonymous manuscripts](manuscripts.md#anonymous-manuscripts) | Off |
 | `--trim <size>` | With `--format print`, the trim size: `5x8`, `5.25x8`, `5.5x8.5`, `6x9`, or `a5` (case-insensitive). An error with any other format | `5.5x8.5` |
@@ -3395,10 +3395,12 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `--pdf` | With `--format print` or `--format shunn`, render the HTML to PDF with an installed engine and write the PDF instead: `dist/<story-id>.pdf` for print, `dist/<story-id>.shunn.pdf` for Shunn. An error with any other format. See [PDF output](#pdf-output) | Off |
 | `--pdf-engine <name\|path>` | With `--pdf`, the engine to run: `prince`, `weasyprint`, `pagedjs-cli`, or `chrome`, or the command name or path of an engine's executable, such as `chromium` or `msedge`. An error without `--pdf`, unless it comes from `cli-defaults`, where it must be one of the four names | The first engine found |
 | `--spoilers` | With `--format codex`, include what gives the story away: entity notes, statuses, deaths, progressions, knowledge, clues, chapter beats, hooks, and outcomes, and how questions and promises resolve. An error with any other format | Off |
+| `--chapter <chapter>` | With `--format post`, build only this chapter, by id (`chapter-07`) or number (`7`): the episode due. An error with any other format, with `--from` or `--to`, or for a chapter the project does not have | Every chapter |
+| `--from <chapter>`, `--to <chapter>` | With `--format post`, build only the chapters from `--from` to `--to`, each an id or a number. Either alone runs to the last chapter or from the first. An error with any other format, or when `--from` comes after `--to` | Every chapter |
 | `--include-pending` | With a build that prints matter pages (`markdown`, `epub`, `docx` without `--shunn`, `html`, `print`, and `narration`), keep the pages whose `permission` is `pending`. An error with any other build. `cli-defaults` cannot set it. See [Pending permissions](#pending-permissions) | Off |
-| `--out <file>` | Output path, relative to the project root. For `codex`, a folder | `dist/<story-id>.<ext>`, or `dist/codex` for `codex` |
-| `--dry-run` | List the files and folders it would write (and, for `codex`, the stale pages it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
-| `--json` | Print a JSON result: `data.format`, `data.outFile` (the absolute path, or the `codex` folder), `data.chapters`, `data.pages` (for `codex`), `data.events` (for `ics`), `data.pdf`, `data.engine` (for `--pdf`), `data.dryRun`, and `data.changes`, with the files written in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
+| `--out <file>` | Output path, relative to the project root. For `codex` and `post`, a folder | `dist/<story-id>.<ext>`, `dist/codex` for `codex`, or `dist/posts` for `post` |
+| `--dry-run` | List the files and folders it would write (and, for `codex` and `post`, the stale pages or posts it would delete), and change nothing; with `--pdf`, name the engine it found without running it (see [Previewing changes](#previewing-changes-with---dry-run)) | Off |
+| `--json` | Print a JSON result: `data.format`, `data.outFile` (the absolute path, or the `codex` or `post` folder), `data.chapters`, `data.pages` (for `codex`), `data.events` (for `ics`), `data.posts` (for `post`), `data.pdf`, `data.engine` (for `--pdf`), `data.dryRun`, and `data.changes`, with the files written in `writes` and the warnings as diagnostics (see [JSON output](#json-output)) | Off |
 
 | Format | Default output | Contents |
 |---|---|---|
@@ -3418,6 +3420,7 @@ Builds a disposable book file in `dist/`. Builds are deterministic: the same sou
 | `ink` | `dist/<story-id>.ink` | An ink story for Inky and inklecate from the same chapters and choices, with the same checks as `twee`: `# title`, `# author`, and `# ifid` global tags, a divert to the first chapter, then one knot per chapter (`chapter-03` becomes `chapter_03`), ending in a sticky `+ [text] -> knot` choice for each of its `choices`, or `-> END` when it has none. With no choices anywhere, each chapter diverts to the next. Prose and choice text are escaped so ink reads them as text. See [ink story](manuscripts.md#ink-story) |
 | `ics` | `dist/<story-id>.ics` | An iCalendar (RFC 5545) file of the writing schedule, to import into Google Calendar, Apple Calendar, or Outlook, or to subscribe to from a published build: all-day events for the `deadline` (with `target-words` or `target-characters`), each serial episode's release date from the [release schedule](project-format.md#release-schedule), plus the next episode on the cadence after the last chapter while the story is not `complete`, and the daily target (`daily-target-words` or `daily-target-characters`) as a recurring event on the `writing-days` until the deadline. Each `UID` comes from the story id and the event, so a rebuilt calendar updates the events instead of adding copies. No prose. Exits 3 when there is nothing to schedule. See [Writing schedule calendar](manuscripts.md#writing-schedule-calendar-icalendar) |
 | `codex` | `dist/codex/` | A story bible as a static site: `index.html` with every entity listed, a page per character, location, faction, artifact, system, and arc (`characters/<id>.html`) with its fields, relationships, the chapters it appears in, and the pages that link to it, and `timeline.html`, `threads.html` (open questions and promises), and `progress.html` (length, chapter targets, plot grid, session log). Plain HTML and inline CSS: no script, no external asset, no date. Spoiler-safe unless `--spoilers` is given. See [Story bible site](manuscripts.md#story-bible-site-codex) |
+| `post` | `dist/posts/` | Each chapter as a serial episode to paste into a serial site or newsletter: `07-chapter-07.html`, an HTML fragment with no `<head>`, page wrapper, heading, class, or style, that keeps italics, bold, scene breaks (`<hr>`), block quotes, and hard line breaks, and `07-chapter-07.txt` beside it as plain text. The number is padded to the widest chapter number, so the files sort in reading order. A chapter's [`author-note`](project-format.md#chapters) follows the episode under an `Author's note` label; no other build prints it. `--chapter`, or `--from` and `--to`, build only some chapters. A rebuild deletes the posts of a chapter that is gone, renamed, or renumbered, and keeps the posts of every other chapter. No matter pages, no uploads. See [Serial episodes](manuscripts.md#serial-episodes-post) |
 
 `export` and `build` print `warning: chapters/chapter-02.md has no prose yet and is built as a heading-only page` for each chapter with no prose, such as one still at `status: outline`, and build anyway.
 
@@ -3474,11 +3477,14 @@ Built 1 chapters as shunn PDF (weasyprint) to ~/stories/the-last-ember/dist/the-
 $ story build --format codex
 Built a codex of 13 pages to ~/stories/the-last-ember/dist/codex
 
+$ story build --format post --chapter 1
+Built 1 post (HTML and text) to ~/stories/the-last-ember/dist/posts
+
 $ story build --format print --trim 7x10
 Unsupported trim size: 7x10. Supported sizes: 5x8, 5.25x8, 5.5x8.5, 6x9, a5
 
 $ story build --format pdf
-Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex
+Unsupported build format: pdf. Supported formats: markdown, epub, docx, shunn, html, print, narration, metadata, fountain, twee, ink, ics, codex, post
 ```
 
 An empty value (`--format=`) reads `Unsupported build format: (empty). ...`.
@@ -4150,8 +4156,8 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--list` | | `snapshot` | Boolean; lists the snapshots instead of taking one |
 | `--restore` | `<name>` | `snapshot` | Puts the snapshot back over the project instead of taking one, after saving the project as `before-restore-<id>-<n>`; deletes markdown files the snapshot lacks, and the folders that leaves empty |
 | `--path` | `<path>` | Every command except `init`, `import`, and `lsp` | Project root |
-| `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` |
-| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `codex`. For `grid`: `markdown` (default), `csv` |
+| `--out` | `<file>` | `export`, `build`, `synopsis`, `diagram` | Relative to the project root; a folder for `build --format codex` and `--format post` |
+| `--format` | `<name>` | `build`, `grid` | For `build`: `markdown`, `md`, `epub`, `docx`, `shunn`, `html`, `print`, `narration`, `metadata`, `fountain`, `twee`, `ink`, `ics`, `codex`, `post`. For `grid`: `markdown` (default), `csv` |
 | `--trim` | `<size>` | `build` | Only with `--format print`: `5x8`, `5.25x8`, `5.5x8.5` (default), `6x9`, `a5` |
 | `--paper` | `<letter\|a4>` | `build` | Only with `--format shunn --pdf` or `--format docx --shunn`: `letter` (default) or `a4` |
 | `--stamp` | `<label>` | `build` | Only with `--format html`: a build label printed in the review copy |
@@ -4162,8 +4168,8 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--pdf-engine` | `<name\|path>` | `build` | Only with `--pdf`: `prince`, `weasyprint`, `pagedjs-cli`, `chrome`, or the path to one; default the first found on `PATH` |
 | `--spoilers` | | `build` | Boolean; only with `--format codex` |
 | `--include-pending` | | `export`, `build` | Boolean; keeps matter pages whose `permission` is `pending`, which are left out by default; only with a build that prints matter pages; not a `cli-defaults` entry |
-| `--from` | `<chapter>` | `grid` | Chapter id or number; the first column shown |
-| `--to` | `<chapter>` | `grid` | Chapter id or number; the last column shown |
+| `--from` | `<chapter>` | `build`, `grid` | Chapter id or number; the first column shown, or the first post built (only with `build --format post`) |
+| `--to` | `<chapter>` | `build`, `grid` | Chapter id or number; the last column shown, or the last post built (only with `build --format post`) |
 | `--where` | `<filter>` | `list` | `key=value`, `key!=value`, `key`, or `!key`; repeatable, and every filter must match |
 | `--query` | `<name>` | `list` | A query from `story.md` `queries`; any `--where` adds to its filters |
 | `--at` | `<chapter-id>` | `knowledge`, `split`, `impact` | Required for both; for `split`, where to split: a scene break number, a heading, or a line of the chapter text |
@@ -4188,7 +4194,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--id` | `<kebab-id>` | `add` (every kind except `chapter` and `scene`), `rename`, `snapshot`, `impact` | The entity or snapshot id, instead of one derived from the name; required when the name has nothing to slug, such as a name only in Chinese, Arabic, or Hebrew. Refused for `chapter` and `scene`, whose ids come from their numbers |
 | `--prose` | | `rename`, `impact` | Boolean; also replaces the entity's name and given name in drafted chapter prose, but not its aliases |
 | `--number` | `<n>` | `add chapter`, `move chapter`, `impact` | Required for `move chapter` |
-| `--chapter` | `<id>` | `add scene`, `move scene`, `translation`, `impact` | For `translation`, only with `--record`: the one chapter to record |
+| `--chapter` | `<id>` | `add scene`, `move scene`, `build`, `translation`, `impact` | For `build`, a chapter id or number, only with `--format post`. For `translation`, only with `--record`: the one chapter to record |
 | `--scene` | `<n>` | `add scene`, `move scene`, `impact` | |
 | `--type` | `<name>` | `add location`, `system`, `faction`, `artifact`, `arc` | |
 | `--role` | `<name>` | `add character` | |

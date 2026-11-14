@@ -482,6 +482,8 @@ Next release: none, the story is complete; episode 12 (chapter-12) on 2026-11-20
 
 To put the release dates in a calendar app, build them as an iCalendar file with `story build . --format ics`, which holds the `deadline` and the daily target too. See [Writing schedule calendar](manuscripts.md#writing-schedule-calendar-icalendar).
 
+To post an episode on its release day, build it with `story build . --format post --chapter <id-or-number>`: an HTML fragment to paste into a serial site and a plain-text copy, in `dist/posts/`, with the chapter's `author-note` after the episode. See [Serial episodes](manuscripts.md#serial-episodes-post).
+
 ### Revision passes
 
 `revision-passes` records a revision as separate named passes, each looking for one kind of problem. It is a list of mappings:
@@ -1023,6 +1025,7 @@ word-count: 1489
 | `release-date` | `YYYY-MM-DD` | no | For a serial: the real-world day this episode releases, overriding the `story.md` cadence for this chapter only. Always a Gregorian date, even with a `calendar`. See [Release schedule](#release-schedule). |
 | `collected-from` | string | no | Written by `story collect`: the `stories` entry the chapter was collected from. Only a chapter with it is rewritten or removed by `story collect`. See [`collect`](cli-reference.md#collect). |
 | `collected-hash` | string | no | Written by `story collect`: a SHA-256 hash of the title, author, and prose it wrote, which tells it whether the story changed since and whether the chapter was edited in the collection. |
+| `author-note` | string | no | For a serial: a note to readers for this episode, as markdown text (a `\|` block keeps its paragraphs). [`story build --format post`](manuscripts.md#serial-episodes-post) prints it after the episode under the `author-note` label. No other build prints it, and it never counts toward word counts. |
 | `choices` | list of mappings | no | For a branching story: the choices that end the chapter, each `text` (what the reader picks) and `to` (the chapter it leads to). See [Branching chapters](#branching-chapters). |
 
 `story continuity` treats `pov` and `characters` as the cast, so a deceased character who appears in a flashback or memory belongs in `mentions`, not `characters`. A `pov` also listed in `mentions` narrates without appearing, as a ghost or posthumous narrator does, so it is not a posthumous appearance. It also warns when the `pov` character is in neither `characters` nor `mentions`, when chapter numbers skip, and when a drafted chapter's prose names a character it lists in none of `pov`, `characters`, or `mentions` (see [`story mentions`](continuity.md#story-mentions)). `story validate` warns when a chapter has no scene records in `scenes/`, and when a chapter has no prose while it is `revised`, `final`, or `complete`, or the story is `complete`, since it would build as a heading-only page. `story export` and `story build` warn about every chapter with no prose.
