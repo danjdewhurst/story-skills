@@ -548,7 +548,7 @@ function readSourceDocument(name, filePath, rules) {
   try {
     // The OpenDocument and EPUB readers stop as soon as the markdown
     // passes the text file limit; docx.js leaves that to the check below.
-    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules), maxTextBytes: MAX_IMPORT_FILE_BYTES });
+    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules), partHeading: (text) => rules.partHeading.test(text), maxTextBytes: MAX_IMPORT_FILE_BYTES });
   } catch (error) {
     // Only an ArchiveError says the file is bad; anything else is a bug.
     throw error instanceof ArchiveError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;

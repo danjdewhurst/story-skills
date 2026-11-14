@@ -186,6 +186,13 @@ describe("odtMarkdown", () => {
     expect(markdown(body, { styles: outline("1") }).notes.map((note) => note.code)).toEqual(["numbering"]);
     expect(markdown(body, { styles: outline("") }).notes).toEqual([]);
     expect(markdown('<text:h text:outline-level="2">Unnumbered</text:h>', { styles: outline("1") }).notes).toEqual([]);
+    expect(markdown('<text:h text:outline-level="1" text:is-list-header="true">A list header</text:h><text:h>Level 1 by default</text:h>', { styles: outline("1") }).notes.map((note) => note.code)).toEqual(["numbering"]);
+    expect(markdown('<text:h text:outline-level="1" text:is-list-header="true">A list header</text:h>', { styles: outline("1") }).notes).toEqual([]);
+    // The note follows the outline level itself, not the markdown heading
+    // level it is capped to.
+    const deep = STYLES.replace("</office:styles>", '</office:styles><text:outline-style style:name="Outline"><text:outline-level-style text:level="8" style:num-format="1"/></text:outline-style>');
+    expect(markdown('<text:h text:outline-level="6">Six</text:h>', { styles: deep }).notes).toEqual([]);
+    expect(markdown('<text:h text:outline-level="8">Eight</text:h>', { styles: deep }).notes.map((note) => note.code)).toEqual(["numbering"]);
   });
 
   test("stops once the markdown passes its limit, and once its parts pass theirs", () => {
@@ -210,6 +217,8 @@ describe("odtMarkdown", () => {
     expect(() => odtMarkdown(Buffer.from("not a zip at all"))).toThrow("it is not a readable zip file, so it is not a .odt; save it again from your word processor");
     expect(() => markdown(p("Text."), { mimetype: "application/vnd.oasis.opendocument.spreadsheet" })).toThrow("its media type is application/vnd.oasis.opendocument.spreadsheet, so it is not an OpenDocument text");
     expect(() => markdown(p("Text."), { mimetype: "x".repeat(300) })).toThrow("its media type is 300 bytes long, so it is not an OpenDocument text");
+    // An entry whose size is the ZIP64 mark is refused as ZIP64, not by a size limit.
+    expect(() => odtMarkdown(declaredZip([{ name: "mimetype", content: Buffer.from("application/vnd.oasis.opendocument.text"), size: 0xffffffff }]))).toThrow("it is a ZIP64 archive, which story does not read; save it again from your word processor");
     const noContent = path.join(makeTempDir(), "draft.odt");
     writeZip(noContent, [{ name: "mimetype", content: "application/vnd.oasis.opendocument.text" }]);
     expect(() => odtMarkdown(fs.readFileSync(noContent))).toThrow("it has no content.xml, so it is not an OpenDocument text");
