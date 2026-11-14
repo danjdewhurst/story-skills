@@ -5,6 +5,7 @@
 // its own markup into runs of { text, italic, bold } and hands them here,
 // so the three formats import alike.
 import { isSceneBreakLine } from "./markdown.js";
+import { ArchiveError } from "./archive.js";
 
 // Prose text from a document: control characters other than a tab are
 // dropped, a line break or carriage return is a space, as XML and Word
@@ -50,6 +51,40 @@ export function paragraphBlocks(runs, level, quote, chapterLine) {
     });
   }
   return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
+}
+
+// Markdown blocks as a reader writes them, held to `maxBytes` as markdown,
+// so a file of tiny parts that make little text each cannot hold more in
+// memory than the import would take. `mark` and `dropTo` take back the
+// blocks written since a mark.
+export function markdownBlocks(maxBytes = Infinity) {
+  const blocks = [];
+  const sizes = [];
+  let size = 0;
+  return {
+    push(block) {
+      const bytes = Buffer.byteLength(block, "utf8") + 2;
+      if (size + bytes > maxBytes + 1) {
+        throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
+      }
+      size += bytes;
+      blocks.push(block);
+      sizes.push(bytes);
+    },
+    mark() {
+      return blocks.length;
+    },
+    dropTo(mark) {
+      while (blocks.length > mark) {
+        blocks.pop();
+        size -= sizes.pop();
+      }
+    },
+    text() {
+      const text = blocks.join("\n\n");
+      return text === "" ? "" : `${text}\n`;
+    }
+  };
 }
 
 // In a `verse` chapter (see isVerseChapter) every line break is kept, so a

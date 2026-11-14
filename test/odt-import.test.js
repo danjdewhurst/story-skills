@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { runCli } from "../src/cli.js";
-import { odtMarkdown } from "../src/odt.js";
+import { MAX_ODT_TEXT_BYTES, odtMarkdown } from "../src/odt.js";
 import { writeZip } from "../src/packaging.js";
-import { makeTempDir, memoryIo, NODE_ON_PATH } from "./helpers.js";
+import { declaredZip, makeTempDir, memoryIo, NODE_ON_PATH } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const NS = [
@@ -39,6 +39,8 @@ const AUTOMATIC = `<office:automatic-styles>
 <style:style style:name="T3" style:family="text"><style:text-properties fo:font-style="normal"/></style:style>
 <style:style style:name="T4" style:family="text"><style:text-properties text:display="none"/></style:style>
 <style:style style:name="P1" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties fo:font-weight="bold"/></style:style>
+<style:style style:name="P2" style:family="paragraph" style:parent-style-name="Standard"><style:text-properties text:display="none"/></style:style>
+<style:style style:name="P3" style:family="paragraph" style:parent-style-name="Standard" style:default-outline-level="2"/>
 </office:automatic-styles>`;
 
 function contentXml(body) {
@@ -165,6 +167,41 @@ describe("odtMarkdown", () => {
     expect(notes.map((note) => note.code).sort()).toEqual(["comments", "footnotes", "images", "numbering", "ruby", "tables", "text-boxes", "tracked-changes"]);
   });
 
+  test("reads hidden paragraphs and sections, outline levels, and a paragraph inside a paragraph", () => {
+    const body = [
+      p("Hidden by its style.", "P2"),
+      p("A level 2 heading by its style's outline level.", "P3"),
+      p('Hidden by its condition.<text:hidden-paragraph text:condition="ooow:1" text:is-hidden="true"/>'),
+      p('Shown, its condition false.<text:hidden-paragraph text:condition="ooow:0" text:is-hidden="false"/>'),
+      '<text:section text:name="C" text:display="condition" text:condition="ooow:1" text:is-hidden="true"><text:p>Hidden section.</text:p></text:section>',
+      '<text:section text:name="D" text:display="condition" text:condition="ooow:0" text:is-hidden="false"><text:p>Shown section.</text:p></text:section>',
+      '<text:p>Outer <text:p>inner <text:p/>text</text:p> end.</text:p>'
+    ].join("");
+    expect(markdown(body).text).toBe(["## A level 2 heading by its style's outline level.", "Shown, its condition false.", "Shown section.", "Outer inner text end."].join("\n\n") + "\n");
+  });
+
+  test("notes headings that chapter numbering numbers", () => {
+    const outline = (format) => STYLES.replace("</office:styles>", `</office:styles><office:automatic-styles/><text:outline-style style:name="Outline"><text:outline-level-style text:level="1" style:num-format="${format}" style:num-prefix="Chapter "><style:list-level-properties/></text:outline-level-style><text:outline-level-style text:level="2" style:num-format=""/></text:outline-style>`);
+    const body = '<text:h text:outline-level="1">The Arrival</text:h>' + p("Text.");
+    expect(markdown(body, { styles: outline("1") }).notes.map((note) => note.code)).toEqual(["numbering"]);
+    expect(markdown(body, { styles: outline("") }).notes).toEqual([]);
+    expect(markdown('<text:h text:outline-level="2">Unnumbered</text:h>', { styles: outline("1") }).notes).toEqual([]);
+  });
+
+  test("stops once the markdown passes its limit, and once its parts pass theirs", () => {
+    const body = p("First paragraph.") + p("Second.");
+    // The whole text is 26 bytes.
+    expect(odtMarkdown(odtBytes(body), { maxTextBytes: 26 }).text).toBe("First paragraph.\n\nSecond.\n");
+    expect(() => odtMarkdown(odtBytes(body), { maxTextBytes: 25 })).toThrow("its text comes to more than the 25 byte limit as markdown");
+    // Each part says it is 32 MB unpacked, at the part limit, but with the
+    // mimetype they come to more than the limit for the whole file, so
+    // neither is inflated.
+    const declared = 32 * 1024 * 1024;
+    const zip = declaredZip([{ name: "mimetype", content: Buffer.from("application/vnd.oasis.opendocument.text") }, { name: "content.xml", content: Buffer.from(contentXml(body)), size: declared }, { name: "styles.xml", content: Buffer.from(STYLES), size: declared }]);
+    expect(declared * 2).toBe(MAX_ODT_TEXT_BYTES);
+    expect(() => odtMarkdown(zip)).toThrow(`its parts come to more than the ${MAX_ODT_TEXT_BYTES} byte limit unpacked`);
+  });
+
   test("reads a document with no styles part and no mimetype", () => {
     expect(markdown(p("Only text."), { styles: null, mimetype: null }).text).toBe("Only text.\n");
   });
@@ -172,6 +209,7 @@ describe("odtMarkdown", () => {
   test("refuses a file that is not a readable OpenDocument text", () => {
     expect(() => odtMarkdown(Buffer.from("not a zip at all"))).toThrow("it is not a readable zip file, so it is not a .odt; save it again from your word processor");
     expect(() => markdown(p("Text."), { mimetype: "application/vnd.oasis.opendocument.spreadsheet" })).toThrow("its media type is application/vnd.oasis.opendocument.spreadsheet, so it is not an OpenDocument text");
+    expect(() => markdown(p("Text."), { mimetype: "x".repeat(300) })).toThrow("its media type is 300 bytes long, so it is not an OpenDocument text");
     const noContent = path.join(makeTempDir(), "draft.odt");
     writeZip(noContent, [{ name: "mimetype", content: "application/vnd.oasis.opendocument.text" }]);
     expect(() => odtMarkdown(fs.readFileSync(noContent))).toThrow("it has no content.xml, so it is not an OpenDocument text");
@@ -183,8 +221,15 @@ describe("odtMarkdown", () => {
   test("refuses a password-protected document", () => {
     const manifest = `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"><manifest:encryption-data manifest:checksum-type="SHA1/1K"><manifest:algorithm manifest:algorithm-name="Blowfish CFB"/></manifest:encryption-data></manifest:file-entry></manifest:manifest>`;
     expect(() => markdown(p("Text."), { manifest })).toThrow("it is password-protected; remove the password in your word processor and save it again");
+    // OpenOffice.org named the manifest's DTD, which declares nothing.
     const plain = manifest.replace(/<manifest:encryption-data[^]*<\/manifest:encryption-data>/, "");
-    expect(markdown(p("Text."), { manifest: plain }).text).toBe("Text.\n");
+    const doctype = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE manifest:manifest PUBLIC "-//OpenOffice.org//DTD Manifest 1.0//EN" "Manifest.dtd">\n';
+    expect(markdown(p("Text."), { manifest: doctype + plain }).text).toBe("Text.\n");
+    // A whole encrypted package has no content.xml beside it.
+    const wholePackage = `<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="encrypted-package" manifest:media-type=""><manifest:encryption-data/></manifest:file-entry></manifest:manifest>`;
+    const file = path.join(makeTempDir(), "locked.odt");
+    writeZip(file, [{ name: "mimetype", content: "application/vnd.oasis.opendocument.text", stored: true }, { name: "META-INF/manifest.xml", content: wholePackage }, { name: "encrypted-package", content: Buffer.alloc(64, 1) }]);
+    expect(() => odtMarkdown(fs.readFileSync(file))).toThrow("it is password-protected");
   });
 });
 
@@ -204,13 +249,12 @@ describe("story import of an .odt", () => {
     expect(text.err).toContain("warning: draft.odt: it has footnotes or endnotes, which the import leaves out [import-content-left-out]");
   });
 
-  test("a folder imports its OpenDocument files with its markdown, skipping LibreOffice lock files", () => {
+  test("a folder imports its OpenDocument files with its markdown", () => {
     const dir = makeTempDir();
     const source = path.join(dir, "drafts");
     fs.mkdirSync(source);
     odtFile(path.join(source, "01-arrival.odt"), '<text:h text:outline-level="1">Chapter 1: Arrival</text:h>' + p("She came by the night train."));
     fs.writeFileSync(path.join(source, "02-departure.md"), "# Chapter 2: Departure\n\nShe left by the morning one.\n");
-    fs.writeFileSync(path.join(source, ".~lock.01-arrival.odt#"), "lock");
     expect(importCli(dir, "drafts", "--title", "Trains", "--dir", "trains").code).toBe(0);
     expect(chapterText(path.join(dir, "trains", "chapters", "chapter-01.md"))).toBe("She came by the night train.");
     expect(chapterText(path.join(dir, "trains", "chapters", "chapter-02.md"))).toBe("She left by the morning one.");

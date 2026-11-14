@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-import zlib from "node:zlib";
 import { spawnSync } from "node:child_process";
 import { runCli } from "../src/cli.js";
 import { archivePath, epubMarkdown, MAX_EPUB_TEXT_BYTES } from "../src/epub.js";
 import { scanComments } from "../src/markdown.js";
-import { crc32, writeZip } from "../src/packaging.js";
-import { makeTempDir, memoryIo, NODE_ON_PATH } from "./helpers.js";
+import { writeZip } from "../src/packaging.js";
+import { declaredZip, makeTempDir, memoryIo, NODE_ON_PATH } from "./helpers.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const CONTAINER = `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`;
@@ -145,11 +144,36 @@ describe("epubMarkdown", () => {
     expect(notes.map((note) => note.code).sort()).toEqual(["footnotes", "images", "ruby", "tables"]);
   });
 
+  test("ends a paragraph at a block it leaves out, and names an image inside one", () => {
+    const body = [
+      '<div>Before<p hidden="">Hidden</p>After</div>',
+      '<div>Text<aside epub:type="footnote"><p>The note.<img src="n.png" alt=""/></p></aside>More</div>',
+      '<p>a<span style="display:none !important">HIDDEN</span>b</p>',
+      "<ol><li>First</li><li>Second</li></ol>"
+    ].join("");
+    const { text, notes } = markdown([body]);
+    expect(text).toBe(["Before", "After", "Text", "More", "ab", "First", "Second"].join("\n\n") + "\n");
+    expect(notes.map((note) => note.code).sort()).toEqual(["footnotes", "images", "lists"]);
+  });
+
+  test("leaves out a contents page, whether the guide names it or its paragraphs are all links", () => {
+    const toc = '<h1>Contents</h1><p><a href="d2.xhtml">Chapter 1</a></p><p><a href="d3.xhtml#top">Chapter 2</a></p>';
+    const chapters = ['<h1>Chapter 1</h1><p>First <a href="#n">prose</a>.</p>', "<h1>Chapter 2</h1><p>Second prose.</p>"];
+    const expected = "# Chapter 1\n\nFirst prose.\n\n# Chapter 2\n\nSecond prose.\n";
+    const found = markdown([toc, ...chapters]);
+    expect(found).toEqual({ text: expected, notes: [{ code: "contents", message: "it has a table of contents in its reading order, which the import leaves out" }] });
+    const documents = [1, 2, 3].map((index) => ({ id: `d${index}`, href: `text/d${index}.xhtml` }));
+    const guide = packageXml(documents).replace("</package>", '<guide><reference type="toc" title="Contents" href="text/d1.xhtml"/><reference type="text" href="text/d2.xhtml"/><reference type="toc" href="../../outside.xhtml"/></guide></package>');
+    expect(markdown(["<p>Not linked, but named by the guide.</p>", ...chapters], { opf: guide }).text).toBe(expected);
+    // One paragraph of links is not a contents page.
+    expect(markdown(['<p>See <a href="d2.xhtml">the next part</a>.</p><p><a href="d2.xhtml">Onward</a></p>']).text).toBe("See the next part.\n\nOnward\n");
+  });
+
   test("reads an EPUB 2 document: an XHTML 1.1 doctype, HTML entities, and prefixed package elements", () => {
     const doctype = '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">';
     const opf = `<?xml version="1.0"?><opf:package xmlns:opf="http://www.idpf.org/2007/opf" version="2.0"><opf:manifest><opf:item id="c" href="text/d1.xhtml" media-type="application/xhtml+xml"/></opf:manifest><opf:spine toc="ncx"><opf:itemref idref="c"/></opf:spine></opf:package>`;
-    const { text } = markdown([xhtml("<p>It&rsquo;s caf&eacute; &hellip; &frac12; &unknown;</p>", { doctype })], { opf });
-    expect(text).toBe("It’s café … ½ &unknown;\n");
+    const { text } = markdown([xhtml("<p>It&rsquo;s caf&eacute; &hellip; &frac12; A&minus;B &rarr; &alpha;&Omega; &there4; &unknown;</p>", { doctype })], { opf });
+    expect(text).toBe("It’s café … ½ A−B → αΩ ∴ &unknown;\n");
   });
 
   test("refuses a file that is not a readable EPUB", () => {
@@ -165,6 +189,8 @@ describe("epubMarkdown", () => {
     for (const [options, message] of cases) {
       expect(() => markdown(["<p>Text.</p>"], options)).toThrow(message);
     }
+    const otherRoot = CONTAINER.replace("<rootfile ", '<rootfile full-path="other.pdf" media-type="application/pdf"/><rootfile ');
+    expect(markdown(["<p>Text.</p>"], { container: otherRoot }).text).toBe("Text.\n");
     const noContainer = path.join(makeTempDir(), "book.epub");
     writeZip(noContainer, [{ name: "mimetype", content: "application/epub+zip" }]);
     expect(() => epubMarkdown(fs.readFileSync(noContainer))).toThrow("it has no META-INF/container.xml, so it is not an EPUB");
@@ -184,12 +210,20 @@ describe("epubMarkdown", () => {
     const encryption = (uri) => `<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:CipherData><enc:CipherReference URI="${uri}"/></enc:CipherData></enc:EncryptedData></encryption>`;
     expect(() => markdown(["<p>Text.</p>"], { entries: [{ name: "META-INF/encryption.xml", content: encryption("OEBPS/text/d1.xhtml") }] })).toThrow("it is locked with DRM (META-INF/encryption.xml encrypts OEBPS/text/d1.xhtml)");
     expect(markdown(["<p>Text.</p>"], { entries: [{ name: "META-INF/encryption.xml", content: encryption("OEBPS/fonts/a.otf") }] }).text).toBe("Text.\n");
+    expect(() => markdown(["<p>Text.</p>"], { entries: [{ name: "META-INF/encryption.xml", content: encryption("OEBPS/content%2Eopf") }] })).toThrow("encrypts OEBPS/content.opf");
+    expect(() => markdown(["<p>Text.</p>"], { entries: [{ name: "META-INF/encryption.xml", content: encryption("http://example.com/x") + encryption("OEBPS/text/d1.xhtml") }] })).toThrow("encrypts OEBPS/text/d1.xhtml");
   });
 
   test("refuses a document type declaration that declares entities, and damaged XHTML", () => {
     expect(() => markdown([xhtml("<p>&a;</p>", { doctype: '<!DOCTYPE html [<!ENTITY a "aaaa">]>' })])).toThrow("has a document type declaration with declarations of its own");
     expect(() => markdown([xhtml("<p>Open<br></p>")])).toThrow("its XML is damaged");
-    expect(() => markdown([xhtml("<p>Text.</p>", { doctype: "<!DOCTYPE html>\n<!DOCTYPE html>" })])).toThrow("has a document type declaration with declarations of its own");
+    expect(() => markdown([xhtml("<p>Text.</p>", { doctype: "<!DOCTYPE html>\n<!DOCTYPE html>" })])).toThrow("its XML is damaged in OEBPS/text/d1.xhtml");
+    expect(() => markdown([xhtml("<p>Text.</p>", { doctype: '<!DOCTYPE x SYSTEM "a>b" [ <!-- c --> ]>' })])).toThrow("has a document type declaration with declarations of its own");
+    expect(markdown([xhtml("<p>Text.</p>", { doctype: "<?pi x?><!-- <!DOCTYPE note [ -->\n<!DOCTYPE html SYSTEM 'about:legacy-compat'>" })]).text).toBe("Text.\n");
+    // A prolog that never ends, or a declaration that never closes, is damage.
+    for (const doctype of ["<!-- never closed", "<?pi never closed", "<!DOCTYPE html"]) {
+      expect(() => markdown([`<?xml version="1.0"?>${doctype}`])).toThrow("its XML is damaged");
+    }
     expect(markdown([xhtml("<p>Text.</p>", { doctype: "<!-- made by hand -->\n<!doctype html>" })]).text).toBe("Text.\n");
   });
 
@@ -201,52 +235,36 @@ describe("epubMarkdown", () => {
     const parts = [1, 2, 3].map((index) => ({ name: `OEBPS/text/d${index}.xhtml`, content: Buffer.from(xhtml(`<p>Part ${index}.</p>`)), size: declared }));
     const opf = packageXml(parts.map((_, index) => ({ id: `d${index + 1}`, href: `text/d${index + 1}.xhtml` })));
     expect(declared * parts.length).toBeGreaterThan(MAX_EPUB_TEXT_BYTES);
-    const zip = rawZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts]);
+    const zip = declaredZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts]);
     expect(() => epubMarkdown(zip)).toThrow(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
     // The same file with honest sizes reads.
-    const honest = rawZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts.map(({ size, ...part }) => part)]);
+    const honest = declaredZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts.map(({ size, ...part }) => part)]);
     expect(epubMarkdown(honest).text).toBe("Part 1.\n\nPart 2.\n\nPart 3.\n");
   });
-});
 
-// A zip of deflated entries, written by hand so an entry can declare a
-// size other than its own (`size`).
-function rawZip(entries) {
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = Buffer.from(entry.name);
-    const data = zlib.deflateRawSync(entry.content);
-    const crc = crc32(entry.content);
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(8, 8);
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(entry.content.length, 22);
-    local.writeUInt16LE(name.length, 26);
-    const central = Buffer.alloc(46);
-    central.writeUInt32LE(0x02014b50, 0);
-    central.writeUInt16LE(8, 10);
-    central.writeUInt32LE(crc, 16);
-    central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(entry.size ?? entry.content.length, 24);
-    central.writeUInt16LE(name.length, 28);
-    central.writeUInt32LE(offset, 42);
-    locals.push(local, name, data);
-    centrals.push(central, name);
-    offset += local.length + name.length + data.length;
-  }
-  const directory = Buffer.concat(centrals);
-  const end = Buffer.alloc(22);
-  end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(directory.length, 12);
-  end.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, directory, end]);
-}
+  test("counts the package and the container toward the limit too", () => {
+    // The spine alone fits; with a 20 MB package it does not.
+    const declared = 15 * 1024 * 1024;
+    const parts = [1, 2, 3].map((index) => ({ name: `OEBPS/text/d${index}.xhtml`, content: Buffer.from(xhtml(`<p>Part ${index}.</p>`)), size: declared }));
+    const opf = packageXml(parts.map((_, index) => ({ id: `d${index + 1}`, href: `text/d${index + 1}.xhtml` }))).replace("<metadata/>", `<metadata/><!--${"x".repeat(20 * 1024 * 1024)}-->`);
+    expect(declared * parts.length).toBeLessThan(MAX_EPUB_TEXT_BYTES);
+    const zip = declaredZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER) }, { name: "OEBPS/content.opf", content: Buffer.from(opf) }, ...parts]);
+    expect(() => epubMarkdown(zip)).toThrow(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+    // A part that says it is larger than the whole limit is refused before
+    // it is inflated.
+    const container = declaredZip([{ name: "META-INF/container.xml", content: Buffer.from(CONTAINER), size: MAX_EPUB_TEXT_BYTES + 1 }]);
+    expect(() => epubMarkdown(container)).toThrow(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+  });
+
+  test("stops once the markdown passes its limit, and names a damaged document", () => {
+    const bodies = ["<p>One short paragraph.</p>", "<p>Another.</p><hr/><p>And more.</p>"];
+    expect(markdown(bodies).text).toBe("One short paragraph.\n\nAnother.\n\n* * *\n\nAnd more.\n");
+    // The whole text is 49 bytes.
+    expect(epubMarkdown(epubBytes(bodies), { maxTextBytes: 49 }).text).toBe("One short paragraph.\n\nAnother.\n\n* * *\n\nAnd more.\n");
+    expect(() => epubMarkdown(epubBytes(bodies), { maxTextBytes: 48 })).toThrow("its text comes to more than the 48 byte limit as markdown");
+    expect(() => markdown(["<p>Fine.</p>", "<p>Open<br></p>"])).toThrow("its XML is damaged in OEBPS/text/d2.xhtml");
+  });
+});
 
 describe("story import of an .epub", () => {
   test("a built EPUB imports back to the same chapter prose", () => {
@@ -275,6 +293,17 @@ describe("story import of an .epub", () => {
     const json = importCli(dir, "book.epub", "--title", "Trains", "--dir", "trains-json", "--json");
     expect(json.code).toBe(0);
     expect(JSON.parse(json.out).diagnostics).toEqual([expect.objectContaining({ code: "import-content-left-out", severity: "warning", file: null, source: path.join(dir, "book.epub") })]);
+  });
+
+  test("a folder imports its EPUB files with its markdown", () => {
+    const dir = makeTempDir();
+    const source = path.join(dir, "drafts");
+    fs.mkdirSync(source);
+    epubFile(path.join(source, "01-arrival.epub"), ["<h1>Chapter 1: Arrival</h1><p>She came by the night train.</p>"]);
+    fs.writeFileSync(path.join(source, "02-departure.md"), "# Chapter 2: Departure\n\nShe left by the morning one.\n");
+    expect(importCli(dir, "drafts", "--title", "Trains", "--dir", "trains").code).toBe(0);
+    expect(chapterText(path.join(dir, "trains", "chapters", "chapter-01.md"))).toBe("She came by the night train.");
+    expect(chapterText(path.join(dir, "trains", "chapters", "chapter-02.md"))).toBe("She left by the morning one.");
   });
 
   test("an .epub that is not an EPUB is a usage error that names the file", () => {
