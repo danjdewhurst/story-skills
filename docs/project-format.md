@@ -392,6 +392,7 @@ tense: past
 | `cli-defaults` | list of mappings | no | Default flags for `story` commands. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `severity` | list of mappings | no | Named warnings promoted to errors or turned off. See [CLI defaults and severity](#cli-defaults-and-severity). |
 | `queries` | list of mappings | no | Named `story list` filters, run with `story list --query <name>`. See [Saved queries](#saved-queries). |
+| `checks` | list of mappings | no | Rules of the project's own, which `story continuity` and `story check` run. See [Project checks](#project-checks). |
 | `build-style` | list of mappings | no | How the EPUB, HTML review copy, and print interior look: a `preset` (`classic`, `modern`, or `elegant`) and overrides for `body-font`, `heading-font`, `heading-style`, `scene-break`, `drop-caps`, `paragraphs`, and an extra `css` file inside the project. Unset, builds look as they always have. The Shunn and DOCX builds ignore it. See [Build styles](manuscripts.md#build-styles). |
 | `cover` | path | no | Cover image inside the project: `.jpg`, `.jpeg`, `.png`, `.gif`, or `.webp`, holding the image its extension names. `story build --format epub` embeds it, and `--out` never replaces it. |
 | `ifid` | UUID | no | The interactive fiction id `story build --format twee` and `--format ink` write, a version 4 UUID such as `3F2C9A61-7B1D-4E8A-9C3B-2A6D5E4F1B07`. Without it the build derives one from the story id, the same on every build, and warns with the line to add: a title change changes the derived IFID, and two books with the same title share it. `story validate` and the build error on a value that is not a version 4 UUID. See [Branching chapters](#branching-chapters). |
@@ -546,7 +547,7 @@ A flag given on the command line always wins, so with the entry above `story bui
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
-| `severity[].warning` | warning code | yes | A warning code from the [CLI reference](cli-reference.md#finding-codes). Give each code once. |
+| `severity[].warning` | warning code | yes | A warning code from the [CLI reference](cli-reference.md#finding-codes), or the `custom-<id>` code of a [project check](#project-checks) whose `level` is `warning`. Give each code once. |
 | `severity[].level` | enum | yes | `error` reports the warning as an error, with its code in brackets, so the command exits 1; with `--json` it is a diagnostic with `severity: "error"` and `ok` is false. `off` reports it as `dismissed`, with the note `severity <code> is off in story.md` (the `exemption` of its `--json` diagnostic). `warning` keeps the default. |
 
 Every warning has a code, printed in brackets at the end of its `warning:` line; the [CLI reference](cli-reference.md#finding-codes) lists them all, by command. An override applies wherever its warning is reported: in the command that checks it, in the checks `report`, `next`, and `doctor` summarise, and in the warnings `build`, `export`, `context`, `add`, `rename`, `move`, `remove`, and `list --query` print after their output (a promoted one makes them exit 1). Errors cannot be overridden: an error means the project is broken or a check failed, not a matter of house style, so an entry naming an error code is rejected. `init` and `import` run before there is a `story.md` to read, so an entry naming one of their warnings (`kept-story-options`, `unsplit-chapter-lines`) is rejected. To dismiss one finding rather than every warning of a code, add a [continuity exemption](#exemptions) with the `code` and the finding's `file` or `chapter`; exemptions apply before `severity`, so an exempted finding stays dismissed when its code is promoted.
@@ -555,7 +556,7 @@ The eleven codes `severity` accepted before every warning had one keep their nam
 
 The `prose` thresholds are flags (`--max-filter-words`, `--max-adverbs`, `--max-bookisms`), so `cli-defaults` sets them too. See [`story prose`](cli-reference.md#prose). So is `similarity`'s `--min-words` and its `--against` text, so a book can keep its earlier volumes as the default reference (`against: ../book-one`), and `progress`'s `--weeks`, for a longer writing history, and the `--days` of `submissions` and `next`, for a longer or shorter response window. Each command takes its own: set `days` on both entries to keep them in step. A relative `against` here, for `similarity` or `compare`, is read from the project folder, wherever you run the command.
 
-`story validate` errors on a field that is not a list of mappings, an unknown or repeated command, a command or flag that cannot take defaults (including `json`), a flag the command does not accept (with a suggestion for a near miss), a boolean flag with a value other than true or false, a value flag with no value, a `prose` threshold that is not a number 0 or more, a `similarity` `min-words` that is not a whole number 5 or more, a `progress` `weeks` that is not a whole number 1 to 52, a `submissions` or `next` `days` that is not a whole number 1 to 3650, an unknown or repeated warning code, an error code, a level other than `error`, `warning`, or `off`, and any other key in a `severity` entry. While either field is invalid, every command except `validate`, `report`, `next`, and `doctor` (`check` included) refuses to run, lists the problems, and exits 3 (an unusable project; with `--json`, as the JSON error object), so a typo cannot silently drop a severity a CI job relies on; those four ignore both fields and report the problems through validation.
+`story validate` errors on a field that is not a list of mappings, an unknown or repeated command, a command or flag that cannot take defaults (including `json`), a flag the command does not accept (with a suggestion for a near miss), a boolean flag with a value other than true or false, a value flag with no value, a `prose` threshold that is not a number 0 or more, a `similarity` `min-words` that is not a whole number 5 or more, a `progress` `weeks` that is not a whole number 1 to 52, a `submissions` or `next` `days` that is not a whole number 1 to 3650, an unknown or repeated warning code, an error code, a `custom-<id>` code with no check of that id in `checks` or whose check has `level: error`, a level other than `error`, `warning`, or `off`, and any other key in a `severity` entry. While either field is invalid, every command except `validate`, `report`, `next`, and `doctor` (`check` included) refuses to run, lists the problems, and exits 3 (an unusable project; with `--json`, as the JSON error object), so a typo cannot silently drop a severity a CI job relies on; those four ignore both fields and report the problems through validation.
 
 ### Saved queries
 
@@ -584,6 +585,44 @@ queries:
 A filter on a key that the kind does not define and that no file of the kind sets is a warning (`query-unknown-key`), not an error: it may be a misspelling, with the nearest key the kind defines suggested, or a custom key no file sets yet, and a query should not start failing `story check` because another file stopped setting a key. The filter then matches as an unset key, so `key=value` matches nothing and `!key` everything. `story list --query` runs the query and prints the warning after the count. The check waits until every file parses, as `story list` does.
 
 Filters name entities by id, so `story rename`, `story move`, and `story merge` point every filter that compares a reference key with the old id (`pov=mara-quill`, `characters!=mara-quill`) at the new one, as they do the frontmatter references. `story remove` leaves the filters that name the removed id as written and lists them (`stale-query`), since dropping a filter would widen the query.
+
+### Project checks
+
+`checks` adds rules of the project's own to `story continuity` and `story check`, such as "every draft chapter has a `hook`" or "no scene without a `location`". Each rule names a kind and the [`story list`](cli-reference.md#list) filters that describe the problem, so a writer does not have to remember to run a [saved query](#saved-queries) and read what it lists. It is a list of mappings:
+
+```yaml
+checks:
+  - id: chapter-needs-hook
+    kind: chapter
+    where: [status=draft, "!hook"]
+    level: warning
+    message: has no hook
+  - id: scene-needs-location
+    kind: scenes
+    where: ["!location"]
+    level: error
+    message: has no location
+```
+
+| Field | Type | Required | Meaning |
+|-------|------|----------|---------|
+| `checks[].id` | kebab-case id | yes | The check's name, unique in the list. Its findings have the code `custom-<id>`, such as `custom-chapter-needs-hook`. |
+| `checks[].kind` | enum | yes | The kind checked, plural or singular, as `story list` takes it: `chapters`, `scenes`, `characters`, `locations`, `systems`, `factions`, `artifacts`, `arcs`, `questions`, `promises`, `clues`, `terms`, `research`, or `matter`. |
+| `checks[].where` | list of strings | yes | One or more filters in the `--where` syntax, `key=value`, `key!=value`, `key`, or `!key`, that describe the problem. A file that matches every one is reported. Write the list in flow style and quote a `!key` filter, as for `queries`. |
+| `checks[].level` | enum | yes | `error` or `warning`: the level of each finding. |
+| `checks[].message` | string | yes | The text after the file in each finding, such as `has no hook`. |
+
+With the first entry above, a draft chapter with no `hook` gives this line in `story check` and `story continuity`:
+
+```text
+warning: chapters/chapter-03.md has no hook [custom-chapter-needs-hook]
+```
+
+A check's finding ends with its code at either level. The finding is about the matched file, and carries no `chapter`. It is a finding like any other: `story check --strict` fails on a warning, `--json` gives the code as the diagnostic's `code`, the language server shows it on the file, a [`severity`](#cli-defaults-and-severity) entry can promote or turn off a `warning` check's code, and a [continuity exemption](#exemptions) with the code and the `file` dismisses one finding, at either level. A check matches files as `story list` does, with the same code, so `story list --where status=draft --where '!hook' chapter` lists what the check reports. A file that fails to parse is reported on its own and not checked.
+
+`story validate` reports the problems with the list: a field that is not a list of mappings (`field-not-list`, `field-invalid-items`), an id that is missing (`missing-field`), an unquoted number (`field-not-text`), not kebab-case (`id-not-kebab`), or listed twice (`duplicate-check`), a missing `kind`, `where`, `level`, or `message` (`missing-field`), and (`invalid-check`) a kind that is not one of the kinds above, a `where` that is not a list of one or more filters, a filter that does not read as one of the four forms, a `level` other than `error` or `warning`, an empty `message`, or a key other than these five. `story continuity` skips an entry with an error, so a broken entry never stops the run, and runs the first entry of an id listed twice. A filter on a key that the kind does not define and that no file of the kind sets is a warning (`check-unknown-key`), as for `queries`: the check runs, and the filter matches as an unset key.
+
+Checks stay declarative: they compare frontmatter values only, and run no project scripts. `story rename`, `move`, `merge`, and `remove` do not edit a check's filters, so update a filter that names an id by hand.
 
 ### Publishing metadata
 
@@ -1217,7 +1256,7 @@ exemptions:
 |-------|------|----------|---------|
 | `type` | string | yes | Must be `exemption-log`. |
 | `exemptions` | list of mappings | yes | One entry per dismissed finding. An entry matches a finding when every one of `pattern`, `code`, `file`, and `chapter` it sets matches. It needs a `pattern`, or a `code` with a `file`, `chapter`, or `pattern`. |
-| `exemptions[].code` | finding code | no | The finding's [code](cli-reference.md#finding-codes): a warning a `severity` entry can name, or an error `story continuity` reports. An entry with only a `code`, or with a `file` or `chapter` and no `code` or `pattern`, is rejected as too broad. |
+| `exemptions[].code` | finding code | no | The finding's [code](cli-reference.md#finding-codes): a warning a `severity` entry can name, an error `story continuity` reports, or the `custom-<id>` code of a [project check](#project-checks) that `story.md` defines. An entry with only a `code`, or with a `file` or `chapter` and no `code` or `pattern`, is rejected as too broad. |
 | `exemptions[].file` | project-relative path | no | The file the finding is about, as the finding names it (`chapters/chapter-05.md`); either separator matches. No absolute path or `..` segment. |
 | `exemptions[].chapter` | chapter id | no | The chapter the finding shows up in. Only some continuity findings carry one; [Exemptions](continuity.md#exemptions) lists them, and a `chapter` with any other `code` is rejected. |
 | `exemptions[].pattern` | string, at least 4 characters | no | Matched as a substring of the finding text; a `/` or `\` in a path matches either separator. The minimum length stops a short pattern from dismissing whole classes of findings. |

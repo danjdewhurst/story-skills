@@ -51,6 +51,23 @@ export function warn(code, message, file = null, chapter = null) {
   return { code, message, file: portablePath(file), chapter };
 }
 
+// A story.md `checks` entry reports each entity it matches under the code
+// custom-<id>, at the level the entry gives. These codes belong to the
+// project, so FINDING_CODES does not list them: CUSTOM_CODE says what one
+// looks like, and story.md severity and continuity/exemptions.md take one
+// that names a check story.md defines.
+export const CUSTOM_CODE_PREFIX = "custom-";
+export const CUSTOM_CODE = /^custom-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function isCustomCode(code) {
+  return typeof code === "string" && CUSTOM_CODE.test(code);
+}
+
+// The finding a story.md check reports, shaped as err and warn shape one.
+export function customFinding(id, message, file = null) {
+  return { code: `${CUSTOM_CODE_PREFIX}${id}`, message, file: portablePath(file), chapter: null };
+}
+
 export const FINDING_CODES = {
   // Any command that reads a project: a file that cannot be read or parsed
   "unreadable-file": "error",
@@ -121,6 +138,9 @@ export const FINDING_CODES = {
   "duplicate-query": "error",
   "invalid-query": "error",
   "query-unknown-key": "warning",
+  "duplicate-check": "error",
+  "invalid-check": "error",
+  "check-unknown-key": "warning",
   "exemption-pattern-too-short": "error",
   "exemption-unknown-code": "error",
   "exemption-code-not-dismissible": "error",

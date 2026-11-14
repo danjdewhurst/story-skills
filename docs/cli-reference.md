@@ -883,7 +883,7 @@ story check [path] [--strict] [--json]
 
 Runs [`validate`](#validate), [`links`](#links), and [`continuity`](#continuity) over one scan of the project and exits once, with the same [exit codes](#output-streams-and-exit-codes): `1` when any of them reports an error. Each check alone misses problems the others catch: `validate` passes a chapter with `pov: nobody-here`, which only `links` reports.
 
-Each finding is reported once. A file that fails to parse, which every check reports, is listed under `validate`, and a chapter or scene date such as `2024-13-45` is reported as the `validate` error (`invalid-date`), not again as the `continuity` warning (`malformed-date`). [`severity`](#defaults-and-severity-from-storymd) entries in `story.md` and [continuity exemptions](continuity.md#exemptions) apply as they do in each check. While `cli-defaults` or `severity` is invalid, `check` refuses to run and exits 3, as `links` and `continuity` do, rather than pass or fail without the severity a CI job set; `story validate` lists the problems.
+Each finding is reported once. A file that fails to parse, which every check reports, is listed under `validate`, and a chapter or scene date such as `2024-13-45` is reported as the `validate` error (`invalid-date`), not again as the `continuity` warning (`malformed-date`). [`severity`](#defaults-and-severity-from-storymd) entries in `story.md` and [continuity exemptions](continuity.md#exemptions) apply as they do in each check. The project's own [checks](project-format.md#project-checks) in `story.md` run under `continuity`, and `validate` reports the problems with the `checks` list itself. While `cli-defaults` or `severity` is invalid, `check` refuses to run and exits 3, as `links` and `continuity` do, rather than pass or fail without the severity a CI job set; `story validate` lists the problems.
 
 | Option | Effect |
 |---|---|
@@ -979,7 +979,7 @@ These commands read the project and never change story files. The one exception 
 story continuity [path] [--json]
 ```
 
-Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, open questions left unanswered for twelve or more drafted chapters, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), and references in `continuity/state.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
+Runs the deterministic continuity engine over frontmatter: characters appearing after they die (by `died-in`, or by a status [progression](project-format.md#progressions) to `deceased`, resolved in story order), status progressions that contradict `died-in` or `revived-in`, promises and clues paid off before they are planted, questions resolved before they are introduced, planted setups with no payoff, open questions left unanswered for twelve or more drafted chapters, POV characters missing from a chapter's cast or from all of its scenes, `status: cut` characters still listed in a cast, arc, or relationship, destroyed or lost artifacts used later, impossible clock and travel times (including journeys faster than the shortest path through location `routes`, and a character at two different places at the same exact time), references in `continuity/state.md`, and the project's own [checks](project-format.md#project-checks) in `story.md`. Findings matching an entry in `continuity/exemptions.md` are reported as `dismissed` and do not fail the run; an entry matches by the finding's `code`, `file`, `chapter`, or text.
 
 Using a copy of [`examples/the-unraveled-thread`](../examples/the-unraveled-thread/), which is broken on purpose:
 
@@ -3565,6 +3565,8 @@ The server never writes a project file. Rename and the quick fixes run their com
 
 Every error and warning has a stable kebab-case code. Text output ends each warning line with it, `warning: chapters/chapter-01.md has 1 [TODO marker in its prose, ... [todo-markers]`, and `--json` gives it as each diagnostic's `code`. A [`severity`](#defaults-and-severity-from-storymd) entry in `story.md` names a warning by its code. Codes never change once released: a reworded message keeps its code, and a code is never reused for another rule.
 
+A [project check](project-format.md#project-checks) in `story.md` reports under its own code, `custom-<id>`, such as `custom-chapter-needs-hook`. `severity` and exemptions take that code as they take a built-in one, but only when `story.md` defines the check.
+
 An error means the project is broken or a check failed, so it cannot be turned down: `severity` accepts only warning codes. A [continuity exemption](continuity.md#exemptions) can name a code too, with a `file`, `chapter`, or `pattern` to narrow it to one finding; it can dismiss any warning code `severity` accepts and the errors `continuity` reports. A code can appear under more than one command, such as `unreachable-chapter`, which `links` reports and a Twee `build` repeats; an override applies wherever it is reported. `check`, `report`, `next`, and `doctor` run `validate`, `links`, and `continuity`, so they report those commands' codes.
 
 **Codes by command**
@@ -3650,6 +3652,9 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `duplicate-query` | error | `story.md` `queries` lists a query name twice. |
 | `invalid-query` | error | A `story.md` `queries` entry has an unknown kind, a `where` that is not a list of one or more filters, a filter `--where` could not read, or a key other than `name`, `kind`, and `where`. See [Saved queries](project-format.md#saved-queries). |
 | `query-unknown-key` | warning | A `story.md` `queries` filter names a key its kind does not define and no file of the kind sets, so it matches as an unset key. `list --query` reports it too. |
+| `duplicate-check` | error | `story.md` `checks` lists a check id twice. |
+| `invalid-check` | error | A `story.md` `checks` entry has an unknown kind, a `where` that is not a list of one or more filters, a filter `--where` could not read, a `level` other than `error` or `warning`, an empty `message`, or a key other than `id`, `kind`, `where`, `level`, and `message`. See [Project checks](project-format.md#project-checks). |
+| `check-unknown-key` | warning | A `story.md` `checks` filter names a key its kind does not define and no file of the kind sets, so it matches as an unset key. |
 | `exemption-pattern-too-short` | error | A continuity exemption pattern is under 4 characters. |
 | `exemption-unknown-code` | error | A continuity exemption's `code` is not a finding code. |
 | `exemption-code-not-dismissible` | error | A continuity exemption's `code` names an error that `continuity` does not report, or a warning `init` or `import` reports: neither can be exempted. |
@@ -3798,6 +3803,8 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `route-same-time` | error | A character is at two places at the same moment. |
 | `route-too-fast` | error | A character moves between places faster than the fastest route allows. |
 | `travel-too-far` | warning | A scene's `travel-hours` is too short to cover the distance from the previous scene by the scene's `travel-mode`, or by the fastest mode. See [Distance travel](project-format.md#distance-travel). |
+
+`continuity` also reports the findings of the project's own [checks](project-format.md#project-checks) in `story.md`. Each has the code `custom-<id>`, from the check's `id`, at the check's `level`, so this table cannot list them.
 
 ### Codes: series
 

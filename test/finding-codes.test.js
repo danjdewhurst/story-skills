@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { severityCodes } from "../src/config.js";
-import { CHAPTER_CODES, CONTINUITY_ERROR_CODES, FINDING_CODES, codesAt, err, exemptionCodes, warn } from "../src/findings.js";
+import { CHAPTER_CODES, CONTINUITY_ERROR_CODES, CUSTOM_CODE, FINDING_CODES, codesAt, err, exemptionCodes, warn } from "../src/findings.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const srcDir = path.join(repoRoot, "src");
@@ -130,10 +130,13 @@ describe("finding codes", () => {
 
   test("the schemas list the codes", () => {
     const result = JSON.parse(fs.readFileSync(path.join(repoRoot, "schemas", "result.schema.json"), "utf8"));
-    expect(result.$defs.diagnostic.properties.code.enum).toEqual(Object.keys(FINDING_CODES));
+    expect(result.$defs.diagnostic.properties.code.anyOf[0].enum).toEqual(Object.keys(FINDING_CODES));
+    expect(result.$defs.diagnostic.properties.code.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
     const story = JSON.parse(fs.readFileSync(path.join(repoRoot, "schemas", "story.schema.json"), "utf8"));
-    expect(story.properties.story.properties.severity.items.properties.warning.enum).toEqual(severityCodes());
-    expect(story.$defs.exemption.properties.code.enum).toEqual(exemptionCodes());
+    expect(story.properties.story.properties.severity.items.properties.warning.anyOf[0].enum).toEqual(severityCodes());
+    expect(story.properties.story.properties.severity.items.properties.warning.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
+    expect(story.$defs.exemption.properties.code.anyOf[0].enum).toEqual(exemptionCodes());
+    expect(story.$defs.exemption.properties.code.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
   });
 
   test("CONTINUITY_ERROR_CODES lists the errors story continuity raises, and not its scan's unreadable-file", () => {

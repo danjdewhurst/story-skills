@@ -16,7 +16,7 @@ For flags and exit codes of every command, see the [CLI reference](cli-reference
 
 - [At a glance](#at-a-glance)
 - [Find your message](#find-your-message)
-- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [status progressions](#status-progressions), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [distance travel](#distance-travel), [worked example](#worked-example-fixing-the-unraveled-thread)
+- [Story continuity](#story-continuity): [how findings are reported](#how-findings-are-reported), [deaths](#deaths-and-posthumous-appearances), [status progressions](#status-progressions), [casts](#casts-and-locations), [promises, questions, and clues](#promises-questions-and-clues), [state](#continuity-state), [prop custody](#prop-custody), [clock](#clock-and-travel-time), [route travel](#route-travel), [distance travel](#distance-travel), [project checks](#project-checks), [worked example](#worked-example-fixing-the-unraveled-thread)
 - [Exemptions](#exemptions)
 - [Story knowledge](#story-knowledge)
 - [Story timeline](#story-timeline)
@@ -82,6 +82,7 @@ Every finding starts with a severity and, usually, a file path. Match the rest o
 | `puts <character> at <location> …, but the fastest route takes`, `at the same time as` | `continuity` | [Route travel](#route-travel) |
 | `gives <character> …h to travel …`, `travel-mode … is not a travel mode` | `continuity`, `validate` | [Distance travel](#distance-travel) |
 | `dismissed:` | `continuity`, and any command reporting a warning an exemption names by code | [Exemptions](#exemptions) |
+| a code in brackets that starts with `custom-` | `continuity` | [Project checks](#project-checks) |
 | `has no hook`, `end in an outright yes`, `with no sequel`, `end on resolution`, `the median chapter` | `pacing` | [Pacing findings](#pacing-findings) |
 | `never planted: readers cannot play fair`, `late plant`, `lists no characters`, `red herring with no payoff`, `no clue is significance-delayed` | `clues` | [Fair-play findings](#fair-play-findings) |
 | `filter words per 1,000`, `-ly adverbs per 1,000`, `said-bookism dialogue tags`, `sentence lengths are uniform`, `have similar first names` | `prose` | [What each line measures](#what-each-line-measures) |
@@ -593,6 +594,27 @@ warning: scenes/chapter-02-scene-01.md gives ines-achebe 0.5h to travel 2.5 mile
 
 The message says `in a straight line on the map` when the distance comes from `coordinates`, and `by the listed distances` when it is a chain of `distances` entries through other places. `travel-hours` is shown as written. Distances are shown to 0.1, rounded down, and the hours needed to 0.1h, rounded up. A travel mode with `per-day` also counts whole days: by a horse that covers 15 leagues a day at 3 leagues an hour, 30 leagues takes at least a day and 5 hours (29h on a 24-hour day). The clock check and this check join up: `travel-too-fast` makes sure the dated scenes leave room for `travel-hours`, and `travel-too-far` makes sure `travel-hours` covers the distance.
 
+### Project checks
+
+A project can add rules of its own to `story continuity` with `checks` in `story.md`: "every draft chapter has a `hook`", "no scene without a `location`", or "every clue names a `payoff`". Each check gives an `id`, the `kind` it checks, the [`story list`](cli-reference.md#list) filters (`where`) that describe the problem, a `level`, and a `message`:
+
+```yaml
+checks:
+  - id: clue-needs-payoff
+    kind: clue
+    where: ["!payoff"]
+    level: warning
+    message: names no payoff chapter
+```
+
+Every file of the kind that matches all the filters is a finding with the code `custom-<id>`, at the check's level:
+
+```text
+warning: continuity/clues/the-torn-ledger.md names no payoff chapter [custom-clue-needs-payoff]
+```
+
+Fix the file, or, if the gap is deliberate, add an [exemption](#exemptions) with `code: custom-clue-needs-payoff` and the file. A `severity` entry in `story.md` can promote a `warning` check's code to an error or turn it off, and `story check --strict` fails on it as on any warning. `story validate` reports a broken entry, such as an unknown kind, a filter it cannot read, a repeated id, or a missing message, and `story continuity` skips that entry. The [project format reference](project-format.md#project-checks) has every field and rule.
+
 ### Worked example: fixing the unraveled thread
 
 Each finding in the [example output](#story-continuity) has a direct fix:
@@ -665,7 +687,7 @@ How matching works:
 - The pattern matches as written, including leading or trailing spaces, so `" ann, who died"` does not also dismiss the same finding for `joann`.
 - An entry `story validate` rejects never dismisses anything, so a typo in one key cannot widen the entry to everything its other keys match.
 
-`story validate` checks the file: `type` must be `exemption-log` and `exemptions` a list of mappings, and each entry needs a non-empty `reason` and at least one of `pattern`, `code`, `file`, and `chapter`. An entry key other than `pattern`, `code`, `file`, `chapter`, and `reason` is an error, since ignoring it would widen the entry. A key that looks like a misspelled one, such as `Code` or `files`, is `exemption-misspelled-key`; any other, such as `file_path` or `scene`, is `exemption-unknown-key`. A `pattern` must be at least 4 characters after trimming whitespace (`exemption-pattern-too-short`). A `code` must be a finding code (`exemption-unknown-code`) that an exemption can dismiss: a warning a `severity` entry can name, or an error `continuity` reports (`exemption-code-not-dismissible`). A `file` must be relative to the project root, with no `..` segment (`exemption-file-not-relative`), and a `chapter` a kebab-case id. An entry with only a `code` is rejected as too broad (`exemption-too-broad`): it would dismiss every finding of that rule, so add a `file`, `chapter`, or `pattern`, or, for a warning, set its `severity` to `off` in `story.md`. So is an entry with a `file` or `chapter` but neither `code` nor `pattern`, which would dismiss every error and warning about that file or chapter. A `chapter` with a `code` whose findings carry no chapter could never match, so it is an error too (`exemption-chapter-not-carried`): use `file`. `story validate` warns (`stale-exemption`) when a `file` is not a file in the project (a folder never matches) or a `chapter` is not a chapter in `chapters/`, since the entry then matches nothing.
+`story validate` checks the file: `type` must be `exemption-log` and `exemptions` a list of mappings, and each entry needs a non-empty `reason` and at least one of `pattern`, `code`, `file`, and `chapter`. An entry key other than `pattern`, `code`, `file`, `chapter`, and `reason` is an error, since ignoring it would widen the entry. A key that looks like a misspelled one, such as `Code` or `files`, is `exemption-misspelled-key`; any other, such as `file_path` or `scene`, is `exemption-unknown-key`. A `pattern` must be at least 4 characters after trimming whitespace (`exemption-pattern-too-short`). A `code` must be a finding code (`exemption-unknown-code`) that an exemption can dismiss: a warning a `severity` entry can name, or an error `continuity` reports (`exemption-code-not-dismissible`). The `custom-<id>` code of a [project check](#project-checks) is accepted at either level, and is `exemption-unknown-code` when `story.md` `checks` has no check with that id. A `file` must be relative to the project root, with no `..` segment (`exemption-file-not-relative`), and a `chapter` a kebab-case id. An entry with only a `code` is rejected as too broad (`exemption-too-broad`): it would dismiss every finding of that rule, so add a `file`, `chapter`, or `pattern`, or, for a warning, set its `severity` to `off` in `story.md`. So is an entry with a `file` or `chapter` but neither `code` nor `pattern`, which would dismiss every error and warning about that file or chapter. A `chapter` with a `code` whose findings carry no chapter could never match, so it is an error too (`exemption-chapter-not-carried`): use `file`. `story validate` warns (`stale-exemption`) when a `file` is not a file in the project (a folder never matches) or a `chapter` is not a chapter in `chapters/`, since the entry then matches nothing.
 
 If the file is missing or does not parse, no exemptions apply. If it is refused as a symlink, a device, or a file over 5 MiB, `story continuity` reports that as an error rather than silently applying none. `story report`, `story next`, and `story doctor` count findings after exemptions. `rename` and `move` update the ids in a `pattern`, a `file` that is the renamed or moved entity's own file (or one of a moved chapter's scene files), and a `chapter` that moved, including the chapter of an entry whose scene moves to another chapter, so an entry stays with its finding; `remove` clears a `chapter` naming a removed chapter, as it does every reference field, and warns about entries whose `pattern` or `file` names the removed entity.
 
