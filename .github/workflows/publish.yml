@@ -134,9 +134,11 @@ jobs:
           ref: ${{ needs.verify.outputs.sha }}
           persist-credentials: false
 
-      # The release binaries embed this Bun, so it is always downloaded,
-      # never restored from the Actions cache another workflow on main
-      # could write.
+      # The native release binaries embed this Bun, so it is always
+      # downloaded, never restored from the Actions cache another workflow
+      # on main could write. A cross-compiled target (the x64 baseline and
+      # musl builds) embeds the runtime that `bun build` downloads for that
+      # target at this Bun's version instead.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:

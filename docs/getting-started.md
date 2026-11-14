@@ -169,6 +169,12 @@ sha256sum -c --ignore-missing story-skills_<version>_checksums.txt        # Linu
 shasum -a 256 -c --ignore-missing story-skills_<version>_checksums.txt    # macOS
 ```
 
+Alpine's BusyBox `sha256sum` has no `--ignore-missing`, so pick out the line for your archive first:
+
+```shell
+grep " story-skills_<version>_linux_<arch>_musl.tar.gz$" story-skills_<version>_checksums.txt | sha256sum -c
+```
+
 Releases after 0.21.0 also carry a signed build provenance attestation for each archive and for the checksums file. With the [GitHub CLI](https://cli.github.com/), check that a download was built by this repository's release workflow, not only that it matches the checksums file:
 
 ```shell
