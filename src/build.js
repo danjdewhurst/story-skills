@@ -873,6 +873,8 @@ export function bookChapters(project, action = "build") {
       numbered,
       displayNumber,
       heading: numbered ? chapterHeading(displayNumber, title, meta.labels, meta.chapterNumerals) : title,
+      // A verse chapter keeps every line break (see isVerseChapter).
+      verse: chapter.verse === true,
       // LF only, so a CRLF checkout builds the same bytes as an LF one. The
       // first paragraph keeps a typed indent (see trimBlankLines).
       body: trimBlankLines(chapterProse(markdown.body).replace(/\r\n?/g, "\n"))

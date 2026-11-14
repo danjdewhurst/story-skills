@@ -372,6 +372,9 @@ export function validateChapters(project, errors, warnings) {
     errors.push(...chapterChoices(chapter, label).problems);
     if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
       errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
+    }
+    if (data.verse !== undefined && typeof data.verse !== "boolean") {
+      errors.push(err("field-not-boolean", `${label} verse must be true or false`, label));
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
       errors.push(err("unnumbered-without-title", `${label} is unnumbered (numbered: false), so it needs a title to print as its heading`, label));
     }

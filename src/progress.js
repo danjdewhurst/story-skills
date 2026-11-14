@@ -100,7 +100,9 @@ export function cleanSessions(value) {
 // the last session carry both counts too. A session without the unit's
 // count (one logged before the book was counted in characters) is left out
 // of `sessions`, the last session, and the pace.
-export function computeProgress({ unit = "words", words, characters = null, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
+// `lines` and `verseChapters` are the lines of the verse chapters and how
+// many there are, or null and 0 in a book without verse.
+export function computeProgress({ unit = "words", words, characters = null, lines = null, verseChapters = 0, target, deadline, today, chapters, sessions, dailyTarget = null, writingDays: scheduled = null, weeks = HISTORY_WEEKS }) {
   const characterBook = unit === "characters";
   const inUnit = (entry) => (characterBook ? entry.characters ?? null : entry.words);
   const length = characterBook ? characters : words;
@@ -110,6 +112,8 @@ export function computeProgress({ unit = "words", words, characters = null, targ
     unit,
     words,
     characterCount: characterBook ? characters : null,
+    lines,
+    verseChapters,
     target: target ?? null,
     percent: target ? (length * 100) / target : null,
     remaining: target ? Math.max(0, target - length) : null,
@@ -254,6 +258,9 @@ export function formatProgress(progress) {
   } else {
     lines.push(`Progress: ${formatNumber(count(progress))} of ${formatNumber(progress.target)} ${noun}s (${formatPercent(progress.percent, 1)}%)`);
     lines.push(`Remaining: ${plural(progress.remaining, noun, formatNumber)}`);
+  }
+  if (progress.lines !== null && progress.lines !== undefined) {
+    lines.push(`Lines: ${formatNumber(progress.lines)} in ${plural(progress.verseChapters, "verse chapter", formatNumber)}`);
   }
 
   if (progress.deadline) {

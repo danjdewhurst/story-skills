@@ -813,6 +813,7 @@ export function projectProgress(root, options = {}) {
       unit: unit.name,
       words,
       characters: counts.characters ?? null,
+      ...verseLines(project),
       target: Number.isInteger(target) && target > 0 ? target : null,
       deadline: typeof data.deadline === "string" ? data.deadline : null,
       today,
@@ -824,6 +825,13 @@ export function projectProgress(root, options = {}) {
     }),
     release: releaseData(release)
   };
+}
+
+// The lines of the verse chapters (see isVerseChapter) and how many there
+// are; lines is null in a book without verse.
+function verseLines(project) {
+  const verse = project.chapters.filter((chapter) => chapter.verse);
+  return { lines: verse.length === 0 ? null : verse.reduce((sum, chapter) => sum + chapter.lineCount, 0), verseChapters: verse.length };
 }
 
 function progressLogFile(sessions, unit) {

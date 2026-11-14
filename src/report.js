@@ -354,7 +354,7 @@ function buildProjectActions(project, validation, links, continuity, displayPath
         hasScene = true;
       }
     }
-    if (!hasScene && !scenesOverridden.has(file)) {
+    if (!hasScene && !chapter.verse && !scenesOverridden.has(file)) {
       chaptersWithoutScenes.push(chapter);
     }
     if (Number.isInteger(chapter.number) && chapter.number > 0) {

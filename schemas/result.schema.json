@@ -539,7 +539,7 @@
     },
     "data-write": {
       "type": "object",
-      "$comment": "The write commands. The rest of data is the command's result: kind, id, and file (relative to the project root) for add, rename, remove, move, split, and merge, plus oldId for rename and move, and prose for rename --prose ({ edits: [{ file, line, endLine, column, from, to }], aliases, shared }); newId, title, scenesMoved, renumbered, choiceAdded ({ file, index, text, to }, or null in a linear book), and choicesRetargeted ([{ file, index, text, from, to }], with text null for a choice that has none) for split, whose file is the new chapter; mergedId, scenesMoved, renumbered, and choicesRetargeted for merge; chapters and total for wordcount.",
+      "$comment": "The write commands. The rest of data is the command's result: kind, id, and file (relative to the project root) for add, rename, remove, move, split, and merge, plus oldId for rename and move, and prose for rename --prose ({ edits: [{ file, line, endLine, column, from, to }], aliases, shared }); newId, title, scenesMoved, renumbered, choiceAdded ({ file, index, text, to }, or null in a linear book), and choicesRetargeted ([{ file, index, text, from, to }], with text null for a choice that has none) for split, whose file is the new chapter; mergedId, scenesMoved, renumbered, and choicesRetargeted for merge; chapters and total for wordcount, with lineCount on each verse chapter and lines, their total, when the book has verse.",
       "required": ["dryRun", "changes"],
       "properties": {
         "undone": {
@@ -1496,7 +1496,7 @@
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["id", "number", "words", "characterCount", "scenes", "sequels", "outcomes", "hook", "status"],
+            "required": ["id", "number", "words", "characterCount", "scenes", "sequels", "outcomes", "hook", "status", "verse"],
             "properties": {
               "id": { "type": "string" },
               "words": { "$ref": "#/$defs/count" },
@@ -1513,7 +1513,8 @@
                   "no-and": { "$ref": "#/$defs/count" }
                 }
               },
-              "hook": { "type": "string" }
+              "hook": { "type": "string" },
+              "verse": { "type": "boolean", "description": "True for a verse chapter (a poetry-collection chapter or verse: true), which is left out of every pacing finding and of the median." }
             }
           }
         },
@@ -1522,13 +1523,14 @@
         "medianCharacterCount": { "type": ["number", "null"], "minimum": 0, "description": "The median chapter in characters, or null in a book counted in words. The long and short chapter findings use the median in the unit." },
         "totals": {
           "type": "object",
-          "required": ["scenes", "sequels", "outcomesRecorded", "setbacks", "hooks"],
+          "required": ["scenes", "sequels", "outcomesRecorded", "setbacks", "hooks", "verseChapters"],
           "properties": {
-            "scenes": { "$ref": "#/$defs/count" },
+            "scenes": { "$ref": "#/$defs/count", "description": "Scene units outside verse chapters." },
             "sequels": { "$ref": "#/$defs/count" },
             "outcomesRecorded": { "$ref": "#/$defs/count" },
             "setbacks": { "$ref": "#/$defs/count" },
-            "hooks": { "$ref": "#/$defs/count" }
+            "hooks": { "$ref": "#/$defs/count", "description": "Prose chapters with a hook." },
+            "verseChapters": { "$ref": "#/$defs/count", "description": "Verse chapters, which the findings leave out." }
           }
         }
       }
@@ -1574,7 +1576,7 @@
     "data-progress": {
       "type": "object",
       "$comment": "target, percent, remaining, deadline.perDay, lastSession.since, and pace are in unit; words is the word count in every book.",
-      "required": ["logged", "unit", "words", "characterCount", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily", "release", "dryRun", "changes"],
+      "required": ["logged", "unit", "words", "characterCount", "lines", "verseChapters", "target", "percent", "remaining", "deadline", "chapters", "sessions", "lastSession", "pace", "projected", "daily", "release", "dryRun", "changes"],
       "properties": {
         "release": { "$ref": "#/$defs/release" },
         "logged": {
@@ -1585,6 +1587,8 @@
         "unit": { "enum": ["words", "characters"], "description": "The book's count unit: characters for Chinese and Japanese, or story.md count-unit; words otherwise." },
         "words": { "$ref": "#/$defs/count" },
         "characterCount": { "type": ["integer", "null"], "minimum": 0, "description": "The manuscript in characters, or null in a book counted in words." },
+        "lines": { "type": ["integer", "null"], "minimum": 0, "description": "The lines of the verse chapters, or null in a book without verse." },
+        "verseChapters": { "$ref": "#/$defs/count", "description": "The verse chapters (a poetry-collection's chapters, or chapters with verse: true)." },
         "target": { "type": ["integer", "null"] },
         "percent": { "type": ["number", "null"] },
         "remaining": { "type": ["integer", "null"] },

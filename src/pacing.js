@@ -31,6 +31,10 @@ export function buildPacing(project) {
   const units = [];
 
   for (const chapter of chapters) {
+    // A verse chapter (a poem, see isVerseChapter) is listed, but its
+    // scenes, hook, and length are left out of every finding: they are
+    // fiction measures.
+    const verse = chapter.verse === true;
     const scenes = project.scenes
       .filter((scene) => scene.chapter === chapter.id)
       .sort((left, right) => left.scene - right.scene || left.id.localeCompare(right.id, "en"));
@@ -39,7 +43,9 @@ export function buildPacing(project) {
       if (!scene.sequel && SCENE_OUTCOMES.has(scene.outcome)) {
         outcomes[scene.outcome] += 1;
       }
-      units.push(scene);
+      if (!verse) {
+        units.push(scene);
+      }
     }
     rows.push({
       id: chapter.id,
@@ -50,9 +56,10 @@ export function buildPacing(project) {
       sequels: scenes.filter((scene) => scene.sequel).length,
       outcomes,
       hook: chapter.hook,
-      status: chapter.status
+      status: chapter.status,
+      verse
     });
-    if (chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
+    if (!verse && chapter.hook === "" && DRAFTED_STATUSES.has(chapter.status)) {
       warnings.push(warn("pacing-no-hook", `${chapter.id} has no hook: record how the chapter ending pulls the reader on`, files.get(chapter.id)));
     }
   }
@@ -78,7 +85,7 @@ export function buildPacing(project) {
   flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
 
   let resolutions = [];
-  for (const row of rows) {
+  for (const row of rows.filter((entry) => !entry.verse)) {
     if (row.hook === "resolution") {
       resolutions.push(row);
     } else {
@@ -88,7 +95,7 @@ export function buildPacing(project) {
   }
   flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
 
-  const written = rows.filter((row) => inUnit(row) > 0);
+  const written = rows.filter((row) => !row.verse && inUnit(row) > 0);
   const median = medianOf(written.map(inUnit));
   if (written.length >= 3) {
     for (const row of written) {
@@ -104,14 +111,15 @@ export function buildPacing(project) {
   return {
     unit: characterBook ? "characters" : "words",
     rows,
-    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => row.words > 0).map((row) => row.words))) : formatMedian(median),
+    medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => !row.verse && row.words > 0).map((row) => row.words))) : formatMedian(median),
     medianCharacterCount: characterBook ? formatMedian(median) : null,
     totals: {
       scenes: units.filter((unit) => !unit.sequel).length,
       sequels: units.filter((unit) => unit.sequel).length,
       outcomesRecorded: recorded.length,
       setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
-      hooks: rows.filter((row) => row.hook !== "").length
+      hooks: rows.filter((row) => !row.verse && row.hook !== "").length,
+      verseChapters: rows.filter((row) => row.verse).length
     },
     warnings
   };
@@ -147,8 +155,11 @@ export function formatPacing(pacing) {
   const { totals } = pacing;
   const characterBook = pacing.unit === "characters";
   const setbackShare = totals.outcomesRecorded === 0 ? "no outcomes recorded" : `${Math.round((totals.setbacks * 100) / totals.outcomesRecorded)}% of recorded outcomes are setbacks or complications`;
+  // Verse chapters are left out of the measures, so the hook share is of
+  // the prose chapters.
+  const verse = totals.verseChapters ?? 0;
   const lines = [
-    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length, "chapter")} with hooks`,
+    `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length - verse, verse > 0 ? "prose chapter" : "chapter")} with hooks${verse > 0 ? ` (${plural(verse, "verse chapter")} left out)` : ""}`,
     `Outcomes: ${setbackShare}`,
     characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
@@ -170,7 +181,7 @@ export function formatPacing(pacing) {
   const cellText = (column, text) => (column.left ? text.padEnd(column.width) : text.padStart(column.width));
   lines.push(`${columns.map((column) => column.title.padEnd(column.width)).join("  ")}  Hook`);
   for (const row of pacing.rows) {
-    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.hook || "-"}`);
+    lines.push(`${columns.map((column) => cellText(column, column.value(row))).join("  ")}  ${row.verse ? "(verse)" : row.hook || "-"}`);
   }
   return `${lines.join("\n")}\n`;
 }

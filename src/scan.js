@@ -17,7 +17,7 @@ import {
   setextSceneBreakLines,
   titleCaseSlug
 } from "./markdown.js";
-import { countUnit } from "./forms.js";
+import { countUnit, isVerseChapter } from "./forms.js";
 import { PROGRESS_FILE } from "./progress-file.js";
 import { languagePack, projectLanguage } from "./languages/index.js";
 import { withStyleLists } from "./languages/style.js";
@@ -354,9 +354,13 @@ export function scanProject(root) {
       declaredWordCount: data["word-count"] === undefined ? 0 : Number.isInteger(data["word-count"]) ? data["word-count"] : null,
       wordCountMissing: data["word-count"] === undefined,
       targetWords: Number.isInteger(data["target-words"]) && data["target-words"] > 0 ? data["target-words"] : 0,
+      // A verse chapter keeps its line breaks in builds, counts its lines,
+      // and is left out of the fiction-only advisories (see isVerseChapter).
+      verse: isVerseChapter(story.data, data),
       // wordCount, and the length in the project's count unit, which every
-      // measure (progress, pacing, form ranges, registries) uses.
-      ...chapterLength(unit, data, markdown),
+      // measure (progress, pacing, form ranges, registries) uses, and in a
+      // verse chapter lineCount.
+      ...chapterLength(unit, data, markdown, isVerseChapter(story.data, data)),
       unclosedComment: hasUnclosedComment(chapterProse(markdown.body)),
       outlineRunsOn: outlineRunsIntoProse(markdown.body),
       todoMarkers: countTodoMarkers(chapterProse(markdown.body)),

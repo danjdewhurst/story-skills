@@ -2088,7 +2088,7 @@ function attemptChapter(context, ops, manuscript) {
 
 // Whether one paragraph's markdown reads back as its own text.
 function readsAlone(source, text, key, manuscript) {
-  return sameKeys(readKeys(text.split(source.eol).join("\n"), manuscript), [key]);
+  return sameKeys(readKeys(text.split(source.eol).join("\n"), manuscript, source.verse), [key]);
 }
 
 // Each current paragraph's review-copy label (ch03-p12); a scene break has
@@ -2195,7 +2195,9 @@ function chapterSource(project, chapter, builtBody) {
       groupsOfLines.at(-1).push(line);
     }
   }
-  const expected = wordParagraphs(builtBody);
+  // A verse chapter prints every line break (see isVerseChapter).
+  const verse = chapter.verse === true;
+  const expected = wordParagraphs(builtBody, verse);
   const blocks = [];
   const itemBlock = [];
   const printed = [];
@@ -2206,7 +2208,7 @@ function chapterSource(project, chapter, builtBody) {
     const code = first.code;
     // A fence longer than any run of backticks in the code.
     const fence = "`".repeat(strippedText.replace(/[^`]/g, "").length + 3);
-    const items = wordParagraphs(code ? `${fence}\n${strippedText}\n${fence}` : strippedText.replace(/\r\n?/g, "\n"));
+    const items = wordParagraphs(code ? `${fence}\n${strippedText}\n${fence}` : strippedText.replace(/\r\n?/g, "\n"), verse);
     const start = proseOffset + offsets[first.start];
     const end = proseOffset + offsets[last.start + last.text.length - 1] + 1;
     const text = raw.slice(start, end);
@@ -2224,6 +2226,7 @@ function chapterSource(project, chapter, builtBody) {
   return {
     raw,
     path: chapter.file,
+    verse,
     proseOffset,
     mapped: sameKeys(printed, expected),
     codes: expected.map((paragraph) => paragraph.code === true),
@@ -2410,21 +2413,21 @@ function readsBack(text, source, planned, manuscript) {
   const body = () => parseFrontmatter(text, "chapter").body;
   return text.slice(0, proseOffset) === raw.slice(0, proseOffset)
     && text.length - body().length + proseStart(body()) === proseOffset
-    && sameKeys(printedKeys(trimBlankLines(chapterProse(body()).replace(/\r\n?/g, "\n")), manuscript), planned);
+    && sameKeys(printedKeys(trimBlankLines(chapterProse(body()).replace(/\r\n?/g, "\n")), manuscript, source.verse), planned);
 }
 
 // The keys a chapter body's paragraphs read back as, each marked as code or
 // text and as a block quote or not, as plannedKeys marks them.
-function printedKeys(body, manuscript) {
-  const paragraphs = wordParagraphs(body);
-  return readKeys(body, manuscript).map((key, index) => plannedKey({ key, code: paragraphs[index]?.code === true, quote: paragraphs[index]?.quote === true }));
+function printedKeys(body, manuscript, verse = false) {
+  const paragraphs = wordParagraphs(body, verse);
+  return readKeys(body, manuscript, verse).map((key, index) => plannedKey({ key, code: paragraphs[index]?.code === true, quote: paragraphs[index]?.quote === true }));
 }
 
 // The keys of the paragraphs a chapter body prints, as a Word build of it
 // is read back.
-function readKeys(body, manuscript) {
+function readKeys(body, manuscript, verse = false) {
   const trace = [];
-  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "" }] }, trace);
+  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] }, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
   return itemsOf(documentReview(part("word/document.xml"), part("word/styles.xml")), "after")
     .filter((item, index) => trace[index].kind === "paragraph" || trace[index].kind === "scene-break")

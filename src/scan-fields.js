@@ -2,19 +2,22 @@
 // written by hand, chapter and scene numbers, a chapter's length, and line
 // numbers in the file.
 import path from "node:path";
-import { chapterProse, characterCount, wordCount } from "./markdown.js";
+import { chapterProse, characterCount, verseLineCount, wordCount } from "./markdown.js";
 
 // A chapter's word count and its length in the count unit: `count`, the
 // count its frontmatter declares in the unit's field (0 when missing, null
 // when not an integer), and the target in the unit's target field (0 when
 // unset). For a project counted in words these repeat the word fields.
-export function chapterLength(unit, data, markdown) {
+// `verse` marks a verse chapter (see isVerseChapter), which also counts its
+// lines (see verseLineCount); `lineCount` is null in any other chapter.
+export function chapterLength(unit, data, markdown, verse = false) {
   const prose = chapterProse(markdown.body);
   const words = wordCount(prose);
   const declared = data[unit.countField];
   const target = data[unit.targetField];
   return {
     wordCount: words,
+    lineCount: verse ? verseLineCount(prose) : null,
     count: unit.name === "characters" ? characterCount(prose) : words,
     declaredCount: declared === undefined ? 0 : Number.isInteger(declared) ? declared : null,
     countMissing: declared === undefined,
