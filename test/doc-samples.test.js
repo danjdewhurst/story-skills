@@ -20,7 +20,7 @@ const FENCE = /^(\s*)(`{3,}|~{3,})(\w*)\s*$/;
 // the count with the markers.
 const MARKED = {
   "README.md": 1,
-  "docs/cli-reference.md": 69,
+  "docs/cli-reference.md": 70,
   "docs/continuity.md": 22,
   "docs/development.md": 1,
   "docs/getting-started.md": 7,
