@@ -133,8 +133,32 @@ const URL_OR_EMAIL = /(?<![a-z0-9+.-])(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>()[\
 // follow it (`[Foo](https://x.com "Title (x)")`). Text that is not one, such
 // as `[Aside](not a link)`, stays as written, and so do code spans, closed
 // backtick fences, autolinks, and backslash-escaped brackets.
-export function plainLinks(text) {
-  return splitFences(String(text)).map((part) => (part.fenced ? part.text : withoutLinks(part.text))).join("");
+// With `images`, an array, each image `keep` takes ({ alt, destination },
+// alt as written) is kept as an IMAGE_TOKEN and added to the array, for the
+// builds that place images; any other is dropped as before.
+export function plainLinks(text, images = null, keep = () => true) {
+  return splitFences(String(text)).map((part) => (part.fenced ? part.text : withoutLinks(part.text, images, keep))).join("");
+}
+
+// The images in the prose of a body, as [{ alt, destination }], in order:
+// those a build reads (see plainLinks), so none in code.
+export function proseImages(text) {
+  const images = [];
+  plainLinks(text, images);
+  return images;
+}
+
+// The marks around an image's number in text plainLinks keeps images in:
+// private-use characters, which a build strips from the prose it reads
+// first, so a typed one never stands for an image.
+export const IMAGE_START = "\uE002";
+export const IMAGE_END = "\uE003";
+export const IMAGE_TOKEN = /\uE002(\d+)\uE003/g;
+// An image's mark read at one index, for inlineRuns.
+export const IMAGE_AT = /\uE002(\d+)\uE003/y;
+
+function imageToken(index) {
+  return `${IMAGE_START}${index}${IMAGE_END}`;
 }
 
 // ASCII punctuation, which a backslash escapes.
@@ -175,18 +199,24 @@ export function autolinkEnd(text, index) {
 // the `](` of a link nested in it, and a title is read only up to the next
 // quote or parenthesis of its kind: a long run of unclosed `[`, `![`, `](`,
 // or backticks stays linear.
-function withoutLinks(source) {
+function withoutLinks(source, images, keep) {
   let result = "";
   let position = 0;
-  for (const [start, end] of linkCuts(source)) {
+  for (const [start, end, image] of linkCuts(source)) {
     result += source.slice(position, start);
+    if (images !== null && image !== undefined && keep(image)) {
+      result += imageToken(images.length);
+      images.push(image);
+    }
     position = end;
   }
   return result + source.slice(position);
 }
 
 // The [start, end] of the markup that withoutLinks drops, in order and
-// apart: a link's `[` and its `](...)`, or a whole image.
+// apart: a link's `[` and its `](...)`, or a whole image, which carries a
+// third item, { alt, destination }: the alt text as written, and the
+// destination without its angle brackets or backslash escapes.
 function linkCuts(source) {
   const cuts = [];
   for (const [start, end] of inlineBlocks(source)) {
@@ -218,16 +248,19 @@ function linkCuts(source) {
       } else if (character === "]" && openers.length > 0) {
         const opener = openers.pop();
         let linkEnd = -1;
+        const destination = {};
         if ((opener.image || openers.length >= inactive) && source[index + 1] === "(") {
           groups ??= parenGroups(source, start, end);
-          linkEnd = inlineLinkEnd(source, index + 1, end, groups);
+          linkEnd = inlineLinkEnd(source, index + 1, end, groups, destination);
         }
         if (linkEnd === -1) {
           index += 1;
           continue;
         }
         if (opener.image) {
-          cuts.push([opener.start, linkEnd]);
+          const written = source.slice(destination.start, destination.end);
+          const target = (written.startsWith("<") ? written.slice(1, -1) : written).replace(BACKSLASH_ESCAPE, "$1");
+          cuts.push([opener.start, linkEnd, { alt: source.slice(opener.start + 2, index), destination: target }]);
         } else {
           cuts.push([opener.start, opener.start + 1], [index, linkEnd]);
           inactive = openers.length;
@@ -243,9 +276,12 @@ function linkCuts(source) {
   cuts.sort((left, right) => left[0] - right[0]);
   const removed = [];
   let position = 0;
-  for (const [start, end] of cuts) {
+  for (const [start, end, image] of cuts) {
     if (end > position) {
-      removed.push([Math.max(start, position), end]);
+      // An image never starts inside another cut: a link's cuts are its
+      // brackets and destination, and an image in a link's text closes
+      // first, so it is found whole.
+      removed.push(image === undefined ? [Math.max(start, position), end] : [start, end, image]);
       position = end;
     }
   }
@@ -331,8 +367,9 @@ function parenGroups(source, start, end) {
 // parentheses in pairs (`groups`, see parenGroups); the title, after a
 // space, is in `"`, `'`, or `()`. A backslash escapes the character after
 // it in either. Spaces, and one line break with the block quote markers
-// after it, may come between them.
-function inlineLinkEnd(source, open, limit, groups) {
+// after it, may come between them. `destination` gets the start and end
+// of the destination as written, angle brackets and all.
+function inlineLinkEnd(source, open, limit, groups, destination = {}) {
   const escaped = (index) => source[index] === "\\" && ESCAPABLE.test(source[index + 1] ?? "");
   let index = skipLinkSpace(source, open + 1, limit);
   if (source[index] === "<") {
@@ -363,6 +400,8 @@ function inlineLinkEnd(source, open, limit, groups) {
     }
   }
   const destinationEnd = index;
+  destination.start = skipLinkSpace(source, open + 1, limit);
+  destination.end = destinationEnd;
   index = skipLinkSpace(source, index, limit);
   const quote = { "\"": "\"", "'": "'", "(": ")" }[source[index]];
   if (index > destinationEnd && quote !== undefined) {
@@ -413,7 +452,9 @@ export function splitWords(markdown) {
   const urls = [];
   // Code is printed by every build, so its words count; only the fence
   // lines themselves, and markup syntax, are left out (see countedText).
-  const normalized = countedText(plainLinks(String(markdown))).replace(/\uE000/g, " ")
+  // Footnotes are notes on the text, not the text, so their definitions
+  // are left out too (see splitFootnotes).
+  const normalized = countedText(plainLinks(splitFootnotes(String(markdown)).text)).replace(/\uE000/g, " ")
     .replace(URL_OR_EMAIL, (match) => {
       urls.push(match);
       return ` ${URL_PLACEHOLDER} `;
@@ -670,44 +711,282 @@ export function setextSceneBreakLines(markdownBody) {
 }
 
 // A footnote definition (`[^1]: The note.`) as GitHub and Pandoc read one,
-// after its indent (footnoteLines allows three spaces at most). Its label
-// runs to the first `]`, so a test reads the line once.
-const FOOTNOTE_DEFINITION = /^ *\[\^[^\]\n]+\]:/;
+// after its indent (footnoteBlocks allows three spaces at most): its label
+// (group 1), with no space or bracket in it, as a marker's, and the
+// spaces after the colon. Its label runs to the first `]`, so a test reads
+// the line once.
+const FOOTNOTE_DEFINITION = /^ *\[\^([^[\]\s]{1,999})\]:[ \t]*/;
+// A footnote marker (`[^1]`), read at one index.
+export const FOOTNOTE_MARKER = /\[\^([^[\]\s]{1,999})\]/y;
 
-// Body line indexes (counted from 0) of the footnote definitions in the
-// prose, in a block quote too. Builds have no footnotes, so they print a
-// definition and its `[^1]` markers as written, where a markdown viewer
-// shows a footnote. A line in an HTML comment, a closed backtick fence, an
-// HTML block, or indented code is not one.
-export function footnoteLines(markdownBody) {
+// A footnote label as markers and definitions match it: in any letter
+// case, as GitHub and Pandoc match labels.
+export function footnoteLabel(label) {
+  return String(label).toLowerCase();
+}
+
+// The footnote definitions in `prose` (text whose lines are all prose),
+// as { label, start, end, paragraphs }: the label as written, the lines
+// (counted from 0) the definition takes, from `start` up to `end`, and
+// its text as paragraphs of markdown lines. A definition runs on over the
+// lines after it, as a paragraph does, until a blank line, a scene break,
+// a heading, an HTML block, a block quote, or another definition. A note
+// is one paragraph: GitHub and Pandoc read a line indented four columns
+// after a blank line as the note's next paragraph, but a writer may indent
+// every paragraph of the text, so here that line is prose. A definition may
+// sit in a block quote, and its lines lose their quote markers. A line in an HTML comment, a closed backtick fence, an HTML
+// block, or indented code is not one. `masked` is `prose` with comments and
+// fences blanked (see maskMarkup), which the block structure is read from.
+function footnoteBlocks(prose, masked = maskMarkup(prose)) {
+  const lines = String(prose).split("\n");
+  const maskedLines = String(masked).split("\n");
+  const blocks = [];
+  // The HTML block the line before opened or continued, whether a
+  // paragraph is open, which the last kind of HTML block cannot interrupt,
+  // and the definition being read, with `blank` set after a blank line.
+  let html = null;
+  let paragraph = false;
+  let note = null;
+  for (const [index, line] of maskedLines.entries()) {
+    const marker = /^(?: {0,3}>[ \t]?)*/.exec(line)[0];
+    const content = expandTabs(line.slice(marker.length));
+    const text = () => expandTabs(lines[index].slice(Math.min(marker.length, lines[index].length))).trim();
+    if (html !== null) {
+      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
+      continue;
+    }
+    if (content.trim() === "") {
+      paragraph = false;
+      if (note !== null) {
+        note.blank = true;
+      }
+      continue;
+    }
+    const indent = indentOf(content);
+    if (note !== null) {
+      // A block quote that opens below an unquoted note ends it too.
+      const opens = (marker !== "" && !note.quoted) || (indent <= 3 && (FOOTNOTE_DEFINITION.test(content) || breaksParagraph(content) || ATX_HEADING.test(content) || htmlBlock(content, true) !== null));
+      if (!note.blank && !opens) {
+        note.paragraphs.at(-1).push(text());
+        note.end = index + 1;
+        continue;
+      }
+      note = null;
+    }
+    if (indent > 3) {
+      // Indented code, or the open paragraph's text: it changes nothing.
+      continue;
+    }
+    const block = htmlBlock(content, paragraph);
+    if (block !== null) {
+      html = block.end !== null && block.end.test(content) ? null : block;
+      paragraph = false;
+      continue;
+    }
+    const definition = FOOTNOTE_DEFINITION.exec(content);
+    if (definition !== null) {
+      const original = expandTabs(lines[index].slice(Math.min(marker.length, lines[index].length)));
+      note = { label: definition[1], start: index, end: index + 1, paragraphs: [[original.slice(definition[0].length).trim()]], blank: false, quoted: marker !== "" };
+      blocks.push(note);
+      paragraph = false;
+      continue;
+    }
+    paragraph = true;
+  }
+  return blocks.map(({ label, start, end, paragraphs }) => ({ label, start, end, paragraphs: paragraphs.map((lines) => lines.filter((line) => line !== "")).filter((lines) => lines.length > 0) }));
+}
+
+// The lines (counted from 0) of `prose` that footnote definitions take,
+// for story apply, which reads a chapter's prose a block at a time: a
+// definition's lines, its lazy continuation lines included, are the note's,
+// not the text's.
+export function footnoteDefinitionLines(prose) {
+  const lines = new Set();
+  if (!String(prose).includes("[^")) {
+    return lines;
+  }
+  for (const block of footnoteBlocks(String(prose))) {
+    for (let index = block.start; index < block.end; index += 1) {
+      lines.add(index);
+    }
+  }
+  return lines;
+}
+
+// The footnotes of a chapter or matter page's prose, as the builds read
+// them: { text, notes }, where `text` is the prose with each definition's
+// lines blank, and `notes` maps each label (see footnoteLabel) to its
+// first definition, { label, text }, its text as markdown paragraphs
+// apart by a blank line. A later definition of a label is left out, as
+// GitHub leaves it.
+export function splitFootnotes(prose) {
+  const source = String(prose);
+  const notes = new Map();
+  if (!source.includes("[^")) {
+    return { text: source, notes };
+  }
+  const blocks = footnoteBlocks(source);
+  if (blocks.length === 0) {
+    return { text: source, notes };
+  }
+  const lines = source.split("\n");
+  for (const block of blocks) {
+    for (let index = block.start; index < block.end; index += 1) {
+      lines[index] = "";
+    }
+    const label = footnoteLabel(block.label);
+    if (!notes.has(label)) {
+      notes.set(label, { label: block.label, text: block.paragraphs.map((paragraph) => paragraph.join("\n")).join("\n\n") });
+    }
+  }
+  return { text: lines.join("\n"), notes };
+}
+
+// The footnote markers in `text` (`[^1]`), as { label, start, end }, read as
+// inline markdown reads them: none in a code span or an autolink, and none
+// escaped with a backslash. `text` holds no closed fence.
+export function footnoteMarkers(text) {
+  const source = String(text);
+  const found = [];
+  if (!source.includes("[^")) {
+    return found;
+  }
+  const closeSpan = codeSpanCloser(source);
+  for (let index = 0; index < source.length;) {
+    const character = source[index];
+    if (character === "\\" && ESCAPABLE.test(source[index + 1] ?? "")) {
+      index += 2;
+    } else if (character === "`") {
+      let run = index;
+      while (source[run] === "`") {
+        run += 1;
+      }
+      const close = closeSpan(index, run - index);
+      index = close === -1 ? run : close;
+    } else if (character === "<" && autolinkEnd(source, index) !== -1) {
+      index = autolinkEnd(source, index);
+    } else if (character === "[" && source[index + 1] === "^") {
+      FOOTNOTE_MARKER.lastIndex = index;
+      const marker = FOOTNOTE_MARKER.exec(source);
+      if (marker === null) {
+        index += 1;
+      } else {
+        found.push({ label: marker[1], start: index, end: index + marker[0].length });
+        index += marker[0].length;
+      }
+    } else {
+      index += 1;
+    }
+  }
+  return found;
+}
+
+// `text` without the footnote definitions in it and without the markers
+// of the notes they define, as the narration script reads a chapter: a
+// marker with no definition stays as written, as every build prints it.
+export function withoutFootnotes(text) {
+  const { text: prose, notes } = splitFootnotes(text);
+  if (notes.size === 0) {
+    return prose;
+  }
+  return splitFences(prose).map((part) => {
+    if (part.fenced) {
+      return part.text;
+    }
+    let result = "";
+    let position = 0;
+    for (const marker of footnoteMarkers(part.text)) {
+      if (notes.has(footnoteLabel(marker.label))) {
+        result += part.text.slice(position, marker.start);
+        position = marker.end;
+      }
+    }
+    return result + part.text.slice(position);
+  }).join("");
+}
+
+// The footnotes of a chapter or matter body, for story validate: { definitions,
+// markers }, each { label, line } with the body line index (counted from
+// 0). Only the prose counts (see proseStart); a marker in a definition's
+// own text is not counted, since builds print it as written, and neither
+// is one in a link's destination.
+export function footnoteUses(markdownBody) {
   const body = String(markdownBody).replace(/\r\n?/g, "\n");
   const masked = maskMarkup(body);
   const start = proseStart(body, masked);
   const first = masked.slice(0, start).split("\n").length - 1;
-  const found = [];
-  // The HTML block the line before opened or continued, and whether a
-  // paragraph is open, which the last kind of HTML block cannot interrupt.
-  let html = null;
-  let paragraph = false;
-  for (const [index, line] of masked.slice(start).split("\n").entries()) {
-    const content = expandTabs(line.slice(/^(?: {0,3}>[ \t]?)*/.exec(line)[0].length));
-    if (html !== null) {
-      html = (html.end === null ? content.trim() === "" : html.end.test(content)) ? null : html;
-    } else if (content.trim() === "") {
-      paragraph = false;
-    } else if (indentOf(content) <= 3) {
-      // A line indented further is indented code, or the open paragraph's
-      // text, and changes nothing.
-      const block = htmlBlock(content, paragraph);
-      const footnote = block === null && FOOTNOTE_DEFINITION.test(content);
-      if (block !== null) {
-        html = block.end !== null && block.end.test(content) ? null : block;
-      }
-      if (footnote) {
-        found.push(first + index);
-      }
-      paragraph = block === null && !footnote;
+  const prose = body.slice(start);
+  const maskedProse = masked.slice(start);
+  if (!prose.includes("[^")) {
+    return { definitions: [], markers: [] };
+  }
+  const blocks = footnoteBlocks(prose, maskedProse);
+  const definitions = blocks.map((block) => ({ label: block.label, line: first + block.start }));
+  // Definition lines blank, and link destinations too, keeping offsets. A
+  // `[^1]` that opens or closes a link's text (`[^1](url)`) is the link's,
+  // as the builds read it.
+  const lines = maskedProse.split("\n");
+  for (const block of blocks) {
+    for (let index = block.start; index < block.end; index += 1) {
+      lines[index] = " ".repeat(lines[index].length);
     }
+  }
+  // A marker in an image's alt text is alt text, which builds print as is.
+  const unlinked = lines.join("\n");
+  const cuts = unlinked.includes("](") ? linkCuts(unlinked) : [];
+  const linkEdges = new Set(cuts.map(([cutStart]) => cutStart));
+  // Images in text order, and markers come in text order, so one pointer
+  // walks them both.
+  const images = cuts.filter((cut) => cut[2] !== undefined);
+  let nextImage = 0;
+  const inImage = (at) => {
+    while (nextImage < images.length && images[nextImage][1] <= at) {
+      nextImage += 1;
+    }
+    return nextImage < images.length && images[nextImage][0] <= at;
+  };
+  const searched = maskLinkTargets(unlinked).text;
+  const markers = [];
+  let line = first;
+  let position = 0;
+  for (const marker of footnoteMarkers(searched).filter(({ start, end }) => !linkEdges.has(start) && !linkEdges.has(end - 1) && !inImage(start))) {
+    for (; position < marker.start; position += 1) {
+      line += searched[position] === "\n" ? 1 : 0;
+    }
+    markers.push({ label: marker.label, line });
+  }
+  return { definitions, markers };
+}
+
+// The images in the prose of a chapter or matter body, as { destination,
+// line } with the body line index (counted from 0), as the builds read
+// them: none in an HTML comment, a closed code fence, or a code span. One
+// in a footnote has the note's label as `note`.
+export function imageLines(markdownBody) {
+  const body = String(markdownBody).replace(/\r\n?/g, "\n");
+  const masked = maskMarkup(body);
+  const start = proseStart(body, masked);
+  const prose = masked.slice(start);
+  const first = masked.slice(0, start).split("\n").length - 1;
+  const found = [];
+  // An image in a footnote is left out of every build (see withImages in
+  // build.js), so it carries the note's label, and is no file to check.
+  const noteLines = new Map();
+  for (const block of prose.includes("[^") ? footnoteBlocks(body.slice(start), prose) : []) {
+    for (let index = block.start; index < block.end; index += 1) {
+      noteLines.set(first + index, block.label);
+    }
+  }
+  let line = first;
+  let position = 0;
+  for (const [cutStart, , image] of prose.includes("](") ? linkCuts(prose) : []) {
+    if (image === undefined) {
+      continue;
+    }
+    for (; position < cutStart; position += 1) {
+      line += prose[position] === "\n" ? 1 : 0;
+    }
+    found.push(noteLines.has(line) ? { destination: image.destination, line, note: noteLines.get(line) } : { destination: image.destination, line });
   }
   return found;
 }
@@ -825,7 +1104,7 @@ let graphemes;
 // left out; a full-width space indent is whitespace.
 export function characterCount(markdown) {
   // A line is a scene break as written: `&#45;&#45;&#45;` prints as text.
-  const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split("\n");
+  const lines = plainLinks(splitFootnotes(String(markdown).replace(/\uE000/g, " ")).text).split("\n");
   const text = countedText(lines.map((line) => (isSceneBreak(line) ? "" : line)).join("\n"))
     .replace(BACKSLASH_ESCAPE, "$1")
     .replace(/[#>*_~|`\s]+/gu, "");

@@ -67,7 +67,7 @@ import {
   requireFields
 } from "./validate-fields.js";
 import { sampleProblem, sampleDuplicate, readEntityData, validateOptionalRegistry } from "./validate-files.js";
-import { storyIdMismatch, storyIdIsFallback, unusedTargetWarnings, validateReleaseDate } from "./validate-story.js";
+import { storyIdMismatch, storyIdIsFallback, unusedTargetWarnings, validateFootnotes, validateProseImages, validateReleaseDate } from "./validate-story.js";
 
 // Per kind, the fields a progression may not change because they hold lists
 // or never change, and the fields whose values are checked against an
@@ -759,6 +759,8 @@ export function validateMatter(project, errors, warnings) {
     if (matter.todoMarkers > 0) {
       warnings.push(warn("matter-todo-markers", `${label} has ${plural(matter.todoMarkers, "[TODO marker")}, which export and build print: ask the author to supply the text`, label));
     }
+    validateProseImages(project, label, matter.images, warnings);
+    validateFootnotes(label, matter.footnotes, warnings);
     const data = readEntityData(matter.file, project.root, label, errors, warnings, "matter");
     if (!data) {
       continue;

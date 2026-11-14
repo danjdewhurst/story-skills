@@ -62,8 +62,9 @@ describe("characterCount", () => {
   });
 
   test("leaves out the markup word counts leave out, and reads an entity as its character", () => {
-    // A ruby reading is printed, so it counts; only the tags go.
-    expect(characterCount("猫と<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>&amp;[^1]\n\n[^1]: 鳥\n\n* [x] 魚\n\n[ref]: https://example.com\n\n[犬][ref]")).toBe(13);
+    // A ruby reading is printed, so it counts; only the tags go. A
+    // footnote's text is a note, not the text, so 鳥 does not count.
+    expect(characterCount("猫と<ruby>漢<rp>(</rp><rt>かん</rt><rp>)</rp></ruby>&amp;[^1]\n\n[^1]: 鳥\n\n* [x] 魚\n\n[ref]: https://example.com\n\n[犬][ref]")).toBe(12);
   });
 
   test("a grapheme cluster counts once", () => {

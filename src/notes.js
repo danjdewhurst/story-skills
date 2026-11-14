@@ -136,7 +136,21 @@ export function readReview(bytes) {
   if (extendedXml !== null) {
     threadComments(comments, extendedXml);
   }
-  return { ...documentParagraphs(document, styles, comments), comments, styles };
+  return { ...documentParagraphs(document, styles, comments), comments, styles, footnoteTexts: footnoteTexts(part("word/footnotes.xml")) };
+}
+
+// The text of each footnote in a footnotes.xml, in order, without Word's
+// separator notes, for story apply to tell whether an editor changed one:
+// [] when there is none.
+export function footnoteTexts(xml) {
+  if (xml === null || xml === undefined) {
+    return [];
+  }
+  const entities = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return [...String(xml).matchAll(/<w:footnote\b([^>]*)>([\s\S]*?)<\/w:footnote>/g)]
+    .filter((match) => !/\bw:type="(?:separator|continuationSeparator|continuationNotice)"/.test(match[1]))
+    .map((match) => [...match[2].matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map((text) => text[1]).join("")
+      .replace(/&(amp|lt|gt|quot|apos);/g, (whole, name) => entities[name]).replace(/\s+/g, " ").trim());
 }
 
 // The paragraphs of a document.xml and its styles.xml given as text, as
@@ -327,13 +341,20 @@ function threadComments(comments, xml) {
 // when some of its text is hidden, `table` when it is in a table cell, and
 // `pageBreak` when a page break opens it, as a Shunn chapter heading does;
 // and `leftOut` names what the text leaves out: "images", "text-boxes",
-// "footnotes", and "tables".
+// "footnotes", and "tables", with `leftOutCounts` giving how many of each.
 function documentParagraphs(xml, styles, comments) {
   const paragraphs = [];
   const quoted = new Map();
   const open = new Map();
   const changes = [];
   const leftOut = new Set();
+  // How many of each kind, for story apply to tell the images and
+  // footnotes its own build set from ones an editor added.
+  const leftOutCounts = new Map();
+  const leaveOut = (kind) => {
+    leftOut.add(kind);
+    leftOutCounts.set(kind, (leftOutCounts.get(kind) ?? 0) + 1);
+  };
   let tables = 0;
   let paragraph = null;
   let run = null;
@@ -396,7 +417,7 @@ function documentParagraphs(xml, styles, comments) {
     if (type === "start" && SKIPPED.has(name)) {
       const kind = LEFT_OUT.get(name);
       if (kind !== undefined) {
-        leftOut.add(kind);
+        leaveOut(kind);
       }
       skip = { name, depth: 1 };
       continue;
@@ -407,7 +428,7 @@ function documentParagraphs(xml, styles, comments) {
       continue;
     }
     if ((name === "w:footnoteReference" || name === "w:endnoteReference") && type !== "end") {
-      leftOut.add("footnotes");
+      leaveOut("footnotes");
       continue;
     }
     if (type === "text") {
@@ -518,7 +539,7 @@ function documentParagraphs(xml, styles, comments) {
     }
   }
 
-  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0), leftOut };
+  return { paragraphs, quoted, styled: paragraphs.some((entry) => entry.level > 0), leftOut, leftOutCounts };
 }
 
 // What a skipped element holds that the text leaves out.

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { severityCodes } from "../src/config.js";
-import { CHAPTER_CODES, CONTINUITY_ERROR_CODES, CUSTOM_CODE, FINDING_CODES, codesAt, err, exemptionCodes, warn } from "../src/findings.js";
+import { CHAPTER_CODES, CONTINUITY_ERROR_CODES, CUSTOM_CODE, FINDING_CODES, RETIRED_CODES, codesAt, err, exemptionCodes, warn } from "../src/findings.js";
 
 const repoRoot = path.join(import.meta.dir, "..");
 const srcDir = path.join(repoRoot, "src");
@@ -133,9 +133,10 @@ describe("finding codes", () => {
     expect(result.$defs.diagnostic.properties.code.anyOf[0].enum).toEqual(Object.keys(FINDING_CODES));
     expect(result.$defs.diagnostic.properties.code.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
     const story = JSON.parse(fs.readFileSync(path.join(repoRoot, "schemas", "story.schema.json"), "utf8"));
-    expect(story.properties.story.properties.severity.items.properties.warning.anyOf[0].enum).toEqual(severityCodes());
+    // A retired code stays accepted, so a story.md that names it still passes.
+    expect(story.properties.story.properties.severity.items.properties.warning.anyOf[0].enum).toEqual([...severityCodes(), ...Object.keys(RETIRED_CODES)]);
     expect(story.properties.story.properties.severity.items.properties.warning.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
-    expect(story.$defs.exemption.properties.code.anyOf[0].enum).toEqual(exemptionCodes());
+    expect(story.$defs.exemption.properties.code.anyOf[0].enum).toEqual([...exemptionCodes(), ...Object.keys(RETIRED_CODES)]);
     expect(story.$defs.exemption.properties.code.anyOf[1].pattern).toBe(CUSTOM_CODE.source);
   });
 

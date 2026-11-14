@@ -5,7 +5,7 @@ import path from "node:path";
 import { COMMANDS } from "./commands.js";
 import { dismissByExemptions, readExemptionLog } from "./exemptions.js";
 import { readTextFile } from "./files.js";
-import { FINDING_CODES, PROJECTLESS_CODES, err, isCustomCode, severityCodes } from "./findings.js";
+import { FINDING_CODES, PROJECTLESS_CODES, RETIRED_CODES, err, isCustomCode, severityCodes } from "./findings.js";
 import { customCodeId, definedCheckLevels } from "./custom-checks.js";
 import { parseFrontmatter } from "./frontmatter.js";
 import { OPTIONS, normalizeBooleanValue, optionFamily, suggestion } from "./options.js";
@@ -238,6 +238,10 @@ function parseSeverity(raw, errors, checks) {
       }
     } else if (PROJECTLESS_CODES.includes(code)) {
       errors.push(`${label} names ${code}, which story init or story import reports before there is a story.md to read: severity cannot change it`);
+      continue;
+    }
+    // A retired warning never fires, so an entry for it changes nothing.
+    if (Object.hasOwn(RETIRED_CODES, code)) {
       continue;
     }
     if (!codes.includes(code) && !isCustomCode(code)) {

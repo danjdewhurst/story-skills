@@ -10,7 +10,8 @@ import {
   countedText,
   extractSection,
   flattenHeadings,
-  footnoteLines,
+  footnoteUses,
+  splitFootnotes,
   isSceneBreakLine,
   kebabCase,
   maskLinkTargets,
@@ -161,7 +162,8 @@ describe("markdown utilities", () => {
   });
 
   test("footnote markers, entities, HTML tags, reference definitions, and task boxes are not words", () => {
-    expect(splitWords("The end.[^1] Then[^note] more.\n\n[^1]: A note counts.")).toEqual(["The", "end", "Then", "more", "A", "note", "counts"]);
+    // A footnote's own text is a note, not the text, so it does not count.
+    expect(splitWords("The end.[^1] Then[^note] more.\n\n[^1]: A note counts.")).toEqual(["The", "end", "Then", "more"]);
     expect(splitWords("Tom &amp; Jerry don&rsquo;t pay caf&eacute; prices&#8202;&mdash;&#X2014;today&nbsp;now &alpha;&AMP;&ast;"))
       .toEqual(["Tom", "Jerry", "don\u2019t", "pay", "caf\u00e9", "prices", "today", "now", "\u03b1"]);
     expect(splitWords("<span class=\"smallcaps\">Lord</span> said <i>un</i>known, line<br/>two <p data-x='1'\nhidden>three</p> <book-note class=\"small\">four</book-note> <details open>five</details>"))
@@ -574,7 +576,7 @@ describe("inline markdown edge cases (#592)", () => {
     expect(characterCount("&#45;&#45;&#45;\n---\n\\* \\* \\*")).toBe(3);
   });
 
-  test("finds footnote definitions in the prose, by line", () => {
+  test("finds footnote definitions and markers in the prose, by line", () => {
     const prose = [
       "## Chapter Notes",
       "",
@@ -603,9 +605,16 @@ describe("inline markdown edge cases (#592)", () => {
       "[^9]: A lone tag cannot interrupt a paragraph.",
       ""
     ].join("\n");
-    expect(footnoteLines(prose)).toEqual([8, 9, 18, 24]);
-    expect(footnoteLines(prose.replace(/\n/g, "\r\n"))).toEqual([8, 9, 18, 24]);
-    expectLinearTime(footnoteLines, (n) => `[^${"[^".repeat(n / 2)}`);
+    // `[^long note]` holds a space, so it is no label, as for a marker.
+    const lines = (body) => footnoteUses(body).definitions.map((definition) => definition.line);
+    expect(lines(prose)).toEqual([8, 18, 24]);
+    expect(lines(prose.replace(/\n/g, "\r\n"))).toEqual([8, 18, 24]);
+    // Builds print indented code and an HTML block as text, so a marker in
+    // either is one, with no definition.
+    expect(footnoteUses(prose).markers).toEqual([{ label: "1", line: 6 }, { label: "2", line: 6 }, { label: "6", line: 17 }, { label: "8", line: 20 }]);
+    expectLinearTime(footnoteUses, (n) => `## Chapter Text\n\n[^${"[^".repeat(n / 2)}`);
+    expectLinearTime((text) => splitFootnotes(text), (n) => `[^a]: ${"[^a".repeat(n / 3)}`);
+    expectLinearTime((text) => splitFootnotes(text), (n) => "[^a]: x\n    y\n".repeat(n / 16));
   }, 15000);
 
   // Sized so that a scan gone quadratic fails in seconds rather than

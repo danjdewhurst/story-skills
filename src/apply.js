@@ -53,10 +53,10 @@ import { EXIT_CODES, exitCodeFor, projectError, usageError } from "./exit-codes.
 import { readTextFile, writeFile, withUndoLog } from "./files.js";
 import { warn } from "./findings.js";
 import { parseFrontmatter } from "./frontmatter.js";
-import { breaksParagraph, chapterProse, commentRanges, flattenHeadings, isSceneBreak, proseStart, splitFences, trimBlankLines, withoutFenceMarkers } from "./markdown.js";
+import { breaksParagraph, chapterProse, footnoteDefinitionLines, commentRanges, flattenHeadings, isSceneBreak, proseStart, splitFences, splitFootnotes, trimBlankLines, withoutFenceMarkers } from "./markdown.js";
 import { assertWritable, undoCommand } from "./mutate-writes.js";
-import { TRANSIENT, displayText, documentReview, groups, inline, readReturnedFile, span } from "./notes.js";
-import { docxEntries, wordParagraphs } from "./packaging.js";
+import { TRANSIENT, displayText, documentReview, footnoteTexts, groups, inline, readReturnedFile, span } from "./notes.js";
+import { DEFAULT_PAPER, docxEntries, shunnDocxEntries, wordParagraphs } from "./packaging.js";
 import { shellWord } from "./report.js";
 import { assertProjectParses, relative, scanProject } from "./scan.js";
 import { nextSnapshotId, snapshotProject } from "./snapshots.js";
@@ -264,7 +264,10 @@ function readBuild(project, shunn) {
     }
   }
   const files = project.chapters.map((chapter) => relative(project, chapter.file));
-  return { items, chapters, manuscript: build.manuscript, project, files, ids: project.chapters.map((chapter) => chapter.id) };
+  // How many of what the text leaves out the build itself sets, such as
+  // the images the prose places, which the returned file holds as the
+  // build wrote them.
+  return { items, chapters, manuscript: build.manuscript, project, files, ids: project.chapters.map((chapter) => chapter.id), leftOutCounts: review.leftOutCounts, footnoteTexts: footnoteTexts(build.footnotes) };
 }
 
 // The paragraphs of a review as one view of its tracked changes sees them
@@ -663,7 +666,25 @@ function applyPlan({ project, review, shown, hash, view, tracked, current, base 
   if (review.comments.size > 0) {
     warnings.push(warn("apply-content-left-out", `${shown} has ${count(review.comments.size, "comment")}, which story apply does not write into the chapters; story notes lists them`));
   }
-  const leftOut = [...review.leftOut].sort().map((kind) => LEFT_OUT_NAMES[kind]);
+  // Images and footnotes the book's own build set are its prose's, not
+  // the editor's, so they are no news: only more of a kind than the build
+  // of the version sent has are.
+  const leftOut = [...review.leftOut].filter((kind) => (review.leftOutCounts?.get(kind) ?? 1) > (sent.leftOutCounts.get(kind) ?? 0)).sort().map((kind) => LEFT_OUT_NAMES[kind]);
+  // A note the build set, changed in place, is no more notes, so each
+  // note's text is looked for among the build's. Without a version sent,
+  // the build is the current project's, which the author may have changed.
+  const builtNotes = new Map();
+  for (const text of sent.footnoteTexts) {
+    builtNotes.set(text, (builtNotes.get(text) ?? 0) + 1);
+  }
+  const changedNotes = (review.footnoteTexts ?? []).filter((text) => {
+    const left = builtNotes.get(text) ?? 0;
+    builtNotes.set(text, left - 1);
+    return left <= 0;
+  });
+  if (!leftOut.includes(LEFT_OUT_NAMES.footnotes) && changedNotes.length > 0) {
+    warnings.push(warn("apply-content-left-out", `${shown} has ${count(changedNotes.length, "footnote")} whose text is not in the ${base ? "version sent" : "project's footnotes (or the project changed them since sending; pass --ref or --snapshot to tell)"}, which story apply does not write: copy the changes into the footnote definitions by hand`));
+  }
   if (leftOut.length > 0) {
     warnings.push(warn("apply-content-left-out", `${shown} has ${joinList(leftOut)}, which story apply leaves out of the chapters, as story import does`));
   }
@@ -2183,9 +2204,20 @@ function chapterSource(project, chapter, builtBody) {
   // Each line as markdownParagraphs reads it: headings flattened and
   // block-quote markers off.
   const read = (line) => flattenHeadings(line.shown).replace(/^(?:[ \t]*>[ \t]?)+/, "");
+  // A footnote definition's lines print no paragraph of the text, so they
+  // are blank here, as the whole chapter reads them.
+  const noteLines = footnoteDefinitionLines(stripped);
+  const noteStarts = new Set();
+  for (let index = 0, start = 0; start <= stripped.length; index += 1) {
+    if (noteLines.has(index)) {
+      noteStarts.add(start);
+    }
+    const newline = stripped.indexOf("\n", start);
+    start = newline === -1 ? stripped.length + 1 : newline + 1;
+  }
   const groupsOfLines = [];
   for (const line of lines) {
-    if (read(line).trim() === "") {
+    if (noteStarts.has(line.start) || read(line).trim() === "") {
       groupsOfLines.push(null);
     } else if (!line.code && breaksParagraph(read(line))) {
       groupsOfLines.push([line], null);
@@ -2198,6 +2230,9 @@ function chapterSource(project, chapter, builtBody) {
   // A verse chapter prints every line break (see isVerseChapter).
   const verse = chapter.verse === true;
   const expected = wordParagraphs(builtBody, verse);
+  // A block read alone still knows the chapter's footnotes, so a marker in
+  // it is no text, as in the whole chapter.
+  const defined = splitFootnotes(builtBody).notes;
   const blocks = [];
   const itemBlock = [];
   const printed = [];
@@ -2208,7 +2243,7 @@ function chapterSource(project, chapter, builtBody) {
     const code = first.code;
     // A fence longer than any run of backticks in the code.
     const fence = "`".repeat(strippedText.replace(/[^`]/g, "").length + 3);
-    const items = wordParagraphs(code ? `${fence}\n${strippedText}\n${fence}` : strippedText.replace(/\r\n?/g, "\n"), verse);
+    const items = wordParagraphs(code ? `${fence}\n${strippedText}\n${fence}` : strippedText.replace(/\r\n?/g, "\n"), verse, defined);
     const start = proseOffset + offsets[first.start];
     const end = proseOffset + offsets[last.start + last.text.length - 1] + 1;
     const text = raw.slice(start, end);
@@ -2424,10 +2459,12 @@ function printedKeys(body, manuscript, verse = false) {
 }
 
 // The keys of the paragraphs a chapter body prints, as a Word build of it
-// is read back.
+// is read back: a Shunn one for a Shunn manuscript (`shunnMeta`), which
+// prints a footnote marker as its number.
 function readKeys(body, manuscript, verse = false) {
   const trace = [];
-  const entries = docxEntries({ ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] }, trace);
+  const book = { ...manuscript, front: [], back: [], chapters: [{ heading: "Chapter", body, byline: "", verse }] };
+  const entries = manuscript.shunnMeta ? shunnDocxEntries(book, manuscript.shunnMeta, DEFAULT_PAPER, trace) : docxEntries(book, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
   return itemsOf(documentReview(part("word/document.xml"), part("word/styles.xml")), "after")
     .filter((item, index) => trace[index].kind === "paragraph" || trace[index].kind === "scene-break")

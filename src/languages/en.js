@@ -211,12 +211,17 @@ export default {
     "published-by": "Published by {publisher}",
     // What a screen reader says for a scene break in the HTML builds.
     "scene-break": "Scene break",
+    // The heading over a chapter's footnotes in the HTML, print, and
+    // Shunn builds.
+    footnotes: "Notes",
     // EPUB: the cover's fallback alt text, the body-matter landmark, and the
-    // accessibility summary without and with a cover.
+    // accessibility summary without and with a cover, and with images in the
+    // prose.
     "cover-alt": "Cover of {title}",
     "start-of-content": "Start of Content",
     "accessibility-summary": "Text-only book with a navigable table of contents, headings for each chapter, and a single logical reading order.",
     "accessibility-summary-cover": "Text book with a described cover image, a navigable table of contents, headings for each chapter, and a single logical reading order.",
+    "accessibility-summary-images": "Text book with described images, a navigable table of contents, headings for each chapter, and a single logical reading order.",
     // The HTML review copy: its title, the note under the title (one
     // sentence each, with -build forms for a stamped build), and the links
     // beside each paragraph label.

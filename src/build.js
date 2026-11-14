@@ -19,7 +19,9 @@ import {
   countTodoMarkers,
   extractSection,
   kebabCase,
+  proseImages,
   scanComments,
+  splitFootnotes,
   titleCaseSlug,
   trimBlankLines,
   wordCount
@@ -52,6 +54,8 @@ import {
   asArray,
   coverIsReady,
   coverImage,
+  proseImage,
+  remoteImage,
   relative,
   PATH_CONTROL_CHARACTERS,
   substituteStoryIdWarnings
@@ -222,6 +226,7 @@ export function buildBook(root, options = {}) {
     writeFile(output.outFile, narrationScript(manuscript, pronunciationGuide(project)), output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { narration: true, titles: true }));
   } else if (format === "html" || format === "print") {
+    withImages(project, manuscript, PAGE_IMAGES);
     const style = projectBuildStyle(project);
     const book = htmlBook(manuscript, indentsFirstLines(format, style));
     const text = format === "html" ? reviewHtml(book, { stamp, noteUrl, style }) : printHtml(book, trim, style);
@@ -230,12 +235,14 @@ export function buildBook(root, options = {}) {
   } else if (format === "shunn") {
     writeShunnMarkdown(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions);
   } else if (format === "epub") {
+    withImages(project, manuscript);
     const cover = project.story.data.cover === undefined ? null : coverImage(project);
     writeEpub(output.outFile, project.storyId, { ...manuscript, cover, style: projectBuildStyle(project) }, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript, { titles: true }));
   } else if (options.shunn) {
     writeShunnDocx(output.outFile, manuscript, shunnMeta(project, options.anonymous), output.writeOptions, paper);
   } else {
+    withImages(project, manuscript);
     writeDocx(output.outFile, manuscript, output.writeOptions);
     manuscript.warnings.push(...matterTodoWarnings(project, manuscript));
   }
@@ -252,10 +259,17 @@ export function buildBook(root, options = {}) {
 // matches too.
 export function wordBuild(project, { shunn = false } = {}) {
   const manuscript = manuscriptParts(project, "apply", { includePending: true, warnLeftOut: false });
+  if (!shunn) {
+    withImages(project, manuscript);
+  }
   const trace = [];
-  const entries = shunn ? shunnDocxEntries(manuscript, shunnMeta(project), DEFAULT_PAPER, trace) : docxEntries(manuscript, trace);
+  const meta = shunn ? shunnMeta(project) : null;
+  const entries = shunn ? shunnDocxEntries(manuscript, meta, DEFAULT_PAPER, trace) : docxEntries(manuscript, trace);
   const part = (name) => entries.find((entry) => entry.name === name).content;
-  return { document: part("word/document.xml"), styles: part("word/styles.xml"), trace, manuscript };
+  // A Shunn build's meta goes with the manuscript, so story apply reads an
+  // edited chapter back as the same kind of build (see readKeys there).
+  const footnotes = entries.find((entry) => entry.name === "word/footnotes.xml")?.content ?? null;
+  return { document: part("word/document.xml"), styles: part("word/styles.xml"), footnotes, trace, manuscript: shunn ? { ...manuscript, shunnMeta: meta } : manuscript };
 }
 
 // `build --format ics`: the deadline, the serial release dates, and the
@@ -335,6 +349,9 @@ function buildPdf(project, format, { trim, paper, parts }, output, options) {
   assertMatterTitles(project, manuscript);
   // The Shunn manuscript keeps its fixed format: build-style never reaches it.
   const style = projectBuildStyle(project);
+  if (format === "print") {
+    withImages(project, manuscript, PAGE_IMAGES);
+  }
   const html = format === "print" ? printHtml(htmlBook(manuscript, indentsFirstLines(format, style)), trim, style) : shunnHtml(manuscript, shunnMeta(project, options.anonymous), paper);
   // A --dry-run finds the engine but does not run it.
   writeFile(output.outFile, isPlanning() ? "" : withFlags(engineFlag, () => renderPdf(html, engine)), output.writeOptions);
@@ -867,6 +884,7 @@ export function bookChapters(project, action = "build") {
     const authors = nameList(markdown.data.author);
     const entry = {
       number: chapter.number,
+      file: chapter.file,
       title,
       authors,
       byline: chapterByline(authors, meta.labels),
@@ -885,6 +903,75 @@ export function bookChapters(project, action = "build") {
     }
   }
   return { meta, chapters, warnings };
+}
+
+// The most image bytes a build places. The HTML and print builds set each
+// image in the page as base64, a third larger, and a page must stay one
+// string: 360 MiB of images is 480 MiB of text. EPUB and DOCX archives
+// have no ZIP64, so they stay well under 4 GiB, and every image is held
+// in memory while the archive is written.
+const MAX_PAGE_IMAGE_BYTES = 360 * 1024 * 1024;
+const MAX_ARCHIVE_IMAGE_BYTES = 1024 * 1024 * 1024;
+// A page counts every use of an image, since each sets the whole image.
+const PAGE_IMAGES = { limit: MAX_PAGE_IMAGE_BYTES, perUse: true };
+
+// For the builds that place images (EPUB, DOCX, HTML, and print): each
+// chapter's and matter page's `images`, a Map from each image destination
+// in its prose to the image (see proseImage), or to null for one the build
+// leaves out, with an image-left-out warning: a web address, which no
+// build fetches, a file that is missing or not a supported image, or one
+// past `limit`, the bytes of images a build places in all: each file once
+// in an archive, every use of it in a page (`perUse`).
+// story validate reports the same images.
+function withImages(project, manuscript, { limit = MAX_ARCHIVE_IMAGE_BYTES, perUse = false } = {}) {
+  // The bytes of the distinct image files placed so far, against `limit`.
+  const placed = new Map();
+  let total = 0;
+  for (const entry of [...manuscript.front, ...manuscript.chapters, ...manuscript.back]) {
+    // The copyright page made from story.md has no file and no images.
+    if (entry.file === undefined) {
+      continue;
+    }
+    const file = relative(project, entry.file);
+    const images = new Map();
+    // A footnote holds text only, so an image in one is left out.
+    const { text, notes } = splitFootnotes(entry.body);
+    for (const note of notes.values()) {
+      for (const { destination } of proseImages(note.text)) {
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} is in footnote [^${note.label}], which builds set as text only, so it is left out`, file));
+      }
+    }
+    const uses = new Map();
+    for (const { destination } of proseImages(text)) {
+      uses.set(destination, (uses.get(destination) ?? 0) + 1);
+    }
+    for (const [destination, count] of uses) {
+      if (remoteImage(destination)) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} is a web address, which builds do not fetch, so it is left out`, file));
+        continue;
+      }
+      let image;
+      try {
+        image = proseImage(project, file, destination);
+      } catch (error) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${error.message}, so it is left out`, file));
+        continue;
+      }
+      // A page sets the image again at every use; an archive stores it once.
+      const cost = perUse ? image.size * count : placed.has(image.filePath) ? 0 : image.size;
+      if (total + cost > limit) {
+        images.set(destination, null);
+        manuscript.warnings.push(warn("image-left-out", `${file} image ${destination} would take this build's images past ${limit / 1024 / 1024} MiB, so it is left out`, file));
+        continue;
+      }
+      placed.set(image.filePath, image.size);
+      total += cost;
+      images.set(destination, image);
+    }
+    entry.images = images;
+  }
 }
 
 // The matter pages whose permission is not cleared (see unclearedPermission)

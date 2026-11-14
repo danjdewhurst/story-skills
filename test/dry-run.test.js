@@ -290,7 +290,19 @@ describe("--dry-run", () => {
         fs.chmodSync(path.join(root, name), 0o644);
       }
     }
-    // Only the cover keeps its first bytes in the scratch copy.
+    // An image the prose places keeps its first bytes too, so the dry run
+    // checks it as the real run does.
+    const chapterPath = path.join(root, "chapters", "chapter-01.md");
+    const chapterText = fs.readFileSync(chapterPath, "utf8");
+    fs.writeFileSync(storyPath, story);
+    fs.writeFileSync(chapterPath, `${chapterText}\n![A map](../map.png)\n`);
+    fs.writeFileSync(path.join(root, "map.png"), Buffer.concat([Buffer.from("89504e470d0a1a0a0000000d49484452", "hex"), Buffer.alloc(64)]));
+    const imagePreview = invokeJson(root, ["doctor", "--fix", "--dry-run", "--json"]);
+    const imageReal = invokeJson(root, ["doctor", "--fix", "--json"]);
+    expect(imageReal.envelope.diagnostics.filter((finding) => finding.code === "invalid-image")).toEqual([]);
+    expect(imagePreview.envelope.diagnostics).toEqual(imageReal.envelope.diagnostics);
+    fs.writeFileSync(chapterPath, chapterText);
+    // Only the cover and image files keep their first bytes in the scratch copy.
     fs.writeFileSync(storyPath, story.replace("schema-version: 2\n", "schema-version: 2\ncover: cover.webp\n"));
     fs.writeFileSync(path.join(root, ".env"), "API_KEY=secret\n");
     fs.writeFileSync(path.join(root, "notes.txt"), "private notes\n");

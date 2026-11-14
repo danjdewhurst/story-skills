@@ -5,7 +5,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { COMMANDS } from "../src/commands.js";
 import { SEVERITY_LEVELS, applyDefaults, applySeverity, parseCliConfig, readCliConfig, severityCodes } from "../src/config.js";
-import { warn } from "../src/findings.js";
+import { RETIRED_CODES, warn } from "../src/findings.js";
 import { OPTIONS, optionFamily } from "../src/options.js";
 import { PROSE_THRESHOLDS, proseThresholds } from "../src/prose.js";
 import { BUILD_EXTENSIONS } from "../src/build.js";
@@ -135,7 +135,8 @@ describe("finding codes", () => {
   test("the schema lists the same warning codes and levels as the validator", () => {
     const schema = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "..", "schemas", "story.schema.json"), "utf8"));
     const severity = schema.properties.story.properties.severity.items.properties;
-    expect(severity.warning.anyOf[0].enum).toEqual(severityCodes());
+    // A retired code stays accepted, so a story.md that names it still passes.
+    expect(severity.warning.anyOf[0].enum).toEqual([...severityCodes(), ...Object.keys(RETIRED_CODES)]);
     expect(severity.level.enum).toEqual(SEVERITY_LEVELS);
     const command = new RegExp(schema.properties.story.properties["cli-defaults"].items.properties.command.pattern, "u");
     expect(COMMANDS.every((entry) => command.test(entry.name))).toBe(true);

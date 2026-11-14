@@ -1,6 +1,6 @@
 import { fillLabel, joinNames } from "./languages/index.js";
 import { compareText } from "./languages/locale.js";
-import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, separateSceneBreaks, trimSourceSpace, wordCount } from "./markdown.js";
+import { characterCount, collapseSourceSpace, flattenHeadings, isSceneBreakLine, plainLinks, separateSceneBreaks, trimSourceSpace, withoutFootnotes, wordCount } from "./markdown.js";
 
 // Audiobook narration script: a pronunciation guide from the bible, opening
 // and closing credits, and each section with its estimated finished runtime.
@@ -143,8 +143,9 @@ export function pronunciationGuide(project) {
 
 function narrationBody(body) {
   // In-prose headings read as paragraphs, so each chapter stays one
-  // section, and links read as their text, as in every other build.
-  const text = flattenHeadings(plainLinks(String(body).replace(/\r\n?/g, "\n")))
+  // section, and links read as their text, as in every other build. A
+  // footnote is not read: its marker and its note go.
+  const text = flattenHeadings(plainLinks(withoutFootnotes(String(body).replace(/\r\n?/g, "\n"))))
     .replace(/\\\n/g, "\n")
     // A line of nothing but whitespace, typed spaces included, is blank, as
     // in the other builds.

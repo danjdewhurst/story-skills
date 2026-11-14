@@ -1,13 +1,14 @@
 // story.md checks for story validate: the story id registries record,
 // paths, cover, deadline and release dates, the release cadence, and the
-// daily and length targets.
+// daily and length targets; and the images in chapter and matter prose,
+// which are checked as the cover is.
 import { storyDateError } from "./continuity.js";
-import { kebabCase } from "./markdown.js";
+import { footnoteLabel, kebabCase } from "./markdown.js";
 import { COUNT_UNITS, formRangeWarning, formRanges } from "./forms.js";
 import { WEEKDAYS, weekdayName } from "./progress.js";
 import { MAX_RELEASE_MONTHS, releaseMonths } from "./release-schedule.js";
 import { err, warn } from "./findings.js";
-import { coverImage, asciiStoryId } from "./scan.js";
+import { coverImage, asciiStoryId, proseImage, remoteImage } from "./scan.js";
 import { requireInteger } from "./validate-fields.js";
 
 // Every registry records the story id, which follows the story.md title, so
@@ -144,6 +145,79 @@ export function validateDailyTarget(data, errors) {
   }
   if (!Array.isArray(days) || days.some((day) => weekdayName(day) === null)) {
     errors.push(err("unsupported-value", `story.md frontmatter field writing-days must be a list of weekdays (${WEEKDAYS.join(", ")}, or full names), got ${Array.isArray(days) ? `[${days.join(", ")}]` : days}`, "story.md"));
+  }
+}
+
+// The images in the prose of `file` (scanned as { destination, line }):
+// each should be an image file inside the project, as the cover must be,
+// and should not be a web address, which no build fetches. Both are
+// warnings, since a build leaves such an image out and goes on, where a
+// broken cover stops the EPUB build.
+// An image used more than once is checked once, with each of its lines.
+export function validateProseImages(project, file, images, warnings) {
+  const uses = new Map();
+  for (const image of images.filter((entry) => entry.note !== undefined)) {
+    warnings.push(warn("image-left-out", `${file} image ${image.destination} (line ${image.line}) is in footnote [^${image.note}], which builds set as text only, so it is left out`, file));
+  }
+  for (const image of images.filter((entry) => entry.note === undefined)) {
+    if (!uses.has(image.destination)) {
+      uses.set(image.destination, []);
+    }
+    uses.get(image.destination).push(image);
+  }
+  for (const [destination, entries] of uses) {
+    const at = `${entries.length === 1 ? "line" : "lines"} ${listedLines(entries)}`;
+    if (remoteImage(destination)) {
+      warnings.push(warn("remote-image", `${file} image ${destination} (${at}) is a web address, which builds do not fetch, so it is left out: save the image in the project and name its path`, file));
+      continue;
+    }
+    try {
+      proseImage(project, file, destination);
+    } catch (error) {
+      warnings.push(warn("invalid-image", `${error.message} (${at}), so builds leave it out`, file));
+    }
+  }
+}
+
+// The line numbers of `entries`, the first ten and how many more, so a
+// finding stays one readable line.
+function listedLines(entries) {
+  const shown = entries.slice(0, 10).map((entry) => entry.line).join(", ");
+  return entries.length > 10 ? `${shown}, and ${entries.length - 10} more` : shown;
+}
+
+// The footnotes in the prose of `file` (scanned as { definitions, markers
+// }, each { label, line }): a marker needs a definition, or builds print
+// it as written, and a definition needs a marker, or builds leave the note
+// out. A label defined twice keeps its first definition, as the builds do.
+export function validateFootnotes(file, footnotes, warnings) {
+  const lines = (entries) => `${entries.length === 1 ? "line" : "lines"} ${listedLines(entries)}`;
+  const byLabel = (entries) => {
+    const groups = new Map();
+    for (const entry of entries) {
+      const label = footnoteLabel(entry.label);
+      if (!groups.has(label)) {
+        groups.set(label, []);
+      }
+      groups.get(label).push(entry);
+    }
+    return groups;
+  };
+  const definitions = byLabel(footnotes.definitions);
+  const markers = byLabel(footnotes.markers);
+  for (const [label, entries] of markers) {
+    if (!definitions.has(label)) {
+      const marker = `[^${entries[0].label}]`;
+      warnings.push(warn("missing-footnote", `${file} has footnote marker ${marker} (${lines(entries)}) with no ${marker}: note, so builds print the marker as written: add the note or remove the marker`, file));
+    }
+  }
+  for (const [label, entries] of definitions) {
+    const marker = `[^${entries[0].label}]`;
+    if (!markers.has(label)) {
+      warnings.push(warn("unused-footnote", `${file} defines footnote ${marker} (${lines(entries)}), which no ${marker} marker in the prose references, so builds leave it out`, file));
+    } else if (entries.length > 1) {
+      warnings.push(warn("unused-footnote", `${file} defines footnote ${marker} again (${lines(entries.slice(1))}), and builds use only the first definition, on line ${entries[0].line}`, file));
+    }
   }
 }
 
