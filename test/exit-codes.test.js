@@ -95,6 +95,7 @@ const OK_ARGS = {
     return ["similarity", "--against", reference];
   },
   progress: () => ["progress"],
+  submissions: () => ["submissions"],
   timeline: () => ["timeline"],
   prose: () => ["prose"],
   diagram: () => ["diagram", "relationships"],

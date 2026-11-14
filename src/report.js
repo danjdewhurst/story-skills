@@ -6,6 +6,7 @@ import { DEFAULT_PASSES, nextPass, passChecks, readPasses } from "./passes.js";
 import { formatPercent, todayOption } from "./progress.js";
 import { formatNextRelease, projectRelease, releaseData } from "./release-schedule.js";
 import { plural } from "./plural.js";
+import { DEFAULT_FOLLOW_UP_DAYS, SUBMISSION_TRACKER, trackerForNext } from "./submissions.js";
 import {
   scanProject,
   relative
@@ -243,6 +244,11 @@ export function projectActions(root, options = {}) {
   const releaseFindings = applySeverity({ ok: true, errors: [], warnings: schedule?.warnings ?? [] }, options.overrides);
   const releaseActions = [...releaseFindings.errors, ...releaseFindings.warnings]
     .map((finding) => action("P1", "Draft the scheduled episode", `${finding.message}: ${finding.file === "story.md" ? "add it with story add chapter" : "draft it under ## Chapter Text"}, then run story wordcount ${shellWord(options.displayPath ?? ".")} --write.`));
+  const days = options.days ?? DEFAULT_FOLLOW_UP_DAYS;
+  const followUps = submissionFollowUps(project.root, { today, days, overrides: options.overrides });
+  if (followUps > 0) {
+    releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${days} days or more for a reply: run story submissions ${shellWord(options.displayPath ?? ".")} to list ${followUps === 1 ? "it" : "them"}.`));
+  }
   return {
     root: project.root,
     title: project.title,
@@ -254,6 +260,17 @@ export function projectActions(root, options = {}) {
     links,
     continuity
   };
+}
+
+// How many tracker rows are due a follow-up, after story.md severity and
+// exemptions, so a submission-overdue warning turned off is not an action.
+function submissionFollowUps(root, { today, days, overrides }) {
+  const tracker = trackerForNext(root, { today, days });
+  if (tracker === null) {
+    return 0;
+  }
+  const checked = applySeverity(tracker, overrides);
+  return [...checked.errors, ...checked.warnings].filter((finding) => finding.code === "submission-overdue").length;
 }
 
 export function formatActionReport(report) {
