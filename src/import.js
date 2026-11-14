@@ -126,12 +126,12 @@ const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORT_FILES = 500;
 const IMPORT_FILE = /\.(?:md|markdown|txt|docx|odt|epub)$/i;
-// The documents read from a zip, by extension: the reader, and the code of
-// the warning about what it left out.
+// The documents read from a zip, by extension: the reader, and whether it
+// is Word, whose warning about what it left out keeps its own code.
 const ARCHIVE_READERS = new Map([
-  ["docx", { read: docxMarkdown, code: "docx-content-left-out" }],
-  ["odt", { read: odtMarkdown, code: "import-content-left-out" }],
-  ["epub", { read: epubMarkdown, code: "import-content-left-out" }]
+  ["docx", { read: docxMarkdown, word: true }],
+  ["odt", { read: odtMarkdown, word: false }],
+  ["epub", { read: epubMarkdown, word: false }]
 ]);
 
 function archiveReader(name) {
@@ -555,7 +555,7 @@ function readSourceDocument(name, filePath, rules) {
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
-  return { name, path: filePath, text: converted.text, notes: converted.notes, noteCode: reader.code };
+  return { name, path: filePath, text: converted.text, notes: converted.notes, word: reader.word };
 }
 
 // Tells the document readers which paragraphs are chapter lines, by the
@@ -675,7 +675,8 @@ function splitChapters(documents, warnings, rules, bylines) {
 
   for (const document of documents) {
     for (const note of document.notes ?? []) {
-      warnings.push({ ...warn(document.noteCode, `${shownText(document.name)}: ${note.message}`), source: document.path });
+      const message = `${shownText(document.name)}: ${note.message}`;
+      warnings.push({ ...(document.word ? warn("docx-content-left-out", message) : warn("import-content-left-out", message)), source: document.path });
     }
     // A bare CR (classic Mac OS) ends a line too.
     const source = document.text.replace(/\r\n?/g, "\n");
