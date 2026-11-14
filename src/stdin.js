@@ -61,7 +61,7 @@ export function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs.
 // report on nothing would read as a clean bill of health.
 export function stdinText(command, bytes) {
   const zipAdvice = command === "import"
-    ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead"
+    ? "story import reads a Word document, an OpenDocument text, or an EPUB only from a .docx, .odt, or .epub file, not from stdin: pass the file's path instead"
     : "Save or export it as markdown or plain text first";
   const text = decodeUtf8(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead", zipAdvice);
   if (text.trim() === "") {

@@ -1068,6 +1068,7 @@ var FINDING_CODES = {
   "collect-hand-written-copy": "warning",
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",
+  "import-content-left-out": "warning",
   "unsplit-chapter-lines": "warning",
   "unused-chapter-text": "warning",
   "usage-error": "error",
@@ -1081,7 +1082,7 @@ function codesAt(level) {
 var RETIRED_CODES = {
   "unsupported-footnote": "builds set footnotes"
 };
-var PROJECTLESS_CODES = ["kept-story-options", "docx-content-left-out", "unsplit-chapter-lines", "unused-chapter-text"];
+var PROJECTLESS_CODES = ["kept-story-options", "docx-content-left-out", "import-content-left-out", "unsplit-chapter-lines", "unused-chapter-text"];
 function severityCodes() {
   return codesAt("warning").filter((code) => !PROJECTLESS_CODES.includes(code));
 }
@@ -23336,56 +23337,50 @@ import { Buffer as Buffer10 } from "node:buffer";
 import fs26 from "node:fs";
 import path40 from "node:path";
 
-// src/docx.js
+// src/archive.js
 import zlib from "node:zlib";
-var MAX_DOCX_PART_BYTES = 32 * 1024 * 1024;
+var MAX_PART_BYTES = 32 * 1024 * 1024;
 var MAX_ZIP_ENTRIES = 1e4;
-var MAX_STYLE_DEPTH = 64;
 var EOCD_SIGNATURE = 101010256;
 var CENTRAL_SIGNATURE = 33639248;
 var LOCAL_SIGNATURE = 67324752;
 var ZIP64_MARK = 4294967295;
-var DOCUMENT_PART = "word/document.xml";
-var STYLES_PART = "word/styles.xml";
+var WORD = Object.freeze({
+  extension: ".docx",
+  kind: "a Word document",
+  again: "save it again from Word",
+  unlock: "remove the password in Word and save it again"
+});
 
-class DocxError extends Error {
+class ArchiveError extends Error {
   constructor(message) {
     super(message);
-    this.name = "DocxError";
+    this.name = "ArchiveError";
   }
 }
 var ESCAPED_CONTROLS = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
 function printable(text) {
   return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) => ESCAPED_CONTROLS[character] ?? "?");
 }
-function docxMarkdown(bytes, { chapterLine = () => null } = {}) {
-  const entries = zipEntries(bytes);
-  const document = entries.get(DOCUMENT_PART);
-  if (document === undefined) {
-    throw new DocxError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
-  }
-  const styles = entries.has(STYLES_PART) ? readStyles(xmlText(bytes, entries.get(STYLES_PART))) : { paragraph: () => EMPTY_STYLE, character: () => EMPTY_STYLE };
-  return documentMarkdown(xmlText(bytes, document), styles, chapterLine);
-}
-function zipEntries(bytes) {
-  const end = findEndOfCentralDirectory(bytes);
+function zipEntries(bytes, format = WORD) {
+  const end = findEndOfCentralDirectory(bytes, format);
   const count = bytes.readUInt16LE(end + 10);
   const size = bytes.readUInt32LE(end + 12);
   const offset = bytes.readUInt32LE(end + 16);
   if (count === 65535 || size === ZIP64_MARK || offset === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
+    throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
   }
   if (count > MAX_ZIP_ENTRIES) {
-    throw new DocxError(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
+    throw new ArchiveError(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
   }
   if (offset + size > end) {
-    throw new DocxError("its zip directory is damaged");
+    throw new ArchiveError("its zip directory is damaged");
   }
   const entries = new Map;
   let position = offset;
   for (let index = 0;index < count; index += 1) {
     if (position + 46 > end || bytes.readUInt32LE(position) !== CENTRAL_SIGNATURE) {
-      throw new DocxError("its zip directory is damaged");
+      throw new ArchiveError("its zip directory is damaged");
     }
     const flags = bytes.readUInt16LE(position + 8);
     const nameLength = bytes.readUInt16LE(position + 28);
@@ -23393,7 +23388,7 @@ function zipEntries(bytes) {
     const commentLength = bytes.readUInt16LE(position + 32);
     const name = bytes.toString("utf8", position + 46, position + 46 + nameLength);
     if (entries.has(name)) {
-      throw new DocxError(`it has two zip entries named ${printable(name)}`);
+      throw new ArchiveError(`it has two zip entries named ${printable(name)}`);
     }
     entries.set(name, {
       name,
@@ -23408,96 +23403,103 @@ function zipEntries(bytes) {
   }
   return entries;
 }
-function findEndOfCentralDirectory(bytes) {
+function findEndOfCentralDirectory(bytes, format) {
   const lowest = Math.max(0, bytes.length - 22 - 65535);
   for (let position = bytes.length - 22;position >= lowest; position -= 1) {
     if (bytes.readUInt32LE(position) === EOCD_SIGNATURE) {
       return position;
     }
   }
-  throw new DocxError("it is not a readable zip file, so it is not a .docx; save it again from Word, or export it to markdown");
+  throw new ArchiveError(`it is not a readable zip file, so it is not a ${format.extension}; ${format.again}, or export it to markdown`);
 }
-function xmlText(bytes, entry) {
+function xmlText(bytes, entry, format = WORD, { doctype = false } = {}) {
   if (entry.encrypted) {
-    throw new DocxError("it is password-protected; remove the password in Word and save it again");
+    throw new ArchiveError(`it is password-protected; ${format.unlock}`);
   }
   if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
+    throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
   }
-  if (entry.size > MAX_DOCX_PART_BYTES) {
-    throw new DocxError(`${entry.name} is ${entry.size} bytes, over the ${MAX_DOCX_PART_BYTES} byte limit`);
+  if (entry.size > MAX_PART_BYTES) {
+    throw new ArchiveError(`${printable(entry.name)} is ${entry.size} bytes, over the ${MAX_PART_BYTES} byte limit`);
   }
   const local = entry.localOffset;
   if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== LOCAL_SIGNATURE) {
-    throw new DocxError(`its zip entry ${entry.name} is damaged`);
+    throw new ArchiveError(`its zip entry ${printable(entry.name)} is damaged`);
   }
   const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
   const data = bytes.subarray(start, start + entry.compressedSize);
   if (data.length !== entry.compressedSize) {
-    throw new DocxError(`its zip entry ${entry.name} is cut short`);
+    throw new ArchiveError(`its zip entry ${printable(entry.name)} is cut short`);
   }
   let content;
   if (entry.method === 0) {
     content = data;
   } else if (entry.method === 8) {
     try {
-      content = zlib.inflateRawSync(data, { maxOutputLength: MAX_DOCX_PART_BYTES });
+      content = zlib.inflateRawSync(data, { maxOutputLength: MAX_PART_BYTES });
     } catch {
-      throw new DocxError(`its zip entry ${entry.name} cannot be inflated, or inflates past the ${MAX_DOCX_PART_BYTES} byte limit`);
+      throw new ArchiveError(`its zip entry ${printable(entry.name)} cannot be inflated, or inflates past the ${MAX_PART_BYTES} byte limit`);
     }
   } else {
-    throw new DocxError(`its zip entry ${entry.name} uses compression method ${entry.method}, which story does not read`);
+    throw new ArchiveError(`its zip entry ${printable(entry.name)} uses compression method ${entry.method}, which story does not read`);
   }
   if (content.length !== entry.size || crc32(content) !== entry.crc) {
-    throw new DocxError(`its zip entry ${entry.name} is damaged`);
+    throw new ArchiveError(`its zip entry ${printable(entry.name)} is damaged`);
   }
   let text;
   try {
     text = UTF82.decode(content);
   } catch {
-    throw new DocxError(`${entry.name} is not valid UTF-8 text`);
+    throw new ArchiveError(`${printable(entry.name)} is not valid UTF-8 text`);
   }
   if (text.charCodeAt(0) === 65279) {
     text = text.slice(1);
   }
-  if (/<!DOCTYPE/i.test(text)) {
-    throw new DocxError(`${entry.name} has a document type declaration, which a Word document never has`);
+  const declaration = /<!DOCTYPE/i.exec(text);
+  if (doctype && declaration !== null) {
+    const end = text.indexOf(">", declaration.index);
+    if (end !== -1 && !text.slice(declaration.index, end).includes("[")) {
+      text = text.slice(0, declaration.index) + text.slice(end + 1);
+    }
+  }
+  if (declaration !== null && (!doctype || /<!DOCTYPE/i.test(text))) {
+    throw new ArchiveError(doctype ? `${printable(entry.name)} has a document type declaration with declarations of its own, which story does not read` : `${printable(entry.name)} has a document type declaration, which ${format.kind} never has`);
   }
   return text;
 }
 var UTF82 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 var TAG = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
 var ATTRIBUTE2 = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-function* xmlTokens(text) {
+function* xmlTokens(text, entities = XML_ENTITIES) {
   const open = [];
-  for (const token of rawTokens(text)) {
+  for (const token of rawTokens(text, entities)) {
     if (token.type === "start") {
       open.push(token.name);
     } else if (token.type === "end" && open.pop() !== token.name) {
-      throw new DocxError("its XML is damaged");
+      throw new ArchiveError("its XML is damaged");
     }
     yield token;
   }
   if (open.length > 0) {
-    throw new DocxError("its XML is damaged");
+    throw new ArchiveError("its XML is damaged");
   }
 }
-function* rawTokens(text) {
+function* rawTokens(text, entities) {
   let position = 0;
   while (position < text.length) {
     const open = text.indexOf("<", position);
     if (open === -1) {
-      yield { type: "text", text: decodeEntities(text.slice(position)) };
+      yield { type: "text", text: decodeEntities(text.slice(position), entities) };
       return;
     }
     if (open > position) {
-      yield { type: "text", text: decodeEntities(text.slice(position, open)) };
+      yield { type: "text", text: decodeEntities(text.slice(position, open), entities) };
     }
     const skip = [["<!--", "-->"], ["<?", "?>"], ["<![CDATA[", "]]>"]].find(([start]) => text.startsWith(start, open));
     if (skip !== undefined) {
       const close = text.indexOf(skip[1], open + skip[0].length);
       if (close === -1) {
-        throw new DocxError("its XML is damaged");
+        throw new ArchiveError("its XML is damaged");
       }
       if (skip[0] === "<![CDATA[") {
         yield { type: "text", text: text.slice(open + 9, close) };
@@ -23508,28 +23510,164 @@ function* rawTokens(text) {
     TAG.lastIndex = open;
     const match = TAG.exec(text);
     if (match === null) {
-      throw new DocxError("its XML is damaged");
+      throw new ArchiveError("its XML is damaged");
     }
     const attributes = {};
     for (const attribute of match[3].matchAll(ATTRIBUTE2)) {
-      attributes[attribute[1]] = decodeEntities(attribute[2] ?? attribute[3]);
+      attributes[attribute[1]] = decodeEntities(attribute[2] ?? attribute[3], entities);
     }
     yield { type: match[1] ? "end" : match[4] ? "empty" : "start", name: match[2], attributes };
     position = TAG.lastIndex;
   }
 }
-var ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", '"'], ["apos", "'"]]);
-function decodeEntities(text) {
-  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, name) => {
+var XML_ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", '"'], ["apos", "'"]]);
+var LATIN_1 = "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml";
+var HTML_ENTITIES = new Map([
+  ...XML_ENTITIES,
+  ...LATIN_1.split(" ").map((name, index) => [name, String.fromCharCode(160 + index)]),
+  ...Object.entries({
+    OElig: "Œ",
+    oelig: "œ",
+    Scaron: "Š",
+    scaron: "š",
+    Yuml: "Ÿ",
+    fnof: "ƒ",
+    circ: "ˆ",
+    tilde: "˜",
+    ensp: " ",
+    emsp: " ",
+    thinsp: " ",
+    zwnj: "‌",
+    zwj: "‍",
+    lrm: "‎",
+    rlm: "‏",
+    ndash: "–",
+    mdash: "—",
+    lsquo: "‘",
+    rsquo: "’",
+    sbquo: "‚",
+    ldquo: "“",
+    rdquo: "”",
+    bdquo: "„",
+    dagger: "†",
+    Dagger: "‡",
+    bull: "•",
+    hellip: "…",
+    permil: "‰",
+    prime: "′",
+    Prime: "″",
+    lsaquo: "‹",
+    rsaquo: "›",
+    euro: "€",
+    trade: "™"
+  })
+]);
+function decodeEntities(text, entities) {
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);/gi, (whole, name) => {
     if (name[0] === "#") {
       const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
       return code <= 1114111 ? String.fromCodePoint(code) : whole;
     }
-    return ENTITIES.get(name) ?? whole;
+    return entities.get(name) ?? whole;
   });
 }
+
+// src/rich-text.js
 function proseText(text) {
-  return text.replace(/[\r\n]/g, " ").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+  return text.replace(/[\r\n]/g, " ").replace(/[\u0000-\u0008\u000b-\u001f\u007f\uE010\uE011]/g, "");
+}
+var LINE_BREAK4 = "";
+var PARAGRAPH_BREAK = "";
+function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
+  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
+}
+var HARD_BREAK = LINE_BREAK4;
+function paragraphBlocks(runs, level, quote, chapterLine) {
+  const pieces = [[]];
+  for (const run of runs) {
+    const parts = run.text.replace(/\u00ad/g, "").split(PARAGRAPH_BREAK);
+    parts.forEach((part, index) => {
+      if (index > 0) {
+        pieces.push([]);
+      }
+      pieces.at(-1).push({ ...run, text: part });
+    });
+  }
+  return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
+}
+function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
+  const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
+  const lines = plain.split(LINE_BREAK4).map((line) => line.trim()).filter((line) => line !== "");
+  if (lines.length === 0) {
+    return "";
+  }
+  if (level === 0 && /^([*_~-])( ?\1){2,}$/.test(plain)) {
+    return plain;
+  }
+  if (level === 0 && plain === "#") {
+    return "***";
+  }
+  if (level === 0) {
+    const heading = lines.length === 1 && chapterLine(lines[0]) !== null ? lines[0] : lines.length === 2 && chapterLine(lines[0])?.bare === true ? `${lines[0]}: ${lines[1]}` : null;
+    if (heading !== null) {
+      return `# ${escapeInline(heading)}`;
+    }
+  }
+  if (level > 0) {
+    return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
+  }
+  const kept = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
+  const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
+  const text = kept.join(plainBreaks ? `
+` : "\\\n");
+  const block = escapeBlockStart(text);
+  return quote ? block.split(`
+`).map((line) => `> ${line}`).join(`
+`) : block;
+}
+function inlineMarkdown(runs) {
+  const merged = [];
+  for (const run of runs) {
+    const last = merged.at(-1);
+    if (last !== undefined && last.italic === run.italic && last.bold === run.bold) {
+      last.text += run.text;
+    } else {
+      merged.push({ ...run });
+    }
+  }
+  return merged.map((run) => {
+    const text = run.text.replace(/[\t ]+/g, " ");
+    const marker = (run.bold ? "**" : "") + (run.italic ? "*" : "");
+    const lead = text.match(/^\s*/)[0];
+    const trail = lead.length === text.length ? "" : text.match(/\s*$/)[0];
+    const body = text.slice(lead.length, text.length - trail.length).replaceAll(` ${LINE_BREAK4}`, LINE_BREAK4).replaceAll(`${LINE_BREAK4} `, LINE_BREAK4);
+    if (marker === "" || body.replaceAll(LINE_BREAK4, "") === "") {
+      return escapeInline(text);
+    }
+    const marked = escapeInline(body).split(LINE_BREAK4).map((line) => line === "" ? line : `${marker}${line}${[...marker].reverse().join("")}`).join(LINE_BREAK4);
+    return `${lead}${marked}${trail}`;
+  }).join("");
+}
+function escapeInline(text) {
+  return text.replace(/[\\`*_[\]<]/g, "\\$&").replace(/\\<!/g, "\\<\\!");
+}
+function escapeBlockStart(text) {
+  return text.split(`
+`).map((line) => line.replace(/^(#{1,6})(?=\s|$)/, "\\$1").replace(/^>/, "\\>").replace(/^([-+])(?=\s)/, "\\$1").replace(/^(\d+)([.)])(?=\s)/, "$1\\$2").replace(/^(=+|-+)$/, (marks) => `\\${marks}`)).join(`
+`);
+}
+// src/docx.js
+var MAX_STYLE_DEPTH = 64;
+var DOCUMENT_PART = "word/document.xml";
+var STYLES_PART = "word/styles.xml";
+function docxMarkdown(bytes, { chapterLine = () => null } = {}) {
+  const entries = zipEntries(bytes, WORD);
+  const document = entries.get(DOCUMENT_PART);
+  if (document === undefined) {
+    throw new ArchiveError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
+  }
+  const styles = entries.has(STYLES_PART) ? readStyles(xmlText(bytes, entries.get(STYLES_PART))) : { paragraph: () => EMPTY_STYLE, character: () => EMPTY_STYLE };
+  return documentMarkdown(xmlText(bytes, document), styles, chapterLine);
 }
 function isOn(attributes) {
   const value = attributes["w:val"];
@@ -23754,7 +23892,7 @@ function documentMarkdown(xml, styles, chapterLine) {
         if (paragraph.markDeleted) {
           joined = paragraph.runs;
         } else {
-          for (const block of paragraphBlocks(paragraph, styles, chapterLine)) {
+          for (const block of wordParagraphBlocks(paragraph, styles, chapterLine)) {
             blocks.push(block);
           }
         }
@@ -23824,7 +23962,7 @@ function documentMarkdown(xml, styles, chapterLine) {
     }
   }
   if (joined !== null) {
-    for (const block of paragraphBlocks({ style: null, outline: null, runs: joined }, styles, chapterLine)) {
+    for (const block of wordParagraphBlocks({ style: null, outline: null, runs: joined }, styles, chapterLine)) {
       blocks.push(block);
     }
   }
@@ -23837,93 +23975,695 @@ function documentMarkdown(xml, styles, chapterLine) {
     notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES[code] }))
   };
 }
-var LINE_BREAK4 = "";
-var PARAGRAPH_BREAK = "";
-function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
-  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
-}
-var HARD_BREAK = LINE_BREAK4;
-function paragraphBlocks(paragraph, styles, chapterLine) {
+function wordParagraphBlocks(paragraph, styles, chapterLine) {
   const style = styles.paragraph(paragraph.style);
   const level = Number.isInteger(paragraph.outline) && paragraph.outline >= 0 && paragraph.outline <= 9 ? outlineLevel(paragraph.outline) : style.level;
-  const quote = level === 0 && style.quote;
   const runs = paragraph.runs.map((run) => ({
-    text: run.text.replace(/­/g, ""),
+    text: run.text,
     italic: level === 0 && (run.italic ?? styles.character(run.style).italic ?? style.italic) === true,
     bold: level === 0 && (run.bold ?? styles.character(run.style).bold ?? style.bold) === true
   }));
-  const pieces = [[]];
-  for (const run of runs) {
-    const parts = run.text.split(PARAGRAPH_BREAK);
-    parts.forEach((part, index) => {
-      if (index > 0) {
-        pieces.push([]);
-      }
-      pieces.at(-1).push({ ...run, text: part });
-    });
-  }
-  return pieces.map((piece) => blockMarkdown(piece, level, quote, chapterLine)).filter((block) => block !== "");
+  return paragraphBlocks(runs, level, style.quote, chapterLine);
 }
-function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
-  const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
-  const lines = plain.split(LINE_BREAK4).map((line) => line.trim()).filter((line) => line !== "");
-  if (lines.length === 0) {
-    return "";
+
+// src/epub.js
+var EPUB = Object.freeze({
+  extension: ".epub",
+  kind: "an EPUB",
+  again: "export it again from the program that made it",
+  unlock: "export a copy without a password from the program that made it"
+});
+var CONTAINER_PART = "META-INF/container.xml";
+var ENCRYPTION_PART = "META-INF/encryption.xml";
+var XHTML = "application/xhtml+xml";
+var MAX_EPUB_TEXT_BYTES = 64 * 1024 * 1024;
+var NOTE_MESSAGES2 = {
+  images: "it has images, which the import leaves out",
+  footnotes: "it has footnotes or endnotes, which the import leaves out",
+  tables: "it has tables, whose cells the import reads as plain paragraphs",
+  ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text",
+  "non-linear": 'it has documents outside its reading order (linear="no"), which the import leaves out',
+  "other-documents": "its reading order has documents that are not XHTML, which the import leaves out"
+};
+function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
+  const entries = zipEntries(bytes, EPUB);
+  let left = MAX_EPUB_TEXT_BYTES;
+  const read = (entry) => {
+    if (entry.size > left) {
+      throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
+    }
+    left -= entry.size;
+    return xmlText(bytes, entry, EPUB, { doctype: true });
+  };
+  const container = entries.get(CONTAINER_PART);
+  if (container === undefined) {
+    throw new ArchiveError(`it has no ${CONTAINER_PART}, so it is not an EPUB`);
   }
-  if (level === 0 && /^([*_~-])( ?\1){2,}$/.test(plain)) {
-    return plain;
+  const packagePath = rootfilePath(read(container));
+  const packageEntry = entries.get(packagePath);
+  if (packageEntry === undefined) {
+    throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(packagePath)}, which is not in the file`);
   }
-  if (level === 0 && plain === "#") {
-    return "***";
-  }
-  if (level === 0) {
-    const heading = lines.length === 1 && chapterLine(lines[0]) !== null ? lines[0] : lines.length === 2 && chapterLine(lines[0])?.bare === true ? `${lines[0]}: ${lines[1]}` : null;
-    if (heading !== null) {
-      return `# ${escapeInline(heading)}`;
+  const encrypted = entries.has(ENCRYPTION_PART) ? encryptedPaths(read(entries.get(ENCRYPTION_PART))) : new Set;
+  const refuseLocked = (part) => {
+    if (encrypted.has(part)) {
+      throw new ArchiveError(`it is locked with DRM (${ENCRYPTION_PART} encrypts ${printable(part)}), which story cannot read; import the manuscript the book was made from instead`);
+    }
+  };
+  refuseLocked(packagePath);
+  const notes = new Set;
+  const blocks = [];
+  for (const part of spineParts(read(packageEntry), packagePath, entries, notes)) {
+    refuseLocked(part);
+    for (const paragraph of xhtmlParagraphs2(read(entries.get(part)), notes)) {
+      blocks.push(...paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine));
     }
   }
-  if (level > 0) {
-    return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
-  }
-  const kept = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
-  const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
-  const text = kept.join(plainBreaks ? `
-` : "\\\n");
-  const block = escapeBlockStart(text);
-  return quote ? block.split(`
-`).map((line) => `> ${line}`).join(`
-`) : block;
-}
-function inlineMarkdown(runs) {
-  const merged = [];
-  for (const run of runs) {
-    const last = merged.at(-1);
-    if (last !== undefined && last.italic === run.italic && last.bold === run.bold) {
-      last.text += run.text;
-    } else {
-      merged.push({ ...run });
-    }
-  }
-  return merged.map((run) => {
-    const text = run.text.replace(/[\t ]+/g, " ");
-    const marker = (run.bold ? "**" : "") + (run.italic ? "*" : "");
-    const lead = text.match(/^\s*/)[0];
-    const trail = lead.length === text.length ? "" : text.match(/\s*$/)[0];
-    const body = text.slice(lead.length, text.length - trail.length).replaceAll(` ${LINE_BREAK4}`, LINE_BREAK4).replaceAll(`${LINE_BREAK4} `, LINE_BREAK4);
-    if (marker === "" || body.replaceAll(LINE_BREAK4, "") === "") {
-      return escapeInline(text);
-    }
-    const marked = escapeInline(body).split(LINE_BREAK4).map((line) => line === "" ? line : `${marker}${line}${[...marker].reverse().join("")}`).join(LINE_BREAK4);
-    return `${lead}${marked}${trail}`;
-  }).join("");
-}
-function escapeInline(text) {
-  return text.replace(/[\\`*_[\]<]/g, "\\$&").replace(/\\<!/g, "\\<\\!");
-}
-function escapeBlockStart(text) {
-  return text.split(`
-`).map((line) => line.replace(/^(#{1,6})(?=\s|$)/, "\\$1").replace(/^>/, "\\>").replace(/^([-+])(?=\s)/, "\\$1").replace(/^(\d+)([.)])(?=\s)/, "$1\\$2").replace(/^(=+|-+)$/, (marks) => `\\${marks}`)).join(`
+  const text = blocks.join(`
+
 `);
+  return {
+    text: text === "" ? "" : `${text}
+`,
+    notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES2[code] }))
+  };
+}
+function localName(name) {
+  return name.slice(name.lastIndexOf(":") + 1);
+}
+function rootfilePath(xml) {
+  for (const token of xmlTokens(xml, HTML_ENTITIES)) {
+    if (token.type === "end" || token.type === "text" || localName(token.name) !== "rootfile") {
+      continue;
+    }
+    const mediaType = token.attributes["media-type"];
+    if (mediaType !== undefined && mediaType !== "application/oebps-package+xml") {
+      continue;
+    }
+    const fullPath = token.attributes["full-path"] ?? "";
+    const resolved = archivePath("", fullPath);
+    if (resolved === null) {
+      throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(fullPath)}, which is not a path inside the file`);
+    }
+    return resolved;
+  }
+  throw new ArchiveError(`its ${CONTAINER_PART} names no package document, so it is not an EPUB`);
+}
+function archivePath(base, href) {
+  const bare = href.replace(/[?#][^]*$/, "");
+  let decoded;
+  try {
+    decoded = decodeURIComponent(bare);
+  } catch {
+    return null;
+  }
+  if (decoded === "" || /^[a-z][a-z0-9+.-]*:/i.test(decoded) || decoded.startsWith("/") || decoded.includes("\\")) {
+    return null;
+  }
+  const parts = [];
+  for (const segment of `${base}${decoded}`.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      if (parts.length === 0) {
+        return null;
+      }
+      parts.pop();
+      continue;
+    }
+    parts.push(segment);
+  }
+  return parts.length === 0 ? null : parts.join("/");
+}
+function encryptedPaths(xml) {
+  const paths = new Set;
+  for (const token of xmlTokens(xml, HTML_ENTITIES)) {
+    if ((token.type === "start" || token.type === "empty") && localName(token.name) === "CipherReference") {
+      const resolved = archivePath("", token.attributes.URI ?? "");
+      if (resolved !== null) {
+        paths.add(resolved);
+      }
+    }
+  }
+  return paths;
+}
+function spineParts(xml, packagePath, entries, notes) {
+  const base = packagePath.includes("/") ? packagePath.slice(0, packagePath.lastIndexOf("/") + 1) : "";
+  const items = new Map;
+  const spine = [];
+  let section = null;
+  for (const token of xmlTokens(xml, HTML_ENTITIES)) {
+    if (token.type === "text") {
+      continue;
+    }
+    const name = localName(token.name);
+    if (name === "manifest" || name === "spine") {
+      section = token.type === "start" ? name : token.type === "end" ? null : section;
+      continue;
+    }
+    if (token.type === "end") {
+      continue;
+    }
+    const { attributes } = token;
+    if (section === "manifest" && name === "item" && attributes.id !== undefined && !items.has(attributes.id)) {
+      items.set(attributes.id, { href: attributes.href ?? "", mediaType: (attributes["media-type"] ?? "").trim().toLowerCase(), properties: (attributes.properties ?? "").split(/\s+/) });
+    } else if (section === "spine" && name === "itemref") {
+      spine.push({ idref: attributes.idref ?? "", linear: (attributes.linear ?? "yes").trim() !== "no" });
+    }
+  }
+  if (spine.length === 0) {
+    throw new ArchiveError("its package has no spine, so it has no reading order to import");
+  }
+  const parts = [];
+  const seen = new Set;
+  for (const { idref, linear } of spine) {
+    const item = items.get(idref);
+    if (item === undefined) {
+      throw new ArchiveError(`its spine names the item ${printable(idref)}, which its manifest does not list`);
+    }
+    if (item.properties.includes("nav")) {
+      continue;
+    }
+    if (!linear) {
+      notes.add("non-linear");
+      continue;
+    }
+    if (item.mediaType !== XHTML) {
+      notes.add(item.mediaType.startsWith("image/") ? "images" : "other-documents");
+      continue;
+    }
+    const part = archivePath(base, item.href);
+    if (part === null) {
+      throw new ArchiveError(`its manifest lists ${printable(item.href)}, which is not a path inside the file`);
+    }
+    if (!entries.has(part)) {
+      throw new ArchiveError(`its manifest lists ${printable(part)}, which is not in the file`);
+    }
+    if (!seen.has(part)) {
+      seen.add(part);
+      parts.push(part);
+    }
+  }
+  return parts;
+}
+var SKIPPED2 = new Map([
+  ["head", null],
+  ["script", null],
+  ["style", null],
+  ["template", null],
+  ["noscript", null],
+  ["nav", null],
+  ["del", null],
+  ["rp", null],
+  ["rt", "ruby"],
+  ["svg", "images"],
+  ["object", "images"],
+  ["iframe", "images"],
+  ["video", "images"],
+  ["audio", "images"],
+  ["canvas", "images"],
+  ["picture", "images"]
+]);
+var BLOCKS = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "body",
+  "caption",
+  "center",
+  "dd",
+  "details",
+  "div",
+  "dl",
+  "dt",
+  "figcaption",
+  "figure",
+  "footer",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hgroup",
+  "li",
+  "main",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "summary",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul"
+]);
+var ITALIC = new Set(["em", "i", "cite", "dfn"]);
+var BOLD = new Set(["strong", "b"]);
+var NOTE_TYPES = /(?:^|\s)(?:doc-)?(?:footnotes?|endnotes?|rearnotes?)(?:\s|$)/;
+var NOTE_REFERENCE = /(?:^|\s)(?:doc-)?noteref(?:\s|$)/;
+var NAVIGATION_TYPES = /(?:^|\s)(?:doc-)?(?:toc|landmarks|page-list|pagebreak)(?:\s|$)/;
+function skippedFor(name, attributes) {
+  if (SKIPPED2.has(name)) {
+    return SKIPPED2.get(name);
+  }
+  const types = `${attributes["epub:type"] ?? ""} ${attributes.role ?? ""}`;
+  if (NOTE_TYPES.test(types) || name === "a" && NOTE_REFERENCE.test(types)) {
+    return "footnotes";
+  }
+  if (NAVIGATION_TYPES.test(types) || attributes.hidden !== undefined || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:;|$)/i.test(attributes.style ?? "")) {
+    return null;
+  }
+  return;
+}
+function styleEmphasis(style) {
+  const fontStyle = /(?:^|;)\s*font-style\s*:\s*([a-z]+)/i.exec(style)?.[1].toLowerCase();
+  const fontWeight = /(?:^|;)\s*font-weight\s*:\s*([a-z0-9]+)/i.exec(style)?.[1].toLowerCase();
+  return {
+    italic: fontStyle === undefined ? null : fontStyle === "italic" || fontStyle === "oblique",
+    bold: fontWeight === undefined ? null : fontWeight === "bold" || fontWeight === "bolder" || /^\d+$/.test(fontWeight) && Number(fontWeight) >= 600
+  };
+}
+function xhtmlParagraphs2(xml, notes) {
+  const paragraphs = [];
+  const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false }];
+  let paragraph = null;
+  let skipping = 0;
+  const flush = () => {
+    if (paragraph !== null && paragraph.runs.some((run) => run.text.trim() !== "")) {
+      paragraphs.push(paragraph);
+    }
+    paragraph = null;
+  };
+  const add = (text) => {
+    const frame = frames.at(-1);
+    if (!frame.body) {
+      return;
+    }
+    if (paragraph === null) {
+      paragraph = { runs: [], level: frame.level, quote: frame.quote };
+    }
+    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold });
+  };
+  for (const token of xmlTokens(xml, HTML_ENTITIES)) {
+    if (skipping > 0) {
+      if (token.type === "start") {
+        skipping += 1;
+      } else if (token.type === "end") {
+        skipping -= 1;
+      } else if (token.type === "empty" && (localName(token.name) === "img" || localName(token.name) === "image")) {
+        notes.add("images");
+      }
+      continue;
+    }
+    if (token.type === "text") {
+      const frame = frames.at(-1);
+      add(frame.pre ? token.text.split(/\r\n?|\n/).map(proseText).join(LINE_BREAK4) : proseText(token.text.replace(/\t/g, " ")));
+      continue;
+    }
+    const name = localName(token.name).toLowerCase();
+    if (token.type === "end") {
+      if (BLOCKS.has(name)) {
+        flush();
+      }
+      frames.pop();
+      continue;
+    }
+    const { attributes } = token;
+    const skipped = skippedFor(name, attributes);
+    if (skipped !== undefined) {
+      if (skipped !== null) {
+        notes.add(skipped);
+      }
+      if (token.type === "start") {
+        skipping = 1;
+      }
+      continue;
+    }
+    if (name === "img" || name === "image") {
+      notes.add("images");
+    }
+    if (name === "table") {
+      notes.add("tables");
+    }
+    if (BLOCKS.has(name) || name === "hr") {
+      flush();
+    }
+    if (name === "br") {
+      add(LINE_BREAK4);
+    }
+    const sceneBreak = name === "hr" || name === "p" && /(?:^|\s)scene-break(?:\s|$)/.test(attributes.class ?? "");
+    if (sceneBreak && frames.at(-1).body) {
+      paragraphs.push({ runs: [{ text: "* * *", italic: false, bold: false }], level: 0, quote: false });
+    }
+    if (token.type === "empty") {
+      continue;
+    }
+    const parent = frames.at(-1);
+    const emphasis = styleEmphasis(attributes.style ?? "");
+    const heading = /^h([1-6])$/.exec(name);
+    frames.push({
+      italic: emphasis.italic ?? (ITALIC.has(name) || parent.italic),
+      bold: emphasis.bold ?? (BOLD.has(name) || parent.bold),
+      level: heading === null ? parent.level : Number(heading[1]),
+      quote: parent.quote || name === "blockquote",
+      pre: parent.pre || name === "pre",
+      body: parent.body || name === "body"
+    });
+    if (sceneBreak) {
+      skipping = 1;
+      frames.pop();
+    }
+  }
+  flush();
+  return paragraphs;
+}
+
+// src/odt.js
+var ODT = Object.freeze({
+  extension: ".odt",
+  kind: "an OpenDocument text",
+  again: "save it again from your word processor",
+  unlock: "remove the password in your word processor and save it again"
+});
+var CONTENT_PART = "content.xml";
+var STYLES_PART2 = "styles.xml";
+var MANIFEST_PART = "META-INF/manifest.xml";
+var MIMETYPE_PART = "mimetype";
+var TEXT_MIMETYPE = /^application\/vnd\.oasis\.opendocument\.text(?:-template|-master)?$/;
+var MAX_STYLE_DEPTH2 = 64;
+var NOTE_MESSAGES3 = {
+  "tracked-changes": "it has tracked changes; the import keeps the text as if every change were accepted",
+  comments: "it has comments, which the import leaves out",
+  footnotes: "it has footnotes or endnotes, which the import leaves out",
+  images: "it has images or drawings, which the import leaves out",
+  "text-boxes": "it has text boxes, whose text the import leaves out",
+  tables: "it has tables, whose cells the import reads as plain paragraphs",
+  numbering: "it has lists or numbered headings, whose bullets and numbers the import leaves out, so a chapter number made that way is lost",
+  ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text"
+};
+function odtMarkdown(bytes, { chapterLine = () => null } = {}) {
+  const entries = zipEntries(bytes, ODT);
+  if (entries.has(MIMETYPE_PART)) {
+    const mimetype = xmlText(bytes, entries.get(MIMETYPE_PART), ODT).trim();
+    if (!TEXT_MIMETYPE.test(mimetype)) {
+      throw new ArchiveError(`its media type is ${printable(mimetype)}, so it is not an OpenDocument text`);
+    }
+  }
+  const content = entries.get(CONTENT_PART);
+  if (content === undefined) {
+    throw new ArchiveError(`it has no ${CONTENT_PART}, so it is not an OpenDocument text`);
+  }
+  if (entries.has(MANIFEST_PART) && encryptedParts(xmlText(bytes, entries.get(MANIFEST_PART), ODT)).has(CONTENT_PART)) {
+    throw new ArchiveError(`it is password-protected; ${ODT.unlock}`);
+  }
+  const contentXml = xmlText(bytes, content, ODT);
+  const styles = readStyles2([...entries.has(STYLES_PART2) ? [xmlText(bytes, entries.get(STYLES_PART2), ODT)] : [], contentXml]);
+  return documentMarkdown2(contentXml, styles, chapterLine);
+}
+function encryptedParts(xml) {
+  const parts = new Set;
+  let entry = null;
+  for (const token of xmlTokens(xml)) {
+    if (token.name === "manifest:file-entry") {
+      entry = token.type === "start" ? token.attributes["manifest:full-path"] ?? null : null;
+    } else if (entry !== null && token.type !== "end" && token.name === "manifest:encryption-data") {
+      parts.add(entry);
+    }
+  }
+  return parts;
+}
+var EMPTY_STYLE2 = { level: 0, quote: false, italic: null, bold: null, hidden: null };
+function outlineAttribute(value) {
+  if (value === undefined) {
+    return null;
+  }
+  const level = Number.parseInt(value, 10);
+  return Number.isInteger(level) && level >= 1 ? level : 0;
+}
+function readStyles2(parts) {
+  const styles = new Map;
+  for (const xml of parts) {
+    let style = null;
+    for (const token of xmlTokens(xml)) {
+      if (token.type === "text") {
+        continue;
+      }
+      if (token.name === "style:style") {
+        if (token.type === "end") {
+          style = null;
+          continue;
+        }
+        const { attributes } = token;
+        const family = attributes["style:family"];
+        style = family === "paragraph" || family === "text" ? {
+          name: attributes["style:display-name"] ?? attributes["style:name"] ?? "",
+          outline: outlineAttribute(attributes["style:default-outline-level"]),
+          parent: attributes["style:parent-style-name"] ?? null,
+          italic: null,
+          bold: null,
+          hidden: null
+        } : null;
+        if (style !== null && attributes["style:name"] !== undefined) {
+          styles.set(`${family}:${attributes["style:name"]}`, style);
+        }
+        if (token.type === "empty") {
+          style = null;
+        }
+        continue;
+      }
+      if (style !== null && token.type !== "end" && token.name === "style:text-properties") {
+        const { attributes } = token;
+        const fontStyle = attributes["fo:font-style"];
+        const fontWeight = attributes["fo:font-weight"];
+        if (fontStyle !== undefined) {
+          style.italic = fontStyle === "italic" || fontStyle === "oblique";
+        }
+        if (fontWeight !== undefined) {
+          style.bold = fontWeight === "bold" || /^\d+$/.test(fontWeight) && Number(fontWeight) >= 600;
+        }
+        if (attributes["text:display"] !== undefined) {
+          style.hidden = attributes["text:display"] === "none";
+        }
+      }
+    }
+  }
+  const resolved = new Map;
+  const resolve = (family, name, depth) => {
+    const key = `${family}:${name}`;
+    if (resolved.has(key)) {
+      return resolved.get(key);
+    }
+    const style = styles.get(key);
+    if (style === undefined || depth > MAX_STYLE_DEPTH2) {
+      return EMPTY_STYLE2;
+    }
+    resolved.set(key, EMPTY_STYLE2);
+    const base = style.parent === null ? EMPTY_STYLE2 : resolve(family, style.parent, depth + 1);
+    const label = style.name.replace(/_20_/g, " ").trim().toLowerCase();
+    const heading = label.match(/^heading (\d+)$/);
+    let level = base.level;
+    if (label === "title") {
+      level = 1;
+    } else if (heading !== null) {
+      level = Math.min(Number(heading[1]), 6);
+    } else if (style.outline !== null) {
+      level = Math.min(style.outline, 6);
+    }
+    const result = {
+      level,
+      quote: base.quote || /^(?:quotations|quote|intense quote|block text|block quote|blockquote)$/.test(label),
+      italic: style.italic ?? base.italic,
+      bold: style.bold ?? base.bold,
+      hidden: style.hidden ?? base.hidden
+    };
+    resolved.set(key, result);
+    return result;
+  };
+  return {
+    paragraph: (name) => name === null ? EMPTY_STYLE2 : resolve("paragraph", name, 0),
+    text: (name) => name === null ? EMPTY_STYLE2 : resolve("text", name, 0)
+  };
+}
+var SKIPPED3 = new Map([
+  ["text:tracked-changes", "tracked-changes"],
+  ["text:note", "footnotes"],
+  ["office:annotation", "comments"],
+  ["draw:frame", "images"],
+  ["draw:a", "images"],
+  ["draw:g", "images"],
+  ["draw:custom-shape", "images"],
+  ["draw:rect", "images"],
+  ["draw:ellipse", "images"],
+  ["draw:line", "images"],
+  ["draw:polygon", "images"],
+  ["draw:path", "images"],
+  ["draw:image", "images"],
+  ["draw:text-box", "text-boxes"],
+  ["text:ruby-text", "ruby"],
+  ["text:number", "numbering"],
+  ["text:table-of-content", null],
+  ["text:alphabetical-index", null],
+  ["text:illustration-index", null],
+  ["text:table-index", null],
+  ["text:object-index", null],
+  ["text:user-index", null],
+  ["text:bibliography", null],
+  ["text:hidden-text", null],
+  ["text:sequence-decls", null],
+  ["text:variable-decls", null],
+  ["text:user-field-decls", null],
+  ["office:forms", null]
+]);
+function documentMarkdown2(xml, styles, chapterLine) {
+  const notes = new Set;
+  const blocks = [];
+  let inText = false;
+  let skipping = null;
+  let paragraph = null;
+  let nested = 0;
+  const spans = [];
+  const finish = () => {
+    const style = styles.paragraph(paragraph.style);
+    const level = paragraph.heading === null ? style.level : paragraph.heading;
+    const runs = paragraph.runs.filter((run) => (run.hidden ?? style.hidden) !== true).map((run) => ({
+      text: run.text,
+      italic: level === 0 && (run.italic ?? style.italic) === true,
+      bold: level === 0 && (run.bold ?? style.bold) === true
+    }));
+    blocks.push(...paragraphBlocks(runs, level, style.quote, chapterLine));
+    paragraph = null;
+  };
+  const add = (text) => {
+    const pick = (key) => {
+      for (let index = spans.length - 1;index >= 0; index -= 1) {
+        const value = styles.text(spans[index])[key];
+        if (value !== null) {
+          return value;
+        }
+      }
+      return null;
+    };
+    paragraph.runs.push({ text, italic: pick("italic"), bold: pick("bold"), hidden: pick("hidden") });
+  };
+  for (const token of xmlTokens(xml)) {
+    const { type, name, attributes } = token;
+    if (skipping !== null) {
+      if (name === "draw:text-box") {
+        notes.add("text-boxes");
+      }
+      if (type === "start") {
+        skipping += 1;
+      } else if (type === "end") {
+        skipping -= 1;
+        if (skipping === 0) {
+          skipping = null;
+        }
+      }
+      continue;
+    }
+    if (name === "office:text") {
+      inText = type === "start";
+      continue;
+    }
+    if (!inText) {
+      continue;
+    }
+    if (type === "text") {
+      if (paragraph !== null) {
+        add(proseText(token.text.replace(/[\t\r\n]/g, " ")));
+      }
+      continue;
+    }
+    if (type !== "end" && SKIPPED3.has(name)) {
+      const note = SKIPPED3.get(name);
+      if (note !== null) {
+        notes.add(note);
+      }
+      if (type === "start") {
+        skipping = 1;
+      }
+      continue;
+    }
+    if (type !== "end" && name === "text:section" && attributes["text:display"] === "none") {
+      if (type === "start") {
+        skipping = 1;
+      }
+      continue;
+    }
+    if (name === "text:change" || name === "text:change-start") {
+      notes.add("tracked-changes");
+      continue;
+    }
+    if (name === "text:list" && type === "start") {
+      notes.add("numbering");
+      continue;
+    }
+    if (name === "table:table" && type === "start") {
+      notes.add("tables");
+      continue;
+    }
+    if (name === "text:p" || name === "text:h") {
+      if (type === "end") {
+        if (nested > 0) {
+          nested -= 1;
+        } else if (paragraph !== null) {
+          finish();
+        }
+        continue;
+      }
+      if (paragraph !== null) {
+        nested += type === "start" ? 1 : 0;
+        continue;
+      }
+      const outline = Number.parseInt(attributes["text:outline-level"] ?? "", 10);
+      paragraph = {
+        style: attributes["text:style-name"] ?? null,
+        heading: name === "text:h" ? Number.isInteger(outline) && outline >= 1 ? Math.min(outline, 6) : 1 : null,
+        runs: []
+      };
+      if (type === "empty") {
+        finish();
+      }
+      continue;
+    }
+    if (paragraph === null) {
+      continue;
+    }
+    if (name === "text:span") {
+      if (type === "start") {
+        spans.push(attributes["text:style-name"] ?? null);
+      } else if (type === "end") {
+        spans.pop();
+      }
+      continue;
+    }
+    if (type === "end") {
+      continue;
+    }
+    if (name === "text:s") {
+      add(" ");
+    } else if (name === "text:tab") {
+      add("\t");
+    } else if (name === "text:line-break") {
+      add(LINE_BREAK4);
+    }
+  }
+  const text = blocks.join(`
+
+`);
+  return {
+    text: text === "" ? "" : `${text}
+`,
+    notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES3[code] }))
+  };
 }
 
 // src/lock.js
@@ -30754,7 +31494,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
   return Buffer8.concat(chunks);
 }
 function stdinText(command, bytes) {
-  const zipAdvice = command === "import" ? "story import reads a Word document only from a .docx file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
+  const zipAdvice = command === "import" ? "story import reads a Word document, an OpenDocument text, or an EPUB only from a .docx, .odt, or .epub file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
   const text = decodeUtf82(bytes, "Cannot read stdin", "Pipe UTF-8 plain text or markdown instead", zipAdvice);
   if (text.trim() === "") {
     throw usageError(`story ${command} - read nothing from stdin: pipe the text in, such as story ${command} - < draft.md`);
@@ -34148,17 +34888,24 @@ function unitNumeral(words) {
   return `(?:(?:${units})[-\\s]${words.hundred}(?:(?:[-\\s]${words.and})?[-\\s]${belowHundred})?|${belowHundred})|`;
 }
 var MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
-var MAX_IMPORT_DOCX_BYTES = 64 * 1024 * 1024;
+var MAX_IMPORT_ARCHIVE_BYTES = 64 * 1024 * 1024;
 var MAX_IMPORT_FILES = 500;
-var IMPORT_FILE = /\.(?:md|markdown|txt|docx)$/i;
-var DOCX_FILE = /\.docx$/i;
+var IMPORT_FILE = /\.(?:md|markdown|txt|docx|odt|epub)$/i;
+var ARCHIVE_READERS = new Map([
+  ["docx", { read: docxMarkdown, code: "docx-content-left-out" }],
+  ["odt", { read: odtMarkdown, code: "import-content-left-out" }],
+  ["epub", { read: epubMarkdown, code: "import-content-left-out" }]
+]);
+function archiveReader(name) {
+  return ARCHIVE_READERS.get(/\.([a-z]+)$/i.exec(name)?.[1].toLowerCase()) ?? null;
+}
 function rejectSymlinkedSource(filePath) {
   if (fs26.lstatSync(filePath).isSymbolicLink()) {
     throw usageError("Refusing to import symlinked source: " + filePath);
   }
 }
 function importFileLimit(filePath) {
-  return DOCX_FILE.test(filePath) ? MAX_IMPORT_DOCX_BYTES : MAX_IMPORT_FILE_BYTES;
+  return archiveReader(filePath) === null ? MAX_IMPORT_FILE_BYTES : MAX_IMPORT_ARCHIVE_BYTES;
 }
 function assertImportFileSize(filePath) {
   const size = fs26.statSync(filePath).size;
@@ -34419,26 +35166,27 @@ function addCandidate(counts, name) {
   counts.set(name, (counts.get(name) ?? 0) + 1);
 }
 function readSourceText(filePath) {
-  return decodeUtf82(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document only from a file whose name ends in .docx; save or export anything else as markdown or plain text first");
+  return decodeUtf82(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document, an OpenDocument text, or an EPUB only from a file whose name ends in .docx, .odt, or .epub; save or export anything else as markdown or plain text first");
 }
 function readSourceDocument(name, filePath, rules) {
-  if (!DOCX_FILE.test(name)) {
+  const reader = archiveReader(name);
+  if (reader === null) {
     return { name, path: filePath, text: readSourceText(filePath) };
   }
-  const bytes = readFileBytes(filePath, MAX_IMPORT_DOCX_BYTES);
+  const bytes = readFileBytes(filePath, MAX_IMPORT_ARCHIVE_BYTES);
   let converted;
   try {
-    converted = docxMarkdown(bytes, { chapterLine: docxChapterLine(rules) });
+    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules) });
   } catch (error) {
-    throw error instanceof DocxError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
+    throw error instanceof ArchiveError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
   }
   const size = Buffer10.byteLength(converted.text, "utf8");
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
-  return { name, path: filePath, text: converted.text, notes: converted.notes };
+  return { name, path: filePath, text: converted.text, notes: converted.notes, noteCode: reader.code };
 }
-function docxChapterLine(rules) {
+function chapterLineReader(rules) {
   return (text) => {
     if (text.length > PLAIN_LINE_MAX_LENGTH) {
       return null;
@@ -34492,7 +35240,7 @@ function readSourceDocuments(source, rules) {
     return readSourceDocument(name, fullPath, rules);
   });
   if (documents.length === 0) {
-    throw usageError(`No markdown, text, or Word files found in ${source}`);
+    throw usageError(`No markdown, text, Word, OpenDocument, or EPUB files found in ${source}`);
   }
   return documents;
 }
@@ -34532,7 +35280,7 @@ function splitChapters(documents, warnings, rules, bylines) {
   const chapters = [];
   for (const document of documents) {
     for (const note of document.notes ?? []) {
-      warnings.push({ ...warn("docx-content-left-out", `${shownText2(document.name)}: ${note.message}`), source: document.path });
+      warnings.push({ ...warn(document.noteCode, `${shownText2(document.name)}: ${note.message}`), source: document.path });
     }
     const source = document.text.replace(/\r\n?/g, `
 `);
@@ -36572,7 +37320,7 @@ var COMMENTS_EXTENDED_PART = "word/commentsExtended.xml";
 var MAX_QUOTED_CHARACTERS = 300;
 var CONTEXT_WORDS = 6;
 var UNCHANGED_WORDS = 12;
-var SKIPPED2 = new Set(["w:rPrChange", "w:pPrChange", "w:sectPrChange", "w:tblPrChange", "mc:Fallback", "w:rt", "w:drawing", "w:pict", "w:object", "w:txbxContent"]);
+var SKIPPED4 = new Set(["w:rPrChange", "w:pPrChange", "w:sectPrChange", "w:tblPrChange", "mc:Fallback", "w:rt", "w:drawing", "w:pict", "w:object", "w:txbxContent"]);
 var CHANGE_ELEMENTS = new Map([
   ["w:ins", { kind: "insertion", state: "inserted" }],
   ["w:del", { kind: "deletion", state: "deleted" }],
@@ -36615,7 +37363,7 @@ function readReturnedFile(file, { cwd, command, root }) {
     hash = createHash("sha256").update(bytes).digest("hex");
     review = readReview(bytes);
   } catch (error) {
-    throw error instanceof DocxError ? usageError(`Cannot read ${printable(file)}: ${error.message}`) : error;
+    throw error instanceof ArchiveError ? usageError(`Cannot read ${printable(file)}: ${error.message}`) : error;
   }
   const relative = path44.relative(cwd, filePath);
   const shown = printable(relative === "" || relative.startsWith("..") || path44.isAbsolute(relative) ? filePath : portablePath(relative));
@@ -36626,7 +37374,7 @@ function readReview(bytes) {
   const part = (name) => entries.has(name) ? xmlText(bytes, entries.get(name)) : null;
   const document = part(DOCUMENT_PART);
   if (document === null) {
-    throw new DocxError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
+    throw new ArchiveError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
   }
   const stylesXml = part(STYLES_PART);
   const styles = stylesXml === null ? null : readStyles(stylesXml);
@@ -36681,7 +37429,7 @@ function readComments(xml, styles) {
       } else if (type === "end" && comment !== null) {
         if (comment.id !== undefined) {
           if (comments.has(comment.id)) {
-            throw new DocxError(`it has two comments with the id ${printable(comment.id)}, so it is damaged; save it again from Word`);
+            throw new ArchiveError(`it has two comments with the id ${printable(comment.id)}, so it is damaged; save it again from Word`);
           }
           const { paragraphs, ...rest } = comment;
           comments.set(comment.id, { ...rest, text: paragraphs.map(displayText).filter((line) => line !== "").join(`
@@ -36694,7 +37442,7 @@ function readComments(xml, styles) {
     if (comment === null) {
       continue;
     }
-    if (type === "start" && (SKIPPED2.has(name) || name === "w:del" || name === "w:moveFrom")) {
+    if (type === "start" && (SKIPPED4.has(name) || name === "w:del" || name === "w:moveFrom")) {
       skip = { name, depth: 1 };
       continue;
     }
@@ -36856,7 +37604,7 @@ function documentParagraphs(xml, styles, comments) {
       }
       continue;
     }
-    if (type === "start" && SKIPPED2.has(name)) {
+    if (type === "start" && SKIPPED4.has(name)) {
       const kind = LEFT_OUT.get(name);
       if (kind !== undefined) {
         leaveOut(kind);
@@ -36912,7 +37660,7 @@ function documentParagraphs(xml, styles, comments) {
     if (name === "w:p") {
       if (type !== "end") {
         if (paragraphs.length >= MAX_NOTES_PARAGRAPHS) {
-          throw new DocxError(`it has more than ${MAX_NOTES_PARAGRAPHS} paragraphs, far more than a book has`);
+          throw new ArchiveError(`it has more than ${MAX_NOTES_PARAGRAPHS} paragraphs, far more than a book has`);
         }
         paragraph = { segments: [], mark: "kept", changes: [], comments: pending, style: null, outline: null, hidden: false, table: tables > 0, pageBreak: false };
         pending = [];
@@ -39564,7 +40312,7 @@ var COMMANDS = [
   {
     name: "import",
     usage: "import <source|->",
-    summary: ["Split an existing manuscript (markdown, text, or", ".docx) into a new story project; - reads the", "manuscript from stdin"],
+    summary: ["Split an existing manuscript (markdown, text,", ".docx, .odt, or .epub) into a new story project;", "- reads the manuscript from stdin"],
     project: "none",
     args: 1,
     options: ["title", "dir", "genre", "sub-genre", "setting-era", "theme", "themes", "pov", "tense", "synopsis", "language", "bylines", "force", ...WRITE_OPTIONS],

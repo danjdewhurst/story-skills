@@ -8,7 +8,10 @@ import { compareText, lowerCase } from "./languages/locale.js";
 import { withStyleLists } from "./languages/style.js";
 import { chapterHeading, characterCount, escapeRegExp, fencedLineIndexes, scanComments, splitFences, titleCaseSlug, wordCount } from "./markdown.js";
 import { countUnit } from "./forms.js";
-import { DocxError, docxMarkdown } from "./docx.js";
+import { ArchiveError } from "./archive.js";
+import { docxMarkdown } from "./docx.js";
+import { epubMarkdown } from "./epub.js";
+import { odtMarkdown } from "./odt.js";
 import { MAX_READ_BYTES, currentText, lstatIfExists, readFileBytes, removeFile } from "./files.js";
 import { withProjectLock } from "./lock.js";
 import { mirrorFolderNames } from "./preview.js";
@@ -116,13 +119,24 @@ function unitNumeral(words) {
 }
 
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
-// A Word document holds its images too, so it may be larger than a text
-// file; only its text parts are read, each under its own limit (docx.js),
-// and the markdown it converts to is held to the text file limit.
-const MAX_IMPORT_DOCX_BYTES = 64 * 1024 * 1024;
+// A Word document, an OpenDocument text, or an EPUB holds its images too,
+// so it may be larger than a text file; only its text parts are read, each
+// under its own limit (archive.js), and the markdown it converts to is held
+// to the text file limit.
+const MAX_IMPORT_ARCHIVE_BYTES = 64 * 1024 * 1024;
 const MAX_IMPORT_FILES = 500;
-const IMPORT_FILE = /\.(?:md|markdown|txt|docx)$/i;
-const DOCX_FILE = /\.docx$/i;
+const IMPORT_FILE = /\.(?:md|markdown|txt|docx|odt|epub)$/i;
+// The documents read from a zip, by extension: the reader, and the code of
+// the warning about what it left out.
+const ARCHIVE_READERS = new Map([
+  ["docx", { read: docxMarkdown, code: "docx-content-left-out" }],
+  ["odt", { read: odtMarkdown, code: "import-content-left-out" }],
+  ["epub", { read: epubMarkdown, code: "import-content-left-out" }]
+]);
+
+function archiveReader(name) {
+  return ARCHIVE_READERS.get(/\.([a-z]+)$/i.exec(name)?.[1].toLowerCase()) ?? null;
+}
 
 function rejectSymlinkedSource(filePath) {
   if (fs.lstatSync(filePath).isSymbolicLink()) {
@@ -131,7 +145,7 @@ function rejectSymlinkedSource(filePath) {
 }
 
 function importFileLimit(filePath) {
-  return DOCX_FILE.test(filePath) ? MAX_IMPORT_DOCX_BYTES : MAX_IMPORT_FILE_BYTES;
+  return archiveReader(filePath) === null ? MAX_IMPORT_FILE_BYTES : MAX_IMPORT_ARCHIVE_BYTES;
 }
 
 function assertImportFileSize(filePath) {
@@ -519,34 +533,36 @@ function addCandidate(counts, name) {
 // already refused a symlink or an oversized file; the read refuses one
 // swapped in since.
 function readSourceText(filePath) {
-  return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document only from a file whose name ends in .docx; save or export anything else as markdown or plain text first");
+  return decodeUtf8(readFileBytes(filePath, MAX_IMPORT_FILE_BYTES), `Cannot import ${filePath}`, "Save it as UTF-8 plain text or markdown first", "story import reads a Word document, an OpenDocument text, or an EPUB only from a file whose name ends in .docx, .odt, or .epub; save or export anything else as markdown or plain text first");
 }
 
-// One source file as a document: a Word document is read as markdown, with
-// notes about what it left out.
+// One source file as a document: a Word document, an OpenDocument text, or
+// an EPUB is read as markdown, with notes about what it left out.
 function readSourceDocument(name, filePath, rules) {
-  if (!DOCX_FILE.test(name)) {
+  const reader = archiveReader(name);
+  if (reader === null) {
     return { name, path: filePath, text: readSourceText(filePath) };
   }
-  const bytes = readFileBytes(filePath, MAX_IMPORT_DOCX_BYTES);
+  const bytes = readFileBytes(filePath, MAX_IMPORT_ARCHIVE_BYTES);
   let converted;
   try {
-    converted = docxMarkdown(bytes, { chapterLine: docxChapterLine(rules) });
+    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules) });
   } catch (error) {
-    // Only a DocxError says the file is bad; anything else is a bug.
-    throw error instanceof DocxError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
+    // Only an ArchiveError says the file is bad; anything else is a bug.
+    throw error instanceof ArchiveError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
   }
   const size = Buffer.byteLength(converted.text, "utf8");
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
-  return { name, path: filePath, text: converted.text, notes: converted.notes };
+  return { name, path: filePath, text: converted.text, notes: converted.notes, noteCode: reader.code };
 }
 
-// Tells docx.js which paragraphs are chapter lines, by the rules a plain
-// text manuscript is split with: null for prose, or { bare } where bare is
-// true when the line has no title of its own ("Chapter 1", "Prologue").
-function docxChapterLine(rules) {
+// Tells the document readers which paragraphs are chapter lines, by the
+// rules a plain text manuscript is split with: null for prose, or { bare }
+// where bare is true when the line has no title of its own ("Chapter 1",
+// "Prologue").
+function chapterLineReader(rules) {
   return (text) => {
     if (text.length > PLAIN_LINE_MAX_LENGTH) {
       return null;
@@ -612,7 +628,7 @@ function readSourceDocuments(source, rules) {
   });
 
   if (documents.length === 0) {
-    throw usageError(`No markdown, text, or Word files found in ${source}`);
+    throw usageError(`No markdown, text, Word, OpenDocument, or EPUB files found in ${source}`);
   }
 
   return documents;
@@ -659,7 +675,7 @@ function splitChapters(documents, warnings, rules, bylines) {
 
   for (const document of documents) {
     for (const note of document.notes ?? []) {
-      warnings.push({ ...warn("docx-content-left-out", `${shownText(document.name)}: ${note.message}`), source: document.path });
+      warnings.push({ ...warn(document.noteCode, `${shownText(document.name)}: ${note.message}`), source: document.path });
     }
     // A bare CR (classic Mac OS) ends a line too.
     const source = document.text.replace(/\r\n?/g, "\n");

@@ -56,6 +56,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 - Releases now have standalone `story` binaries for Alpine and other musl Linux systems, on x64 and arm64. See [Install the story CLI](docs/getting-started.md#install-the-story-cli).
   - The archives are `story-skills_<version>_linux_x64_musl.tar.gz` and `story-skills_<version>_linux_arm64_musl.tar.gz`, in the checksums file and attested like the others. They need `libstdc++` (`apk add libstdc++`).
   - Each one is smoke-tested in an Alpine container before release. The glibc Linux binaries and the Homebrew formula are unchanged.
+- `story import` now reads OpenDocument (`.odt`) and EPUB (`.epub`) manuscripts directly, so they no longer need Pandoc first. ([#887](https://github.com/danjdewhurst/story-skills/issues/887))
+  - An `.odt` is read as a `.docx` is: heading paragraphs and heading styles become headings, italic and bold become emphasis, the `Quotations` style becomes a block quote, line breaks and scene breaks are kept, and tracked changes are read as accepted.
+  - An `.epub` is read in its spine order, each XHTML document in turn, and then split into chapters as a markdown file is. The navigation document is left out. `<h1>` to `<h6>`, `<em>`, `<strong>`, `<blockquote>`, `<br>`, and `<hr>` carry over.
+  - What either leaves out, such as comments, footnotes, images, tables, lists, or EPUB documents outside the reading order, is named in a new `import-content-left-out` warning. Word documents keep `docx-content-left-out`.
+  - A folder import reads `.odt` and `.epub` files too. A password-protected, damaged, or ZIP64 file is refused, and so is an EPUB locked with DRM or one whose package names a path outside the file or a URL. An EPUB's parts may come to 64 MB unpacked together.
+  - See [Importing an OpenDocument text or an EPUB](docs/manuscripts.md#importing-an-opendocument-text-or-an-epub).
 
 ### Changed
 

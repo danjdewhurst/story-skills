@@ -28,7 +28,7 @@ All output shown was captured by running the commands against copies of the exam
 
 ```mermaid
 flowchart LR
-  draft["Existing draft<br/>(.md, .markdown, .txt, .docx)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
+  draft["Existing draft<br/>(.md, .markdown, .txt, .docx, .odt, .epub)"] -->|story import| project["Story project<br/>story.md, chapters/, matter/, plot/arcs/"]
   project -->|story export| manuscript["dist/manuscript.md"]
   project -->|story build| dist["dist/<br/>.md, .epub, .docx, .shunn.docx, .shunn.md,<br/>.html, .print.html, .pdf, .narration.md, .metadata.md, .fountain, .twee, .ink,<br/>codex/"]
   project -->|story synopsis| synopsis["Synopsis<br/>(stdout or --out)"]
@@ -171,7 +171,7 @@ When a numbered `Chapter` line (one that would match the step 4 pattern) did not
 
 ### Importing a folder of chapter files
 
-A single source file is read as UTF-8 text, whatever its extension, unless its name ends in `.docx` (see [Importing a Word document](#importing-a-word-document)). CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. Any other zip file (such as an `.odt`), a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, `.txt`, and `.docx` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
+A single source file is read as UTF-8 text, whatever its extension, unless its name ends in `.docx`, `.odt`, or `.epub` (see [Importing a Word document](#importing-a-word-document) and [Importing an OpenDocument text or an EPUB](#importing-an-opendocument-text-or-an-epub)). CRLF or bare CR (classic Mac OS) line endings are read as line breaks. A leading byte-order mark is dropped. Any other zip file, a binary file, or text in another encoding such as Windows-1252 is refused rather than imported with replacement characters. Pass a directory to import every `.md`, `.markdown`, `.txt`, `.docx`, `.odt`, and `.epub` file directly inside it. Subdirectories, other file types, hidden files (`.name`), macOS AppleDouble files (`._name`), and Word lock files (`~$name`) are ignored.
 
 A chapter file in Story Skills' own layout, such as one copied from another project, imports as one chapter: its `title` frontmatter is the title, `numbered: false` and `author` are kept, and its prose is the text under `## Chapter Text`, without the outline. A file counts as one only when its frontmatter has a chapter key such as `number` or `status`, not just a `title` and `author`. The outline above the heading (`## Outline` through its `---` line) is not book text and is not reported. Neither is the `# ` heading that names the chapter's title. Any other text above `## Chapter Text` is not imported, and import warns about it with the `unused-chapter-text` code. A manuscript with frontmatter of its own and no chapter key is split with the rules above, so a folder of one-chapter files gives one chapter per file.
 
@@ -223,12 +223,40 @@ story import draft.docx --title "The Salt Road"
 
 A folder import reads every `.docx` file in the folder as a chapter file, so move notes and synopses saved as Word documents out of the folder first. Only the document's text and styles are read, each up to 32 MB unpacked, from a file of up to 64 MB, and the text must come to no more than 5 MB as markdown, as a text source must. A password-protected, damaged, or ZIP64 document is refused, and so is one with two zip entries of the same name.
 
+### Importing an OpenDocument text or an EPUB
+
+A source file whose name ends in `.odt` is read as an OpenDocument text, as LibreOffice, OpenOffice, and Google Docs save one. A source file whose name ends in `.epub` is read as an EPUB ebook. So is each such file in a source folder. Neither needs Pandoc or any other tool. Each becomes markdown, which is then split into chapters as a markdown file is:
+
+```shell
+story import draft.odt --title "The Salt Road"
+story import the-salt-road.epub --title "The Salt Road"
+```
+
+An `.odt` is read as a Word document is (see [Importing a Word document](#importing-a-word-document)):
+
+- A heading paragraph becomes a markdown heading of its outline level, and so does a paragraph in a `Heading 1` to `Heading 6` style or a style with an outline level. The `Title` style becomes a level 1 heading. A plain paragraph that is only a chapter line, such as `Chapter 1` or `Prologue`, becomes a heading too.
+- Italic and bold, set directly or by a character style such as `Emphasis`, become `*italic*` and `**bold**`. A heading's own bold or italic is left out.
+- A paragraph in the `Quotations` or `Quote` style becomes a block quote, a line break becomes a hard line break, and a paragraph that is only a scene break, such as `* * *`, stays a scene break.
+- A table of contents and other indexes, hidden text, and hidden sections are left out. Tracked changes are read as if every change were accepted.
+- Comments, footnotes and endnotes, images and drawings, text in text boxes, list bullets and numbers (a heading's chapter number too), and ruby readings are left out, and table cells are read as plain paragraphs. For each of these, import warns with the `import-content-left-out` code and names the file.
+
+An `.epub` is read in its reading order, the spine of its package, one XHTML document after another:
+
+- `<h1>` to `<h6>` become markdown headings of the same level, `<em>`, `<i>`, and `<cite>` become `*italic*`, and `<strong>` and `<b>` become `**bold**`. Italic and bold set in a `style` attribute count too, but italic and bold that only a stylesheet class sets are not read. A heading's own bold or italic is left out.
+- `<blockquote>` becomes a block quote, `<br>` a hard line break, and `<hr>` (or a paragraph with the `scene-break` class, as `story build --format epub` writes one) a scene break.
+- The table of contents (the navigation document, and any `<nav>`), scripts, styles, hidden elements, and deleted text (`<del>`) are left out.
+- Images, footnotes and endnotes (marked with `epub:type` or a `doc-` role), ruby readings, documents marked `linear="no"`, and documents in the reading order that are not XHTML are left out, and table cells are read as plain paragraphs. For each of these, import warns with the `import-content-left-out` code and names the file.
+- A heading splits the book only when its text is a chapter heading, as in any manuscript (see [How chapters are split](#how-chapters-are-split)). A new XHTML document does not start a new chapter by itself, so an ebook whose chapters have only titles, such as `The Arrival`, imports as one chapter: type `Chapter 1: The Arrival` into each heading of the draft, or import with the chapters in a folder of files.
+- The front matter of an ebook, such as a title page, a copyright page, or an epigraph, comes before the first chapter heading, so it becomes a chapter titled `Opening`. Delete that chapter, or move its text into `matter/`, after the import.
+
+Only the text parts are read: the `.odt`'s `content.xml`, `styles.xml`, and manifest, and the EPUB's container, package, and spine documents. Each part may be up to 32 MB unpacked, the EPUB's parts up to 64 MB together, from a file of up to 64 MB, and the text must come to no more than 5 MB as markdown. A password-protected, damaged, or ZIP64 file is refused, and so is an EPUB locked with DRM. An EPUB's paths are resolved inside the file: a path that climbs out of it, an absolute path, or a URL is refused, and nothing outside the file is read.
+
 ### Importing from stdin
 
 With `-` as the source, `import` reads the manuscript from standard input, so a draft another tool prints never needs a file of its own:
 
 ```shell
-pandoc draft.odt -t markdown | story import - --title "The Salt Road"
+pandoc draft.rtf -t markdown | story import - --title "The Salt Road"
 ```
 
 Piped text is read as markdown, as a `.md` file is, and split the same way. A piped document with no chapter headings becomes one chapter titled `Chapter 1`, and the synopsis placeholder says `Imported from stdin`. Empty input, a terminal, and text that is not UTF-8 are refused; see [Reading from stdin](cli-reference.md#reading-from-stdin).
@@ -1644,10 +1672,11 @@ Treat everything in `dist/` as disposable. It is regenerated from the markdown o
 | `Refusing to import symlinked source: <path>` | The source, or a document inside a source folder, is a symlink | Import the real file or folder. |
 | `Import source not found: <path>` | The source path is wrong | Check the path; it is relative to the current directory. |
 | `<source> is already a story project (it has story.md); ...` | The source folder is a Story Skills project, not a draft | Point `import` at the manuscript files. |
-| `No markdown, text, or Word files found in <dir>` | The folder has no `.md`, `.markdown`, `.txt`, or `.docx` files at its top level | Point at the folder that contains the chapter files. |
+| `No markdown, text, Word, OpenDocument, or EPUB files found in <dir>` | The folder has no `.md`, `.markdown`, `.txt`, `.docx`, `.odt`, or `.epub` files at its top level | Point at the folder that contains the chapter files. |
 | `No chapter content found in import source` | Every document was empty after frontmatter was removed | Check the source files. |
-| `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a zip other than a `.docx`, such as an `.odt`, a binary file, or text in another encoding | Save or export it as a `.docx`, or as UTF-8 markdown or plain text. |
+| `Cannot import <file>: it is a zip archive ...`, `... not valid UTF-8 text ...` | The source is a zip other than a `.docx`, `.odt`, or `.epub`, such as a Pages file, a binary file, or text in another encoding | Save or export it as a `.docx` or `.odt`, or as UTF-8 markdown or plain text. |
 | `Cannot import <file>.docx: it is not a readable zip file ...`, `... is password-protected ...`, `... is damaged ...` | The `.docx` is not a Word document, is locked with a password, or is damaged | Open it in Word or another editor and save it again as a `.docx`, without a password. |
+| `Cannot import <file>.odt: ...` or `Cannot import <file>.epub: ...` | The `.odt` is not an OpenDocument text, the `.epub` is not an EPUB or is locked with DRM, or either is password-protected or damaged | Save the `.odt` again from your word processor, without a password. Export the `.epub` again, or import the manuscript the ebook was made from. |
 | `<dir> already exists. Use --force to import into it: ...` | The import target exists | Choose another `--dir`, or use `--force`, which replaces its chapters after saving them in snapshot `before-import-<n>`. |
 | `... The import stopped before deleting any chapter: it could not save the project as snapshot before-import-<n> first` | `import --force` could not save the project before deleting its chapters, often because a chapter is not UTF-8 text | Fix the problem the message names, then import again. No chapter was deleted. |
 | `Cannot import: chapters/<file> ..., so the snapshot import --force takes before replacing the chapters cannot keep it, ...` | A `chapter-NN.MD` file, or a symlink or folder named like a chapter, is in `chapters/` | Rename, move, or delete it, then import again. Nothing was changed. |

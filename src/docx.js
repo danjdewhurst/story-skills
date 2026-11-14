@@ -6,46 +6,22 @@
 // knows what to check.
 //
 // A .docx is a zip of XML parts. Only word/document.xml and
-// word/styles.xml are read, each under a size limit, and node:zlib inflates
-// them: decompression gives the same bytes on every runtime, unlike the
-// compression deflate.js replaces. The XML is read with a small scanner
-// that refuses a document type declaration, so no entity is ever expanded.
-import zlib from "node:zlib";
-import { isSceneBreakLine } from "./markdown.js";
-import { crc32 } from "./packaging.js";
+// word/styles.xml are read, each under a size limit, through archive.js,
+// which refuses a document type declaration, so no entity is ever
+// expanded. rich-text.js writes the paragraphs as markdown.
+import { ArchiveError, MAX_PART_BYTES, WORD, xmlText, xmlTokens, zipEntries } from "./archive.js";
+import { LINE_BREAK, PARAGRAPH_BREAK, paragraphBlocks, proseText } from "./rich-text.js";
 
-// A part bigger than this inflated is refused: a novel's document.xml is a
-// few megabytes, and the limit bounds the memory one conversion takes.
-export const MAX_DOCX_PART_BYTES = 32 * 1024 * 1024;
-const MAX_ZIP_ENTRIES = 10000;
+// story notes, story apply, and their tests read Word documents through
+// these names.
+export { ArchiveError as DocxError, printable, xmlText, xmlTokens, zipEntries } from "./archive.js";
+export { HARD_BREAK, paragraphMarkdown, proseText } from "./rich-text.js";
+export const MAX_DOCX_PART_BYTES = MAX_PART_BYTES;
 // A style based on a style based on ... is followed this far.
 const MAX_STYLE_DEPTH = 64;
-const EOCD_SIGNATURE = 0x06054b50;
-const CENTRAL_SIGNATURE = 0x02014b50;
-const LOCAL_SIGNATURE = 0x04034b50;
-const ZIP64_MARK = 0xffffffff;
 
 export const DOCUMENT_PART = "word/document.xml";
 export const STYLES_PART = "word/styles.xml";
-
-// The error for a file that is not a readable Word document. Its message
-// is the reason, for the caller to show after the file name.
-export class DocxError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = "DocxError";
-  }
-}
-
-// Text from the file, such as a zip entry name, made safe to print in a
-// message: a line break or tab is written as \n, \r, or \t, and any other
-// control character or line separator becomes "?", so the name cannot
-// start a line of its own.
-const ESCAPED_CONTROLS = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
-
-export function printable(text) {
-  return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) => ESCAPED_CONTROLS[character] ?? "?");
-}
 
 // Converts the bytes of a .docx to { text, notes }: markdown text, and the
 // notes about what was left out, each { code, message }. `chapterLine`
@@ -54,206 +30,13 @@ export function printable(text) {
 // no title of its own. Throws a DocxError when the file is not a readable
 // .docx.
 export function docxMarkdown(bytes, { chapterLine = () => null } = {}) {
-  const entries = zipEntries(bytes);
+  const entries = zipEntries(bytes, WORD);
   const document = entries.get(DOCUMENT_PART);
   if (document === undefined) {
-    throw new DocxError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
+    throw new ArchiveError(`it has no ${DOCUMENT_PART}, so it is not a Word document`);
   }
   const styles = entries.has(STYLES_PART) ? readStyles(xmlText(bytes, entries.get(STYLES_PART))) : { paragraph: () => EMPTY_STYLE, character: () => EMPTY_STYLE };
   return documentMarkdown(xmlText(bytes, document), styles, chapterLine);
-}
-
-// The zip's central directory, as a map from entry name to the entry's
-// method, sizes, CRC, and local header offset.
-export function zipEntries(bytes) {
-  const end = findEndOfCentralDirectory(bytes);
-  const count = bytes.readUInt16LE(end + 10);
-  const size = bytes.readUInt32LE(end + 12);
-  const offset = bytes.readUInt32LE(end + 16);
-  if (count === 0xffff || size === ZIP64_MARK || offset === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
-  }
-  if (count > MAX_ZIP_ENTRIES) {
-    throw new DocxError(`it has ${count} zip entries, over the ${MAX_ZIP_ENTRIES} entry limit`);
-  }
-  if (offset + size > end) {
-    throw new DocxError("its zip directory is damaged");
-  }
-  const entries = new Map();
-  let position = offset;
-  for (let index = 0; index < count; index += 1) {
-    if (position + 46 > end || bytes.readUInt32LE(position) !== CENTRAL_SIGNATURE) {
-      throw new DocxError("its zip directory is damaged");
-    }
-    const flags = bytes.readUInt16LE(position + 8);
-    const nameLength = bytes.readUInt16LE(position + 28);
-    const extraLength = bytes.readUInt16LE(position + 30);
-    const commentLength = bytes.readUInt16LE(position + 32);
-    const name = bytes.toString("utf8", position + 46, position + 46 + nameLength);
-    // Two entries with one name could show one text in Word and import
-    // another.
-    if (entries.has(name)) {
-      throw new DocxError(`it has two zip entries named ${printable(name)}`);
-    }
-    entries.set(name, {
-      name,
-      encrypted: (flags & 1) === 1,
-      method: bytes.readUInt16LE(position + 10),
-      crc: bytes.readUInt32LE(position + 16),
-      compressedSize: bytes.readUInt32LE(position + 20),
-      size: bytes.readUInt32LE(position + 24),
-      localOffset: bytes.readUInt32LE(position + 42)
-    });
-    position += 46 + nameLength + extraLength + commentLength;
-  }
-  return entries;
-}
-
-// The end of central directory record is the last 22 bytes, unless the
-// zip has a comment of up to 65,535 bytes after it.
-function findEndOfCentralDirectory(bytes) {
-  const lowest = Math.max(0, bytes.length - 22 - 0xffff);
-  for (let position = bytes.length - 22; position >= lowest; position -= 1) {
-    if (bytes.readUInt32LE(position) === EOCD_SIGNATURE) {
-      return position;
-    }
-  }
-  throw new DocxError("it is not a readable zip file, so it is not a .docx; save it again from Word, or export it to markdown");
-}
-
-// One entry's bytes, inflated and checked against its size and CRC, read
-// as UTF-8 XML.
-export function xmlText(bytes, entry) {
-  if (entry.encrypted) {
-    throw new DocxError("it is password-protected; remove the password in Word and save it again");
-  }
-  if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new DocxError("it is a ZIP64 archive, which story does not read; save it again from Word");
-  }
-  if (entry.size > MAX_DOCX_PART_BYTES) {
-    throw new DocxError(`${entry.name} is ${entry.size} bytes, over the ${MAX_DOCX_PART_BYTES} byte limit`);
-  }
-  const local = entry.localOffset;
-  if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== LOCAL_SIGNATURE) {
-    throw new DocxError(`its zip entry ${entry.name} is damaged`);
-  }
-  const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
-  const data = bytes.subarray(start, start + entry.compressedSize);
-  if (data.length !== entry.compressedSize) {
-    throw new DocxError(`its zip entry ${entry.name} is cut short`);
-  }
-  let content;
-  if (entry.method === 0) {
-    content = data;
-  } else if (entry.method === 8) {
-    try {
-      content = zlib.inflateRawSync(data, { maxOutputLength: MAX_DOCX_PART_BYTES });
-    } catch {
-      throw new DocxError(`its zip entry ${entry.name} cannot be inflated, or inflates past the ${MAX_DOCX_PART_BYTES} byte limit`);
-    }
-  } else {
-    throw new DocxError(`its zip entry ${entry.name} uses compression method ${entry.method}, which story does not read`);
-  }
-  if (content.length !== entry.size || crc32(content) !== entry.crc) {
-    throw new DocxError(`its zip entry ${entry.name} is damaged`);
-  }
-  let text;
-  try {
-    text = UTF8.decode(content);
-  } catch {
-    throw new DocxError(`${entry.name} is not valid UTF-8 text`);
-  }
-  if (text.charCodeAt(0) === 0xfeff) {
-    text = text.slice(1);
-  }
-  if (/<!DOCTYPE/i.test(text)) {
-    throw new DocxError(`${entry.name} has a document type declaration, which a Word document never has`);
-  }
-  return text;
-}
-
-const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-
-// XML tokens: start, end, and empty tags with their attributes, and the
-// text between them. Comments, processing instructions, and CDATA are
-// skipped. The tag pattern is sticky and its attribute values cannot
-// overlap, so a scan stays linear. A comment, processing instruction, or
-// CDATA section that never ends, an end tag that does not match the open
-// element, or an element left open is damage, so a cut-short part is never
-// read as a shorter document.
-const TAG = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
-const ATTRIBUTE = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-
-export function* xmlTokens(text) {
-  const open = [];
-  for (const token of rawTokens(text)) {
-    if (token.type === "start") {
-      open.push(token.name);
-    } else if (token.type === "end" && open.pop() !== token.name) {
-      throw new DocxError("its XML is damaged");
-    }
-    yield token;
-  }
-  if (open.length > 0) {
-    throw new DocxError("its XML is damaged");
-  }
-}
-
-function* rawTokens(text) {
-  let position = 0;
-  while (position < text.length) {
-    const open = text.indexOf("<", position);
-    if (open === -1) {
-      yield { type: "text", text: decodeEntities(text.slice(position)) };
-      return;
-    }
-    if (open > position) {
-      yield { type: "text", text: decodeEntities(text.slice(position, open)) };
-    }
-    const skip = [["<!--", "-->"], ["<?", "?>"], ["<![CDATA[", "]]>"]].find(([start]) => text.startsWith(start, open));
-    if (skip !== undefined) {
-      const close = text.indexOf(skip[1], open + skip[0].length);
-      if (close === -1) {
-        throw new DocxError("its XML is damaged");
-      }
-      if (skip[0] === "<![CDATA[") {
-        yield { type: "text", text: text.slice(open + 9, close) };
-      }
-      position = close + skip[1].length;
-      continue;
-    }
-    TAG.lastIndex = open;
-    const match = TAG.exec(text);
-    if (match === null) {
-      throw new DocxError("its XML is damaged");
-    }
-    const attributes = {};
-    for (const attribute of match[3].matchAll(ATTRIBUTE)) {
-      attributes[attribute[1]] = decodeEntities(attribute[2] ?? attribute[3]);
-    }
-    yield { type: match[1] ? "end" : match[4] ? "empty" : "start", name: match[2], attributes };
-    position = TAG.lastIndex;
-  }
-}
-
-const ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", "\""], ["apos", "'"]]);
-
-function decodeEntities(text) {
-  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, name) => {
-    if (name[0] === "#") {
-      const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
-      return code <= 0x10ffff ? String.fromCodePoint(code) : whole;
-    }
-    return ENTITIES.get(name) ?? whole;
-  });
-}
-
-// Prose text from a `w:t`: control characters other than a tab are
-// dropped, a line break or carriage return is a space, as XML and Word
-// read them, and the private-use marks this module uses for breaks are
-// dropped, so text can never add a markdown line of its own.
-export function proseText(text) {
-  return text.replace(/[\r\n]/g, " ").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
 }
 
 // A Word on/off property (`<w:i/>`, `<w:i w:val="0"/>`) is on unless its
@@ -523,7 +306,7 @@ function documentMarkdown(xml, styles, chapterLine) {
         if (paragraph.markDeleted) {
           joined = paragraph.runs;
         } else {
-          for (const block of paragraphBlocks(paragraph, styles, chapterLine)) {
+          for (const block of wordParagraphBlocks(paragraph, styles, chapterLine)) {
             blocks.push(block);
           }
         }
@@ -594,7 +377,7 @@ function documentMarkdown(xml, styles, chapterLine) {
   }
 
   if (joined !== null) {
-    for (const block of paragraphBlocks({ style: null, outline: null, runs: joined }, styles, chapterLine)) {
+    for (const block of wordParagraphBlocks({ style: null, outline: null, runs: joined }, styles, chapterLine)) {
       blocks.push(block);
     }
   }
@@ -605,132 +388,17 @@ function documentMarkdown(xml, styles, chapterLine) {
   };
 }
 
-// Private-use marks for a hard line break and a page break inside a
-// paragraph, replaced when the paragraph is written. proseText drops them
-// from the document's own text.
-const LINE_BREAK = "";
-const PARAGRAPH_BREAK = "";
-
-// One paragraph of body text as markdown, as the import writes it: `runs`
-// are { text, italic, bold }, with HARD_BREAK for each line break, and
-// `quote` makes it a block quote. story apply writes an editor's paragraph
-// into a chapter with this. A run of scene-break markers comes back as
-// written, so the caller decides what a scene break is.
-export function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
-  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
-}
-
-// The mark paragraphMarkdown reads as a line break inside a paragraph.
-export const HARD_BREAK = LINE_BREAK;
-
 // One Word paragraph as markdown blocks: a page break inside it splits it.
-function paragraphBlocks(paragraph, styles, chapterLine) {
+function wordParagraphBlocks(paragraph, styles, chapterLine) {
   const style = styles.paragraph(paragraph.style);
   const level = Number.isInteger(paragraph.outline) && paragraph.outline >= 0 && paragraph.outline <= 9
     ? outlineLevel(paragraph.outline)
     : style.level;
-  const quote = level === 0 && style.quote;
   const runs = paragraph.runs.map((run) => ({
-    text: run.text.replace(/­/g, ""),
+    text: run.text,
     // A heading's own bold or italic is its style, not emphasis.
     italic: level === 0 && (run.italic ?? styles.character(run.style).italic ?? style.italic) === true,
     bold: level === 0 && (run.bold ?? styles.character(run.style).bold ?? style.bold) === true
   }));
-  const pieces = [[]];
-  for (const run of runs) {
-    const parts = run.text.split(PARAGRAPH_BREAK);
-    parts.forEach((part, index) => {
-      if (index > 0) {
-        pieces.push([]);
-      }
-      pieces.at(-1).push({ ...run, text: part });
-    });
-  }
-  return pieces.map((piece) => blockMarkdown(piece, level, quote, chapterLine)).filter((block) => block !== "");
-}
-
-// In a `verse` chapter (see isVerseChapter) every line break is kept, so a
-// hard break needs no backslash, unless a blank line inside the paragraph
-// would end it, or a line shaped like a scene break (`***`), which only a
-// backslash at a line end keeps in the paragraph.
-function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
-  const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
-  const lines = plain.split(LINE_BREAK).map((line) => line.trim()).filter((line) => line !== "");
-  if (lines.length === 0) {
-    return "";
-  }
-  // A scene break keeps its own markers, unless it is a lone `#`, which
-  // markdown would read as an empty heading. Text with backslashes, such as
-  // `\* \* \*`, is prose, escaped as written.
-  if (level === 0 && /^([*_~-])( ?\1){2,}$/.test(plain)) {
-    return plain;
-  }
-  if (level === 0 && plain === "#") {
-    return "***";
-  }
-  if (level === 0) {
-    // A chapter line in a plain paragraph, bold or not, is a chapter
-    // heading, as is a bare one ("Chapter 1") with its title on the next
-    // line of the same paragraph.
-    const heading = lines.length === 1 && chapterLine(lines[0]) !== null
-      ? lines[0]
-      : lines.length === 2 && chapterLine(lines[0])?.bare === true ? `${lines[0]}: ${lines[1]}` : null;
-    if (heading !== null) {
-      return `# ${escapeInline(heading)}`;
-    }
-  }
-  if (level > 0) {
-    return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
-  }
-  const kept = inlineMarkdown(runs).split(LINE_BREAK).map((line) => line.trim()).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1));
-  const plainBreaks = verse && !kept.some((line) => line === "" || isSceneBreakLine(line));
-  const text = kept.join(plainBreaks ? "\n" : "\\\n");
-  const block = escapeBlockStart(text);
-  return quote ? block.split("\n").map((line) => `> ${line}`).join("\n") : block;
-}
-
-// The runs as markdown inline text: runs with the same emphasis merge, and
-// white space at the edges of an emphasised run (a no-break space too)
-// moves outside its markers, so `*word *` never appears.
-function inlineMarkdown(runs) {
-  const merged = [];
-  for (const run of runs) {
-    const last = merged.at(-1);
-    if (last !== undefined && last.italic === run.italic && last.bold === run.bold) {
-      last.text += run.text;
-    } else {
-      merged.push({ ...run });
-    }
-  }
-  return merged.map((run) => {
-    const text = run.text.replace(/[\t ]+/g, " ");
-    const marker = (run.bold ? "**" : "") + (run.italic ? "*" : "");
-    const lead = text.match(/^\s*/)[0];
-    const trail = lead.length === text.length ? "" : text.match(/\s*$/)[0];
-    const body = text.slice(lead.length, text.length - trail.length).replaceAll(` ${LINE_BREAK}`, LINE_BREAK).replaceAll(`${LINE_BREAK} `, LINE_BREAK);
-    if (marker === "" || body.replaceAll(LINE_BREAK, "") === "") {
-      return escapeInline(text);
-    }
-    // Emphasis cannot span a hard line break, so each line gets its own.
-    const marked = escapeInline(body).split(LINE_BREAK).map((line) => (line === "" ? line : `${marker}${line}${[...marker].reverse().join("")}`)).join(LINE_BREAK);
-    return `${lead}${marked}${trail}`;
-  }).join("");
-}
-
-// Characters that would read as markdown markup in prose are escaped. An
-// escaped `<!` also escapes its `!`, so `<!--` in the prose is never read
-// as the start of an HTML comment.
-function escapeInline(text) {
-  return text.replace(/[\\`*_[\]<]/g, "\\$&").replace(/\\<!/g, "\\<\\!");
-}
-
-// A line that would start a heading, list, block quote, or code block is
-// escaped at its start.
-function escapeBlockStart(text) {
-  return text.split("\n").map((line) => line
-    .replace(/^(#{1,6})(?=\s|$)/, "\\$1")
-    .replace(/^>/, "\\>")
-    .replace(/^([-+])(?=\s)/, "\\$1")
-    .replace(/^(\d+)([.)])(?=\s)/, "$1\\$2")
-    .replace(/^(=+|-+)$/, (marks) => `\\${marks}`)).join("\n");
+  return paragraphBlocks(runs, level, style.quote, chapterLine);
 }
