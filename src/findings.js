@@ -180,6 +180,7 @@ export const FINDING_CODES = {
   "translation-of-self": "error",
   "translation-of-unreadable": "error",
   "translation-of-not-project": "error",
+  "translation-of-invalid": "error",
   // story continuity
   "revived-without-death": "error",
   "died-in-missing-chapter": "error",

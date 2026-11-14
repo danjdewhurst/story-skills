@@ -517,11 +517,13 @@ translation-of: ../book-en
 ---
 ```
 
-`translation-of` is a path from the translation's folder to the source, with `/`. `story links` reports an absolute path, a backslash, a path to the translation itself, and a folder with no `story.md` as errors.
+`translation-of` is a path from the translation's folder to the source, with `/`. `story links` reports an absolute path, a backslash, a path to the translation itself, a folder that holds the translation, and a folder with no `story.md` as errors.
+
+The source must be on disk wherever the translation is checked, at the path the link gives, or `story links` and `story check` report `translation-of-not-project`. In CI, keep both editions in one repository, or check the source out beside the translation, as for [series books](automation.md#story-checks-workflow).
 
 `story translation` compares the two projects. It compares structure, never meaning:
 
-- Chapters, scenes, and entity ids that one edition has and the other does not are errors. A chapter the source added after the copy, or an id renamed in one edition only, shows here. Research notes are not compared.
+- Chapters, scenes, and entity ids that one edition has and the other does not are errors. A chapter the source added after the copy, or an id renamed in one edition only, shows here. Research notes are not compared, and the translation may add matter pages of its own, such as a translator's note.
 - A translated chapter with another number of prose paragraphs than its source chapter is a warning. A chapter with no prose yet is skipped.
 - A source chapter that changed since it was translated is a warning, when the translated chapter records a `source-hash`.
 

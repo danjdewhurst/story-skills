@@ -37,16 +37,17 @@ export { severityCodes };
 const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
 
 // Flags that name one target or one moment rather than a habit.
-const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
+const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], translation: ["chapter"] };
 
 // Flags that change what one run does rather than set a habit: a default
 // --force would replace every snapshot whose name is taken, a default
 // --list or --restore would stop snapshot taking one, a default
 // --include-pending would put uncleared matter in every build, the
 // published review copy too, a default --query would refuse every
-// story list of another kind, and an anonymous manuscript is for one
-// blind market, not every submission.
-const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"] };
+// story list of another kind, an anonymous manuscript is for one
+// blind market, not every submission, and a default translation --record
+// would record every source change as translated before the check saw it.
+const ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
 
 // Flags that only make sense together. When the command line gives any of a
 // group, the defaults for the whole group are dropped: `story build --format

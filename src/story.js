@@ -263,8 +263,10 @@ export function seriesReport(root) {
 export function translationReport(root, options = {}) {
   const projectRoot = path.resolve(root);
   requireStoryFile(projectRoot);
-  // The link resolves relative to the real folder, as series links do.
-  return buildTranslation(fs.realpathSync(projectRoot), scanProject, options);
+  // The project is read and written by the path given, so the changes a
+  // write records are relative to it; the link resolves from the real
+  // folder (see validateTranslationLink).
+  return buildTranslation(projectRoot, scanProject, options);
 }
 
 // Compares the current chapters with an earlier draft: a git ref (read with

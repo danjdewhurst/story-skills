@@ -3,12 +3,13 @@ import path from "node:path";
 import { proseParagraphs } from "./compare.js";
 import { projectError, usageError } from "./exit-codes.js";
 import { portablePath, projectPath, writeFile } from "./files.js";
-import { err, warn } from "./findings.js";
+import { err, outputText, warn } from "./findings.js";
 import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { chapterProse } from "./markdown.js";
 import { assertWritable } from "./mutate-writes.js";
 import { assertProjectParses } from "./scan.js";
 import { readMarkdown } from "./scan-files.js";
+import { PATH_CONTROL_CHARACTERS } from "./scan-ids.js";
 import { canonicalPath, readBookFrontmatter } from "./series.js";
 import { nfc } from "./unicode.js";
 
@@ -29,7 +30,10 @@ const SOURCE_HASH_LENGTH = 12;
 
 // The entity kinds compared by id, with the name a finding gives each.
 // Research notes are about the source's sources, not the book, so a
-// translation may leave them out.
+// translation may leave them out. A translation may add matter pages of
+// its own, such as a translator's note, so only missing matter is
+// reported.
+const ONLY_MISSING = new Set(["matter"]);
 const COMPARED_KINDS = [
   ["chapters", "chapter"],
   ["scenes", "scene"],
@@ -59,31 +63,74 @@ export function translationLabel(value) {
   return path.posix.normalize(portablePath(value)).replace(/(.)\/$/, "$1");
 }
 
+// Why `value`, a translation-of path, cannot be followed from the project
+// at `root` without reading the disk, as [code, message], or null.
+function linkProblem(root, value) {
+  const label = `story.md ${TRANSLATION_FIELD} ${value}`;
+  // A control character or line break would print as a line of its own.
+  if (PATH_CONTROL_CHARACTERS.test(value)) {
+    return ["translation-of-invalid", `${label.replace(PATH_CONTROL_CHARACTERS, "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`];
+  }
+  // An absolute path names one machine's folders, so the link breaks for a
+  // co-author or a CI runner. C:book-en is relative to drive C's own
+  // current folder, so it counts too. Checked before the backslash, so
+  // C:\\books\\en is reported as absolute.
+  if (path.posix.isAbsolute(value) || path.win32.isAbsolute(value) || /^[A-Za-z]:/.test(value)) {
+    return ["translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`];
+  }
+  // A Windows separator resolves on Windows and nowhere else, so it is
+  // reported by name on every platform instead of as a missing project.
+  if (value.includes("\\")) {
+    return ["translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`];
+  }
+  // More `..` steps than the project's folder is deep would stop at the
+  // file system root in the project, but climb out of a --dry-run copy.
+  let depth = canonicalPath(root).split(path.sep).filter(Boolean).length;
+  for (const segment of value.split("/")) {
+    depth += segment === ".." ? -1 : segment === "" || segment === "." ? 0 : 1;
+    if (depth < 0) {
+      return ["translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`];
+    }
+  }
+  return null;
+}
+
+// The source project a --dry-run copies beside the copy of the project at
+// `root` (see preview.js): the path `translation-of` names, resolved as
+// the real run resolves it, or undefined when the link is unset or one
+// validateTranslationLink refuses before reading the disk.
+export function translationSourceToCopy(root, data) {
+  const value = translationOf(data);
+  return value === undefined || linkProblem(root, value) !== null ? undefined : path.resolve(canonicalPath(root), value);
+}
+
 // Checks story.md `translation-of` the way validateSeriesLinks checks
 // `follows` and `precedes`: a relative path with forward slashes to another
 // story project. Returns the source project's root, or null when the field
 // is unset or the link cannot be followed (the reason is in `errors`).
+// The path resolves from the project's real folder, as story translation
+// resolves it, so a project reached through a symlink finds the same source.
 export function validateTranslationLink(root, data, errors) {
   const value = translationOf(data);
   if (value === undefined) {
     return null;
   }
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
-  // A Windows separator resolves on Windows and nowhere else, so it is
-  // reported by name on every platform instead of as a missing project.
-  if (value.includes("\\")) {
-    errors.push(err("translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md"));
+  const problem = linkProblem(root, value);
+  if (problem !== null) {
+    errors.push(err(problem[0], problem[1], "story.md"));
     return null;
   }
-  // An absolute path names one machine's folders, so the link breaks for a
-  // co-author or a CI runner.
-  if (path.posix.isAbsolute(value) || path.win32.isAbsolute(value)) {
-    errors.push(err("translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`, "story.md"));
-    return null;
-  }
-  const target = path.resolve(root, value);
-  if (target === root || canonicalPath(target) === canonicalPath(root)) {
+  const real = canonicalPath(root);
+  const target = path.resolve(real, value);
+  if (target === real || canonicalPath(target) === real) {
     errors.push(err("translation-of-self", `${label} points at this project`, "story.md"));
+    return null;
+  }
+  // A source folder holding the translation would scan around it, and a
+  // --dry-run copy could not hold both, so the translation sits elsewhere.
+  if (isInside(canonicalPath(target), real)) {
+    errors.push(err("translation-of-invalid", `${label} is a folder that holds this project; keep the translation outside its source, such as beside it`, "story.md"));
     return null;
   }
   let source;
@@ -103,6 +150,11 @@ export function validateTranslationLink(root, data, errors) {
 // The source-hash of a chapter: its title and prose paragraphs, as
 // proseParagraphs reads them, so rewrapping a paragraph or editing the
 // outline or an HTML comment does not count as a change to translate.
+function isInside(folder, target) {
+  const relative = path.relative(folder, target);
+  return relative !== "" && !path.isAbsolute(relative) && !relative.split(path.sep).includes("..");
+}
+
 export function sourceHash(title, paragraphs) {
   const text = nfc([String(title ?? ""), ...paragraphs].join("\n\n"));
   return crypto.createHash("sha256").update(text, "utf8").digest("hex").slice(0, SOURCE_HASH_LENGTH);
@@ -188,7 +240,7 @@ export function buildTranslation(root, scan, options = {}) {
       }
     }
     for (const [id, entity] of ownIds) {
-      if (!sourceIds.has(id)) {
+      if (!sourceIds.has(id) && !ONLY_MISSING.has(kind)) {
         const file = ownFile(entity.file);
         extra.push({ kind, id, file });
         errors.push(err("translation-extra", `${file} has ${kind} ${id}, which the source ${label} does not; give it the source's id, or add it to the source first`, file));
@@ -273,14 +325,16 @@ function recordedHash(data) {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
-export function formatTranslationReport(report) {
+// The text report. With `dryRun`, the chapters --record would write are
+// listed as such.
+export function formatTranslationReport(report, { dryRun = false } = {}) {
   const lines = [
-    `# Translation: ${report.title} (${report.language})`,
+    `# Translation: ${outputText(report.title)} (${report.language})`,
     "",
-    `Source: ${report.source ?? "unknown"}${report.sourceTitle === null ? "" : ` - ${report.sourceTitle} (${report.sourceLanguage})`}`
+    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${report.sourceLanguage})`}`
   ];
   if (report.recorded.length > 0) {
-    lines.push(`Recorded ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
+    lines.push(`${dryRun ? "Would record" : "Recorded"} ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
   }
   lines.push("", "Chapters:");
   if (report.chapters.length === 0) {
