@@ -27,6 +27,11 @@ const CHECK_KEYS = ["id", "kind", "where", "level", "message"];
 // The levels a check can report at: the two levels a finding has.
 export const CHECK_LEVELS = ["error", "warning"];
 
+// The longest message a check takes. Each matching file repeats it, in the
+// terminal, a CI log, --json, and the editor, so a project from another
+// author cannot make a check print a book per file.
+export const MAX_CHECK_MESSAGE = 200;
+
 // A check as messages name it: a kebab-case id as written, anything else by
 // its place in the list.
 function checkLabel(item, index) {
@@ -69,7 +74,8 @@ export function checkDefinitionFindings(project) {
 // unquoted-number, or non-kebab-case id; a missing or unknown kind; a where
 // that is not a list of filters, is empty, or has a filter --where could not
 // read; a missing level or one other than error or warning; a missing or
-// empty message; and any other key. A warning: a filter on a key the kind
+// empty message, or one longer than MAX_CHECK_MESSAGE characters; and any
+// other key. A warning: a filter on a key the kind
 // neither defines nor any of its files sets.
 function checkProblems(project, item, index, knownFor) {
   const errors = [];
@@ -106,14 +112,17 @@ function checkProblems(project, item, index, knownFor) {
     errors.push(err("missing-field", `${label} is missing message`, "story.md"));
   } else if (typeof item.message !== "string" || item.message.trim() === "") {
     errors.push(err("invalid-check", `${label} message must be text, such as message: has no hook`, "story.md"));
+  } else if (item.message.trim().length > MAX_CHECK_MESSAGE) {
+    errors.push(err("invalid-check", `${label} message is longer than ${MAX_CHECK_MESSAGE} characters: keep it to a short phrase, such as has no hook`, "story.md"));
   }
   return { errors, warnings, spec };
 }
 
 // The checks story continuity runs: each entry with no error, in list
 // order, with its id, kind entry, filters, level, and message. An id listed
-// twice runs once, as its first entry. A story.md that does not parse has
-// no checks.
+// twice belongs to its first entry, which runs only when it has no error,
+// as definedCheckLevels reads it. A story.md that does not parse has no
+// checks.
 export function usableChecks(project) {
   const raw = project.story.data?.checks;
   if (!Array.isArray(raw)) {
@@ -126,11 +135,14 @@ export function usableChecks(project) {
     if (!isMapping(item)) {
       return;
     }
-    const problems = checkProblems(project, item, index, knownFor);
-    if (problems.errors.length > 0 || seen.has(item.id)) {
+    if (seen.has(item.id)) {
       return;
     }
     seen.add(item.id);
+    const problems = checkProblems(project, item, index, knownFor);
+    if (problems.errors.length > 0) {
+      return;
+    }
     checks.push({ id: item.id, entry: problems.spec.entry, filters: problems.spec.filters, level: item.level, message: oneLine(item.message.trim()) });
   });
   return checks;

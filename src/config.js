@@ -212,8 +212,12 @@ function parseSeverity(raw, errors, checks) {
     if (isCustomCode(code)) {
       const id = customCodeId(code);
       if (!checks.has(id)) {
+        // A guess compares the code with every check id, so it is made only
+        // for a short code among a few checks: story.md comes from the
+        // project, and every command reads it.
         const defined = [...checks.keys()].map((check) => `custom-${check}`);
-        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${suggestion(code, defined)}`);
+        const guess = code.length <= 64 && defined.length <= 100 ? suggestion(code, defined.filter((candidate) => candidate.length <= 64)) : "";
+        errors.push(`${label} names ${code}, but story.md checks has no check ${id}${guess}`);
         continue;
       }
       if (checks.get(id) === "error") {

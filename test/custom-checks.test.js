@@ -4,7 +4,7 @@ import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { checkContinuity } from "../src/continuity.js";
 import { usableChecks } from "../src/custom-checks.js";
-import { createStoryProject, projectCheck, scanProject, validateProject } from "../src/story.js";
+import { createStoryProject, projectCheck, projectReport, removeEntity, renameEntity, scanProject, validateProject } from "../src/story.js";
 import { RESULT_SCHEMA_PATH, checkProjectSchema, validateAgainstSchema } from "../scripts/check-schema.js";
 import { makeTempDir, memoryIo, writeMarkdown } from "./helpers.js";
 
@@ -165,7 +165,7 @@ describe("story.md checks (#891)", () => {
     ].join("\n"));
     expect(codes(validateProject(root).errors, "exemption")).toEqual([
       "exemption-unknown-code: continuity/exemptions.md exemptions[0] code custom-no-such-check names no check in story.md checks",
-      "exemption-too-broad: continuity/exemptions.md exemptions[1] sets only code, which would dismiss every custom-ilse-pov finding: add file, chapter, or pattern to narrow it"
+      "exemption-too-broad: continuity/exemptions.md exemptions[1] sets only code, which would dismiss every custom-ilse-pov finding: add file, chapter, or pattern to narrow it, or, for a warning check, set severity custom-ilse-pov to off in story.md"
     ]);
   });
 
@@ -222,7 +222,21 @@ describe("story.md checks (#891)", () => {
       "duplicate-check: story.md lists check twice more than once",
       "check-unknown-key: story.md check typo filters on \"stauts\", which no chapter file sets and the schema does not define, so it matches as unset; did you mean \"status\"?"
     ]);
-    expect(checkProjectSchema(root).some((problem) => problem.includes(".checks"))).toBe(true);
+    expect(checkProjectSchema(root).filter((problem) => problem.includes(".checks"))).toEqual([
+      "$.story.checks[Bad Id].id: \"Bad Id\" does not match ^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      expect.stringMatching(/^\$\.story\.checks\[Bad Id\]\.kind: "chapterz" is not one of /),
+      expect.stringMatching(/^\$\.story\.checks\[Bad Id\]\.where\[0\]: "=x" does not match /),
+      expect.stringMatching(/^\$\.story\.checks\[Bad Id\]\.where\[1\]: "pov=" does not match /),
+      "$.story.checks[Bad Id].level: \"info\" is not one of error, warning",
+      "$.story.checks[Bad Id].message: \"  \" does not match \\S",
+      "$.story.checks[1]: missing required id",
+      "$.story.checks[1]: missing required level",
+      "$.story.checks[1]: missing required message",
+      "$.story.checks[1].where: fewer than 1 items",
+      expect.stringMatching(/^\$\.story\.checks\[2\]\.id: expected string, got/),
+      "$.story.checks[2].where: expected array, got string",
+      "$.story.checks[3]: expected object, got string"
+    ]);
 
     const project = scanProject(root);
     expect(usableChecks(project).map((check) => [check.id, check.message])).toEqual([["twice", "first"], ["typo", "never matches"]]);
@@ -240,5 +254,89 @@ describe("story.md checks (#891)", () => {
     writeExemptions(root, "  - code: custom-ilse-pov\n    file: chapters/chapter-01.md\n    reason: Fine.");
     expect(validateProject(root).errors.filter((finding) => /check|severity|exemption/.test(finding.message))).toEqual([]);
     expect(checkProjectSchema(root).filter((problem) => /checks|severity|exemptions/.test(problem))).toEqual([]);
+  });
+
+  test("a check runs over any kind, reading its own folder", () => {
+    const root = sampleProject([
+      "checks:",
+      "  - id: term-needs-definition",
+      "    kind: term",
+      "    where: [\"!definition\"]",
+      "    level: warning",
+      "    message: has no definition"
+    ].join("\n"));
+    writeMarkdown(path.join(root, "glossary", "terms", "ember-tide.md"), "term: Ember tide", "# Ember tide\n");
+    writeMarkdown(path.join(root, "glossary", "terms", "salt-road.md"), "term: Salt road\ndefinition: The coast road.", "# Salt road\n");
+    expect(custom(checkContinuity(scanProject(root)).warnings).map((finding) => [finding.code, finding.file])).toEqual([
+      ["custom-term-needs-definition", "glossary/terms/ember-tide.md"]
+    ]);
+  });
+
+  test("report counts a check's findings with the continuity check", () => {
+    const report = projectReport(sampleProject());
+    expect(custom(report.continuity.errors).map((finding) => finding.file)).toEqual(["chapters/chapter-01.md", "chapters/chapter-04.md"]);
+  });
+
+  test("an exemption that gives a chapter for a check's code is refused, since its findings carry none", () => {
+    const root = sampleProject();
+    writeExemptions(root, "  - code: custom-ilse-pov\n    chapter: chapter-01\n    reason: Prologue.");
+    expect(codes(validateProject(root).errors, "exemption")).toEqual([
+      "exemption-chapter-not-carried: continuity/exemptions.md exemptions[0] sets chapter, but custom-ilse-pov findings carry no chapter, so it would never match: use file instead"
+    ]);
+  });
+
+  test("an id listed twice belongs to its first entry, even when that entry is broken", () => {
+    const root = sampleProject([
+      "checks:",
+      "  - id: twice",
+      "    kind: chapterz",
+      "    where: [pov=ilse]",
+      "    level: error",
+      "    message: first",
+      "  - id: twice",
+      "    kind: chapter",
+      "    where: [pov=mara]",
+      "    level: warning",
+      "    message: second",
+      "severity:",
+      "  - warning: custom-twice",
+      "    level: off"
+    ].join("\n"));
+    expect(usableChecks(scanProject(root))).toEqual([]);
+    expect(custom(checkContinuity(scanProject(root)).warnings)).toEqual([]);
+    expect(codes(validateProject(root).errors, "invalid-cli-config")).toEqual([
+      "invalid-cli-config: story.md severity[0] names custom-twice, whose check reports an error: severity changes only warnings, so set the check's level instead"
+    ]);
+  });
+
+  test("a message longer than 200 characters is refused", () => {
+    const root = sampleProject(`checks:\n  - id: long\n    kind: chapter\n    where: [pov=ilse]\n    level: warning\n    message: ${"x".repeat(201)}`);
+    expect(codes(validateProject(root).errors, "invalid-check")).toEqual([
+      "invalid-check: story.md check long message is longer than 200 characters: keep it to a short phrase, such as has no hook"
+    ]);
+    expect(usableChecks(scanProject(root))).toEqual([]);
+  });
+
+  test("severity guesses a check id only for a short code among a few checks", () => {
+    const longId = `c-${"a".repeat(80)}`;
+    const root = sampleProject(`${CHECKS}\n  - id: ${longId}\n    kind: chapter\n    where: [pov=x]\n    level: warning\n    message: m\nseverity:\n  - warning: custom-${longId}b\n    level: off`);
+    expect(codes(validateProject(root).errors, "invalid-cli-config")).toEqual([
+      `invalid-cli-config: story.md severity[0] names custom-${longId}b, but story.md checks has no check ${longId}b`
+    ]);
+  });
+
+  test("rename points a check's filters at the new id, and remove lists the ones left", () => {
+    const root = sampleProject();
+    writeMarkdown(path.join(root, "characters", "ilse.md"), "name: Ilse\nrole: protagonist\nstatus: alive", "# Ilse\n");
+    writeMarkdown(path.join(root, "characters", "mara.md"), "name: Mara\nrole: supporting\nstatus: alive", "# Mara\n");
+    renameEntity(root, { kind: "character", id: "ilse", name: "Ilse Varga", newId: "ilse-varga" });
+    const data = scanProject(root).story.data;
+    expect(data.checks[1].where).toEqual(["pov=ilse-varga"]);
+    expect(custom(checkContinuity(scanProject(root)).errors).map((finding) => finding.file)).toEqual(["chapters/chapter-01.md", "chapters/chapter-04.md"]);
+
+    const removed = removeEntity(root, { kind: "character", id: "ilse-varga" });
+    expect(removed.warnings.filter((warning) => warning.code === "stale-query").map((warning) => warning.message)).toEqual([
+      "story.md check ilse-pov (pov=ilse-varga) still filters on character ilse-varga, which remove does not change: update or delete that filter"
+    ]);
   });
 });

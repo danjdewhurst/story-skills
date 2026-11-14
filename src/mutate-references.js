@@ -173,28 +173,36 @@ export function followExemptionPatterns(root, plan, kind, oldId, newId) {
   }
 }
 
-// Saved story.md queries filter on ids (`pov=mara-quill`), so when rename,
-// move, or merge changes an id, the filters comparing a key that can name
-// the entity with the old id follow it, as its frontmatter references do;
-// the rest of each filter stays as written. No key names a scene, so a scene
-// move has none to follow.
+// Saved story.md queries and checks filter on ids (`pov=mara-quill`), so
+// when rename, move, or merge changes an id, the filters comparing a key
+// that can name the entity with the old id follow it, as its frontmatter
+// references do; the rest of each filter stays as written. No key names a
+// scene, so a scene move has none to follow.
 export function followQueryFilters(root, plan, kind, oldId, newId) {
   const filePath = path.join(root, "story.md");
   const text = plan.get(filePath) ?? readTextFile(filePath);
   // The plan already parsed it: a broken story.md stops the command.
   const data = parseFrontmatter(text, filePath).data;
-  const found = queryFiltersNaming(data.queries, entityReferenceContext(root, kind, oldId).isReferenceKey, oldId);
-  if (found.length === 0) {
-    return;
+  const isReferenceKey = entityReferenceContext(root, kind, oldId).isReferenceKey;
+  const changed = {};
+  for (const field of ["queries", "checks"]) {
+    const found = queryFiltersNaming(data[field], isReferenceKey, oldId);
+    if (found.length === 0) {
+      continue;
+    }
+    const entries = [...data[field]];
+    for (const { index, item, positions } of found) {
+      entries[index] = { ...item, where: item.where.map((filter, position) => (positions.includes(position) ? retargetFilter(filter, newId) : filter)) };
+    }
+    changed[field] = entries;
   }
-  const queries = [...data.queries];
-  for (const { index, item, positions } of found) {
-    queries[index] = { ...item, where: item.where.map((filter, position) => (positions.includes(position) ? retargetFilter(filter, newId) : filter)) };
+  if (Object.keys(changed).length === 0) {
+    return;
   }
   if (!plan.has(filePath)) {
     plan.originals?.set(filePath, text);
   }
-  plan.set(filePath, replaceFrontmatter(text, { ...data, queries }));
+  plan.set(filePath, replaceFrontmatter(text, { ...data, ...changed }));
 }
 
 // The files besides `excludedFile` (when not null) that already reference
