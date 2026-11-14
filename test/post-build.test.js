@@ -201,6 +201,14 @@ Support me at https://example.com
     // A manifest some other tool wrote does not count.
     fs.writeFileSync(path.join(root, "site", ".story-posts.json"), '{"files":["01-intro.html"]}', "utf8");
     expect(() => buildBook(root, { format: "post", out: "site" })).toThrow("it holds other files");
+    // Nor does one that does not parse, such as one left with merge markers.
+    fs.writeFileSync(path.join(root, "site", ".story-posts.json"), "<<<<<<< HEAD\n{}", "utf8");
+    expect(() => buildBook(root, { format: "post", out: "site" })).toThrow("it holds other files");
+    // With only hidden files beside it, the folder is taken, and the build
+    // writes a new manifest over the broken one.
+    fs.rmSync(path.join(root, "site", "01-intro.html"));
+    buildBook(root, { format: "post", out: "site" });
+    expect(manifest(root, "site").files).toEqual(["01-chapter-01.html", "01-chapter-01.txt"]);
     expect(() => buildBook(root, { format: "post", out: "." })).toThrow("Refusing to write the posts to .: it holds the project");
     fs.mkdirSync(path.join(root, "dist"));
     fs.writeFileSync(path.join(root, "dist", "book.md"), "", "utf8");
