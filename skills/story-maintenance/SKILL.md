@@ -83,7 +83,7 @@ Use:
 - `add matter` when the user wants a dedication, epigraph, copyright page, acknowledgments, author's note, about-the-author, or also-by page. Never invent acknowledgments, biographical facts, or copyright details: ask the user for them. Rules: `references/editing-commands.md` (add matter).
 - `add research` when the story relies on a real-world fact. Rules: `references/editing-commands.md` (add research).
 - `export` only when the user asks for a combined manuscript at a specific path; it includes front and back matter
-- `build` when the user asks to build the book artifact: markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, Fountain, Twee, ink, and iCalendar outputs in `dist/`, a codex site in `dist/codex/`, and serial episodes to post in `dist/posts/`, with front and back matter. Rules: `references/builds.md` (build).
+- `build` when the user asks to build the book artifact: markdown, EPUB, DOCX, Shunn, HTML, print, narration, metadata, Fountain, Twee, ink, and iCalendar outputs in `dist/`, and a codex site in `dist/codex/`, with front and back matter, plus serial episodes to post in `dist/posts/`, without matter. Rules: `references/builds.md` (build).
 - `build --format html` when the user wants a review or reading copy for people who never open a terminal. Rules: `references/builds.md` (html).
 - `build --format print` for a print-ready interior; `--pdf` renders a PDF with an engine the user has installed. Rules: `references/builds.md` (print).
 - `build --format narration` for an audiobook narration script, and `build --format metadata` for a retailer metadata sheet. Rules: `references/builds.md` (narration, metadata).
