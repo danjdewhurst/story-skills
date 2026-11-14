@@ -6,6 +6,7 @@ import { parseFrontmatter } from "../src/frontmatter.js";
 import { importManuscript } from "../src/import.js";
 import { createStoryProject, validateLinks, validateProject } from "../src/story.js";
 import { UNDO_LOG } from "../src/files.js";
+import { LOCK_FILE } from "../src/lock.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
 import { SYMLINKS_SUPPORTED, makeTempDir, memoryIo, treeSnapshot, writeMarkdown } from "./helpers.js";
 
@@ -327,11 +328,13 @@ describe("story collect (#885)", () => {
     const { collection } = shelf();
     run(collection);
     writeMarkdown(path.join(collection, "characters", "ruth.md"), "id: ruth\nname: Ruth\nrole: supporting\nstatus: deceased\ndied-in: chapter-02", "# Ruth\n");
+    writeMarkdown(path.join(collection, "scenes", "chapter-01-scene-01.md"), "title: The Flats\nchapter: chapter-01\nscene: 1\nstatus: draft", "# The Flats\n");
     setStories(collection, ["../salt", "../low-tide"]);
     const before = treeSnapshot(collection);
     const result = run(collection);
     expect(result.code).toBe(4);
     expect(result.err).toContain("- chapter-02 (story ../salt) would move to chapter-01, but characters/ruth.md names it");
+    expect(result.err).toContain("- chapter-01 (story ../low-tide) would move to chapter-02, but scenes/chapter-01-scene-01.md names it");
     expect(treeSnapshot(collection)).toEqual(before);
   });
 
@@ -405,6 +408,47 @@ describe("story collect (#885)", () => {
     const io = memoryIo(parent);
     expect(runCli(["collect", "collection", "--force"], io)).toBe(0);
     expect(io.output()).toContain("Saved the collection as snapshot before-collect-1 before replacing the edits; story snapshot --restore before-collect-1 --path collection puts it back\n");
+  });
+
+  test("story links passes a project with no stories list", () => {
+    const parent = makeTempDir();
+    const root = project(parent, "book", "Book");
+    expect(validateLinks(root).errors).toEqual([]);
+  });
+
+  test("a stories value that is not a list of folders is refused", () => {
+    const { collection } = shelf();
+    const storyPath = path.join(collection, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace(/^stories:\n(?: {2}- .*\n)*/m, "stories: ../salt\n"), "utf8");
+    const result = run(collection);
+    expect(result.code).toBe(3);
+    expect(result.err).toContain("story.md stories must be a list of story project folders");
+  });
+
+  test("--force --dry-run names the snapshot the real run would save, after the ones already saved, and writes nothing", () => {
+    const { collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-01.md");
+    const edit = (text) => fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/The tide went[^.]*\./, text), "utf8");
+    edit("The tide went far out.");
+    expect(run(collection, "--force").code).toBe(0);
+    edit("The tide went out at last.");
+    const before = treeSnapshot(collection);
+    const json = JSON.parse(run(collection, "--force", "--dry-run", "--json").out);
+    expect(json.ok).toBe(true);
+    expect(json.data.snapshot.id).toBe("before-collect-2");
+    expect(json.data.changes.map((change) => change.path)).toContain("chapters/chapter-01.md");
+    expect(treeSnapshot(collection)).toEqual(before);
+  });
+
+  test("a story project another command holds the lock of is refused", () => {
+    const { lowTide, collection } = shelf();
+    fs.writeFileSync(path.join(lowTide, LOCK_FILE), `${process.pid}\nhost\n`);
+    const before = treeSnapshot(collection);
+    const result = run(collection);
+    expect(result.code).toBe(4);
+    expect(result.err).toContain("another story command is changing story ../low-tide");
+    expect(treeSnapshot(collection)).toEqual(before);
   });
 
   test("leaves no undo log after a run", () => {

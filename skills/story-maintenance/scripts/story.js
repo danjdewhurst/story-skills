@@ -34148,25 +34148,17 @@ function collectionStories(root, data) {
     }
     seen.set(real, entry);
     const storyFile = path41.join(target, "story.md");
-    let isProject;
+    let story = null;
     try {
-      isProject = fs27.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true && fs27.lstatSync(storyFile, { throwIfNoEntry: false })?.isFile() === true;
-    } catch (error) {
-      if (error.code !== "ENOTDIR") {
-        errors.push(err("collection-story-unreadable", `${label}: ${error.code ?? error.message}`, "story.md"));
-        continue;
+      if (fs27.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true && fs27.lstatSync(storyFile, { throwIfNoEntry: false })?.isFile() === true) {
+        story = parseFrontmatter(readTextFile(storyFile), storyFile).data;
       }
-      isProject = false;
-    }
-    if (!isProject) {
-      errors.push(err("collection-story-not-project", `${label} is not a story project: missing story.md`, "story.md"));
-      continue;
-    }
-    let story;
-    try {
-      story = parseFrontmatter(readTextFile(storyFile), storyFile).data;
     } catch (error) {
       errors.push(err("collection-story-unreadable", `${label}: ${outputText(error.message.replace(storyFile, "story.md"))}`, "story.md"));
+      continue;
+    }
+    if (story === null) {
+      errors.push(err("collection-story-not-project", `${label} is not a story project: missing story.md`, "story.md"));
       continue;
     }
     stories.push({ path: entry, root: target, real, data: story });
