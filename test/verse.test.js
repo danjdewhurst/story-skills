@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { isVerseChapter, STORY_FORMS } from "../src/forms.js";
-import { shunnHtml, verseLineCount, wordParagraphs } from "../src/packaging.js";
+import { LINE_BREAK, shunnHtml, verseLineCount, wordParagraphs } from "../src/packaging.js";
 import {
   buildBook,
   checkProjectContinuity,
@@ -135,6 +135,12 @@ describe("poetry collections and verse chapters", () => {
     expect(verseLineCount("![chart](tide.png)\nline one")).toBe(1);
     // A tilde line is not a fence, so it prints.
     expect(verseLineCount("~~~ low water ~~~\nnext")).toBe(2);
+    // Lines inside a fence are code, never a heading or a scene break, so
+    // they are not dropped; the builds print the block as one line, so it
+    // counts once.
+    const fenced = "one\ntwo\n\n```\n# literal heading\n* * *\nplain code\n```\n\nthree";
+    expect(wordParagraphs(fenced, true).map((paragraph) => paragraph.runs.map((run) => run.text).join(""))).toEqual([`one${LINE_BREAK}two`, "literal heading * * * plain code", "three"]);
+    expect(verseLineCount(fenced)).toBe(4);
   });
 
   test("a verse chapter's comments and outline are not lines of the poem", () => {
