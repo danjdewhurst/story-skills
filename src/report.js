@@ -6,7 +6,7 @@ import { DEFAULT_PASSES, nextPass, passChecks, readPasses } from "./passes.js";
 import { formatPercent, todayOption } from "./progress.js";
 import { formatNextRelease, projectRelease, releaseData } from "./release-schedule.js";
 import { plural } from "./plural.js";
-import { DEFAULT_FOLLOW_UP_DAYS, SUBMISSION_TRACKER, trackerForNext } from "./submissions.js";
+import { DEFAULT_FOLLOW_UP_DAYS, SUBMISSION_TRACKER, recountOverdue, trackerForNext } from "./submissions.js";
 import {
   scanProject,
   relative
@@ -247,7 +247,8 @@ export function projectActions(root, options = {}) {
   const days = options.days ?? DEFAULT_FOLLOW_UP_DAYS;
   const followUps = submissionFollowUps(project.root, { today, days, overrides: options.overrides });
   if (followUps > 0) {
-    releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${days} days or more for a reply: run story submissions ${shellWord(options.displayPath ?? ".")} to list ${followUps === 1 ? "it" : "them"}.`));
+    const list = `story submissions ${shellWord(options.displayPath ?? ".")}${days === DEFAULT_FOLLOW_UP_DAYS ? "" : ` --days ${days}`}`;
+    releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${plural(days, "day")} or more for a reply: run ${list} to list ${followUps === 1 ? "it" : "them"}.`));
   }
   return {
     root: project.root,
@@ -269,8 +270,7 @@ function submissionFollowUps(root, { today, days, overrides }) {
   if (tracker === null) {
     return 0;
   }
-  const checked = applySeverity(tracker, overrides);
-  return [...checked.errors, ...checked.warnings].filter((finding) => finding.code === "submission-overdue").length;
+  return recountOverdue(applySeverity(tracker, overrides)).overdue;
 }
 
 export function formatActionReport(report) {

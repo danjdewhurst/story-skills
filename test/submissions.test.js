@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
-import { createStoryProject } from "../src/story.js";
+import { createStoryProject, shellWord } from "../src/story.js";
 import { SUBMISSION_STATUSES, submissionsReport } from "../src/submissions.js";
 import { RESULT_SCHEMA_PATH, validateAgainstSchema } from "../scripts/check-schema.js";
-import { makeTempDir, memoryIo, treeDiff, treeSnapshot } from "./helpers.js";
+import { SYMLINKS_SUPPORTED, expectLinearGrowth, makeTempDir, memoryIo, treeDiff, treeSnapshot } from "./helpers.js";
 
 const resultSchema = JSON.parse(fs.readFileSync(RESULT_SCHEMA_PATH, "utf8"));
 const TODAY = "2026-11-14";
@@ -71,7 +71,7 @@ describe("story submissions", () => {
     expect(text.out).toBe([
       "# Submissions: submission/tracker.md",
       "",
-      "Today: 2026-11-14; follow up after 90 days without a reply",
+      "Today: 2026-11-14; follow up after 90 days or more without a reply",
       "",
       "- Jane Agent (Big Lit): queried, sent 2026-06-01; waiting 166 days: follow up",
       "- Mark Smith: requested-full, sent 2026-05-01, reply 2026-09-01; waiting 74 days",
@@ -84,7 +84,7 @@ describe("story submissions", () => {
     ].join("\n"));
     expect(text.err).toBe([
       "Submissions checked: 0 errors, 1 warnings, 0 dismissed",
-      "warning: submission/tracker.md line 12 (Jane Agent (Big Lit)): queried, waiting 166 days for a reply since 2026-06-01 (follow up after 90): follow up, or record the reply [submission-overdue]",
+      "warning: submission/tracker.md line 12 (Jane Agent (Big Lit)): queried, waiting 166 days for a reply since 2026-06-01 (90 or more is due a follow-up): follow up, or record the reply [submission-overdue]",
       ""
     ].join("\n"));
 
@@ -106,8 +106,9 @@ describe("story submissions", () => {
     const { envelope } = json(cwd, ["submissions", root, "--date", TODAY, "--days", "200"]);
     expect(envelope.data).toMatchObject({ days: 200, waiting: 3, overdue: 0 });
     expect(envelope.diagnostics).toEqual([]);
-    // A reply awaited exactly the window is due.
+    // A reply awaited exactly the window is due; one day short is not.
     expect(submissionsReport(root, { today: TODAY, days: 166 }).rows[0].overdue).toBe(true);
+    expect(submissionsReport(root, { today: TODAY, days: 167 }).rows[0].overdue).toBe(false);
   });
 
   test("an unknown status or a malformed date is an error, and exits 1", () => {
@@ -170,21 +171,26 @@ describe("story submissions", () => {
     ]);
   });
 
-  test("never writes, and refuses a symlinked submission folder", () => {
+  test("never writes", () => {
     const { cwd, root } = project();
     writeTracker(root, bookTracker(ROWS));
     const before = treeSnapshot(root);
     invoke(cwd, ["submissions", root, "--date", TODAY]);
     invoke(cwd, ["submissions", root, "--date", TODAY, "--json"]);
-    expect(treeDiff(before, treeSnapshot(root))).toEqual(treeDiff(before, before));
+    expect(treeDiff(before, treeSnapshot(root))).toEqual([]);
+  });
 
+  test.skipIf(!SYMLINKS_SUPPORTED)("refuses a symlinked submission folder, and next ignores it", () => {
+    const { cwd, root } = project();
     const elsewhere = makeTempDir();
     writeTracker(elsewhere, bookTracker(ROWS));
-    fs.rmSync(path.join(root, "submission"), { recursive: true });
     fs.symlinkSync(path.join(elsewhere, "submission"), path.join(root, "submission"), "dir");
     const result = invoke(cwd, ["submissions", root, "--date", TODAY]);
     expect(result.code).toBe(3);
     expect(result.err).toContain("Refusing to use symlinked project directory");
+    const next = invoke(cwd, ["next", root, "--date", TODAY]);
+    expect(next.code).toBe(0);
+    expect(next.out).not.toContain("Follow up on submissions");
   });
 
   test("a tracker whose frontmatter does not parse exits 3", () => {
@@ -193,6 +199,84 @@ describe("story submissions", () => {
     const result = invoke(cwd, ["submissions", root, "--date", TODAY]);
     expect(result.code).toBe(3);
     expect(result.err).toContain("submission/tracker.md cannot be parsed");
+  });
+
+  test("only the statuses that await a reply wait, each counted once", () => {
+    const { cwd, root } = project();
+    writeTracker(root, `${BOOK_HEADER}${SUBMISSION_STATUSES.map((status, index) => `| Agent ${index} | 2026-01-01 | query | ${index === 0 ? "Queried" : status} | | |`).join("\n")}\n`);
+    const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    expect(code).toBe(0);
+    expect(envelope.data.counts).toEqual(Object.fromEntries(SUBMISSION_STATUSES.map((status) => [status, 1])));
+    expect(Object.fromEntries(envelope.data.rows.map((row) => [row.status, row.overdue]))).toEqual({
+      queried: true, submitted: true, held: true, "requested-partial": true, "requested-full": true,
+      offer: false, declined: false, "no-response": false, withdrawn: false
+    });
+    expect(envelope.data.rows.filter((row) => row.waitingSince !== null).map((row) => row.status)).toEqual(["queried", "submitted", "held", "requested-partial", "requested-full"]);
+    // No frontmatter: rows count from line 3.
+    expect(envelope.data.rows[0].line).toBe(3);
+    expect(envelope.data).toMatchObject({ waiting: 5, overdue: 5 });
+  });
+
+  test("strips marks from every column, and skips only the template's placeholder row", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker([
+      "| *No submissions yet* | | | | | |",
+      "| **Ada Byrne** | 2026-10-01 | _query_ | queried | | `fast` |",
+      "| *Emphasised Only* | | | | | |"
+    ]));
+    const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    expect(code).toBe(1);
+    expect(envelope.data.rows.map((row) => [row.name, row.materials, row.notes])).toEqual([["Ada Byrne", "query", "fast"], ["Emphasised Only", "", ""]]);
+    expect(envelope.diagnostics.map((entry) => entry.code)).toEqual(["submission-invalid-status", "submission-invalid-date"]);
+  });
+
+  test("an exemption or severity off leaves a row out of the follow-ups, in text, JSON, and next", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker(ROWS));
+    fs.mkdirSync(path.join(root, "continuity"), { recursive: true });
+    fs.writeFileSync(path.join(root, "continuity", "exemptions.md"), "---\ntype: exemption-log\nexemptions:\n  - code: submission-overdue\n    pattern: \"Jane Agent\"\n    reason: \"Nudged by phone.\"\n---\n");
+    const text = invoke(cwd, ["submissions", root, "--date", TODAY]);
+    expect(text.code).toBe(0);
+    expect(text.out).toContain("- Jane Agent (Big Lit): queried, sent 2026-06-01; waiting 166 days\n");
+    expect(text.out).toContain("Waiting for a reply: 3; due a follow-up: 0\n");
+    expect(text.err).toStartWith("Submissions checked: 0 errors, 0 warnings, 1 dismissed\n");
+    const { envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    expect(envelope.data.overdue).toBe(0);
+    expect(envelope.data.rows[0].overdue).toBe(false);
+    expect(invoke(cwd, ["next", root, "--date", TODAY]).out).not.toContain("Follow up on submissions");
+    // Another row is still due once the window is shorter.
+    expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "60"]).out).toContain("1 submission in submission/tracker.md has waited 60 days or more");
+  });
+
+  test("story.md cli-defaults: --days is checked by validate, and --date cannot be a default", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker(ROWS));
+    const story = path.join(root, "story.md");
+    const original = fs.readFileSync(story, "utf8");
+    const configure = (entries) => fs.writeFileSync(story, original.replace(/^---\n/, `---\ncli-defaults:\n${entries}`));
+    configure("  - command: submissions\n    days: 20\n");
+    expect(json(cwd, ["submissions", root, "--date", TODAY]).envelope.data).toMatchObject({ days: 20, overdue: 3 });
+    for (const entry of ["  - command: next\n    days: 0\n", "  - command: submissions\n    days: 5000\n"]) {
+      configure(entry);
+      const validate = invoke(cwd, ["validate", root]);
+      expect(validate.code).toBe(1);
+      expect(validate.err).toContain("--days must be a whole number 1 to 3650");
+    }
+    configure("  - command: submissions\n    date: 2026-01-01\n");
+    const validate = invoke(cwd, ["validate", root]);
+    expect(validate.code).toBe(1);
+    expect(validate.err).toContain("story.md cli-defaults[0] sets date, which names one target and cannot be a default");
+    expect(invoke(cwd, ["submissions", root]).code).toBe(3);
+  });
+
+  test("a tracker with more than 10,000 rows is refused without reading a row", () => {
+    const { cwd, root } = project();
+    writeTracker(root, `${BOOK_HEADER}${"|x|2026-01-01|q|queried||\n".repeat(10001)}`);
+    const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    expect(code).toBe(1);
+    expect(envelope.data.rows).toEqual([]);
+    expect(envelope.diagnostics).toEqual([expect.objectContaining({ code: "submission-tracker-too-large", message: "submission/tracker.md has 10001 table rows, more than the 10000 a tracker can hold: split it, or move old rows to another file" })]);
+    expect(invoke(cwd, ["next", root, "--date", TODAY]).out).not.toContain("Follow up on submissions");
   });
 
   test("a folder with no story.md is not a story project", () => {
@@ -212,6 +296,7 @@ describe("story submissions", () => {
       expect(result.code).toBe(2);
       expect(result.err).toContain("--days must be a whole number 1 to 3650, such as 90");
     }
+    expect(invoke(cwd, ["next", root, "--days", "0"]).code).toBe(2);
   });
 });
 
@@ -222,8 +307,8 @@ describe("story next and the submission tracker", () => {
     writeTracker(root, bookTracker(ROWS));
     const text = invoke(cwd, ["next", root, "--date", TODAY]);
     expect(text.code).toBe(0);
-    expect(text.out).toContain(`- [P2] Follow up on submissions: 1 submission in submission/tracker.md has waited 90 days or more for a reply: run story submissions ${root} to list it.\n`);
-    expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "20"]).out).toContain("3 submissions in submission/tracker.md have waited 20 days or more for a reply: run story submissions");
+    expect(text.out).toContain(`- [P2] Follow up on submissions: 1 submission in submission/tracker.md has waited 90 days or more for a reply: run story submissions ${shellWord(root)} to list it.\n`);
+    expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "20"]).out).toContain(`3 submissions in submission/tracker.md have waited 20 days or more for a reply: run story submissions ${shellWord(root)} --days 20 to list them.`);
     expect(invoke(cwd, ["next", root, "--date", TODAY, "--days", "200"]).out).not.toContain("Follow up on submissions");
 
     const story = path.join(root, "story.md");
@@ -242,13 +327,17 @@ describe("story next and the submission tracker", () => {
 });
 
 describe("tracker cells", () => {
-  test("a long run of emphasis marks in a cell reads in linear time", () => {
+  test("marks around a cell are taken off in linear time", () => {
     const { root } = project();
-    const marks = "*".repeat(200000);
-    writeTracker(root, bookTracker([`| ${marks}x | 2026-06-01 | query | queried${marks} | | |`]));
-    const started = Date.now();
-    const report = submissionsReport(root, { today: TODAY, days: 90 });
-    expect(Date.now() - started).toBeLessThan(5000);
-    expect(report.errors.map((entry) => entry.code)).toEqual(["submission-invalid-status"]);
+    const report = expectLinearGrowth(
+      (text) => {
+        writeTracker(root, text);
+        return submissionsReport(root, { today: TODAY, days: 90 });
+      },
+      (size) => bookTracker([`| ${"*".repeat(size)}Ada${"*".repeat(size)} | 2026-06-01 | query | ${"`".repeat(size)}queried${"`".repeat(size)} | | |`]),
+      200000
+    );
+    expect(report.rows[0]).toMatchObject({ name: "Ada", status: "queried" });
+    expect(report.errors).toEqual([]);
   });
 });

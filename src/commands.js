@@ -31,7 +31,7 @@ import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
 import { assertTranslationLink, formatTranslationReport } from "./translation.js";
 import { formatSimilarity } from "./similarity.js";
-import { followUpDays, formatSubmissions, submissionsReport } from "./submissions.js";
+import { followUpDays, formatSubmissions, recountOverdue, submissionsReport } from "./submissions.js";
 import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
 import { formatVoices } from "./voices.js";
@@ -568,14 +568,14 @@ export const COMMANDS = [
     summary: [
       "List submission/tracker.md rows, count each status,",
       "check statuses and dates, and flag replies awaited",
-      "longer than --days (default 90); never writes"
+      "--days days or more (default 90); never writes"
     ],
     project: "positional",
     options: ["date", "days", "json"],
     run({ parsed, io, root, overrides }) {
       const today = todayOption(parsed.options.date, "submissions");
       const days = followUpDays(parsed.options);
-      const report = applySeverity(submissionsReport(root(), { today, days }), overrides);
+      const report = recountOverdue(applySeverity(submissionsReport(root(), { today, days }), overrides));
       if (wantsJson(parsed)) {
         return reportJson(io, "submissions", report);
       }

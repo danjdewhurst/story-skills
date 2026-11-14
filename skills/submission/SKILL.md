@@ -266,7 +266,9 @@ gives another response window, such as `--days 60`. Do not count the rows
 by hand; summarize from the command's output: queries out, partial and full
 requests, offers, declines, and the entries due a follow-up. An error means
 a row has an unknown status or a malformed date: ask the user for the right
-value and fix that row. Never invent a reply to clear a follow-up.
+value and fix that row. A tracker with no table that has a Status and a
+Date Sent column is an error too: rebuild the table from the template.
+Never invent a reply to clear a follow-up.
 `story next .` also lists the submissions due a follow-up.
 
 ### 9. Short fiction and collections
