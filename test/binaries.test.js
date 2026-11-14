@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { ALPINE_IMAGE, COMPILE_SAFETY_FLAGS, TARGETS, alpineSpawn, archiveName, buildTarget, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeRunner, smokeTest, verifyZip } from "../scripts/build-binaries.js";
+import { ALPINE_IMAGE, ALPINE_SMOKE_SCRIPT, COMPILE_SAFETY_FLAGS, TARGETS, alpineSpawn, archiveName, buildTarget, checksumsName, checksumsText, executableName, hostTarget, parseArgs, sha256File, smokeRunner, smokeTest, verifyZip } from "../scripts/build-binaries.js";
 import { formula, parseChecksums } from "../scripts/homebrew-formula.js";
 import { writeZip } from "../src/packaging.js";
 import { VERSION } from "../src/version.js";
@@ -72,6 +72,32 @@ describe("standalone binaries (#296)", () => {
     expect(ALPINE_IMAGE).toMatch(/^alpine:\d+\.\d+@sha256:[0-9a-f]{64}$/);
   });
 
+  test("a musl build smoke-tests in Alpine, and a target the machine cannot run is not smoke-tested", () => {
+    const build = (name, platform, arch) => {
+      const calls = [];
+      const spawn = (command, args, options) => {
+        calls.push({ command, args });
+        if (command === "tar") {
+          fs.writeFileSync(path.join(options.cwd, args[1].split(path.sep).pop()), "");
+          fs.writeFileSync(args[1], "archive");
+        }
+        const stdout = args.includes("--help") ? "Usage: story <command> [options]\n" : `${VERSION}\n`;
+        return { status: 0, stdout, stderr: "" };
+      };
+      const log = [];
+      buildTarget(TARGETS.find((target) => target.name === name), VERSION, makeTempDir(), { smoke: true, spawn, log: (line) => log.push(line), platform, arch });
+      return { calls, log };
+    };
+    const musl = build("linux-arm64-musl", "linux", "arm64");
+    const runs = musl.calls.filter((call) => call.command === "docker");
+    expect(runs.map((call) => call.args.slice(call.args.indexOf(ALPINE_IMAGE) + 5))).toEqual([["--version"], ["validate", path.join(repoRoot, "examples", "the-last-ember")], ["--help"], ["--version"]]);
+    expect(musl.calls.some((call) => call.command.endsWith("story"))).toBe(false);
+    expect(musl.log).toEqual([`Smoke-tested linux-arm64-musl in ${ALPINE_IMAGE}: --version ${VERSION}, validate and --help passed`]);
+    const elsewhere = build("linux-arm64-musl", "linux", "x64");
+    expect(elsewhere.calls.map((call) => call.command)).toEqual(["bun", "tar"]);
+    expect(elsewhere.log).toEqual([]);
+  });
+
   test("the Alpine runner mounts the executable, the arguments' paths, and the working folder", () => {
     const calls = [];
     const spawn = (command, args) => {
@@ -84,16 +110,18 @@ describe("standalone binaries (#296)", () => {
     expect(calls[0].command).toBe("docker");
     expect(calls[0].args).toEqual([
       "run", "--rm", "--platform", "linux/arm64",
-      "--volume", "/work:/work:ro", "--volume", "/repo/examples/x:/repo/examples/x:ro",
-      ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', "/work/story", "validate", "/repo/examples/x"
+      "--mount", "type=bind,source=/work,target=/work,readonly", "--mount", "type=bind,source=/repo/examples/x,target=/repo/examples/x,readonly",
+      ALPINE_IMAGE, "sh", "-c", ALPINE_SMOKE_SCRIPT, "/work/story", "validate", "/repo/examples/x"
     ]);
     expect(calls[1].args).toEqual([
       "run", "--rm", "--platform", "linux/arm64",
-      "--volume", "/work:/work:ro", "--volume", "/tmp/folder:/tmp/folder", "--workdir", "/tmp/folder",
-      ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', "/work/story", "--version"
+      "--mount", "type=bind,source=/work,target=/work,readonly", "--mount", "type=bind,source=/tmp/folder,target=/tmp/folder", "--workdir", "/tmp/folder",
+      ALPINE_IMAGE, "sh", "-c", ALPINE_SMOKE_SCRIPT, "/work/story", "--version"
     ]);
     alpineSpawn(TARGETS.find((target) => target.name === "linux-x64-musl"), spawn)("/w/story", []);
     expect(calls[2].args.slice(0, 4)).toEqual(["run", "--rm", "--platform", "linux/amd64"]);
+    expect(ALPINE_SMOKE_SCRIPT).toContain("apk add --no-cache --quiet libstdc++");
+    expect(ALPINE_SMOKE_SCRIPT).toEndWith('exec "$0" "$@"');
   });
 
   test("the smoke test checks the version, a validate run, and the usage", () => {

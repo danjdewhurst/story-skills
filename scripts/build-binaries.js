@@ -8,14 +8,17 @@
 // matches package.json.
 //
 // Usage:
-//   node scripts/build-binaries.js [--target <os>-<arch> ...] [--host] [--smoke] [--out <dir>]
+//   node scripts/build-binaries.js [--target <name> ...] [--host] [--smoke] [--out <dir>]
+//
+// <name> is a TARGETS name, such as darwin-arm64 or linux-x64-musl.
 //
 // With no --target it builds every target, cross-compiling from this
 // machine; --host builds only the machine's own target. --smoke runs the
 // host target's executable before archiving it: `--version` must print the
 // package version, `--help` must print the usage, and `validate` must pass on
 // an example project. On Linux, --smoke also runs the musl target of the
-// machine's architecture, in an Alpine container (Docker). Archives land in
+// machine's architecture, in an Alpine container, so on Linux --smoke with no
+// --target needs Docker. Archives land in
 // dist/binaries/ unless --out says otherwise. Needs bun and tar; the
 // Windows zip is written with the CLI's own zip writer, then read back with
 // node:zlib to check it.
@@ -186,6 +189,10 @@ export function smokeTest(executable, version, spawn = spawnSync) {
   }
 }
 
+// Installs libstdc++, retrying once after a mirror error, then runs the
+// executable ($0) with its arguments.
+export const ALPINE_SMOKE_SCRIPT = 'install() { apk add --no-cache --quiet libstdc++ > /dev/null; }; { install || { sleep 5 && install; }; } && exec "$0" "$@"';
+
 // Stands in for `spawn` to run a musl executable in an Alpine container, so
 // smokeTest's checks run there unchanged. The executable's folder and every
 // absolute path among the arguments are mounted read-only at the same path,
@@ -195,11 +202,12 @@ export function alpineSpawn(target, spawn = spawnSync) {
   const platform = `linux/${target.arch === "x64" ? "amd64" : target.arch}`;
   return (executable, args, options = {}) => {
     const readOnly = [path.dirname(executable), ...args.filter((arg) => path.isAbsolute(arg))];
-    const mounts = [...new Set(readOnly)].flatMap((folder) => ["--volume", `${folder}:${folder}:ro`]);
-    const workdir = options.cwd ? ["--volume", `${options.cwd}:${options.cwd}`, "--workdir", options.cwd] : [];
+    const bind = (folder) => `type=bind,source=${folder},target=${folder}`;
+    const mounts = [...new Set(readOnly)].flatMap((folder) => ["--mount", `${bind(folder)},readonly`]);
+    const workdir = options.cwd ? ["--mount", bind(options.cwd), "--workdir", options.cwd] : [];
     return spawn(
       "docker",
-      ["run", "--rm", "--platform", platform, ...mounts, ...workdir, ALPINE_IMAGE, "sh", "-c", 'apk add --no-cache --quiet libstdc++ > /dev/null && exec "$0" "$@"', executable, ...args],
+      ["run", "--rm", "--platform", platform, ...mounts, ...workdir, ALPINE_IMAGE, "sh", "-c", ALPINE_SMOKE_SCRIPT, executable, ...args],
       { encoding: "utf8" }
     );
   };
@@ -222,12 +230,14 @@ export function verifyZip(archive, name, content) {
 // Compiles and archives one target, and returns its archive's name and hash.
 // `spawn` stands in for child_process.spawnSync, so tests can build without
 // compiling anything.
-export function buildTarget(target, version, out, { smoke = false, spawn = spawnSync, log = console.log } = {}) {
+// `platform` and `arch` stand in for this machine's, so tests can reach each
+// smoke runner.
+export function buildTarget(target, version, out, { smoke = false, spawn = spawnSync, log = console.log, platform = process.platform, arch = process.arch } = {}) {
   const work = fs.mkdtempSync(path.join(os.tmpdir(), `story-binary-${target.name}-`));
   try {
     const executable = executableName(target);
     run("bun", ["build", "./bin/story.js", "--compile", ...COMPILE_SAFETY_FLAGS, `--target=${target.bun}`, `--outfile=${path.join(work, executable)}`], repoRoot, spawn);
-    const runner = smoke ? smokeRunner(target) : null;
+    const runner = smoke ? smokeRunner(target, platform, arch) : null;
     if (runner === "host") {
       smokeTest(path.join(work, executable), version, spawn);
       log(`Smoke-tested ${target.name}: --version ${version}, validate and --help passed`);
