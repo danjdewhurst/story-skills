@@ -68,7 +68,7 @@ Every skill that drafts, edits, or critiques prose reads `language` in `story.md
 | Draft without an outline and tidy the bible afterwards | [discovery-drafting](#discovery-drafting) | "I want to discovery-write" |
 | Fix a flat scene, an info dump, an opening, or a chapter ending | [scene-craft](#scene-craft) | "Fix the info dump in chapter 2" |
 | Keep spelling, voice, and house style consistent, or lint prose | [voice-style](#voice-style) | "Set up a style sheet for this book" |
-| Write a poem, limerick, or song, or check that verse scans | [verse-craft](#verse-craft) | "Does this limerick scan?" |
+| Write a poem, limerick, or song, check that verse scans, or make a poetry collection | [verse-craft](#verse-craft) | "Does this limerick scan?" |
 | Plan, draft, or revise a branching or choose-your-own-adventure book whose chapters carry choices | [interactive-fiction](#interactive-fiction) | "Plan where the branches rejoin" |
 | Revise or continuity-check existing chapters, or work through revision passes | [revision-continuity](#revision-continuity) | "Continuity-check chapter 3" |
 | Line edit, copyedit, proofread, or make the voices distinct | [line-editing](#line-editing) | "Line edit chapter 3" |
@@ -147,7 +147,7 @@ The main handoffs:
 | [discovery-drafting](#discovery-drafting) | Chapters, post-hoc notes, reconciled bible files | `reindex`, `wordcount --write`, `check`, `progress --log` |
 | [scene-craft](#scene-craft) | `scenes/*.md` planning fields and sections, chapter `hook` | `reindex`, `wordcount --write`, `check`, `pacing` |
 | [voice-style](#voice-style) | `style-sheet.md`, character `voice-words`/`voice-avoid`, chapter prose | `prose`, `voices`, `names`, `reindex`, `wordcount --write`, `check`, `rename character` |
-| [verse-craft](#verse-craft) | Standalone poem files, or verse in chapter prose and `matter/` | `add matter`, `reindex`, `wordcount --write`, `check` (story verse only) |
+| [verse-craft](#verse-craft) | Standalone poem files, verse in chapter prose and `matter/`, or a poetry collection project | `init --form poetry-collection`, `add chapter`, `add matter`, `reindex`, `wordcount --write`, `check` (story verse and collections only) |
 | [interactive-fiction](#interactive-fiction) | Chapter `choices`, branch chapters and scenes, `continuity/state.md`, `notes/branch-map.md` | `add chapter`, `context`, `move`, `split`, `merge`, `remove chapter`, `build --format twee`/`ink`, `reindex`, `wordcount --write`, `check` |
 | [revision-continuity](#revision-continuity) | Chapters and every dependent record, `story.md` `revision-passes` | `report`, `passes`, `next`, `move`, `reindex`, `wordcount --write`, `check`, `continuity`, `doctor`, `pacing`, `clues`, `voices`, `prose`, `timeline`, `diagram`, `compare`, `series` |
 | [line-editing](#line-editing) | Chapter prose, `style-sheet.md`, character voice fields | `passes`, `prose`, `voices`, `build --format narration`/`html`/`print`, `reindex`, `wordcount --write`, `check` |
@@ -177,7 +177,7 @@ The main handoffs:
 3. **Workshop the logline** for each pick with the recipe in `story-init`'s `title-logline.md`, then run every logline stress test in `premise-tests.md`, reporting each as pass, weak, or fail with one revision per weak or failed test.
 4. **Draft `premise` and `counter-premise`** as value-plus-cause hypotheses, or record `premise: tbd-discovery`. The logline goes in the Synopsis section, not `premise`.
 5. **Name the stakes** on three levels: external, relational, and internal. At least two must be concrete and personal.
-6. **Choose the form** by counting the idea's moving parts (POV characters, threads, locations, time span): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, or `chapter-book`.
+6. **Choose the form** by counting the idea's moving parts (POV characters, threads, locations, time span): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`, or `poetry-collection`.
 7. **Brainstorm titles**, cut to a shortlist of five, and test them. Once a project exists, `story names` checks title words and new names against every entity.
 8. **Sanity-check against two or three comparable books** you name. It never invents titles, authors, or sales claims, and marks the list unverified unless web search confirmed each book.
 9. **Hand off** a one-screen brief. On approval it follows `story-init`, quoting every value in single quotes for the shell because workshop text is your own words:
@@ -600,11 +600,11 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 
 ### verse-craft
 
-**Purpose.** Writes, scans, and revises verse: fixed forms such as the limerick, sonnet, haiku, and villanelle; ballads and song lyrics; rhyming picture-book text; and verse inside a story, such as a character's song or a prophecy. Every claim that a line scans is shown: the agent marks the stresses, counts the syllables, and labels the rhyme scheme so you can check the work.
+**Purpose.** Writes, scans, and revises verse: fixed forms such as the limerick, sonnet, haiku, and villanelle; ballads and song lyrics; rhyming picture-book text; verse inside a story, such as a character's song or a prophecy; and a poetry collection kept as a story project. Every claim that a line scans is shown: the agent marks the stresses, counts the syllables, and labels the rhyme scheme so you can check the work.
 
-**Triggers.** "Write a poem", "write a limerick", "write a sonnet", "haiku", "villanelle", "ballad", "song lyrics", "a song for my character", "a rhyme", "rhyming couplets", "does this scan", "check the meter", "fix the rhythm of this poem", "rhyme scheme", "iambic pentameter", "a prophecy in verse", "a nursery rhyme", "rhyming picture book".
+**Triggers.** "Write a poem", "write a limerick", "write a sonnet", "haiku", "villanelle", "ballad", "song lyrics", "a song for my character", "a rhyme", "rhyming couplets", "does this scan", "check the meter", "fix the rhythm of this poem", "rhyme scheme", "iambic pentameter", "a prophecy in verse", "a nursery rhyme", "rhyming picture book", "poetry collection", "book of poems".
 
-**Not for.** Accidental rhymes in prose ([line-editing](#line-editing)), permissions for quoting another writer's poem or song lyrics ([editorial-review](#editorial-review)), or a poetry collection as a story project: the CLI checks fiction entities, so a collection stays as plain files.
+**Not for.** Accidental rhymes in prose ([line-editing](#line-editing)), permissions for quoting another writer's poem or song lyrics ([editorial-review](#editorial-review)), or a nonfiction book or essay collection, which the story project model does not cover.
 
 **Hard rules.** It never says a line scans without showing its stresses. It never pads a line with filler ("did go", "so very") or inverts word order to land a rhyme, unless your style does so on purpose. It never reproduces copyrighted lyrics or poems, and never rewrites your poem wholesale without permission. Verse a character writes sounds like that character, so a clumsy character's poem can stay clumsy.
 
@@ -615,13 +615,14 @@ It also uses line-editing's [`language-conventions.md`](../skills/line-editing/r
 3. **Scan.** Shows a scansion table for every line: stresses, syllables, beats, rhyme letter, and a verdict of ok, deliberate variation, or fault. When you ask for the poem only, it scans privately and offers the table afterwards.
 4. **Check rhyme and form.** Labels the rhyme scheme, marks slant and eye rhymes, checks the form's other rules (refrains, the sonnet's turn, the limerick's punchline), and offers a read-aloud with the system's text-to-speech.
 5. **Revise.** Proposes fixes in line-editing's before/after format, with the verse line as the location, and rescans every changed line.
-6. **Place story verse.** Puts the verse in the chapter or a `matter/` file, ends each line of a stanza except the last with a backslash so builds keep the line breaks, then runs `story reindex .`, `story wordcount . --write`, and `story check .`.
+6. **Place story verse.** Puts the verse in the chapter or a `matter/` file, ends each line of a stanza except the last with a backslash so builds keep the line breaks (or sets `verse: true` on a chapter that is all verse), then runs `story reindex .`, `story wordcount . --write`, and `story check .`.
+7. **Poetry collection.** Starts the book with `story init 'Title' --form poetry-collection`, which sets `genre: poetry` and no word target, and adds one chapter per poem. Every chapter is a [verse chapter](project-format.md#verse-chapters): builds keep each line break with no backslashes, `story wordcount` and `story progress` count lines, and the scene-record, POV, hook, and pacing checks skip it. `verse: false` makes one chapter prose.
 
 **Reads.** For story verse, `story.md` (including `language`), the speaker's character file, and the chapter the verse goes in. Nothing for a standalone poem, though it asks the language when the request leaves it open. Verse in another language is scanned by that language's tradition (syllabic, quantitative, mora-based, or tonal), not in English feet.
 
-**Writes.** A standalone poem file where you ask for it, or verse in chapter prose and `matter/` files.
+**Writes.** A standalone poem file where you ask for it, verse in chapter prose and `matter/` files, or a poetry collection project with one chapter per poem.
 
-**CLI.** None for a standalone poem. For story verse, `story add matter "Epigraph" --heading=false` for an epigraph page, then `story reindex .`, `story wordcount . --write`, and `story check .`.
+**CLI.** None for a standalone poem. For story verse, `story add matter "Epigraph" --heading=false` for an epigraph page, then `story reindex .`, `story wordcount . --write`, and `story check .`. For a poetry collection, `story init --form poetry-collection` and `story add chapter`, then the same three commands.
 
 **References.**
 
@@ -939,7 +940,7 @@ One `story.md` holds one edition's metadata. When the ebook and print ISBNs diff
 
 **Triggers.** "Make an audiobook", "narration script", "narrator", "ACX", "Findaway", "pronunciation guide", "how long is the audiobook", "adapt to a screenplay", "Fountain", "screenplay", "picture book", "spreads", "illustration notes", "art notes", "comic script", "comics script", "graphic novel", "panels", "interactive edition", "turn the book into Ink or Twine", "translate the book", "translation", "foreign edition", "glossary for translators".
 
-**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), new prose in the source book ([chapter-writing](#chapter-writing)), or writing a new branching or choose-your-own-adventure story ([interactive-fiction](#interactive-fiction)). Verse, including rhyming picture-book text, goes to [verse-craft](#verse-craft); nonfiction and poetry collections are outside the story project model, though a [short-story collection](series.md#short-story-collections-and-anthologies) fits.
+**Not for.** Publishing metadata, print, ebook, launch, or rights deals ([publishing](#publishing); audio and film rights one-sheets live there), agent submission ([submission](#submission)), new prose in the source book ([chapter-writing](#chapter-writing)), or writing a new branching or choose-your-own-adventure story ([interactive-fiction](#interactive-fiction)). Verse, including rhyming picture-book text and a [poetry collection](series.md#poetry-collections), goes to [verse-craft](#verse-craft); nonfiction is outside the story project model, though a [short-story collection](series.md#short-story-collections-and-anthologies) fits.
 
 **Hard rules.** It never changes the source manuscript to suit an adaptation without your approval. It never puts adaptation `.md` files in the project root, where `story validate` reports them as stray files; they go in `adaptations/` or use another extension such as `.fountain`. It never invents a pronunciation for a real place, person, or language. It gives working figures for audio-platform specs and tells you to check the current spec, and treats narrator, illustrator, and translator contracts as matters for publishing's contract checklist and a professional.
 

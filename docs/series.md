@@ -1,6 +1,6 @@
 # Series
 
-This page is for writers working on more than one book in the same world: sequels, prequels, and trilogies. It covers how books link to each other, how `story init` creates a linked book, what `story series` checks, and how to carry characters and facts from one book to the next. It also shows how to lay out a short-story collection or anthology, which gathers several story projects into one book.
+This page is for writers working on more than one book in the same world: sequels, prequels, and trilogies. It covers how books link to each other, how `story init` creates a linked book, what `story series` checks, and how to carry characters and facts from one book to the next. It also shows how to lay out a short-story collection or anthology, which gathers several story projects into one book, and a poetry collection.
 
 **On this page**
 
@@ -15,6 +15,7 @@ This page is for writers working on more than one book in the same world: sequel
 - [Maintenance checklist](#maintenance-checklist)
 - [Short-story collections and anthologies](#short-story-collections-and-anthologies)
 - [Translations](#translations)
+- [Poetry collections](#poetry-collections)
 
 ## How a series is modelled
 
@@ -503,7 +504,27 @@ Leave `author` out of `story.md` when the editor is the book's only credit. The 
 
 - No command assembles story projects into a collection. The collection's chapters are copies, so an edit to a story after assembly must be made in both projects, or the chapter imported again.
 - A build covers the whole project, so a single story's submission manuscript comes from its own project, not from the collection.
-- Poetry and nonfiction collections are outside the story project model: the EPUB, HTML, and Shunn builds join the lines of a paragraph, so a poem loses its line breaks.
+- Nonfiction collections, such as a book of essays, stay out of scope. A nonfiction book needs a different entity model from characters, scenes, and continuity, and the story project model does not give one.
+
+## Poetry collections
+
+A book of poems is one story project with `form: poetry-collection`, and each poem is a chapter:
+
+```shell
+story init 'Tide Tables' --form poetry-collection
+story add chapter 'Dawn Ebb'
+```
+
+Every chapter of a poetry collection is a [verse chapter](project-format.md#verse-chapters): each line break of the poem is kept in the EPUB, HTML, print, and DOCX builds, and a blank line is a stanza break, with no backslashes. `story wordcount` and `story progress` count each poem's lines as well as its words, and the fiction-only checks (scene records, POV, hooks, and the pacing findings) skip it. A poem in a novel, such as a ballad a character sings, can be a chapter of its own with `verse: true`; a prose chapter in a collection, such as an afterword, sets `verse: false`. A dedication, epigraph, or notes page goes in `matter/` as in any book, and is not verse. Run the maintenance block after adding or revising poems:
+
+```shell
+story reindex .
+story wordcount . --write
+story check .
+story build . --format epub
+```
+
+[`examples/tide-tables`](../examples/tide-tables/) is a collection of three poems, and the [verse-craft](skills.md#verse-craft) skill writes, scans, and revises the poems in it. Nonfiction collections stay out of scope (see above).
 
 ## Translations
 

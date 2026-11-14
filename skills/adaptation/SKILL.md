@@ -39,11 +39,11 @@ redoing the adaptation; say so if `status` is not `revising` or `complete`.
   choose-your-own-adventure story (use `interactive-fiction`)
 - NOT for writing or scanning verse, including rhyming picture-book text
   (use `verse-craft`)
-- Nonfiction and poetry collections are outside the story project model.
-  The CLI checks fiction entities (characters, chapters, scenes,
-  continuity); do not force a poetry collection or nonfiction book into
-  it. A short-story collection does fit: see `docs/series.md`, Short-story
-  collections and anthologies.
+- Nonfiction is outside the story project model. The CLI checks fiction
+  entities (characters, chapters, scenes, continuity); do not force a
+  nonfiction book into it. A short-story collection does fit: see
+  `docs/series.md`, Short-story collections and anthologies. So does a
+  poetry collection (`form: poetry-collection`, use `verse-craft`).
 
 ## Hard Rules
 
