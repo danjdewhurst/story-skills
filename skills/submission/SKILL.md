@@ -268,7 +268,12 @@ requests, offers, declines, and the entries due a follow-up. An error means
 a row has an unknown status or a malformed date: ask the user for the right
 value and fix that row. A tracker with no table that has a Status and a
 Date Sent column is an error too: rebuild the table from the template.
-Never invent a reply to clear a follow-up.
+A date after today is a warning: ask the user for the right year. Never
+invent a reply to clear a follow-up. When the user sends a follow-up, note
+its date in Notes; the row stays due until a reply comes, so once the user
+stops waiting, set `no-response`. If the user sets `days` for
+`submissions` in `cli-defaults` in `story.md`, set the same `days` for
+`next`, which takes its own.
 `story next .` also lists the submissions due a follow-up.
 
 ### 9. Short fiction and collections

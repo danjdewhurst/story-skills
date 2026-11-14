@@ -269,6 +269,24 @@ describe("story submissions", () => {
     expect(invoke(cwd, ["submissions", root]).code).toBe(3);
   });
 
+  test("reads rows without outer pipes, and warns about a date after today", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker([
+      "| A | 2026-01-01 | q | queried | | |",
+      "B | 2026-01-01 | q | queried | | ",
+      "| C | 2027-11-01 | q | queried | | |",
+      "| D | 2026-01-01 | q | requested-full | 2027-01-01 | |"
+    ], "\nSome text.\n| E | 2026-01-01 | q | queried | | |\n"));
+    const { code, envelope } = json(cwd, ["submissions", root, "--date", TODAY]);
+    expect(code).toBe(0);
+    expect(envelope.data.rows.map((row) => row.name)).toEqual(["A", "B", "C", "D"]);
+    expect(envelope.data.overdue).toBe(2);
+    expect(envelope.diagnostics.filter((entry) => entry.code === "submission-date-in-future").map((entry) => entry.message)).toEqual([
+      "submission/tracker.md line 13 (C): Date Sent 2027-11-01 is after today, 2026-11-14: check the year",
+      "submission/tracker.md line 14 (D): Response Date 2027-01-01 is after today, 2026-11-14: check the year"
+    ]);
+  });
+
   test("a tracker with more than 10,000 rows is refused without reading a row", () => {
     const { cwd, root } = project();
     writeTracker(root, `${BOOK_HEADER}${"|x|2026-01-01|q|queried||\n".repeat(10001)}`);

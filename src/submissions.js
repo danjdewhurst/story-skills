@@ -95,6 +95,13 @@ function headerName(cell) {
   return plainCell(cell).toLowerCase().replace(/\s+/g, " ");
 }
 
+// Whether a line holds a pipe not escaped with a backslash: as in GFM, a
+// table row needs no outer pipes, and the table runs to the first line
+// without one or the first blank line.
+function hasCellBreak(line) {
+  return /(?<!\\)\|/.test(line);
+}
+
 // The tracker tables in `lines` (the file's lines, frontmatter included,
 // with `start` the first line after it), each as { headers, rows }, where a
 // row is { line, cells } with line counted from 1.
@@ -102,13 +109,13 @@ function trackerTables(lines, start) {
   const fenced = fencedLineIndexes(lines);
   const tables = [];
   for (let index = start; index < lines.length - 1; index += 1) {
-    if (fenced.has(index) || !lines[index].trim().startsWith("|") || !DELIMITER_ROW.test(lines[index + 1].trim())) {
+    if (fenced.has(index) || !hasCellBreak(lines[index]) || !DELIMITER_ROW.test(lines[index + 1].trim())) {
       continue;
     }
     const headers = tableCells(lines[index]).map(headerName);
     const rows = [];
     let next = index + 2;
-    for (; next < lines.length && !fenced.has(next) && lines[next].trim().startsWith("|"); next += 1) {
+    for (; next < lines.length && !fenced.has(next) && lines[next].trim() !== "" && hasCellBreak(lines[next]); next += 1) {
       rows.push({ line: next + 1, cells: tableCells(lines[next]) });
     }
     if (headers.includes("status") && headers.includes("date sent")) {
@@ -237,6 +244,11 @@ function checkRow(row, todayDays, days, result) {
   }
   const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
   const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
+  for (const [date, column] of [[sent, "Date Sent"], [response, "Response Date"]]) {
+    if (date !== undefined && date.days > todayDays) {
+      result.warnings.push(warn("submission-date-in-future", `${label}: ${column} ${date.text} is after today, ${formatDay(todayDays)}: check the year`, SUBMISSION_TRACKER));
+    }
+  }
   const since = [sent, response].filter((date) => date !== undefined).sort((left, right) => right.days - left.days)[0];
   row.waitingSince = null;
   row.waitingDays = null;
@@ -252,6 +264,10 @@ function checkRow(row, todayDays, days, result) {
     }
   }
   return row;
+}
+
+function formatDay(days) {
+  return new Date(days * 86400000).toISOString().slice(0, 10);
 }
 
 // A row's date column as { text, days }, or undefined when it is blank or

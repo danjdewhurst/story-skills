@@ -327,6 +327,7 @@ export const FINDING_CODES = {
   "submission-invalid-status": "error",
   "submission-invalid-date": "error",
   "submission-overdue": "warning",
+  "submission-date-in-future": "warning",
   // story compare
   "story-missing-at-ref": "warning",
   // story similarity
