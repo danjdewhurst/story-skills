@@ -11,7 +11,7 @@ The CLI never writes story content for you. It scaffolds files, rebuilds registr
 - [How the CLI behaves](#how-the-cli-behaves)
 - [Setup commands](#setup-commands): `init`, `import`, `migrate`
 - [Maintenance commands](#maintenance-commands): `validate`, `reindex`, `wordcount`, `links`, `check`, `list`
-- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `notes`, `apply`, `similarity`, `progress`, `timeline`, `prose`, `series`, `translation`, `report`, `next`, `doctor`
+- [Analysis commands](#analysis-commands): `continuity`, `knowledge`, `context`, `compare`, `notes`, `apply`, `similarity`, `progress`, `submissions`, `timeline`, `prose`, `series`, `translation`, `report`, `next`, `doctor`
 - [Craft and revision commands](#craft-and-revision-commands): `pacing`, `clues`, `grid`, `voices`, `names`, `mentions`, `diagram`, `passes`, `snapshot`
 - [Entity commands](#entity-commands): `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact`
 - [Output commands](#output-commands): `export`, `build`, `synopsis`
@@ -64,6 +64,7 @@ Absolute paths in output are shortened to `~/stories/...`.
 | | [`apply <file.docx>`](#apply) | Write the text of an editor's returned Word file into the chapters' prose, paragraph by paragraph | Yes |
 | | [`similarity [path]`](#similarity) | Find passages that share a run of words with other text: earlier books, a draft, or a source | No |
 | | [`progress [path]`](#progress) | Show words against targets and deadline | With `--log` |
+| | [`submissions [path]`](#submissions) | List the submission tracker's rows and status counts, check them, and flag replies awaited too long | No |
 | | [`timeline [path]`](#timeline) | Show scenes in story-time order, POV balance, presence | No |
 | | [`prose [path\|-]`](#prose) | Lint chapter prose, or a passage piped to stdin | No |
 | | [`series [path]`](#series) | Order linked books and check shared canon | No |
@@ -148,7 +149,7 @@ Every command except `init`, `import`, and `lsp` works on one story project: a d
 
 | Commands | How to give the project | Default |
 |---|---|---|
-| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `translation`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
+| `validate`, `reindex`, `wordcount`, `links`, `check`, `continuity`, `compare`, `similarity`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `grid`, `voices`, `series`, `translation`, `passes`, `report`, `next`, `doctor`, `migrate`, `export`, `build`, `synopsis` | A positional `[path]` **or** `--path <path>` | Current directory |
 | `knowledge`, `context`, `notes`, `apply`, `list`, `names`, `mentions`, `diagram`, `snapshot`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `impact` | `--path <path>` only, because their positionals are ids, names, a file, or an entity or diagram kind | Current directory |
 | `init`, `import`, `lsp` | Neither. `init` and `import` create a new project; use `--dir` to choose where. `lsp` checks the projects in the folders the editor opens | A directory named after the story id (`init`, `import`) |
 
@@ -282,7 +283,7 @@ Defaults apply with `--json` too, and to `prose -` and `voices -` inside a proje
 The CLI prints results to stdout and diagnostics to stderr.
 
 - `validate`, `links`, `continuity`, `check`, and `mentions` with no entity write everything to **stderr**: a summary line, then one line per `error:`, `warning:`, and `dismissed:` finding. Nothing goes to stdout. A `warning:` line ends with the warning's [code](#finding-codes) in brackets, as does an `error:` line for a warning `severity` promoted.
-- `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, `series`, and `translation` write their report to stdout, then the same summary and finding lines to stderr.
+- `compare`, `notes`, `apply <file.docx>`, `similarity`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `names`, `mentions <kind> <id>`, `series`, and `translation` write their report to stdout, then the same summary and finding lines to stderr.
 - `diagram` writes the Mermaid source (or, with `--out`, a confirmation) to stdout, `grid` the plot grid, and `list` one line per match, with a `3 of 12 chapters matched` count on stderr. If the project has a file that fails to parse, they write the summary and error lines to stderr instead.
 - All other commands write a short confirmation or report to stdout, except `lsp`, which writes only protocol messages there for the editor.
 - Errors that stop a command (a bad option, a missing project, an unknown id) print one line to stderr.
@@ -307,7 +308,7 @@ Findings keep `1`, so `story validate || exit 1` fails on errors as it always ha
 
 ### JSON output
 
-`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `translation`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, which tests such a change, and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
+`--json` prints one JSON object on stdout instead of the text report, for scripts and agents. Every command takes it: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `translation`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), the commands that print text to keep (`diagram`, `grid`, `synopsis`, and `passes`), the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, which tests such a change, and the commands that write a book or make a project (`export`, `build`, `init`, and `import`). Nothing is written to stderr, and the exit code is the same as without `--json`: `1` for findings, `2` for a usage error, `3` for a folder that is not a usable story project, and `4` for a refused write (see [Output streams and exit codes](#output-streams-and-exit-codes)). `ok` is `true` exactly when the exit code is `0`. The one exception is [`lsp`](#lsp), which already speaks JSON-RPC on stdout and so takes no `--json`.
 
 Every result has the same envelope:
 
@@ -1591,6 +1592,52 @@ Sessions: none logged (run story progress --log after a writing session)
 Progress checked: 0 errors, 0 warnings, 0 dismissed
 ```
 
+### submissions
+
+```text
+story submissions [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
+```
+
+Reads `submission/tracker.md`, the tracker the [`submission`](skills.md) skill keeps, and lists its rows, counts each status from the table, checks each row, and flags the submissions still waiting for a reply after `--days` days. It never writes: every row comes from the author.
+
+The tracker is a markdown table whose header has a `Status` and a `Date Sent` column, after optional YAML frontmatter. Columns are found by their header, in any order and letter case, so both the book tracker (`Agent/Publisher`, `Date Sent`, `Materials`, `Status`, `Response Date`, `Notes`) and the short-fiction tracker (`Market`, `Story`, `Date Sent`, `Type`, `Rights Offered`, `Status`, `Response Date`, `Notes`) are read. Other tables, such as `## Publication History`, a hand-kept `## Summary`, and tables in code fences are left alone, and so is the template's `*No submissions yet*` row.
+
+Each row is checked:
+
+- `Status` is one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`, in any letter case and with or without code marks. Anything else, or an empty cell, is a [`submission-invalid-status`](#codes-submissions) error.
+- `Date Sent` is a real `YYYY-MM-DD` day, and `Response Date` is one too or blank. Anything else is a [`submission-invalid-date`](#codes-submissions) error.
+- A row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) waits from the later of its `Date Sent` and `Response Date`, so a request for the full manuscript waits from the day the request came. A row that has waited `--days` days or more is a [`submission-overdue`](#codes-submissions) warning.
+
+A project with no `submission/tracker.md` prints a short note and exits 0. A tracker with no tracker table is a [`submission-tracker-no-table`](#codes-submissions) error. Errors exit 1; warnings alone exit 0. A tracker whose frontmatter does not parse, or a `submission` folder that is a symlink, exits 3.
+
+| Option | Effect |
+|---|---|
+| `--date <YYYY-MM-DD>` | Use this date as "today" for the days waited. Default: the local date |
+| `--days <n>` | How many days a submission may wait for a reply before it is due a follow-up: a whole number 1 to 3650, default `90`. Anything else is a usage error (exit 2). A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
+
+In `--json`, `data` holds `file`, `found` (false when there is no tracker), `today`, `days`, `rows`, `counts` (every status, with 0 for the ones no row has), `waiting` (rows that await a reply), and `overdue`. Each row has `line` (its line in the file), `name` (the `Agent/Publisher` or `Market` column), `story`, `dateSent`, `materials`, `type`, `rights` (`Rights Offered`), `status`, `responseDate`, and `notes`, each null when the table has no such column, plus `waitingSince`, `waitingDays`, and `overdue`.
+
+<!-- replay: the-last-ember setup=last-ember-tracker -->
+```shell
+story submissions --date 2026-11-14
+```
+
+```text
+# Submissions: submission/tracker.md
+
+Today: 2026-11-14; follow up after 90 days without a reply
+
+- Ada Byrne (Byrne Literary): queried, sent 2026-06-02; waiting 165 days: follow up
+- Tom Reyes (North Light Agency): requested-full, sent 2026-06-02, reply 2026-07-15; waiting 122 days: follow up
+- Lena Okafor (Okafor & Hart): declined, sent 2026-06-09, reply 2026-06-30
+
+Counts: queried 1, requested-full 1, declined 1 (3 submissions)
+Waiting for a reply: 2; due a follow-up: 2
+Submissions checked: 0 errors, 2 warnings, 0 dismissed
+warning: submission/tracker.md line 11 (Ada Byrne (Byrne Literary)): queried, waiting 165 days for a reply since 2026-06-02 (follow up after 90): follow up, or record the reply [submission-overdue]
+warning: submission/tracker.md line 12 (Tom Reyes (North Light Agency)): requested-full, waiting 122 days for a reply since 2026-07-15 (follow up after 90): follow up, or record the reply [submission-overdue]
+```
+
 ### timeline
 
 ```text
@@ -1896,16 +1943,18 @@ Next Actions:
 ### next
 
 ```text
-story next [path] [--date <YYYY-MM-DD>] [--json]
+story next [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
 ```
 
 Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within `release-warn-days` days (default 3), or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
+
+When `submission/tracker.md` has rows that have waited `--days` days (default 90) or more for a reply, as [`submissions`](#submissions) counts them, `next` adds one action: `[P2] Follow up on submissions: 2 submissions in submission/tracker.md have waited 90 days or more for a reply: run story submissions . to list them.` A `severity` entry that turns [`submission-overdue`](#codes-submissions) off, or an exemption that dismisses it, leaves the row out. A tracker that cannot be read gives no action; `story submissions` reports the problem.
 
 | Priority | Actions |
 |---|---|
 | `P0` | Fix validation errors, broken references, or continuity contradictions |
 | `P1` | Draft a serial episode that is due, review continuity warnings, refresh stale word counts, add scene records for chapters without them, reconcile `mode: discovered` chapters that have no `## Chapter Notes (post-hoc)` heading; when `story.md` has `status: revising`, plan revision passes or work the next one |
-| `P2` | Track open questions, review pending promises and open clues, draft the next chapter, create a first character |
+| `P2` | Follow up on submissions, track open questions, review pending promises and open clues, draft the next chapter, create a first character |
 | `P3` | Nothing is blocking the next writing pass |
 
 Actions are sorted by priority, P0 first; actions with the same priority keep the order the checks produce them. The draft-next-chapter action names the first chapter that exists but has no prose yet (0 words, such as a fresh outline), `[P2] Draft chapter 1: chapters/chapter-01.md has no prose yet (status outline): draft it under ## Chapter Text to ...`, and only when every chapter has prose does it suggest adding the next number with `story add chapter`. It is left out when `story.md` has `status: revising`, `status: complete`, or `status: abandoned`, or when every arc is `resolved`. A discovered chapter without post-hoc notes gets `[P1] Reconcile discovered chapters: Run the discovery-drafting reconcile loop and add ## Chapter Notes (post-hoc) for <ids>.`
@@ -3522,7 +3571,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 
 - [Any command](#codes-any-command) · [validate](#codes-validate) · [links](#codes-links) · [continuity](#codes-continuity) · [series](#codes-series) · [translation](#codes-translation)
 - [prose](#codes-prose) · [pacing](#codes-pacing) · [clues](#codes-clues) · [voices](#codes-voices) · [mentions](#codes-mentions) · [names](#codes-names)
-- [context](#codes-context) · [progress and next](#codes-progress-and-next) · [compare](#codes-compare) · [notes](#codes-notes) · [apply](#codes-apply) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
+- [context](#codes-context) · [progress and next](#codes-progress-and-next) · [submissions](#codes-submissions) · [compare](#codes-compare) · [notes](#codes-notes) · [apply](#codes-apply) · [similarity](#codes-similarity) · [build and export](#codes-build-and-export)
 - [add, rename, move, split, merge, and remove](#codes-add-rename-move-split-merge-and-remove) · [impact](#codes-impact) · [snapshot --restore](#codes-snapshot---restore) · [init and import](#codes-init-and-import) · [JSON failures](#codes-json-failures)
 
 ### Codes: any command
@@ -3860,6 +3909,15 @@ An error means the project is broken or a check failed, so it cannot be turned d
 |---|---|---|
 | `release-undrafted` | warning | A serial episode's release date is past or within `release-warn-days` days (default 3) and its chapter has no prose yet, or, with a `release-every` cadence and a `story.md` status other than `complete`, the episode has no chapter yet (see [Release schedule](project-format.md#release-schedule)). |
 
+### Codes: submissions
+
+| Code | Level | Reported when |
+|---|---|---|
+| `submission-tracker-no-table` | error | `submission/tracker.md` has no table with a `Status` and a `Date Sent` column. |
+| `submission-invalid-status` | error | A tracker row's `Status` is empty or not one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`. |
+| `submission-invalid-date` | error | A tracker row's `Date Sent` is empty or not a real `YYYY-MM-DD` day, or its `Response Date` is neither blank nor such a day. |
+| `submission-overdue` | warning | A tracker row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) has waited `--days` days (default 90) or more since the later of its `Date Sent` and `Response Date`. `story next` turns these into one follow-up action. |
+
 ### Codes: compare
 
 | Code | Level | Reported when |
@@ -3991,6 +4049,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
 | `--weeks` | `<n>` | `progress` | Whole number 1 to 52; default `4` |
+| `--days` | `<n>` | `submissions`, `next` | Whole number 1 to 3650; default `90`: the days a submission may wait for a reply before it is due a follow-up |
 | `--ref` | `<git-ref>` | `compare`, `apply` | Exclusive with `--against` and `--snapshot`; for `apply`, the version sent to the editor |
 | `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, a file, folder, or git ref; exclusive with `--snapshot` |
 | `--snapshot` | `<name>` | `compare`, `similarity`, `apply` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot`; for `apply`, the version sent to the editor |
@@ -4043,7 +4102,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--role` | `<name>` | `add character` | |
 | `--status` | `<name>` | `add` (every kind except `system`, `term`, and `matter`) | |
 | `--mode` | `<name>` | `add chapter` | `discovered` or `outlined` |
-| `--date` | `<date>` | `add chapter`, `add scene`, `progress`, `next` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add`; for `progress` the session date, and for `progress` and `next` the day release dates are measured from (default today) |
+| `--date` | `<date>` | `add chapter`, `add scene`, `progress`, `next`, `submissions` | `YYYY-MM-DD`, or a [custom calendar](project-format.md#custom-calendars) date for `add`; for `progress` the session date, for `progress` and `next` the day release dates are measured from, and for `submissions` and `next` the day waiting time is counted to (default today) |
 | `--time` | `<time>` | `add chapter`, `add scene` | `HH:MM` or a named time of day |
 | `--travel-hours` | `<n>` | `add scene` | |
 | `--travel-mode` | `<name>` | `add scene` | One of the `story.md` [`travel-modes`](project-format.md#geography) |

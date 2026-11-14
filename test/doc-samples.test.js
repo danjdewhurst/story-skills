@@ -20,7 +20,7 @@ const FENCE = /^(\s*)(`{3,}|~{3,})(\w*)\s*$/;
 // the count with the markers.
 const MARKED = {
   "README.md": 1,
-  "docs/cli-reference.md": 68,
+  "docs/cli-reference.md": 69,
   "docs/continuity.md": 22,
   "docs/development.md": 1,
   "docs/getting-started.md": 7,
@@ -401,6 +401,21 @@ const SETUPS = {
   // cli-reference.md progress: target-words 90000 and a deadline.
   "last-ember-target": (home, stories) => {
     edit(path.join(stories, "the-last-ember", "story.md"), "status: in-progress\n", "status: in-progress\ntarget-words: 90000\ndeadline: 2027-03-31\n");
+  },
+  // cli-reference.md submissions: The Last Ember's tracker with three
+  // queries out, as the submission skill writes it.
+  "last-ember-tracker": (home, stories) => {
+    const folder = path.join(stories, "the-last-ember", "submission");
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, "tracker.md"), [
+      "---", "type: submission-tracker", "story: the-last-ember", "updated: 2026-10-01", "---", "", "# Submission Tracker: The Last Ember", "",
+      "| Agent/Publisher | Date Sent | Materials | Status | Response Date | Notes |",
+      "|-----------------|-----------|-----------|--------|---------------|-------|",
+      "| Ada Byrne (Byrne Literary) | 2026-06-02 | query + first 10 pages | queried | | |",
+      "| Tom Reyes (North Light Agency) | 2026-06-02 | query + synopsis | requested-full | 2026-07-15 | sent the full 2026-07-16 |",
+      "| Lena Okafor (Okafor & Hart) | 2026-06-09 | query + first 10 pages | declined | 2026-06-30 | form rejection |",
+      ""
+    ].join("\n"));
   },
   // writing-workflows.md: The Gannet Point Light, a novel with a deadline
   // and 132 words drafted.

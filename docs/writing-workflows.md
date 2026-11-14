@@ -1534,7 +1534,7 @@ I queried three agents today. Add them to the tracker.
 Summarize where the book stands.
 ```
 
-The tracker is created the first time you report a submission, and every row comes from what you tell the agent. On request it summarises queries out, partial and full requests, offers, declines, and entries past the response window you set.
+The tracker is created the first time you report a submission, and every row comes from what you tell the agent. To summarise, the agent runs [`story submissions .`](cli-reference.md#submissions), which counts each status from the table, checks each row's status and dates, and flags entries still waiting for a reply after 90 days (`--days` for the response window you set). `story next .` lists those follow-ups too.
 
 ### 5. Short fiction and collections
 

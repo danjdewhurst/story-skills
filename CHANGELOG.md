@@ -21,6 +21,12 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
   - `story translation [path]` compares structure, never meaning. Chapters, scenes, and entity ids in one edition only are errors (`translation-missing`, `translation-extra`). A chapter whose paragraph count differs from the source (`translation-paragraph-count`) and a source chapter changed since it was translated (`translation-source-changed`) are warnings. `--json` gives the chapters, the `missing` and `extra` ids, and each chapter's hashes.
   - A translated chapter's new `source-hash` field records the source chapter it was made from. `story translation --record` writes it for every chapter, or for one with `--chapter <id>`, and takes the project lock and `--dry-run` like the other write commands.
   - The `adaptation` skill sets `translation-of`, records the source hashes, and runs `story translation` in place of comparing the editions by hand.
+- `story submissions` reads the submission tracker: it lists the rows, counts each status, checks them, and flags replies awaited too long. See [submissions](docs/cli-reference.md#submissions).
+  - It reads `submission/tracker.md` as the `submission` skill writes it, the book tracker and the short-fiction one, and never writes. A project with no tracker prints a short note and exits 0.
+  - An unknown or empty status (`submission-invalid-status`), a date that is not `YYYY-MM-DD` (`submission-invalid-date`), or a tracker with no tracker table (`submission-tracker-no-table`) is an error and exits 1.
+  - A row still waiting for a reply 90 days or more after the later of its Date Sent and Response Date is a `submission-overdue` warning. `--days <n>` changes the window and `--date` sets today. `--json` gives the rows and counts.
+  - `story next` adds a `[P2] Follow up on submissions` action for those rows, and takes `--days` too.
+  - The `submission` skill runs the command instead of counting by hand, and its tracker template drops the hand-kept `## Summary` list.
 
 ### Changed
 
