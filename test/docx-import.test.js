@@ -353,7 +353,7 @@ describe("story import of a .docx", () => {
     docxFile(path.join(dir, "draft.txt"), paragraph(run("Text.")));
     const result = importCli(dir, "draft.txt", "--title", "Zip", "--dir", "zip");
     expect(result.code).toBe(2);
-    expect(result.err).toContain("story import reads a Word document only from a file whose name ends in .docx");
+    expect(result.err).toContain("story import reads a Word document, an OpenDocument text, or an EPUB only from a file whose name ends in .docx, .odt, or .epub");
   });
 });
 

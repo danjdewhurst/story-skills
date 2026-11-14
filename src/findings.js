@@ -411,6 +411,7 @@ export const FINDING_CODES = {
   // story init and story import
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",
+  "import-content-left-out": "warning",
   "unsplit-chapter-lines": "warning",
   "unused-chapter-text": "warning",
   // Any command with --json, when it fails before producing a result
@@ -435,7 +436,7 @@ export const RETIRED_CODES = {
 
 // Warnings that story init and story import report while making a project,
 // before any story.md or exemption log is read, so neither can change them.
-export const PROJECTLESS_CODES = ["kept-story-options", "docx-content-left-out", "unsplit-chapter-lines", "unused-chapter-text"];
+export const PROJECTLESS_CODES = ["kept-story-options", "docx-content-left-out", "import-content-left-out", "unsplit-chapter-lines", "unused-chapter-text"];
 
 // The warning codes a story.md severity entry can name.
 export function severityCodes() {
