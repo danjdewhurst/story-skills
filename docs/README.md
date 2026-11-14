@@ -135,7 +135,7 @@ The repository includes twelve sample projects in [`examples/`](../examples/). T
 | [`quatre-heures-dix-sept`](../examples/quatre-heures-dix-sept/) | A short story in French (`language: fr`): dialogue in guillemets with French no-break spaces, the French word lists, and French build labels |
 | [`kirimi-eki-no-wasuremono`](../examples/kirimi-eki-no-wasuremono/) | A short story in Japanese (`language: ja`): counted in characters, `target-characters`, corner-bracket dialogue, and `writing-mode: vertical` |
 | [`laysat-lil-bay`](../examples/laysat-lil-bay/) | A short story in Arabic (`language: ar`): right-to-left builds and Arabic punctuation |
-| [`tide-tables`](../examples/tide-tables/) | A poetry collection of three poems (`form: poetry-collection`): verse chapters whose line breaks every build keeps, with no backslashes, and line counts in `story wordcount` |
+| [`tide-tables`](../examples/tide-tables/) | A poetry collection of three poems (`form: poetry-collection`): verse chapters whose line breaks the EPUB, print, DOCX, and review builds keep with no backslashes, and line counts in `story wordcount` |
 
 ## Other resources
 

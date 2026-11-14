@@ -177,7 +177,7 @@ The main handoffs:
 3. **Workshop the logline** for each pick with the recipe in `story-init`'s `title-logline.md`, then run every logline stress test in `premise-tests.md`, reporting each as pass, weak, or fail with one revision per weak or failed test.
 4. **Draft `premise` and `counter-premise`** as value-plus-cause hypotheses, or record `premise: tbd-discovery`. The logline goes in the Synopsis section, not `premise`.
 5. **Name the stakes** on three levels: external, relational, and internal. At least two must be concrete and personal.
-6. **Choose the form** by counting the idea's moving parts (POV characters, threads, locations, time span): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, `chapter-book`, or `poetry-collection`.
+6. **Choose the form** by counting the idea's moving parts (POV characters, threads, locations, time span): `novel`, `novella`, `novelette`, `short-story`, `flash`, `serial`, `picture-book`, or `chapter-book`.
 7. **Brainstorm titles**, cut to a shortlist of five, and test them. Once a project exists, `story names` checks title words and new names against every entity.
 8. **Sanity-check against two or three comparable books** you name. It never invents titles, authors, or sales claims, and marks the list unverified unless web search confirmed each book.
 9. **Hand off** a one-screen brief. On approval it follows `story-init`, quoting every value in single quotes for the shell because workshop text is your own words:
