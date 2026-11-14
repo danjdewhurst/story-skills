@@ -32,6 +32,7 @@ story diagram timeline
 story diagram clues
 story diagram arcs
 story progress . --log
+story submissions . --days 60
 story compare . --ref draft-1
 story compare . --against ../book-draft-1
 story snapshot draft-1 --path .
