@@ -86,7 +86,7 @@ Which commands can report findings (exit `1`):
 | `impact` | The change it tests would add an error to `story check`. With `--strict`, an added warning, or a warning the change itself gives, fails it too. Findings the project already has do not count, even when the change gives them new ids. |
 | `report`, `next`, `doctor` | Never, on a readable project. They summarise the checks but always exit 0. |
 | `doctor --fix` | A check still reports an error after its safe repairs. |
-| `similarity`, `notes`, `apply`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
+| `similarity`, `notes`, `apply`, `collect`, `build`, `export`, `context`, `add`, `rename`, `move`, `split`, `merge`, `remove`, `snapshot --restore` | Only when `severity` in `story.md` promotes a warning they print; the command's output is still written. |
 | `init`, `import`, `migrate`, `reindex`, `wordcount`, `knowledge`, `passes`, `snapshot`, `synopsis` | Never: they succeed, or stop with `2`, `3`, or `4`. `snapshot --restore` is the exception above. |
 | `lsp` | Never. The language server exits `0` when the editor shuts it down and `1` when it exits without a shutdown request, or stops with `2` for an unknown option. |
 
@@ -141,7 +141,7 @@ The [CLI reference](cli-reference.md#output-streams-and-exit-codes) has the full
 
 ### JSON output
 
-`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `translation`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, and `apply`), `impact`, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
+`--json` works on every command: the check and analysis commands (`validate`, `links`, `continuity`, `check`, `series`, `translation`, `report`, `next`, `doctor`, `knowledge`, `context`, `list`, `progress`, `submissions`, `timeline`, `prose`, `pacing`, `clues`, `voices`, `similarity`, `names`, `mentions`, `compare`, and `notes`), `diagram`, `grid`, `synopsis`, and `passes`, the commands that change the project in place (`add`, `rename`, `move`, `split`, `merge`, `remove`, `reindex`, `migrate`, `wordcount`, `doctor --fix`, `snapshot`, `apply`, and `collect`), `impact`, and `export`, `build`, `init`, and `import`. It prints one JSON object to stdout and nothing to stderr, so a script can parse the result instead of the text:
 
 ```json
 {

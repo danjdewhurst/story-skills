@@ -8,6 +8,7 @@ import { isPathInside, readTextFile } from "./files.js";
 import { kebabCase } from "./markdown.js";
 import { canonicalPath, seriesLinks, validateSeriesLinks } from "./series.js";
 import { validateTranslationLink } from "./translation.js";
+import { collectionStories } from "./collect.js";
 import { err, warn } from "./findings.js";
 import {
   scanProject,
@@ -357,6 +358,7 @@ export function validateLinksOf(project) {
   validateMatterBodyLinks(project, errors);
   validateSeriesLinks(project.root, project.story.data, errors);
   validateTranslationLink(project.root, project.story.data, errors);
+  errors.push(...collectionStories(project.root, project.story.data).errors);
 
   return { ok: errors.length === 0, errors, warnings };
 }

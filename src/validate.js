@@ -264,6 +264,7 @@ function validateStoryFrontmatter(project, errors, warnings) {
   }
   validateStringArray(data, "follows", "story.md", errors);
   validateStringArray(data, "precedes", "story.md", errors);
+  validateStringArray(data, "stories", "story.md", errors);
   if (data["season-goal"] !== undefined) {
     requireScalar(data, "season-goal", "story.md", errors);
   }

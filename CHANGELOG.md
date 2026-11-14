@@ -10,6 +10,11 @@ This file was started after 0.15.0. Entries for 0.15.0 back to 0.12.0 come from 
 
 ### Added
 
+- `story collect` assembles a short-story collection from the story projects its `story.md` `stories` list names, so each story is edited only in its own project. ([#885](https://github.com/danjdewhurst/story-skills/issues/885))
+  - `stories` lists the story project folders beside the collection, in reading order, such as `stories: [../low-tide, ../salt]`. `story links` reports an entry that is missing, not a story project, outside the collection's folder, the collection itself, or a repeat (the `collection-story-*` codes).
+  - Each story becomes one chapter, as `story import` makes one from the story's chapter file, with the story's writer in `author` when they are not the collection's own author. The report says which stories were `added`, `changed` since the last run, or `unchanged`.
+  - collect marks its chapters with `collected-from` and `collected-hash`, and rewrites or removes only those, so a chapter you write in the collection keeps its file and number. An edit made to a collected chapter in the collection is refused unless `--force` replaces it.
+  - It takes `--dry-run` and `--json`, holds the project lock, and keeps an undo log. A missing story project is an error, and nothing is written.
 - Characters can record a `born` date, and the tools work out their age at each dated chapter and check it. See [Birth dates and ages](docs/project-format.md#birth-dates-and-ages).
   - `born` is a day (`2001-09-14`) or a year alone (`1968`), or a day or a year of the story calendar (`3 Thaw 270 AE`, `270 AE`). `story add character --born <date>` writes it, and `story validate` reports one that is neither (`invalid-date`). A progression cannot change it.
   - `story context` puts the age on each character's card, on a scene's own date when it has one. `story knowledge` prints `Age at chapter-02: 24` first, and `--json` gives it as `age`. The editor hover shows it too. A year alone gives a range, such as `57 or 58`.

@@ -201,6 +201,13 @@ export const FINDING_CODES = {
   "translation-of-unreadable": "error",
   "translation-of-not-project": "error",
   "translation-of-invalid": "error",
+  "collection-story-backslash": "error",
+  "collection-story-outside": "error",
+  "collection-story-self": "error",
+  "collection-story-duplicate": "error",
+  "collection-story-not-project": "error",
+  "collection-story-unreadable": "error",
+  "collection-too-many-stories": "error",
   // story continuity
   "revived-without-death": "error",
   "died-in-missing-chapter": "error",
@@ -395,6 +402,8 @@ export const FINDING_CODES = {
   "apply-content-left-out": "warning",
   "apply-not-written": "warning",
   "apply-invisible-text": "warning",
+  // story collect
+  "collect-hand-written-copy": "warning",
   // story init and story import
   "kept-story-options": "warning",
   "docx-content-left-out": "warning",

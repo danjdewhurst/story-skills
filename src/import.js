@@ -1192,7 +1192,13 @@ function stripTitleHeading(text, rules) {
 }
 
 function chapterMarkdown(title, number, counts, prose, unnumbered = false, authors = []) {
-  return `${stringifyFrontmatter({
+  return importedChapterText(importedChapterData(title, number, counts, unnumbered, authors), prose);
+}
+
+// The frontmatter of a chapter import writes. story collect writes a new
+// chapter with it too, so a collected story matches an imported one.
+export function importedChapterData(title, number, counts, unnumbered = false, authors = []) {
+  return {
     title,
     number,
     ...(unnumbered ? { numbered: false } : {}),
@@ -1204,7 +1210,13 @@ function chapterMarkdown(title, number, counts, prose, unnumbered = false, autho
     "arcs-advanced": [],
     status: "draft",
     ...counts
-  })}# ${unnumbered ? title : chapterHeading(number, title)}
+  };
+}
+
+// A chapter file as import writes it: the frontmatter, the chapter's
+// heading from its title and number, and the prose under ## Chapter Text.
+export function importedChapterText(data, prose) {
+  return `${stringifyFrontmatter(data)}# ${data.numbered === false ? data.title : chapterHeading(data.number, data.title)}
 
 ## Chapter Text
 

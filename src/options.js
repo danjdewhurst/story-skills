@@ -33,7 +33,9 @@ export const OPTIONS = [
       "Let init/import use an existing directory: add",
       "missing starter files, never overwrite existing",
       "ones; import also replaces every chapter-NN.md",
-      "file; snapshot replaces a same-named snapshot"
+      "file; snapshot replaces a same-named snapshot;",
+      "collect replaces collected chapters edited in",
+      "the collection"
     ]
   },
   { name: "write", help: ["Update chapter word-count frontmatter"] },
