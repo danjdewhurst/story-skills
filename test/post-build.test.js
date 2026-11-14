@@ -245,6 +245,38 @@ Support me at https://example.com
     expect(read(root, "02-chapter-02.txt")).toBe("Prose runs on as one line.\n");
   });
 
+  test("numbers footnotes after the episode, before the author's note, linked in the HTML", () => {
+    const root = project();
+    chapter(root, 1, {
+      extra: 'author-note: "More on Friday."\n',
+      body: "The bell rang twice.[^bell] It stopped.[^bell]\n\nThe tide came in.[^tide]\n\n[^bell]: An old *ship's* bell.\n[^tide]: A spring tide."
+    });
+    buildBook(root, { format: "post" });
+    expect(read(root, "01-chapter-01.html")).toBe(`<p>The bell rang twice.<sup><a href="#chapter-01-fn1" id="chapter-01-fnref1">1</a></sup> It stopped.<sup><a href="#chapter-01-fn1" id="chapter-01-fnref1-2">1</a></sup></p>
+<p>The tide came in.<sup><a href="#chapter-01-fn2" id="chapter-01-fnref2">2</a></sup></p>
+<hr>
+<p><strong>Notes</strong></p>
+<p id="chapter-01-fn1"><a href="#chapter-01-fnref1">1.</a> An old <em>ship's</em> bell.</p>
+<p id="chapter-01-fn2"><a href="#chapter-01-fnref2">2.</a> A spring tide.</p>
+<hr>
+<p><strong>Author's note</strong></p>
+<p>More on Friday.</p>
+`);
+    expect(read(root, "01-chapter-01.txt")).toBe("The bell rang twice.[1] It stopped.[1]\n\nThe tide came in.[2]\n\n---\n\nNotes\n\n1. An old ship's bell.\n\n2. A spring tide.\n\n---\n\nAuthor's note\n\nMore on Friday.\n");
+  });
+
+  test("leaves images out of posts with a warning, and keeps the text around them", () => {
+    const root = project();
+    chapter(root, 1, { body: "The gull ![a gull](images/gull.png) landed.\n\n![the harbour](images/harbour.png)\n\nThen it flew." });
+    const result = buildBook(root, { format: "post" });
+    expect(result.warnings.map((finding) => [finding.code, finding.message])).toEqual([
+      ["image-left-out", "chapters/chapter-01.md image images/gull.png is left out of the post: upload it through the serial site's own editor"],
+      ["image-left-out", "chapters/chapter-01.md image images/harbour.png is left out of the post: upload it through the serial site's own editor"]
+    ]);
+    expect(read(root, "01-chapter-01.html")).toBe("<p>The gull landed.</p>\n<p>Then it flew.</p>\n");
+    expect(read(root, "01-chapter-01.txt")).toBe("The gull landed.\n\nThen it flew.\n");
+  });
+
   test("refuses an --out under project source, even a folder that does not exist yet, and an invalid build-style", () => {
     const root = project();
     chapter(root, 1);

@@ -16555,9 +16555,6 @@ function postBody(body, { key, verse = false } = {}) {
   }));
   return { paragraphs, notes };
 }
-function htmlParagraphs(body, ownIndent = false, verse = false) {
-  return postBody(body, { key: "", verse }).paragraphs;
-}
 function writeDocx(outFile, manuscript, writeOptions = {}) {
   writeZip(outFile, docxEntries(manuscript), writeOptions);
 }
@@ -33146,17 +33143,22 @@ function icsCalendar({ title, events, stamp }) {
 
 // src/posts.js
 var DEFAULT_TEXT_SCENE_BREAK = "* * *";
-var TEXT_NOTE_RULE = "---";
+var TEXT_RULE = "---";
 function postHtml(episode) {
   const block = (markup) => ({ quote: false, markup });
   const prose = (paragraphs) => paragraphs.map((paragraph) => paragraph === null ? block("<hr>") : { quote: paragraph.quote, markup: `<p>${paragraph.html}</p>` });
+  const label = (key) => block(`<p><strong>${escapeHtml(fillLabel(episode.labels, key))}</strong></p>`);
+  const { paragraphs, notes } = episodeBody(episode);
   const blocks = [];
   if (episode.byline !== "") {
     blocks.push(block(`<p><em>${escapeHtml(episode.byline)}</em></p>`));
   }
-  blocks.push(...prose(episodeParagraphs(episode)));
+  blocks.push(...prose(paragraphs));
+  if (notes.length > 0) {
+    blocks.push(block("<hr>"), label("footnotes"), ...notes.flatMap((note) => noteTexts(note.html).map((html, index) => block(index === 0 ? `<p id="${note.id}"><a href="#${note.backlink}">${note.number}.</a> ${html}</p>` : `<p>${html}</p>`))));
+  }
   if (episode.authorNote !== "") {
-    blocks.push(block("<hr>"), block(`<p><strong>${escapeHtml(fillLabel(episode.labels, "author-note"))}</strong></p>`), ...prose(htmlParagraphs(episode.authorNote)));
+    blocks.push(block("<hr>"), label("author-note"), ...prose(postBody(episode.authorNote, { key: `${episode.key}-note` }).paragraphs));
   }
   return blocks.length === 0 ? "" : `${withBlockquotes(blocks).join(`
 `)}
@@ -33171,25 +33173,32 @@ function postText(episode, sceneBreak = DEFAULT_TEXT_SCENE_BREAK) {
 `).map((line) => `    ${line}`).join(`
 `) : paragraph.lines;
   });
+  const { paragraphs, notes } = episodeBody(episode);
   const blocks = [];
   if (episode.byline !== "") {
     blocks.push(episode.byline);
   }
-  blocks.push(...prose(episodeParagraphs(episode)));
+  blocks.push(...prose(paragraphs));
+  if (notes.length > 0) {
+    blocks.push(TEXT_RULE, fillLabel(episode.labels, "footnotes"), ...notes.flatMap((note) => noteTexts(note.lines).map((text, index) => index === 0 ? `${note.number}. ${text}` : text)));
+  }
   if (episode.authorNote !== "") {
-    blocks.push(TEXT_NOTE_RULE, fillLabel(episode.labels, "author-note"), ...prose(htmlParagraphs(episode.authorNote)));
+    blocks.push(TEXT_RULE, fillLabel(episode.labels, "author-note"), ...prose(postBody(episode.authorNote, { key: `${episode.key}-note` }).paragraphs));
   }
   return blocks.length === 0 ? "" : `${blocks.join(`
 
 `)}
 `;
 }
-function episodeParagraphs(episode) {
-  const paragraphs = htmlParagraphs(episode.body, false, episode.verse === true);
-  while (episode.authorNote !== "" && paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === null) {
+function noteTexts(paragraphs) {
+  return paragraphs.length === 0 ? [""] : paragraphs;
+}
+function episodeBody(episode) {
+  const { paragraphs, notes } = postBody(episode.body, { key: episode.key, verse: episode.verse === true });
+  while ((notes.length > 0 || episode.authorNote !== "") && paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === null) {
     paragraphs.pop();
   }
-  return paragraphs;
+  return { paragraphs, notes };
 }
 function authorNoteText(value) {
   if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") {
@@ -33713,12 +33722,16 @@ function buildPosts(project, out, selection) {
   const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
   const written = [];
   const empty = [];
+  const leftOut = [];
   const planned = selected.flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]);
   writePostManifest(output, [...new Set([...listed, ...planned])]);
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
     const label = relative(project, chapter.file);
-    const episode = { byline: book.byline, body: book.body, verse: book.verse === true, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    const episode = { key: chapter.id, byline: book.byline, body: book.body, verse: book.verse === true, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    for (const destination of new Set(proseImages(book.body).map((image) => image.destination))) {
+      leftOut.push(warn("image-left-out", `${label} image ${destination} is left out of the post: upload it through the serial site's own editor`, label));
+    }
     if (wordCount(book.body) === 0) {
       empty.push(warn("empty-chapter", `${label} has no prose yet and is built as an empty post`, label));
     }
@@ -33736,7 +33749,7 @@ function buildPosts(project, out, selection) {
   }
   writePostManifest(output, selected.length === all.length ? written : [...new Set([...listed.filter(isPost), ...written])]);
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
-  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty] };
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty, ...leftOut] };
 }
 function postRange(chapters, { chapter, from, to }) {
   if (chapter !== undefined) {

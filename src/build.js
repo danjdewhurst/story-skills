@@ -514,6 +514,7 @@ function buildPosts(project, out, selection) {
   const current = new Set(all.filter((chapter) => isKebabId(chapter.id)).flatMap((chapter) => [`${name(chapter)}.html`, `${name(chapter)}.txt`]));
   const written = [];
   const empty = [];
+  const leftOut = [];
   // The manifest names every post this build will write before it writes
   // one, so a build stopped partway leaves a folder later builds still
   // take for their own, and posts they can still clear.
@@ -522,7 +523,13 @@ function buildPosts(project, out, selection) {
   for (const [offset, chapter] of selected.entries()) {
     const book = chapters[range.start + offset];
     const label = relative(project, chapter.file);
-    const episode = { byline: book.byline, body: book.body, verse: book.verse === true, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    const episode = { key: chapter.id, byline: book.byline, body: book.body, verse: book.verse === true, authorNote: authorNoteText(chapter.frontmatter?.["author-note"]), labels: meta.labels };
+    // A pasted fragment cannot carry an image file, and a data: URI is not
+    // one a serial site keeps, so images are left out, as the Shunn builds
+    // leave them out, for the writer to upload through the site's editor.
+    for (const destination of new Set(proseImages(book.body).map((image) => image.destination))) {
+      leftOut.push(warn("image-left-out", `${label} image ${destination} is left out of the post: upload it through the serial site's own editor`, label));
+    }
     if (wordCount(book.body) === 0) {
       empty.push(warn("empty-chapter", `${label} has no prose yet and is built as an empty post`, label));
     }
@@ -546,7 +553,7 @@ function buildPosts(project, out, selection) {
   // bookChapters warns about every empty chapter; a post build names only
   // the ones it built.
   const others = warnings.filter((finding) => finding.code !== "empty-chapter");
-  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty] };
+  return { outFile: output.directory, chapters: selected.length, format: "post", posts: selected.length, removed: removed.length, warnings: [...others, ...empty, ...leftOut] };
 }
 
 // The chapters --chapter, or --from and --to, pick, as indexes into the

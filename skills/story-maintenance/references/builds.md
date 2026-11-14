@@ -47,6 +47,7 @@ See the `publishing` skill.
 
 - On a release day, build only the episode due: `story build . --format post --chapter <id-or-number>`. A number is the chapter's `number` field, not the printed number after an unnumbered prologue. `story next . --json` gives it as `data.release.next.chapter`, which is `null` when that episode has no chapter yet. `--from` and `--to` build a range. These flags are an error with any other format.
 - A chapter's `author-note` (markdown text in its frontmatter) prints after the episode under the `author-note` label. No other build prints it, and no word count includes it. Write only a note the user gives you.
+- Footnotes are numbered after the episode, before the author's note, and linked in the HTML. Images are left out with an `image-left-out` warning: tell the user to upload each one through the site's own editor. A verse chapter keeps its line and stanza breaks.
 - The heading is not in the files, because serial sites take the title in their own field. Links print as their text, as in every build, so tell the user to write a web address in full.
 - The folder's hidden `.story-posts.json` lists the posts the build wrote. A build of every chapter deletes the listed posts of a chapter that is gone, renamed, or renumbered. A build of some chapters deletes nothing, so after a renumbering, or when chapter 100 adds a digit to every name, build every chapter once. No build deletes a file it did not write. `--out` names the folder, and a folder that has files and no manifest is refused. The build does not upload anything.
 
