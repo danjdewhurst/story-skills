@@ -23,7 +23,7 @@ const TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat", "source-hash"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -33,7 +33,7 @@ const TEXT_FIELDS = {
   matter: ["title", "rights-holder", "credit"]
 };
 
-const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "surname", "short-title", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start"];
+const STORY_TEXT_FIELDS = ["title", "series", "series-title", "genre", "sub-genre", "setting-era", "pov", "premise", "counter-premise", "author", "surname", "short-title", "season-goal", "language", "publisher", "publication-date", "description", "copyright", "cover-alt", "ai-disclosure", "draft-mode", "cover", "deadline", "release-start", "translation-of"];
 
 export function validateTextFields(project, errors) {
   const check = (label, data, fields) => {

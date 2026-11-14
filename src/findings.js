@@ -175,6 +175,11 @@ export const FINDING_CODES = {
   "series-link-not-sibling": "error",
   "series-missing-backlink": "error",
   "series-link-other-series": "error",
+  "translation-of-backslash": "error",
+  "translation-of-absolute": "error",
+  "translation-of-self": "error",
+  "translation-of-unreadable": "error",
+  "translation-of-not-project": "error",
   // story continuity
   "revived-without-death": "error",
   "died-in-missing-chapter": "error",
@@ -269,6 +274,11 @@ export const FINDING_CODES = {
   "canon-destroyed-status": "warning",
   "canon-destroyed-artifact-used": "error",
   "canon-fact-relearned": "error",
+  // story translation
+  "translation-missing": "error",
+  "translation-extra": "error",
+  "translation-paragraph-count": "warning",
+  "translation-source-changed": "warning",
   // story prose
   "prose-filter-words": "warning",
   "prose-adverbs": "warning",

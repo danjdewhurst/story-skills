@@ -29,6 +29,7 @@ import { formatProgress } from "./progress.js";
 import { formatStateChanges } from "./progressions.js";
 import { formatProseReport } from "./prose.js";
 import { formatSeriesReport } from "./series.js";
+import { formatTranslationReport } from "./translation.js";
 import { formatSimilarity } from "./similarity.js";
 import { SNAPSHOTS_DIR, SNAPSHOT_MANIFEST, existingSnapshot, formatRestore, formatRestorePreview, formatSnapshot, formatSnapshotList, listSnapshots, planRestore, restoreSnapshot, snapshotId, snapshotProject } from "./snapshots.js";
 import { formatTimeline } from "./timeline.js";
@@ -76,6 +77,7 @@ import {
   splitChapter,
   storyTimeline,
   synopsisBook,
+  translationReport,
   uniqueCheckFindings,
   validateLinks,
   validateProject,
@@ -807,6 +809,50 @@ export const COMMANDS = [
       }
       io.stdout.write(formatSeriesReport(report));
       return reportResult(io, report, "Series is consistent", "Series check failed");
+    }
+  },
+  {
+    name: "translation",
+    usage: "translation [path]",
+    summary: [
+      "Compare a translation with the source project its",
+      "story.md translation-of names: chapters, scenes,",
+      "and ids in one only, paragraph counts, and source",
+      "chapters changed since they were translated;",
+      "--record notes the source-hash of each chapter"
+    ],
+    project: "positional",
+    options: ["record", "chapter", ...WRITE_OPTIONS],
+    writes: (options) => isTruthy(options.record),
+    run({ parsed, io, root, overrides }) {
+      const record = isTruthy(parsed.options.record);
+      const dryRun = isTruthy(parsed.options["dry-run"]);
+      const { chapter } = parsed.options;
+      if (!record && dryRun) {
+        throw usageError("--dry-run previews translation --record: add --record", "dry-run");
+      }
+      if (!record && chapter !== undefined) {
+        throw usageError("--chapter picks the one chapter translation --record writes: add --record", "chapter");
+      }
+      const projectRoot = root();
+      const { result, changes } = record
+        ? runOrPreview(dryRun, projectRoot, (target) => translationReport(target, { record, chapter }))
+        : { result: translationReport(projectRoot), changes: [] };
+      const report = applySeverity(result, overrides);
+      if (wantsJson(parsed)) {
+        return writeJsonResult(io, {
+          command: "translation",
+          ok: report.ok,
+          data: { ...resultData(report), root: projectRoot, dryRun, changes },
+          diagnostics: diagnosticsFrom(report, "translation"),
+          writes: dryRun ? [] : writtenFiles(projectRoot, changes)
+        });
+      }
+      io.stdout.write(formatTranslationReport(report));
+      if (dryRun) {
+        io.stdout.write(formatPreview("translation --record", changes));
+      }
+      return reportResult(io, report, "Translation is in step with its source", "Translation check failed");
     }
   },
   {

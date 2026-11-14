@@ -7,6 +7,7 @@ import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE, lockedByAnother } from "./lock.js";
 import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, PATH_CONTROL_CHARACTERS, SKIPPED_SCAN_DIRECTORIES, existingStoryData, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
+import { translationOf } from "./translation.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
 // project, and the writes, renames, and deletes it records there (see
@@ -120,9 +121,10 @@ function inScratch(target, run, prepare) {
   }
 }
 
-// Copies the books the project links to through follows/precedes, and those
-// its sibling books link to, each to its own path in the scratch folder
-// (mirror), since series checks and links read them there. A book is copied
+// Copies the books the project links to through follows/precedes (and the
+// source project its translation-of names), and those its sibling books
+// link to, each to its own path in the scratch folder (mirror), since
+// series checks and links read them there. A book is copied
 // once, at its real path; a link that reaches it through a symlink stays a
 // symlink to that copy, so checks that compare real paths (is it the same
 // book, is it a sibling) answer as they do in the project. The copies are
@@ -163,7 +165,13 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
     } catch {
       continue;
     }
-    for (const link of ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))) {
+    // A translation's source project is read by links and translation, so
+    // it is copied too, when the link is one they follow: relative, with /.
+    const source = translationOf(data);
+    const followed = source !== undefined && !source.includes("\\") && !path.posix.isAbsolute(source) && !path.win32.isAbsolute(source);
+    const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))
+      .concat(followed ? [path.resolve(book, source)] : []);
+    for (const link of links) {
       const real = realPath(link);
       if (!copies.has(real)) {
         const target = mirror(home(real));
