@@ -438,11 +438,6 @@ export function postBody(body, { key, verse = false } = {}) {
   return { paragraphs, notes };
 }
 
-// A body's paragraphs as the post build sets them (see postBody).
-export function htmlParagraphs(body, ownIndent = false, verse = false) {
-  return postBody(body, { key: "", verse }).paragraphs;
-}
-
 export function writeDocx(outFile, manuscript, writeOptions = {}) {
   writeZip(outFile, docxEntries(manuscript), writeOptions);
 }
