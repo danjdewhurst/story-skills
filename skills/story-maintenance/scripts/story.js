@@ -869,6 +869,7 @@ var FINDING_CODES = {
   "translation-of-self": "error",
   "translation-of-unreadable": "error",
   "translation-of-not-project": "error",
+  "translation-of-invalid": "error",
   "revived-without-death": "error",
   "died-in-missing-chapter": "error",
   "revived-in-missing-chapter": "error",
@@ -21854,8 +21855,8 @@ function formatSimilarity(report) {
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
-var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"] };
-var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"] };
+var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], translation: ["chapter"] };
+var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
   compare: [["ref", "against", "snapshot"]],
@@ -25655,6 +25656,7 @@ function writeChanged(filePath, contents, original, changed, root) {
 var TRANSLATION_FIELD = "translation-of";
 var SOURCE_HASH_FIELD = "source-hash";
 var SOURCE_HASH_LENGTH = 12;
+var ONLY_MISSING = new Set(["matter"]);
 var COMPARED_KINDS = [
   ["chapters", "chapter"],
   ["scenes", "scene"],
@@ -25677,23 +25679,49 @@ function translationOf(data) {
 function translationLabel(value) {
   return path24.posix.normalize(portablePath(value)).replace(/(.)\/$/, "$1");
 }
+function linkProblem(root, value) {
+  const label = `story.md ${TRANSLATION_FIELD} ${value}`;
+  if (PATH_CONTROL_CHARACTERS.test(value)) {
+    return ["translation-of-invalid", `${label.replace(PATH_CONTROL_CHARACTERS, "?")} has a control character or a mark that reorders text; write a plain path such as ../book-en`];
+  }
+  if (path24.posix.isAbsolute(value) || path24.win32.isAbsolute(value) || /^[A-Za-z]:/.test(value)) {
+    return ["translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`];
+  }
+  if (value.includes("\\")) {
+    return ["translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`];
+  }
+  let depth = canonicalPath(root).split(path24.sep).filter(Boolean).length;
+  for (const segment of value.split("/")) {
+    depth += segment === ".." ? -1 : segment === "" || segment === "." ? 0 : 1;
+    if (depth < 0) {
+      return ["translation-of-invalid", `${label} climbs above the file system root; write the path from this project's folder, such as ../book-en`];
+    }
+  }
+  return null;
+}
+function translationSourceToCopy(root, data) {
+  const value = translationOf(data);
+  return value === undefined || linkProblem(root, value) !== null ? undefined : path24.resolve(canonicalPath(root), value);
+}
 function validateTranslationLink(root, data, errors) {
   const value = translationOf(data);
   if (value === undefined) {
     return null;
   }
   const label = `story.md ${TRANSLATION_FIELD} ${value}`;
-  if (value.includes("\\")) {
-    errors.push(err("translation-of-backslash", `${label} uses a backslash; write ${value.replace(/\\/g, "/")} so the link works on every system`, "story.md"));
+  const problem = linkProblem(root, value);
+  if (problem !== null) {
+    errors.push(err(problem[0], problem[1], "story.md"));
     return null;
   }
-  if (path24.posix.isAbsolute(value) || path24.win32.isAbsolute(value)) {
-    errors.push(err("translation-of-absolute", `${label} is an absolute path; write the path from this project's folder, such as ../book-en`, "story.md"));
-    return null;
-  }
-  const target = path24.resolve(root, value);
-  if (target === root || canonicalPath(target) === canonicalPath(root)) {
+  const real = canonicalPath(root);
+  const target = path24.resolve(real, value);
+  if (target === real || canonicalPath(target) === real) {
     errors.push(err("translation-of-self", `${label} points at this project`, "story.md"));
+    return null;
+  }
+  if (isInside(canonicalPath(target), real)) {
+    errors.push(err("translation-of-invalid", `${label} is a folder that holds this project; keep the translation outside its source, such as beside it`, "story.md"));
     return null;
   }
   let source;
@@ -25708,6 +25736,10 @@ function validateTranslationLink(root, data, errors) {
     return null;
   }
   return target;
+}
+function isInside(folder, target) {
+  const relative = path24.relative(folder, target);
+  return relative !== "" && !path24.isAbsolute(relative) && !relative.split(path24.sep).includes("..");
 }
 function sourceHash(title, paragraphs) {
   const text = nfc([String(title ?? ""), ...paragraphs].join(`
@@ -25787,7 +25819,7 @@ function buildTranslation(root, scan, options = {}) {
       }
     }
     for (const [id, entity] of ownIds) {
-      if (!sourceIds.has(id)) {
+      if (!sourceIds.has(id) && !ONLY_MISSING.has(kind)) {
         const file = ownFile(entity.file);
         extra.push({ kind, id, file });
         errors.push(err("translation-extra", `${file} has ${kind} ${id}, which the source ${label} does not; give it the source's id, or add it to the source first`, file));
@@ -25861,14 +25893,14 @@ function recordedHash(data) {
   const value = data?.[SOURCE_HASH_FIELD];
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
-function formatTranslationReport(report) {
+function formatTranslationReport(report, { dryRun = false } = {}) {
   const lines = [
-    `# Translation: ${report.title} (${report.language})`,
+    `# Translation: ${outputText(report.title)} (${report.language})`,
     "",
-    `Source: ${report.source ?? "unknown"}${report.sourceTitle === null ? "" : ` - ${report.sourceTitle} (${report.sourceLanguage})`}`
+    `Source: ${outputText(report.source ?? "unknown")}${report.sourceTitle === null ? "" : ` - ${outputText(report.sourceTitle)} (${report.sourceLanguage})`}`
   ];
   if (report.recorded.length > 0) {
-    lines.push(`Recorded ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
+    lines.push(`${dryRun ? "Would record" : "Recorded"} ${SOURCE_HASH_FIELD} in ${report.recorded.length} ${report.recorded.length === 1 ? "chapter" : "chapters"}: ${report.recorded.join(", ")}`);
   }
   lines.push("", "Chapters:");
   if (report.chapters.length === 0) {
@@ -25990,9 +26022,8 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
     } catch {
       continue;
     }
-    const source = translationOf(data);
-    const followed = source !== undefined && !source.includes("\\") && !path25.posix.isAbsolute(source) && !path25.win32.isAbsolute(source);
-    const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field)).concat(followed ? [path25.resolve(book, source)] : []);
+    const source = translationSourceToCopy(book, data);
+    const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field)).concat(source === undefined ? [] : [source]);
     for (const link of links) {
       const real = realPath2(link);
       if (!copies.has(real)) {
@@ -31911,7 +31942,7 @@ function seriesReport(root) {
 function translationReport(root, options = {}) {
   const projectRoot = path37.resolve(root);
   requireStoryFile(projectRoot);
-  return buildTranslation(fs25.realpathSync(projectRoot), scanProject, options);
+  return buildTranslation(projectRoot, scanProject, options);
 }
 function compareProject(root, options = {}) {
   const given = (value) => typeof value === "string" && value !== "";
@@ -34138,7 +34169,7 @@ function createLanguageServer({ send, exit, schedule = setTimeout, cancel = clea
         if (folder === null) {
           continue;
         }
-        const roots = new Set([...folders.get(folder) ?? [], ...[...published.keys()].filter((root) => isInside(folder, root))]);
+        const roots = new Set([...folders.get(folder) ?? [], ...[...published.keys()].filter((root) => isInside2(folder, root))]);
         folders.delete(folder);
         const kept = new Set([...[...folders.values()].flat(), ...[...documents.keys()].map(projectRootOf)]);
         for (const root of roots) {
@@ -34242,7 +34273,7 @@ function findProjects(folder, depth, found) {
     }
   }
 }
-function isInside(folder, file) {
+function isInside2(folder, file) {
   const relative = path39.relative(folder, file);
   return !relative.startsWith("..") && !path39.isAbsolute(relative);
 }
@@ -38315,7 +38346,7 @@ var COMMANDS = [
           writes: dryRun ? [] : writtenFiles(projectRoot, changes)
         });
       }
-      io.stdout.write(formatTranslationReport(report));
+      io.stdout.write(formatTranslationReport(report, { dryRun }));
       if (dryRun) {
         io.stdout.write(formatPreview("translation --record", changes));
       }

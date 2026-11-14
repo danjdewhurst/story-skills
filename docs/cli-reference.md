@@ -843,7 +843,7 @@ Checks that references between entities point at entities that exist and that tw
 - the chapter, character, and arc ids in questions, promises, and clues, and the `used-in` chapters of research notes. A promise or clue `payoff`, its `planted` while `status` is `planned` or `abandoned`, an `open` or `abandoned` question's `introduced`, and a research note's `used-in` may name a scheduled `chapter-NN` that has no chapter file yet, unless its number is 0 or belongs to an existing chapter under another id (`chapter-1` beside `chapter-01`)
 - chapter ids and markdown links in the bodies of `plot/timeline.md` and arc files, and markdown links in the bodies of `matter/` pages
 - the `follows` and `precedes` links in `story.md`, which must point at story projects that link back
-- the `translation-of` link in `story.md`, which must be a relative path, with `/`, to another story project (see [translation](#translation))
+- the `translation-of` link in `story.md`, which must be a relative path, with `/`, to another story project that does not hold this one (see [translation](#translation))
 
 With `characters/old-bram.md` listing two locations, where `dock-nine` does not exist and `gull-harbour` does not list Bram back:
 
@@ -1787,11 +1787,11 @@ story translation [path] [--record] [--chapter <id>] [--dry-run] [--json]
 
 Compares a translated edition with the source project that `translation-of` in its `story.md` names, such as `translation-of: ../book-en`. It compares structure only, never meaning. It reports:
 
-- chapters, scenes, and entity ids (characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, glossary terms, and matter pages) that one project has and the other does not, as errors. Research notes are not compared.
+- chapters, scenes, and entity ids (characters, locations, systems, factions, artifacts, arcs, questions, promises, clues, glossary terms, and matter pages) that one project has and the other does not, as errors. Research notes are not compared, and a matter page only the translation has, such as a translator's note, is allowed.
 - chapters whose number of prose paragraphs differs from the source chapter, as warnings. A translated chapter with no prose yet is not counted.
 - source chapters that changed since they were translated, as warnings, when the translated chapter records a `source-hash`. A chapter without one is not checked.
 
-A `source-hash` is the first 12 hex digits of a SHA-256 of the source chapter's title and prose paragraphs, as [`compare`](#compare) reads them. So a change to the outline, an HTML comment, or the line wrapping inside a paragraph does not count. `--record` writes the current `source-hash` of each source chapter into the translated chapter with the same id. `--chapter <id>` writes only that chapter's. `--record` holds the [project lock](#where-commands-write), and `--dry-run` with it lists the chapters it would change. The source project is only read.
+A `source-hash` is the first 12 hex digits of a SHA-256 of the source chapter's title and prose paragraphs, as [`compare`](#compare) reads them. So a change to the outline, an HTML comment, or the line wrapping inside a paragraph does not count. `--record` writes the current `source-hash` of each source chapter into the translated chapter with the same id. `--chapter <id>` writes only that chapter's. `--record` holds the [project lock](#where-commands-write), and `--dry-run` with it lists the chapters it would change and prints `Would record` in place of `Recorded`. `cli-defaults` cannot set `--record` or `--chapter`, which belong to one run. The source project is only read.
 
 | Option | Effect |
 |---|---|
@@ -3667,6 +3667,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | `translation-of-self` | error | `translation-of` points at this project. |
 | `translation-of-unreadable` | error | The source project's `story.md` cannot be read. |
 | `translation-of-not-project` | error | The folder `translation-of` names has no `story.md`. |
+| `translation-of-invalid` | error | `translation-of` has a control character, climbs above the file system root, or names a folder that holds this project. |
 
 ### Codes: continuity
 

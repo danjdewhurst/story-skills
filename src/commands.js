@@ -848,7 +848,7 @@ export const COMMANDS = [
           writes: dryRun ? [] : writtenFiles(projectRoot, changes)
         });
       }
-      io.stdout.write(formatTranslationReport(report));
+      io.stdout.write(formatTranslationReport(report, { dryRun }));
       if (dryRun) {
         io.stdout.write(formatPreview("translation --record", changes));
       }

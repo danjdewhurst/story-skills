@@ -7,7 +7,7 @@ import { usageError } from "./exit-codes.js";
 import { LOCK_FILE, TAKEOVER_FILE, lockedByAnother } from "./lock.js";
 import { IMAGE_SIGNATURE_BYTES, MATTER_DIR, MAX_SCAN_DEPTH, MAX_SCAN_FILES, PATH_CONTROL_CHARACTERS, SKIPPED_SCAN_DIRECTORIES, existingStoryData, extractMarkdownLinkTargets, requireStoryFile } from "./scan.js";
 import { MAX_SERIES_BOOKS, readBookFrontmatter, seriesLinks } from "./series.js";
-import { translationOf } from "./translation.js";
+import { translationSourceToCopy } from "./translation.js";
 
 // --dry-run: a write command runs unchanged on a scratch copy of the
 // project, and the writes, renames, and deletes it records there (see
@@ -166,11 +166,10 @@ function copyLinkedBooks(projectRoot, mirror, scratch) {
       continue;
     }
     // A translation's source project is read by links and translation, so
-    // it is copied too, when the link is one they follow: relative, with /.
-    const source = translationOf(data);
-    const followed = source !== undefined && !source.includes("\\") && !path.posix.isAbsolute(source) && !path.win32.isAbsolute(source);
+    // it is copied too, when the link is one they follow.
+    const source = translationSourceToCopy(book, data);
     const links = ["follows", "precedes"].flatMap((field) => seriesLinks(book, data ?? {}, field))
-      .concat(followed ? [path.resolve(book, source)] : []);
+      .concat(source === undefined ? [] : [source]);
     for (const link of links) {
       const real = realPath(link);
       if (!copies.has(real)) {
