@@ -11,7 +11,7 @@ import path46 from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Buffer } from "node:buffer";
+import { Buffer as Buffer2 } from "node:buffer";
 
 // src/exit-codes.js
 var EXIT_CODES = Object.freeze({
@@ -87,7 +87,7 @@ function readFileAndStats(filePath, maxBytes = MAX_READ_BYTES) {
     if (open === undefined) {
       return { bytes: readAtMost(descriptor, filePath, stats.size, maxBytes), stats };
     }
-    const bytes = Buffer.from(open, "utf8");
+    const bytes = Buffer2.from(open, "utf8");
     if (bytes.length > maxBytes) {
       throw projectError(`${filePath}: Refusing to read oversized file: ${bytes.length} bytes exceeds the ${maxBytes} byte limit`);
     }
@@ -109,7 +109,7 @@ function withOpenDocuments(documents, run) {
 function readFilePrefix(filePath, length) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const buffer = Buffer.allocUnsafe(length);
+    const buffer = Buffer2.allocUnsafe(length);
     let filled = 0;
     let read;
     do {
@@ -124,7 +124,7 @@ function readFilePrefix(filePath, length) {
 function forEachLine(filePath, maxLineBytes, visit) {
   const { descriptor } = openRegularFile(filePath, Infinity);
   try {
-    const chunk = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+    const chunk = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
     let parts = [];
     let size = 0;
     let number = 0;
@@ -142,13 +142,13 @@ function forEachLine(filePath, maxLineBytes, visit) {
         const piece = data.subarray(start, end);
         add(piece);
         number += 1;
-        visit(parts.length === 0 ? piece : Buffer.concat([...parts, piece]), number);
+        visit(parts.length === 0 ? piece : Buffer2.concat([...parts, piece]), number);
         parts = [];
         size = 0;
         start = end + 1;
       }
       add(data.subarray(start));
-      parts.push(Buffer.from(data.subarray(start)));
+      parts.push(Buffer2.from(data.subarray(start)));
     }
   } finally {
     fs.closeSync(descriptor);
@@ -185,13 +185,13 @@ function openRegularFile(filePath, maxBytes) {
 function readAtMost(descriptor, filePath, size, maxBytes) {
   const chunks = [];
   let total = 0;
-  let buffer = Buffer.allocUnsafe(Math.min(size, maxBytes) + 1);
+  let buffer = Buffer2.allocUnsafe(Math.min(size, maxBytes) + 1);
   let filled = 0;
   let read;
   do {
     if (filled === buffer.length) {
       chunks.push(buffer);
-      buffer = Buffer.allocUnsafe(READ_CHUNK_BYTES);
+      buffer = Buffer2.allocUnsafe(READ_CHUNK_BYTES);
       filled = 0;
     }
     read = fs.readSync(descriptor, buffer, filled, buffer.length - filled, null);
@@ -202,7 +202,7 @@ function readAtMost(descriptor, filePath, size, maxBytes) {
     }
   } while (read > 0);
   chunks.push(buffer.subarray(0, filled));
-  return chunks.length === 1 ? chunks[0] : Buffer.concat(chunks, total);
+  return chunks.length === 1 ? chunks[0] : Buffer2.concat(chunks, total);
 }
 function symlinkReadRefusal(filePath) {
   return projectError(`${filePath}: Refusing to read through symlink`);
@@ -240,7 +240,7 @@ function invalidUtf8Offset(buffer) {
     if (character === "�" && !(buffer[offset] === 239 && buffer[offset + 1] === 191 && buffer[offset + 2] === 189)) {
       break;
     }
-    offset += Buffer.byteLength(character, "utf8");
+    offset += Buffer2.byteLength(character, "utf8");
   }
   return Math.max(0, Math.min(offset, buffer.length - 1));
 }
@@ -549,7 +549,7 @@ function temporaryPath(target) {
   let name = "";
   let bytes = 0;
   for (const character of path.basename(target)) {
-    bytes += Buffer.byteLength(character, "utf8");
+    bytes += Buffer2.byteLength(character, "utf8");
     if (bytes > TEMPORARY_NAME_BYTES) {
       break;
     }
@@ -15091,10 +15091,10 @@ function relative(project, file) {
 import path11 from "node:path";
 
 // src/packaging.js
-import { Buffer as Buffer4 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 
 // src/deflate.js
-import { Buffer as Buffer2 } from "node:buffer";
+import { Buffer as Buffer3 } from "node:buffer";
 var WINDOW_SIZE = 32768;
 var WINDOW_MASK = WINDOW_SIZE - 1;
 var MIN_MATCH = 3;
@@ -15258,7 +15258,7 @@ function bitWriter(size) {
       if (pendingBits > 0) {
         push(pending);
       }
-      return Buffer2.from(bytes.buffer, 0, used);
+      return Buffer3.from(bytes.buffer, 0, used);
     }
   };
 }
@@ -15453,7 +15453,7 @@ function canonicalCodes(lengths) {
 // src/scan-cover.js
 import fs4 from "node:fs";
 import path9 from "node:path";
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer4 } from "node:buffer";
 var COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -15569,12 +15569,12 @@ function coverFormat(filePath) {
   return formatOfBytes(readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES));
 }
 function formatOfBytes(bytes) {
-  const head = Buffer3.from(bytes).subarray(0, IMAGE_SIGNATURE_BYTES);
+  const head = Buffer4.from(bytes).subarray(0, IMAGE_SIGNATURE_BYTES);
   const ascii = (start, end) => head.subarray(start, end).toString("latin1");
-  if (head.subarray(0, 8).equals(Buffer3.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+  if (head.subarray(0, 8).equals(Buffer4.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return "image/png";
   }
-  if (head.subarray(0, 3).equals(Buffer3.from([255, 216, 255]))) {
+  if (head.subarray(0, 3).equals(Buffer4.from([255, 216, 255]))) {
     return "image/jpeg";
   }
   if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
@@ -15586,7 +15586,7 @@ function formatOfBytes(bytes) {
   return null;
 }
 function imageSize(bytes, mediaType) {
-  const data = Buffer3.from(bytes);
+  const data = Buffer4.from(bytes);
   const size = (width, height) => width > 0 && height > 0 ? { width, height } : null;
   if (mediaType === "image/png") {
     return data.length >= 24 && data.toString("latin1", 12, 16) === "IHDR" ? size(data.readUInt32BE(16), data.readUInt32BE(20)) : null;
@@ -16447,7 +16447,7 @@ function htmlBook(manuscript, ownIndent = false) {
   const sources = new Map;
   const image = (entry) => {
     if (!sources.has(entry.filePath)) {
-      sources.set(entry.filePath, `data:${entry.mediaType};base64,${Buffer4.from(proseImageBytes(entry)).toString("base64")}`);
+      sources.set(entry.filePath, `data:${entry.mediaType};base64,${Buffer5.from(proseImageBytes(entry)).toString("base64")}`);
     }
     return `<img src="${sources.get(entry.filePath)}" alt="${escapeHtml(entry.alt)}">`;
   };
@@ -17346,8 +17346,8 @@ function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES)
   const centralParts = [];
   let offset = 0;
   for (const entry of entries) {
-    const name = Buffer4.from(entry.name, "utf8");
-    const content = Buffer4.isBuffer(entry.content) ? entry.content : Buffer4.from(entry.content, "utf8");
+    const name = Buffer5.from(entry.name, "utf8");
+    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
     if (offset + content.length > maxBytes) {
       throw projectError(`Cannot write the build: its archive would pass 4 GiB, more than a ZIP without ZIP64 can hold; use fewer or smaller images`);
     }
@@ -17356,7 +17356,7 @@ function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES)
     const compressed = deflated !== null && deflated.length < content.length;
     const body = compressed ? deflated : content;
     const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer4.alloc(30);
+    const localHeader = Buffer5.alloc(30);
     localHeader.writeUInt32LE(67324752, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
@@ -17369,7 +17369,7 @@ function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES)
     localHeader.writeUInt16LE(name.length, 26);
     localHeader.writeUInt16LE(0, 28);
     localParts.push(localHeader, name, body);
-    const centralHeader = Buffer4.alloc(46);
+    const centralHeader = Buffer5.alloc(46);
     centralHeader.writeUInt32LE(33639248, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
@@ -17394,7 +17394,7 @@ function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES)
   for (const part of centralParts) {
     centralSize += part.length;
   }
-  const end = Buffer4.alloc(22);
+  const end = Buffer5.alloc(22);
   end.writeUInt32LE(101010256, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
@@ -17403,7 +17403,7 @@ function writeZip(outFile, entries, writeOptions = {}, maxBytes = ZIP_MAX_BYTES)
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer4.concat(localParts.concat(centralParts, end)), writeOptions);
+  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
 }
 function crc32(buffer) {
   let crc = 4294967295;
@@ -22369,7 +22369,7 @@ import path17 from "node:path";
 import fs6 from "node:fs";
 import os from "node:os";
 import path15 from "node:path";
-import { Buffer as Buffer5 } from "node:buffer";
+import { Buffer as Buffer6 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -22581,7 +22581,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs6.existsSync(output) ? fs6.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer5.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer6.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -23333,7 +23333,7 @@ import fs27 from "node:fs";
 import path41 from "node:path";
 
 // src/import.js
-import { Buffer as Buffer10 } from "node:buffer";
+import { Buffer as Buffer11 } from "node:buffer";
 import fs26 from "node:fs";
 import path40 from "node:path";
 
@@ -23361,6 +23361,29 @@ class ArchiveError extends Error {
 var ESCAPED_CONTROLS = { "\n": "\\n", "\r": "\\r", "\t": "\\t" };
 function printable(text) {
   return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) => ESCAPED_CONTROLS[character] ?? "?");
+}
+var SHOWN_LENGTH = 200;
+function shown2(text) {
+  const value = String(text);
+  return printable(value.length > SHOWN_LENGTH ? `${value.slice(0, SHOWN_LENGTH)}…` : value);
+}
+function partReader(bytes, format, limit) {
+  let left = limit;
+  const over = () => new ArchiveError(`its parts come to more than the ${limit} byte limit unpacked`);
+  return {
+    reserve(entries) {
+      if (entries.reduce((total, entry) => total + entry.size, 0) > left) {
+        throw over();
+      }
+    },
+    read(entry, options) {
+      if (entry.size > left) {
+        throw over();
+      }
+      left -= entry.size;
+      return xmlText(bytes, entry, format, options);
+    }
+  };
 }
 function zipEntries(bytes, format = WORD) {
   const end = findEndOfCentralDirectory(bytes, format);
@@ -23455,17 +23478,53 @@ function xmlText(bytes, entry, format = WORD, { doctype = false } = {}) {
   if (text.charCodeAt(0) === 65279) {
     text = text.slice(1);
   }
-  const declaration = /<!DOCTYPE/i.exec(text);
-  if (doctype && declaration !== null) {
-    const end = text.indexOf(">", declaration.index);
-    if (end !== -1 && !text.slice(declaration.index, end).includes("[")) {
-      text = text.slice(0, declaration.index) + text.slice(end + 1);
+  if (doctype) {
+    const declaration = prologDoctype(text);
+    if (declaration !== null && declaration.subset) {
+      throw new ArchiveError(`${printable(entry.name)} has a document type declaration with declarations of its own, which story does not read`);
     }
-  }
-  if (declaration !== null && (!doctype || /<!DOCTYPE/i.test(text))) {
-    throw new ArchiveError(doctype ? `${printable(entry.name)} has a document type declaration with declarations of its own, which story does not read` : `${printable(entry.name)} has a document type declaration, which ${format.kind} never has`);
+    if (declaration !== null) {
+      text = text.slice(0, declaration.start) + text.slice(declaration.end);
+    }
+  } else if (/<!DOCTYPE/i.test(text)) {
+    throw new ArchiveError(`${printable(entry.name)} has a document type declaration, which ${format.kind} never has`);
   }
   return text;
+}
+function prologDoctype(text) {
+  let position = 0;
+  for (;; ) {
+    while (position < text.length && ` 	\r
+`.includes(text[position])) {
+      position += 1;
+    }
+    const skip = [["<?", "?>"], ["<!--", "-->"]].find(([start]) => text.startsWith(start, position));
+    if (skip !== undefined) {
+      const close = text.indexOf(skip[1], position + skip[0].length);
+      if (close === -1) {
+        return null;
+      }
+      position = close + skip[1].length;
+      continue;
+    }
+    if (text.slice(position, position + 9).toUpperCase() !== "<!DOCTYPE") {
+      return null;
+    }
+    let quote = null;
+    for (let index = position + 9;index < text.length; index += 1) {
+      const character = text[index];
+      if (quote !== null) {
+        quote = character === quote ? null : quote;
+      } else if (character === '"' || character === "'") {
+        quote = character;
+      } else if (character === "[") {
+        return { start: position, end: index, subset: true };
+      } else if (character === ">") {
+        return { start: position, end: index + 1, subset: false };
+      }
+    }
+    return null;
+  }
 }
 var UTF82 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 var TAG = /<(\/?)([A-Za-z_][\w.:-]*)((?:\s+[^\s=/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/y;
@@ -23522,6 +23581,14 @@ function* rawTokens(text, entities) {
 }
 var XML_ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", '"'], ["apos", "'"]]);
 var LATIN_1 = "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml";
+var HTML_SYMBOLS = [
+  "Alpha:913 Beta:914 Gamma:915 Delta:916 Epsilon:917 Zeta:918 Eta:919 Theta:920 Iota:921 Kappa:922 Lambda:923 Mu:924 Nu:925 Xi:926 Omicron:927 Pi:928 Rho:929 Sigma:931 Tau:932 Upsilon:933 Phi:934 Chi:935 Psi:936 Omega:937",
+  "alpha:945 beta:946 gamma:947 delta:948 epsilon:949 zeta:950 eta:951 theta:952 iota:953 kappa:954 lambda:955 mu:956 nu:957 xi:958 omicron:959 pi:960 rho:961 sigmaf:962 sigma:963 tau:964 upsilon:965 phi:966 chi:967 psi:968 omega:969 thetasym:977 upsih:978 piv:982",
+  "oline:8254 frasl:8260 weierp:8472 image:8465 real:8476 alefsym:8501",
+  "larr:8592 uarr:8593 rarr:8594 darr:8595 harr:8596 crarr:8629 lArr:8656 uArr:8657 rArr:8658 dArr:8659 hArr:8660",
+  "forall:8704 part:8706 exist:8707 empty:8709 nabla:8711 isin:8712 notin:8713 ni:8715 prod:8719 sum:8721 minus:8722 lowast:8727 radic:8730 prop:8733 infin:8734 ang:8736 and:8743 or:8744 cap:8745 cup:8746 int:8747 there4:8756 sim:8764 cong:8773 asymp:8776 ne:8800 equiv:8801 le:8804 ge:8805 sub:8834 sup:8835 nsub:8836 sube:8838 supe:8839 oplus:8853 otimes:8855 perp:8869 sdot:8901",
+  "lceil:8968 rceil:8969 lfloor:8970 rfloor:8971 lang:9001 rang:9002 loz:9674 spades:9824 clubs:9827 hearts:9829 diams:9830"
+].join(" ");
 var HTML_ENTITIES = new Map([
   ...XML_ENTITIES,
   ...LATIN_1.split(" ").map((name, index) => [name, String.fromCharCode(160 + index)]),
@@ -23560,6 +23627,10 @@ var HTML_ENTITIES = new Map([
     rsaquo: "›",
     euro: "€",
     trade: "™"
+  }),
+  ...HTML_SYMBOLS.split(" ").map((pair) => {
+    const [name, code] = pair.split(":");
+    return [name, String.fromCodePoint(Number(code))];
   })
 ]);
 function decodeEntities(text, entities) {
@@ -23594,6 +23665,38 @@ function paragraphBlocks(runs, level, quote, chapterLine) {
     });
   }
   return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
+}
+function markdownBlocks(maxBytes = Infinity) {
+  const blocks = [];
+  const sizes = [];
+  let size = 0;
+  return {
+    push(block) {
+      const bytes = Buffer.byteLength(block, "utf8") + 2;
+      if (size + bytes > maxBytes + 1) {
+        throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
+      }
+      size += bytes;
+      blocks.push(block);
+      sizes.push(bytes);
+    },
+    mark() {
+      return blocks.length;
+    },
+    dropTo(mark) {
+      while (blocks.length > mark) {
+        blocks.pop();
+        size -= sizes.pop();
+      }
+    },
+    text() {
+      const text = blocks.join(`
+
+`);
+      return text === "" ? "" : `${text}
+`;
+    }
+  };
 }
 function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
@@ -24002,19 +24105,15 @@ var NOTE_MESSAGES2 = {
   footnotes: "it has footnotes or endnotes, which the import leaves out",
   tables: "it has tables, whose cells the import reads as plain paragraphs",
   ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text",
+  lists: "it has lists, whose bullets and numbers the import leaves out",
+  contents: "it has a table of contents in its reading order, which the import leaves out",
   "non-linear": 'it has documents outside its reading order (linear="no"), which the import leaves out',
   "other-documents": "its reading order has documents that are not XHTML, which the import leaves out"
 };
-function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
+function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, EPUB);
-  let left = MAX_EPUB_TEXT_BYTES;
-  const read = (entry) => {
-    if (entry.size > left) {
-      throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
-    }
-    left -= entry.size;
-    return xmlText(bytes, entry, EPUB, { doctype: true });
-  };
+  const parts = partReader(bytes, EPUB, MAX_EPUB_TEXT_BYTES);
+  const read = (entry) => parts.read(entry, { doctype: true });
   const container = entries.get(CONTAINER_PART);
   if (container === undefined) {
     throw new ArchiveError(`it has no ${CONTAINER_PART}, so it is not an EPUB`);
@@ -24022,33 +24121,49 @@ function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
   const packagePath = rootfilePath(read(container));
   const packageEntry = entries.get(packagePath);
   if (packageEntry === undefined) {
-    throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(packagePath)}, which is not in the file`);
+    throw new ArchiveError(`its ${CONTAINER_PART} names the package ${shown2(packagePath)}, which is not in the file`);
   }
   const encrypted = entries.has(ENCRYPTION_PART) ? encryptedPaths(read(entries.get(ENCRYPTION_PART))) : new Set;
   const refuseLocked = (part) => {
     if (encrypted.has(part)) {
-      throw new ArchiveError(`it is locked with DRM (${ENCRYPTION_PART} encrypts ${printable(part)}), which story cannot read; import the manuscript the book was made from instead`);
+      throw new ArchiveError(`it is locked with DRM (${ENCRYPTION_PART} encrypts ${shown2(part)}), which story cannot read; import the manuscript the book was made from instead`);
     }
   };
   refuseLocked(packagePath);
   const notes = new Set;
-  const parts = spineParts(read(packageEntry), packagePath, entries, notes);
-  if (parts.reduce((total, part) => total + entries.get(part).size, 0) > left) {
-    throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
-  }
-  const blocks = [];
-  for (const part of parts) {
+  const spine = spineParts(read(packageEntry), packagePath, entries, notes);
+  parts.reserve(spine.map((part) => entries.get(part)));
+  const blocks = markdownBlocks(maxTextBytes);
+  for (const part of spine) {
     refuseLocked(part);
-    for (const paragraph of xhtmlParagraphs2(read(entries.get(part)), notes)) {
-      blocks.push(...paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine));
+    const xml = read(entries.get(part));
+    const mark = blocks.mark();
+    let paragraphs = 0;
+    let linked = 0;
+    try {
+      xhtmlParagraphs2(xml, notes, (paragraph) => {
+        const text = paragraph.runs.filter((run) => run.text.trim() !== "");
+        if (paragraph.level === 0 || text.some((run) => run.link)) {
+          paragraphs += 1;
+          linked += text.length > 0 && text.every((run) => run.link) ? 1 : 0;
+        }
+        for (const block of paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine)) {
+          blocks.push(block);
+        }
+      });
+    } catch (error) {
+      if (error instanceof ArchiveError && error.message === "its XML is damaged") {
+        throw new ArchiveError(`its XML is damaged in ${shown2(part)}`);
+      }
+      throw error;
+    }
+    if (linked >= 2 && linked === paragraphs) {
+      blocks.dropTo(mark);
+      notes.add("contents");
     }
   }
-  const text = blocks.join(`
-
-`);
   return {
-    text: text === "" ? "" : `${text}
-`,
+    text: blocks.text(),
     notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES2[code] }))
   };
 }
@@ -24067,7 +24182,7 @@ function rootfilePath(xml) {
     const fullPath = token.attributes["full-path"] ?? "";
     const resolved = archivePath("", fullPath);
     if (resolved === null) {
-      throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(fullPath)}, which is not a path inside the file`);
+      throw new ArchiveError(`its ${CONTAINER_PART} names the package ${shown2(fullPath)}, which is not a path inside the file`);
     }
     return resolved;
   }
@@ -24116,13 +24231,14 @@ function spineParts(xml, packagePath, entries, notes) {
   const base = packagePath.includes("/") ? packagePath.slice(0, packagePath.lastIndexOf("/") + 1) : "";
   const items = new Map;
   const spine = [];
+  const contents = new Set;
   let section = null;
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
     if (token.type === "text") {
       continue;
     }
     const name = localName(token.name);
-    if (name === "manifest" || name === "spine") {
+    if (name === "manifest" || name === "spine" || name === "guide") {
       section = token.type === "start" ? name : token.type === "end" ? null : section;
       continue;
     }
@@ -24134,6 +24250,11 @@ function spineParts(xml, packagePath, entries, notes) {
       items.set(attributes.id, { href: attributes.href ?? "", mediaType: (attributes["media-type"] ?? "").trim().toLowerCase(), properties: (attributes.properties ?? "").split(/\s+/) });
     } else if (section === "spine" && name === "itemref") {
       spine.push({ idref: attributes.idref ?? "", linear: (attributes.linear ?? "yes").trim() !== "no" });
+    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc") {
+      const part = archivePath(base, attributes.href ?? "");
+      if (part !== null) {
+        contents.add(part);
+      }
     }
   }
   if (spine.length === 0) {
@@ -24144,7 +24265,7 @@ function spineParts(xml, packagePath, entries, notes) {
   for (const { idref, linear } of spine) {
     const item = items.get(idref);
     if (item === undefined) {
-      throw new ArchiveError(`its spine names the item ${printable(idref)}, which its manifest does not list`);
+      throw new ArchiveError(`its spine names the item ${shown2(idref)}, which its manifest does not list`);
     }
     if (item.properties.includes("nav")) {
       continue;
@@ -24159,12 +24280,14 @@ function spineParts(xml, packagePath, entries, notes) {
     }
     const part = archivePath(base, item.href);
     if (part === null) {
-      throw new ArchiveError(`its manifest lists ${printable(item.href)}, which is not a path inside the file`);
+      throw new ArchiveError(`its manifest lists ${shown2(item.href)}, which is not a path inside the file`);
     }
     if (!entries.has(part)) {
-      throw new ArchiveError(`its manifest lists ${printable(part)}, which is not in the file`);
+      throw new ArchiveError(`its manifest lists ${shown2(part)}, which is not in the file`);
     }
-    if (!seen.has(part)) {
+    if (contents.has(part)) {
+      notes.add("contents");
+    } else if (!seen.has(part)) {
       seen.add(part);
       parts.push(part);
     }
@@ -24242,7 +24365,7 @@ function skippedFor(name, attributes) {
   if (NOTE_TYPES.test(types) || name === "a" && NOTE_REFERENCE.test(types)) {
     return "footnotes";
   }
-  if (NAVIGATION_TYPES.test(types) || attributes.hidden !== undefined || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:;|$)/i.test(attributes.style ?? "")) {
+  if (NAVIGATION_TYPES.test(types) || attributes.hidden !== undefined || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i.test(attributes.style ?? "")) {
     return null;
   }
   return;
@@ -24255,14 +24378,13 @@ function styleEmphasis(style) {
     bold: fontWeight === undefined ? null : fontWeight === "bold" || fontWeight === "bolder" || /^\d+$/.test(fontWeight) && Number(fontWeight) >= 600
   };
 }
-function xhtmlParagraphs2(xml, notes) {
-  const paragraphs = [];
-  const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false }];
+function xhtmlParagraphs2(xml, notes, emit) {
+  const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false, link: false }];
   let paragraph = null;
   let skipping = 0;
   const flush = () => {
     if (paragraph !== null && paragraph.runs.some((run) => run.text.trim() !== "")) {
-      paragraphs.push(paragraph);
+      emit(paragraph);
     }
     paragraph = null;
   };
@@ -24274,7 +24396,7 @@ function xhtmlParagraphs2(xml, notes) {
     if (paragraph === null) {
       paragraph = { runs: [], level: frame.level, quote: frame.quote };
     }
-    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold });
+    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link });
   };
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
     if (skipping > 0) {
@@ -24303,6 +24425,9 @@ function xhtmlParagraphs2(xml, notes) {
     const { attributes } = token;
     const skipped = skippedFor(name, attributes);
     if (skipped !== undefined) {
+      if (BLOCKS.has(name) || name === "nav") {
+        flush();
+      }
       if (skipped !== null) {
         notes.add(skipped);
       }
@@ -24317,6 +24442,9 @@ function xhtmlParagraphs2(xml, notes) {
     if (name === "table") {
       notes.add("tables");
     }
+    if (name === "ol" || name === "ul") {
+      notes.add("lists");
+    }
     if (BLOCKS.has(name) || name === "hr") {
       flush();
     }
@@ -24325,7 +24453,7 @@ function xhtmlParagraphs2(xml, notes) {
     }
     const sceneBreak = name === "hr" || name === "p" && /(?:^|\s)scene-break(?:\s|$)/.test(attributes.class ?? "");
     if (sceneBreak && frames.at(-1).body) {
-      paragraphs.push({ runs: [{ text: "* * *", italic: false, bold: false }], level: 0, quote: false });
+      emit({ runs: [{ text: "* * *", italic: false, bold: false, link: false }], level: 0, quote: false });
     }
     if (token.type === "empty") {
       continue;
@@ -24339,7 +24467,8 @@ function xhtmlParagraphs2(xml, notes) {
       level: heading === null ? parent.level : Number(heading[1]),
       quote: parent.quote || name === "blockquote",
       pre: parent.pre || name === "pre",
-      body: parent.body || name === "body"
+      body: parent.body || name === "body",
+      link: parent.link || name === "a" && !/^\s*(?:#|$)/.test(attributes.href ?? "")
     });
     if (sceneBreak) {
       skipping = 1;
@@ -24347,7 +24476,6 @@ function xhtmlParagraphs2(xml, notes) {
     }
   }
   flush();
-  return paragraphs;
 }
 
 // src/odt.js
@@ -24362,6 +24490,8 @@ var STYLES_PART2 = "styles.xml";
 var MANIFEST_PART = "META-INF/manifest.xml";
 var MIMETYPE_PART = "mimetype";
 var TEXT_MIMETYPE = /^application\/vnd\.oasis\.opendocument\.text(?:-template|-master)?$/;
+var MAX_ODT_TEXT_BYTES = 64 * 1024 * 1024;
+var MAX_MIMETYPE_BYTES = 256;
 var MAX_STYLE_DEPTH2 = 64;
 var NOTE_MESSAGES3 = {
   "tracked-changes": "it has tracked changes; the import keeps the text as if every change were accepted",
@@ -24373,36 +24503,36 @@ var NOTE_MESSAGES3 = {
   numbering: "it has lists or numbered headings, whose bullets and numbers the import leaves out, so a chapter number made that way is lost",
   ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text"
 };
-function odtMarkdown(bytes, { chapterLine = () => null } = {}) {
+function odtMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, ODT);
-  if (entries.has(MIMETYPE_PART)) {
-    const mimetype = xmlText(bytes, entries.get(MIMETYPE_PART), ODT).trim();
-    if (!TEXT_MIMETYPE.test(mimetype)) {
-      throw new ArchiveError(`its media type is ${printable(mimetype)}, so it is not an OpenDocument text`);
+  const parts = partReader(bytes, ODT, MAX_ODT_TEXT_BYTES);
+  if (entries.has(MANIFEST_PART) && hasEncryptedParts(parts.read(entries.get(MANIFEST_PART), { doctype: true }))) {
+    throw new ArchiveError(`it is password-protected; ${ODT.unlock}`);
+  }
+  const mimetype = entries.get(MIMETYPE_PART);
+  if (mimetype !== undefined) {
+    const value = mimetype.size > MAX_MIMETYPE_BYTES ? null : parts.read(mimetype).trim();
+    if (value === null || !TEXT_MIMETYPE.test(value)) {
+      throw new ArchiveError(`its media type is ${value === null ? `${mimetype.size} bytes long` : shown2(value)}, so it is not an OpenDocument text`);
     }
   }
   const content = entries.get(CONTENT_PART);
   if (content === undefined) {
     throw new ArchiveError(`it has no ${CONTENT_PART}, so it is not an OpenDocument text`);
   }
-  if (entries.has(MANIFEST_PART) && encryptedParts(xmlText(bytes, entries.get(MANIFEST_PART), ODT)).has(CONTENT_PART)) {
-    throw new ArchiveError(`it is password-protected; ${ODT.unlock}`);
-  }
-  const contentXml = xmlText(bytes, content, ODT);
-  const styles = readStyles2([...entries.has(STYLES_PART2) ? [xmlText(bytes, entries.get(STYLES_PART2), ODT)] : [], contentXml]);
-  return documentMarkdown2(contentXml, styles, chapterLine);
+  const stylesEntry = entries.get(STYLES_PART2);
+  parts.reserve(stylesEntry === undefined ? [content] : [content, stylesEntry]);
+  const contentXml = parts.read(content);
+  const styles = readStyles2([...stylesEntry === undefined ? [] : [parts.read(stylesEntry)], contentXml]);
+  return documentMarkdown2(contentXml, styles, chapterLine, maxTextBytes);
 }
-function encryptedParts(xml) {
-  const parts = new Set;
-  let entry = null;
+function hasEncryptedParts(xml) {
   for (const token of xmlTokens(xml)) {
-    if (token.name === "manifest:file-entry") {
-      entry = token.type === "start" ? token.attributes["manifest:full-path"] ?? null : null;
-    } else if (entry !== null && token.type !== "end" && token.name === "manifest:encryption-data") {
-      parts.add(entry);
+    if (token.type !== "end" && token.name === "manifest:encryption-data") {
+      return true;
     }
   }
-  return parts;
+  return false;
 }
 var EMPTY_STYLE2 = { level: 0, quote: false, italic: null, bold: null, hidden: null };
 function outlineAttribute(value) {
@@ -24414,10 +24544,20 @@ function outlineAttribute(value) {
 }
 function readStyles2(parts) {
   const styles = new Map;
+  const numbered = new Set;
   for (const xml of parts) {
     let style = null;
+    let outlineStyle = false;
     for (const token of xmlTokens(xml)) {
       if (token.type === "text") {
+        continue;
+      }
+      if (token.name === "text:outline-style") {
+        outlineStyle = token.type === "start";
+        continue;
+      }
+      if (outlineStyle && token.type !== "end" && token.name === "text:outline-level-style" && (token.attributes["style:num-format"] ?? "") !== "") {
+        numbered.add(Number.parseInt(token.attributes["text:level"] ?? "", 10));
         continue;
       }
       if (token.name === "style:style") {
@@ -24493,7 +24633,8 @@ function readStyles2(parts) {
   };
   return {
     paragraph: (name) => name === null ? EMPTY_STYLE2 : resolve("paragraph", name, 0),
-    text: (name) => name === null ? EMPTY_STYLE2 : resolve("text", name, 0)
+    text: (name) => name === null ? EMPTY_STYLE2 : resolve("text", name, 0),
+    numbered
   };
 }
 var SKIPPED3 = new Map([
@@ -24526,9 +24667,9 @@ var SKIPPED3 = new Map([
   ["text:user-field-decls", null],
   ["office:forms", null]
 ]);
-function documentMarkdown2(xml, styles, chapterLine) {
+function documentMarkdown2(xml, styles, chapterLine, maxTextBytes) {
   const notes = new Set;
-  const blocks = [];
+  const blocks = markdownBlocks(maxTextBytes);
   let inText = false;
   let skipping = null;
   let paragraph = null;
@@ -24537,25 +24678,26 @@ function documentMarkdown2(xml, styles, chapterLine) {
   const finish = () => {
     const style = styles.paragraph(paragraph.style);
     const level = paragraph.heading === null ? style.level : paragraph.heading;
+    if (paragraph.hidden) {
+      paragraph = null;
+      return;
+    }
+    if (paragraph.heading !== null && styles.numbered.has(paragraph.heading)) {
+      notes.add("numbering");
+    }
     const runs = paragraph.runs.filter((run) => (run.hidden ?? style.hidden) !== true).map((run) => ({
       text: run.text,
       italic: level === 0 && (run.italic ?? style.italic) === true,
       bold: level === 0 && (run.bold ?? style.bold) === true
     }));
-    blocks.push(...paragraphBlocks(runs, level, style.quote, chapterLine));
+    for (const block of paragraphBlocks(runs, level, style.quote, chapterLine)) {
+      blocks.push(block);
+    }
     paragraph = null;
   };
   const add = (text) => {
-    const pick = (key) => {
-      for (let index = spans.length - 1;index >= 0; index -= 1) {
-        const value = styles.text(spans[index])[key];
-        if (value !== null) {
-          return value;
-        }
-      }
-      return null;
-    };
-    paragraph.runs.push({ text, italic: pick("italic"), bold: pick("bold"), hidden: pick("hidden") });
+    const span = spans.at(-1) ?? EMPTY_STYLE2;
+    paragraph.runs.push({ text, italic: span.italic, bold: span.bold, hidden: span.hidden });
   };
   for (const token of xmlTokens(xml)) {
     const { type, name, attributes } = token;
@@ -24596,7 +24738,7 @@ function documentMarkdown2(xml, styles, chapterLine) {
       }
       continue;
     }
-    if (type !== "end" && name === "text:section" && attributes["text:display"] === "none") {
+    if (type !== "end" && name === "text:section" && (attributes["text:display"] === "none" || attributes["text:display"] === "condition" && attributes["text:is-hidden"] === "true")) {
       if (type === "start") {
         skipping = 1;
       }
@@ -24631,6 +24773,7 @@ function documentMarkdown2(xml, styles, chapterLine) {
       paragraph = {
         style: attributes["text:style-name"] ?? null,
         heading: name === "text:h" ? Number.isInteger(outline) && outline >= 1 ? Math.min(outline, 6) : 1 : null,
+        hidden: false,
         runs: []
       };
       if (type === "empty") {
@@ -24643,7 +24786,9 @@ function documentMarkdown2(xml, styles, chapterLine) {
     }
     if (name === "text:span") {
       if (type === "start") {
-        spans.push(attributes["text:style-name"] ?? null);
+        const own = styles.text(attributes["text:style-name"] ?? null);
+        const outer = spans.at(-1) ?? EMPTY_STYLE2;
+        spans.push({ italic: own.italic ?? outer.italic, bold: own.bold ?? outer.bold, hidden: own.hidden ?? outer.hidden });
       } else if (type === "end") {
         spans.pop();
       }
@@ -24658,14 +24803,12 @@ function documentMarkdown2(xml, styles, chapterLine) {
       add("\t");
     } else if (name === "text:line-break") {
       add(LINE_BREAK4);
+    } else if (name === "text:hidden-paragraph" && attributes["text:is-hidden"] === "true") {
+      paragraph.hidden = true;
     }
   }
-  const text = blocks.join(`
-
-`);
   return {
-    text: text === "" ? "" : `${text}
-`,
+    text: blocks.text(),
     notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES3[code] }))
   };
 }
@@ -24891,7 +25034,7 @@ function realPath(target) {
 }
 
 // src/preview.js
-import { Buffer as Buffer7 } from "node:buffer";
+import { Buffer as Buffer8 } from "node:buffer";
 import fs13 from "node:fs";
 import os3 from "node:os";
 import path27 from "node:path";
@@ -25031,7 +25174,7 @@ import fs11 from "node:fs";
 import path24 from "node:path";
 
 // src/undo.js
-import { Buffer as Buffer6 } from "node:buffer";
+import { Buffer as Buffer7 } from "node:buffer";
 import path19 from "node:path";
 var HEADER_BYTES = 4096;
 var ABSENT = "absent";
@@ -25145,7 +25288,7 @@ function parsedLine(bytes) {
   }
 }
 function isUndoEntry(entry, first) {
-  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer6.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
+  return entry !== null && typeof entry === "object" && typeof entry.path === "string" && isUndoablePath(entry.path) && (entry.after === null || /^[0-9a-f]{64}$/.test(entry.after)) && (!first || entry.before === null || typeof entry.before === "string" && Buffer7.byteLength(entry.before) <= MAX_READ_BYTES) && (entry.mode === undefined || Number.isInteger(entry.mode) && entry.mode >= 0 && entry.mode <= 511);
 }
 function stateOf(value, hashed = false) {
   return value === null ? ABSENT : hashed ? value : contentHash(value);
@@ -28329,12 +28472,12 @@ function copyRegularFile(from, to, keepHead = false) {
 function copyUndoLog(from, to) {
   fs13.writeFileSync(to, "");
   try {
-    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs13.appendFileSync(to, Buffer7.concat([line, LINE_FEED])));
+    forEachLine(from, MAX_UNDO_LINE_BYTES, (line) => fs13.appendFileSync(to, Buffer8.concat([line, LINE_FEED])));
   } catch {
     fs13.appendFileSync(to, LINE_FEED);
   }
 }
-var LINE_FEED = Buffer7.from(`
+var LINE_FEED = Buffer8.from(`
 `);
 var IMAGE_EXTENSIONS = /\.(?:gif|jpe?g|png|webp)$/i;
 function coverOf(root) {
@@ -31455,7 +31598,7 @@ function unparsedNote(snapshot) {
 }
 
 // src/stdin.js
-import { Buffer as Buffer8 } from "node:buffer";
+import { Buffer as Buffer9 } from "node:buffer";
 import fs23 from "node:fs";
 import tty from "node:tty";
 var STDIN_ARG = "-";
@@ -31467,7 +31610,7 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     throw usageError(`story ${command} - reads from stdin, but stdin is a terminal: pipe the text in, such as story ${command} - < draft.md`);
   }
   const chunks = [];
-  const buffer = Buffer8.alloc(CHUNK_BYTES);
+  const buffer = Buffer9.alloc(CHUNK_BYTES);
   let total = 0;
   for (;; ) {
     let read;
@@ -31493,9 +31636,9 @@ function readStdin(command, { fd = 0, isatty = tty.isatty, readSync = fs23.readS
     if (total > maxBytes) {
       throw usageError(`Refusing to read more than ${maxBytes} bytes from stdin`);
     }
-    chunks.push(Buffer8.from(buffer.subarray(0, read)));
+    chunks.push(Buffer9.from(buffer.subarray(0, read)));
   }
-  return Buffer8.concat(chunks);
+  return Buffer9.concat(chunks);
 }
 function stdinText(command, bytes) {
   const zipAdvice = command === "import" ? "story import reads a Word document, an OpenDocument text, or an EPUB only from a .docx, .odt, or .epub file, not from stdin: pass the file's path instead" : "Save or export it as markdown or plain text first";
@@ -32811,7 +32954,7 @@ ${body.filter((part) => part !== "").join(`
 var CODEX_GENERATOR = "story build --format codex";
 
 // src/ics.js
-import { Buffer as Buffer9 } from "node:buffer";
+import { Buffer as Buffer10 } from "node:buffer";
 var LAST_DAY2 = Date.UTC(9999, 11, 31) / 86400000;
 var ICS_LINE_OCTETS = 75;
 var BYDAY = { mon: "MO", tue: "TU", wed: "WE", thu: "TH", fri: "FR", sat: "SA", sun: "SU" };
@@ -32828,7 +32971,7 @@ function foldLine(line) {
   let current = "";
   let octets = 0;
   for (const char of line.match(/\\[^]|[^]/gu) ?? []) {
-    const size = Buffer9.byteLength(char, "utf8");
+    const size = Buffer10.byteLength(char, "utf8");
     if (octets + size > ICS_LINE_OCTETS) {
       parts.push(current);
       current = " ";
@@ -34961,7 +35104,7 @@ function importManuscript(options) {
       const title = chapter.title || `Chapter ${number}`;
       const name = `chapter-${String(number).padStart(2, "0")}.md`;
       const text = chapterMarkdown(title, number, counts, chapter.prose, chapter.unnumbered, chapter.authors);
-      const bytes = Buffer10.byteLength(text, "utf8");
+      const bytes = Buffer11.byteLength(text, "utf8");
       if (bytes > MAX_READ_BYTES) {
         throw usageError(`Cannot import: ${name} would be ${bytes} bytes, over the ${MAX_READ_BYTES} byte limit story reads. Split the manuscript with chapter headings first`);
       }
@@ -35180,11 +35323,11 @@ function readSourceDocument(name, filePath, rules) {
   const bytes = readFileBytes(filePath, MAX_IMPORT_ARCHIVE_BYTES);
   let converted;
   try {
-    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules) });
+    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules), maxTextBytes: MAX_IMPORT_FILE_BYTES });
   } catch (error) {
     throw error instanceof ArchiveError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
   }
-  const size = Buffer10.byteLength(converted.text, "utf8");
+  const size = Buffer11.byteLength(converted.text, "utf8");
   if (size > MAX_IMPORT_FILE_BYTES) {
     throw usageError(`Cannot import ${filePath}: its text is ${size} bytes as markdown, over the ${MAX_IMPORT_FILE_BYTES} byte limit; split it into several documents and import the folder`);
   }
@@ -36274,21 +36417,21 @@ function listItem2(lines, frontmatter, key, item) {
 }
 
 // src/lsp-transport.js
-import { Buffer as Buffer11 } from "node:buffer";
-var HEADER_END = Buffer11.from(`\r
+import { Buffer as Buffer12 } from "node:buffer";
+var HEADER_END = Buffer12.from(`\r
 \r
 `, "ascii");
 var CONTENT_LENGTH = /^content-length:[ \t]*(\d+)[ \t]*$/im;
 function encodeMessage(message) {
-  const body = Buffer11.from(JSON.stringify(message), "utf8");
-  return Buffer11.concat([Buffer11.from(`Content-Length: ${body.length}\r
+  const body = Buffer12.from(JSON.stringify(message), "utf8");
+  return Buffer12.concat([Buffer12.from(`Content-Length: ${body.length}\r
 \r
 `, "ascii"), body]);
 }
 function messageReader(onMessage, onProblem) {
-  let pending = Buffer11.alloc(0);
+  let pending = Buffer12.alloc(0);
   return (chunk) => {
-    pending = Buffer11.concat([pending, chunk]);
+    pending = Buffer12.concat([pending, chunk]);
     for (let headerEnd = pending.indexOf(HEADER_END);headerEnd !== -1; headerEnd = pending.indexOf(HEADER_END)) {
       const header = pending.subarray(0, headerEnd).toString("ascii");
       const length = CONTENT_LENGTH.exec(header);

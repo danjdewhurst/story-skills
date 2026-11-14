@@ -10,8 +10,8 @@
 // manifest that says whether the text is encrypted are read, each under a
 // size limit, through archive.js, which refuses a document type
 // declaration, so no entity is ever expanded.
-import { ArchiveError, printable, xmlText, xmlTokens, zipEntries } from "./archive.js";
-import { LINE_BREAK, paragraphBlocks, proseText } from "./rich-text.js";
+import { ArchiveError, partReader, shown, xmlTokens, zipEntries } from "./archive.js";
+import { LINE_BREAK, markdownBlocks, paragraphBlocks, proseText } from "./rich-text.js";
 
 export const ODT = Object.freeze({
   extension: ".odt",
@@ -25,6 +25,10 @@ const STYLES_PART = "styles.xml";
 const MANIFEST_PART = "META-INF/manifest.xml";
 const MIMETYPE_PART = "mimetype";
 const TEXT_MIMETYPE = /^application\/vnd\.oasis\.opendocument\.text(?:-template|-master)?$/;
+// The parts one import reads come to no more than this inflated, as an
+// EPUB's do, and the mimetype part to no more than a media type's length.
+export const MAX_ODT_TEXT_BYTES = 64 * 1024 * 1024;
+const MAX_MIMETYPE_BYTES = 256;
 // A style based on a style based on ... is followed this far.
 const MAX_STYLE_DEPTH = 64;
 
@@ -40,42 +44,45 @@ const NOTE_MESSAGES = {
 };
 
 // Converts the bytes of an .odt to { text, notes }, as docxMarkdown does
-// for a .docx. Throws an ArchiveError when the file is not a readable
+// for a .docx. `maxTextBytes` stops the conversion once the markdown would
+// be larger. Throws an ArchiveError when the file is not a readable
 // OpenDocument text.
-export function odtMarkdown(bytes, { chapterLine = () => null } = {}) {
+export function odtMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, ODT);
-  if (entries.has(MIMETYPE_PART)) {
-    const mimetype = xmlText(bytes, entries.get(MIMETYPE_PART), ODT).trim();
-    if (!TEXT_MIMETYPE.test(mimetype)) {
-      throw new ArchiveError(`its media type is ${printable(mimetype)}, so it is not an OpenDocument text`);
+  const parts = partReader(bytes, ODT, MAX_ODT_TEXT_BYTES);
+  // An encrypted .odt keeps its zip entries plain and gives encryption data
+  // in the manifest for each encrypted part, or for the one encrypted
+  // package that holds them all, with no content.xml beside it. An
+  // OpenOffice.org manifest may name its DTD, which declares nothing.
+  if (entries.has(MANIFEST_PART) && hasEncryptedParts(parts.read(entries.get(MANIFEST_PART), { doctype: true }))) {
+    throw new ArchiveError(`it is password-protected; ${ODT.unlock}`);
+  }
+  const mimetype = entries.get(MIMETYPE_PART);
+  if (mimetype !== undefined) {
+    const value = mimetype.size > MAX_MIMETYPE_BYTES ? null : parts.read(mimetype).trim();
+    if (value === null || !TEXT_MIMETYPE.test(value)) {
+      throw new ArchiveError(`its media type is ${value === null ? `${mimetype.size} bytes long` : shown(value)}, so it is not an OpenDocument text`);
     }
   }
   const content = entries.get(CONTENT_PART);
   if (content === undefined) {
     throw new ArchiveError(`it has no ${CONTENT_PART}, so it is not an OpenDocument text`);
   }
-  // An encrypted .odt keeps its zip entries plain and lists each encrypted
-  // part in the manifest.
-  if (entries.has(MANIFEST_PART) && encryptedParts(xmlText(bytes, entries.get(MANIFEST_PART), ODT)).has(CONTENT_PART)) {
-    throw new ArchiveError(`it is password-protected; ${ODT.unlock}`);
-  }
-  const contentXml = xmlText(bytes, content, ODT);
-  const styles = readStyles([...(entries.has(STYLES_PART) ? [xmlText(bytes, entries.get(STYLES_PART), ODT)] : []), contentXml]);
-  return documentMarkdown(contentXml, styles, chapterLine);
+  const stylesEntry = entries.get(STYLES_PART);
+  parts.reserve(stylesEntry === undefined ? [content] : [content, stylesEntry]);
+  const contentXml = parts.read(content);
+  const styles = readStyles([...(stylesEntry === undefined ? [] : [parts.read(stylesEntry)]), contentXml]);
+  return documentMarkdown(contentXml, styles, chapterLine, maxTextBytes);
 }
 
-// The parts the manifest gives encryption data for.
-function encryptedParts(xml) {
-  const parts = new Set();
-  let entry = null;
+// Whether the manifest gives encryption data for any part.
+function hasEncryptedParts(xml) {
   for (const token of xmlTokens(xml)) {
-    if (token.name === "manifest:file-entry") {
-      entry = token.type === "start" ? token.attributes["manifest:full-path"] ?? null : null;
-    } else if (entry !== null && token.type !== "end" && token.name === "manifest:encryption-data") {
-      parts.add(entry);
+    if (token.type !== "end" && token.name === "manifest:encryption-data") {
+      return true;
     }
   }
-  return parts;
+  return false;
 }
 
 const EMPTY_STYLE = { level: 0, quote: false, italic: null, bold: null, hidden: null };
@@ -96,13 +103,25 @@ function outlineAttribute(value) {
 // (from a `Heading N` name, the `Title` style, or a default outline level),
 // whether it is a quote, and whether it sets italic, bold, or hidden text,
 // each from the style or the nearest style it is based on. A later part's
-// style of the same name wins, so content.xml goes last.
+// style of the same name wins, so content.xml goes last. `numbered` holds
+// the outline levels that chapter numbering numbers.
 function readStyles(parts) {
   const styles = new Map();
+  // The outline levels whose headings chapter numbering numbers.
+  const numbered = new Set();
   for (const xml of parts) {
     let style = null;
+    let outlineStyle = false;
     for (const token of xmlTokens(xml)) {
       if (token.type === "text") {
+        continue;
+      }
+      if (token.name === "text:outline-style") {
+        outlineStyle = token.type === "start";
+        continue;
+      }
+      if (outlineStyle && token.type !== "end" && token.name === "text:outline-level-style" && (token.attributes["style:num-format"] ?? "") !== "") {
+        numbered.add(Number.parseInt(token.attributes["text:level"] ?? "", 10));
         continue;
       }
       if (token.name === "style:style") {
@@ -185,7 +204,8 @@ function readStyles(parts) {
   };
   return {
     paragraph: (name) => (name === null ? EMPTY_STYLE : resolve("paragraph", name, 0)),
-    text: (name) => (name === null ? EMPTY_STYLE : resolve("text", name, 0))
+    text: (name) => (name === null ? EMPTY_STYLE : resolve("text", name, 0)),
+    numbered
   };
 }
 
@@ -226,40 +246,41 @@ const SKIPPED = new Map([
 
 // Walks content.xml's office:text and writes each paragraph as markdown
 // blocks.
-function documentMarkdown(xml, styles, chapterLine) {
+function documentMarkdown(xml, styles, chapterLine, maxTextBytes) {
   const notes = new Set();
-  const blocks = [];
+  const blocks = markdownBlocks(maxTextBytes);
   let inText = false;
   let skipping = null;
   let paragraph = null;
   let nested = 0;
-  // The text styles of the open spans, innermost last.
+  // The italic, bold, and hidden of the open spans, innermost last, each
+  // resolved from its own style and the span around it once, as it opens.
   const spans = [];
 
   const finish = () => {
     const style = styles.paragraph(paragraph.style);
     const level = paragraph.heading === null ? style.level : paragraph.heading;
+    if (paragraph.hidden) {
+      paragraph = null;
+      return;
+    }
+    if (paragraph.heading !== null && styles.numbered.has(paragraph.heading)) {
+      notes.add("numbering");
+    }
     const runs = paragraph.runs.filter((run) => (run.hidden ?? style.hidden) !== true).map((run) => ({
       text: run.text,
       // A heading's own bold or italic is its style, not emphasis.
       italic: level === 0 && (run.italic ?? style.italic) === true,
       bold: level === 0 && (run.bold ?? style.bold) === true
     }));
-    blocks.push(...paragraphBlocks(runs, level, style.quote, chapterLine));
+    for (const block of paragraphBlocks(runs, level, style.quote, chapterLine)) {
+      blocks.push(block);
+    }
     paragraph = null;
   };
   const add = (text) => {
-    // The innermost span that says decides.
-    const pick = (key) => {
-      for (let index = spans.length - 1; index >= 0; index -= 1) {
-        const value = styles.text(spans[index])[key];
-        if (value !== null) {
-          return value;
-        }
-      }
-      return null;
-    };
-    paragraph.runs.push({ text, italic: pick("italic"), bold: pick("bold"), hidden: pick("hidden") });
+    const span = spans.at(-1) ?? EMPTY_STYLE;
+    paragraph.runs.push({ text, italic: span.italic, bold: span.bold, hidden: span.hidden });
   };
 
   for (const token of xmlTokens(xml)) {
@@ -304,7 +325,8 @@ function documentMarkdown(xml, styles, chapterLine) {
       }
       continue;
     }
-    if (type !== "end" && name === "text:section" && attributes["text:display"] === "none") {
+    // A section hidden outright, or by a condition that is true now.
+    if (type !== "end" && name === "text:section" && (attributes["text:display"] === "none" || (attributes["text:display"] === "condition" && attributes["text:is-hidden"] === "true"))) {
       if (type === "start") {
         skipping = 1;
       }
@@ -342,6 +364,7 @@ function documentMarkdown(xml, styles, chapterLine) {
         style: attributes["text:style-name"] ?? null,
         // A heading without an outline level is a level 1 heading.
         heading: name === "text:h" ? (Number.isInteger(outline) && outline >= 1 ? Math.min(outline, 6) : 1) : null,
+        hidden: false,
         runs: []
       };
       if (type === "empty") {
@@ -354,7 +377,9 @@ function documentMarkdown(xml, styles, chapterLine) {
     }
     if (name === "text:span") {
       if (type === "start") {
-        spans.push(attributes["text:style-name"] ?? null);
+        const own = styles.text(attributes["text:style-name"] ?? null);
+        const outer = spans.at(-1) ?? EMPTY_STYLE;
+        spans.push({ italic: own.italic ?? outer.italic, bold: own.bold ?? outer.bold, hidden: own.hidden ?? outer.hidden });
       } else if (type === "end") {
         spans.pop();
       }
@@ -369,12 +394,14 @@ function documentMarkdown(xml, styles, chapterLine) {
       add("\t");
     } else if (name === "text:line-break") {
       add(LINE_BREAK);
+    } else if (name === "text:hidden-paragraph" && attributes["text:is-hidden"] === "true") {
+      // A paragraph hidden by a condition that is true now.
+      paragraph.hidden = true;
     }
   }
 
-  const text = blocks.join("\n\n");
   return {
-    text: text === "" ? "" : `${text}\n`,
+    text: blocks.text(),
     notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES[code] }))
   };
 }

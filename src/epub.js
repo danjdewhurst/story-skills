@@ -11,8 +11,8 @@
 // toward one limit, each path the package names is resolved inside the
 // archive (a path that climbs out of it, or a URL, is refused), and nothing
 // outside the archive is ever read. A document locked with DRM is refused.
-import { ArchiveError, HTML_ENTITIES, printable, xmlText, xmlTokens, zipEntries } from "./archive.js";
-import { LINE_BREAK, paragraphBlocks, proseText } from "./rich-text.js";
+import { ArchiveError, HTML_ENTITIES, partReader, shown, xmlTokens, zipEntries } from "./archive.js";
+import { LINE_BREAK, markdownBlocks, paragraphBlocks, proseText } from "./rich-text.js";
 
 export const EPUB = Object.freeze({
   extension: ".epub",
@@ -35,24 +35,19 @@ const NOTE_MESSAGES = {
   footnotes: "it has footnotes or endnotes, which the import leaves out",
   tables: "it has tables, whose cells the import reads as plain paragraphs",
   ruby: "it has ruby (furigana) readings, which the import leaves out, keeping the base text",
+  lists: "it has lists, whose bullets and numbers the import leaves out",
+  contents: "it has a table of contents in its reading order, which the import leaves out",
   "non-linear": "it has documents outside its reading order (linear=\"no\"), which the import leaves out",
   "other-documents": "its reading order has documents that are not XHTML, which the import leaves out"
 };
 
 // Converts the bytes of an .epub to { text, notes }, as docxMarkdown does
-// for a .docx. Throws an ArchiveError when the file is not a readable EPUB.
-export function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
+// for a .docx. `maxTextBytes` stops the conversion once the markdown would
+// be larger. Throws an ArchiveError when the file is not a readable EPUB.
+export function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, EPUB);
-  let left = MAX_EPUB_TEXT_BYTES;
-  // xmlText checks that a part inflates to exactly its declared size, so
-  // the declared sizes are what the reads cost.
-  const read = (entry) => {
-    if (entry.size > left) {
-      throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
-    }
-    left -= entry.size;
-    return xmlText(bytes, entry, EPUB, { doctype: true });
-  };
+  const parts = partReader(bytes, EPUB, MAX_EPUB_TEXT_BYTES);
+  const read = (entry) => parts.read(entry, { doctype: true });
 
   const container = entries.get(CONTAINER_PART);
   if (container === undefined) {
@@ -61,33 +56,55 @@ export function epubMarkdown(bytes, { chapterLine = () => null } = {}) {
   const packagePath = rootfilePath(read(container));
   const packageEntry = entries.get(packagePath);
   if (packageEntry === undefined) {
-    throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(packagePath)}, which is not in the file`);
+    throw new ArchiveError(`its ${CONTAINER_PART} names the package ${shown(packagePath)}, which is not in the file`);
   }
   const encrypted = entries.has(ENCRYPTION_PART) ? encryptedPaths(read(entries.get(ENCRYPTION_PART))) : new Set();
   const refuseLocked = (part) => {
     if (encrypted.has(part)) {
-      throw new ArchiveError(`it is locked with DRM (${ENCRYPTION_PART} encrypts ${printable(part)}), which story cannot read; import the manuscript the book was made from instead`);
+      throw new ArchiveError(`it is locked with DRM (${ENCRYPTION_PART} encrypts ${shown(part)}), which story cannot read; import the manuscript the book was made from instead`);
     }
   };
   refuseLocked(packagePath);
 
   const notes = new Set();
-  const parts = spineParts(read(packageEntry), packagePath, entries, notes);
+  const spine = spineParts(read(packageEntry), packagePath, entries, notes);
   // The whole spine is measured before any of it is inflated, so a file
   // over the limit costs no more than its directory.
-  if (parts.reduce((total, part) => total + entries.get(part).size, 0) > left) {
-    throw new ArchiveError(`its parts come to more than the ${MAX_EPUB_TEXT_BYTES} byte limit unpacked`);
-  }
-  const blocks = [];
-  for (const part of parts) {
+  parts.reserve(spine.map((part) => entries.get(part)));
+  const blocks = markdownBlocks(maxTextBytes);
+  for (const part of spine) {
     refuseLocked(part);
-    for (const paragraph of xhtmlParagraphs(read(entries.get(part)), notes)) {
-      blocks.push(...paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine));
+    const xml = read(entries.get(part));
+    const mark = blocks.mark();
+    let paragraphs = 0;
+    let linked = 0;
+    try {
+      xhtmlParagraphs(xml, notes, (paragraph) => {
+        // A paragraph that is all link text, such as a contents entry.
+        const text = paragraph.runs.filter((run) => run.text.trim() !== "");
+        if (paragraph.level === 0 || text.some((run) => run.link)) {
+          paragraphs += 1;
+          linked += text.length > 0 && text.every((run) => run.link) ? 1 : 0;
+        }
+        for (const block of paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine)) {
+          blocks.push(block);
+        }
+      });
+    } catch (error) {
+      if (error instanceof ArchiveError && error.message === "its XML is damaged") {
+        throw new ArchiveError(`its XML is damaged in ${shown(part)}`);
+      }
+      throw error;
+    }
+    // A contents page that the package does not mark as one: a document
+    // whose paragraphs are all links, under headings of its own.
+    if (linked >= 2 && linked === paragraphs) {
+      blocks.dropTo(mark);
+      notes.add("contents");
     }
   }
-  const text = blocks.join("\n\n");
   return {
-    text: text === "" ? "" : `${text}\n`,
+    text: blocks.text(),
     notes: [...notes].map((code) => ({ code, message: NOTE_MESSAGES[code] }))
   };
 }
@@ -111,7 +128,7 @@ function rootfilePath(xml) {
     const fullPath = token.attributes["full-path"] ?? "";
     const resolved = archivePath("", fullPath);
     if (resolved === null) {
-      throw new ArchiveError(`its ${CONTAINER_PART} names the package ${printable(fullPath)}, which is not a path inside the file`);
+      throw new ArchiveError(`its ${CONTAINER_PART} names the package ${shown(fullPath)}, which is not a path inside the file`);
     }
     return resolved;
   }
@@ -167,20 +184,22 @@ function encryptedPaths(xml) {
 }
 
 // The XHTML parts of the spine, in reading order, each once. The navigation
-// document (the table of contents) is left out, and so is a document marked
-// linear="no", which is outside the reading order; anything else that is not
-// XHTML is left out with a note.
+// document and the contents page the guide names are left out, and so is a
+// document marked linear="no", which is outside the reading order; anything
+// else that is not XHTML is left out with a note.
 function spineParts(xml, packagePath, entries, notes) {
   const base = packagePath.includes("/") ? packagePath.slice(0, packagePath.lastIndexOf("/") + 1) : "";
   const items = new Map();
   const spine = [];
+  // The contents page an EPUB 2 package's guide names.
+  const contents = new Set();
   let section = null;
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
     if (token.type === "text") {
       continue;
     }
     const name = localName(token.name);
-    if (name === "manifest" || name === "spine") {
+    if (name === "manifest" || name === "spine" || name === "guide") {
       section = token.type === "start" ? name : token.type === "end" ? null : section;
       continue;
     }
@@ -192,6 +211,11 @@ function spineParts(xml, packagePath, entries, notes) {
       items.set(attributes.id, { href: attributes.href ?? "", mediaType: (attributes["media-type"] ?? "").trim().toLowerCase(), properties: (attributes.properties ?? "").split(/\s+/) });
     } else if (section === "spine" && name === "itemref") {
       spine.push({ idref: attributes.idref ?? "", linear: (attributes.linear ?? "yes").trim() !== "no" });
+    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc") {
+      const part = archivePath(base, attributes.href ?? "");
+      if (part !== null) {
+        contents.add(part);
+      }
     }
   }
   if (spine.length === 0) {
@@ -202,7 +226,7 @@ function spineParts(xml, packagePath, entries, notes) {
   for (const { idref, linear } of spine) {
     const item = items.get(idref);
     if (item === undefined) {
-      throw new ArchiveError(`its spine names the item ${printable(idref)}, which its manifest does not list`);
+      throw new ArchiveError(`its spine names the item ${shown(idref)}, which its manifest does not list`);
     }
     if (item.properties.includes("nav")) {
       continue;
@@ -217,12 +241,14 @@ function spineParts(xml, packagePath, entries, notes) {
     }
     const part = archivePath(base, item.href);
     if (part === null) {
-      throw new ArchiveError(`its manifest lists ${printable(item.href)}, which is not a path inside the file`);
+      throw new ArchiveError(`its manifest lists ${shown(item.href)}, which is not a path inside the file`);
     }
     if (!entries.has(part)) {
-      throw new ArchiveError(`its manifest lists ${printable(part)}, which is not in the file`);
+      throw new ArchiveError(`its manifest lists ${shown(part)}, which is not in the file`);
     }
-    if (!seen.has(part)) {
+    if (contents.has(part)) {
+      notes.add("contents");
+    } else if (!seen.has(part)) {
       seen.add(part);
       parts.push(part);
     }
@@ -278,7 +304,7 @@ function skippedFor(name, attributes) {
   if (NOTE_TYPES.test(types) || (name === "a" && NOTE_REFERENCE.test(types))) {
     return "footnotes";
   }
-  if (NAVIGATION_TYPES.test(types) || attributes.hidden !== undefined || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:;|$)/i.test(attributes.style ?? "")) {
+  if (NAVIGATION_TYPES.test(types) || attributes.hidden !== undefined || /(?:^|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)\s*(?:!\s*important\s*)?(?:;|$)/i.test(attributes.style ?? "")) {
     return null;
   }
   return undefined;
@@ -295,18 +321,18 @@ function styleEmphasis(style) {
   };
 }
 
-// One XHTML document's paragraphs, each { runs, level, quote }, with runs
-// of { text, italic, bold }. Text is read only inside the body.
-function xhtmlParagraphs(xml, notes) {
-  const paragraphs = [];
+// Hands each paragraph of one XHTML document to `emit` as { runs, level,
+// quote }, with runs of { text, italic, bold, link }, where link marks text
+// inside a link to another document. Text is read only inside the body.
+function xhtmlParagraphs(xml, notes, emit) {
   // One frame per open element: the italic, bold, heading level, quote,
   // and preformatting the element's text gets.
-  const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false }];
+  const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false, link: false }];
   let paragraph = null;
   let skipping = 0;
   const flush = () => {
     if (paragraph !== null && paragraph.runs.some((run) => run.text.trim() !== "")) {
-      paragraphs.push(paragraph);
+      emit(paragraph);
     }
     paragraph = null;
   };
@@ -319,7 +345,7 @@ function xhtmlParagraphs(xml, notes) {
       paragraph = { runs: [], level: frame.level, quote: frame.quote };
     }
     // A heading's own bold or italic is its style, not emphasis.
-    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold });
+    paragraph.runs.push({ text, italic: frame.level === 0 && frame.italic, bold: frame.level === 0 && frame.bold, link: frame.link });
   };
 
   for (const token of xmlTokens(xml, HTML_ENTITIES)) {
@@ -349,6 +375,10 @@ function xhtmlParagraphs(xml, notes) {
     const { attributes } = token;
     const skipped = skippedFor(name, attributes);
     if (skipped !== undefined) {
+      // A block left out still ends the paragraph before it.
+      if (BLOCKS.has(name) || name === "nav") {
+        flush();
+      }
       if (skipped !== null) {
         notes.add(skipped);
       }
@@ -363,6 +393,9 @@ function xhtmlParagraphs(xml, notes) {
     if (name === "table") {
       notes.add("tables");
     }
+    if (name === "ol" || name === "ul") {
+      notes.add("lists");
+    }
     if (BLOCKS.has(name) || name === "hr") {
       flush();
     }
@@ -373,7 +406,7 @@ function xhtmlParagraphs(xml, notes) {
     // break, is a scene break, whatever marker it shows.
     const sceneBreak = name === "hr" || (name === "p" && /(?:^|\s)scene-break(?:\s|$)/.test(attributes.class ?? ""));
     if (sceneBreak && frames.at(-1).body) {
-      paragraphs.push({ runs: [{ text: "* * *", italic: false, bold: false }], level: 0, quote: false });
+      emit({ runs: [{ text: "* * *", italic: false, bold: false, link: false }], level: 0, quote: false });
     }
     if (token.type === "empty") {
       continue;
@@ -387,7 +420,9 @@ function xhtmlParagraphs(xml, notes) {
       level: heading === null ? parent.level : Number(heading[1]),
       quote: parent.quote || name === "blockquote",
       pre: parent.pre || name === "pre",
-      body: parent.body || name === "body"
+      body: parent.body || name === "body",
+      // An in-page link (#note) is not a link to another document.
+      link: parent.link || (name === "a" && !/^\s*(?:#|$)/.test(attributes.href ?? ""))
     });
     if (sceneBreak) {
       // The marker's own text is not prose.
@@ -396,5 +431,4 @@ function xhtmlParagraphs(xml, notes) {
     }
   }
   flush();
-  return paragraphs;
 }

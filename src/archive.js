@@ -47,6 +47,39 @@ export function printable(text) {
   return String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, (character) => ESCAPED_CONTROLS[character] ?? "?");
 }
 
+// Text from the file as printable shows it, cut to its first 200
+// characters, so a message never repeats megabytes of it.
+const SHOWN_LENGTH = 200;
+
+export function shown(text) {
+  const value = String(text);
+  return printable(value.length > SHOWN_LENGTH ? `${value.slice(0, SHOWN_LENGTH)}…` : value);
+}
+
+// Reads one archive's parts under a limit on their total inflated size,
+// for a format that reads more parts than a .docx does. xmlText checks
+// that a part inflates to exactly its declared size, so the declared sizes
+// are what the reads cost, and `reserve` can refuse parts before any of
+// them is inflated.
+export function partReader(bytes, format, limit) {
+  let left = limit;
+  const over = () => new ArchiveError(`its parts come to more than the ${limit} byte limit unpacked`);
+  return {
+    reserve(entries) {
+      if (entries.reduce((total, entry) => total + entry.size, 0) > left) {
+        throw over();
+      }
+    },
+    read(entry, options) {
+      if (entry.size > left) {
+        throw over();
+      }
+      left -= entry.size;
+      return xmlText(bytes, entry, format, options);
+    }
+  };
+}
+
 // The zip's central directory, as a map from entry name to the entry's
 // method, sizes, CRC, and local header offset.
 export function zipEntries(bytes, format = WORD) {
@@ -152,21 +185,61 @@ export function xmlText(bytes, entry, format = WORD, { doctype = false } = {}) {
   if (text.charCodeAt(0) === 0xfeff) {
     text = text.slice(1);
   }
-  const declaration = /<!DOCTYPE/i.exec(text);
-  if (doctype && declaration !== null) {
-    // A declaration with no internal subset (no `[`) declares no entity,
-    // so it is dropped. A string search, not a pattern, keeps this linear.
-    const end = text.indexOf(">", declaration.index);
-    if (end !== -1 && !text.slice(declaration.index, end).includes("[")) {
-      text = text.slice(0, declaration.index) + text.slice(end + 1);
+  if (doctype) {
+    // A declaration in the prolog with no internal subset declares no
+    // entity, so it is dropped. Any other is left for the scanner, which
+    // refuses it as damage, unless it is inside a comment or CDATA.
+    const declaration = prologDoctype(text);
+    if (declaration !== null && declaration.subset) {
+      throw new ArchiveError(`${printable(entry.name)} has a document type declaration with declarations of its own, which story does not read`);
     }
-  }
-  if (declaration !== null && (!doctype || /<!DOCTYPE/i.test(text))) {
-    throw new ArchiveError(doctype
-      ? `${printable(entry.name)} has a document type declaration with declarations of its own, which story does not read`
-      : `${printable(entry.name)} has a document type declaration, which ${format.kind} never has`);
+    if (declaration !== null) {
+      text = text.slice(0, declaration.start) + text.slice(declaration.end);
+    }
+  } else if (/<!DOCTYPE/i.test(text)) {
+    throw new ArchiveError(`${printable(entry.name)} has a document type declaration, which ${format.kind} never has`);
   }
   return text;
+}
+
+// The document type declaration in the prolog, after any white space, XML
+// declaration, processing instructions, and comments, as { start, end,
+// subset }, where subset is true when it has an internal subset (a `[`
+// outside its quoted ids); or null when the prolog has none, or one that
+// never ends. One pass over the prolog, with no pattern to backtrack.
+function prologDoctype(text) {
+  let position = 0;
+  for (;;) {
+    while (position < text.length && " \t\r\n".includes(text[position])) {
+      position += 1;
+    }
+    const skip = [["<?", "?>"], ["<!--", "-->"]].find(([start]) => text.startsWith(start, position));
+    if (skip !== undefined) {
+      const close = text.indexOf(skip[1], position + skip[0].length);
+      if (close === -1) {
+        return null;
+      }
+      position = close + skip[1].length;
+      continue;
+    }
+    if (text.slice(position, position + 9).toUpperCase() !== "<!DOCTYPE") {
+      return null;
+    }
+    let quote = null;
+    for (let index = position + 9; index < text.length; index += 1) {
+      const character = text[index];
+      if (quote !== null) {
+        quote = character === quote ? null : quote;
+      } else if (character === "\"" || character === "'") {
+        quote = character;
+      } else if (character === "[") {
+        return { start: position, end: index, subset: true };
+      } else if (character === ">") {
+        return { start: position, end: index + 1, subset: false };
+      }
+    }
+    return null;
+  }
 }
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
@@ -237,9 +310,20 @@ function* rawTokens(text, entities) {
 const XML_ENTITIES = new Map([["lt", "<"], ["gt", ">"], ["amp", "&"], ["quot", "\""], ["apos", "'"]]);
 
 // The HTML entities an XHTML document of an EPUB 2 may use through the
-// XHTML DTD: XML's five, the Latin-1 ones, and the punctuation and spaces
-// prose uses. Another is kept as written.
+// XHTML DTD: XML's five and the 252 of HTML 4 (Latin-1, punctuation and
+// spaces, Greek, arrows, and symbols). Another is kept as written.
 const LATIN_1 = "nbsp iexcl cent pound curren yen brvbar sect uml copy ordf laquo not shy reg macr deg plusmn sup2 sup3 acute micro para middot cedil sup1 ordm raquo frac14 frac12 frac34 iquest Agrave Aacute Acirc Atilde Auml Aring AElig Ccedil Egrave Eacute Ecirc Euml Igrave Iacute Icirc Iuml ETH Ntilde Ograve Oacute Ocirc Otilde Ouml times Oslash Ugrave Uacute Ucirc Uuml Yacute THORN szlig agrave aacute acirc atilde auml aring aelig ccedil egrave eacute ecirc euml igrave iacute icirc iuml eth ntilde ograve oacute ocirc otilde ouml divide oslash ugrave uacute ucirc uuml yacute thorn yuml";
+// HTML 4's Greek letters, arrows, and mathematical and other symbols, as
+// name:code point.
+const HTML_SYMBOLS = [
+  "Alpha:913 Beta:914 Gamma:915 Delta:916 Epsilon:917 Zeta:918 Eta:919 Theta:920 Iota:921 Kappa:922 Lambda:923 Mu:924 Nu:925 Xi:926 Omicron:927 Pi:928 Rho:929 Sigma:931 Tau:932 Upsilon:933 Phi:934 Chi:935 Psi:936 Omega:937",
+  "alpha:945 beta:946 gamma:947 delta:948 epsilon:949 zeta:950 eta:951 theta:952 iota:953 kappa:954 lambda:955 mu:956 nu:957 xi:958 omicron:959 pi:960 rho:961 sigmaf:962 sigma:963 tau:964 upsilon:965 phi:966 chi:967 psi:968 omega:969 thetasym:977 upsih:978 piv:982",
+  "oline:8254 frasl:8260 weierp:8472 image:8465 real:8476 alefsym:8501",
+  "larr:8592 uarr:8593 rarr:8594 darr:8595 harr:8596 crarr:8629 lArr:8656 uArr:8657 rArr:8658 dArr:8659 hArr:8660",
+  "forall:8704 part:8706 exist:8707 empty:8709 nabla:8711 isin:8712 notin:8713 ni:8715 prod:8719 sum:8721 minus:8722 lowast:8727 radic:8730 prop:8733 infin:8734 ang:8736 and:8743 or:8744 cap:8745 cup:8746 int:8747 there4:8756 sim:8764 cong:8773 asymp:8776 ne:8800 equiv:8801 le:8804 ge:8805 sub:8834 sup:8835 nsub:8836 sube:8838 supe:8839 oplus:8853 otimes:8855 perp:8869 sdot:8901",
+  "lceil:8968 rceil:8969 lfloor:8970 rfloor:8971 lang:9001 rang:9002 loz:9674 spades:9824 clubs:9827 hearts:9829 diams:9830"
+].join(" ");
+
 export const HTML_ENTITIES = new Map([
   ...XML_ENTITIES,
   ...LATIN_1.split(" ").map((name, index) => [name, String.fromCharCode(160 + index)]),
@@ -249,6 +333,10 @@ export const HTML_ENTITIES = new Map([
     ndash: "–", mdash: "—", lsquo: "‘", rsquo: "’", sbquo: "‚", ldquo: "“", rdquo: "”", bdquo: "„",
     dagger: "†", Dagger: "‡", bull: "•", hellip: "…", permil: "‰", prime: "′", Prime: "″",
     lsaquo: "‹", rsaquo: "›", euro: "€", trade: "™"
+  }),
+  ...HTML_SYMBOLS.split(" ").map((pair) => {
+    const [name, code] = pair.split(":");
+    return [name, String.fromCodePoint(Number(code))];
   })
 ]);
 
