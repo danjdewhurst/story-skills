@@ -9,6 +9,7 @@ import { parseFrontmatter, replaceFrontmatter } from "./frontmatter.js";
 import { projectPath, removeFile } from "./files.js";
 import { maskMarkup, proseStart } from "./markdown.js";
 import { warn } from "./findings.js";
+import { isVerseChapter } from "./forms.js";
 import { refusedError, usageError } from "./exit-codes.js";
 import {
   CHAPTER_STATUSES,
@@ -108,7 +109,7 @@ function mergeNow(root, options) {
     const current = scanProject(project.root);
     const kept = readMarkdown(first.file, project.root);
     const gone = readMarkdown(second.file, project.root);
-    const merged = mergedChapter(kept, gone, current.unit, first.id, second.id);
+    const merged = mergedChapter(kept, gone, current, first.id, second.id);
     warnings.push(...merged.warnings);
     const context = entityReferenceContext(project.root, "chapter", second.id);
     const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]),
@@ -200,9 +201,9 @@ function isBlankValue(value) {
 }
 
 // Chapter fields a merge never takes from the second chapter: it works them
-// out, or keeps the first chapter's `numbered`, since a missing one means
-// true (mergedChapter warns when the two differ).
-const MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered"]);
+// out, or keeps the first chapter's `numbered` and `verse`, since a missing
+// one has a meaning of its own (mergedChapter warns when the two differ).
+const MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered", "verse"]);
 
 const MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
 
@@ -421,7 +422,8 @@ function sceneBreakLine(body) {
 
 // The merged chapter file, from the first chapter's markdown, with the
 // warnings for fields the second set differently.
-function mergedChapter(first, second, unit, firstId, secondId) {
+function mergedChapter(first, second, project, firstId, secondId) {
+  const { unit } = project;
   const body = withLineEndings(mergedChapterBody(first.body, second.body, first.data.number, second.data.number), first.rawMarkdown);
   const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
   const label = `chapters/${firstId}.md`;
@@ -440,6 +442,15 @@ function mergedChapter(first, second, unit, firstId, secondId) {
     warnings.push(warn("merge-conflicts", numbered(first.data)
       ? `${secondId} is unnumbered (numbered: false) but ${firstId} is not: the merged ${firstId} stays numbered. Set numbered: false on it if it should not be`
       : `${firstId} is unnumbered (numbered: false) but ${secondId} is not: the merged ${firstId} stays unnumbered. Remove numbered: false from it if it should be numbered`, label));
+  }
+  // Likewise the merged chapter stays verse or prose as the first chapter
+  // was (see isVerseChapter), so a poem never turns prose, or prose verse,
+  // without a word.
+  const verse = (data) => isVerseChapter(project.story.data, data);
+  if (verse(first.data) !== verse(second.data)) {
+    warnings.push(warn("merge-conflicts", verse(first.data)
+      ? `${secondId} is prose but ${firstId} is verse: the merged ${firstId} stays verse, so every line break of ${secondId}'s text is kept. Set verse: false on it if it should be prose`
+      : `${secondId} is verse but ${firstId} is prose: the merged ${firstId} stays prose, so ${secondId}'s lines join. Set verse: true on it if it should be verse`, label));
   }
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }

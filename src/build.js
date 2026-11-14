@@ -213,7 +213,7 @@ export function buildBook(root, options = {}) {
     }), output.writeOptions);
   } else if (format === "twee" || format === "ink") {
     const { branches, ifid } = interactiveStory(project, manuscript, format);
-    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }));
+    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links, verse: manuscript.chapters[position].verse }));
     writeFile(output.outFile, format === "twee"
       ? tweeSource({ title: manuscript.title, ifid, start: passages[0].name, passages })
       : inkSource({ title: manuscript.title, author: manuscript.author, ifid, branching: branches.branching, passages }), output.writeOptions);

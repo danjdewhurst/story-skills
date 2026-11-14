@@ -179,8 +179,8 @@ function chapterReferenceFiles(root, chapterId, excluded) {
 // from, the story's own `author` among them, so both halves keep its
 // byline. Its hook goes with it too, since the new chapter now ends where the
 // old one did; arcs-advanced stays behind, since the arc beat could be in
-// either half.
-const SPLIT_COPIED_FIELDS = ["numbered", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+// either half. `verse` goes too, so a poem split in two stays verse.
+const SPLIT_COPIED_FIELDS = ["numbered", "verse", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
 
 export function splitChapter(root, options) {
   return withUndo(root, ["split", options.id, ...flag("at", options.at), ...flag("title", options.title)], () => splitNow(root, options));

@@ -46,11 +46,12 @@ function inkLine(line) {
 // break is a space except between Chinese or Japanese characters (see
 // softBreak) and beside a heading, and a line ending in two spaces or a
 // backslash is a hard break (the backslash dropped) that keeps verse on its
-// lines. The spaces match only from the start of a run, so a long run inside
+// lines. In a `verse` chapter (see isVerseChapter) every line is a hard
+// break. The spaces match only from the start of a run, so a long run inside
 // a line stays linear.
 const HARD_BREAK = /(?:(?<! ) {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
 
-function inkProse(body) {
+function inkProse(body, verse = false) {
   const out = [];
   for (const paragraph of separateSceneBreaks(body).split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
     const lines = paragraph.split(/\r?\n/);
@@ -59,8 +60,8 @@ function inkProse(body) {
     let previous = null;
     lines.forEach((line, index) => {
       const last = index === lines.length - 1;
-      const broken = !last && HARD_BREAK.test(line);
-      const text = (broken ? line.replace(/\\$/, "") : line).trim();
+      const broken = !last && (verse || HARD_BREAK.test(line));
+      const text = (broken && HARD_BREAK.test(line) ? line.replace(/\\$/, "") : line).trim();
       if (previous !== null) {
         pieces.push(isHeadingLine(previous.line) || isHeadingLine(line) ? " " : softBreak(previous.text, text));
       }
@@ -83,7 +84,7 @@ function inkTag(name, value) {
 }
 
 // `story` is { title, author, ifid, branching, passages: [{ name, body,
-// links }] }, with passage names and each link's `to` as chapter ids.
+// links, verse }] }, with passage names and each link's `to` as chapter ids.
 export function inkSource(story) {
   const lines = [inkTag("title", story.title)];
   if (story.author.trim() !== "") {
@@ -93,7 +94,7 @@ export function inkSource(story) {
   story.passages.forEach((passage, position) => {
     lines.push(`=== ${inkKnotName(passage.name)} ===`);
     if (passage.body !== "") {
-      lines.push(...inkProse(passage.body));
+      lines.push(...inkProse(passage.body, passage.verse === true));
     }
     if (!story.branching) {
       const next = story.passages[position + 1];

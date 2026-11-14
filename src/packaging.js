@@ -1148,6 +1148,18 @@ function markdownParagraphs(markdown, ownIndent = false, verse = false) {
   return paragraphs;
 }
 
+// The lines of a verse chapter (see isVerseChapter) as the builds print
+// them: each line of text of each paragraph, read as markdownParagraphs
+// reads a verse chapter. Blank lines (the stanza breaks), scene breaks, a
+// lone block-quote marker, fence lines, and a line that is only an image
+// print nothing, so they are not counted; a code block counts once. Pass
+// prose with comments removed (see chapterProse).
+export function verseLineCount(prose) {
+  return markdownParagraphs(String(prose).replace(/\r\n?/g, "\n"), false, true)
+    .filter((paragraph) => !paragraph.sceneBreak)
+    .reduce((sum, paragraph) => sum + paragraph.text.split(LINE_BREAK).filter((line) => line.trim() !== "").length, 0);
+}
+
 // A chapter or matter body as the Word builds set it: one entry per
 // paragraph markdownParagraphs reads (with first lines indented by the
 // build), { sceneBreak: true } or { quote, code, runs }, where `code`

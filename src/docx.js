@@ -615,8 +615,8 @@ const PARAGRAPH_BREAK = "";
 // `quote` makes it a block quote. story apply writes an editor's paragraph
 // into a chapter with this. A run of scene-break markers comes back as
 // written, so the caller decides what a scene break is.
-export function paragraphMarkdown(runs, { quote = false } = {}) {
-  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null);
+export function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
+  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
 }
 
 // The mark paragraphMarkdown reads as a line break inside a paragraph.
@@ -648,7 +648,10 @@ function paragraphBlocks(paragraph, styles, chapterLine) {
   return pieces.map((piece) => blockMarkdown(piece, level, quote, chapterLine)).filter((block) => block !== "");
 }
 
-function blockMarkdown(runs, level, quote, chapterLine) {
+// In a `verse` chapter (see isVerseChapter) every line break is kept, so a
+// hard break needs no backslash, unless a blank line inside the paragraph
+// would end it.
+function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
   const lines = plain.split(LINE_BREAK).map((line) => line.trim()).filter((line) => line !== "");
   if (lines.length === 0) {
@@ -677,7 +680,8 @@ function blockMarkdown(runs, level, quote, chapterLine) {
   if (level > 0) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
-  const text = inlineMarkdown(runs).split(LINE_BREAK).map((line) => line.trim()).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1)).join("\\\n");
+  const kept = inlineMarkdown(runs).split(LINE_BREAK).map((line) => line.trim()).filter((line, index, all) => line !== "" || (index > 0 && index < all.length - 1));
+  const text = kept.join(verse && !kept.includes("") ? "\n" : "\\\n");
   const block = escapeBlockStart(text);
   return quote ? block.split("\n").map((line) => `> ${line}`).join("\n") : block;
 }

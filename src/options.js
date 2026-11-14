@@ -19,7 +19,7 @@ export const OPTIONS = [
   { name: "themes", value: "<a,b>", repeatable: true, commas: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book, poetry-collection); sets a default", "target-words"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book, poetry-collection); sets a default", "target-words, except for serial and", "poetry-collection"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
   { name: "language", value: "<tag>", help: ["Manuscript language for import, a BCP 47 tag", "such as fr; defaults to the existing story.md"] },
   { name: "bylines", help: ["For import, read each chapter's author from a", "leading by-line (\"by Ada Writer\", taken out of", "the prose) or its file's frontmatter author"] },
