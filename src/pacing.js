@@ -75,14 +75,14 @@ export function buildPacing(project) {
   let withoutSequel = [];
   for (const unit of units) {
     if (unit === RUN_BREAK) {
-      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
-      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+      flushRun(easyWins, EASY_WIN_RUN, warnings, easyWinsWarning);
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, noSequelWarning);
       easyWins = [];
       withoutSequel = [];
       continue;
     }
     if (unit.sequel) {
-      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, noSequelWarning);
       withoutSequel = [];
       continue;
     }
@@ -90,23 +90,23 @@ export function buildPacing(project) {
     if (unit.outcome === "yes") {
       easyWins.push(unit);
     } else {
-      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+      flushRun(easyWins, EASY_WIN_RUN, warnings, easyWinsWarning);
       easyWins = [];
     }
   }
-  flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
-  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+  flushRun(easyWins, EASY_WIN_RUN, warnings, easyWinsWarning);
+  flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, noSequelWarning);
 
   let resolutions = [];
   for (const row of rows) {
     if (!row.verse && row.hook === "resolution") {
       resolutions.push(row);
     } else {
-      flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
+      flushRun(resolutions, RESOLUTION_RUN, warnings, resolutionRunWarning);
       resolutions = [];
     }
   }
-  flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
+  flushRun(resolutions, RESOLUTION_RUN, warnings, resolutionRunWarning);
 
   const written = rows.filter((row) => !row.verse && inUnit(row) > 0);
   const median = medianOf(written.map(inUnit));
@@ -138,6 +138,11 @@ export function buildPacing(project) {
     warnings
   };
 }
+
+// The findings for a run that has gone on too long.
+const easyWinsWarning = (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`);
+const noSequelWarning = (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`);
+const resolutionRunWarning = (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`);
 
 function flushRun(run, minimum, warnings, message) {
   if (run.length >= minimum) {
