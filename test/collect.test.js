@@ -383,6 +383,30 @@ describe("story collect (#885)", () => {
     expect(data["character-count"]).toBe(4);
   });
 
+  test("numbered: false on a collected chapter is not an edit, and a CRLF chapter is left as it is", () => {
+    const { collection } = shelf();
+    run(collection);
+    const first = path.join(collection, "chapters", "chapter-01.md");
+    fs.writeFileSync(first, fs.readFileSync(first, "utf8").replace("number: 1\n", "number: 1\nnumbered: false\n").replace("# Chapter 1: Low Tide", "# Low Tide"), "utf8");
+    const second = path.join(collection, "chapters", "chapter-02.md");
+    fs.writeFileSync(second, fs.readFileSync(second, "utf8").replace(/\n/g, "\r\n"), "utf8");
+    const before = treeSnapshot(collection);
+    const json = JSON.parse(run(collection, "--json").out);
+    expect(json.ok).toBe(true);
+    expect(json.data.changes).toEqual([]);
+    expect(treeSnapshot(collection)).toEqual(before);
+  });
+
+  test("--force names the restore command with the collection's path from where collect ran", () => {
+    const { parent, collection } = shelf();
+    run(collection);
+    const file = path.join(collection, "chapters", "chapter-01.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("The tide went out.", "The tide went far out."), "utf8");
+    const io = memoryIo(parent);
+    expect(runCli(["collect", "collection", "--force"], io)).toBe(0);
+    expect(io.output()).toContain("Saved the collection as snapshot before-collect-1 before replacing the edits; story snapshot --restore before-collect-1 --path collection puts it back\n");
+  });
+
   test("leaves no undo log after a run", () => {
     const { collection } = shelf();
     expect(run(collection).code).toBe(0);
