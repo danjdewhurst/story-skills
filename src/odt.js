@@ -264,7 +264,7 @@ function documentMarkdown(xml, styles, chapterLine, maxTextBytes) {
       paragraph = null;
       return;
     }
-    if (paragraph.heading !== null && styles.numbered.has(paragraph.heading)) {
+    if (paragraph.outline !== null && styles.numbered.has(paragraph.outline)) {
       notes.add("numbering");
     }
     const runs = paragraph.runs.filter((run) => (run.hidden ?? style.hidden) !== true).map((run) => ({
@@ -364,6 +364,9 @@ function documentMarkdown(xml, styles, chapterLine, maxTextBytes) {
         style: attributes["text:style-name"] ?? null,
         // A heading without an outline level is a level 1 heading.
         heading: name === "text:h" ? (Number.isInteger(outline) && outline >= 1 ? Math.min(outline, 6) : 1) : null,
+        // The outline level chapter numbering numbers, unless the heading
+        // is a list header, which is never numbered.
+        outline: name === "text:h" && attributes["text:is-list-header"] !== "true" ? (Number.isInteger(outline) && outline >= 1 ? outline : 1) : null,
         hidden: false,
         runs: []
       };

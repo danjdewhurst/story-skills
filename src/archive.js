@@ -53,7 +53,12 @@ const SHOWN_LENGTH = 200;
 
 export function shown(text) {
   const value = String(text);
-  return printable(value.length > SHOWN_LENGTH ? `${value.slice(0, SHOWN_LENGTH)}…` : value);
+  if (value.length <= SHOWN_LENGTH) {
+    return printable(value);
+  }
+  // A cut never leaves half of a surrogate pair.
+  const cut = /[\ud800-\udbff]/.test(value[SHOWN_LENGTH - 1]) ? SHOWN_LENGTH - 1 : SHOWN_LENGTH;
+  return printable(`${value.slice(0, cut)}…`);
 }
 
 // Reads one archive's parts under a limit on their total inflated size,
@@ -112,7 +117,7 @@ export function zipEntries(bytes, format = WORD) {
     if (entries.has(name)) {
       throw new ArchiveError(`it has two zip entries named ${printable(name)}`);
     }
-    entries.set(name, {
+    const entry = {
       name,
       encrypted: (flags & 1) === 1,
       method: bytes.readUInt16LE(position + 10),
@@ -120,7 +125,13 @@ export function zipEntries(bytes, format = WORD) {
       compressedSize: bytes.readUInt32LE(position + 20),
       size: bytes.readUInt32LE(position + 24),
       localOffset: bytes.readUInt32LE(position + 42)
-    });
+    };
+    // An entry whose sizes are in a ZIP64 extra field is refused here, so
+    // no size limit reads the mark as a size.
+    if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
+      throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
+    }
+    entries.set(name, entry);
     position += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
@@ -145,9 +156,6 @@ function findEndOfCentralDirectory(bytes, format) {
 export function xmlText(bytes, entry, format = WORD, { doctype = false } = {}) {
   if (entry.encrypted) {
     throw new ArchiveError(`it is password-protected; ${format.unlock}`);
-  }
-  if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
   }
   if (entry.size > MAX_PART_BYTES) {
     throw new ArchiveError(`${printable(entry.name)} is ${entry.size} bytes, over the ${MAX_PART_BYTES} byte limit`);

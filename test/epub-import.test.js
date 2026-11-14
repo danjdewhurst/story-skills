@@ -157,7 +157,7 @@ describe("epubMarkdown", () => {
   });
 
   test("leaves out a contents page, whether the guide names it or its paragraphs are all links", () => {
-    const toc = '<h1>Contents</h1><p><a href="d2.xhtml">Chapter 1</a></p><p><a href="d3.xhtml#top">Chapter 2</a></p>';
+    const toc = '<h1>Contents</h1><ol><li><a href="d2.xhtml">Chapter 1</a></li><li><a href="d3.xhtml#top">Chapter 2</a></li></ol>';
     const chapters = ['<h1>Chapter 1</h1><p>First <a href="#n">prose</a>.</p>', "<h1>Chapter 2</h1><p>Second prose.</p>"];
     const expected = "# Chapter 1\n\nFirst prose.\n\n# Chapter 2\n\nSecond prose.\n";
     const found = markdown([toc, ...chapters]);
@@ -165,8 +165,16 @@ describe("epubMarkdown", () => {
     const documents = [1, 2, 3].map((index) => ({ id: `d${index}`, href: `text/d${index}.xhtml` }));
     const guide = packageXml(documents).replace("</package>", '<guide><reference type="toc" title="Contents" href="text/d1.xhtml"/><reference type="text" href="text/d2.xhtml"/><reference type="toc" href="../../outside.xhtml"/></guide></package>');
     expect(markdown(["<p>Not linked, but named by the guide.</p>", ...chapters], { opf: guide }).text).toBe(expected);
-    // One paragraph of links is not a contents page.
-    expect(markdown(['<p>See <a href="d2.xhtml">the next part</a>.</p><p><a href="d2.xhtml">Onward</a></p>']).text).toBe("See the next part.\n\nOnward\n");
+    // A guide reference to a place inside a document leaves the document in.
+    const inside = packageXml(documents).replace("</package>", '<guide><reference type="toc" href="text/d1.xhtml#toc"/></guide></package>');
+    expect(markdown(["<p>Front matter and contents.</p>", ...chapters], { opf: inside }).text).toBe(`Front matter and contents.\n\n${expected}`);
+    // One paragraph of links is not a contents page, and links that lead
+    // out of the book, or nowhere in it, are not contents entries.
+    expect(markdown(['<p>See <a href="d2.xhtml">the next part</a>.</p><p><a href="d2.xhtml">Onward</a></p>', "<p>Next.</p>"]).text).toBe("See the next part.\n\nOnward\n\nNext.\n");
+    expect(markdown(['<p><a href="https://example.com/news">Sign up</a></p><p><a href="mailto:me@example.com">Write</a></p><p><a href="gone.xhtml">Gone</a></p>']).text).toBe("Sign up\n\nWrite\n\nGone\n");
+    // A part heading on a contents page stays, to open the chapter after it.
+    const divider = epubBytes(['<h1>Part One</h1><p><a href="d2.xhtml">Chapter 1</a></p><p><a href="d3.xhtml">Chapter 2</a></p>', ...chapters]);
+    expect(epubMarkdown(divider, { partHeading: (text) => /^part /i.test(text) }).text).toBe(`# Part One\n\n${expected}`);
   });
 
   test("reads an EPUB 2 document: an XHTML 1.1 doctype, HTML entities, and prefixed package elements", () => {
@@ -191,6 +199,11 @@ describe("epubMarkdown", () => {
     }
     const otherRoot = CONTAINER.replace("<rootfile ", '<rootfile full-path="other.pdf" media-type="application/pdf"/><rootfile ');
     expect(markdown(["<p>Text.</p>"], { container: otherRoot }).text).toBe("Text.\n");
+    // A long value from the file is cut in the message, never inside a
+    // surrogate pair.
+    const long = (idref) => packageXml([{ id: "d1", href: "text/d1.xhtml" }], { spine: [idref] });
+    expect(() => markdown(["<p>Text.</p>"], { opf: long(`${"a".repeat(199)}😀${"b".repeat(50)}`) })).toThrow(`its spine names the item ${"a".repeat(199)}…, which its manifest does not list`);
+    expect(() => markdown(["<p>Text.</p>"], { opf: long("c".repeat(250)) })).toThrow(`its spine names the item ${"c".repeat(200)}…, which its manifest does not list`);
     const noContainer = path.join(makeTempDir(), "book.epub");
     writeZip(noContainer, [{ name: "mimetype", content: "application/epub+zip" }]);
     expect(() => epubMarkdown(fs.readFileSync(noContainer))).toThrow("it has no META-INF/container.xml, so it is not an EPUB");

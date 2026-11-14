@@ -12,7 +12,7 @@
 // archive (a path that climbs out of it, or a URL, is refused), and nothing
 // outside the archive is ever read. A document locked with DRM is refused.
 import { ArchiveError, HTML_ENTITIES, partReader, shown, xmlTokens, zipEntries } from "./archive.js";
-import { LINE_BREAK, markdownBlocks, paragraphBlocks, proseText } from "./rich-text.js";
+import { LINE_BREAK, blockBytes, checkMarkdownSize, markdownBlocks, paragraphBlocks, proseText } from "./rich-text.js";
 
 export const EPUB = Object.freeze({
   extension: ".epub",
@@ -43,8 +43,10 @@ const NOTE_MESSAGES = {
 
 // Converts the bytes of an .epub to { text, notes }, as docxMarkdown does
 // for a .docx. `maxTextBytes` stops the conversion once the markdown would
-// be larger. Throws an ArchiveError when the file is not a readable EPUB.
-export function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
+// be larger, and `partHeading` tells a part heading ("Part Two"), which a
+// contents page keeps, from any other. Throws an ArchiveError when the file
+// is not a readable EPUB.
+export function epubMarkdown(bytes, { chapterLine = () => null, partHeading = () => false, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, EPUB);
   const parts = partReader(bytes, EPUB, MAX_EPUB_TEXT_BYTES);
   const read = (entry) => parts.read(entry, { doctype: true });
@@ -72,23 +74,37 @@ export function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = I
   // over the limit costs no more than its directory.
   parts.reserve(spine.map((part) => entries.get(part)));
   const blocks = markdownBlocks(maxTextBytes);
+  const documents = new Set(spine);
   for (const part of spine) {
     refuseLocked(part);
     const xml = read(entries.get(part));
-    const mark = blocks.mark();
+    // A link counts when it leads to another document of the spine.
+    const folder = part.slice(0, part.lastIndexOf("/") + 1);
+    const leadsToDocument = (href) => documents.has(archivePath(folder, href));
+    // Each paragraph's blocks, and the notes, wait until the document is
+    // known not to be a contents page; what waits is held to the limit too.
+    const waiting = [];
+    const own = new Set();
     let paragraphs = 0;
     let linked = 0;
+    let keptBytes = 0;
+    let linkedBytes = 0;
     try {
-      xhtmlParagraphs(xml, notes, (paragraph) => {
+      xhtmlParagraphs(xml, own, leadsToDocument, (paragraph) => {
         // A paragraph that is all link text, such as a contents entry.
         const text = paragraph.runs.filter((run) => run.text.trim() !== "");
-        if (paragraph.level === 0 || text.some((run) => run.link)) {
+        const allLinks = text.length > 0 && text.every((run) => run.link);
+        if (paragraph.level === 0 || allLinks) {
           paragraphs += 1;
-          linked += text.length > 0 && text.every((run) => run.link) ? 1 : 0;
+          linked += allLinks ? 1 : 0;
         }
-        for (const block of paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine)) {
-          blocks.push(block);
-        }
+        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine);
+        const bytes = found.reduce((total, block) => total + blockBytes(block), 0);
+        keptBytes += allLinks ? 0 : bytes;
+        linkedBytes += allLinks ? bytes : 0;
+        checkMarkdownSize(Math.max(blocks.size() + keptBytes, linkedBytes), maxTextBytes);
+        const part = paragraph.level > 0 && partHeading(paragraph.runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim());
+        waiting.push({ found, part });
       });
     } catch (error) {
       if (error instanceof ArchiveError && error.message === "its XML is damaged") {
@@ -97,10 +113,16 @@ export function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = I
       throw error;
     }
     // A contents page that the package does not mark as one: a document
-    // whose paragraphs are all links, under headings of its own.
-    if (linked >= 2 && linked === paragraphs) {
-      blocks.dropTo(mark);
-      notes.add("contents");
+    // whose paragraphs are all links to other documents. Only a part
+    // heading stays, since it opens the chapter after it.
+    const contents = linked >= 2 && linked === paragraphs;
+    for (const { found, part } of waiting) {
+      if (!contents || part) {
+        found.forEach((block) => blocks.push(block));
+      }
+    }
+    for (const code of contents ? ["contents"] : own) {
+      notes.add(code);
     }
   }
   return {
@@ -211,7 +233,9 @@ function spineParts(xml, packagePath, entries, notes) {
       items.set(attributes.id, { href: attributes.href ?? "", mediaType: (attributes["media-type"] ?? "").trim().toLowerCase(), properties: (attributes.properties ?? "").split(/\s+/) });
     } else if (section === "spine" && name === "itemref") {
       spine.push({ idref: attributes.idref ?? "", linear: (attributes.linear ?? "yes").trim() !== "no" });
-    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc") {
+    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc" && !(attributes.href ?? "").includes("#")) {
+      // A reference to a place inside a document (#toc) may share that
+      // document with chapters, so only a whole document is left out.
       const part = archivePath(base, attributes.href ?? "");
       if (part !== null) {
         contents.add(part);
@@ -323,8 +347,9 @@ function styleEmphasis(style) {
 
 // Hands each paragraph of one XHTML document to `emit` as { runs, level,
 // quote }, with runs of { text, italic, bold, link }, where link marks text
-// inside a link to another document. Text is read only inside the body.
-function xhtmlParagraphs(xml, notes, emit) {
+// inside a link whose href `leadsToDocument` accepts. Text is read only
+// inside the body.
+function xhtmlParagraphs(xml, notes, leadsToDocument, emit) {
   // One frame per open element: the italic, bold, heading level, quote,
   // and preformatting the element's text gets.
   const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false, link: false }];
@@ -421,8 +446,7 @@ function xhtmlParagraphs(xml, notes, emit) {
       quote: parent.quote || name === "blockquote",
       pre: parent.pre || name === "pre",
       body: parent.body || name === "body",
-      // An in-page link (#note) is not a link to another document.
-      link: parent.link || (name === "a" && !/^\s*(?:#|$)/.test(attributes.href ?? ""))
+      link: parent.link || (name === "a" && leadsToDocument(attributes.href ?? ""))
     });
     if (sceneBreak) {
       // The marker's own text is not prose.

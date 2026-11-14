@@ -23365,7 +23365,11 @@ function printable(text) {
 var SHOWN_LENGTH = 200;
 function shown2(text) {
   const value = String(text);
-  return printable(value.length > SHOWN_LENGTH ? `${value.slice(0, SHOWN_LENGTH)}…` : value);
+  if (value.length <= SHOWN_LENGTH) {
+    return printable(value);
+  }
+  const cut = /[\ud800-\udbff]/.test(value[SHOWN_LENGTH - 1]) ? SHOWN_LENGTH - 1 : SHOWN_LENGTH;
+  return printable(`${value.slice(0, cut)}…`);
 }
 function partReader(bytes, format, limit) {
   let left = limit;
@@ -23413,7 +23417,7 @@ function zipEntries(bytes, format = WORD) {
     if (entries.has(name)) {
       throw new ArchiveError(`it has two zip entries named ${printable(name)}`);
     }
-    entries.set(name, {
+    const entry = {
       name,
       encrypted: (flags & 1) === 1,
       method: bytes.readUInt16LE(position + 10),
@@ -23421,7 +23425,11 @@ function zipEntries(bytes, format = WORD) {
       compressedSize: bytes.readUInt32LE(position + 20),
       size: bytes.readUInt32LE(position + 24),
       localOffset: bytes.readUInt32LE(position + 42)
-    });
+    };
+    if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
+      throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
+    }
+    entries.set(name, entry);
     position += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
@@ -23438,9 +23446,6 @@ function findEndOfCentralDirectory(bytes, format) {
 function xmlText(bytes, entry, format = WORD, { doctype = false } = {}) {
   if (entry.encrypted) {
     throw new ArchiveError(`it is password-protected; ${format.unlock}`);
-  }
-  if (entry.size === ZIP64_MARK || entry.compressedSize === ZIP64_MARK) {
-    throw new ArchiveError(`it is a ZIP64 archive, which story does not read; ${format.again}`);
   }
   if (entry.size > MAX_PART_BYTES) {
     throw new ArchiveError(`${printable(entry.name)} is ${entry.size} bytes, over the ${MAX_PART_BYTES} byte limit`);
@@ -23666,28 +23671,25 @@ function paragraphBlocks(runs, level, quote, chapterLine) {
   }
   return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
 }
+function blockBytes(block) {
+  return Buffer.byteLength(block, "utf8") + 2;
+}
+function checkMarkdownSize(size, maxBytes) {
+  if (size > maxBytes + 1) {
+    throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
+  }
+}
 function markdownBlocks(maxBytes = Infinity) {
   const blocks = [];
-  const sizes = [];
   let size = 0;
   return {
     push(block) {
-      const bytes = Buffer.byteLength(block, "utf8") + 2;
-      if (size + bytes > maxBytes + 1) {
-        throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
-      }
-      size += bytes;
+      checkMarkdownSize(size + blockBytes(block), maxBytes);
+      size += blockBytes(block);
       blocks.push(block);
-      sizes.push(bytes);
     },
-    mark() {
-      return blocks.length;
-    },
-    dropTo(mark) {
-      while (blocks.length > mark) {
-        blocks.pop();
-        size -= sizes.pop();
-      }
+    size() {
+      return size;
     },
     text() {
       const text = blocks.join(`
@@ -24110,7 +24112,7 @@ var NOTE_MESSAGES2 = {
   "non-linear": 'it has documents outside its reading order (linear="no"), which the import leaves out',
   "other-documents": "its reading order has documents that are not XHTML, which the import leaves out"
 };
-function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity } = {}) {
+function epubMarkdown(bytes, { chapterLine = () => null, partHeading = () => false, maxTextBytes = Infinity } = {}) {
   const entries = zipEntries(bytes, EPUB);
   const parts = partReader(bytes, EPUB, MAX_EPUB_TEXT_BYTES);
   const read = (entry) => parts.read(entry, { doctype: true });
@@ -24134,22 +24136,33 @@ function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity
   const spine = spineParts(read(packageEntry), packagePath, entries, notes);
   parts.reserve(spine.map((part) => entries.get(part)));
   const blocks = markdownBlocks(maxTextBytes);
+  const documents = new Set(spine);
   for (const part of spine) {
     refuseLocked(part);
     const xml = read(entries.get(part));
-    const mark = blocks.mark();
+    const folder = part.slice(0, part.lastIndexOf("/") + 1);
+    const leadsToDocument = (href) => documents.has(archivePath(folder, href));
+    const waiting = [];
+    const own = new Set;
     let paragraphs = 0;
     let linked = 0;
+    let keptBytes = 0;
+    let linkedBytes = 0;
     try {
-      xhtmlParagraphs2(xml, notes, (paragraph) => {
+      xhtmlParagraphs2(xml, own, leadsToDocument, (paragraph) => {
         const text = paragraph.runs.filter((run) => run.text.trim() !== "");
-        if (paragraph.level === 0 || text.some((run) => run.link)) {
+        const allLinks = text.length > 0 && text.every((run) => run.link);
+        if (paragraph.level === 0 || allLinks) {
           paragraphs += 1;
-          linked += text.length > 0 && text.every((run) => run.link) ? 1 : 0;
+          linked += allLinks ? 1 : 0;
         }
-        for (const block of paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine)) {
-          blocks.push(block);
-        }
+        const found = paragraphBlocks(paragraph.runs, paragraph.level, paragraph.quote, chapterLine);
+        const bytes = found.reduce((total, block) => total + blockBytes(block), 0);
+        keptBytes += allLinks ? 0 : bytes;
+        linkedBytes += allLinks ? bytes : 0;
+        checkMarkdownSize(Math.max(blocks.size() + keptBytes, linkedBytes), maxTextBytes);
+        const part = paragraph.level > 0 && partHeading(paragraph.runs.map((run) => run.text).join("").replace(/\s+/g, " ").trim());
+        waiting.push({ found, part });
       });
     } catch (error) {
       if (error instanceof ArchiveError && error.message === "its XML is damaged") {
@@ -24157,9 +24170,14 @@ function epubMarkdown(bytes, { chapterLine = () => null, maxTextBytes = Infinity
       }
       throw error;
     }
-    if (linked >= 2 && linked === paragraphs) {
-      blocks.dropTo(mark);
-      notes.add("contents");
+    const contents = linked >= 2 && linked === paragraphs;
+    for (const { found, part } of waiting) {
+      if (!contents || part) {
+        found.forEach((block) => blocks.push(block));
+      }
+    }
+    for (const code of contents ? ["contents"] : own) {
+      notes.add(code);
     }
   }
   return {
@@ -24250,7 +24268,7 @@ function spineParts(xml, packagePath, entries, notes) {
       items.set(attributes.id, { href: attributes.href ?? "", mediaType: (attributes["media-type"] ?? "").trim().toLowerCase(), properties: (attributes.properties ?? "").split(/\s+/) });
     } else if (section === "spine" && name === "itemref") {
       spine.push({ idref: attributes.idref ?? "", linear: (attributes.linear ?? "yes").trim() !== "no" });
-    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc") {
+    } else if (section === "guide" && name === "reference" && (attributes.type ?? "").trim().toLowerCase() === "toc" && !(attributes.href ?? "").includes("#")) {
       const part = archivePath(base, attributes.href ?? "");
       if (part !== null) {
         contents.add(part);
@@ -24378,7 +24396,7 @@ function styleEmphasis(style) {
     bold: fontWeight === undefined ? null : fontWeight === "bold" || fontWeight === "bolder" || /^\d+$/.test(fontWeight) && Number(fontWeight) >= 600
   };
 }
-function xhtmlParagraphs2(xml, notes, emit) {
+function xhtmlParagraphs2(xml, notes, leadsToDocument, emit) {
   const frames = [{ italic: false, bold: false, level: 0, quote: false, pre: false, body: false, link: false }];
   let paragraph = null;
   let skipping = 0;
@@ -24468,7 +24486,7 @@ function xhtmlParagraphs2(xml, notes, emit) {
       quote: parent.quote || name === "blockquote",
       pre: parent.pre || name === "pre",
       body: parent.body || name === "body",
-      link: parent.link || name === "a" && !/^\s*(?:#|$)/.test(attributes.href ?? "")
+      link: parent.link || name === "a" && leadsToDocument(attributes.href ?? "")
     });
     if (sceneBreak) {
       skipping = 1;
@@ -24682,7 +24700,7 @@ function documentMarkdown2(xml, styles, chapterLine, maxTextBytes) {
       paragraph = null;
       return;
     }
-    if (paragraph.heading !== null && styles.numbered.has(paragraph.heading)) {
+    if (paragraph.outline !== null && styles.numbered.has(paragraph.outline)) {
       notes.add("numbering");
     }
     const runs = paragraph.runs.filter((run) => (run.hidden ?? style.hidden) !== true).map((run) => ({
@@ -24773,6 +24791,7 @@ function documentMarkdown2(xml, styles, chapterLine, maxTextBytes) {
       paragraph = {
         style: attributes["text:style-name"] ?? null,
         heading: name === "text:h" ? Number.isInteger(outline) && outline >= 1 ? Math.min(outline, 6) : 1 : null,
+        outline: name === "text:h" && attributes["text:is-list-header"] !== "true" ? Number.isInteger(outline) && outline >= 1 ? outline : 1 : null,
         hidden: false,
         runs: []
       };
@@ -35323,7 +35342,7 @@ function readSourceDocument(name, filePath, rules) {
   const bytes = readFileBytes(filePath, MAX_IMPORT_ARCHIVE_BYTES);
   let converted;
   try {
-    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules), maxTextBytes: MAX_IMPORT_FILE_BYTES });
+    converted = reader.read(bytes, { chapterLine: chapterLineReader(rules), partHeading: (text) => rules.partHeading.test(text), maxTextBytes: MAX_IMPORT_FILE_BYTES });
   } catch (error) {
     throw error instanceof ArchiveError ? usageError(`Cannot import ${filePath}: ${error.message}`) : error;
   }

@@ -53,32 +53,34 @@ export function paragraphBlocks(runs, level, quote, chapterLine) {
   return pieces.map((piece) => blockMarkdown(piece, level, quote && level === 0, chapterLine)).filter((block) => block !== "");
 }
 
+// The bytes a block adds to the markdown: its own, and the blank line
+// that parts it from the next.
+export function blockBytes(block) {
+  return Buffer.byteLength(block, "utf8") + 2;
+}
+
+// The error for markdown over `maxBytes`. Blocks of `size` (the sum of
+// their blockBytes) come to size - 1 bytes of text, with its last line end.
+export function checkMarkdownSize(size, maxBytes) {
+  if (size > maxBytes + 1) {
+    throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
+  }
+}
+
 // Markdown blocks as a reader writes them, held to `maxBytes` as markdown,
 // so a file of tiny parts that make little text each cannot hold more in
-// memory than the import would take. `mark` and `dropTo` take back the
-// blocks written since a mark.
+// memory than the import would take.
 export function markdownBlocks(maxBytes = Infinity) {
   const blocks = [];
-  const sizes = [];
   let size = 0;
   return {
     push(block) {
-      const bytes = Buffer.byteLength(block, "utf8") + 2;
-      if (size + bytes > maxBytes + 1) {
-        throw new ArchiveError(`its text comes to more than the ${maxBytes} byte limit as markdown; split it into several documents and import the folder`);
-      }
-      size += bytes;
+      checkMarkdownSize(size + blockBytes(block), maxBytes);
+      size += blockBytes(block);
       blocks.push(block);
-      sizes.push(bytes);
     },
-    mark() {
-      return blocks.length;
-    },
-    dropTo(mark) {
-      while (blocks.length > mark) {
-        blocks.pop();
-        size -= sizes.pop();
-      }
+    size() {
+      return size;
     },
     text() {
       const text = blocks.join("\n\n");
