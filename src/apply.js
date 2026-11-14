@@ -2393,7 +2393,7 @@ function paragraphText(source, doc, indent, quote) {
   if (doc.sceneBreak) {
     return source.sceneBreak;
   }
-  const text = paragraphMarkdown(doc.runs, { quote }).split("\n").map(escapeLineStart).join(source.eol);
+  const text = paragraphMarkdown(doc.runs, { quote, verse: source.verse }).split("\n").map(escapeLineStart).join(source.eol);
   return quote ? text : `${indent}${text}`;
 }
 

@@ -2,7 +2,8 @@
 // written by hand, chapter and scene numbers, a chapter's length, and line
 // numbers in the file.
 import path from "node:path";
-import { chapterProse, characterCount, verseLineCount, wordCount } from "./markdown.js";
+import { chapterProse, characterCount, wordCount } from "./markdown.js";
+import { verseLineCount } from "./packaging.js";
 
 // A chapter's word count and its length in the count unit: `count`, the
 // count its frontmatter declares in the unit's field (0 when missing, null

@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runCli } from "../src/cli.js";
 import { isVerseChapter, STORY_FORMS } from "../src/forms.js";
-import { verseLineCount } from "../src/markdown.js";
-import { wordParagraphs } from "../src/packaging.js";
+import { shunnHtml, verseLineCount, wordParagraphs } from "../src/packaging.js";
 import {
   buildBook,
   checkProjectContinuity,
@@ -70,9 +69,14 @@ describe("poetry collections and verse chapters", () => {
     expect(isVerseChapter({}, { verse: "yes" })).toBe(false);
   });
 
-  test("validate reports a verse field that is not true or false", () => {
+  test("validate reports a verse field that is not true or false, beside an unnumbered chapter's missing title", () => {
     const root = project(null, [{ fields: "verse: yes please", body: "Words." }]);
-    expect(messages(validateProject(root).errors)).toContain("chapters/chapter-01.md verse must be true or false");
+    const { errors } = validateProject(root);
+    expect(errors.filter((error) => error.code === "field-not-boolean").map((error) => error.message)).toEqual(["chapters/chapter-01.md verse must be true or false"]);
+
+    const both = project(null, [{ body: "Words." }]);
+    writeMarkdown(path.join(both, "chapters", "chapter-01.md"), "number: 1\nstatus: draft\nnumbered: false\nverse: maybe", "\n## Chapter Text\n\nWords.\n");
+    expect(validateProject(both).errors.map((error) => error.code).filter((code) => code === "field-not-boolean" || code === "unnumbered-without-title").sort()).toEqual(["field-not-boolean", "unnumbered-without-title"]);
   });
 
   test("every line break in a verse chapter is kept in the builds, and a blank line is a stanza break", () => {
@@ -91,16 +95,25 @@ describe("poetry collections and verse chapters", () => {
     const docx = readArchiveText(buildBook(root, { format: "docx" }).outFile);
     expect(docx).toContain('goes out</w:t><w:br/><w:t xml:space="preserve">like a held breath,</w:t><w:br/>');
     expect(docx).toContain("This prose joins up.");
-    expect(readArchiveText(buildBook(root, { format: "docx", shunn: true }).outFile)).toContain("<w:br/>");
+    // The first line has no backslash, so only verse breaks it.
+    expect(readArchiveText(buildBook(root, { format: "docx", shunn: true }).outFile)).toMatch(/goes out<\/w:t>(?:<\/w:r><w:r>(?:<w:rPr>.*?<\/w:rPr>)?)?<w:br\/>/);
+    const meta = { title: "Salt Hours", author: "Ada", lead: "Ada", editors: "", labels: undefined, contact: [], words: 10, pack: undefined, shortForm: false };
+    const chapter = (verse) => ({ meta: { language: "en" }, chapters: [{ heading: "One", byline: "", body: "low water\nhigh water", verse }] });
+    expect(shunnHtml(chapter(true), meta)).toContain("low water<br>high water");
+    expect(shunnHtml(chapter(false), meta)).toContain("low water high water");
 
     const shunn = file(root, { format: "shunn" });
     expect(shunn).toContain("The water goes out\\\nlike a held breath,\\\nand the mud *shines*.\n\nGulls write their names\\\non the wet sand\\\nand the sea erases them.");
     expect(shunn).toContain("This prose joins up.");
     // The markdown build copies the chapter text as written.
     expect(file(root, { format: "markdown" })).toContain(POEM);
+    // ink prints each line as its own line, and the prose as one.
+    const ink = file(root, { format: "ink" });
+    expect(ink).toContain("The water goes out\nlike a held breath,\nand the mud *shines*.\n\nGulls write their names\non the wet sand\nand the sea erases them.");
+    expect(ink).toContain("This prose joins up.");
   });
 
-  test("verse: true keeps a poem's lines inside any other form, and code keeps its own lines", () => {
+  test("verse: true keeps a poem's lines inside any other form, and code is not changed", () => {
     const root = project("novel", [{ body: "A plain\nparagraph." }, { fields: "verse: true", body: "Sing low,\nsing slow." }]);
     const html = file(root, { format: "html" });
     expect(html).toContain("A plain paragraph.");
@@ -109,11 +122,25 @@ describe("poetry collections and verse chapters", () => {
     expect(fenced.map((paragraph) => paragraph.runs.map((run) => run.text).join(""))).toEqual(wordParagraphs("```\nline one\nline two\n```").map((paragraph) => paragraph.runs.map((run) => run.text).join("")));
   });
 
-  test("verseLineCount counts lines of text, not blank lines, scene breaks, headings, or fences", () => {
+  test("verseLineCount counts the lines the builds print", () => {
     expect(verseLineCount(POEM)).toBe(6);
-    expect(verseLineCount("# Title\n\none\ntwo\n\n* * *\n\nthree\n```\nfour\n```\n   \n")).toBe(4);
+    // Scene breaks, blank lines, and fence lines print nothing; a code block
+    // prints as one paragraph, and a heading as a line.
+    expect(verseLineCount("# Title\n\none\ntwo\n\n* * *\n\nthree\n```\nfour\n```\n   \n")).toBe(5);
     expect(verseLineCount("")).toBe(0);
     expect(verseLineCount("one\r\ntwo\r\n")).toBe(2);
+    // A lone quote marker is a stanza break, and a line that is only an
+    // image prints nothing.
+    expect(verseLineCount("> one\n> two\n>\n> three")).toBe(3);
+    expect(verseLineCount("![chart](tide.png)\nline one")).toBe(1);
+    // A tilde line is not a fence, so it prints.
+    expect(verseLineCount("~~~ low water ~~~\nnext")).toBe(2);
+  });
+
+  test("a verse chapter's comments and outline are not lines of the poem", () => {
+    const root = project("poetry-collection", [{ body: "one\n<!-- revise -->\ntwo" }]);
+    writeMarkdown(path.join(root, "chapters", "chapter-02.md"), "title: Two\nnumber: 2\nstatus: draft", "\n## Outline\n\n1. Plan a\n2. Plan b\n\n---\n\n## Chapter Text\n\nthree\nfour\n\nfive\n");
+    expect(computeWordCounts(root).chapters.map((chapter) => chapter.lineCount)).toEqual([2, 3]);
   });
 
   test("wordcount and progress count the lines of verse chapters, and --write records words only", () => {
@@ -126,6 +153,17 @@ describe("poetry collections and verse chapters", () => {
     const cli = invoke(root, ["wordcount", root]);
     expect(cli.code).toBe(0);
     expect(cli.out).toContain("chapters/chapter-01.md: 25 (6 lines)\nchapters/chapter-02.md: 2\nTotal: 27\nLines: 6\n");
+    const json = JSON.parse(invoke(root, ["wordcount", root, "--json"]).out);
+    expect(json.data.chapters.map((chapter) => chapter.lineCount)).toEqual([6, undefined]);
+    expect(json.data.lines).toBe(6);
+    const prosePlain = project(null, [{ body: "Prose." }]);
+    expect(JSON.parse(invoke(prosePlain, ["wordcount", prosePlain, "--json"]).out).data).not.toHaveProperty("lines");
+
+    // A book counted in characters gives characters and lines.
+    const characters = project("poetry-collection", [{ body: "one\ntwo" }]);
+    const storyPath = path.join(characters, "story.md");
+    fs.writeFileSync(storyPath, fs.readFileSync(storyPath, "utf8").replace("schema-version: 2\n", "schema-version: 2\ncount-unit: characters\n"), "utf8");
+    expect(invoke(characters, ["wordcount", characters]).out).toBe("chapters/chapter-01.md: 6 (2 lines)\nTotal: 6 characters\nLines: 2\n");
 
     expect(invoke(root, ["wordcount", root, "--write"]).code).toBe(0);
     const written = fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8");
@@ -154,6 +192,10 @@ describe("poetry collections and verse chapters", () => {
         writeMarkdown(path.join(root, "scenes", `chapter-0${number}-scene-0${scene}.md`), `title: S${number}${scene}\nchapter: chapter-0${number}\nscene: ${scene}\nstatus: draft\noutcome: yes`, "# Scene\n");
       }
     }
+    for (const number of [1, 2, 3]) {
+      const file = path.join(root, "chapters", `chapter-0${number}.md`);
+      fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace("status: draft", "status: draft\nhook: resolution"), "utf8");
+    }
     const report = pacingReport(root);
     expect(messages(report.warnings)).toEqual(["chapter-04 has no hook: record how the chapter ending pulls the reader on"]);
     expect(report.rows.map((row) => row.verse)).toEqual([true, true, true, false]);
@@ -178,13 +220,59 @@ describe("poetry collections and verse chapters", () => {
     expect(formatPacing(pacingReport(prose))).toContain("0 of 4 chapters with hooks\n");
   });
 
+  test("a verse chapter ends a pacing run, and a book all in verse has no median", () => {
+    // Prose resolutions on either side of a poem are not in a row, and nor
+    // are easy wins.
+    const root = project("novel", [
+      { fields: "hook: resolution", body: "word" },
+      { fields: "hook: resolution", body: "word" },
+      { fields: "verse: true", body: "a poem" },
+      { fields: "hook: resolution", body: "word" }
+    ]);
+    for (const [chapter, scene] of [[1, 1], [2, 1], [3, 1], [4, 1]]) {
+      writeMarkdown(path.join(root, "scenes", `chapter-0${chapter}-scene-0${scene}.md`), `title: S${chapter}\nchapter: chapter-0${chapter}\nscene: ${scene}\nstatus: draft\noutcome: yes`, "# Scene\n");
+    }
+    const codes = pacingReport(root).warnings.map((warning) => warning.code);
+    expect(codes).not.toContain("pacing-resolution-run");
+    expect(codes).not.toContain("pacing-easy-wins");
+    // Without the poem, the same chapters are a run.
+    fs.rmSync(path.join(root, "chapters", "chapter-03.md"));
+    fs.rmSync(path.join(root, "scenes", "chapter-03-scene-01.md"));
+    const joined = pacingReport(root).warnings.map((warning) => warning.code);
+    expect(joined).toContain("pacing-resolution-run");
+    expect(joined).toContain("pacing-easy-wins");
+
+    expect(formatPacing(pacingReport(project("poetry-collection", [{ body: "one" }, { body: "two" }])))).toContain("Median chapter: none (no prose chapters)\n");
+  });
+
   test("validate, next, and continuity skip scene-record and POV checks for verse chapters", () => {
-    const root = project("poetry-collection", [{ fields: "pov: nobody", body: POEM }, { fields: "verse: false\npov: nobody", body: "Prose." }]);
-    writeMarkdown(path.join(root, "scenes", "chapter-01-scene-01.md"), "title: Shore\nchapter: chapter-01\nscene: 1\nstatus: draft\npov: someone", "# Scene\n");
+    // chapter-01 is a poem with no scene, chapter-02 a poem with a scene told
+    // by someone, and chapter-03 prose with neither.
+    const root = project("poetry-collection", [
+      { fields: "pov: nobody", body: POEM },
+      { fields: "pov: nobody", body: POEM },
+      { fields: "verse: false\npov: nobody", body: "Prose." }
+    ]);
+    writeMarkdown(path.join(root, "scenes", "chapter-02-scene-01.md"), "title: Shore\nchapter: chapter-02\nscene: 1\nstatus: draft\npov: someone", "# Scene\n");
     const validation = validateProject(root);
-    expect(messages(validation.warnings).filter((message) => message.includes("scene records"))).toEqual(["chapters/chapter-02.md has no machine-readable scene records"]);
+    expect(messages(validation.warnings).filter((message) => message.includes("scene records"))).toEqual(["chapters/chapter-03.md has no machine-readable scene records"]);
     const pov = checkProjectContinuity(root).warnings.filter((warning) => warning.code.startsWith("pov-"));
-    expect(messages(pov)).toEqual(["chapters/chapter-02.md POV character nobody is not listed in characters"]);
+    expect(messages(pov)).toEqual(["chapters/chapter-03.md POV character nobody is not listed in characters"]);
     expect(invoke(root, ["next", root]).out).toContain("Create machine-readable scene files for 1 chapters");
+
+    // tide-tables is all verse with no scene records, so next asks for none.
+    expect(invoke(root, ["next", path.join(import.meta.dir, "..", "examples", "tide-tables")]).out).not.toContain("machine-readable scene files");
+  });
+
+  test("split keeps both halves verse, and merge keeps the first chapter's verse with a warning", () => {
+    const root = project("novel", [{ body: "Prose one." }, { fields: "verse: true", body: "one\ntwo\n\nthree\nfour" }, { body: "Prose three." }]);
+    expect(invoke(root, ["split", "chapter-02", "--at", "three", "--path", root]).code).toBe(0);
+    for (const number of [2, 3]) {
+      expect(fs.readFileSync(path.join(root, "chapters", `chapter-0${number}.md`), "utf8")).toContain("verse: true");
+    }
+    const merged = invoke(root, ["merge", "chapter-01", "chapter-02", "--path", root]);
+    expect(merged.code).toBe(0);
+    expect(merged.err).toContain("chapter-02 is verse but chapter-01 is prose: the merged chapter-01 stays prose, so chapter-02's lines join. Set verse: true on it if it should be verse [merge-conflicts]");
+    expect(fs.readFileSync(path.join(root, "chapters", "chapter-01.md"), "utf8")).not.toContain("verse:");
   });
 });

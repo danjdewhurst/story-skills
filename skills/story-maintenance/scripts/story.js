@@ -11177,11 +11177,6 @@ function trimBlankLines(text) {
 function wordCount(markdown) {
   return splitWords(markdown).length;
 }
-function verseLineCount(prose) {
-  return String(prose).replace(/\r\n?/g, `
-`).split(`
-`).filter((line) => line.trim() !== "" && !isSceneBreakLine(line) && !isHeadingLine(line.trimStart()) && !/^ {0,3}(?:`{3,}|~{3,})/.test(line)).length;
-}
 var graphemes2;
 function characterCount(markdown) {
   const lines = plainLinks(String(markdown).replace(/\uE000/g, " ")).split(`
@@ -13225,7 +13220,7 @@ var OPTIONS = [
   { name: "themes", value: "<a,b>", repeatable: true, commas: true, aliasOf: "theme", help: ["Comma-separated themes for init, import, or add arc"] },
   { name: "pov", value: "<style|id>", help: ["POV style for init or import; POV character id", "for add chapter/scene (also added to characters)"] },
   { name: "tense", value: "<tense>", help: ["Narrative tense for init or import"] },
-  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book, poetry-collection); sets a default", "target-words"] },
+  { name: "form", value: "<form>", help: ["Story form for init (novel, novella, novelette,", "short-story, flash, serial, picture-book,", "chapter-book, poetry-collection); sets a default", "target-words, except for serial and", "poetry-collection"] },
   { name: "synopsis", value: "<text>", help: ["Starter synopsis for init or import"] },
   { name: "language", value: "<tag>", help: ["Manuscript language for import, a BCP 47 tag", "such as fr; defaults to the existing story.md"] },
   { name: "bylines", help: ["For import, read each chapter's author from a", 'leading by-line ("by Ada Writer", taken out of', "the prose) or its file's frontmatter author"] },
@@ -14131,7 +14126,7 @@ function customCodeId(code) {
 
 // src/scan.js
 import fs5 from "node:fs";
-import path13 from "node:path";
+import path14 from "node:path";
 
 // src/geography.js
 var DEFAULT_DISTANCE_UNIT = "units";
@@ -14814,7 +14809,1809 @@ function relative(project, file) {
 }
 
 // src/scan-fields.js
+import path10 from "node:path";
+
+// src/packaging.js
+import { Buffer as Buffer3 } from "node:buffer";
+
+// src/deflate.js
+import { Buffer as Buffer2 } from "node:buffer";
+var WINDOW_SIZE = 32768;
+var WINDOW_MASK = WINDOW_SIZE - 1;
+var MIN_MATCH = 3;
+var MAX_MATCH = 258;
+var MAX_CHAIN = 256;
+var NICE_MATCH = 128;
+var GOOD_MATCH = 32;
+var TRIES_PER_BYTE = 16;
+var FAR_MATCH = 4096;
+var HASH_BITS = 15;
+var HASH_MASK = (1 << HASH_BITS) - 1;
+var BLOCK_SYMBOLS = 16384;
+var END_OF_BLOCK = 256;
+var MAX_CODE_BITS = 15;
+var MAX_CODE_LENGTH_BITS = 7;
+var LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
+var LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+var DISTANCE_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
+var DISTANCE_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
+var CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
+var CODE_LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7];
+function codeTable(bases, size) {
+  const table = new Uint8Array(size);
+  let code = 0;
+  for (let value = bases[0];value < size; value += 1) {
+    if (code + 1 < bases.length && bases[code + 1] <= value) {
+      code += 1;
+    }
+    table[value] = code;
+  }
+  return table;
+}
+var LENGTH_CODE = codeTable(LENGTH_BASE, MAX_MATCH + 1);
+var DISTANCE_CODE = codeTable(DISTANCE_BASE, WINDOW_SIZE + 1);
+var FIXED_LITERAL_LENGTHS = Array.from({ length: 288 }, (_, symbol) => symbol < 144 ? 8 : symbol < 256 ? 9 : symbol < 280 ? 7 : 8);
+var FIXED_DISTANCE_LENGTHS = new Array(30).fill(5);
+var FIXED_LITERAL_CODES = canonicalCodes(FIXED_LITERAL_LENGTHS);
+var FIXED_DISTANCE_CODES = canonicalCodes(FIXED_DISTANCE_LENGTHS);
+function deflateRaw(data, { blockSymbols = BLOCK_SYMBOLS, codeBits = MAX_CODE_BITS, codeLengthBits = MAX_CODE_LENGTH_BITS, stats = {} } = {}) {
+  const length = data.length;
+  const writer = bitWriter(length);
+  const limits = { codeBits, codeLengthBits };
+  stats.blocks = [];
+  const head = new Int32Array(HASH_MASK + 1).fill(-1);
+  const prev = new Int32Array(WINDOW_SIZE);
+  const block = {
+    values: new Uint16Array(blockSymbols),
+    distances: new Uint16Array(blockSymbols),
+    count: 0,
+    literals: new Array(286).fill(0),
+    distanceCodes: new Array(30).fill(0)
+  };
+  let foundDistance = 0;
+  let tries = 0;
+  const hashAt = (position) => (data[position] << 10 ^ data[position + 1] << 5 ^ data[position + 2]) & HASH_MASK;
+  const insert = (position) => {
+    if (position + MIN_MATCH <= length) {
+      const hash = hashAt(position);
+      prev[position & WINDOW_MASK] = head[hash];
+      head[hash] = position;
+    }
+  };
+  const longestMatch = (position, chain) => {
+    if (position + MIN_MATCH > length) {
+      return 0;
+    }
+    const limit = Math.min(MAX_MATCH, length - position);
+    const enough = Math.min(NICE_MATCH, limit);
+    let best = 0;
+    let candidate = head[hashAt(position)];
+    for (let left = Math.min(chain, TRIES_PER_BYTE * position + MAX_CHAIN - tries);left > 0 && candidate >= 0 && position - candidate <= WINDOW_SIZE; left -= 1) {
+      tries += 1;
+      if (data[candidate + best] === data[position + best]) {
+        let run = 0;
+        while (run < limit && data[candidate + run] === data[position + run]) {
+          run += 1;
+        }
+        if (run > best) {
+          best = run;
+          foundDistance = position - candidate;
+          if (best >= enough) {
+            break;
+          }
+        }
+      }
+      candidate = prev[candidate & WINDOW_MASK];
+    }
+    return best < MIN_MATCH || best === MIN_MATCH && foundDistance > FAR_MATCH ? 0 : best;
+  };
+  const emit = (value, distance, symbol) => {
+    if (block.count === blockSymbols) {
+      stats.blocks.push(writeBlock(writer, block, false, limits));
+    }
+    block.values[block.count] = value;
+    block.distances[block.count] = distance;
+    block.count += 1;
+    block.literals[symbol] += 1;
+    if (distance > 0) {
+      block.distanceCodes[DISTANCE_CODE[distance]] += 1;
+    }
+  };
+  const emitLiteral = (byte) => emit(byte, 0, byte);
+  const emitMatch = (matchLength, distance) => emit(matchLength, distance, 257 + LENGTH_CODE[matchLength]);
+  let position = 0;
+  let matchLength = longestMatch(0, MAX_CHAIN);
+  let matchDistance = foundDistance;
+  while (position < length) {
+    insert(position);
+    if (matchLength > 0 && matchLength < NICE_MATCH) {
+      const nextLength = longestMatch(position + 1, matchLength >= GOOD_MATCH ? MAX_CHAIN >> 2 : MAX_CHAIN);
+      if (nextLength > matchLength) {
+        emitLiteral(data[position]);
+        position += 1;
+        matchLength = nextLength;
+        matchDistance = foundDistance;
+        continue;
+      }
+    }
+    if (matchLength > 0) {
+      emitMatch(matchLength, matchDistance);
+      for (let step = 1;step < matchLength; step += 1) {
+        insert(position + step);
+      }
+      position += matchLength;
+    } else {
+      emitLiteral(data[position]);
+      position += 1;
+    }
+    matchLength = longestMatch(position, MAX_CHAIN);
+    matchDistance = foundDistance;
+  }
+  stats.blocks.push(writeBlock(writer, block, true, limits));
+  stats.tries = tries;
+  return writer.finish();
+}
+function bitWriter(size) {
+  let bytes = new Uint8Array(Math.max(64, size >> 1));
+  let used = 0;
+  let pending = 0;
+  let pendingBits = 0;
+  const push = (byte) => {
+    if (used === bytes.length) {
+      const grown = new Uint8Array(bytes.length * 2);
+      grown.set(bytes);
+      bytes = grown;
+    }
+    bytes[used] = byte;
+    used += 1;
+  };
+  return {
+    write(value, bits) {
+      pending |= value << pendingBits;
+      pendingBits += bits;
+      while (pendingBits >= 8) {
+        push(pending & 255);
+        pending >>>= 8;
+        pendingBits -= 8;
+      }
+    },
+    finish() {
+      if (pendingBits > 0) {
+        push(pending);
+      }
+      return Buffer2.from(bytes.buffer, 0, used);
+    }
+  };
+}
+function writeBlock(writer, block, final, limits) {
+  block.literals[END_OF_BLOCK] = 1;
+  const literalLengths = huffmanLengths(block.literals, limits.codeBits);
+  const distanceLengths = huffmanLengths(block.distanceCodes, limits.codeBits);
+  const header = dynamicHeader(literalLengths, distanceLengths, limits.codeLengthBits);
+  const dynamicBits = header.bits + codedBits(block.literals, literalLengths) + codedBits(block.distanceCodes, distanceLengths);
+  const fixedBits = codedBits(block.literals, FIXED_LITERAL_LENGTHS) + codedBits(block.distanceCodes, FIXED_DISTANCE_LENGTHS);
+  const type = fixedBits <= dynamicBits ? "fixed" : "dynamic";
+  writer.write(final ? 1 : 0, 1);
+  if (type === "fixed") {
+    writer.write(1, 2);
+    writeSymbols(writer, block, FIXED_LITERAL_CODES, FIXED_LITERAL_LENGTHS, FIXED_DISTANCE_CODES, FIXED_DISTANCE_LENGTHS);
+  } else {
+    writer.write(2, 2);
+    header.write(writer);
+    writeSymbols(writer, block, canonicalCodes(literalLengths), literalLengths, canonicalCodes(distanceLengths), distanceLengths);
+  }
+  block.count = 0;
+  block.literals.fill(0);
+  block.distanceCodes.fill(0);
+  return type;
+}
+function writeSymbols(writer, block, literalCodes, literalLengths, distanceCodes, distanceLengths) {
+  for (let index = 0;index < block.count; index += 1) {
+    const value = block.values[index];
+    const distance = block.distances[index];
+    if (distance === 0) {
+      writer.write(literalCodes[value], literalLengths[value]);
+      continue;
+    }
+    const lengthCode = LENGTH_CODE[value];
+    writer.write(literalCodes[257 + lengthCode], literalLengths[257 + lengthCode]);
+    writer.write(value - LENGTH_BASE[lengthCode], LENGTH_EXTRA[lengthCode]);
+    const distanceCode = DISTANCE_CODE[distance];
+    writer.write(distanceCodes[distanceCode], distanceLengths[distanceCode]);
+    writer.write(distance - DISTANCE_BASE[distanceCode], DISTANCE_EXTRA[distanceCode]);
+  }
+  writer.write(literalCodes[END_OF_BLOCK], literalLengths[END_OF_BLOCK]);
+}
+function codedBits(frequencies, lengths) {
+  let bits = 0;
+  for (let symbol = 0;symbol < frequencies.length; symbol += 1) {
+    bits += frequencies[symbol] * lengths[symbol];
+  }
+  return bits;
+}
+function dynamicHeader(literalLengths, distanceLengths, codeLengthBits) {
+  const literalCount = lastUsed(literalLengths) + 1;
+  const distanceCount = lastUsed(distanceLengths) + 1;
+  const items = runLengths([...literalLengths.slice(0, literalCount), ...distanceLengths.slice(0, distanceCount)]);
+  const frequencies = new Array(19).fill(0);
+  for (const [symbol] of items) {
+    frequencies[symbol] += 1;
+  }
+  const lengths = huffmanLengths(frequencies, codeLengthBits);
+  const codes = canonicalCodes(lengths);
+  let orderCount = CODE_LENGTH_ORDER.length;
+  while (orderCount > 4 && lengths[CODE_LENGTH_ORDER[orderCount - 1]] === 0) {
+    orderCount -= 1;
+  }
+  let bits = 5 + 5 + 4 + 3 * orderCount;
+  for (const [symbol] of items) {
+    bits += lengths[symbol] + CODE_LENGTH_EXTRA[symbol];
+  }
+  return {
+    bits,
+    write(writer) {
+      writer.write(literalCount - 257, 5);
+      writer.write(distanceCount - 1, 5);
+      writer.write(orderCount - 4, 4);
+      for (let index = 0;index < orderCount; index += 1) {
+        writer.write(lengths[CODE_LENGTH_ORDER[index]], 3);
+      }
+      for (const [symbol, extra] of items) {
+        writer.write(codes[symbol], lengths[symbol]);
+        writer.write(extra, CODE_LENGTH_EXTRA[symbol]);
+      }
+    }
+  };
+}
+function lastUsed(lengths) {
+  let index = lengths.length - 1;
+  while (lengths[index] === 0) {
+    index -= 1;
+  }
+  return index;
+}
+function runLengths(lengths) {
+  const items = [];
+  for (let index = 0;index < lengths.length; ) {
+    const value = lengths[index];
+    let run = 1;
+    while (index + run < lengths.length && lengths[index + run] === value) {
+      run += 1;
+    }
+    index += run;
+    if (value === 0) {
+      for (;run >= 11; run -= Math.min(run, 138)) {
+        items.push([18, Math.min(run, 138) - 11]);
+      }
+      if (run >= 3) {
+        items.push([17, run - 3]);
+        run = 0;
+      }
+    } else {
+      items.push([value, 0]);
+      run -= 1;
+      for (;run >= 3; run -= Math.min(run, 6)) {
+        items.push([16, Math.min(run, 6) - 3]);
+      }
+    }
+    for (;run > 0; run -= 1) {
+      items.push([value, 0]);
+    }
+  }
+  return items;
+}
+function huffmanLengths(frequencies, limit) {
+  let weights = Array.from(frequencies);
+  let used = weights.filter((weight) => weight > 0).length;
+  for (let symbol = 0;used < 2; symbol += 1) {
+    if (weights[symbol] === 0) {
+      weights[symbol] = 1;
+      used += 1;
+    }
+  }
+  let lengths = treeDepths(weights);
+  while (Math.max(...lengths) > limit) {
+    weights = weights.map((weight) => weight + 1 >> 1);
+    lengths = treeDepths(weights);
+  }
+  return lengths;
+}
+function treeDepths(weights) {
+  const leaves = [];
+  for (let symbol = 0;symbol < weights.length; symbol += 1) {
+    if (weights[symbol] > 0) {
+      leaves.push(symbol);
+    }
+  }
+  leaves.sort((a, b) => weights[a] - weights[b] || a - b);
+  const nodeWeights = leaves.map((symbol) => weights[symbol]);
+  const parents = [];
+  let leaf = 0;
+  let inner = leaves.length;
+  const lightest = () => leaf < leaves.length && (inner === nodeWeights.length || nodeWeights[leaf] <= nodeWeights[inner]) ? leaf++ : inner++;
+  while (nodeWeights.length < 2 * leaves.length - 1) {
+    const first = lightest();
+    const second = lightest();
+    parents[first] = nodeWeights.length;
+    parents[second] = nodeWeights.length;
+    nodeWeights.push(nodeWeights[first] + nodeWeights[second]);
+  }
+  const depths = new Array(nodeWeights.length).fill(0);
+  for (let node = nodeWeights.length - 2;node >= 0; node -= 1) {
+    depths[node] = depths[parents[node]] + 1;
+  }
+  const lengths = new Array(weights.length).fill(0);
+  leaves.forEach((symbol, index) => {
+    lengths[symbol] = depths[index];
+  });
+  return lengths;
+}
+function canonicalCodes(lengths) {
+  const counts = new Array(MAX_CODE_BITS + 1).fill(0);
+  for (const length of lengths) {
+    counts[length] += 1;
+  }
+  counts[0] = 0;
+  const next = [0];
+  for (let bits = 1;bits <= MAX_CODE_BITS; bits += 1) {
+    next[bits] = next[bits - 1] + counts[bits - 1] << 1;
+  }
+  return lengths.map((length) => {
+    if (length === 0) {
+      return 0;
+    }
+    let code = next[length];
+    next[length] += 1;
+    let reversed = 0;
+    for (let bit = 0;bit < length; bit += 1) {
+      reversed = reversed << 1 | code & 1;
+      code >>= 1;
+    }
+    return reversed;
+  });
+}
+
+// src/build-style.js
 import path9 from "node:path";
+var BUILD_STYLE_PRESETS = ["classic", "modern", "elegant"];
+var HEADING_STYLES = ["centered", "small-caps", "left"];
+var PARAGRAPH_STYLES = ["indented", "block"];
+var BUILD_STYLE_KEYS = ["preset", "body-font", "heading-font", "heading-style", "scene-break", "drop-caps", "paragraphs", "css"];
+var NAME = `[^,"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]`;
+var SOLID = `[^\\s,"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]`;
+var FAMILY = `${NAME}*${SOLID}${NAME}*`;
+var ITEM = `\\s*(?:"${FAMILY}"|'${FAMILY}'|${FAMILY})\\s*`;
+var FONT_PATTERN = new RegExp(`^${ITEM}(?:,${ITEM})*$`, "u");
+var SCENE_BREAK_PATTERN = /^[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f][^\u0000-\u001f\u007f]*$/u;
+var GENERIC_FAMILIES = new Set(["serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong"]);
+var SANS_STACK = `"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif`;
+var OLD_STYLE_STACK = `Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif`;
+var PRESETS = {
+  classic: {},
+  modern: { headingFont: SANS_STACK, headingStyle: "left", sceneBreak: "• • •", dropCaps: false, paragraphs: "block" },
+  elegant: { bodyFont: OLD_STYLE_STACK, headingStyle: "small-caps", sceneBreak: "❦", dropCaps: true, paragraphs: "indented" }
+};
+var isEntry4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function styleFields(data) {
+  const value = data["build-style"];
+  return Array.isArray(value) ? Object.assign({}, ...value.filter(isEntry4)) : {};
+}
+function fontList(value) {
+  return String(value).split(",").map((item) => {
+    const name = item.trim().replace(/^(["'])(.*)\1$/u, "$2").trim();
+    return GENERIC_FAMILIES.has(name.toLowerCase()) ? name.toLowerCase() : `"${name}"`;
+  }).join(", ");
+}
+function buildStyle(data) {
+  const fields = styleFields(data);
+  const preset = PRESETS[fields.preset] ?? PRESETS.classic;
+  const pick = (key, presetKey) => fields[key] !== undefined ? fields[key] : preset[presetKey] ?? null;
+  const style = {
+    preset: typeof fields.preset === "string" ? fields.preset : "classic",
+    bodyFont: fields["body-font"] === undefined ? null : fontList(fields["body-font"]),
+    presetBodyFont: preset.bodyFont ?? null,
+    headingFont: fields["heading-font"] === undefined ? null : fontList(fields["heading-font"]),
+    presetHeadingFont: preset.headingFont ?? null,
+    headingStyle: pick("heading-style", "headingStyle"),
+    sceneBreak: fields["scene-break"] === undefined ? preset.sceneBreak ?? null : String(fields["scene-break"]).trim(),
+    dropCaps: pick("drop-caps", "dropCaps"),
+    paragraphs: pick("paragraphs", "paragraphs"),
+    css: typeof fields.css === "string" ? fields.css.trim() : null
+  };
+  style.styled = ["bodyFont", "presetBodyFont", "headingFont", "presetHeadingFont", "headingStyle", "sceneBreak", "dropCaps", "paragraphs"].some((key) => style[key] !== null);
+  return style;
+}
+var CLASSIC_STYLE = Object.freeze(buildStyle({}));
+function styleFonts(style, type) {
+  const latin = type.fonts.latin;
+  const own = (list) => list === null ? null : latin ? list : `${list}, ${type.fonts.body}`;
+  const body = own(style.bodyFont) ?? (latin ? style.presetBodyFont : null) ?? type.fonts.body;
+  const heading = own(style.headingFont) ?? (latin ? style.presetHeadingFont : null);
+  return { body, heading, heads: heading ?? (body === type.fonts.body ? type.fonts.heads : body) };
+}
+function styleSheetFile(root, value) {
+  const css = String(value).trim();
+  if (PATH_CONTROL_CHARACTERS.test(css)) {
+    throw controlCharacterError("build-style css", css);
+  }
+  if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
+    throw projectError(`story.md build-style css ${css} must be a .css file`);
+  }
+  const filePath = path9.resolve(root, css);
+  if (!isPathInside(root, filePath)) {
+    throw projectError(`story.md build-style css ${css} must be inside the project`);
+  }
+  if (!lstatIfExists(filePath)) {
+    throw projectError(`story.md build-style css ${css} does not exist`);
+  }
+  let text;
+  try {
+    assertSafeProjectPath(filePath, root);
+    text = readTextFile(filePath);
+  } catch (error) {
+    throw projectError(`story.md build-style css ${css}: ${String(error.message).replace(`${filePath}: `, "")}`);
+  }
+  if (/<\/style/i.test(text)) {
+    throw projectError(`story.md build-style css ${css} must not contain </style`);
+  }
+  text = text.replace(/^﻿/, "").replace(/\r\n?/g, `
+`);
+  return { filePath, text: text === "" || text.endsWith(`
+`) ? text : `${text}
+` };
+}
+function validateBuildStyle(data, errors, root = null) {
+  const value = data["build-style"];
+  if (value === undefined) {
+    return;
+  }
+  const fail = (message) => errors.push(err("invalid-build-style", `story.md build-style ${message}`, "story.md"));
+  if (!Array.isArray(value) || !value.every(isEntry4)) {
+    fail("must be a list of key: value entries, such as - preset: modern (see docs/manuscripts.md#build-styles)");
+    return;
+  }
+  const seen = new Set;
+  for (const entry of value) {
+    for (const [key, setting] of Object.entries(entry)) {
+      if (!BUILD_STYLE_KEYS.includes(key)) {
+        fail(`key ${key} is not a style setting; use ${BUILD_STYLE_KEYS.join(", ")}`);
+        continue;
+      }
+      if (seen.has(key)) {
+        fail(`sets ${key} more than once`);
+        continue;
+      }
+      seen.add(key);
+      const problem = settingProblem(key, setting);
+      if (problem !== "") {
+        fail(problem);
+      } else if (key === "css" && root !== null) {
+        try {
+          styleSheetFile(root, setting);
+        } catch (error) {
+          errors.push(err("invalid-build-style", error.message, "story.md"));
+        }
+      }
+    }
+  }
+}
+function settingProblem(key, value) {
+  const choice = (choices) => typeof value === "string" && choices.includes(value) ? "" : `${key} must be one of ${choices.join(", ")}`;
+  switch (key) {
+    case "preset":
+      return choice(BUILD_STYLE_PRESETS);
+    case "heading-style":
+      return choice(HEADING_STYLES);
+    case "paragraphs":
+      return choice(PARAGRAPH_STYLES);
+    case "body-font":
+    case "heading-font":
+      return typeof value === "string" && FONT_PATTERN.test(value) ? "" : `${key} must be a comma-separated list of font names, such as Iowan Old Style, Georgia, serif`;
+    case "scene-break":
+      return typeof value === "string" && SCENE_BREAK_PATTERN.test(value) ? "" : `${key} must be one line of text, such as "* * *" or "~"`;
+    case "drop-caps":
+      return typeof value === "boolean" ? "" : `${key} must be true or false`;
+    default:
+      return typeof value === "string" && value.trim() !== "" ? "" : `${key} must be the path to a .css file in the project`;
+  }
+}
+
+// src/html.js
+var TRIM_SIZES = new Map([
+  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230, charactersPerPage: 480 }],
+  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250, charactersPerPage: 520 }],
+  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275, charactersPerPage: 580 }],
+  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300, charactersPerPage: 640 }],
+  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270, charactersPerPage: 560 }]
+]);
+var DEFAULT_TRIM = "5.5x8.5";
+function labelledParagraphs(part) {
+  let count = 0;
+  return part.paragraphs.map((paragraph) => {
+    if (paragraph === null) {
+      return null;
+    }
+    count += 1;
+    return { label: `${part.key}-p${count}`, paragraph };
+  });
+}
+function paragraphLabels(book) {
+  return book.parts.flatMap((part) => labelledParagraphs(part).filter((entry) => entry !== null).map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
+}
+function openingWords(text, count = 6) {
+  const source = String(text);
+  const words = wordSpans(source, /(?<!\S)\S*[\p{L}\p{N}]\S*/gu);
+  const opening = words.length > count ? source.slice(0, words[count].start) : source;
+  const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
+  return words.length > count ? `${collapsed}…` : collapsed;
+}
+function noteHref(noteUrl, label, stamp, text) {
+  const params = [["title", `[${label}] `], ["anchor", label]];
+  if (stamp !== "") {
+    params.push(["build", stamp]);
+  }
+  params.push(["quote", openingWords(text)]);
+  const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join("&");
+  const hash = noteUrl.indexOf("#");
+  const base = hash === -1 ? noteUrl : noteUrl.slice(0, hash);
+  const fragment = hash === -1 ? "" : noteUrl.slice(hash);
+  return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
+}
+function indentsFirstLines(format, style = CLASSIC_STYLE) {
+  return format === "print" ? style.paragraphs !== "block" : style.paragraphs === "indented";
+}
+function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = {}) {
+  const labels = book.labels;
+  const label = (key, values) => fillLabel(labels, key, values);
+  const contents = label("contents");
+  const type = typesetting(book.language, book.writingMode);
+  const rtl = type.rtl;
+  const fonts = styleFonts(style, type);
+  const toc = [];
+  const sections = [];
+  for (const part of book.parts) {
+    const sectionId = part.kind === "chapter" ? part.key : `matter-${part.key}`;
+    toc.push(`<li><a href="#${sectionId}">${escapeHtml(part.title)}</a></li>`);
+    const body = [];
+    for (const entry of labelledParagraphs(part)) {
+      if (entry === null) {
+        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
+        continue;
+      }
+      const { label: anchor, paragraph } = entry;
+      const note = noteUrl === "" ? "" : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="${escapeHtml(label("note-title", { label: anchor }))}" target="_blank" rel="noopener">${escapeHtml(label("note"))}</a>`;
+      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
+    }
+    const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
+    const partByline = (part.byline ?? "") === "" ? "" : `<p class="byline">${escapeHtml(part.byline)}</p>
+`;
+    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
+${partByline}${withBlockquotes(body).join(`
+`)}
+</section>`);
+  }
+  const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join(`
+`);
+  const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
+  const code = (text) => `<code>${escapeHtml(text)}</code>`;
+  const intro = joinSentences([
+    stamp === "" ? sentence("review-intro") : sentence("review-intro-build", { build: code(stamp) }),
+    sentence("review-labels", { label: code("ch03-p12") }),
+    sentence(stamp === "" ? "review-quote" : "review-quote-build"),
+    noteUrl === "" ? "" : sentence("review-note-link")
+  ]);
+  return `<!DOCTYPE html>
+${htmlRoot(book.language)}
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(label("review-title", { title: book.title }))}</title>
+<style>
+:root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${fonts.body}; }
+main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
+header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
+.byline, .note { color: var(--muted); margin: 0 0 1rem; }
+.note { font: 0.9rem/1.5 system-ui, sans-serif; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
+nav ol { padding-left: 1.25rem; }
+nav a, .anchor { color: var(--accent); }
+section { border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
+h2 { font-size: 1.4rem; margin: 1rem 0 1.5rem; }
+p { position: relative; margin: 0 0 1rem; }
+.anchor { position: absolute; left: -5.5rem; width: 5rem; text-align: right; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
+p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
+p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
+.scene-break { border: 0; text-align: center; margin: 2rem 0; }
+.scene-break::after { content: "${cssString(style.sceneBreak ?? "* * *")}"; color: var(--muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
+${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
+p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
+@media (max-width: 52rem) { .note-link { position: static; display: block; width: fit-content; margin-top: -1.4em; margin-inline-start: auto; opacity: 0.6; } }
+`}${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px solid var(--accent); padding-right: 0.75rem; }
+[dir="rtl"] nav ol { padding-left: 0; padding-right: 1.25rem; }
+[dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
+@media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
+${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
+`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts, hasBylines(book))}</style>
+${extraStyle(style)}</head>
+<body>
+<main>
+<header>
+<h1>${escapeHtml(book.title)}</h1>
+${byline}
+<p class="note">${intro}</p>
+</header>
+<nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
+${toc.join(`
+`)}
+</ol></nav>
+${sections.join(`
+`)}
+</main>
+</body>
+</html>
+`;
+}
+var REVIEW_VERTICAL = `html { writing-mode: vertical-rl; }
+main { max-width: none; max-height: 38rem; margin: auto 0; padding: 1rem 2rem 1rem 6rem; }
+header h1 { margin: 0; margin-block: 2rem 0.25rem; }
+.byline, .note, p { margin: 0; margin-block-end: 1rem; }
+.note { border-left: 0; padding-left: 0; border-top: 3px solid var(--accent); padding-top: 0.75rem; }
+nav ol { padding-left: 0; padding-top: 1.25rem; }
+section { border-top: 0; margin-top: 0; padding-top: 0; border-right: 1px solid var(--rule); margin-right: 3rem; padding-right: 1rem; }
+h2 { margin: 0; margin-block: 1rem 1.5rem; }
+.anchor, .note-link { position: static; display: block; width: auto; margin: 0; text-align: start; opacity: 0.6; }
+blockquote { margin: 0; margin-inline-start: 1.5rem; margin-block-end: 1rem; }
+.scene-break { margin: 0 2rem; }
+`;
+var PRINT_VERTICAL = `html { writing-mode: vertical-rl; }
+h1 { margin: 1in 0 0 0.5in; }
+blockquote { margin: 1.5em 0.8em; }
+p.scene-break { margin: 0 0.8em; }
+`;
+function reviewStyleRules(style, type, fonts, bylines = false) {
+  const opening = bylines ? ["section > h2 + p:not(.byline)", "section > h2 + p.byline + p"] : ["section > h2 + p"];
+  const rules = [];
+  if (fonts.heading !== null) {
+    rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
+  }
+  if (bylines && style.paragraphs === "indented") {
+    rules.push("section > p.byline { text-indent: 0; margin-block-end: 1rem; }");
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`section > h2 { ${heading} }`);
+  }
+  if (style.paragraphs === "indented") {
+    rules.push("section p { margin-block-end: 0; text-indent: 1.5em; }", `${opening.join(", ")}, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }`, "section.front p, section.back p { margin-block-end: 1rem; }");
+  }
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`@media (min-width: 52.01rem) { ${opening.map((selector) => `section.chapter > ${selector.replace(/^section > /, "")}::first-letter`).join(", ")} { ${DROP_CAP_RULE} } }`);
+  }
+  return rules.length === 0 ? "" : `${rules.join(`
+`)}
+`;
+}
+function headingRule(headingStyle, type) {
+  if (headingStyle === "centered") {
+    return "text-align: center; font-weight: normal;";
+  }
+  if (headingStyle === "small-caps") {
+    return `text-align: center; font-weight: normal;${type.cased ? " font-variant: small-caps; letter-spacing: 0.08em;" : ""}`;
+  }
+  if (headingStyle === "left") {
+    return `text-align: ${type.rtl ? "right" : "left"}; font-weight: bold;`;
+  }
+  return "";
+}
+var DROP_CAP_RULE = "float: left; font-size: 3.2em; line-height: 0.8; margin: 0.08em 0.08em 0 0;";
+function extraStyle(style) {
+  return style.cssText ? `<style>
+${style.cssText}</style>
+` : "";
+}
+function printStyleRules(style, type, fonts, bylines = false) {
+  const rules = [];
+  if (fonts.heading !== null) {
+    rules.push(`h1 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`section.chapter > h1, section.front > h1, section.back > h1 { ${heading} }`);
+  }
+  if (style.paragraphs === "block") {
+    rules.push(`p { text-indent: 0; ${type.vertical ? "margin-left" : "margin-bottom"}: 0.7em; }`);
+  }
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { ${DROP_CAP_RULE} }`);
+  }
+  return rules.length === 0 ? "" : `${rules.join(`
+`)}
+`;
+}
+function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
+  const trim = TRIM_SIZES.get(trimName);
+  if (!trim) {
+    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
+  }
+  const pages = estimateBookPages(book, trimName);
+  const inside = insideMargin(pages);
+  const author = leadNames(bookMeta(book));
+  const credits = bookCredits(book);
+  const bylines = hasBylines(book);
+  const type = typesetting(book.language, book.writingMode);
+  const fonts = styleFonts(style, type);
+  const rtl = type.rtl;
+  const recto = rtl || type.vertical ? "left" : "right";
+  const verso = rtl || type.vertical ? "right" : "left";
+  const heads = `${type.cased ? "italic " : ""}9pt ${fonts.heads}`;
+  const sceneBreak = style.sceneBreak === null ? "*&#8195;*&#8195;*" : escapeHtml(style.sceneBreak);
+  const toc = [];
+  const sections = [];
+  for (const part of book.parts) {
+    const paragraphs = [];
+    let first = true;
+    for (const paragraph of part.paragraphs) {
+      if (paragraph === null) {
+        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">${sceneBreak}</p>` });
+        first = true;
+        continue;
+      }
+      paragraphs.push({ quote: paragraph.quote, markup: first ? `<p class="first">${paragraph.html}</p>` : `<p>${paragraph.html}</p>` });
+      first = false;
+    }
+    if (part.kind === "chapter") {
+      toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
+    }
+    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>${(part.byline ?? "") === "" ? "" : `
+<p class="byline">${escapeHtml(part.byline)}</p>`}` : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
+    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
+${withBlockquotes(paragraphs).join(`
+`)}
+</section>`);
+  }
+  const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
+  const beforeToc = copyrightIndex === -1 ? [] : [sections[copyrightIndex]];
+  const afterToc = sections.filter((_, index) => index !== copyrightIndex);
+  const tocPageNumbers = rtl ? `.toc li { position: relative; padding-left: 2.5em; }
+.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }` : `.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : "right"}; }`;
+  return `<!DOCTYPE html>
+${htmlRoot(book.language)}
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(book.title)}</title>
+<!-- Print interior for ${trimName} trim (${trim.width} x ${trim.height}), about ${pages} pages.
+     Render to PDF with a CSS paged-media engine, for example:
+       npx pagedjs-cli book.print.html -o book.pdf
+       weasyprint book.print.html book.pdf
+       prince book.print.html -o book.pdf
+${type.vertical ? `     Vertical text needs an engine that sets it, such as Vivliostyle or Prince.
+` : ""}     Check the printer's current specs for margins, bleed, and fonts before upload. -->
+<style>
+@page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
+@page :left { margin-left: 0.5in; margin-right: ${inside}; }
+@page :${verso} {
+  @top-center { content: "${cssString(author || book.title)}"; font: ${heads}; } }
+@page :${recto} {
+  @top-center { content: string(chapter-title, first-except); font: ${heads}; } }
+@page chapter { @bottom-center { content: counter(page); font: 9pt ${fonts.heads}; } }
+@page :blank { @top-center { content: none; } @bottom-center { content: none; } }
+@page front { @top-center { content: none; } @bottom-center { content: none; } }
+html { font: 11pt/1.4 ${fonts.body}; }
+body { margin: 0; hyphens: auto; }
+.title-page, .toc, section.front { page: front; break-before: ${recto}; }
+section.front.copyright-page { break-before: page; font-size: 9pt; }
+.title-page { text-align: center; padding-top: 30%; }
+.title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
+.title-page .author { font-size: 14pt${type.cased ? "; font-variant: small-caps; letter-spacing: 0.05em" : ""}; }
+.toc h1 { font-size: 14pt; font-weight: normal; text-align: center${type.cased ? "; font-variant: small-caps" : ""}; }
+.toc ol { list-style: none; padding: 0; }
+.toc a { color: inherit; text-decoration: none; }
+${tocPageNumbers}
+section.chapter, section.back { page: chapter; break-before: ${recto}; }
+section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
+.running-head { height: 0; margin: 0; }
+h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
+p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
+p.first, p.scene-break + p { text-indent: 0; }
+${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4in;${type.cased ? " font-style: italic;" : ""} break-after: avoid; }
+` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
+${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
+` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
+blockquote { margin: 0.8em 1.5em; }
+blockquote p { text-indent: 0; text-align: start; }
+section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
+section.front:not(.copyright-page) p { text-align: center; }
+@media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
+${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
+` : ""}${printStyleRules(style, type, fonts, bylines)}</style>
+${extraStyle(style)}</head>
+<body>
+<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${credits.map((line) => `<p class="author">${escapeHtml(line)}</p>`).join("")}</section>
+${beforeToc.join(`
+`)}
+<nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
+${toc.join(`
+`)}
+</ol></nav>
+${afterToc.join(`
+`)}
+</body>
+</html>
+`;
+}
+function bookMeta(book) {
+  return { authors: book.authors ?? [], editors: book.editors ?? [], labels: book.labels };
+}
+function bookCredits(book) {
+  return creditLines(bookMeta(book));
+}
+function hasBylines(book) {
+  return book.parts.some((part) => (part.byline ?? "") !== "");
+}
+function joinSentences(sentences) {
+  return sentences.filter((sentence) => sentence !== "").reduce((text, sentence) => text === "" || /[。！？]$/u.test(text) ? `${text}${sentence}` : `${text} ${sentence}`, "");
+}
+function htmlRoot(language) {
+  const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
+  return `<html lang="${escapeHtml(language)}"${dir}>`;
+}
+var OPENING_SINK_PAGES = 0.3;
+var CONTENTS_ENTRIES_PER_PAGE = 25;
+function estimateBookPages(book, trimName = DEFAULT_TRIM) {
+  const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
+  const [perPage, length] = book.unit === "characters" ? [trim.charactersPerPage, (part) => part.characters] : [trim.wordsPerPage, (part) => part.words];
+  const chapters = book.parts.filter((part) => part.kind === "chapter").length;
+  let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
+  for (const part of book.parts.filter((entry) => !(entry.copyright && entry.placement === "front"))) {
+    const sink = part.heading ? OPENING_SINK_PAGES : 0;
+    pages += Math.max(1, Math.ceil((length(part) ?? 0) / perPage + sink)) + 0.5;
+  }
+  return Math.ceil(pages);
+}
+function insideMargin(pages) {
+  if (pages <= 150) {
+    return "0.625in";
+  }
+  if (pages <= 300) {
+    return "0.75in";
+  }
+  if (pages <= 500) {
+    return "0.875in";
+  }
+  return "1in";
+}
+function withBlockquotes(items) {
+  const out = [];
+  let open = false;
+  for (const item of items) {
+    if (item.quote && !open) {
+      out.push("<blockquote>");
+    } else if (!item.quote && open) {
+      out.push("</blockquote>");
+    }
+    open = item.quote;
+    out.push(item.markup);
+  }
+  if (open) {
+    out.push("</blockquote>");
+  }
+  return out;
+}
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function cssString(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n\f]+/g, " ").replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16).toUpperCase()} `);
+}
+
+// src/packaging.js
+function buildTimestamp() {
+  const raw = process.env.SOURCE_DATE_EPOCH;
+  if (raw !== undefined && raw !== "") {
+    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
+    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
+      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+  }
+  return "2000-01-01T00:00:00Z";
+}
+function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const lang = xmlEscape(meta.language);
+  const type = typesetting(meta.language, meta.writingMode);
+  const rtl = type.rtl;
+  const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
+  const style = manuscript.style ?? CLASSIC_STYLE;
+  const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
+  const stylesheet = epubStylesheet(type, style, bylines);
+  const extra = style.cssText ?? "";
+  const head = [
+    stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
+    extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
+  ].join("");
+  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
+  const documents = [];
+  const pushMatter = (placement) => (entry) => documents.push({
+    id: `${placement}-${entry.id}`,
+    label: entry.title,
+    content: matterXhtml(entry, placement, root, head, markup)
+  });
+  manuscript.front.forEach(pushMatter("front"));
+  for (const chapter of manuscript.chapters) {
+    documents.push({
+      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
+      label: chapter.heading,
+      content: chapterXhtml(chapter, root, head, markup),
+      bodymatter: true
+    });
+  }
+  manuscript.back.forEach(pushMatter("back"));
+  const coverEntries = [];
+  const coverItems = [];
+  const coverMeta = [];
+  const coverSpine = [];
+  if (manuscript.cover) {
+    const href = `images/cover.${manuscript.cover.extension}`;
+    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
+    coverEntries.push({ name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes), stored: true }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
+    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
+    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
+    coverSpine.push(`<itemref idref="cover"/>`);
+  }
+  const creator = epubCreators(meta, manuscript.chapters);
+  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
+  const optional = [
+    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
+    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
+    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
+    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
+    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
+  ].join("");
+  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
+  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
+  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
+  const modified = buildTimestamp();
+  writeZip(outFile, [
+    { name: "mimetype", content: "application/epub+zip", stored: true },
+    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
+    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${extra === "" ? "" : `<item id="extra-style" href="extra.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
+    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
+    ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
+    ...extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }],
+    ...coverEntries,
+    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
+  ], writeOptions);
+}
+function epubCreators(meta, chapters) {
+  const storyAuthors = new Set(chapters.flatMap((chapter) => chapter.authors ?? []));
+  const credited = new Set([...meta.authors, ...meta.editors]);
+  const contributors = [...storyAuthors].filter((name) => !credited.has(name));
+  if (meta.editors.length === 0 && contributors.length === 0) {
+    return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
+  }
+  const entry = (element, id, name, roles) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}>${roles.map((role) => `<meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`).join("")}`;
+  const authors = new Set(meta.authors);
+  return [
+    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, ["aut"])),
+    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, storyAuthors.has(name) && !authors.has(name) ? ["edt", "aut"] : ["edt"])),
+    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, ["aut"]))
+  ].join("");
+}
+function epubStylesheet(type, style = CLASSIC_STYLE, bylines = false) {
+  const rules = [];
+  if (type.vertical) {
+    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
+  }
+  const fonts = styleFonts(style, type);
+  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
+    rules.push(`body { font-family: ${fonts.body}; }`);
+  }
+  if (!style.styled) {
+    return rules.length === 0 ? "" : `${rules.join(`
+`)}
+`;
+  }
+  const opening = bylines ? ["h1 + p:not(.byline)", "h1 + p.byline + p"] : ["h1 + p"];
+  if (fonts.heading !== null) {
+    rules.push(`h1 { font-family: ${fonts.heading}; }`);
+  }
+  const heading = headingRule(style.headingStyle, type);
+  if (heading !== "") {
+    rules.push(`h1 { ${heading} }`);
+  }
+  const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
+  if (style.paragraphs === "indented") {
+    rules.push("p { margin: 0; text-indent: 1.5em; }", `${opening.join(", ")}, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }`, `body.matter p { margin: ${after}; }`);
+  } else if (style.paragraphs === "block") {
+    rules.push(`p { margin: ${after}; text-indent: 0; }`);
+  }
+  rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
+  if (bylines) {
+    rules.push(`p.byline { text-align: center; text-indent: 0; margin: ${after}; }`);
+  }
+  if (style.dropCaps === true && type.cased && !type.vertical) {
+    rules.push(`${opening.map((selector) => `body.chapter > ${selector}::first-letter`).join(", ")} { ${DROP_CAP_RULE} }`);
+  }
+  return `${rules.join(`
+`)}
+`;
+}
+function navXhtml(title, documents, root, labels, head = "") {
+  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
+  const start = documents.find((doc) => doc.bodymatter);
+  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
+}
+function epubAccessibilityMeta(hasCover, labels) {
+  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
+  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
+  return [
+    `<meta property="schema:accessMode">textual</meta>`,
+    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
+    `<meta property="schema:accessModeSufficient">textual</meta>`,
+    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
+    `<meta property="schema:accessibilityHazard">none</meta>`,
+    `<meta property="schema:accessibilitySummary">${summary}</meta>`
+  ].join("");
+}
+function xhtmlParagraphs(body, markup, verse = false) {
+  const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
+  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
+    quote: Boolean(paragraph.quote),
+    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
+  }))).join("");
+}
+function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
+  const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
+  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}"${classes}>${content}</body></html>`;
+}
+function chapterXhtml(chapter, root, head, markup) {
+  const heading = chapter.heading;
+  const title = String(chapter.title ?? "").trim() || heading;
+  const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
+  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
+}
+function matterXhtml(entry, placement, root, head, markup) {
+  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
+  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
+  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
+}
+function htmlBook(manuscript, ownIndent = false) {
+  const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
+  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
+    if (paragraph.sceneBreak) {
+      return null;
+    }
+    const runs = inlineRuns(paragraph.text, paragraph.code);
+    return {
+      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
+      text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
+      quote: paragraph.quote
+    };
+  });
+  const matter = (placement) => (entry) => ({
+    key: `${placement}-${entry.id}`,
+    kind: entry.copyright ? `${placement} copyright-page` : placement,
+    copyright: Boolean(entry.copyright),
+    placement,
+    title: entry.title,
+    heading: entry.heading,
+    words: wordCount(entry.body),
+    ...characters(entry.body),
+    paragraphs: paragraphs(entry.body)
+  });
+  const parts = [
+    ...manuscript.front.map(matter("front")),
+    ...manuscript.chapters.map((chapter) => ({
+      key: chapter.key,
+      kind: "chapter",
+      placement: "body",
+      title: chapter.heading,
+      heading: true,
+      byline: chapter.byline ?? "",
+      words: wordCount(chapter.body),
+      ...characters(chapter.body),
+      paragraphs: paragraphs(chapter.body, chapter.verse)
+    })),
+    ...manuscript.back.map(matter("back"))
+  ];
+  return {
+    title: manuscript.title,
+    ...manuscript.unit === "characters" ? { unit: "characters" } : {},
+    authors: manuscript.meta.authors,
+    editors: manuscript.meta.editors ?? [],
+    language: manuscript.meta.language,
+    writingMode: manuscript.meta.writingMode,
+    labels: manuscript.meta.labels,
+    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
+    parts
+  };
+}
+function writeDocx(outFile, manuscript, writeOptions = {}) {
+  writeZip(outFile, docxEntries(manuscript), writeOptions);
+}
+function docxEntries(manuscript, trace = null) {
+  const meta = manuscript.meta ?? publishingMeta({});
+  const script = docxScript(meta);
+  const note = (entry) => trace?.push(entry);
+  const credits = creditLines(meta);
+  const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
+  note(traceEntry("title", null));
+  credits.forEach(() => note(traceEntry("credit", null)));
+  const pushSection = (heading, body, byline, part, verse = false) => {
+    if (heading !== null) {
+      bodyParts.push(paragraphXml(script, heading, "Heading1"));
+      note(traceEntry("heading", part));
+    }
+    if (byline !== "") {
+      bodyParts.push(paragraphXml(script, byline, "Byline"));
+      note(traceEntry("byline", part));
+    }
+    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
+      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
+      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+    });
+  };
+  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
+  manuscript.front.forEach(pushMatter("front"));
+  manuscript.chapters.forEach((chapter, index) => {
+    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
+  });
+  manuscript.back.forEach(pushMatter("back"));
+  return docxPackageEntries(script, bodyParts.join(""));
+}
+function traceEntry(kind, part, index = null) {
+  return { kind, part, index };
+}
+function docxScript(meta) {
+  const language = meta?.language ?? "en";
+  const type = typesetting(language, meta?.writingMode);
+  const { eastAsia, cs, eastAsian, complex } = type.docx;
+  const written = writtenTag(language);
+  const tag = xmlEscape(written);
+  const font = (name) => `"${name ?? "Times New Roman"}"`;
+  return {
+    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
+    bidi: type.rtl ? "<w:bidi/>" : "",
+    rtl: type.rtl ? "<w:rtl/>" : "",
+    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
+    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
+    sizeCs: complex,
+    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
+    direction: type.vertical ? `<w:textDirection w:val="tbRl"/>` : type.rtl ? "<w:bidi/>" : ""
+  };
+}
+function docxSection(script, page = "", headers = []) {
+  const references = headers.map((header, index) => `<w:headerReference w:type="${header.type}" r:id="${docxHeaderId(index)}"/>`).join("");
+  const titlePage = headers.some((header) => header.type === "first") ? "<w:titlePg/>" : "";
+  const content = `${references}${page}${titlePage}${script.direction}`;
+  return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
+}
+function docxHeaderId(index) {
+  return `rId${index + 2}`;
+}
+var SHUNN_PAPERS = new Map([
+  ["letter", { css: "letter", width: 12240, height: 15840 }],
+  ["a4", { css: "A4", width: 11906, height: 16838 }]
+]);
+var DEFAULT_PAPER = "letter";
+function shunnPaper(name) {
+  const paper = SHUNN_PAPERS.get(name ?? DEFAULT_PAPER);
+  if (paper === undefined) {
+    throw new Error(`Unsupported paper: ${name}`);
+  }
+  return paper;
+}
+function docxPackageEntries(script, body, page = "", headers = []) {
+  const headerName = (index) => `header${index + 1}.xml`;
+  const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
+  const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
+  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+  return [
+    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
+    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
+    { name: "word/styles.xml", content: docxStyles(script) },
+    ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
+    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
+  ];
+}
+function docxStyles(script) {
+  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/>${script.sizeCs ? `<w:szCs w:val="28"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>` + `</w:styles>`;
+}
+var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
+var SHUNN_SIZE = `<w:sz w:val="24"/>`;
+var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
+function shunnRunProperties(script, { strong = false, em = false } = {}) {
+  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
+}
+function shunnRunXml(script, text, decoration) {
+  return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
+}
+function shunnHeadParts(meta) {
+  const name = meta.surname ? oneLine2(meta.surname) : headFit(headSurname(meta.lead ?? meta.author ?? "", meta.pack?.familyNameFirst), HEAD_NAME_COLUMNS, meta.labels);
+  const title = meta.shortTitle ? oneLine2(meta.shortTitle) : headFit(headTitle(meta.title), HEAD_TITLE_COLUMNS, meta.labels);
+  return [name, title].filter((part) => part !== "");
+}
+var HEAD_NAME_COLUMNS = 20;
+var HEAD_TITLE_COLUMNS = 30;
+function oneLine2(text) {
+  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\ue001]+/g, " ").replace(/^ | $/g, "");
+}
+var NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv|phd|ph\.d|md|m\.d|esq)\.?$/i;
+function headSurname(name, familyFirst = false) {
+  const words = (oneLine2(name).split(",").find((part) => part.trim() !== "") ?? "").split(" ").filter((word) => word !== "");
+  if (familyFirst) {
+    return words[0] ?? "";
+  }
+  while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
+    words.pop();
+  }
+  return words[words.length - 1] ?? "";
+}
+function headTitle(title) {
+  const text = oneLine2(title);
+  const main = text.split(/:\s|\uff1a|\u2014/u)[0].replace(/\s+$/u, "");
+  return main === "" ? text : main;
+}
+var WIDE_CHARACTER = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
+function headColumns(char) {
+  return /\p{M}/u.test(char) ? 0 : WIDE_CHARACTER.test(char) ? 2 : 1;
+}
+function headFit(text, limit, labels) {
+  let kept = "";
+  let width = 0;
+  for (const char of text) {
+    width += headColumns(char);
+    if (width > limit) {
+      const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
+      return withoutDangling(cut > 0 ? kept.slice(0, cut) : kept, labels);
+    }
+    kept += char;
+  }
+  return text;
+}
+function withoutDangling(text, labels) {
+  const joiners = new Set(["and", String(labels?.and ?? "").replace(/\{[ab]\}/g, "").trim().toLowerCase()]);
+  const dangling = /[\s,;:/&\u2013\u2014\u3001\uff0c-]+$/u;
+  let rest = text.replace(dangling, "");
+  let space = rest.lastIndexOf(" ");
+  while (space > 0 && joiners.has(rest.slice(space + 1).toLowerCase())) {
+    rest = rest.slice(0, space).replace(dangling, "");
+    space = rest.lastIndexOf(" ");
+  }
+  return rest;
+}
+function shunnHeaders(script, meta) {
+  const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
+  const text = shunnHeadParts(meta).map((part) => `${part} / `).join("");
+  const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`].map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
+  return [
+    { type: "default", content: paragraph(`${shunnRunXml(script, text)}${field}`) },
+    { type: "first", content: paragraph("") }
+  ];
+}
+function shunnParagraphXml(script, runXml, centered, quote = false) {
+  const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
+}
+function shunnChapterHeadingXml(script, text) {
+  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
+}
+function shunnRounded(count) {
+  const step = count < 1000 ? 1 : count < 40000 ? 100 : 1000;
+  return Math.round(count / step) * step;
+}
+function shunnLength(meta) {
+  const pack = meta.pack ?? languagePack();
+  const characters = meta.characters !== undefined;
+  const count = shunnRounded(characters ? meta.characters : meta.words);
+  const key = pluralLabelKey(meta.labels, characters ? "approximate-characters" : "approximate-words", count, pack);
+  return fillLabel(meta.labels, key, { [characters ? "characters" : "words"]: formatNumber2(count, pack) });
+}
+function shunnByline(meta) {
+  const lines = [];
+  if (meta.author) {
+    const by = fillLabel(meta.labels, "by");
+    lines.push(...by === "" ? [meta.author] : [by, meta.author]);
+  }
+  if (meta.editors) {
+    lines.push(meta.editors);
+  }
+  return lines;
+}
+function shunnChapterByline(chapter, meta) {
+  return meta.shortForm || meta.anonymous ? "" : chapter.byline ?? "";
+}
+function shunnTitlePageXml(script, meta) {
+  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
+  const lines = [line(meta.title, { strong: true })];
+  lines.push(...shunnByline(meta).map((text) => line(text)));
+  lines.push(line(shunnLength(meta)));
+  for (const contactLine of meta.contact) {
+    lines.push(line(String(contactLine)));
+  }
+  return lines;
+}
+function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName = DEFAULT_PAPER) {
+  writeZip(outFile, shunnDocxEntries(manuscript, meta, paperName), writeOptions);
+}
+function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = null) {
+  const script = docxScript(manuscript.meta);
+  const note = (entry) => trace?.push(entry);
+  const paragraphs = [...shunnTitlePageXml(script, meta)];
+  paragraphs.forEach(() => note(traceEntry("title-page", null)));
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
+  if (meta.shortForm) {
+    paragraphs.push(shunnParagraphXml(script, "", true));
+    note(traceEntry("blank", null));
+  }
+  let sections = 0;
+  manuscript.chapters.forEach((chapter, chapterIndex) => {
+    const part = { placement: "body", chapter: chapterIndex };
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    if (!meta.shortForm) {
+      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
+      note(traceEntry("heading", part));
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, byline), true));
+        note(traceEntry("byline", part));
+      }
+    } else if (body.length === 0) {
+      return;
+    } else if (sections++ > 0) {
+      paragraphs.push(hash);
+      note(traceEntry("separator", null));
+    }
+    body.forEach((paragraph, index) => {
+      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
+      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
+    });
+  });
+  const paper = shunnPaper(paperName);
+  const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
+  return docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta));
+}
+function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
+  const lines = [meta.title];
+  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
+  for (const contactLine of meta.contact) {
+    lines.push(String(contactLine));
+  }
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  if (meta.shortForm) {
+    lines.push("");
+  }
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const body = markdownParagraphs(chapter.body, true, chapter.verse);
+    if (!meta.shortForm) {
+      lines.push("\f", `# ${chapter.heading}`, "");
+      const byline = shunnChapterByline(chapter, meta);
+      if (byline !== "") {
+        lines.push(byline, "");
+      }
+    } else if (body.length === 0) {
+      continue;
+    } else if (sections++ > 0) {
+      lines.push("#", "");
+    }
+    for (const paragraph of body) {
+      if (paragraph.sceneBreak) {
+        lines.push(sceneBreak, "");
+        continue;
+      }
+      const prefix = paragraph.quote ? "> " : "";
+      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK3).join(`\\
+${prefix}`)}`, "");
+    }
+  }
+  writeFile(outFile, `${lines.join(`
+`).trimEnd()}
+`, writeOptions);
+}
+function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
+  const paper = shunnPaper(paperName);
+  const language = manuscript.meta?.language ?? "en";
+  const type = typesetting(language, "horizontal");
+  const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
+  const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
+  const headBox = type.rtl ? "@top-left" : "@top-right";
+  const sceneBreak = meta.shortForm ? "#" : "* * *";
+  const paragraphMarkup = (paragraph) => ({
+    quote: Boolean(paragraph.quote),
+    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
+  });
+  const body = [];
+  let sections = 0;
+  for (const chapter of manuscript.chapters) {
+    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
+    if (!meta.shortForm) {
+      const byline = shunnChapterByline(chapter, meta);
+      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
+${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
+`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+`)}
+</section>`);
+      continue;
+    }
+    if (paragraphs.length === 0) {
+      continue;
+    }
+    if (sections++ > 0) {
+      body.push(`<p class="break">#</p>`);
+    }
+    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
+`));
+  }
+  const dir = type.rtl ? ` dir="rtl"` : "";
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(language)}"${dir}>
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(meta.title)}</title>
+<style>
+@page { size: ${paper.css}; margin: 1in;
+  ${headBox} { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
+@page :first { ${headBox} { content: none; } }
+html { font: 12pt/2 ${fonts}; }
+body { margin: 0; }
+p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
+.title-page { line-height: 1.2; }
+.title-page p { text-indent: 0; }
+.title-page .length { float: ${type.rtl ? "left" : "right"}; }
+.title-block { clear: both; text-align: center; margin-top: ${meta.shortForm ? "2.5in" : "3in"}; }
+.title-block h1, .chapter h2 { font: inherit; font-weight: bold; margin: 0; }
+.title-block p { text-indent: 0; text-align: center; }
+.short-form { margin-top: 2em; }
+.chapter { break-before: page; }
+.chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
+p.break, p.byline { text-align: center; text-indent: 0; }
+blockquote { margin: 0 0.5in; }
+blockquote p { text-indent: 0; }
+</style>
+</head>
+<body>
+<header class="title-page">
+<p class="length">${escapeHtml(shunnLength(meta))}</p>
+${meta.contact.map((line) => `<p>${escapeHtml(String(line))}</p>`).join(`
+`)}
+</header>
+<div class="title-block"><h1>${escapeHtml(meta.title)}</h1>
+${shunnByline(meta).map((line) => `<p>${escapeHtml(line)}</p>`).join(`
+`)}
+</div>
+${meta.shortForm ? `<div class="short-form">
+${body.join(`
+`)}
+</div>` : body.join(`
+`)}
+</body>
+</html>
+`;
+}
+function docxTextXml(text) {
+  return String(text).split(LINE_BREAK3).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
+}
+function paragraphXml(script, text, style = "", runs = [{ text }]) {
+  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
+  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
+  const runXml = runs.map((run) => {
+    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
+    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
+    return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
+  });
+  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
+}
+function inlineRuns(text, code = false) {
+  if (code) {
+    return [{ text, strong: false, em: false }];
+  }
+  const nodes = [];
+  const closeSpan = codeSpanCloser(text);
+  let buffer = "";
+  const isSpace = (char) => char === undefined || char === LINE_BREAK3 || /\s/u.test(char);
+  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
+  for (let index = 0;index < text.length; ) {
+    const char = text[index];
+    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
+      buffer += text[index + 1];
+      index += 2;
+      continue;
+    }
+    if (char === "`") {
+      let run = 0;
+      while (text[index + run] === "`") {
+        run += 1;
+      }
+      const end = closeSpan(index, run);
+      if (end === -1) {
+        buffer += "`".repeat(run);
+        index += run;
+      } else {
+        const code = text.slice(index + run, end - run);
+        buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
+        index = end;
+      }
+      continue;
+    }
+    const reference = char === "&" ? characterReference(text, index) : null;
+    if (reference !== null) {
+      buffer += reference.value;
+      index += reference.length;
+      continue;
+    }
+    const autolink = char === "<" ? autolinkEnd(text, index) : -1;
+    if (autolink !== -1) {
+      buffer += text.slice(index + 1, autolink - 1);
+      index = autolink;
+      continue;
+    }
+    if (char !== "*" && char !== "_") {
+      buffer += char;
+      index += 1;
+      continue;
+    }
+    let end = index;
+    while (text[end] === char) {
+      end += 1;
+    }
+    if (buffer !== "") {
+      nodes.push({ text: buffer });
+      buffer = "";
+    }
+    const before = text[index - 1];
+    const after = text[end];
+    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
+    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
+    nodes.push({
+      delimiter: char,
+      count: end - index,
+      original: end - index,
+      open: char === "*" ? left : left && (!right || isPunct(before)),
+      close: char === "*" ? right : right && (!left || isPunct(after)),
+      strong: 0,
+      em: 0
+    });
+    index = end;
+  }
+  if (buffer !== "") {
+    nodes.push({ text: buffer });
+  }
+  const stack = [];
+  const bottom = new Map;
+  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
+  for (const [closeIndex, closer] of nodes.entries()) {
+    if (!closer.delimiter) {
+      continue;
+    }
+    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
+    while (closer.close && closer.count > 0) {
+      const floor = bottom.get(key) ?? 0;
+      let position = stack.length - 1;
+      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
+        position -= 1;
+      }
+      if (position < floor) {
+        bottom.set(key, stack.length);
+        break;
+      }
+      const openIndex = stack[position];
+      const opener = nodes[openIndex];
+      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
+      opener.count -= used;
+      closer.count -= used;
+      const marks = depth[used === 2 ? "strong" : "em"];
+      marks[openIndex + 1] += 1;
+      marks[closeIndex] -= 1;
+      stack.length = opener.count > 0 ? position + 1 : position;
+      for (const [other, value] of bottom) {
+        if (value > stack.length) {
+          bottom.set(other, stack.length);
+        }
+      }
+    }
+    if (closer.open && closer.count > 0) {
+      stack.push(closeIndex);
+    }
+  }
+  let strongDepth = 0;
+  let emDepth = 0;
+  for (const [index, node] of nodes.entries()) {
+    strongDepth += depth.strong[index];
+    emDepth += depth.em[index];
+    node.strong = strongDepth;
+    node.em = emDepth;
+  }
+  const runs = [];
+  for (const node of nodes) {
+    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
+    if (value === "") {
+      continue;
+    }
+    const strong = (node.strong ?? 0) > 0;
+    const em = (node.em ?? 0) > 0;
+    const previous = runs[runs.length - 1];
+    if (previous && previous.strong === strong && previous.em === em) {
+      previous.text += value;
+    } else {
+      runs.push({ text: value, strong, em });
+    }
+  }
+  return runs;
+}
+function canPairEmphasis(opener, closer) {
+  const both = opener.close || closer.open;
+  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
+  return opener.delimiter === closer.delimiter && !ruleOfThree;
+}
+function inlineHtml(text) {
+  return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
+}
+function runMarkup(run, escape, lineBreak) {
+  let markup = escape(run.text).split(LINE_BREAK3).join(lineBreak);
+  if (run.em) {
+    markup = `<em>${markup}</em>`;
+  }
+  if (run.strong) {
+    markup = `<strong>${markup}</strong>`;
+  }
+  return markup;
+}
+var LINE_BREAK3 = "";
+function markdownParagraphs(markdown, ownIndent = false, verse = false) {
+  const paragraphs = [];
+  let lines = [];
+  let quote = false;
+  const flush = () => {
+    if (lines.length === 0) {
+      return;
+    }
+    const texts = lines.map(({ line }, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
+    const joined = texts.map((text, index) => {
+      if (index === texts.length - 1) {
+        return text;
+      }
+      if (verse && !lines[index].code || lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
+        return `${text}${LINE_BREAK3}`;
+      }
+      return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
+    }).join("");
+    const parts = collapseSourceSpace(joined).split(LINE_BREAK3).map(trimSourceSpace);
+    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK3);
+    const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
+    const { code } = lines[0];
+    lines = [];
+    paragraphs.push(!code && !text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote, code });
+  };
+  const source = splitFences(markdown.replace(/\r\n?/g, `
+`)).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text)).split(`
+`).map((line) => ({ line, code: part.fenced })));
+  for (const { line: sourceLine, code } of source) {
+    const heading = isHeadingLine(sourceLine);
+    const rawLine = flattenHeadings(sourceLine);
+    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
+    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
+    if (line.trim() === "") {
+      flush();
+      continue;
+    }
+    if (!code && breaksParagraph(line)) {
+      flush();
+      paragraphs.push({ sceneBreak: true });
+      continue;
+    }
+    if (lines.length > 0 && marker && !quote) {
+      flush();
+    }
+    if (lines.length === 0) {
+      quote = Boolean(marker);
+    }
+    lines.push({ line, heading, code });
+  }
+  flush();
+  return paragraphs;
+}
+function verseLineCount(prose) {
+  return markdownParagraphs(String(prose).replace(/\r\n?/g, `
+`), false, true).filter((paragraph) => !paragraph.sceneBreak).reduce((sum, paragraph) => sum + paragraph.text.split(LINE_BREAK3).filter((line) => line.trim() !== "").length, 0);
+}
+function wordParagraphs(body, verse = false) {
+  return markdownParagraphs(body, true, verse).map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) });
+}
+var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
+var ZIP_UTF8_NAME_FLAG = 2048;
+var ZIP_STORED = 0;
+var ZIP_DEFLATED = 8;
+function writeZip(outFile, entries, writeOptions = {}) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer3.from(entry.name, "utf8");
+    const content = Buffer3.isBuffer(entry.content) ? entry.content : Buffer3.from(entry.content, "utf8");
+    const crc = crc32(content);
+    const deflated = entry.stored ? null : deflateRaw(content);
+    const compressed = deflated !== null && deflated.length < content.length;
+    const body = compressed ? deflated : content;
+    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
+    const localHeader = Buffer3.alloc(30);
+    localHeader.writeUInt32LE(67324752, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
+    localHeader.writeUInt16LE(method, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(body.length, 18);
+    localHeader.writeUInt32LE(content.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, name, body);
+    const centralHeader = Buffer3.alloc(46);
+    centralHeader.writeUInt32LE(33639248, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
+    centralHeader.writeUInt16LE(method, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(body.length, 20);
+    centralHeader.writeUInt32LE(content.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + body.length;
+  }
+  let centralSize = 0;
+  for (const part of centralParts) {
+    centralSize += part.length;
+  }
+  const end = Buffer3.alloc(22);
+  end.writeUInt32LE(101010256, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+  writeFile(outFile, Buffer3.concat(localParts.concat(centralParts, end)), writeOptions);
+}
+function crc32(buffer) {
+  let crc = 4294967295;
+  for (const byte of buffer) {
+    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
+  }
+  return (crc ^ 4294967295) >>> 0;
+}
+var CRC_TABLE = [];
+for (let index = 0;index < 256; index += 1) {
+  let value = index;
+  for (let bit = 0;bit < 8; bit += 1) {
+    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
+  }
+  CRC_TABLE.push(value >>> 0);
+}
+var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+function xmlEscape(value) {
+  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// src/scan-fields.js
 function chapterLength(unit, data, markdown, verse = false) {
   const prose = chapterProse(markdown.body);
   const words = wordCount(prose);
@@ -14863,20 +16660,20 @@ function chapterNumber(value, file) {
   return value !== undefined && isPositiveIntegerValue(value) ? Number(value) : chapterNumberFromFile(file);
 }
 function chapterNumberFromFile(file) {
-  const match = CHAPTER_FILENAME_PATTERN.exec(path9.basename(file));
+  const match = CHAPTER_FILENAME_PATTERN.exec(path10.basename(file));
   return match ? Number.parseInt(match[1], 10) : 0;
 }
 function sceneNumberFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path9.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
   return match ? Number.parseInt(match[2], 10) : 0;
 }
 function sceneChapterFromFile(file) {
-  const match = SCENE_FILENAME_PATTERN.exec(path9.basename(file));
+  const match = SCENE_FILENAME_PATTERN.exec(path10.basename(file));
   return match ? match[1] : "";
 }
 
 // src/scan-entity-files.js
-import path10 from "node:path";
+import path11 from "node:path";
 function buildEntity(project, kind, name, options) {
   const requestedId = requestedEntityId(kind, options.id);
   if (kind === "chapter") {
@@ -14930,7 +16727,7 @@ function buildEntity(project, kind, name, options) {
 }
 function entityResult(project, kind, id, markdown) {
   const config = entityConfig(kind);
-  return { id, markdown, file: path10.join(project.root, config.dir, `${id}.md`) };
+  return { id, markdown, file: path11.join(project.root, config.dir, `${id}.md`) };
 }
 function characterFile(name, options, calendar = null) {
   const bornError = bornProblem(options.born, calendar);
@@ -15508,8 +17305,8 @@ function extractMarkdownLinkTargets(body) {
 }
 // src/scan-cover.js
 import fs4 from "node:fs";
-import path11 from "node:path";
-import { Buffer as Buffer2 } from "node:buffer";
+import path12 from "node:path";
+import { Buffer as Buffer4 } from "node:buffer";
 var COVER_MEDIA_TYPES = {
   ".gif": "image/gif",
   ".jpeg": "image/jpeg",
@@ -15540,11 +17337,11 @@ function coverImage(project) {
   if (PATH_CONTROL_CHARACTERS.test(cover)) {
     throw controlCharacterError("cover", cover);
   }
-  const mediaType = COVER_MEDIA_TYPES[path11.extname(cover).toLowerCase()];
+  const mediaType = COVER_MEDIA_TYPES[path12.extname(cover).toLowerCase()];
   if (mediaType === undefined) {
     throw projectError(`story.md cover ${cover} must be a ${Object.keys(COVER_MEDIA_TYPES).join(", ")} image`);
   }
-  const filePath = path11.resolve(project.root, cover);
+  const filePath = path12.resolve(project.root, cover);
   if (!isPathInside(project.root, filePath)) {
     throw projectError(`story.md cover ${cover} must be inside the project`);
   }
@@ -15567,17 +17364,17 @@ function coverImage(project) {
   if (held !== mediaType) {
     throw projectError(held === null ? `story.md cover ${cover} does not hold a ${IMAGE_FORMAT_NAMES[mediaType]} image: its first bytes are not the ${IMAGE_FORMAT_NAMES[mediaType]} signature` : `story.md cover ${cover} holds a ${IMAGE_FORMAT_NAMES[held]} image, not a ${IMAGE_FORMAT_NAMES[mediaType]} one: rename it to end in ${Object.keys(COVER_MEDIA_TYPES).filter((extension) => COVER_MEDIA_TYPES[extension] === held).join(" or ")}`);
   }
-  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path11.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
+  return { filePath, mediaType, extension: mediaType === "image/jpeg" ? "jpg" : path12.extname(cover).slice(1).toLowerCase(), maxBytes: MAX_COVER_BYTES };
 }
 var IMAGE_FORMAT_NAMES = { "image/gif": "GIF", "image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WebP" };
 var IMAGE_SIGNATURE_BYTES = 12;
 function coverFormat(filePath) {
   const head = readFilePrefix(filePath, IMAGE_SIGNATURE_BYTES);
   const ascii = (start, end) => head.subarray(start, end).toString("latin1");
-  if (head.subarray(0, 8).equals(Buffer2.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+  if (head.subarray(0, 8).equals(Buffer4.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
     return "image/png";
   }
-  if (head.subarray(0, 3).equals(Buffer2.from([255, 216, 255]))) {
+  if (head.subarray(0, 3).equals(Buffer4.from([255, 216, 255]))) {
     return "image/jpeg";
   }
   if (ascii(0, 6) === "GIF87a" || ascii(0, 6) === "GIF89a") {
@@ -15707,7 +17504,7 @@ function branchGraph(project) {
   return { branching, passages, problems, missing, warnings };
 }
 // src/scan-registries.js
-import path12 from "node:path";
+import path13 from "node:path";
 function storyBible(options) {
   const data = {
     title: options.title,
@@ -15848,7 +17645,7 @@ ${themeTracking || `| Theme | Arcs | Chapters |
 `;
 }
 function chapterIndex(storyId, chapters, unit = COUNT_UNITS.get("words")) {
-  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell2(chapter.number)} | ${cell2(chapter.title)} | ${cell2(chapter.pov)} | ${cell2(chapter.status)} | ${cell2(chapter.count)} | [${chapter.id}](${path12.basename(chapter.file)}) |`);
+  const rows = chapters.length === 0 ? ["| *No chapters yet* | | | | | |"] : chapters.map((chapter) => `| ${cell2(chapter.number)} | ${cell2(chapter.title)} | ${cell2(chapter.pov)} | ${cell2(chapter.status)} | ${cell2(chapter.count)} | [${chapter.id}](${path13.basename(chapter.file)}) |`);
   const total = chapters.reduce((sum, chapter) => sum + chapter.count, 0);
   const heading = `${unit.noun[0].toUpperCase()}${unit.noun.slice(1)} Count`;
   return `${stringifyFrontmatter({ type: "chapter-registry", story: storyId })}# Chapters
@@ -16046,7 +17843,7 @@ function existingStyleData(root) {
   }
 }
 function existingStoryData(root) {
-  if (!lstatIfExists(path13.join(root, "story.md"))) {
+  if (!lstatIfExists(path14.join(root, "story.md"))) {
     return null;
   }
   try {
@@ -16056,7 +17853,7 @@ function existingStoryData(root) {
   }
 }
 function scanProject(root) {
-  const projectRoot = path13.resolve(root);
+  const projectRoot = path14.resolve(root);
   const scanErrors = [];
   const storyPath = requireStoryFile(projectRoot);
   let story;
@@ -16064,12 +17861,12 @@ function scanProject(root) {
     story = readMarkdown(storyPath, projectRoot);
   } catch (error) {
     scanErrors.push(err("unreadable-file", fileErrorMessage("story.md", error), "story.md"));
-    story = { data: { title: path13.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
+    story = { data: { title: path14.basename(projectRoot) }, body: "", rawMarkdown: "", unreadable: true };
   }
   const storyId = deriveStoryId(story.data.title, projectRoot);
   const titleText = typeof story.data.title === "string" || typeof story.data.title === "number" ? String(story.data.title).trim() : "";
   let continuity = null;
-  const continuityPath = path13.join(projectRoot, "continuity", "state.md");
+  const continuityPath = path14.join(projectRoot, "continuity", "state.md");
   if (fs5.existsSync(continuityPath)) {
     try {
       continuity = readMarkdown(continuityPath, projectRoot);
@@ -16085,7 +17882,7 @@ function scanProject(root) {
     root: projectRoot,
     story,
     storyId,
-    title: titleText || path13.basename(projectRoot),
+    title: titleText || path14.basename(projectRoot),
     language,
     pack,
     unit,
@@ -16315,7 +18112,7 @@ ${errors.map((error) => `- ${error.message}`).join(`
   }
 }
 function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
-  const directory = path13.join(root, relativeDir);
+  const directory = path14.join(root, relativeDir);
   if (!fs5.existsSync(directory)) {
     return [];
   }
@@ -16326,11 +18123,11 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
     throw projectError("Too many files in " + relativeDir + ": " + files.length + " exceeds the " + MAX_SCAN_FILES + " file limit");
   }
   for (const file of files) {
-    const fullPath = path13.join(directory, file);
-    const label = path13.posix.join(relativeDir, file);
+    const fullPath = path14.join(directory, file);
+    const label = path14.posix.join(relativeDir, file);
     try {
       const markdown = readMarkdown(fullPath, root);
-      const entity = mapEntity(path13.basename(file, ".md"), fullPath, markdown.data, markdown);
+      const entity = mapEntity(path14.basename(file, ".md"), fullPath, markdown.data, markdown);
       Object.defineProperty(entity, "frontmatter", { value: markdown.data, enumerable: false });
       entities.push(entity);
     } catch (error) {
@@ -16340,7 +18137,7 @@ function readEntityFiles(root, relativeDir, mapEntity, scanErrors) {
   return entities;
 }
 function readExemptions(root, scanErrors) {
-  const exemptionsPath = path13.join(root, "continuity", "exemptions.md");
+  const exemptionsPath = path14.join(root, "continuity", "exemptions.md");
   if (!lstatIfExists(exemptionsPath)) {
     return [];
   }
@@ -16360,7 +18157,7 @@ function readExemptions(root, scanErrors) {
   return parseExemptions(data.exemptions);
 }
 function readOptionalRootFile(root, name, scanErrors) {
-  const filePath = path13.join(root, name);
+  const filePath = path14.join(root, name);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -16373,7 +18170,7 @@ function readOptionalRootFile(root, name, scanErrors) {
   }
 }
 function readStyleSheet(root, scanErrors) {
-  const filePath = path13.join(root, STYLE_SHEET_FILE);
+  const filePath = path14.join(root, STYLE_SHEET_FILE);
   if (!lstatIfExists(filePath)) {
     return null;
   }
@@ -18845,6 +20642,7 @@ var DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
 var EASY_WIN_RUN = 3;
 var NO_SEQUEL_RUN = 4;
 var RESOLUTION_RUN = 3;
+var RUN_BREAK = Object.freeze({ runBreak: true });
 function buildPacing(project) {
   const characterBook = project.unit?.name === "characters";
   const inUnit = (row) => characterBook ? row.characterCount : row.words;
@@ -18866,6 +20664,9 @@ function buildPacing(project) {
         units.push(scene);
       }
     }
+    if (verse) {
+      units.push(RUN_BREAK);
+    }
     rows.push({
       id: chapter.id,
       number: chapter.number,
@@ -18885,6 +20686,13 @@ function buildPacing(project) {
   let easyWins = [];
   let withoutSequel = [];
   for (const unit of units) {
+    if (unit === RUN_BREAK) {
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+      easyWins = [];
+      withoutSequel = [];
+      continue;
+    }
     if (unit.sequel) {
       flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
       withoutSequel = [];
@@ -18901,8 +20709,8 @@ function buildPacing(project) {
   flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
   flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
   let resolutions = [];
-  for (const row of rows.filter((entry) => !entry.verse)) {
-    if (row.hook === "resolution") {
+  for (const row of rows) {
+    if (!row.verse && row.hook === "resolution") {
       resolutions.push(row);
     } else {
       flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
@@ -18921,15 +20729,16 @@ function buildPacing(project) {
       }
     }
   }
-  const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
+  const scenes = units.filter((unit) => unit !== RUN_BREAK);
+  const recorded = scenes.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
     unit: characterBook ? "characters" : "words",
     rows,
     medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => !row.verse && row.words > 0).map((row) => row.words))) : formatMedian(median),
     medianCharacterCount: characterBook ? formatMedian(median) : null,
     totals: {
-      scenes: units.filter((unit) => !unit.sequel).length,
-      sequels: units.filter((unit) => unit.sequel).length,
+      scenes: scenes.filter((unit) => !unit.sequel).length,
+      sequels: scenes.filter((unit) => unit.sequel).length,
       outcomesRecorded: recorded.length,
       setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
       hooks: rows.filter((row) => !row.verse && row.hook !== "").length,
@@ -18967,7 +20776,7 @@ function formatPacing(pacing) {
   const lines = [
     `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length - verse, verse > 0 ? "prose chapter" : "chapter")} with hooks${verse > 0 ? ` (${plural(verse, "verse chapter")} left out)` : ""}`,
     `Outcomes: ${setbackShare}`,
-    characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
+    verse > 0 && verse === pacing.rows.length ? "Median chapter: none (no prose chapters)" : characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
   ];
   if (pacing.rows.length === 0) {
@@ -19094,544 +20903,6 @@ function formatCsv(table) {
 function csvCell(value) {
   const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",;\t\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-// src/build-style.js
-import path14 from "node:path";
-var BUILD_STYLE_PRESETS = ["classic", "modern", "elegant"];
-var HEADING_STYLES = ["centered", "small-caps", "left"];
-var PARAGRAPH_STYLES = ["indented", "block"];
-var BUILD_STYLE_KEYS = ["preset", "body-font", "heading-font", "heading-style", "scene-break", "drop-caps", "paragraphs", "css"];
-var NAME = `[^,"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]`;
-var SOLID = `[^\\s,"'\\\\/<>;{}()\\u0000-\\u001f\\u007f]`;
-var FAMILY = `${NAME}*${SOLID}${NAME}*`;
-var ITEM = `\\s*(?:"${FAMILY}"|'${FAMILY}'|${FAMILY})\\s*`;
-var FONT_PATTERN = new RegExp(`^${ITEM}(?:,${ITEM})*$`, "u");
-var SCENE_BREAK_PATTERN = /^[^\u0000-\u001f\u007f]*[^\s\u0000-\u001f\u007f][^\u0000-\u001f\u007f]*$/u;
-var GENERIC_FAMILIES = new Set(["serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong"]);
-var SANS_STACK = `"Avenir Next", "Segoe UI", "Helvetica Neue", Arial, "Noto Sans", sans-serif`;
-var OLD_STYLE_STACK = `Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif`;
-var PRESETS = {
-  classic: {},
-  modern: { headingFont: SANS_STACK, headingStyle: "left", sceneBreak: "• • •", dropCaps: false, paragraphs: "block" },
-  elegant: { bodyFont: OLD_STYLE_STACK, headingStyle: "small-caps", sceneBreak: "❦", dropCaps: true, paragraphs: "indented" }
-};
-var isEntry4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-function styleFields(data) {
-  const value = data["build-style"];
-  return Array.isArray(value) ? Object.assign({}, ...value.filter(isEntry4)) : {};
-}
-function fontList(value) {
-  return String(value).split(",").map((item) => {
-    const name = item.trim().replace(/^(["'])(.*)\1$/u, "$2").trim();
-    return GENERIC_FAMILIES.has(name.toLowerCase()) ? name.toLowerCase() : `"${name}"`;
-  }).join(", ");
-}
-function buildStyle(data) {
-  const fields = styleFields(data);
-  const preset = PRESETS[fields.preset] ?? PRESETS.classic;
-  const pick = (key, presetKey) => fields[key] !== undefined ? fields[key] : preset[presetKey] ?? null;
-  const style = {
-    preset: typeof fields.preset === "string" ? fields.preset : "classic",
-    bodyFont: fields["body-font"] === undefined ? null : fontList(fields["body-font"]),
-    presetBodyFont: preset.bodyFont ?? null,
-    headingFont: fields["heading-font"] === undefined ? null : fontList(fields["heading-font"]),
-    presetHeadingFont: preset.headingFont ?? null,
-    headingStyle: pick("heading-style", "headingStyle"),
-    sceneBreak: fields["scene-break"] === undefined ? preset.sceneBreak ?? null : String(fields["scene-break"]).trim(),
-    dropCaps: pick("drop-caps", "dropCaps"),
-    paragraphs: pick("paragraphs", "paragraphs"),
-    css: typeof fields.css === "string" ? fields.css.trim() : null
-  };
-  style.styled = ["bodyFont", "presetBodyFont", "headingFont", "presetHeadingFont", "headingStyle", "sceneBreak", "dropCaps", "paragraphs"].some((key) => style[key] !== null);
-  return style;
-}
-var CLASSIC_STYLE = Object.freeze(buildStyle({}));
-function styleFonts(style, type) {
-  const latin = type.fonts.latin;
-  const own = (list) => list === null ? null : latin ? list : `${list}, ${type.fonts.body}`;
-  const body = own(style.bodyFont) ?? (latin ? style.presetBodyFont : null) ?? type.fonts.body;
-  const heading = own(style.headingFont) ?? (latin ? style.presetHeadingFont : null);
-  return { body, heading, heads: heading ?? (body === type.fonts.body ? type.fonts.heads : body) };
-}
-function styleSheetFile(root, value) {
-  const css = String(value).trim();
-  if (PATH_CONTROL_CHARACTERS.test(css)) {
-    throw controlCharacterError("build-style css", css);
-  }
-  if (!/\.css$/i.test(css) || /[\\/]\.css$/i.test(css) || css.toLowerCase() === ".css") {
-    throw projectError(`story.md build-style css ${css} must be a .css file`);
-  }
-  const filePath = path14.resolve(root, css);
-  if (!isPathInside(root, filePath)) {
-    throw projectError(`story.md build-style css ${css} must be inside the project`);
-  }
-  if (!lstatIfExists(filePath)) {
-    throw projectError(`story.md build-style css ${css} does not exist`);
-  }
-  let text;
-  try {
-    assertSafeProjectPath(filePath, root);
-    text = readTextFile(filePath);
-  } catch (error) {
-    throw projectError(`story.md build-style css ${css}: ${String(error.message).replace(`${filePath}: `, "")}`);
-  }
-  if (/<\/style/i.test(text)) {
-    throw projectError(`story.md build-style css ${css} must not contain </style`);
-  }
-  text = text.replace(/^﻿/, "").replace(/\r\n?/g, `
-`);
-  return { filePath, text: text === "" || text.endsWith(`
-`) ? text : `${text}
-` };
-}
-function validateBuildStyle(data, errors, root = null) {
-  const value = data["build-style"];
-  if (value === undefined) {
-    return;
-  }
-  const fail = (message) => errors.push(err("invalid-build-style", `story.md build-style ${message}`, "story.md"));
-  if (!Array.isArray(value) || !value.every(isEntry4)) {
-    fail("must be a list of key: value entries, such as - preset: modern (see docs/manuscripts.md#build-styles)");
-    return;
-  }
-  const seen = new Set;
-  for (const entry of value) {
-    for (const [key, setting] of Object.entries(entry)) {
-      if (!BUILD_STYLE_KEYS.includes(key)) {
-        fail(`key ${key} is not a style setting; use ${BUILD_STYLE_KEYS.join(", ")}`);
-        continue;
-      }
-      if (seen.has(key)) {
-        fail(`sets ${key} more than once`);
-        continue;
-      }
-      seen.add(key);
-      const problem = settingProblem(key, setting);
-      if (problem !== "") {
-        fail(problem);
-      } else if (key === "css" && root !== null) {
-        try {
-          styleSheetFile(root, setting);
-        } catch (error) {
-          errors.push(err("invalid-build-style", error.message, "story.md"));
-        }
-      }
-    }
-  }
-}
-function settingProblem(key, value) {
-  const choice = (choices) => typeof value === "string" && choices.includes(value) ? "" : `${key} must be one of ${choices.join(", ")}`;
-  switch (key) {
-    case "preset":
-      return choice(BUILD_STYLE_PRESETS);
-    case "heading-style":
-      return choice(HEADING_STYLES);
-    case "paragraphs":
-      return choice(PARAGRAPH_STYLES);
-    case "body-font":
-    case "heading-font":
-      return typeof value === "string" && FONT_PATTERN.test(value) ? "" : `${key} must be a comma-separated list of font names, such as Iowan Old Style, Georgia, serif`;
-    case "scene-break":
-      return typeof value === "string" && SCENE_BREAK_PATTERN.test(value) ? "" : `${key} must be one line of text, such as "* * *" or "~"`;
-    case "drop-caps":
-      return typeof value === "boolean" ? "" : `${key} must be true or false`;
-    default:
-      return typeof value === "string" && value.trim() !== "" ? "" : `${key} must be the path to a .css file in the project`;
-  }
-}
-
-// src/html.js
-var TRIM_SIZES = new Map([
-  ["5x8", { width: "5in", height: "8in", wordsPerPage: 230, charactersPerPage: 480 }],
-  ["5.25x8", { width: "5.25in", height: "8in", wordsPerPage: 250, charactersPerPage: 520 }],
-  ["5.5x8.5", { width: "5.5in", height: "8.5in", wordsPerPage: 275, charactersPerPage: 580 }],
-  ["6x9", { width: "6in", height: "9in", wordsPerPage: 300, charactersPerPage: 640 }],
-  ["a5", { width: "148mm", height: "210mm", wordsPerPage: 270, charactersPerPage: 560 }]
-]);
-var DEFAULT_TRIM = "5.5x8.5";
-function labelledParagraphs(part) {
-  let count = 0;
-  return part.paragraphs.map((paragraph) => {
-    if (paragraph === null) {
-      return null;
-    }
-    count += 1;
-    return { label: `${part.key}-p${count}`, paragraph };
-  });
-}
-function paragraphLabels(book) {
-  return book.parts.flatMap((part) => labelledParagraphs(part).filter((entry) => entry !== null).map((entry) => ({ label: entry.label, key: part.key, text: entry.paragraph.text })));
-}
-function openingWords(text, count = 6) {
-  const source = String(text);
-  const words = wordSpans(source, /(?<!\S)\S*[\p{L}\p{N}]\S*/gu);
-  const opening = words.length > count ? source.slice(0, words[count].start) : source;
-  const collapsed = opening.split(/\s+/).filter((word) => word !== "").join(" ");
-  return words.length > count ? `${collapsed}…` : collapsed;
-}
-function noteHref(noteUrl, label, stamp, text) {
-  const params = [["title", `[${label}] `], ["anchor", label]];
-  if (stamp !== "") {
-    params.push(["build", stamp]);
-  }
-  params.push(["quote", openingWords(text)]);
-  const query = params.map(([name, value]) => `${name}=${encodeURIComponent(value)}`).join("&");
-  const hash = noteUrl.indexOf("#");
-  const base = hash === -1 ? noteUrl : noteUrl.slice(0, hash);
-  const fragment = hash === -1 ? "" : noteUrl.slice(hash);
-  return `${base}${base.includes("?") ? "&" : "?"}${query}${fragment}`;
-}
-function indentsFirstLines(format, style = CLASSIC_STYLE) {
-  return format === "print" ? style.paragraphs !== "block" : style.paragraphs === "indented";
-}
-function reviewHtml(book, { stamp = "", noteUrl = "", style = CLASSIC_STYLE } = {}) {
-  const labels = book.labels;
-  const label = (key, values) => fillLabel(labels, key, values);
-  const contents = label("contents");
-  const type = typesetting(book.language, book.writingMode);
-  const rtl = type.rtl;
-  const fonts = styleFonts(style, type);
-  const toc = [];
-  const sections = [];
-  for (const part of book.parts) {
-    const sectionId = part.kind === "chapter" ? part.key : `matter-${part.key}`;
-    toc.push(`<li><a href="#${sectionId}">${escapeHtml(part.title)}</a></li>`);
-    const body = [];
-    for (const entry of labelledParagraphs(part)) {
-      if (entry === null) {
-        body.push({ quote: false, markup: `<hr class="scene-break" aria-label="${escapeHtml(label("scene-break"))}">` });
-        continue;
-      }
-      const { label: anchor, paragraph } = entry;
-      const note = noteUrl === "" ? "" : `<a class="note-link" href="${escapeHtml(noteHref(noteUrl, anchor, stamp, paragraph.text))}" title="${escapeHtml(label("note-title", { label: anchor }))}" target="_blank" rel="noopener">${escapeHtml(label("note"))}</a>`;
-      body.push({ quote: paragraph.quote, markup: `<p id="${anchor}"><a class="anchor" href="#${anchor}" title="${escapeHtml(label("anchor-title", { label: anchor }))}">${anchor}</a>${note}${paragraph.html}</p>` });
-    }
-    const heading = part.heading ? `<h2>${escapeHtml(part.title)}</h2>` : `<h2 class="visually-hidden">${escapeHtml(part.title)}</h2>`;
-    const partByline = (part.byline ?? "") === "" ? "" : `<p class="byline">${escapeHtml(part.byline)}</p>
-`;
-    sections.push(`<section id="${sectionId}" class="${part.kind}">${heading}
-${partByline}${withBlockquotes(body).join(`
-`)}
-</section>`);
-  }
-  const byline = bookCredits(book).map((line) => `<p class="byline">${escapeHtml(line)}</p>`).join(`
-`);
-  const sentence = (key, values) => fillLabel(labels, key, values, escapeHtml);
-  const code = (text) => `<code>${escapeHtml(text)}</code>`;
-  const intro = joinSentences([
-    stamp === "" ? sentence("review-intro") : sentence("review-intro-build", { build: code(stamp) }),
-    sentence("review-labels", { label: code("ch03-p12") }),
-    sentence(stamp === "" ? "review-quote" : "review-quote-build"),
-    noteUrl === "" ? "" : sentence("review-note-link")
-  ]);
-  return `<!DOCTYPE html>
-${htmlRoot(book.language)}
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(label("review-title", { title: book.title }))}</title>
-<style>
-:root { --bg: #fdfcf8; --fg: #1d1b16; --muted: #6b665c; --rule: #ddd6c8; --accent: #7c3aed; }
-@media (prefers-color-scheme: dark) { :root { --bg: #16150f; --fg: #ece8dd; --muted: #a39e92; --rule: #3a372f; --accent: #b794f4; } }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 1.1rem/1.65 ${fonts.body}; }
-main { max-width: 38rem; margin: 0 auto; padding: 2rem 1rem 6rem; }
-header h1 { font-size: 2rem; line-height: 1.2; margin: 2rem 0 0.25rem; }
-.byline, .note { color: var(--muted); margin: 0 0 1rem; }
-.note { font: 0.9rem/1.5 system-ui, sans-serif; border-left: 3px solid var(--accent); padding-left: 0.75rem; }
-nav ol { padding-left: 1.25rem; }
-nav a, .anchor { color: var(--accent); }
-section { border-top: 1px solid var(--rule); margin-top: 3rem; padding-top: 1rem; }
-h2 { font-size: 1.4rem; margin: 1rem 0 1.5rem; }
-p { position: relative; margin: 0 0 1rem; }
-.anchor { position: absolute; left: -5.5rem; width: 5rem; text-align: right; font: 0.7rem/2.2 system-ui, sans-serif; text-decoration: none; opacity: 0.35; }
-p:hover .anchor, p:target .anchor, .anchor:focus { opacity: 1; }
-p:target { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-blockquote { margin: 0 0 1rem; margin-inline-start: 1.5rem; }
-.scene-break { border: 0; text-align: center; margin: 2rem 0; }
-.scene-break::after { content: "${cssString(style.sceneBreak ?? "* * *")}"; color: var(--muted); }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-@media (max-width: 52rem) { .anchor { position: static; display: block; width: auto; text-align: left; line-height: 1.4; opacity: 0.6; } }
-${noteUrl === "" ? "" : `.note-link { position: absolute; left: -5.5rem; top: 1.5rem; width: 5rem; text-align: right; font: 0.7rem/1.4 system-ui, sans-serif; color: var(--accent); text-decoration: none; opacity: 0.35; }
-p:hover .note-link, p:target .note-link, .note-link:focus { opacity: 1; }
-@media (max-width: 52rem) { .note-link { position: static; display: block; width: fit-content; margin-top: -1.4em; margin-inline-start: auto; opacity: 0.6; } }
-`}${rtl ? `[dir="rtl"] .note { border-left: 0; padding-left: 0; border-right: 3px solid var(--accent); padding-right: 0.75rem; }
-[dir="rtl"] nav ol { padding-left: 0; padding-right: 1.25rem; }
-[dir="rtl"] .anchor { left: auto; right: -5.5rem; text-align: left; }
-@media (max-width: 52rem) { [dir="rtl"] .anchor { text-align: right; } }
-${noteUrl === "" ? "" : `[dir="rtl"] .note-link { left: auto; right: -5.5rem; text-align: left; }
-`}` : ""}${type.vertical ? REVIEW_VERTICAL : ""}${reviewStyleRules(style, type, fonts, hasBylines(book))}</style>
-${extraStyle(style)}</head>
-<body>
-<main>
-<header>
-<h1>${escapeHtml(book.title)}</h1>
-${byline}
-<p class="note">${intro}</p>
-</header>
-<nav aria-label="${escapeHtml(contents)}"><h2>${escapeHtml(contents)}</h2><ol>
-${toc.join(`
-`)}
-</ol></nav>
-${sections.join(`
-`)}
-</main>
-</body>
-</html>
-`;
-}
-var REVIEW_VERTICAL = `html { writing-mode: vertical-rl; }
-main { max-width: none; max-height: 38rem; margin: auto 0; padding: 1rem 2rem 1rem 6rem; }
-header h1 { margin: 0; margin-block: 2rem 0.25rem; }
-.byline, .note, p { margin: 0; margin-block-end: 1rem; }
-.note { border-left: 0; padding-left: 0; border-top: 3px solid var(--accent); padding-top: 0.75rem; }
-nav ol { padding-left: 0; padding-top: 1.25rem; }
-section { border-top: 0; margin-top: 0; padding-top: 0; border-right: 1px solid var(--rule); margin-right: 3rem; padding-right: 1rem; }
-h2 { margin: 0; margin-block: 1rem 1.5rem; }
-.anchor, .note-link { position: static; display: block; width: auto; margin: 0; text-align: start; opacity: 0.6; }
-blockquote { margin: 0; margin-inline-start: 1.5rem; margin-block-end: 1rem; }
-.scene-break { margin: 0 2rem; }
-`;
-var PRINT_VERTICAL = `html { writing-mode: vertical-rl; }
-h1 { margin: 1in 0 0 0.5in; }
-blockquote { margin: 1.5em 0.8em; }
-p.scene-break { margin: 0 0.8em; }
-`;
-function reviewStyleRules(style, type, fonts, bylines = false) {
-  const opening = bylines ? ["section > h2 + p:not(.byline)", "section > h2 + p.byline + p"] : ["section > h2 + p"];
-  const rules = [];
-  if (fonts.heading !== null) {
-    rules.push(`header h1, section > h2 { font-family: ${fonts.heading}; }`);
-  }
-  if (bylines && style.paragraphs === "indented") {
-    rules.push("section > p.byline { text-indent: 0; margin-block-end: 1rem; }");
-  }
-  const heading = headingRule(style.headingStyle, type);
-  if (heading !== "") {
-    rules.push(`section > h2 { ${heading} }`);
-  }
-  if (style.paragraphs === "indented") {
-    rules.push("section p { margin-block-end: 0; text-indent: 1.5em; }", `${opening.join(", ")}, .scene-break + p, blockquote p, section.front p, section.back p { text-indent: 0; }`, "section.front p, section.back p { margin-block-end: 1rem; }");
-  }
-  if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`@media (min-width: 52.01rem) { ${opening.map((selector) => `section.chapter > ${selector.replace(/^section > /, "")}::first-letter`).join(", ")} { ${DROP_CAP_RULE} } }`);
-  }
-  return rules.length === 0 ? "" : `${rules.join(`
-`)}
-`;
-}
-function headingRule(headingStyle, type) {
-  if (headingStyle === "centered") {
-    return "text-align: center; font-weight: normal;";
-  }
-  if (headingStyle === "small-caps") {
-    return `text-align: center; font-weight: normal;${type.cased ? " font-variant: small-caps; letter-spacing: 0.08em;" : ""}`;
-  }
-  if (headingStyle === "left") {
-    return `text-align: ${type.rtl ? "right" : "left"}; font-weight: bold;`;
-  }
-  return "";
-}
-var DROP_CAP_RULE = "float: left; font-size: 3.2em; line-height: 0.8; margin: 0.08em 0.08em 0 0;";
-function extraStyle(style) {
-  return style.cssText ? `<style>
-${style.cssText}</style>
-` : "";
-}
-function printStyleRules(style, type, fonts, bylines = false) {
-  const rules = [];
-  if (fonts.heading !== null) {
-    rules.push(`h1 { font-family: ${fonts.heading}; }`);
-  }
-  const heading = headingRule(style.headingStyle, type);
-  if (heading !== "") {
-    rules.push(`section.chapter > h1, section.front > h1, section.back > h1 { ${heading} }`);
-  }
-  if (style.paragraphs === "block") {
-    rules.push(`p { text-indent: 0; ${type.vertical ? "margin-left" : "margin-bottom"}: 0.7em; }`);
-  }
-  if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { ${DROP_CAP_RULE} }`);
-  }
-  return rules.length === 0 ? "" : `${rules.join(`
-`)}
-`;
-}
-function printHtml(book, trimName = DEFAULT_TRIM, style = CLASSIC_STYLE) {
-  const trim = TRIM_SIZES.get(trimName);
-  if (!trim) {
-    throw usageError(`Unsupported trim size: ${trimName}. Supported sizes: ${[...TRIM_SIZES.keys()].join(", ")}`, "trim");
-  }
-  const pages = estimateBookPages(book, trimName);
-  const inside = insideMargin(pages);
-  const author = leadNames(bookMeta(book));
-  const credits = bookCredits(book);
-  const bylines = hasBylines(book);
-  const type = typesetting(book.language, book.writingMode);
-  const fonts = styleFonts(style, type);
-  const rtl = type.rtl;
-  const recto = rtl || type.vertical ? "left" : "right";
-  const verso = rtl || type.vertical ? "right" : "left";
-  const heads = `${type.cased ? "italic " : ""}9pt ${fonts.heads}`;
-  const sceneBreak = style.sceneBreak === null ? "*&#8195;*&#8195;*" : escapeHtml(style.sceneBreak);
-  const toc = [];
-  const sections = [];
-  for (const part of book.parts) {
-    const paragraphs = [];
-    let first = true;
-    for (const paragraph of part.paragraphs) {
-      if (paragraph === null) {
-        paragraphs.push({ quote: false, markup: `<p class="scene-break" aria-label="${escapeHtml(fillLabel(book.labels, "scene-break"))}">${sceneBreak}</p>` });
-        first = true;
-        continue;
-      }
-      paragraphs.push({ quote: paragraph.quote, markup: first ? `<p class="first">${paragraph.html}</p>` : `<p>${paragraph.html}</p>` });
-      first = false;
-    }
-    if (part.kind === "chapter") {
-      toc.push(`<li><a href="#${part.key}">${escapeHtml(part.title)}</a></li>`);
-    }
-    const heading = part.heading ? `<h1>${escapeHtml(part.title)}</h1>${(part.byline ?? "") === "" ? "" : `
-<p class="byline">${escapeHtml(part.byline)}</p>`}` : part.placement === "back" ? `<div class="running-head" aria-hidden="true"></div>` : "";
-    sections.push(`<section id="${part.key}" class="${part.kind}">${heading}
-${withBlockquotes(paragraphs).join(`
-`)}
-</section>`);
-  }
-  const copyrightIndex = book.parts.findIndex((part) => part.copyright && part.placement === "front");
-  const beforeToc = copyrightIndex === -1 ? [] : [sections[copyrightIndex]];
-  const afterToc = sections.filter((_, index) => index !== copyrightIndex);
-  const tocPageNumbers = rtl ? `.toc li { position: relative; padding-left: 2.5em; }
-.toc a::after { content: target-counter(attr(href), page); position: absolute; left: 0; bottom: 0; }` : `.toc a::after { content: " " target-counter(attr(href), page); float: ${type.vertical ? "none" : "right"}; }`;
-  return `<!DOCTYPE html>
-${htmlRoot(book.language)}
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(book.title)}</title>
-<!-- Print interior for ${trimName} trim (${trim.width} x ${trim.height}), about ${pages} pages.
-     Render to PDF with a CSS paged-media engine, for example:
-       npx pagedjs-cli book.print.html -o book.pdf
-       weasyprint book.print.html book.pdf
-       prince book.print.html -o book.pdf
-${type.vertical ? `     Vertical text needs an engine that sets it, such as Vivliostyle or Prince.
-` : ""}     Check the printer's current specs for margins, bleed, and fonts before upload. -->
-<style>
-@page { size: ${trim.width} ${trim.height}; margin: 0.75in 0.5in 0.75in ${inside}; }
-@page :left { margin-left: 0.5in; margin-right: ${inside}; }
-@page :${verso} {
-  @top-center { content: "${cssString(author || book.title)}"; font: ${heads}; } }
-@page :${recto} {
-  @top-center { content: string(chapter-title, first-except); font: ${heads}; } }
-@page chapter { @bottom-center { content: counter(page); font: 9pt ${fonts.heads}; } }
-@page :blank { @top-center { content: none; } @bottom-center { content: none; } }
-@page front { @top-center { content: none; } @bottom-center { content: none; } }
-html { font: 11pt/1.4 ${fonts.body}; }
-body { margin: 0; hyphens: auto; }
-.title-page, .toc, section.front { page: front; break-before: ${recto}; }
-section.front.copyright-page { break-before: page; font-size: 9pt; }
-.title-page { text-align: center; padding-top: 30%; }
-.title-page h1 { font-size: 26pt; font-weight: normal; margin: 0 0 1em; }
-.title-page .author { font-size: 14pt${type.cased ? "; font-variant: small-caps; letter-spacing: 0.05em" : ""}; }
-.toc h1 { font-size: 14pt; font-weight: normal; text-align: center${type.cased ? "; font-variant: small-caps" : ""}; }
-.toc ol { list-style: none; padding: 0; }
-.toc a { color: inherit; text-decoration: none; }
-${tocPageNumbers}
-section.chapter, section.back { page: chapter; break-before: ${recto}; }
-section.chapter > h1, section.back > h1, section.back > .running-head { string-set: chapter-title content(text); }
-.running-head { height: 0; margin: 0; }
-h1 { font-size: 16pt; font-weight: normal; text-align: center; margin: 1.5in 0 0.5in; break-after: avoid; }
-p { margin: 0; text-indent: 1.5em; text-align: justify; widows: 2; orphans: 2; }
-p.first, p.scene-break + p { text-indent: 0; }
-${bylines ? `p.byline { text-align: center; text-indent: 0; margin: -0.3in 0 0.4in;${type.cased ? " font-style: italic;" : ""} break-after: avoid; }
-` : ""}${type.cased && style.dropCaps === null ? `/* A raised initial: floated drop caps render inconsistently across engines. */
-${bylines ? "section.chapter > h1 + p.first::first-letter, section.chapter > h1 + p.byline + p.first::first-letter" : "section.chapter > h1 + p.first::first-letter"} { font-size: 2.4em; line-height: 1; }
-` : ""}p.scene-break { text-align: center; text-indent: 0; margin: 0.8em 0; break-after: avoid; }
-blockquote { margin: 0.8em 1.5em; }
-blockquote p { text-indent: 0; text-align: start; }
-section.front p, section.back p { text-indent: 0; margin-bottom: 0.6em; text-align: ${rtl ? "right" : "left"}; }
-section.front:not(.copyright-page) p { text-align: center; }
-@media screen { body { max-width: ${trim.width}; margin: 2rem auto; padding: 0 1rem; } section { margin-top: 3rem; } }
-${type.vertical ? `${PRINT_VERTICAL}@media screen { body { max-width: none; max-height: ${trim.height}; margin: auto 2rem; padding: 1rem 0; } section { margin-top: 0; margin-right: 3rem; } }
-` : ""}${printStyleRules(style, type, fonts, bylines)}</style>
-${extraStyle(style)}</head>
-<body>
-<section class="title-page"><h1>${escapeHtml(book.title)}</h1>${credits.map((line) => `<p class="author">${escapeHtml(line)}</p>`).join("")}</section>
-${beforeToc.join(`
-`)}
-<nav class="toc"><h1>${escapeHtml(fillLabel(book.labels, "contents"))}</h1><ol>
-${toc.join(`
-`)}
-</ol></nav>
-${afterToc.join(`
-`)}
-</body>
-</html>
-`;
-}
-function bookMeta(book) {
-  return { authors: book.authors ?? [], editors: book.editors ?? [], labels: book.labels };
-}
-function bookCredits(book) {
-  return creditLines(bookMeta(book));
-}
-function hasBylines(book) {
-  return book.parts.some((part) => (part.byline ?? "") !== "");
-}
-function joinSentences(sentences) {
-  return sentences.filter((sentence) => sentence !== "").reduce((text, sentence) => text === "" || /[。！？]$/u.test(text) ? `${text}${sentence}` : `${text} ${sentence}`, "");
-}
-function htmlRoot(language) {
-  const dir = typesetting(language).rtl ? ` dir="rtl"` : "";
-  return `<html lang="${escapeHtml(language)}"${dir}>`;
-}
-var OPENING_SINK_PAGES = 0.3;
-var CONTENTS_ENTRIES_PER_PAGE = 25;
-function estimateBookPages(book, trimName = DEFAULT_TRIM) {
-  const trim = TRIM_SIZES.get(trimName) ?? TRIM_SIZES.get(DEFAULT_TRIM);
-  const [perPage, length] = book.unit === "characters" ? [trim.charactersPerPage, (part) => part.characters] : [trim.wordsPerPage, (part) => part.words];
-  const chapters = book.parts.filter((part) => part.kind === "chapter").length;
-  let pages = 2 + Math.max(1, Math.ceil(chapters / CONTENTS_ENTRIES_PER_PAGE)) + 0.5;
-  for (const part of book.parts.filter((entry) => !(entry.copyright && entry.placement === "front"))) {
-    const sink = part.heading ? OPENING_SINK_PAGES : 0;
-    pages += Math.max(1, Math.ceil((length(part) ?? 0) / perPage + sink)) + 0.5;
-  }
-  return Math.ceil(pages);
-}
-function insideMargin(pages) {
-  if (pages <= 150) {
-    return "0.625in";
-  }
-  if (pages <= 300) {
-    return "0.75in";
-  }
-  if (pages <= 500) {
-    return "0.875in";
-  }
-  return "1in";
-}
-function withBlockquotes(items) {
-  const out = [];
-  let open = false;
-  for (const item of items) {
-    if (item.quote && !open) {
-      out.push("<blockquote>");
-    } else if (!item.quote && open) {
-      out.push("</blockquote>");
-    }
-    open = item.quote;
-    out.push(item.markup);
-  }
-  if (open) {
-    out.push("</blockquote>");
-  }
-  return out;
-}
-function escapeHtml(value) {
-  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-function cssString(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/</g, "\\3C ").replace(/>/g, "\\3E ").replace(/&/g, "\\26 ").replace(/[\r\n\f]+/g, " ").replace(/[\u0000-\u001f\u007f]/g, (char) => `\\${char.charCodeAt(0).toString(16).toUpperCase()} `);
 }
 
 // src/release-schedule.js
@@ -20352,7 +21623,7 @@ import path17 from "node:path";
 import fs6 from "node:fs";
 import os from "node:os";
 import path15 from "node:path";
-import { Buffer as Buffer3 } from "node:buffer";
+import { Buffer as Buffer5 } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 var PDF_ENGINES = [
@@ -20564,7 +21835,7 @@ ${detail}`}`;
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${reason}`));
     }
     const pdf = fs6.existsSync(output) ? fs6.readFileSync(output) : null;
-    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer3.from("%PDF-"))) {
+    if (result.status !== 0 || pdf === null || !pdf.subarray(0, 5).equals(Buffer5.from("%PDF-"))) {
       const outcome = result.status !== 0 ? `exited with ${result.status === null ? `signal ${result.signal}` : `code ${result.status}`}` : pdf === null ? "wrote no PDF" : "wrote a file that is not a PDF";
       throw refusedError(withDetail(`PDF engine ${engine.name} (${engine.file}) ${outcome}`));
     }
@@ -20593,1264 +21864,6 @@ function lastLines(text, count = 10) {
   const cause = lines.slice(0, -count).find((line) => /\b(?:FATAL|ERROR|Error)\b/.test(line));
   return (cause === undefined ? tail : [cause, "...", ...tail]).join(`
 `);
-}
-
-// src/packaging.js
-import { Buffer as Buffer5 } from "node:buffer";
-
-// src/deflate.js
-import { Buffer as Buffer4 } from "node:buffer";
-var WINDOW_SIZE = 32768;
-var WINDOW_MASK = WINDOW_SIZE - 1;
-var MIN_MATCH = 3;
-var MAX_MATCH = 258;
-var MAX_CHAIN = 256;
-var NICE_MATCH = 128;
-var GOOD_MATCH = 32;
-var TRIES_PER_BYTE = 16;
-var FAR_MATCH = 4096;
-var HASH_BITS = 15;
-var HASH_MASK = (1 << HASH_BITS) - 1;
-var BLOCK_SYMBOLS = 16384;
-var END_OF_BLOCK = 256;
-var MAX_CODE_BITS = 15;
-var MAX_CODE_LENGTH_BITS = 7;
-var LENGTH_BASE = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258];
-var LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
-var DISTANCE_BASE = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577];
-var DISTANCE_EXTRA = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
-var CODE_LENGTH_ORDER = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
-var CODE_LENGTH_EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 3, 7];
-function codeTable(bases, size) {
-  const table = new Uint8Array(size);
-  let code = 0;
-  for (let value = bases[0];value < size; value += 1) {
-    if (code + 1 < bases.length && bases[code + 1] <= value) {
-      code += 1;
-    }
-    table[value] = code;
-  }
-  return table;
-}
-var LENGTH_CODE = codeTable(LENGTH_BASE, MAX_MATCH + 1);
-var DISTANCE_CODE = codeTable(DISTANCE_BASE, WINDOW_SIZE + 1);
-var FIXED_LITERAL_LENGTHS = Array.from({ length: 288 }, (_, symbol) => symbol < 144 ? 8 : symbol < 256 ? 9 : symbol < 280 ? 7 : 8);
-var FIXED_DISTANCE_LENGTHS = new Array(30).fill(5);
-var FIXED_LITERAL_CODES = canonicalCodes(FIXED_LITERAL_LENGTHS);
-var FIXED_DISTANCE_CODES = canonicalCodes(FIXED_DISTANCE_LENGTHS);
-function deflateRaw(data, { blockSymbols = BLOCK_SYMBOLS, codeBits = MAX_CODE_BITS, codeLengthBits = MAX_CODE_LENGTH_BITS, stats = {} } = {}) {
-  const length = data.length;
-  const writer = bitWriter(length);
-  const limits = { codeBits, codeLengthBits };
-  stats.blocks = [];
-  const head = new Int32Array(HASH_MASK + 1).fill(-1);
-  const prev = new Int32Array(WINDOW_SIZE);
-  const block = {
-    values: new Uint16Array(blockSymbols),
-    distances: new Uint16Array(blockSymbols),
-    count: 0,
-    literals: new Array(286).fill(0),
-    distanceCodes: new Array(30).fill(0)
-  };
-  let foundDistance = 0;
-  let tries = 0;
-  const hashAt = (position) => (data[position] << 10 ^ data[position + 1] << 5 ^ data[position + 2]) & HASH_MASK;
-  const insert = (position) => {
-    if (position + MIN_MATCH <= length) {
-      const hash = hashAt(position);
-      prev[position & WINDOW_MASK] = head[hash];
-      head[hash] = position;
-    }
-  };
-  const longestMatch = (position, chain) => {
-    if (position + MIN_MATCH > length) {
-      return 0;
-    }
-    const limit = Math.min(MAX_MATCH, length - position);
-    const enough = Math.min(NICE_MATCH, limit);
-    let best = 0;
-    let candidate = head[hashAt(position)];
-    for (let left = Math.min(chain, TRIES_PER_BYTE * position + MAX_CHAIN - tries);left > 0 && candidate >= 0 && position - candidate <= WINDOW_SIZE; left -= 1) {
-      tries += 1;
-      if (data[candidate + best] === data[position + best]) {
-        let run = 0;
-        while (run < limit && data[candidate + run] === data[position + run]) {
-          run += 1;
-        }
-        if (run > best) {
-          best = run;
-          foundDistance = position - candidate;
-          if (best >= enough) {
-            break;
-          }
-        }
-      }
-      candidate = prev[candidate & WINDOW_MASK];
-    }
-    return best < MIN_MATCH || best === MIN_MATCH && foundDistance > FAR_MATCH ? 0 : best;
-  };
-  const emit = (value, distance, symbol) => {
-    if (block.count === blockSymbols) {
-      stats.blocks.push(writeBlock(writer, block, false, limits));
-    }
-    block.values[block.count] = value;
-    block.distances[block.count] = distance;
-    block.count += 1;
-    block.literals[symbol] += 1;
-    if (distance > 0) {
-      block.distanceCodes[DISTANCE_CODE[distance]] += 1;
-    }
-  };
-  const emitLiteral = (byte) => emit(byte, 0, byte);
-  const emitMatch = (matchLength, distance) => emit(matchLength, distance, 257 + LENGTH_CODE[matchLength]);
-  let position = 0;
-  let matchLength = longestMatch(0, MAX_CHAIN);
-  let matchDistance = foundDistance;
-  while (position < length) {
-    insert(position);
-    if (matchLength > 0 && matchLength < NICE_MATCH) {
-      const nextLength = longestMatch(position + 1, matchLength >= GOOD_MATCH ? MAX_CHAIN >> 2 : MAX_CHAIN);
-      if (nextLength > matchLength) {
-        emitLiteral(data[position]);
-        position += 1;
-        matchLength = nextLength;
-        matchDistance = foundDistance;
-        continue;
-      }
-    }
-    if (matchLength > 0) {
-      emitMatch(matchLength, matchDistance);
-      for (let step = 1;step < matchLength; step += 1) {
-        insert(position + step);
-      }
-      position += matchLength;
-    } else {
-      emitLiteral(data[position]);
-      position += 1;
-    }
-    matchLength = longestMatch(position, MAX_CHAIN);
-    matchDistance = foundDistance;
-  }
-  stats.blocks.push(writeBlock(writer, block, true, limits));
-  stats.tries = tries;
-  return writer.finish();
-}
-function bitWriter(size) {
-  let bytes = new Uint8Array(Math.max(64, size >> 1));
-  let used = 0;
-  let pending = 0;
-  let pendingBits = 0;
-  const push = (byte) => {
-    if (used === bytes.length) {
-      const grown = new Uint8Array(bytes.length * 2);
-      grown.set(bytes);
-      bytes = grown;
-    }
-    bytes[used] = byte;
-    used += 1;
-  };
-  return {
-    write(value, bits) {
-      pending |= value << pendingBits;
-      pendingBits += bits;
-      while (pendingBits >= 8) {
-        push(pending & 255);
-        pending >>>= 8;
-        pendingBits -= 8;
-      }
-    },
-    finish() {
-      if (pendingBits > 0) {
-        push(pending);
-      }
-      return Buffer4.from(bytes.buffer, 0, used);
-    }
-  };
-}
-function writeBlock(writer, block, final, limits) {
-  block.literals[END_OF_BLOCK] = 1;
-  const literalLengths = huffmanLengths(block.literals, limits.codeBits);
-  const distanceLengths = huffmanLengths(block.distanceCodes, limits.codeBits);
-  const header = dynamicHeader(literalLengths, distanceLengths, limits.codeLengthBits);
-  const dynamicBits = header.bits + codedBits(block.literals, literalLengths) + codedBits(block.distanceCodes, distanceLengths);
-  const fixedBits = codedBits(block.literals, FIXED_LITERAL_LENGTHS) + codedBits(block.distanceCodes, FIXED_DISTANCE_LENGTHS);
-  const type = fixedBits <= dynamicBits ? "fixed" : "dynamic";
-  writer.write(final ? 1 : 0, 1);
-  if (type === "fixed") {
-    writer.write(1, 2);
-    writeSymbols(writer, block, FIXED_LITERAL_CODES, FIXED_LITERAL_LENGTHS, FIXED_DISTANCE_CODES, FIXED_DISTANCE_LENGTHS);
-  } else {
-    writer.write(2, 2);
-    header.write(writer);
-    writeSymbols(writer, block, canonicalCodes(literalLengths), literalLengths, canonicalCodes(distanceLengths), distanceLengths);
-  }
-  block.count = 0;
-  block.literals.fill(0);
-  block.distanceCodes.fill(0);
-  return type;
-}
-function writeSymbols(writer, block, literalCodes, literalLengths, distanceCodes, distanceLengths) {
-  for (let index = 0;index < block.count; index += 1) {
-    const value = block.values[index];
-    const distance = block.distances[index];
-    if (distance === 0) {
-      writer.write(literalCodes[value], literalLengths[value]);
-      continue;
-    }
-    const lengthCode = LENGTH_CODE[value];
-    writer.write(literalCodes[257 + lengthCode], literalLengths[257 + lengthCode]);
-    writer.write(value - LENGTH_BASE[lengthCode], LENGTH_EXTRA[lengthCode]);
-    const distanceCode = DISTANCE_CODE[distance];
-    writer.write(distanceCodes[distanceCode], distanceLengths[distanceCode]);
-    writer.write(distance - DISTANCE_BASE[distanceCode], DISTANCE_EXTRA[distanceCode]);
-  }
-  writer.write(literalCodes[END_OF_BLOCK], literalLengths[END_OF_BLOCK]);
-}
-function codedBits(frequencies, lengths) {
-  let bits = 0;
-  for (let symbol = 0;symbol < frequencies.length; symbol += 1) {
-    bits += frequencies[symbol] * lengths[symbol];
-  }
-  return bits;
-}
-function dynamicHeader(literalLengths, distanceLengths, codeLengthBits) {
-  const literalCount = lastUsed(literalLengths) + 1;
-  const distanceCount = lastUsed(distanceLengths) + 1;
-  const items = runLengths([...literalLengths.slice(0, literalCount), ...distanceLengths.slice(0, distanceCount)]);
-  const frequencies = new Array(19).fill(0);
-  for (const [symbol] of items) {
-    frequencies[symbol] += 1;
-  }
-  const lengths = huffmanLengths(frequencies, codeLengthBits);
-  const codes = canonicalCodes(lengths);
-  let orderCount = CODE_LENGTH_ORDER.length;
-  while (orderCount > 4 && lengths[CODE_LENGTH_ORDER[orderCount - 1]] === 0) {
-    orderCount -= 1;
-  }
-  let bits = 5 + 5 + 4 + 3 * orderCount;
-  for (const [symbol] of items) {
-    bits += lengths[symbol] + CODE_LENGTH_EXTRA[symbol];
-  }
-  return {
-    bits,
-    write(writer) {
-      writer.write(literalCount - 257, 5);
-      writer.write(distanceCount - 1, 5);
-      writer.write(orderCount - 4, 4);
-      for (let index = 0;index < orderCount; index += 1) {
-        writer.write(lengths[CODE_LENGTH_ORDER[index]], 3);
-      }
-      for (const [symbol, extra] of items) {
-        writer.write(codes[symbol], lengths[symbol]);
-        writer.write(extra, CODE_LENGTH_EXTRA[symbol]);
-      }
-    }
-  };
-}
-function lastUsed(lengths) {
-  let index = lengths.length - 1;
-  while (lengths[index] === 0) {
-    index -= 1;
-  }
-  return index;
-}
-function runLengths(lengths) {
-  const items = [];
-  for (let index = 0;index < lengths.length; ) {
-    const value = lengths[index];
-    let run = 1;
-    while (index + run < lengths.length && lengths[index + run] === value) {
-      run += 1;
-    }
-    index += run;
-    if (value === 0) {
-      for (;run >= 11; run -= Math.min(run, 138)) {
-        items.push([18, Math.min(run, 138) - 11]);
-      }
-      if (run >= 3) {
-        items.push([17, run - 3]);
-        run = 0;
-      }
-    } else {
-      items.push([value, 0]);
-      run -= 1;
-      for (;run >= 3; run -= Math.min(run, 6)) {
-        items.push([16, Math.min(run, 6) - 3]);
-      }
-    }
-    for (;run > 0; run -= 1) {
-      items.push([value, 0]);
-    }
-  }
-  return items;
-}
-function huffmanLengths(frequencies, limit) {
-  let weights = Array.from(frequencies);
-  let used = weights.filter((weight) => weight > 0).length;
-  for (let symbol = 0;used < 2; symbol += 1) {
-    if (weights[symbol] === 0) {
-      weights[symbol] = 1;
-      used += 1;
-    }
-  }
-  let lengths = treeDepths(weights);
-  while (Math.max(...lengths) > limit) {
-    weights = weights.map((weight) => weight + 1 >> 1);
-    lengths = treeDepths(weights);
-  }
-  return lengths;
-}
-function treeDepths(weights) {
-  const leaves = [];
-  for (let symbol = 0;symbol < weights.length; symbol += 1) {
-    if (weights[symbol] > 0) {
-      leaves.push(symbol);
-    }
-  }
-  leaves.sort((a, b) => weights[a] - weights[b] || a - b);
-  const nodeWeights = leaves.map((symbol) => weights[symbol]);
-  const parents = [];
-  let leaf = 0;
-  let inner = leaves.length;
-  const lightest = () => leaf < leaves.length && (inner === nodeWeights.length || nodeWeights[leaf] <= nodeWeights[inner]) ? leaf++ : inner++;
-  while (nodeWeights.length < 2 * leaves.length - 1) {
-    const first = lightest();
-    const second = lightest();
-    parents[first] = nodeWeights.length;
-    parents[second] = nodeWeights.length;
-    nodeWeights.push(nodeWeights[first] + nodeWeights[second]);
-  }
-  const depths = new Array(nodeWeights.length).fill(0);
-  for (let node = nodeWeights.length - 2;node >= 0; node -= 1) {
-    depths[node] = depths[parents[node]] + 1;
-  }
-  const lengths = new Array(weights.length).fill(0);
-  leaves.forEach((symbol, index) => {
-    lengths[symbol] = depths[index];
-  });
-  return lengths;
-}
-function canonicalCodes(lengths) {
-  const counts = new Array(MAX_CODE_BITS + 1).fill(0);
-  for (const length of lengths) {
-    counts[length] += 1;
-  }
-  counts[0] = 0;
-  const next = [0];
-  for (let bits = 1;bits <= MAX_CODE_BITS; bits += 1) {
-    next[bits] = next[bits - 1] + counts[bits - 1] << 1;
-  }
-  return lengths.map((length) => {
-    if (length === 0) {
-      return 0;
-    }
-    let code = next[length];
-    next[length] += 1;
-    let reversed = 0;
-    for (let bit = 0;bit < length; bit += 1) {
-      reversed = reversed << 1 | code & 1;
-      code >>= 1;
-    }
-    return reversed;
-  });
-}
-
-// src/packaging.js
-function buildTimestamp() {
-  const raw = process.env.SOURCE_DATE_EPOCH;
-  if (raw !== undefined && raw !== "") {
-    const date = /^\d+$/.test(raw.trim()) ? new Date(Number(raw.trim()) * 1000) : null;
-    if (date !== null && !Number.isNaN(date.getTime()) && date.getUTCFullYear() <= 9999) {
-      return date.toISOString().replace(/\.\d{3}Z$/, "Z");
-    }
-  }
-  return "2000-01-01T00:00:00Z";
-}
-function writeEpub(outFile, storyId, manuscript, writeOptions = {}) {
-  const meta = manuscript.meta ?? publishingMeta({});
-  const lang = xmlEscape(meta.language);
-  const type = typesetting(meta.language, meta.writingMode);
-  const rtl = type.rtl;
-  const root = `xml:lang="${lang}" lang="${lang}"${rtl ? ` dir="rtl"` : ""}`;
-  const style = manuscript.style ?? CLASSIC_STYLE;
-  const bylines = manuscript.chapters.some((chapter) => (chapter.byline ?? "") !== "");
-  const stylesheet = epubStylesheet(type, style, bylines);
-  const extra = style.cssText ?? "";
-  const head = [
-    stylesheet === "" ? "" : `<link rel="stylesheet" type="text/css" href="style.css"/>`,
-    extra === "" ? "" : `<link rel="stylesheet" type="text/css" href="extra.css"/>`
-  ].join("");
-  const markup = { styled: style.styled, sceneBreak: style.sceneBreak ?? "* * *", ownIndent: style.paragraphs === "indented" };
-  const documents = [];
-  const pushMatter = (placement) => (entry) => documents.push({
-    id: `${placement}-${entry.id}`,
-    label: entry.title,
-    content: matterXhtml(entry, placement, root, head, markup)
-  });
-  manuscript.front.forEach(pushMatter("front"));
-  for (const chapter of manuscript.chapters) {
-    documents.push({
-      id: `chapter-${String(chapter.number).padStart(2, "0")}`,
-      label: chapter.heading,
-      content: chapterXhtml(chapter, root, head, markup),
-      bodymatter: true
-    });
-  }
-  manuscript.back.forEach(pushMatter("back"));
-  const coverEntries = [];
-  const coverItems = [];
-  const coverMeta = [];
-  const coverSpine = [];
-  if (manuscript.cover) {
-    const href = `images/cover.${manuscript.cover.extension}`;
-    const alt = meta.coverAlt === "" ? fillLabel(meta.labels, "cover-alt", { title: manuscript.title }) : meta.coverAlt;
-    coverEntries.push({ name: `OEBPS/${href}`, content: readFileBytes(manuscript.cover.filePath, manuscript.cover.maxBytes), stored: true }, { name: "OEBPS/cover.xhtml", content: `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(manuscript.title)}</title>${head}</head><body epub:type="cover"><img src="${href}" alt="${xmlEscape(alt)}"/></body></html>` });
-    coverItems.push(`<item id="cover-image" href="${href}" media-type="${manuscript.cover.mediaType}" properties="cover-image"/>`, `<item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
-    coverMeta.push(`<meta name="cover" content="cover-image"/>`);
-    coverSpine.push(`<itemref idref="cover"/>`);
-  }
-  const creator = epubCreators(meta, manuscript.chapters);
-  const identifier = meta.isbn === "" ? xmlEscape(storyId) : `urn:isbn:${meta.isbn}`;
-  const optional = [
-    meta.publisher === "" ? "" : `<dc:publisher>${xmlEscape(meta.publisher)}</dc:publisher>`,
-    meta.publicationDate === "" ? "" : `<dc:date>${xmlEscape(meta.publicationDate)}</dc:date>`,
-    meta.description === "" ? "" : `<dc:description>${xmlEscape(meta.description)}</dc:description>`,
-    ...meta.subjects.map((subject) => `<dc:subject>${xmlEscape(subject)}</dc:subject>`),
-    meta.copyright === "" ? "" : `<dc:rights>${xmlEscape(meta.copyright)}</dc:rights>`
-  ].join("");
-  const accessibility = epubAccessibilityMeta(Boolean(manuscript.cover), meta.labels);
-  const items = documents.map((doc) => `<item id="${doc.id}" href="${doc.id}.xhtml" media-type="application/xhtml+xml"/>`);
-  const spine = documents.map((doc) => `<itemref idref="${doc.id}"/>`);
-  const modified = buildTimestamp();
-  writeZip(outFile, [
-    { name: "mimetype", content: "application/epub+zip", stored: true },
-    { name: "META-INF/container.xml", content: `<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
-    { name: "OEBPS/content.opf", content: `<?xml version="1.0" encoding="UTF-8"?><package version="3.0" unique-identifier="book-id" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">${identifier}</dc:identifier><dc:title>${xmlEscape(manuscript.title)}</dc:title>${creator}<dc:language>${lang}</dc:language>${optional}<meta property="dcterms:modified">${modified}</meta>${accessibility}${coverMeta.join("")}${type.vertical ? `<meta name="primary-writing-mode" content="vertical-rl"/>` : ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>${stylesheet === "" ? "" : `<item id="style" href="style.css" media-type="text/css"/>`}${extra === "" ? "" : `<item id="extra-style" href="extra.css" media-type="text/css"/>`}${coverItems.join("")}${items.join("")}</manifest><spine${rtl || type.vertical ? ` page-progression-direction="rtl"` : ""}>${coverSpine.join("")}${spine.join("")}</spine></package>` },
-    { name: "OEBPS/nav.xhtml", content: navXhtml(manuscript.title, documents, root, meta.labels, head) },
-    ...stylesheet === "" ? [] : [{ name: "OEBPS/style.css", content: stylesheet }],
-    ...extra === "" ? [] : [{ name: "OEBPS/extra.css", content: extra }],
-    ...coverEntries,
-    ...documents.map((doc) => ({ name: `OEBPS/${doc.id}.xhtml`, content: doc.content }))
-  ], writeOptions);
-}
-function epubCreators(meta, chapters) {
-  const storyAuthors = new Set(chapters.flatMap((chapter) => chapter.authors ?? []));
-  const credited = new Set([...meta.authors, ...meta.editors]);
-  const contributors = [...storyAuthors].filter((name) => !credited.has(name));
-  if (meta.editors.length === 0 && contributors.length === 0) {
-    return meta.authors.map((name) => `<dc:creator>${xmlEscape(name)}</dc:creator>`).join("");
-  }
-  const entry = (element, id, name, roles) => `<dc:${element} id="${id}">${xmlEscape(name)}</dc:${element}>${roles.map((role) => `<meta refines="#${id}" property="role" scheme="marc:relators">${role}</meta>`).join("")}`;
-  const authors = new Set(meta.authors);
-  return [
-    ...meta.authors.map((name, index) => entry("creator", `author-${index + 1}`, name, ["aut"])),
-    ...meta.editors.map((name, index) => entry("creator", `editor-${index + 1}`, name, storyAuthors.has(name) && !authors.has(name) ? ["edt", "aut"] : ["edt"])),
-    ...contributors.map((name, index) => entry("contributor", `contributor-${index + 1}`, name, ["aut"]))
-  ].join("");
-}
-function epubStylesheet(type, style = CLASSIC_STYLE, bylines = false) {
-  const rules = [];
-  if (type.vertical) {
-    rules.push("html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }");
-  }
-  const fonts = styleFonts(style, type);
-  if (!type.fonts.latin || fonts.body !== type.fonts.body) {
-    rules.push(`body { font-family: ${fonts.body}; }`);
-  }
-  if (!style.styled) {
-    return rules.length === 0 ? "" : `${rules.join(`
-`)}
-`;
-  }
-  const opening = bylines ? ["h1 + p:not(.byline)", "h1 + p.byline + p"] : ["h1 + p"];
-  if (fonts.heading !== null) {
-    rules.push(`h1 { font-family: ${fonts.heading}; }`);
-  }
-  const heading = headingRule(style.headingStyle, type);
-  if (heading !== "") {
-    rules.push(`h1 { ${heading} }`);
-  }
-  const after = type.vertical ? "0 0 0 0.8em" : "0 0 0.8em";
-  if (style.paragraphs === "indented") {
-    rules.push("p { margin: 0; text-indent: 1.5em; }", `${opening.join(", ")}, p.scene-break + p, blockquote p, body.matter p { text-indent: 0; }`, `body.matter p { margin: ${after}; }`);
-  } else if (style.paragraphs === "block") {
-    rules.push(`p { margin: ${after}; text-indent: 0; }`);
-  }
-  rules.push("p.scene-break { text-align: center; text-indent: 0; margin: 1em 0; }");
-  if (bylines) {
-    rules.push(`p.byline { text-align: center; text-indent: 0; margin: ${after}; }`);
-  }
-  if (style.dropCaps === true && type.cased && !type.vertical) {
-    rules.push(`${opening.map((selector) => `body.chapter > ${selector}::first-letter`).join(", ")} { ${DROP_CAP_RULE} }`);
-  }
-  return `${rules.join(`
-`)}
-`;
-}
-function navXhtml(title, documents, root, labels, head = "") {
-  const links = documents.map((doc) => `<li><a href="${doc.id}.xhtml">${xmlEscape(doc.label)}</a></li>`);
-  const start = documents.find((doc) => doc.bodymatter);
-  const landmarks = start ? `<nav epub:type="landmarks" hidden="hidden"><ol><li><a epub:type="bodymatter" href="${start.id}.xhtml">${xmlEscape(fillLabel(labels, "start-of-content"))}</a></li></ol></nav>` : "";
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body><nav epub:type="toc" id="toc"><h1>${xmlEscape(fillLabel(labels, "contents"))}</h1><ol>${links.join("")}</ol></nav>${landmarks}</body></html>`;
-}
-function epubAccessibilityMeta(hasCover, labels) {
-  const features = ["tableOfContents", "readingOrder", "structuralNavigation", ...hasCover ? ["alternativeText"] : []];
-  const summary = xmlEscape(fillLabel(labels, hasCover ? "accessibility-summary-cover" : "accessibility-summary"));
-  return [
-    `<meta property="schema:accessMode">textual</meta>`,
-    ...hasCover ? [`<meta property="schema:accessMode">visual</meta>`] : [],
-    `<meta property="schema:accessModeSufficient">textual</meta>`,
-    ...features.map((feature) => `<meta property="schema:accessibilityFeature">${feature}</meta>`),
-    `<meta property="schema:accessibilityHazard">none</meta>`,
-    `<meta property="schema:accessibilitySummary">${summary}</meta>`
-  ].join("");
-}
-function xhtmlParagraphs(body, markup, verse = false) {
-  const sceneBreak = markup.styled ? `<p class="scene-break">${xmlEscape(markup.sceneBreak)}</p>` : "<p>* * *</p>";
-  return withBlockquotes(markdownParagraphs(body, markup.ownIndent, verse).map((paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? sceneBreak : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, xmlEscape, "<br/>")).join("")}</p>`
-  }))).join("");
-}
-function xhtmlDocument(title, root, head, bodyType, content, bodyClass = "") {
-  const classes = bodyClass === "" ? "" : ` class="${bodyClass}"`;
-  return `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" ${root}><head><title>${xmlEscape(title)}</title>${head}</head><body epub:type="${bodyType}"${classes}>${content}</body></html>`;
-}
-function chapterXhtml(chapter, root, head, markup) {
-  const heading = chapter.heading;
-  const title = String(chapter.title ?? "").trim() || heading;
-  const byline = (chapter.byline ?? "") === "" ? "" : `<p class="byline"><em>${xmlEscape(chapter.byline)}</em></p>`;
-  return xhtmlDocument(title, root, head, "bodymatter chapter", `<h1>${xmlEscape(heading)}</h1>${byline}${xhtmlParagraphs(chapter.body, markup, chapter.verse)}`, markup.styled ? "chapter" : "");
-}
-function matterXhtml(entry, placement, root, head, markup) {
-  const heading = entry.heading ? `<h1>${xmlEscape(entry.title)}</h1>` : "";
-  const bodyType = entry.copyright ? `${placement}matter copyright-page` : `${placement}matter`;
-  return xhtmlDocument(entry.title, root, head, bodyType, `${heading}${xhtmlParagraphs(entry.body, markup)}`, markup.styled ? "matter" : "");
-}
-function htmlBook(manuscript, ownIndent = false) {
-  const characters = (body) => manuscript.unit === "characters" ? { characters: characterCount(body) } : {};
-  const paragraphs = (body, verse = false) => markdownParagraphs(body, ownIndent, verse).map((paragraph) => {
-    if (paragraph.sceneBreak) {
-      return null;
-    }
-    const runs = inlineRuns(paragraph.text, paragraph.code);
-    return {
-      html: runs.map((run) => runMarkup(run, escapeHtml, "<br>")).join(""),
-      text: runs.map((run) => run.text).join("").split(LINE_BREAK3).join(" ").replace(/\s+/g, " ").trim(),
-      quote: paragraph.quote
-    };
-  });
-  const matter = (placement) => (entry) => ({
-    key: `${placement}-${entry.id}`,
-    kind: entry.copyright ? `${placement} copyright-page` : placement,
-    copyright: Boolean(entry.copyright),
-    placement,
-    title: entry.title,
-    heading: entry.heading,
-    words: wordCount(entry.body),
-    ...characters(entry.body),
-    paragraphs: paragraphs(entry.body)
-  });
-  const parts = [
-    ...manuscript.front.map(matter("front")),
-    ...manuscript.chapters.map((chapter) => ({
-      key: chapter.key,
-      kind: "chapter",
-      placement: "body",
-      title: chapter.heading,
-      heading: true,
-      byline: chapter.byline ?? "",
-      words: wordCount(chapter.body),
-      ...characters(chapter.body),
-      paragraphs: paragraphs(chapter.body, chapter.verse)
-    })),
-    ...manuscript.back.map(matter("back"))
-  ];
-  return {
-    title: manuscript.title,
-    ...manuscript.unit === "characters" ? { unit: "characters" } : {},
-    authors: manuscript.meta.authors,
-    editors: manuscript.meta.editors ?? [],
-    language: manuscript.meta.language,
-    writingMode: manuscript.meta.writingMode,
-    labels: manuscript.meta.labels,
-    words: manuscript.chapters.reduce((sum, chapter) => sum + wordCount(chapter.body), 0),
-    parts
-  };
-}
-function writeDocx(outFile, manuscript, writeOptions = {}) {
-  writeZip(outFile, docxEntries(manuscript), writeOptions);
-}
-function docxEntries(manuscript, trace = null) {
-  const meta = manuscript.meta ?? publishingMeta({});
-  const script = docxScript(meta);
-  const note = (entry) => trace?.push(entry);
-  const credits = creditLines(meta);
-  const bodyParts = [paragraphXml(script, manuscript.title, "Title"), ...credits.map((line) => paragraphXml(script, line, "Credit"))];
-  note(traceEntry("title", null));
-  credits.forEach(() => note(traceEntry("credit", null)));
-  const pushSection = (heading, body, byline, part, verse = false) => {
-    if (heading !== null) {
-      bodyParts.push(paragraphXml(script, heading, "Heading1"));
-      note(traceEntry("heading", part));
-    }
-    if (byline !== "") {
-      bodyParts.push(paragraphXml(script, byline, "Byline"));
-      note(traceEntry("byline", part));
-    }
-    markdownParagraphs(body, true, verse).forEach((paragraph, index) => {
-      bodyParts.push(paragraph.sceneBreak ? paragraphXml(script, "* * *", "SceneBreak") : paragraphXml(script, paragraph.text, paragraph.quote ? "Quote" : "", inlineRuns(paragraph.text, paragraph.code)));
-      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
-    });
-  };
-  const pushMatter = (placement) => (entry) => pushSection(entry.heading ? entry.title : null, entry.body, "", { placement, id: entry.id });
-  manuscript.front.forEach(pushMatter("front"));
-  manuscript.chapters.forEach((chapter, index) => {
-    pushSection(chapter.heading, chapter.body, chapter.byline ?? "", { placement: "body", chapter: index }, chapter.verse);
-  });
-  manuscript.back.forEach(pushMatter("back"));
-  return docxPackageEntries(script, bodyParts.join(""));
-}
-function traceEntry(kind, part, index = null) {
-  return { kind, part, index };
-}
-function docxScript(meta) {
-  const language = meta?.language ?? "en";
-  const type = typesetting(language, meta?.writingMode);
-  const { eastAsia, cs, eastAsian, complex } = type.docx;
-  const written = writtenTag(language);
-  const tag = xmlEscape(written);
-  const font = (name) => `"${name ?? "Times New Roman"}"`;
-  return {
-    lang: written === "en" || written === "und" ? "" : `<w:lang w:val="${tag}"${eastAsian ? ` w:eastAsia="${tag}"` : ""}${complex ? ` w:bidi="${tag}"` : ""}/>`,
-    bidi: type.rtl ? "<w:bidi/>" : "",
-    rtl: type.rtl ? "<w:rtl/>" : "",
-    bold: complex ? "<w:b/><w:bCs/>" : "<w:b/>",
-    italic: complex ? "<w:i/><w:iCs/>" : "<w:i/>",
-    sizeCs: complex,
-    fonts: `<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia=${font(eastAsia)} w:cs=${font(cs)}${eastAsian ? ` w:hint="eastAsia"` : ""}/>`,
-    direction: type.vertical ? `<w:textDirection w:val="tbRl"/>` : type.rtl ? "<w:bidi/>" : ""
-  };
-}
-function docxSection(script, page = "", headers = []) {
-  const references = headers.map((header, index) => `<w:headerReference w:type="${header.type}" r:id="${docxHeaderId(index)}"/>`).join("");
-  const titlePage = headers.some((header) => header.type === "first") ? "<w:titlePg/>" : "";
-  const content = `${references}${page}${titlePage}${script.direction}`;
-  return content === "" ? "<w:sectPr/>" : `<w:sectPr>${content}</w:sectPr>`;
-}
-function docxHeaderId(index) {
-  return `rId${index + 2}`;
-}
-var SHUNN_PAPERS = new Map([
-  ["letter", { css: "letter", width: 12240, height: 15840 }],
-  ["a4", { css: "A4", width: 11906, height: 16838 }]
-]);
-var DEFAULT_PAPER = "letter";
-function shunnPaper(name) {
-  const paper = SHUNN_PAPERS.get(name ?? DEFAULT_PAPER);
-  if (paper === undefined) {
-    throw new Error(`Unsupported paper: ${name}`);
-  }
-  return paper;
-}
-function docxPackageEntries(script, body, page = "", headers = []) {
-  const headerName = (index) => `header${index + 1}.xml`;
-  const headerTypes = headers.map((header, index) => `<Override PartName="/word/${headerName(index)}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("");
-  const headerRelationships = headers.map((header, index) => `<Relationship Id="${docxHeaderId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="${headerName(index)}"/>`).join("");
-  const relationshipsNamespace = headers.length === 0 ? "" : ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
-  return [
-    { name: "[Content_Types].xml", content: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>${headerTypes}</Types>` },
-    { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
-    { name: "word/_rels/document.xml.rels", content: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${headerRelationships}</Relationships>` },
-    { name: "word/styles.xml", content: docxStyles(script) },
-    ...headers.map((header, index) => ({ name: `word/${headerName(index)}`, content: `<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${header.content}</w:hdr>` })),
-    { name: "word/document.xml", content: `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"${relationshipsNamespace}><w:body>${body}${docxSection(script, page, headers)}</w:body></w:document>` }
-  ];
-}
-function docxStyles(script) {
-  return `<?xml version="1.0" encoding="UTF-8"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` + `<w:docDefaults><w:rPrDefault><w:rPr>${script.fonts}<w:sz w:val="24"/><w:szCs w:val="24"/>${script.lang}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>` + `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="720"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="56"/>${script.sizeCs ? `<w:szCs w:val="56"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Credit"><w:name w:val="Credit"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:contextualSpacing/><w:jc w:val="center"/></w:pPr><w:rPr><w:sz w:val="28"/>${script.sizeCs ? `<w:szCs w:val="28"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:ind w:firstLine="0"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr>${script.bold}<w:sz w:val="32"/>${script.sizeCs ? `<w:szCs w:val="32"/>` : ""}</w:rPr></w:style>` + `<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:before="120" w:after="120"/><w:ind w:left="720" w:right="720" w:firstLine="0"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SceneBreak"><w:name w:val="Scene Break"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr></w:style>` + `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Byline"><w:name w:val="Byline"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:rPr>${script.italic}</w:rPr></w:style>` + `</w:styles>`;
-}
-var SHUNN_FONT = `<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/>`;
-var SHUNN_SIZE = `<w:sz w:val="24"/>`;
-var SHUNN_PARAGRAPH_SPACING = `<w:spacing w:line="480" w:lineRule="auto"/>`;
-function shunnRunProperties(script, { strong = false, em = false } = {}) {
-  return `<w:rPr>${SHUNN_FONT}${strong ? script.bold : ""}${em ? script.italic : ""}${SHUNN_SIZE}${script.rtl}</w:rPr>`;
-}
-function shunnRunXml(script, text, decoration) {
-  return `<w:r>${shunnRunProperties(script, decoration)}${docxTextXml(text)}</w:r>`;
-}
-function shunnHeadParts(meta) {
-  const name = meta.surname ? oneLine2(meta.surname) : headFit(headSurname(meta.lead ?? meta.author ?? "", meta.pack?.familyNameFirst), HEAD_NAME_COLUMNS, meta.labels);
-  const title = meta.shortTitle ? oneLine2(meta.shortTitle) : headFit(headTitle(meta.title), HEAD_TITLE_COLUMNS, meta.labels);
-  return [name, title].filter((part) => part !== "");
-}
-var HEAD_NAME_COLUMNS = 20;
-var HEAD_TITLE_COLUMNS = 30;
-function oneLine2(text) {
-  return String(text).replace(/[ \u0000-\u001f\u007f-\u009f\u2028\u2029\ue001]+/g, " ").replace(/^ | $/g, "");
-}
-var NAME_SUFFIX = /^(?:jr|jnr|sr|snr|ii|iii|iv|phd|ph\.d|md|m\.d|esq)\.?$/i;
-function headSurname(name, familyFirst = false) {
-  const words = (oneLine2(name).split(",").find((part) => part.trim() !== "") ?? "").split(" ").filter((word) => word !== "");
-  if (familyFirst) {
-    return words[0] ?? "";
-  }
-  while (words.length > 1 && NAME_SUFFIX.test(words[words.length - 1])) {
-    words.pop();
-  }
-  return words[words.length - 1] ?? "";
-}
-function headTitle(title) {
-  const text = oneLine2(title);
-  const main = text.split(/:\s|\uff1a|\u2014/u)[0].replace(/\s+$/u, "");
-  return main === "" ? text : main;
-}
-var WIDE_CHARACTER = /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6\u{20000}-\u{3fffd}]/u;
-function headColumns(char) {
-  return /\p{M}/u.test(char) ? 0 : WIDE_CHARACTER.test(char) ? 2 : 1;
-}
-function headFit(text, limit, labels) {
-  let kept = "";
-  let width = 0;
-  for (const char of text) {
-    width += headColumns(char);
-    if (width > limit) {
-      const cut = /[ -]/.test(char) ? kept.length : Math.max(kept.lastIndexOf(" "), kept.lastIndexOf("-"));
-      return withoutDangling(cut > 0 ? kept.slice(0, cut) : kept, labels);
-    }
-    kept += char;
-  }
-  return text;
-}
-function withoutDangling(text, labels) {
-  const joiners = new Set(["and", String(labels?.and ?? "").replace(/\{[ab]\}/g, "").trim().toLowerCase()]);
-  const dangling = /[\s,;:/&\u2013\u2014\u3001\uff0c-]+$/u;
-  let rest = text.replace(dangling, "");
-  let space = rest.lastIndexOf(" ");
-  while (space > 0 && joiners.has(rest.slice(space + 1).toLowerCase())) {
-    rest = rest.slice(0, space).replace(dangling, "");
-    space = rest.lastIndexOf(" ");
-  }
-  return rest;
-}
-function shunnHeaders(script, meta) {
-  const paragraph = (runs) => `<w:p><w:pPr>${script.bidi}<w:spacing w:line="240" w:lineRule="auto"/><w:ind w:firstLine="0"/><w:jc w:val="right"/></w:pPr>${runs}</w:p>`;
-  const text = shunnHeadParts(meta).map((part) => `${part} / `).join("");
-  const field = [`<w:fldChar w:fldCharType="begin"/>`, `<w:instrText xml:space="preserve"> PAGE </w:instrText>`, `<w:fldChar w:fldCharType="separate"/>`, `<w:fldChar w:fldCharType="end"/>`].map((content) => `<w:r>${shunnRunProperties(script)}${content}</w:r>`).join("");
-  return [
-    { type: "default", content: paragraph(`${shunnRunXml(script, text)}${field}`) },
-    { type: "first", content: paragraph("") }
-  ];
-}
-function shunnParagraphXml(script, runXml, centered, quote = false) {
-  const layout = centered ? `<w:ind w:firstLine="0"/><w:jc w:val="center"/>` : quote ? `<w:ind w:left="720" w:right="720" w:firstLine="0"/>` : `<w:ind w:firstLine="720"/>`;
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}${layout}</w:pPr>${runXml}</w:p>`;
-}
-function shunnChapterHeadingXml(script, text) {
-  return `<w:p><w:pPr>${script.bidi}${SHUNN_PARAGRAPH_SPACING}<w:ind w:firstLine="0"/><w:jc w:val="center"/></w:pPr><w:r>${script.rtl === "" ? "" : `<w:rPr>${script.rtl}</w:rPr>`}<w:br w:type="page"/></w:r>${shunnRunXml(script, text, { strong: true })}</w:p>`;
-}
-function shunnRounded(count) {
-  const step = count < 1000 ? 1 : count < 40000 ? 100 : 1000;
-  return Math.round(count / step) * step;
-}
-function shunnLength(meta) {
-  const pack = meta.pack ?? languagePack();
-  const characters = meta.characters !== undefined;
-  const count = shunnRounded(characters ? meta.characters : meta.words);
-  const key = pluralLabelKey(meta.labels, characters ? "approximate-characters" : "approximate-words", count, pack);
-  return fillLabel(meta.labels, key, { [characters ? "characters" : "words"]: formatNumber2(count, pack) });
-}
-function shunnByline(meta) {
-  const lines = [];
-  if (meta.author) {
-    const by = fillLabel(meta.labels, "by");
-    lines.push(...by === "" ? [meta.author] : [by, meta.author]);
-  }
-  if (meta.editors) {
-    lines.push(meta.editors);
-  }
-  return lines;
-}
-function shunnChapterByline(chapter, meta) {
-  return meta.shortForm || meta.anonymous ? "" : chapter.byline ?? "";
-}
-function shunnTitlePageXml(script, meta) {
-  const line = (text, decoration) => shunnParagraphXml(script, shunnRunXml(script, text, decoration), true);
-  const lines = [line(meta.title, { strong: true })];
-  lines.push(...shunnByline(meta).map((text) => line(text)));
-  lines.push(line(shunnLength(meta)));
-  for (const contactLine of meta.contact) {
-    lines.push(line(String(contactLine)));
-  }
-  return lines;
-}
-function writeShunnDocx(outFile, manuscript, meta, writeOptions = {}, paperName = DEFAULT_PAPER) {
-  writeZip(outFile, shunnDocxEntries(manuscript, meta, paperName), writeOptions);
-}
-function shunnDocxEntries(manuscript, meta, paperName = DEFAULT_PAPER, trace = null) {
-  const script = docxScript(manuscript.meta);
-  const note = (entry) => trace?.push(entry);
-  const paragraphs = [...shunnTitlePageXml(script, meta)];
-  paragraphs.forEach(() => note(traceEntry("title-page", null)));
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const hash = shunnParagraphXml(script, shunnRunXml(script, "#"), true);
-  if (meta.shortForm) {
-    paragraphs.push(shunnParagraphXml(script, "", true));
-    note(traceEntry("blank", null));
-  }
-  let sections = 0;
-  manuscript.chapters.forEach((chapter, chapterIndex) => {
-    const part = { placement: "body", chapter: chapterIndex };
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
-    if (!meta.shortForm) {
-      paragraphs.push(shunnChapterHeadingXml(script, chapter.heading));
-      note(traceEntry("heading", part));
-      const byline = shunnChapterByline(chapter, meta);
-      if (byline !== "") {
-        paragraphs.push(shunnParagraphXml(script, shunnRunXml(script, byline), true));
-        note(traceEntry("byline", part));
-      }
-    } else if (body.length === 0) {
-      return;
-    } else if (sections++ > 0) {
-      paragraphs.push(hash);
-      note(traceEntry("separator", null));
-    }
-    body.forEach((paragraph, index) => {
-      paragraphs.push(paragraph.sceneBreak ? shunnParagraphXml(script, shunnRunXml(script, sceneBreak), true) : shunnParagraphXml(script, inlineRuns(paragraph.text, paragraph.code).map((run) => shunnRunXml(script, run.text, run)).join(""), false, paragraph.quote));
-      note(traceEntry(paragraph.sceneBreak ? "scene-break" : "paragraph", part, index));
-    });
-  });
-  const paper = shunnPaper(paperName);
-  const page = `<w:pgSz w:w="${paper.width}" w:h="${paper.height}"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>`;
-  return docxPackageEntries(script, paragraphs.join(""), page, shunnHeaders(script, meta));
-}
-function writeShunnMarkdown(outFile, manuscript, meta, writeOptions = {}) {
-  const lines = [meta.title];
-  lines.push(...shunnByline(meta), "", shunnLength(meta), "");
-  for (const contactLine of meta.contact) {
-    lines.push(String(contactLine));
-  }
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  if (meta.shortForm) {
-    lines.push("");
-  }
-  let sections = 0;
-  for (const chapter of manuscript.chapters) {
-    const body = markdownParagraphs(chapter.body, true, chapter.verse);
-    if (!meta.shortForm) {
-      lines.push("\f", `# ${chapter.heading}`, "");
-      const byline = shunnChapterByline(chapter, meta);
-      if (byline !== "") {
-        lines.push(byline, "");
-      }
-    } else if (body.length === 0) {
-      continue;
-    } else if (sections++ > 0) {
-      lines.push("#", "");
-    }
-    for (const paragraph of body) {
-      if (paragraph.sceneBreak) {
-        lines.push(sceneBreak, "");
-        continue;
-      }
-      const prefix = paragraph.quote ? "> " : "";
-      lines.push(`${prefix}${paragraph.text.split(LINE_BREAK3).join(`\\
-${prefix}`)}`, "");
-    }
-  }
-  writeFile(outFile, `${lines.join(`
-`).trimEnd()}
-`, writeOptions);
-}
-function shunnHtml(manuscript, meta, paperName = DEFAULT_PAPER) {
-  const paper = shunnPaper(paperName);
-  const language = manuscript.meta?.language ?? "en";
-  const type = typesetting(language, "horizontal");
-  const fonts = `"Courier New", Courier, ${type.fonts.latin ? "monospace" : type.fonts.body}`;
-  const head = shunnHeadParts(meta).map((part) => `"${cssString(part)} / "`).join(" ");
-  const headBox = type.rtl ? "@top-left" : "@top-right";
-  const sceneBreak = meta.shortForm ? "#" : "* * *";
-  const paragraphMarkup = (paragraph) => ({
-    quote: Boolean(paragraph.quote),
-    markup: paragraph.sceneBreak ? `<p class="break">${escapeHtml(sceneBreak)}</p>` : `<p>${inlineRuns(paragraph.text, paragraph.code).map((run) => runMarkup(run, escapeHtml, "<br>")).join("")}</p>`
-  });
-  const body = [];
-  let sections = 0;
-  for (const chapter of manuscript.chapters) {
-    const paragraphs = markdownParagraphs(chapter.body, true, chapter.verse);
-    if (!meta.shortForm) {
-      const byline = shunnChapterByline(chapter, meta);
-      body.push(`<section class="chapter"><h2>${escapeHtml(chapter.heading)}</h2>
-${byline === "" ? "" : `<p class="byline">${escapeHtml(byline)}</p>
-`}${withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`)}
-</section>`);
-      continue;
-    }
-    if (paragraphs.length === 0) {
-      continue;
-    }
-    if (sections++ > 0) {
-      body.push(`<p class="break">#</p>`);
-    }
-    body.push(withBlockquotes(paragraphs.map(paragraphMarkup)).join(`
-`));
-  }
-  const dir = type.rtl ? ` dir="rtl"` : "";
-  return `<!DOCTYPE html>
-<html lang="${escapeHtml(language)}"${dir}>
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(meta.title)}</title>
-<style>
-@page { size: ${paper.css}; margin: 1in;
-  ${headBox} { content: ${head === "" ? "" : `${head} `}counter(page); font: 12pt ${fonts}; } }
-@page :first { ${headBox} { content: none; } }
-html { font: 12pt/2 ${fonts}; }
-body { margin: 0; }
-p { margin: 0; text-indent: 0.5in; text-align: start; widows: 2; orphans: 2; }
-.title-page { line-height: 1.2; }
-.title-page p { text-indent: 0; }
-.title-page .length { float: ${type.rtl ? "left" : "right"}; }
-.title-block { clear: both; text-align: center; margin-top: ${meta.shortForm ? "2.5in" : "3in"}; }
-.title-block h1, .chapter h2 { font: inherit; font-weight: bold; margin: 0; }
-.title-block p { text-indent: 0; text-align: center; }
-.short-form { margin-top: 2em; }
-.chapter { break-before: page; }
-.chapter h2 { text-align: center; margin: 2.25in 0 1em; break-after: avoid; }
-p.break, p.byline { text-align: center; text-indent: 0; }
-blockquote { margin: 0 0.5in; }
-blockquote p { text-indent: 0; }
-</style>
-</head>
-<body>
-<header class="title-page">
-<p class="length">${escapeHtml(shunnLength(meta))}</p>
-${meta.contact.map((line) => `<p>${escapeHtml(String(line))}</p>`).join(`
-`)}
-</header>
-<div class="title-block"><h1>${escapeHtml(meta.title)}</h1>
-${shunnByline(meta).map((line) => `<p>${escapeHtml(line)}</p>`).join(`
-`)}
-</div>
-${meta.shortForm ? `<div class="short-form">
-${body.join(`
-`)}
-</div>` : body.join(`
-`)}
-</body>
-</html>
-`;
-}
-function docxTextXml(text) {
-  return String(text).split(LINE_BREAK3).map((part) => `<w:t xml:space="preserve">${xmlEscape(part)}</w:t>`).join("<w:br/>");
-}
-function paragraphXml(script, text, style = "", runs = [{ text }]) {
-  const properties = `${style ? `<w:pStyle w:val="${style}"/>` : ""}${script.bidi}`;
-  const styleXml = properties === "" ? "" : `<w:pPr>${properties}</w:pPr>`;
-  const runXml = runs.map((run) => {
-    const decoration = `${run.strong ? script.bold : ""}${run.em ? script.italic : ""}${script.rtl}`;
-    const runStyle = decoration === "" ? "" : `<w:rPr>${decoration}</w:rPr>`;
-    return `<w:r>${runStyle}${docxTextXml(run.text)}</w:r>`;
-  });
-  return `<w:p>${styleXml}${runXml.join("")}</w:p>`;
-}
-function inlineRuns(text, code = false) {
-  if (code) {
-    return [{ text, strong: false, em: false }];
-  }
-  const nodes = [];
-  const closeSpan = codeSpanCloser(text);
-  let buffer = "";
-  const isSpace = (char) => char === undefined || char === LINE_BREAK3 || /\s/u.test(char);
-  const isPunct = (char) => char !== undefined && /[\p{P}\p{S}]/u.test(char);
-  for (let index = 0;index < text.length; ) {
-    const char = text[index];
-    if (char === "\\" && /[!-/:-@[-`{-~]/.test(text[index + 1] ?? "")) {
-      buffer += text[index + 1];
-      index += 2;
-      continue;
-    }
-    if (char === "`") {
-      let run = 0;
-      while (text[index + run] === "`") {
-        run += 1;
-      }
-      const end = closeSpan(index, run);
-      if (end === -1) {
-        buffer += "`".repeat(run);
-        index += run;
-      } else {
-        const code = text.slice(index + run, end - run);
-        buffer += code.startsWith(" ") && code.endsWith(" ") && /[^ ]/.test(code) ? code.slice(1, -1) : code;
-        index = end;
-      }
-      continue;
-    }
-    const reference = char === "&" ? characterReference(text, index) : null;
-    if (reference !== null) {
-      buffer += reference.value;
-      index += reference.length;
-      continue;
-    }
-    const autolink = char === "<" ? autolinkEnd(text, index) : -1;
-    if (autolink !== -1) {
-      buffer += text.slice(index + 1, autolink - 1);
-      index = autolink;
-      continue;
-    }
-    if (char !== "*" && char !== "_") {
-      buffer += char;
-      index += 1;
-      continue;
-    }
-    let end = index;
-    while (text[end] === char) {
-      end += 1;
-    }
-    if (buffer !== "") {
-      nodes.push({ text: buffer });
-      buffer = "";
-    }
-    const before = text[index - 1];
-    const after = text[end];
-    const left = !isSpace(after) && (!isPunct(after) || isSpace(before) || isPunct(before));
-    const right = !isSpace(before) && (!isPunct(before) || isSpace(after) || isPunct(after));
-    nodes.push({
-      delimiter: char,
-      count: end - index,
-      original: end - index,
-      open: char === "*" ? left : left && (!right || isPunct(before)),
-      close: char === "*" ? right : right && (!left || isPunct(after)),
-      strong: 0,
-      em: 0
-    });
-    index = end;
-  }
-  if (buffer !== "") {
-    nodes.push({ text: buffer });
-  }
-  const stack = [];
-  const bottom = new Map;
-  const depth = { strong: new Array(nodes.length + 1).fill(0), em: new Array(nodes.length + 1).fill(0) };
-  for (const [closeIndex, closer] of nodes.entries()) {
-    if (!closer.delimiter) {
-      continue;
-    }
-    const key = `${closer.delimiter}${closer.open ? 1 : 0}${closer.original % 3}`;
-    while (closer.close && closer.count > 0) {
-      const floor = bottom.get(key) ?? 0;
-      let position = stack.length - 1;
-      while (position >= floor && !canPairEmphasis(nodes[stack[position]], closer)) {
-        position -= 1;
-      }
-      if (position < floor) {
-        bottom.set(key, stack.length);
-        break;
-      }
-      const openIndex = stack[position];
-      const opener = nodes[openIndex];
-      const used = opener.count >= 2 && closer.count >= 2 ? 2 : 1;
-      opener.count -= used;
-      closer.count -= used;
-      const marks = depth[used === 2 ? "strong" : "em"];
-      marks[openIndex + 1] += 1;
-      marks[closeIndex] -= 1;
-      stack.length = opener.count > 0 ? position + 1 : position;
-      for (const [other, value] of bottom) {
-        if (value > stack.length) {
-          bottom.set(other, stack.length);
-        }
-      }
-    }
-    if (closer.open && closer.count > 0) {
-      stack.push(closeIndex);
-    }
-  }
-  let strongDepth = 0;
-  let emDepth = 0;
-  for (const [index, node] of nodes.entries()) {
-    strongDepth += depth.strong[index];
-    emDepth += depth.em[index];
-    node.strong = strongDepth;
-    node.em = emDepth;
-  }
-  const runs = [];
-  for (const node of nodes) {
-    const value = node.delimiter ? node.delimiter.repeat(node.count) : node.text;
-    if (value === "") {
-      continue;
-    }
-    const strong = (node.strong ?? 0) > 0;
-    const em = (node.em ?? 0) > 0;
-    const previous = runs[runs.length - 1];
-    if (previous && previous.strong === strong && previous.em === em) {
-      previous.text += value;
-    } else {
-      runs.push({ text: value, strong, em });
-    }
-  }
-  return runs;
-}
-function canPairEmphasis(opener, closer) {
-  const both = opener.close || closer.open;
-  const ruleOfThree = both && (opener.original + closer.original) % 3 === 0 && !(opener.original % 3 === 0 && closer.original % 3 === 0);
-  return opener.delimiter === closer.delimiter && !ruleOfThree;
-}
-function inlineHtml(text) {
-  return inlineRuns(String(text)).map((run) => runMarkup(run, escapeHtml, "<br>")).join("");
-}
-function runMarkup(run, escape, lineBreak) {
-  let markup = escape(run.text).split(LINE_BREAK3).join(lineBreak);
-  if (run.em) {
-    markup = `<em>${markup}</em>`;
-  }
-  if (run.strong) {
-    markup = `<strong>${markup}</strong>`;
-  }
-  return markup;
-}
-var LINE_BREAK3 = "";
-function markdownParagraphs(markdown, ownIndent = false, verse = false) {
-  const paragraphs = [];
-  let lines = [];
-  let quote = false;
-  const flush = () => {
-    if (lines.length === 0) {
-      return;
-    }
-    const texts = lines.map(({ line }, index) => trimSourceSpace(index < lines.length - 1 && /\\$/.test(line) ? line.slice(0, -1) : line));
-    const joined = texts.map((text, index) => {
-      if (index === texts.length - 1) {
-        return text;
-      }
-      if (verse && !lines[index].code || lines[index].line.endsWith("\\") || lines[index].line.endsWith("  ")) {
-        return `${text}${LINE_BREAK3}`;
-      }
-      return `${text}${lines[index].heading || lines[index + 1].heading ? " " : softBreak(text, texts[index + 1])}`;
-    }).join("");
-    const parts = collapseSourceSpace(joined).split(LINE_BREAK3).map(trimSourceSpace);
-    const kept = parts.slice(parts.findIndex((part) => part.trim() !== "")).join(LINE_BREAK3);
-    const text = ownIndent ? kept.replace(/^\s+/, "") : kept;
-    const { code } = lines[0];
-    lines = [];
-    paragraphs.push(!code && !text.includes(LINE_BREAK3) && isSceneBreakLine(text) ? { sceneBreak: true } : { text, quote, code });
-  };
-  const source = splitFences(markdown.replace(/\r\n?/g, `
-`)).flatMap((part) => (part.fenced ? withoutFenceMarkers(part.text) : plainLinks(part.text)).split(`
-`).map((line) => ({ line, code: part.fenced })));
-  for (const { line: sourceLine, code } of source) {
-    const heading = isHeadingLine(sourceLine);
-    const rawLine = flattenHeadings(sourceLine);
-    const marker = /^(?:[ \t]*>[ \t]?)+/.exec(rawLine);
-    const line = marker ? rawLine.slice(marker[0].length) : rawLine;
-    if (line.trim() === "") {
-      flush();
-      continue;
-    }
-    if (!code && breaksParagraph(line)) {
-      flush();
-      paragraphs.push({ sceneBreak: true });
-      continue;
-    }
-    if (lines.length > 0 && marker && !quote) {
-      flush();
-    }
-    if (lines.length === 0) {
-      quote = Boolean(marker);
-    }
-    lines.push({ line, heading, code });
-  }
-  flush();
-  return paragraphs;
-}
-function wordParagraphs(body, verse = false) {
-  return markdownParagraphs(body, true, verse).map((paragraph) => paragraph.sceneBreak ? { sceneBreak: true } : { quote: Boolean(paragraph.quote), code: Boolean(paragraph.code), runs: inlineRuns(paragraph.text, paragraph.code) });
-}
-var ZIP_DOS_DATE = 0 << 9 | 1 << 5 | 1;
-var ZIP_UTF8_NAME_FLAG = 2048;
-var ZIP_STORED = 0;
-var ZIP_DEFLATED = 8;
-function writeZip(outFile, entries, writeOptions = {}) {
-  const localParts = [];
-  const centralParts = [];
-  let offset = 0;
-  for (const entry of entries) {
-    const name = Buffer5.from(entry.name, "utf8");
-    const content = Buffer5.isBuffer(entry.content) ? entry.content : Buffer5.from(entry.content, "utf8");
-    const crc = crc32(content);
-    const deflated = entry.stored ? null : deflateRaw(content);
-    const compressed = deflated !== null && deflated.length < content.length;
-    const body = compressed ? deflated : content;
-    const method = compressed ? ZIP_DEFLATED : ZIP_STORED;
-    const localHeader = Buffer5.alloc(30);
-    localHeader.writeUInt32LE(67324752, 0);
-    localHeader.writeUInt16LE(20, 4);
-    localHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 6);
-    localHeader.writeUInt16LE(method, 8);
-    localHeader.writeUInt16LE(0, 10);
-    localHeader.writeUInt16LE(ZIP_DOS_DATE, 12);
-    localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(body.length, 18);
-    localHeader.writeUInt32LE(content.length, 22);
-    localHeader.writeUInt16LE(name.length, 26);
-    localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, name, body);
-    const centralHeader = Buffer5.alloc(46);
-    centralHeader.writeUInt32LE(33639248, 0);
-    centralHeader.writeUInt16LE(20, 4);
-    centralHeader.writeUInt16LE(20, 6);
-    centralHeader.writeUInt16LE(ZIP_UTF8_NAME_FLAG, 8);
-    centralHeader.writeUInt16LE(method, 10);
-    centralHeader.writeUInt16LE(0, 12);
-    centralHeader.writeUInt16LE(ZIP_DOS_DATE, 14);
-    centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(body.length, 20);
-    centralHeader.writeUInt32LE(content.length, 24);
-    centralHeader.writeUInt16LE(name.length, 28);
-    centralHeader.writeUInt16LE(0, 30);
-    centralHeader.writeUInt16LE(0, 32);
-    centralHeader.writeUInt16LE(0, 34);
-    centralHeader.writeUInt16LE(0, 36);
-    centralHeader.writeUInt32LE(0, 38);
-    centralHeader.writeUInt32LE(offset, 42);
-    centralParts.push(centralHeader, name);
-    offset += localHeader.length + name.length + body.length;
-  }
-  let centralSize = 0;
-  for (const part of centralParts) {
-    centralSize += part.length;
-  }
-  const end = Buffer5.alloc(22);
-  end.writeUInt32LE(101010256, 0);
-  end.writeUInt16LE(0, 4);
-  end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(entries.length, 8);
-  end.writeUInt16LE(entries.length, 10);
-  end.writeUInt32LE(centralSize, 12);
-  end.writeUInt32LE(offset, 16);
-  end.writeUInt16LE(0, 20);
-  writeFile(outFile, Buffer5.concat(localParts.concat(centralParts, end)), writeOptions);
-}
-function crc32(buffer) {
-  let crc = 4294967295;
-  for (const byte of buffer) {
-    crc = CRC_TABLE[(crc ^ byte) & 255] ^ crc >>> 8;
-  }
-  return (crc ^ 4294967295) >>> 0;
-}
-var CRC_TABLE = [];
-for (let index = 0;index < 256; index += 1) {
-  let value = index;
-  for (let bit = 0;bit < 8; bit += 1) {
-    value = value & 1 ? 3988292384 ^ value >>> 1 : value >>> 1;
-  }
-  CRC_TABLE.push(value >>> 0);
-}
-var XML_INVALID_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-function xmlEscape(value) {
-  return String(value).replace(XML_INVALID_CHARACTERS, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // src/similarity.js
@@ -23074,8 +23087,8 @@ function documentMarkdown(xml, styles, chapterLine) {
 }
 var LINE_BREAK4 = "";
 var PARAGRAPH_BREAK = "";
-function paragraphMarkdown(runs, { quote = false } = {}) {
-  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null);
+function paragraphMarkdown(runs, { quote = false, verse = false } = {}) {
+  return blockMarkdown(runs.map((run) => ({ text: run.text.replace(/\u00ad/g, ""), italic: run.italic === true, bold: run.bold === true })), 0, quote, () => null, verse);
 }
 var HARD_BREAK = LINE_BREAK4;
 function paragraphBlocks(paragraph, styles, chapterLine) {
@@ -23099,7 +23112,7 @@ function paragraphBlocks(paragraph, styles, chapterLine) {
   }
   return pieces.map((piece) => blockMarkdown(piece, level, quote, chapterLine)).filter((block) => block !== "");
 }
-function blockMarkdown(runs, level, quote, chapterLine) {
+function blockMarkdown(runs, level, quote, chapterLine, verse = false) {
   const plain = runs.map((run) => run.text).join("").replace(/[\t ]+/g, " ").trim();
   const lines = plain.split(LINE_BREAK4).map((line) => line.trim()).filter((line) => line !== "");
   if (lines.length === 0) {
@@ -23120,7 +23133,9 @@ function blockMarkdown(runs, level, quote, chapterLine) {
   if (level > 0) {
     return `${"#".repeat(level)} ${escapeInline(lines.join(" ").replace(/[ \t]+/g, " "))}`;
   }
-  const text = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1).join("\\\n");
+  const kept = inlineMarkdown(runs).split(LINE_BREAK4).map((line) => line.trim()).filter((line, index, all) => line !== "" || index > 0 && index < all.length - 1);
+  const text = kept.join(verse && !kept.includes("") ? `
+` : "\\\n");
   const block = escapeBlockStart(text);
   return quote ? block.split(`
 `).map((line) => `> ${line}`).join(`
@@ -24583,11 +24598,11 @@ function validateChapters(project, errors, warnings) {
       warnings.push(warn("todo-placeholder", `${label} author is still a [TODO] placeholder; builds leave it out`, label));
     }
     errors.push(...chapterChoices(chapter, label).problems);
-    if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
-      errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
-    }
     if (data.verse !== undefined && typeof data.verse !== "boolean") {
       errors.push(err("field-not-boolean", `${label} verse must be true or false`, label));
+    }
+    if (data.numbered !== undefined && typeof data.numbered !== "boolean") {
+      errors.push(err("field-not-boolean", `${label} numbered must be true or false`, label));
     } else if (data.numbered === false && (typeof data.title !== "string" || data.title.trim() === "")) {
       errors.push(err("unnumbered-without-title", `${label} is unnumbered (numbered: false), so it needs a title to print as its heading`, label));
     }
@@ -27806,7 +27821,7 @@ function fillStoryProject(root, title, cwd, options) {
     bookNumber: series.bookNumber,
     follows: series.follows,
     precedes: series.precedes,
-    genre: options.genre ?? inherited.genre ?? (options.form === VERSE_FORM ? "poetry" : "fiction"),
+    genre: options.genre ?? (options.form === VERSE_FORM ? "poetry" : inherited.genre ?? "fiction"),
     subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
     settingEra: options.settingEra ?? "unspecified",
     themes,
@@ -28983,7 +28998,7 @@ function chapterReferenceFiles(root, chapterId, excluded) {
   const plan = planReferenceRewrites(root, context, new Map(excluded.map((file) => [file, null])), idRenamer(chapterId, probe), (body, file) => renameIdTokens(root, file, renameLinkTargets(root, file, body, context, probe), chapterId, probe, renameChapterIdText));
   return [...plan.keys()].map((file) => projectPath(root, file)).filter((file) => !REGISTRY_FILES.has(file)).sort();
 }
-var SPLIT_COPIED_FIELDS = ["numbered", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
+var SPLIT_COPIED_FIELDS = ["numbered", "verse", "author", "pov", "locations", "characters", "mentions", "status", "mode", "date", "time", "strand"];
 function splitChapter(root, options) {
   return withUndo(root, ["split", options.id, ...flag("at", options.at), ...flag("title", options.title)], () => splitNow(root, options));
 }
@@ -29142,7 +29157,7 @@ function mergeNow(root, options) {
     const current = scanProject(project.root);
     const kept = readMarkdown(first.file, project.root);
     const gone = readMarkdown(second.file, project.root);
-    const merged = mergedChapter(kept, gone, current.unit, first.id, second.id);
+    const merged = mergedChapter(kept, gone, current, first.id, second.id);
     warnings.push(...merged.warnings);
     const context = entityReferenceContext(project.root, "chapter", second.id);
     const plan = planReferenceRewrites(project.root, context, new Map([[first.file, merged.text], [second.file, null]]), idRenamer(second.id, first.id), (body, file) => renameIdTokens(project.root, file, renameLinkTargets(project.root, file, body, context, first.id), second.id, first.id));
@@ -29219,7 +29234,7 @@ var BLANK_VALUES = [undefined, null, ""];
 function isBlankValue(value) {
   return BLANK_VALUES.includes(value) || Array.isArray(value) && value.length === 0;
 }
-var MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered"]);
+var MERGE_DERIVED_FIELDS = new Set(["title", "number", "word-count", "character-count", "hook", "numbered", "verse"]);
 var MERGE_SUMMED_FIELDS = new Set(["target-words", "target-characters"]);
 function mergedChapterData(firstData, secondData) {
   const data = { ...firstData };
@@ -29406,7 +29421,8 @@ function sceneBreakLine(body) {
   const paragraph = proseParagraphs3(body).find((entry) => entry.sceneBreak);
   return paragraph ? body.slice(paragraph.start, paragraph.end).trim() : null;
 }
-function mergedChapter(first, second, unit, firstId, secondId) {
+function mergedChapter(first, second, project, firstId, secondId) {
+  const { unit } = project;
   const body = withLineEndings(mergedChapterBody(first.body, second.body, first.data.number, second.data.number), first.rawMarkdown);
   const { data, conflicts, droppedHook } = mergedChapterData(first.data, second.data);
   const label = `chapters/${firstId}.md`;
@@ -29420,6 +29436,10 @@ function mergedChapter(first, second, unit, firstId, secondId) {
   const numbered = (data) => data.numbered !== false;
   if (numbered(first.data) !== numbered(second.data)) {
     warnings.push(warn("merge-conflicts", numbered(first.data) ? `${secondId} is unnumbered (numbered: false) but ${firstId} is not: the merged ${firstId} stays numbered. Set numbered: false on it if it should not be` : `${firstId} is unnumbered (numbered: false) but ${secondId} is not: the merged ${firstId} stays unnumbered. Remove numbered: false from it if it should be numbered`, label));
+  }
+  const verse = (data) => isVerseChapter(project.story.data, data);
+  if (verse(first.data) !== verse(second.data)) {
+    warnings.push(warn("merge-conflicts", verse(first.data) ? `${secondId} is prose but ${firstId} is verse: the merged ${firstId} stays verse, so every line break of ${secondId}'s text is kept. Set verse: false on it if it should be prose` : `${secondId} is verse but ${firstId} is prose: the merged ${firstId} stays prose, so ${secondId}'s lines join. Set verse: true on it if it should be verse`, label));
   }
   return { text: replaceFrontmatter(first.rawMarkdown, { ...data, ...chapterLengthFields(body, unit) }, body), warnings };
 }
@@ -31468,7 +31488,7 @@ function inkLine(line) {
   return /^[*+\-=]|^(?:INCLUDE|VAR|CONST|LIST|EXTERNAL|TODO)\b/.test(text) ? `\\${text}` : text;
 }
 var HARD_BREAK2 = /(?:(?<! ) {2,}|(?:^|[^\\])(?:\\\\)*\\)$/;
-function inkProse(body) {
+function inkProse(body, verse = false) {
   const out = [];
   for (const paragraph of separateSceneBreaks(body).split(/\r?\n[ \t]*(?:\r?\n[ \t]*)*\r?\n/)) {
     const lines = paragraph.split(/\r?\n/);
@@ -31476,8 +31496,8 @@ function inkProse(body) {
     let previous = null;
     lines.forEach((line, index) => {
       const last = index === lines.length - 1;
-      const broken = !last && HARD_BREAK2.test(line);
-      const text = (broken ? line.replace(/\\$/, "") : line).trim();
+      const broken = !last && (verse || HARD_BREAK2.test(line));
+      const text = (broken && HARD_BREAK2.test(line) ? line.replace(/\\$/, "") : line).trim();
       if (previous !== null) {
         pieces.push(isHeadingLine(previous.line) || isHeadingLine(line) ? " " : softBreak(previous.text, text));
       }
@@ -31505,7 +31525,7 @@ function inkSource(story) {
   story.passages.forEach((passage, position) => {
     lines.push(`=== ${inkKnotName(passage.name)} ===`);
     if (passage.body !== "") {
-      lines.push(...inkProse(passage.body));
+      lines.push(...inkProse(passage.body, passage.verse === true));
     }
     if (!story.branching) {
       const next = story.passages[position + 1];
@@ -31652,7 +31672,7 @@ function buildBook(root, options = {}) {
     }), output.writeOptions);
   } else if (format === "twee" || format === "ink") {
     const { branches, ifid } = interactiveStory(project, manuscript, format);
-    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links }));
+    const passages = branches.passages.map((passage, position) => ({ name: passage.chapter.id, body: manuscript.chapters[position].body, links: passage.links, verse: manuscript.chapters[position].verse }));
     writeFile(output.outFile, format === "twee" ? tweeSource({ title: manuscript.title, ifid, start: passages[0].name, passages }) : inkSource({ title: manuscript.title, author: manuscript.author, ifid, branching: branches.branching, passages }), output.writeOptions);
     manuscript.warnings.push(...branches.warnings);
   } else if (format === "narration") {
@@ -37961,7 +37981,7 @@ function paragraphText(source, doc, indent, quote) {
   if (doc.sceneBreak) {
     return source.sceneBreak;
   }
-  const text = paragraphMarkdown(doc.runs, { quote }).split(`
+  const text = paragraphMarkdown(doc.runs, { quote, verse: source.verse }).split(`
 `).map(escapeLineStart).join(source.eol);
   return quote ? text : `${indent}${text}`;
 }

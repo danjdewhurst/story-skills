@@ -169,6 +169,16 @@ describe("story apply: the round trip", () => {
 });
 
 describe("story apply: writing edits", () => {
+  test("an edit in a verse chapter is written with plain line breaks, not backslashes", () => {
+    const book = sentBook({ example: "tide-tables" });
+    const original = chapter(book, 2);
+    const target = paragraphWith(book, "The boats swing round");
+    const file = returned(book, (xml) => xml.replace(target, target.replace("The boats swing round", "The dinghies swing round")));
+    const result = story(book.dir, "apply", file, "--path", "book");
+    expect(result.code).toBe(0);
+    expect(chapter(book, 2)).toBe(original.replace("The boats swing round on their ropes\n", "The dinghies swing round on their ropes\n"));
+  });
+
   test("writes a changed paragraph and keeps the frontmatter and every other paragraph byte for byte", () => {
     const book = sentBook();
     const original = chapter(book, 1);

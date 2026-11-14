@@ -185,8 +185,9 @@ function fillStoryProject(root, title, cwd, options) {
     bookNumber: series.bookNumber,
     follows: series.follows,
     precedes: series.precedes,
-    // A poetry collection is poetry unless the writer says otherwise.
-    genre: options.genre ?? inherited.genre ?? (options.form === VERSE_FORM ? "poetry" : "fiction"),
+    // A poetry collection is poetry unless the writer says otherwise, even
+    // when it follows a book of another genre.
+    genre: options.genre ?? (options.form === VERSE_FORM ? "poetry" : inherited.genre ?? "fiction"),
     subGenre: options.subGenre ?? inherited["sub-genre"] ?? "general",
     settingEra: options.settingEra ?? "unspecified",
     themes,

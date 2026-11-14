@@ -14,6 +14,8 @@ const DRAFTED_STATUSES = new Set(["draft", "revised", "final", "complete"]);
 const EASY_WIN_RUN = 3;
 const NO_SEQUEL_RUN = 4;
 const RESOLUTION_RUN = 3;
+// Where a verse chapter sits among the scene units: it ends a run.
+const RUN_BREAK = Object.freeze({ runBreak: true });
 
 // `unit` is the project's count unit. Each row has its `words` and its
 // `characterCount`, null in a book counted in words, and likewise
@@ -33,7 +35,8 @@ export function buildPacing(project) {
   for (const chapter of chapters) {
     // A verse chapter (a poem, see isVerseChapter) is listed, but its
     // scenes, hook, and length are left out of every finding: they are
-    // fiction measures.
+    // fiction measures. It still sits between the chapters on either side,
+    // so it ends a run of scenes, as a marker in `units` says.
     const verse = chapter.verse === true;
     const scenes = project.scenes
       .filter((scene) => scene.chapter === chapter.id)
@@ -46,6 +49,9 @@ export function buildPacing(project) {
       if (!verse) {
         units.push(scene);
       }
+    }
+    if (verse) {
+      units.push(RUN_BREAK);
     }
     rows.push({
       id: chapter.id,
@@ -68,6 +74,13 @@ export function buildPacing(project) {
   let easyWins = [];
   let withoutSequel = [];
   for (const unit of units) {
+    if (unit === RUN_BREAK) {
+      flushRun(easyWins, EASY_WIN_RUN, warnings, (run) => warn("pacing-easy-wins", `${run.length} scenes in a row end in an outright yes (${span(run)}): raise the cost with yes-but or no-and`));
+      flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
+      easyWins = [];
+      withoutSequel = [];
+      continue;
+    }
     if (unit.sequel) {
       flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
       withoutSequel = [];
@@ -85,8 +98,8 @@ export function buildPacing(project) {
   flushRun(withoutSequel, NO_SEQUEL_RUN, warnings, (run) => warn("pacing-no-sequel", `${run.length} scene units in a row with no sequel (${span(run)}): give the POV character room to react and decide`));
 
   let resolutions = [];
-  for (const row of rows.filter((entry) => !entry.verse)) {
-    if (row.hook === "resolution") {
+  for (const row of rows) {
+    if (!row.verse && row.hook === "resolution") {
       resolutions.push(row);
     } else {
       flushRun(resolutions, RESOLUTION_RUN, warnings, (run) => warn("pacing-resolution-run", `${run.length} chapters in a row end on resolution (${span(run)}): readers can put the book down`));
@@ -107,15 +120,16 @@ export function buildPacing(project) {
     }
   }
 
-  const recorded = units.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
+  const scenes = units.filter((unit) => unit !== RUN_BREAK);
+  const recorded = scenes.filter((unit) => !unit.sequel && SCENE_OUTCOMES.has(unit.outcome));
   return {
     unit: characterBook ? "characters" : "words",
     rows,
     medianWords: characterBook ? formatMedian(medianOf(rows.filter((row) => !row.verse && row.words > 0).map((row) => row.words))) : formatMedian(median),
     medianCharacterCount: characterBook ? formatMedian(median) : null,
     totals: {
-      scenes: units.filter((unit) => !unit.sequel).length,
-      sequels: units.filter((unit) => unit.sequel).length,
+      scenes: scenes.filter((unit) => !unit.sequel).length,
+      sequels: scenes.filter((unit) => unit.sequel).length,
       outcomesRecorded: recorded.length,
       setbacks: recorded.filter((unit) => unit.outcome !== "yes").length,
       hooks: rows.filter((row) => !row.verse && row.hook !== "").length,
@@ -161,7 +175,9 @@ export function formatPacing(pacing) {
   const lines = [
     `Pacing: ${plural(totals.scenes, "scene")}, ${plural(totals.sequels, "sequel")}, ${totals.hooks} of ${plural(pacing.rows.length - verse, verse > 0 ? "prose chapter" : "chapter")} with hooks${verse > 0 ? ` (${plural(verse, "verse chapter")} left out)` : ""}`,
     `Outcomes: ${setbackShare}`,
-    characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
+    verse > 0 && verse === pacing.rows.length
+      ? "Median chapter: none (no prose chapters)"
+      : characterBook ? `Median chapter: ${pacing.medianCharacterCount} characters` : `Median chapter: ${pacing.medianWords} words`,
     ""
   ];
   if (pacing.rows.length === 0) {
