@@ -120,6 +120,16 @@ describe("translation-of", () => {
     const errors = [];
     expect(validateTranslationLink(nested, { "translation-of": "../.." }, errors)).toBeNull();
     expect(errors).toEqual([{ code: "translation-of-invalid", message: "story.md translation-of ../.. is a folder that holds this project; keep the translation outside its source, such as beside it", file: "story.md", chapter: null }]);
+    // A --dry-run refuses it as the real run does: --record checks the link
+    // on the project itself, and links in a copy finds the same folder.
+    setFields(path.join(nested, "story.md"), { "translation-of": "../.." });
+    const real = invoke(nested, ["translation", "--record"]);
+    const preview = invoke(nested, ["translation", "--record", "--dry-run"]);
+    expect(real.code).toBe(3);
+    expect(preview).toEqual(real);
+    const linkCodes = (args) => JSON.parse(invoke(nested, args).out).diagnostics.filter((entry) => entry.code.startsWith("translation-of")).map((entry) => entry.code);
+    expect(linkCodes(["doctor", "--fix", "--dry-run", "--json"])).toEqual(["translation-of-invalid"]);
+    expect(linkCodes(["links", "--json"])).toEqual(["translation-of-invalid"]);
   });
 
   test("a source whose story.md cannot be read is translation-of-unreadable, and --record refuses it", () => {
@@ -446,6 +456,23 @@ describe("story translation", () => {
     expect(unreadable).toMatchObject({ ok: false, source: null, chapters: [] });
     expect(codes(unreadable.errors)).toEqual(["unreadable-file"]);
     expect(() => translationReport(translation, { record: true })).toThrow("Cannot record source hashes");
+  });
+
+  test("a chapter that fails to parse in one edition is reported once, not as missing or extra", () => {
+    const { source, translation } = editions();
+    const broken = "---\ntitle: Uno\ntitle: Otra vez\n---\nTexto.\n";
+    fs.writeFileSync(chapterFile(translation, "chapter-01"), broken, "utf8");
+    const report = translationReport(translation);
+    expect(report.missing).toEqual([]);
+    expect(report.errors).toEqual([expect.objectContaining({ code: "unreadable-file", file: "chapters/chapter-01.md" })]);
+    expect(report.chapters.map((entry) => entry.id)).toEqual(["chapter-02"]);
+
+    // A broken source chapter: the translated chapter is not extra.
+    fs.copyFileSync(chapterFile(source, "chapter-01"), chapterFile(translation, "chapter-01"));
+    fs.writeFileSync(chapterFile(source, "chapter-02"), broken, "utf8");
+    const sourceBroken = translationReport(translation);
+    expect(sourceBroken.extra).toEqual([]);
+    expect(sourceBroken.errors).toEqual([expect.objectContaining({ code: "unreadable-file", file: "../book-en/chapters/chapter-02.md" })]);
   });
 
   test("a source file that fails to parse is reported with the source path, and --record refuses it", () => {
