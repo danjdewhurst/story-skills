@@ -63,6 +63,22 @@ describe("story submissions", () => {
     expect(Object.keys(envelope.data.counts)).toEqual(SUBMISSION_STATUSES);
   });
 
+  test("a submission folder without tracker.md is the same as no tracker", () => {
+    const { cwd, root } = project();
+    fs.mkdirSync(path.join(root, "submission"));
+    const text = invoke(cwd, ["submissions", root, "--date", TODAY]);
+    expect(text.code).toBe(0);
+    expect(text.out).toStartWith("No submission tracker:");
+  });
+
+  test("a tracker table with no rows says no submissions are recorded", () => {
+    const { cwd, root } = project();
+    writeTracker(root, bookTracker([]));
+    const text = invoke(cwd, ["submissions", root, "--date", TODAY]);
+    expect(text.code).toBe(0);
+    expect(text.out).toContain("No submissions recorded yet.\n");
+  });
+
   test("lists the rows, counts each status from the table, and flags replies awaited 90 days or more", () => {
     const { cwd, root } = project();
     writeTracker(root, bookTracker(["| *No submissions yet* | | | | | |", ...ROWS]));
