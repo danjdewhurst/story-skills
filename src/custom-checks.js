@@ -32,10 +32,14 @@ export const CHECK_LEVELS = ["error", "warning"];
 // author cannot make a check print a book per file.
 export const MAX_CHECK_MESSAGE = 200;
 
+// The longest id a check takes, for the same reason: every finding prints
+// its custom-<id> code.
+export const MAX_CHECK_ID = 64;
+
 // A check as messages name it: a kebab-case id as written, anything else by
 // its place in the list.
 function checkLabel(item, index) {
-  return typeof item.id === "string" && KEBAB_NAME.test(item.id) ? `story.md check ${item.id}` : `story.md checks[${index}]`;
+  return typeof item.id === "string" && KEBAB_NAME.test(item.id) && item.id.length <= MAX_CHECK_ID ? `story.md check ${item.id}` : `story.md checks[${index}]`;
 }
 
 // The problems with story.md `checks`, as story validate reports them: a
@@ -91,6 +95,8 @@ function checkProblems(project, item, index, knownFor) {
     errors.push(err("field-not-text", `${label} id ${String(item.id)} is not text: quote it, such as id: "${String(item.id)}"`, "story.md"));
   } else if (typeof item.id !== "string" || !KEBAB_NAME.test(item.id)) {
     errors.push(err("id-not-kebab", `${label} id ${quoted(item.id)} must be kebab-case, such as chapter-needs-hook`, "story.md"));
+  } else if (item.id.length > MAX_CHECK_ID) {
+    errors.push(err("invalid-check", `${label} id is longer than ${MAX_CHECK_ID} characters: keep it to a short name, such as chapter-needs-hook`, "story.md"));
   }
 
   const spec = readFilterSpec(project, item, label, knownFor);

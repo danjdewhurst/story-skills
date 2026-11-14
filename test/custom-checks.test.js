@@ -317,8 +317,23 @@ describe("story.md checks (#891)", () => {
     expect(usableChecks(scanProject(root))).toEqual([]);
   });
 
+  test("an id longer than 64 characters is refused", () => {
+    const root = sampleProject(`checks:\n  - id: ${"a".repeat(65)}\n    kind: chapter\n    where: [pov=ilse]\n    level: warning\n    message: m`);
+    expect(codes(validateProject(root).errors, "invalid-check")).toEqual([
+      "invalid-check: story.md checks[0] id is longer than 64 characters: keep it to a short name, such as chapter-needs-hook"
+    ]);
+    expect(usableChecks(scanProject(root))).toEqual([]);
+  });
+
+  test("severity guesses only for the first five unknown codes", () => {
+    const entries = Array.from({ length: 7 }, () => "  - warning: custom-chapter-needs-hok\n    level: off").join("\n");
+    const root = sampleProject(`${CHECKS}\nseverity:\n${entries}`);
+    const guessed = codes(validateProject(root).errors, "invalid-cli-config").map((message) => message.endsWith("did you mean custom-chapter-needs-hook?"));
+    expect(guessed).toEqual([true, true, true, true, true, false, false]);
+  });
+
   test("severity guesses a check id only for a short code among a few checks", () => {
-    const longId = `c-${"a".repeat(80)}`;
+    const longId = `c-${"a".repeat(60)}`;
     const root = sampleProject(`${CHECKS}\n  - id: ${longId}\n    kind: chapter\n    where: [pov=x]\n    level: warning\n    message: m\nseverity:\n  - warning: custom-${longId}b\n    level: off`);
     expect(codes(validateProject(root).errors, "invalid-cli-config")).toEqual([
       `invalid-cli-config: story.md severity[0] names custom-${longId}b, but story.md checks has no check ${longId}b`
