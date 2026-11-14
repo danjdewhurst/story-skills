@@ -55,6 +55,19 @@ function breakChapter(root) {
   fs.writeFileSync(path.join(root, "chapters", "chapter-01.md"), "---\ntitle: One\ntitle: Again\n---\nText.\n", "utf8");
 }
 
+// A story project beside the book, named in the book's story.md
+// `stories`, so story collect has a story to collect. Nothing is made in a
+// folder without story.md.
+function shelve(root) {
+  if (fs.existsSync(path.join(root, "story.md"))) {
+    expect(invoke(path.dirname(root), ["init", "Shelf Story", "--dir", "shelf-story"]).code).toBe(ok);
+    expect(invoke(path.join(path.dirname(root), "shelf-story"), ["add", "chapter", "Shelf"]).code).toBe(ok);
+    const story = path.join(root, "story.md");
+    fs.writeFileSync(story, fs.readFileSync(story, "utf8").replace(/^title: (.*)\n/m, (line) => `${line}stories:\n  - ../shelf-story\n`), "utf8");
+  }
+  return ["collect"];
+}
+
 // The arguments that make each command succeed in a project made by
 // newProject(), run from its root.
 const OK_ARGS = {
@@ -64,6 +77,7 @@ const OK_ARGS = {
     fs.writeFileSync(draft, "# Chapter 1\n\nThe tide came in.\n", "utf8");
     return ["import", draft, "--title", "Imported", "--dir", path.join(cwd, "..", "imported")];
   },
+  collect: (cwd) => shelve(cwd),
   validate: () => ["validate"],
   reindex: () => ["reindex"],
   wordcount: () => ["wordcount", "--write"],
@@ -187,6 +201,13 @@ const REFUSED = {
     return ["import", draft, "--title", "Imported", "--dir", root];
   },
   add: () => ["add", "character", "Mara Quill"],
+  // A collected chapter edited in the book.
+  collect: (root) => {
+    expect(invoke(root, shelve(root)).code).toBe(ok);
+    const chapter = path.join(root, "chapters", "chapter-02.md");
+    fs.writeFileSync(chapter, `${fs.readFileSync(chapter, "utf8")}An edit.\n`, "utf8");
+    return ["collect"];
+  },
   rename: (root) => {
     invoke(root, ["add", "character", "Tobin Reed"]);
     return ["rename", "character", "tobin-reed", "Mara Quill"];
@@ -221,6 +242,7 @@ const REFUSED = {
 const LOCKED = {
   init: ["init", "Exit Codes", "--dir", ".", "--force"],
   reindex: ["reindex"],
+  collect: ["collect"],
   wordcount: ["wordcount", "--write"],
   progress: ["progress", "--log"],
   passes: ["passes", "--init"],

@@ -23696,7 +23696,7 @@ var TEXT_FIELDS = {
   factions: ["pronunciation", "name"],
   artifacts: ["pronunciation", "name", "owner", "location"],
   arcs: ["name"],
-  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat", "source-hash"],
+  chapters: ["title", "pov", "mode", "date", "time", "episode-question", "release-date", "time-skip", "strand", "beat", "collected-from", "collected-hash", "source-hash"],
   scenes: ["title", "chapter", "pov", "location", "date", "time", "dilemma", "flashback-to"],
   questions: ["title", "introduced", "resolved"],
   promises: ["title", "planted", "payoff"],
@@ -24601,6 +24601,9 @@ function validateChapters(project, errors, warnings) {
     }
     if (data["time-skip"] !== undefined) {
       requireScalar(data, "time-skip", label, errors);
+    }
+    for (const field of ["collected-from", "collected-hash"]) {
+      requireScalar(data, field, label, errors);
     }
     validateReleaseDate(data["release-date"], `${label} release-date`, label, errors);
     validateEnum(data, "hook", CHAPTER_HOOKS, label, errors);
@@ -26065,12 +26068,15 @@ function formatCheck(result) {
 }
 
 // src/mutate-writes.js
-function withUndo(root, words, run) {
+function withUndo(root, words, run, { beforeLog = () => {
+  return;
+} } = {}) {
   const command = undoCommand(words);
   assertNoInterruptedChange(root, command);
   const undone = undoInterruptedChange(root);
   try {
-    const result = withUndoLog(root, command, run);
+    const prepared = beforeLog();
+    const result = withUndoLog(root, command, () => run(prepared));
     return undone === null ? result : { ...result, undone };
   } catch (error) {
     if (undone !== null) {
@@ -34078,7 +34084,10 @@ function importedChapterData(title, number, counts, unnumbered = false, authors 
   };
 }
 function importedChapterText(data, prose) {
-  return `${stringifyFrontmatter(data)}# ${data.numbered === false ? data.title : chapterHeading(data.number, data.title)}
+  return `${stringifyFrontmatter(data)}${importedChapterBody(data, prose)}`;
+}
+function importedChapterBody(data, prose) {
+  return `# ${data.numbered === false ? data.title : chapterHeading(data.number, data.title)}
 
 ## Chapter Text
 
@@ -34110,7 +34119,11 @@ function collectionStories(root, data) {
   const seen = new Map;
   for (const value of entries) {
     const entry = value.trim();
-    const label = `story.md stories ${entry}`;
+    const label = `story.md stories ${outputText(entry)}`;
+    if (PATH_CONTROL_CHARACTERS.test(entry)) {
+      errors.push(err("collection-story-not-project", `${label} holds a control character, so it names no story project folder`, "story.md"));
+      continue;
+    }
     if (entry.includes("\\")) {
       errors.push(err("collection-story-backslash", `${label} uses a backslash; write ${entry.replace(/\\/g, "/")} so the path works on every system`, "story.md"));
       continue;
@@ -34125,17 +34138,27 @@ function collectionStories(root, data) {
       errors.push(err("collection-story-self", `${label} is this collection or a folder inside it; a story is its own project beside the collection`, "story.md"));
       continue;
     }
-    if (real === parent || !isPathInside(parent, real)) {
-      errors.push(err("collection-story-outside", `${label} is outside the folder that holds this collection; keep each story project beside the collection, such as ../low-tide`, "story.md"));
+    if (path41.dirname(real) !== parent) {
+      errors.push(err("collection-story-outside", `${label} is not a sibling folder of this collection; keep each story project in the folder that holds the collection, such as ../low-tide`, "story.md"));
       continue;
     }
     if (seen.has(real)) {
-      errors.push(err("collection-story-duplicate", `${label} names the same story project as ${seen.get(real)}; list each story once`, "story.md"));
+      errors.push(err("collection-story-duplicate", `${label} names the same story project as ${outputText(seen.get(real))}; list each story once`, "story.md"));
       continue;
     }
     seen.set(real, entry);
     const storyFile = path41.join(target, "story.md");
-    if (!fs27.statSync(target, { throwIfNoEntry: false })?.isDirectory() || !fs27.lstatSync(storyFile, { throwIfNoEntry: false })?.isFile()) {
+    let isProject;
+    try {
+      isProject = fs27.statSync(target, { throwIfNoEntry: false })?.isDirectory() === true && fs27.lstatSync(storyFile, { throwIfNoEntry: false })?.isFile() === true;
+    } catch (error) {
+      if (error.code !== "ENOTDIR") {
+        errors.push(err("collection-story-unreadable", `${label}: ${error.code ?? error.message}`, "story.md"));
+        continue;
+      }
+      isProject = false;
+    }
+    if (!isProject) {
       errors.push(err("collection-story-not-project", `${label} is not a story project: missing story.md`, "story.md"));
       continue;
     }
@@ -34143,7 +34166,7 @@ function collectionStories(root, data) {
     try {
       story = parseFrontmatter(readTextFile(storyFile), storyFile).data;
     } catch (error) {
-      errors.push(err("collection-story-unreadable", `${label}: ${error.message}`, "story.md"));
+      errors.push(err("collection-story-unreadable", `${label}: ${outputText(error.message.replace(storyFile, "story.md"))}`, "story.md"));
       continue;
     }
     stories.push({ path: entry, root: target, real, data: story });
@@ -34151,115 +34174,175 @@ function collectionStories(root, data) {
   return { stories, errors };
 }
 function collectStories(root, { sourceRoot = root, force = false } = {}) {
-  return withUndo(root, ["collect", ...force ? ["--force"] : []], () => {
-    const project = scanProject(root);
-    assertProjectParses(project, "collect");
-    const data = project.story.data;
-    if (data.stories === undefined) {
-      throw projectError("story.md has no stories list: add stories, the story project folders in reading order, such as stories: [../low-tide, ../salt]");
+  return withUndo(root, ["collect", ...force ? ["--force"] : []], (plan) => writeCollection(plan), {
+    beforeLog() {
+      const plan = planCollection(root, sourceRoot, force);
+      if (plan.edited.length > 0) {
+        plan.snapshot = snapshotBeforeCollect(plan.project.root, sourceRoot);
+      }
+      return plan;
     }
-    if (!Array.isArray(data.stories) || data.stories.some((value) => typeof value !== "string" || value.trim() === "")) {
-      throw projectError("story.md stories must be a list of story project folders, such as stories: [../low-tide, ../salt]");
-    }
-    const { stories, errors } = collectionStories(sourceRoot, data);
-    if (errors.length > 0) {
-      throw projectError(`Cannot collect: fix story.md stories first; nothing was changed:
+  });
+}
+function planCollection(root, sourceRoot, force) {
+  const project = scanProject(root);
+  assertProjectParses(project, "collect");
+  const data = project.story.data;
+  if (data.stories === undefined) {
+    throw projectError("story.md has no stories list: add stories, the story project folders in reading order, such as stories: [../low-tide, ../salt]");
+  }
+  if (!Array.isArray(data.stories) || data.stories.some((value) => typeof value !== "string" || value.trim() === "")) {
+    throw projectError("story.md stories must be a list of story project folders, such as stories: [../low-tide, ../salt]");
+  }
+  const { stories, errors } = collectionStories(sourceRoot, data);
+  if (errors.length > 0) {
+    throw projectError(`Cannot collect: fix story.md stories first; nothing was changed:
 ${errors.map((error) => `- ${error.message}`).join(`
 `)}`);
+  }
+  const unit = countUnit(data, languagePack(projectLanguage(data)));
+  const ownAuthors = publishingMeta(data).authors;
+  const chapters = [...project.chapters].sort(byNumber);
+  const collected = [];
+  const handWritten = [];
+  for (const chapter of chapters) {
+    const markdown = readMarkdown(chapter.file, project.root);
+    const from = markdown.data["collected-from"];
+    if (typeof from === "string" && from.trim() !== "") {
+      const real = PATH_CONTROL_CHARACTERS.test(from) ? null : canonicalPath(path41.resolve(sourceRoot, from.trim()));
+      collected.push({ chapter, markdown, real, from: from.trim(), intact: isIntact(markdown) });
+    } else {
+      handWritten.push({ chapter, markdown });
     }
-    const unit = countUnit(data, languagePack(projectLanguage(data)));
-    const ownAuthors = publishingMeta(data).authors;
-    const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id));
-    const collected = [];
-    const handWritten = [];
-    for (const chapter of chapters) {
-      const markdown = readMarkdown(chapter.file, project.root);
-      const from = markdown.data["collected-from"];
-      if (typeof from === "string" && from.trim() !== "") {
-        collected.push({ chapter, markdown, real: canonicalPath(path41.resolve(sourceRoot, from.trim())), from: from.trim() });
-      } else {
-        handWritten.push({ chapter, markdown });
-      }
-    }
-    const taken = new Set(handWritten.map((entry) => entry.chapter.number));
-    let next = 1;
-    const claimed = new Set;
-    const planned = stories.map((story) => {
-      while (taken.has(next)) {
-        next += 1;
-      }
-      const number = next;
+  }
+  const taken = new Set(handWritten.map((entry) => entry.chapter.number));
+  let next = 1;
+  const claimed = new Set;
+  const planned = stories.map((story) => {
+    while (taken.has(next)) {
       next += 1;
-      const content = storyContent(story, ownAuthors);
-      const previous = collected.find((entry) => entry.real === story.real && !claimed.has(entry));
-      if (previous) {
-        claimed.add(previous);
-      }
-      return { story, number, content, previous };
-    });
-    const leaving = collected.filter((entry) => !claimed.has(entry));
-    const edited = [...planned.map((entry) => entry.previous).filter(Boolean), ...leaving].filter((entry) => !matchesRecordedHash(entry.markdown));
-    if (edited.length > 0 && !force) {
-      const files = edited.map((entry) => relative(project, entry.chapter.file));
-      throw refusedError(`Cannot collect: ${files.join(", ")} ${files.length === 1 ? "was" : "were"} changed in the collection since story collect wrote ${files.length === 1 ? "it" : "them"}, and collect would replace ${files.length === 1 ? "that edit" : "those edits"}; nothing was changed. Make the edit in the story project, then run story collect --force to replace the chapter`);
     }
-    const chaptersDir = path41.join(project.root, "chapters");
-    const ownFiles = new Set(collected.map((entry) => entry.chapter.file));
-    const writes = planned.map((entry) => {
-      const file = path41.join(chaptersDir, `chapter-${String(entry.number).padStart(2, "0")}.md`);
-      if (!ownFiles.has(file) && lstatIfExists(file) !== null) {
-        throw refusedError(`Cannot collect: ${projectPath(project.root, file)} is in the way of story ${entry.story.path}, and story collect did not write it; nothing was changed. Rename it, or give its chapter the number in its file name`);
-      }
-      return { ...entry, file, text: chapterText2(entry, unit), original: currentText(file) };
-    });
-    const written = new Set(writes.map((entry) => entry.file));
-    const removals = collected.filter((entry) => !written.has(entry.chapter.file));
-    assertWritable(project.root, [...writes.map((entry) => entry.file), ...removals.map((entry) => entry.chapter.file)]);
-    const changed = [];
-    for (const entry of writes) {
-      if (entry.original !== entry.text) {
-        writeFile(entry.file, entry.text, { root: project.root, unchangedFrom: entry.original });
-        changed.push(entry.file);
-      }
+    const number = next;
+    next += 1;
+    const content = storyContent(story, ownAuthors);
+    const previous = collected.find((entry) => entry.real === story.real && !claimed.has(entry));
+    if (previous) {
+      claimed.add(previous);
     }
-    for (const entry of removals) {
-      removeFile(entry.chapter.file, { root: project.root, unchangedFrom: entry.markdown.rawMarkdown });
-      changed.push(entry.chapter.file);
-    }
-    const reindexed = changed.length === 0 ? { changed: [] } : reindexProject(project.root);
-    const chapterId = (file) => path41.basename(file, ".md");
-    return {
-      stories: writes.map((entry) => ({
-        path: entry.story.path,
-        title: entry.content.title,
-        chapter: chapterId(entry.file),
-        file: projectPath(project.root, entry.file),
-        status: entry.previous === undefined ? "added" : entry.previous.markdown.data["collected-hash"] === entry.content.hash ? "unchanged" : "changed",
-        from: entry.previous === undefined || entry.previous.chapter.file === entry.file ? null : entry.previous.chapter.id,
-        replacedEdit: entry.previous !== undefined && !matchesRecordedHash(entry.previous.markdown)
-      })),
-      removed: leaving.map((entry) => ({
-        path: entry.from,
-        chapter: entry.chapter.id,
-        file: relative(project, entry.chapter.file),
-        replacedEdit: !matchesRecordedHash(entry.markdown)
-      })),
-      changed: changed.concat(reindexed.changed),
-      warnings: handWrittenCopies(project, handWritten, writes)
-    };
+    return { story, number, content, previous };
   });
+  for (const entry of planned.filter((candidate) => candidate.previous === undefined)) {
+    const renamed = collected.find((candidate) => !claimed.has(candidate) && candidate.intact && candidate.markdown.data["collected-hash"] === entry.content.hash);
+    if (renamed) {
+      claimed.add(renamed);
+      entry.previous = renamed;
+    }
+  }
+  const leaving = collected.filter((entry) => !claimed.has(entry));
+  const edited = [...planned.map((entry) => entry.previous).filter(Boolean), ...leaving].filter((entry) => !entry.intact);
+  if (edited.length > 0 && !force) {
+    const files = edited.map((entry) => relative(project, entry.chapter.file));
+    throw refusedError(`Cannot collect: ${files.join(", ")} ${files.length === 1 ? "was" : "were"} changed in the collection since story collect wrote ${files.length === 1 ? "it" : "them"}, and collect would replace ${files.length === 1 ? "that edit" : "those edits"}; nothing was changed. Make the edit in the story project instead. story collect --force discards it, after saving the collection as snapshot before-collect-<n>`);
+  }
+  const chaptersDir = path41.join(project.root, "chapters");
+  const ownFiles = new Set(collected.map((entry) => entry.chapter.file));
+  const writes = planned.map((entry) => {
+    const file = path41.join(chaptersDir, `chapter-${String(entry.number).padStart(2, "0")}.md`);
+    if (!ownFiles.has(file) && lstatIfExists(file) !== null) {
+      throw refusedError(`Cannot collect: ${projectPath(project.root, file)} is in the way of story ${outputText(entry.story.path)}, and story collect did not write it; nothing was changed. Rename it, or give its chapter the number in its file name`);
+    }
+    return { ...entry, file, text: chapterText2(entry, unit), original: currentText(file) };
+  });
+  const written = new Set(writes.map((entry) => entry.file));
+  const removals = collected.filter((entry) => !written.has(entry.chapter.file));
+  assertNoChapterReferences(project, writes, leaving, ownFiles);
+  assertWritable(project.root, [...writes.map((entry) => entry.file), ...removals.map((entry) => entry.chapter.file)]);
+  return { project, writes, removals, leaving, handWritten, edited, snapshot: null };
+}
+function writeCollection({ project, writes, removals, leaving, handWritten, snapshot }) {
+  const changed = [];
+  for (const entry of writes) {
+    if (entry.original !== entry.text) {
+      writeFile(entry.file, entry.text, { root: project.root, unchangedFrom: entry.original });
+      changed.push(entry.file);
+    }
+  }
+  for (const entry of removals) {
+    removeFile(entry.chapter.file, { root: project.root, unchangedFrom: entry.markdown.rawMarkdown });
+    changed.push(entry.chapter.file);
+  }
+  const reindexed = changed.length === 0 ? { changed: [] } : reindexProject(project.root);
+  const chapterId = (file) => path41.basename(file, ".md");
+  return {
+    stories: writes.map((entry) => ({
+      path: entry.story.path,
+      title: entry.content.title,
+      chapter: chapterId(entry.file),
+      file: projectPath(project.root, entry.file),
+      status: entry.previous === undefined ? "added" : entry.previous.markdown.data["collected-hash"] === entry.content.hash ? "unchanged" : "changed",
+      from: entry.previous === undefined || entry.previous.chapter.file === entry.file ? null : entry.previous.chapter.id,
+      replacedEdit: entry.previous !== undefined && !entry.previous.intact
+    })),
+    removed: leaving.map((entry) => ({
+      path: entry.from,
+      chapter: entry.chapter.id,
+      file: relative(project, entry.chapter.file),
+      replacedEdit: !entry.intact
+    })),
+    snapshot,
+    changed: changed.concat(reindexed.changed),
+    warnings: handWrittenCopies(project, handWritten, writes)
+  };
+}
+function assertNoChapterReferences(project, writes, leaving, ownFiles) {
+  const moving = [
+    ...writes.filter((entry) => entry.previous !== undefined && entry.previous.chapter.file !== entry.file).map((entry) => ({ id: entry.previous.chapter.id, story: entry.story.path, to: path41.basename(entry.file, ".md") })),
+    ...leaving.map((entry) => ({ id: entry.chapter.id, story: entry.from, to: null }))
+  ];
+  if (moving.length === 0) {
+    return;
+  }
+  const regenerated = new Map([...ownFiles].map((file) => [file, null]));
+  const problems = [];
+  for (const { id, story, to } of moving) {
+    const files = [
+      ...project.scenes.filter((scene) => scene.chapter === id).map((scene) => scene.file),
+      ...removeEntityReferences(project.root, "chapter", id, regenerated).keys()
+    ];
+    const named = [...new Set(files.map((file) => relative(project, file)))].sort();
+    if (named.length > 0) {
+      problems.push(`${id} (story ${outputText(story)}) would ${to === null ? "be removed" : `move to ${to}`}, but ${named.join(", ")} ${named.length === 1 ? "names" : "name"} it`);
+    }
+  }
+  if (problems.length > 0) {
+    throw refusedError(`Cannot collect: story collect does not rewrite what names a collected chapter, so these would name the wrong story; nothing was changed:
+${problems.map((problem) => `- ${problem}`).join(`
+`)}
+Keep scenes, characters, and other records that name chapters in each story's own project, or point them at another chapter first`);
+  }
+}
+function snapshotBeforeCollect(root, sourceRoot) {
+  if (path41.resolve(root) !== path41.resolve(sourceRoot)) {
+    mirrorFolderNames(path41.join(sourceRoot, SNAPSHOTS_DIR), path41.join(root, SNAPSHOTS_DIR));
+  }
+  const id = nextSnapshotId(root, "before-collect-");
+  const snapshot = snapshotProject(root, { name: id, id, unparsed: true });
+  return { id: snapshot.id, dir: snapshot.dir, restore: `story snapshot --restore ${snapshot.id}` };
 }
 function storyContent(story, ownAuthors) {
   const project = scanProject(story.root);
-  const label = `story ${story.path}`;
+  const label = `story ${outputText(story.path)}`;
+  const interrupted = interruptedChange(story.root);
+  if (interrupted !== null) {
+    throw refusedError(`Cannot collect: ${outputText(interrupted.command)} stopped part way in ${label}, so collect would read a change made only in part; nothing was changed. Run story doctor --fix --path ${shellWord(story.path)} to put it back, or run that command again there to finish it`);
+  }
   try {
-    assertNoInterruptedChange(story.root, "story collect");
     assertProjectParses(project, `collect ${label}`);
   } catch (error) {
     error.message = error.message.startsWith("Cannot collect") ? error.message : `${label}: ${error.message}`;
     throw error;
   }
-  const chapters = [...project.chapters].sort((left, right) => left.number - right.number || left.id.localeCompare(right.id));
+  const chapters = [...project.chapters].sort(byNumber);
   if (chapters.length === 0) {
     throw projectError(`Cannot collect: ${label} has no chapters yet; write the story, or take it out of story.md stories`);
   }
@@ -34269,6 +34352,9 @@ function storyContent(story, ownAuthors) {
   const authors = sameNames(storyAuthors, ownAuthors) ? [] : storyAuthors;
   return { title, authors, prose, hash: contentHash(JSON.stringify([title, authors, prose])) };
 }
+function byNumber(left, right) {
+  return left.number - right.number || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+}
 function chapterProseText(body) {
   const text = body.replace(/\r\n?/g, `
 `);
@@ -34277,42 +34363,29 @@ function chapterProseText(body) {
 function sameNames(left, right) {
   return left.length === right.length && left.every((name) => right.includes(name));
 }
-function matchesRecordedHash(markdown) {
+function isIntact(markdown) {
   const title = String(markdown.data.title ?? "").replace(/\s+/g, " ").trim();
   const authors = nameList(markdown.data.author).map((name) => name.replace(/\s+/g, " "));
   const prose = chapterProseText(markdown.body);
-  return markdown.data["collected-hash"] === contentHash(JSON.stringify([title, authors, prose]));
+  const body = markdown.body.replace(/\r\n?/g, `
+`).replace(/^\n+/, "");
+  return markdown.data["collected-hash"] === contentHash(JSON.stringify([title, authors, prose])) && body === importedChapterBody(markdown.data, prose);
 }
 function chapterText2({ story, number, content, previous }, unit) {
   const words = wordCount(scanComments(content.prose).text);
   const counts = unit.name === "characters" ? { "word-count": words, "character-count": characterCount(scanComments(content.prose).text) } : { "word-count": words };
-  const base = previous === undefined ? importedChapterData(content.title, number, counts, false, content.authors) : { ...previous.markdown.data };
-  delete base.author;
-  const data = {
-    ...base,
-    title: content.title,
-    number,
-    ...content.authors.length === 0 ? {} : { author: content.authors.length === 1 ? content.authors[0] : content.authors },
-    ...counts,
-    "collected-from": story.path,
-    "collected-hash": content.hash
-  };
-  const ordered = previous === undefined ? reorderAuthor(data) : data;
-  return importedChapterText(ordered, content.prose);
-}
-function reorderAuthor(data) {
-  if (data.author === undefined) {
-    return data;
+  const collectedFields = { "collected-from": story.path, "collected-hash": content.hash };
+  if (previous === undefined) {
+    return importedChapterText({ ...importedChapterData(content.title, number, counts, false, content.authors), ...collectedFields }, content.prose);
   }
-  const { author, ...rest } = data;
-  const result = {};
-  for (const [key, value] of Object.entries(rest)) {
-    result[key] = value;
-    if (key === (rest.numbered === undefined ? "number" : "numbered")) {
-      result.author = author;
-    }
+  const data = { ...previous.markdown.data, title: content.title, number, ...counts, ...collectedFields };
+  if (content.authors.length === 0) {
+    delete data.author;
+  } else {
+    data.author = content.authors.length === 1 ? content.authors[0] : content.authors;
   }
-  return result;
+  return replaceFrontmatter(previous.markdown.rawMarkdown, data, `
+${importedChapterBody(data, content.prose)}`);
 }
 function handWrittenCopies(project, handWritten, writes) {
   const titles = new Map(writes.map((entry) => [entry.content.title.toLowerCase(), entry]));
@@ -34328,9 +34401,8 @@ function handWrittenCopies(project, handWritten, writes) {
 }
 function formatCollect(result, dryRun) {
   const lines = [];
-  const changes = result.stories.filter((story) => story.status !== "unchanged" || story.from !== null).length + result.removed.length;
   if (!dryRun) {
-    lines.push(changes === 0 ? `Collected ${plural(result.stories.length, "story", "stories")}: no story changed since the last run` : `Collected ${plural(result.stories.length, "story", "stories")}:`);
+    lines.push(result.changed.length === 0 ? `Collected ${plural(result.stories.length, "story", "stories")}: no story changed since the last run` : `Collected ${plural(result.stories.length, "story", "stories")}:`);
   }
   for (const story of result.stories) {
     const notes = [story.status];
@@ -34340,11 +34412,14 @@ function formatCollect(result, dryRun) {
     if (story.replacedEdit) {
       notes.push("replaced the edit made in the collection");
     }
-    lines.push(`- ${story.path}: ${story.chapter} "${story.title}" (${notes.join("; ")})`);
+    lines.push(`- ${outputText(story.path)}: ${story.chapter} "${outputText(story.title)}" (${notes.join("; ")})`);
   }
   for (const entry of result.removed) {
     const notes = [`was ${entry.chapter}`, ...entry.replacedEdit ? ["replaced the edit made in the collection"] : []];
-    lines.push(`- ${entry.path}: ${dryRun ? "would be removed" : "removed"}, as it is no longer in story.md stories (${notes.join("; ")})`);
+    lines.push(`- ${outputText(entry.path)}: ${dryRun ? "would be removed" : "removed"}, as it is no longer in story.md stories (${notes.join("; ")})`);
+  }
+  if (result.snapshot) {
+    lines.push(`${dryRun ? "Would save" : "Saved"} the collection as snapshot ${result.snapshot.id} before replacing the edits; ${result.snapshot.restore} puts it back`);
   }
   return lines.length === 0 ? "" : `${lines.join(`
 `)}
