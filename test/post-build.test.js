@@ -226,6 +226,28 @@ Support me at https://example.com
     expect(posts(root)).toEqual([".gitkeep", "01-chapter-01.html", "01-chapter-01.txt", "02-chapter-02.html", "02-chapter-02.txt"]);
   });
 
+  test("keeps every line and stanza break of a verse chapter", () => {
+    const root = project();
+    chapter(root, 1, { extra: "verse: true\n", body: "The tide goes out\nand leaves the stones;\n\nthe *gulls* come in\nto count the bones." });
+    chapter(root, 2, { body: "Prose runs on\nas one line." });
+    buildBook(root, { format: "post" });
+    expect(read(root, "01-chapter-01.html")).toBe("<p>The tide goes out<br>and leaves the stones;</p>\n<p>the <em>gulls</em> come in<br>to count the bones.</p>\n");
+    expect(read(root, "01-chapter-01.txt")).toBe("The tide goes out\nand leaves the stones;\n\nthe gulls come in\nto count the bones.\n");
+    // A prose chapter still joins its soft line breaks.
+    expect(read(root, "02-chapter-02.txt")).toBe("Prose runs on as one line.\n");
+  });
+
+  test("refuses an --out under project source, even a folder that does not exist yet, and an invalid build-style", () => {
+    const root = project();
+    chapter(root, 1);
+    expect(() => buildBook(root, { format: "post", out: "chapters/posts" })).toThrow("Refusing to write generated output to chapters/posts: it is project source");
+    expect(fs.existsSync(path.join(root, "chapters", "posts"))).toBe(false);
+    const styled = project("build-style: invalid\n");
+    chapter(styled, 1);
+    expect(() => buildBook(styled, { format: "post" })).toThrow("Cannot build until story.md build-style is fixed");
+    expect(fs.existsSync(path.join(styled, "dist"))).toBe(false);
+  });
+
   test("never removes a symlink or a folder in a listed post's place, or a file the manifest names outside the folder", () => {
     const root = project();
     chapter(root, 1);

@@ -18,7 +18,8 @@ const TEXT_NOTE_RULE = "---";
 
 // The episode as an HTML fragment: the chapter's own byline, the prose, and
 // the author's note after a rule under its label. `episode` is
-// { byline, body, authorNote, labels }; an empty episode is an empty file.
+// { byline, body, verse, authorNote, labels }; an empty episode is an
+// empty file.
 export function postHtml(episode) {
   const block = (markup) => ({ quote: false, markup });
   const prose = (paragraphs) => paragraphs.map((paragraph) => (paragraph === null ? block("<hr>") : { quote: paragraph.quote, markup: `<p>${paragraph.html}</p>` }));
@@ -54,10 +55,12 @@ export function postText(episode, sceneBreak = DEFAULT_TEXT_SCENE_BREAK) {
   return blocks.length === 0 ? "" : `${blocks.join("\n\n")}\n`;
 }
 
-// The episode's paragraphs. Before an author's note, a scene break that
-// ends the chapter goes, so the note's own rule does not follow another.
+// The episode's paragraphs: in a verse chapter, every line break kept and
+// each stanza a paragraph, as the other builds set a poem. Before an
+// author's note, a scene break that ends the chapter goes, so the note's
+// own rule does not follow another.
 function episodeParagraphs(episode) {
-  const paragraphs = htmlParagraphs(episode.body);
+  const paragraphs = htmlParagraphs(episode.body, false, episode.verse === true);
   while (episode.authorNote !== "" && paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === null) {
     paragraphs.pop();
   }
