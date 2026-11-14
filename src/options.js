@@ -39,7 +39,7 @@ export const OPTIONS = [
   { name: "write", help: ["Update chapter word-count frontmatter"] },
   { name: "log", help: ["Record today's word count in progress.md"] },
   { name: "weeks", value: "<n>", help: ["Weeks of writing history for progress (1 to 52,", "default 4)"] },
-  { name: "days", value: "<n>", help: ["Days a submission may wait for a reply before", "submissions and next flag it (1 to 3650,", "default 90)"] },
+  { name: "days", value: "<n>", help: ["Days without a reply after which submissions and", "next flag a submission for a follow-up (1 to", "3650, default 90)"] },
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare; the version sent to the editor for", "apply"] },
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for", "compare; text to check for similarity (a file,", "folder, or git ref)"] },
   { name: "snapshot", value: "<name>", help: ["Earlier draft as a snapshot saved by story", "snapshot, for compare or similarity; the version", "sent to the editor for apply"] },

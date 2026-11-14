@@ -13,6 +13,7 @@ import { historyWeeks } from "./progress.js";
 import { SHUNN_PAPERS } from "./packaging.js";
 import { proseThresholds } from "./prose.js";
 import { similarityOptions } from "./similarity.js";
+import { followUpDays } from "./submissions.js";
 
 // Optional CLI configuration in story.md frontmatter:
 //
@@ -37,7 +38,7 @@ export { severityCodes };
 const TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
 
 // Flags that name one target or one moment rather than a habit.
-const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], translation: ["chapter"] };
+const TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], submissions: ["date"], translation: ["chapter"] };
 
 // Flags that change what one run does rather than set a habit: a default
 // --force would replace every snapshot whose name is taken, a default
@@ -114,10 +115,10 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    // The prose and similarity thresholds and progress --weeks are checked
-    // here too, so story validate catches a bad one before a CI run of the
-    // command does.
-    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks }[name];
+    // The prose and similarity thresholds, progress --weeks, and the
+    // submissions and next --days are checked here too, so story validate
+    // catches a bad one before a CI run of the command does.
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks, submissions: followUpDays, next: followUpDays }[name];
     if (thresholds !== undefined) {
       try {
         thresholds(defaults[name]);

@@ -1600,20 +1600,20 @@ story submissions [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
 
 Reads `submission/tracker.md`, the tracker the [`submission`](skills.md) skill keeps, and lists its rows, counts each status from the table, checks each row, and flags the submissions still waiting for a reply after `--days` days. It never writes: every row comes from the author.
 
-The tracker is a markdown table whose header has a `Status` and a `Date Sent` column, after optional YAML frontmatter. Columns are found by their header, in any order and letter case, so both the book tracker (`Agent/Publisher`, `Date Sent`, `Materials`, `Status`, `Response Date`, `Notes`) and the short-fiction tracker (`Market`, `Story`, `Date Sent`, `Type`, `Rights Offered`, `Status`, `Response Date`, `Notes`) are read. Other tables, such as `## Publication History`, a hand-kept `## Summary`, and tables in code fences are left alone, and so is the template's `*No submissions yet*` row.
+The tracker is a markdown table whose header has a `Status` and a `Date Sent` column, after optional YAML frontmatter. Columns are found by their header, in any order and letter case, so both the book tracker (`Agent/Publisher`, `Date Sent`, `Materials`, `Status`, `Response Date`, `Notes`) and the short-fiction tracker (`Market`, `Story`, `Date Sent`, `Type`, `Rights Offered`, `Status`, `Response Date`, `Notes`) are read. Each row starts with `|`; a table ends at the first line that does not. Other tables, such as `## Publication History`, a hand-kept `## Summary`, and tables in backtick code fences are left alone, and so is the template's `*No submissions yet*` row. Emphasis and code marks around a cell, such as `**2026-06-01**` or `` `queried` ``, are taken off.
 
 Each row is checked:
 
 - `Status` is one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`, in any letter case and with or without code marks. Anything else, or an empty cell, is a [`submission-invalid-status`](#codes-submissions) error.
 - `Date Sent` is a real `YYYY-MM-DD` day, and `Response Date` is one too or blank. Anything else is a [`submission-invalid-date`](#codes-submissions) error.
-- A row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) waits from the later of its `Date Sent` and `Response Date`, so a request for the full manuscript waits from the day the request came. A row that has waited `--days` days or more is a [`submission-overdue`](#codes-submissions) warning.
+- A row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) waits from the later of its `Date Sent` and `Response Date`, so a request for the full manuscript waits from the day the request came. A row that has waited `--days` days or more is a [`submission-overdue`](#codes-submissions) warning. A row whose warning a `severity` entry turns `off` or an [exemption](continuity.md#exemptions) dismisses is not counted as due a follow-up, in the text, `--json`, and `next`.
 
-A project with no `submission/tracker.md` prints a short note and exits 0. A tracker with no tracker table is a [`submission-tracker-no-table`](#codes-submissions) error. Errors exit 1; warnings alone exit 0. A tracker whose frontmatter does not parse, or a `submission` folder that is a symlink, exits 3.
+A project with no `submission/tracker.md` prints a short note and exits 0. A tracker with no tracker table is a [`submission-tracker-no-table`](#codes-submissions) error, and one with more than 10,000 table rows a [`submission-tracker-too-large`](#codes-submissions) error, with no row read. Errors exit 1; warnings alone exit 0. A tracker whose frontmatter does not parse, or a `submission` folder that is a symlink, exits 3.
 
 | Option | Effect |
 |---|---|
 | `--date <YYYY-MM-DD>` | Use this date as "today" for the days waited. Default: the local date |
-| `--days <n>` | How many days a submission may wait for a reply before it is due a follow-up: a whole number 1 to 3650, default `90`. Anything else is a usage error (exit 2). A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it |
+| `--days <n>` | How many days without a reply make a submission due a follow-up: a whole number 1 to 3650, default `90`. Anything else is a usage error (exit 2). A `story.md` [`cli-defaults`](#defaults-and-severity-from-storymd) entry can set it, and `story validate` checks it; `next` takes its own entry |
 
 In `--json`, `data` holds `file`, `found` (false when there is no tracker), `today`, `days`, `rows`, `counts` (every status, with 0 for the ones no row has), `waiting` (rows that await a reply), and `overdue`. Each row has `line` (its line in the file), `name` (the `Agent/Publisher` or `Market` column), `story`, `dateSent`, `materials`, `type`, `rights` (`Rights Offered`), `status`, `responseDate`, and `notes`, each null when the table has no such column, plus `waitingSince`, `waitingDays`, and `overdue`.
 
@@ -1625,7 +1625,7 @@ story submissions --date 2026-11-14
 ```text
 # Submissions: submission/tracker.md
 
-Today: 2026-11-14; follow up after 90 days without a reply
+Today: 2026-11-14; follow up after 90 days or more without a reply
 
 - Ada Byrne (Byrne Literary): queried, sent 2026-06-02; waiting 165 days: follow up
 - Tom Reyes (North Light Agency): requested-full, sent 2026-06-02, reply 2026-07-15; waiting 122 days: follow up
@@ -1634,8 +1634,8 @@ Today: 2026-11-14; follow up after 90 days without a reply
 Counts: queried 1, requested-full 1, declined 1 (3 submissions)
 Waiting for a reply: 2; due a follow-up: 2
 Submissions checked: 0 errors, 2 warnings, 0 dismissed
-warning: submission/tracker.md line 11 (Ada Byrne (Byrne Literary)): queried, waiting 165 days for a reply since 2026-06-02 (follow up after 90): follow up, or record the reply [submission-overdue]
-warning: submission/tracker.md line 12 (Tom Reyes (North Light Agency)): requested-full, waiting 122 days for a reply since 2026-07-15 (follow up after 90): follow up, or record the reply [submission-overdue]
+warning: submission/tracker.md line 11 (Ada Byrne (Byrne Literary)): queried, waiting 165 days for a reply since 2026-06-02 (90 or more is due a follow-up): follow up, or record the reply [submission-overdue]
+warning: submission/tracker.md line 12 (Tom Reyes (North Light Agency)): requested-full, waiting 122 days for a reply since 2026-07-15 (90 or more is due a follow-up): follow up, or record the reply [submission-overdue]
 ```
 
 ### timeline
@@ -1948,7 +1948,7 @@ story next [path] [--date <YYYY-MM-DD>] [--days <n>] [--json]
 
 Runs `validate`, `links`, and `continuity`, then lists prioritised actions. A serial with a [release schedule](project-format.md#release-schedule) also gets a `Next release:` line under the checks, and a `[P1] Draft the scheduled episode` action for each [`release-undrafted`](#codes-progress-and-next) warning: an episode due within `release-warn-days` days (default 3), or past due, with no prose or no chapter yet. `--date` sets "today" for the schedule (default the local date). In `--json`, `data.release` is the schedule as [`progress`](#progress) reports it, and the warnings are diagnostics with `check` `next`.
 
-When `submission/tracker.md` has rows that have waited `--days` days (default 90) or more for a reply, as [`submissions`](#submissions) counts them, `next` adds one action: `[P2] Follow up on submissions: 2 submissions in submission/tracker.md have waited 90 days or more for a reply: run story submissions . to list them.` A `severity` entry that turns [`submission-overdue`](#codes-submissions) off, or an exemption that dismisses it, leaves the row out. A tracker that cannot be read gives no action; `story submissions` reports the problem.
+When `submission/tracker.md` has rows that have waited `--days` days (default 90) or more for a reply, as [`submissions`](#submissions) counts them, `next` adds one action: `[P2] Follow up on submissions: 2 submissions in submission/tracker.md have waited 90 days or more for a reply: run story submissions . to list them.` With another `--days`, the suggested command carries it, such as `story submissions . --days 60`. `next` reads its own `days` in `cli-defaults`, not the `submissions` entry. A `severity` entry that turns [`submission-overdue`](#codes-submissions) off, or an exemption that dismisses it, leaves the row out. A tracker that cannot be read gives no action; `story submissions` reports the problem.
 
 | Priority | Actions |
 |---|---|
@@ -3914,6 +3914,7 @@ An error means the project is broken or a check failed, so it cannot be turned d
 | Code | Level | Reported when |
 |---|---|---|
 | `submission-tracker-no-table` | error | `submission/tracker.md` has no table with a `Status` and a `Date Sent` column. |
+| `submission-tracker-too-large` | error | `submission/tracker.md` has more than 10,000 table rows. No row is read, so a cloned project cannot fill the output or the memory `--json` needs. |
 | `submission-invalid-status` | error | A tracker row's `Status` is empty or not one of `queried`, `submitted`, `held`, `requested-partial`, `requested-full`, `offer`, `declined`, `no-response`, or `withdrawn`. |
 | `submission-invalid-date` | error | A tracker row's `Date Sent` is empty or not a real `YYYY-MM-DD` day, or its `Response Date` is neither blank nor such a day. |
 | `submission-overdue` | warning | A tracker row with a status that waits for a reply (`queried`, `submitted`, `held`, `requested-partial`, or `requested-full`) has waited `--days` days (default 90) or more since the later of its `Date Sent` and `Response Date`. `story next` turns these into one follow-up action. |
@@ -4049,7 +4050,7 @@ Every option the CLI accepts, in the order `story --help` lists them. "Repeatabl
 | `--write` | | `wordcount` | Boolean |
 | `--log` | | `progress` | Boolean |
 | `--weeks` | `<n>` | `progress` | Whole number 1 to 52; default `4` |
-| `--days` | `<n>` | `submissions`, `next` | Whole number 1 to 3650; default `90`: the days a submission may wait for a reply before it is due a follow-up |
+| `--days` | `<n>` | `submissions`, `next` | Whole number 1 to 3650; default `90`: the days without a reply that make a submission due a follow-up |
 | `--ref` | `<git-ref>` | `compare`, `apply` | Exclusive with `--against` and `--snapshot`; for `apply`, the version sent to the editor |
 | `--against` | `<path>` | `compare`, `similarity` | For `compare`, exclusive with `--ref` and `--snapshot`. For `similarity`, a file, folder, or git ref; exclusive with `--snapshot` |
 | `--snapshot` | `<name>` | `compare`, `similarity`, `apply` | Exclusive with `--ref` and `--against`; a snapshot saved with `snapshot`; for `apply`, the version sent to the editor |

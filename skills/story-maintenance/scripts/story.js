@@ -1000,6 +1000,7 @@ var FINDING_CODES = {
   "context-file-skipped": "warning",
   "release-undrafted": "warning",
   "submission-tracker-no-table": "error",
+  "submission-tracker-too-large": "error",
   "submission-invalid-status": "error",
   "submission-invalid-date": "error",
   "submission-overdue": "warning",
@@ -13227,7 +13228,7 @@ var OPTIONS = [
   { name: "write", help: ["Update chapter word-count frontmatter"] },
   { name: "log", help: ["Record today's word count in progress.md"] },
   { name: "weeks", value: "<n>", help: ["Weeks of writing history for progress (1 to 52,", "default 4)"] },
-  { name: "days", value: "<n>", help: ["Days a submission may wait for a reply before", "submissions and next flag it (1 to 3650,", "default 90)"] },
+  { name: "days", value: "<n>", help: ["Days without a reply after which submissions and", "next flag a submission for a follow-up (1 to", "3650, default 90)"] },
   { name: "ref", value: "<git-ref>", help: ["Earlier draft as a git branch, tag, or commit", "for compare; the version sent to the editor for", "apply"] },
   { name: "against", value: "<path>", help: ["Earlier draft as another project folder for", "compare; text to check for similarity (a file,", "folder, or git ref)"] },
   { name: "snapshot", value: "<name>", help: ["Earlier draft as a snapshot saved by story", "snapshot, for compare or similarity; the version", "sent to the editor for apply"] },
@@ -20146,7 +20147,7 @@ function formatNumber4(value) {
 }
 
 // src/config.js
-import path15 from "node:path";
+import path16 from "node:path";
 
 // src/pdf.js
 import fs6 from "node:fs";
@@ -21857,10 +21858,247 @@ function formatSimilarity(report) {
 `;
 }
 
+// src/submissions.js
+import path15 from "node:path";
+var SUBMISSION_TRACKER = "submission/tracker.md";
+var SUBMISSION_STATUSES = ["queried", "submitted", "held", "requested-partial", "requested-full", "offer", "declined", "no-response", "withdrawn"];
+var WAITING_STATUSES = new Set(["queried", "submitted", "held", "requested-partial", "requested-full"]);
+var DEFAULT_FOLLOW_UP_DAYS = 90;
+var MAX_TRACKER_ROWS = 1e4;
+var OVERDUE_FINDINGS = new WeakMap;
+var MAX_FOLLOW_UP_DAYS = 3650;
+function followUpDays(options = {}) {
+  const raw = options.days;
+  if (raw === undefined) {
+    return DEFAULT_FOLLOW_UP_DAYS;
+  }
+  const text = String(raw).trim();
+  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_FOLLOW_UP_DAYS) {
+    throw usageError(`--days must be a whole number 1 to ${MAX_FOLLOW_UP_DAYS}, such as ${DEFAULT_FOLLOW_UP_DAYS}`, "days");
+  }
+  return Number(text);
+}
+var COLUMNS = new Map([
+  ["story", "story"],
+  ["date sent", "dateSent"],
+  ["materials", "materials"],
+  ["type", "type"],
+  ["rights offered", "rights"],
+  ["status", "status"],
+  ["response date", "responseDate"],
+  ["notes", "notes"]
+]);
+var DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
+function tableCells(line) {
+  return line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/).map((cell) => cell.trim().replace(/\\\|/g, "|"));
+}
+var MARKS = new Set(["*", "_", "`"]);
+function plainCell(cell) {
+  let text = cell.trim();
+  while (text.length >= 2 && MARKS.has(text[0]) && text.at(-1) === text[0]) {
+    text = text.slice(1, -1).trim();
+  }
+  return text;
+}
+function headerName(cell) {
+  return plainCell(cell).toLowerCase().replace(/\s+/g, " ");
+}
+function trackerTables(lines, start) {
+  const fenced = fencedLineIndexes(lines);
+  const tables = [];
+  for (let index = start;index < lines.length - 1; index += 1) {
+    if (fenced.has(index) || !lines[index].trim().startsWith("|") || !DELIMITER_ROW.test(lines[index + 1].trim())) {
+      continue;
+    }
+    const headers = tableCells(lines[index]).map(headerName);
+    const rows = [];
+    let next = index + 2;
+    for (;next < lines.length && !fenced.has(next) && lines[next].trim().startsWith("|"); next += 1) {
+      rows.push({ line: next + 1, cells: tableCells(lines[next]) });
+    }
+    if (headers.includes("status") && headers.includes("date sent")) {
+      tables.push({ headers, rows });
+    }
+    index = next - 1;
+  }
+  return tables;
+}
+function placeholderRow(cells) {
+  return plainCell(cells[0] ?? "").toLowerCase() === "no submissions yet" && cells.slice(1).every((cell) => cell === "");
+}
+function trackerRow(headers, { line, cells }) {
+  const row = { line, name: "" };
+  for (const field of COLUMNS.values()) {
+    row[field] = null;
+  }
+  let named = false;
+  for (const [index, header] of headers.entries()) {
+    const field = COLUMNS.get(header);
+    const cell = plainCell(cells[index] ?? "");
+    if (field !== undefined) {
+      row[field] = cell;
+    } else if (!named) {
+      row.name = cell;
+      named = true;
+    }
+  }
+  return row;
+}
+function rowLabel(row) {
+  const name = row.name;
+  return `${SUBMISSION_TRACKER} line ${row.line}${name === "" ? "" : ` (${name})`}`;
+}
+function trackerLines(text) {
+  if (!/^---[ \t]*\r?\n/.test(text)) {
+    return { start: 0, lines: text.split(/\r?\n/) };
+  }
+  let body;
+  try {
+    body = parseFrontmatter(text, SUBMISSION_TRACKER).body;
+  } catch (error) {
+    throw projectError(`${SUBMISSION_TRACKER} cannot be parsed: ${error.message}`);
+  }
+  const head = text.slice(0, text.length - body.length);
+  return { start: head.split(/\r?\n/).length - 1, lines: text.split(/\r?\n/) };
+}
+function readTracker(root) {
+  const folder = path15.join(root, "submission");
+  if (lstatIfExists(folder) === null) {
+    return null;
+  }
+  assertSafeProjectDirectory(folder, root);
+  const file = path15.join(root, SUBMISSION_TRACKER);
+  if (lstatIfExists(file) === null) {
+    return null;
+  }
+  return readTextFile(file);
+}
+function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }) {
+  requireStoryFile(root);
+  const text = readTracker(root);
+  const counts = Object.fromEntries(SUBMISSION_STATUSES.map((status) => [status, 0]));
+  const result = { root, file: SUBMISSION_TRACKER, found: text !== null, today, days, rows: [], counts, waiting: 0, overdue: 0, ok: true, errors: [], warnings: [] };
+  if (text === null) {
+    return result;
+  }
+  const { start, lines } = trackerLines(text);
+  const tables = trackerTables(lines, start);
+  if (tables.length === 0) {
+    result.errors.push(err("submission-tracker-no-table", `${SUBMISSION_TRACKER} has no tracker table: add one with a Status and a Date Sent column, as the submission skill's tracker template has`, SUBMISSION_TRACKER));
+  }
+  const rowCount = tables.reduce((total, table) => total + table.rows.length, 0);
+  if (rowCount > MAX_TRACKER_ROWS) {
+    result.errors.push(err("submission-tracker-too-large", `${SUBMISSION_TRACKER} has ${rowCount} table rows, more than the ${MAX_TRACKER_ROWS} a tracker can hold: split it, or move old rows to another file`, SUBMISSION_TRACKER));
+    result.ok = false;
+    return result;
+  }
+  const todayDays = parseClockDate(today).days;
+  for (const table of tables) {
+    for (const cells of table.rows) {
+      if (placeholderRow(cells.cells)) {
+        continue;
+      }
+      result.rows.push(checkRow(trackerRow(table.headers, cells), todayDays, days, result));
+    }
+  }
+  result.waiting = result.rows.filter((row) => row.waitingSince !== null).length;
+  result.overdue = result.rows.filter((row) => row.overdue).length;
+  result.ok = result.errors.length === 0;
+  return result;
+}
+function checkRow(row, todayDays, days, result) {
+  const label = rowLabel(row);
+  const status = (row.status ?? "").toLowerCase();
+  row.status = status;
+  if (status === "") {
+    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
+  } else if (!SUBMISSION_STATUSES.includes(status)) {
+    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
+  } else {
+    result.counts[status] += 1;
+  }
+  const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
+  const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
+  const since = [sent, response].filter((date) => date !== undefined).sort((left, right) => right.days - left.days)[0];
+  row.waitingSince = null;
+  row.waitingDays = null;
+  row.overdue = false;
+  if (WAITING_STATUSES.has(status) && since !== undefined) {
+    row.waitingSince = since.text;
+    row.waitingDays = todayDays - since.days;
+    row.overdue = row.waitingDays >= days;
+    if (row.overdue) {
+      const finding = warn("submission-overdue", `${label}: ${status}, waiting ${plural(row.waitingDays, "day")} for a reply since ${since.text} (${days} or more is due a follow-up): follow up, or record the reply`, SUBMISSION_TRACKER);
+      OVERDUE_FINDINGS.set(row, finding);
+      result.warnings.push(finding);
+    }
+  }
+  return row;
+}
+function rowDate(row, field, column, label, result, { required }) {
+  if (row[field] === null) {
+    return;
+  }
+  const text = row[field];
+  if (text === "") {
+    if (required) {
+      result.errors.push(err("submission-invalid-date", `${label}: ${column} is empty; write the date as YYYY-MM-DD`, SUBMISSION_TRACKER));
+    }
+    return;
+  }
+  const date = parseClockDate(text);
+  if (date === undefined) {
+    result.errors.push(err("submission-invalid-date", `${label}: ${column} "${text}" must be a real YYYY-MM-DD calendar day`, SUBMISSION_TRACKER));
+  }
+  return date;
+}
+function recountOverdue(report) {
+  const active = new Set([...report.errors, ...report.warnings]);
+  const rows = report.rows.map((row) => ({ ...row, overdue: row.overdue && active.has(OVERDUE_FINDINGS.get(row)) }));
+  return { ...report, rows, overdue: rows.filter((row) => row.overdue).length };
+}
+function trackerForNext(root, options) {
+  try {
+    return submissionsReport(root, options);
+  } catch {
+    return null;
+  }
+}
+function formatSubmissions(report) {
+  if (!report.found) {
+    return `No submission tracker: ${SUBMISSION_TRACKER} does not exist yet. The submission skill creates it when the first submission goes out.
+`;
+  }
+  const lines = [`# Submissions: ${SUBMISSION_TRACKER}`, "", `Today: ${report.today}; follow up after ${plural(report.days, "day")} or more without a reply`, ""];
+  if (report.rows.length === 0 && report.errors.length === 0) {
+    lines.push("No submissions recorded yet.");
+  }
+  for (const row of report.rows) {
+    lines.push(`- ${formatRow(row)}`);
+  }
+  const counted = SUBMISSION_STATUSES.filter((status) => report.counts[status] > 0).map((status) => `${status} ${report.counts[status]}`);
+  lines.push("", `Counts: ${counted.length === 0 ? "none" : counted.join(", ")} (${plural(report.rows.length, "submission")})`, `Waiting for a reply: ${report.waiting}; due a follow-up: ${report.overdue}`);
+  return `${lines.join(`
+`)}
+`;
+}
+function formatRow(row) {
+  const name = outputText(row.name) || "(no name)";
+  const story = row.story ? ` [${outputText(row.story)}]` : "";
+  const status = row.status === "" ? "(no status)" : outputText(row.status);
+  const sent = row.dateSent ? ` sent ${outputText(row.dateSent)}` : "";
+  const response = row.responseDate ? `, reply ${outputText(row.responseDate)}` : "";
+  let waiting = "";
+  if (row.waitingDays !== null && row.waitingDays >= 0) {
+    waiting = `; waiting ${plural(row.waitingDays, "day")}${row.overdue ? ": follow up" : ""}`;
+  }
+  return `${name}${story}: ${status}${sent ? `,${sent}` : ""}${response}${waiting}`;
+}
+
 // src/config.js
 var SEVERITY_LEVELS = ["error", "warning", "off"];
 var TARGETED_COMMANDS = new Set(["knowledge", "add", "rename", "move", "remove", "split", "merge", "impact"]);
-var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], translation: ["chapter"] };
+var TARGETED_FLAGS = { passes: ["start", "done"], progress: ["date"], next: ["date"], submissions: ["date"], translation: ["chapter"] };
 var ONE_RUN_FLAGS = { snapshot: ["force", "list", "id", "restore"], export: ["include-pending"], build: ["include-pending", "anonymous"], list: ["query"], translation: ["record"] };
 var LINKED_FLAGS = {
   build: [["format", "shunn", "trim", "stamp", "note-url", "pdf"]],
@@ -21871,7 +22109,7 @@ var EMPTY_CONFIG = Object.freeze({ defaults: {}, severity: {}, exemptions: [], e
 function readCliConfig(root) {
   let data;
   try {
-    data = parseFrontmatter(readTextFile(path15.join(root, "story.md"))).data;
+    data = parseFrontmatter(readTextFile(path16.join(root, "story.md"))).data;
   } catch {
     return EMPTY_CONFIG;
   }
@@ -21913,7 +22151,7 @@ function parseDefaults(raw, errors) {
       continue;
     }
     defaults[name] = parseCommandDefaults(command, item, label, errors);
-    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks }[name];
+    const thresholds = { prose: proseThresholds, similarity: similarityOptions, progress: historyWeeks, submissions: followUpDays, next: followUpDays }[name];
     if (thresholds !== undefined) {
       try {
         thresholds(defaults[name]);
@@ -21926,7 +22164,7 @@ function parseDefaults(raw, errors) {
 }
 function isOutsidePath(value) {
   const text = String(value).trim();
-  return path15.isAbsolute(text) || path15.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text) || path15.posix.normalize(text.replace(/\\/g, "/")).split("/")[0] === ".." || /\p{Cc}/u.test(text);
+  return path16.isAbsolute(text) || path16.win32.isAbsolute(text) || /^[A-Za-z]:/.test(text) || path16.posix.normalize(text.replace(/\\/g, "/")).split("/")[0] === ".." || /\p{Cc}/u.test(text);
 }
 function parseCommandDefaults(command, item, label, errors) {
   const accepted = command.options ?? [];
@@ -22664,7 +22902,7 @@ function escapeBlockStart(text) {
 // src/lock.js
 import fs7 from "node:fs";
 import os2 from "node:os";
-import path16 from "node:path";
+import path17 from "node:path";
 var LOCK_FILE = ".story.lock";
 var DEFAULT_WAIT_MS = 1e4;
 var POLL_MS = 50;
@@ -22674,7 +22912,7 @@ var TAKEOVER_FILE = ".story-takeover.tmp";
 var TAKEOVER_STALE_MS = 2000;
 var held = new Map;
 function withProjectLock(root, run, options = {}) {
-  const projectRoot = path16.resolve(root);
+  const projectRoot = path17.resolve(root);
   const key = realPath(projectRoot);
   if (held.has(key)) {
     held.set(key, held.get(key) + 1);
@@ -22684,8 +22922,8 @@ function withProjectLock(root, run, options = {}) {
       held.set(key, held.get(key) - 1);
     }
   }
-  const lockPath = path16.join(projectRoot, LOCK_FILE);
-  const lockable = options.folder ? isDirectory(projectRoot) : fs7.existsSync(path16.join(projectRoot, "story.md"));
+  const lockPath = path17.join(projectRoot, LOCK_FILE);
+  const lockable = options.folder ? isDirectory(projectRoot) : fs7.existsSync(path17.join(projectRoot, "story.md"));
   if (!lockable || isPlanning()) {
     return run();
   }
@@ -22705,8 +22943,8 @@ function withProjectLock(root, run, options = {}) {
   }
 }
 function lockedByAnother(root) {
-  const projectRoot = path16.resolve(root);
-  return !held.has(realPath(projectRoot)) && readOwner(path16.join(projectRoot, LOCK_FILE))?.alive === true;
+  const projectRoot = path17.resolve(root);
+  return !held.has(realPath(projectRoot)) && readOwner(path17.join(projectRoot, LOCK_FILE))?.alive === true;
 }
 function acquire(lockPath) {
   const deadline = Date.now() + lockWaitMs();
@@ -22736,11 +22974,11 @@ function acquire(lockPath) {
   return created;
 }
 function withProjectLocks(locks, run) {
-  const order = (lock) => realPath(path16.resolve(lock.root));
+  const order = (lock) => realPath(path17.resolve(lock.root));
   return [...locks].sort((left, right) => order(left) < order(right) ? -1 : order(left) > order(right) ? 1 : 0).reduceRight((inner, lock) => () => withProjectLock(lock.root, inner, lock), run)();
 }
 function removeStale(lockPath, staleText) {
-  const guard = path16.join(path16.dirname(lockPath), TAKEOVER_FILE);
+  const guard = path17.join(path17.dirname(lockPath), TAKEOVER_FILE);
   let created = tryCreate(guard);
   if (created === null && Date.now() - modifiedAt(guard) > TAKEOVER_STALE_MS) {
     fs7.rmSync(guard, { force: true });
@@ -22820,9 +23058,9 @@ function sameHostAlive(pid, recorded, written, modified) {
 var IDENTITY_PATTERN = /^[0-9a-f-]+ pid:\[\d+\] \d+$/;
 function processIdentity(proc = "/proc") {
   try {
-    const started = startTimeField(readTextFile(path16.join(proc, "self", "stat")));
-    const boot = readTextFile(path16.join(proc, "sys", "kernel", "random", "boot_id")).trim();
-    const identity = `${boot} ${fs7.readlinkSync(path16.join(proc, "self", "ns", "pid"))} ${started}`;
+    const started = startTimeField(readTextFile(path17.join(proc, "self", "stat")));
+    const boot = readTextFile(path17.join(proc, "sys", "kernel", "random", "boot_id")).trim();
+    const identity = `${boot} ${fs7.readlinkSync(path17.join(proc, "self", "ns", "pid"))} ${started}`;
     return IDENTITY_PATTERN.test(identity) ? identity : null;
   } catch {
     return null;
@@ -22830,7 +23068,7 @@ function processIdentity(proc = "/proc") {
 }
 function processStartTime(pid, proc = "/proc") {
   try {
-    return startTimeField(readTextFile(path16.join(proc, String(pid), "stat"))) ?? null;
+    return startTimeField(readTextFile(path17.join(proc, String(pid), "stat"))) ?? null;
   } catch {
     return null;
   }
@@ -23015,229 +23253,6 @@ function formatPasses(passes, command = "story passes") {
   return `${lines.join(`
 `)}
 `;
-}
-
-// src/submissions.js
-import path17 from "node:path";
-var SUBMISSION_TRACKER = "submission/tracker.md";
-var SUBMISSION_STATUSES = ["queried", "submitted", "held", "requested-partial", "requested-full", "offer", "declined", "no-response", "withdrawn"];
-var WAITING_STATUSES = new Set(["queried", "submitted", "held", "requested-partial", "requested-full"]);
-var DEFAULT_FOLLOW_UP_DAYS = 90;
-var MAX_FOLLOW_UP_DAYS = 3650;
-function followUpDays(options = {}) {
-  const raw = options.days;
-  if (raw === undefined) {
-    return DEFAULT_FOLLOW_UP_DAYS;
-  }
-  const text = String(raw).trim();
-  if (!/^\d+$/.test(text) || Number(text) < 1 || Number(text) > MAX_FOLLOW_UP_DAYS) {
-    throw usageError(`--days must be a whole number 1 to ${MAX_FOLLOW_UP_DAYS}, such as ${DEFAULT_FOLLOW_UP_DAYS}`, "days");
-  }
-  return Number(text);
-}
-var COLUMNS = new Map([
-  ["story", "story"],
-  ["date sent", "dateSent"],
-  ["materials", "materials"],
-  ["type", "type"],
-  ["rights offered", "rights"],
-  ["status", "status"],
-  ["response date", "responseDate"],
-  ["notes", "notes"]
-]);
-var DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
-function tableCells(line) {
-  return line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "").split(/(?<!\\)\|/).map((cell) => cell.trim().replace(/\\\|/g, "|"));
-}
-var MARKS = new Set(["*", "_", "`"]);
-function plainCell(cell) {
-  let text = cell.trim();
-  while (text.length >= 2 && MARKS.has(text[0]) && text.at(-1) === text[0]) {
-    text = text.slice(1, -1).trim();
-  }
-  return text;
-}
-function headerName(cell) {
-  return plainCell(cell).toLowerCase().replace(/\s+/g, " ");
-}
-function trackerTables(lines, start) {
-  const fenced = fencedLineIndexes(lines);
-  const tables = [];
-  for (let index = start;index < lines.length - 1; index += 1) {
-    if (fenced.has(index) || !lines[index].trim().startsWith("|") || !DELIMITER_ROW.test(lines[index + 1].trim())) {
-      continue;
-    }
-    const headers = tableCells(lines[index]).map(headerName);
-    const rows = [];
-    let next = index + 2;
-    for (;next < lines.length && !fenced.has(next) && lines[next].trim().startsWith("|"); next += 1) {
-      rows.push({ line: next + 1, cells: tableCells(lines[next]) });
-    }
-    if (headers.includes("status") && headers.includes("date sent")) {
-      tables.push({ headers, rows });
-    }
-    index = next - 1;
-  }
-  return tables;
-}
-function placeholderRow(cells) {
-  return /^([*_]).+\1$/.test(cells[0] ?? "") && cells.slice(1).every((cell) => cell === "");
-}
-function trackerRow(headers, { line, cells }) {
-  const row = { line, name: "" };
-  for (const field of COLUMNS.values()) {
-    row[field] = null;
-  }
-  let named = false;
-  for (const [index, header] of headers.entries()) {
-    const field = COLUMNS.get(header);
-    const cell = cells[index] ?? "";
-    if (field !== undefined) {
-      row[field] = cell;
-    } else if (!named) {
-      row.name = cell;
-      named = true;
-    }
-  }
-  return row;
-}
-function rowLabel(row) {
-  const name = plainCell(row.name);
-  return `${SUBMISSION_TRACKER} line ${row.line}${name === "" ? "" : ` (${name})`}`;
-}
-function trackerLines(text) {
-  if (!/^---[ \t]*\r?\n/.test(text)) {
-    return { start: 0, lines: text.split(/\r?\n/) };
-  }
-  let body;
-  try {
-    body = parseFrontmatter(text, SUBMISSION_TRACKER).body;
-  } catch (error) {
-    throw projectError(`${SUBMISSION_TRACKER} cannot be parsed: ${error.message}`);
-  }
-  const head = text.slice(0, text.length - body.length);
-  return { start: head.split(/\r?\n/).length - 1, lines: text.split(/\r?\n/) };
-}
-function readTracker(root) {
-  const folder = path17.join(root, "submission");
-  if (lstatIfExists(folder) === null) {
-    return null;
-  }
-  assertSafeProjectDirectory(folder, root);
-  const file = path17.join(root, SUBMISSION_TRACKER);
-  if (lstatIfExists(file) === null) {
-    return null;
-  }
-  return readTextFile(file);
-}
-function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }) {
-  requireStoryFile(root);
-  const text = readTracker(root);
-  const counts = Object.fromEntries(SUBMISSION_STATUSES.map((status) => [status, 0]));
-  const result = { root, file: SUBMISSION_TRACKER, found: text !== null, today, days, rows: [], counts, waiting: 0, overdue: 0, ok: true, errors: [], warnings: [] };
-  if (text === null) {
-    return result;
-  }
-  const { start, lines } = trackerLines(text);
-  const tables = trackerTables(lines, start);
-  if (tables.length === 0) {
-    result.errors.push(err("submission-tracker-no-table", `${SUBMISSION_TRACKER} has no tracker table: add one with a Status and a Date Sent column, as the submission skill's tracker template has`, SUBMISSION_TRACKER));
-  }
-  const todayDays = parseClockDate(today).days;
-  for (const table of tables) {
-    for (const cells of table.rows) {
-      if (placeholderRow(cells.cells)) {
-        continue;
-      }
-      result.rows.push(checkRow(trackerRow(table.headers, cells), todayDays, days, result));
-    }
-  }
-  result.waiting = result.rows.filter((row) => row.waitingSince !== null).length;
-  result.overdue = result.rows.filter((row) => row.overdue).length;
-  result.ok = result.errors.length === 0;
-  return result;
-}
-function checkRow(row, todayDays, days, result) {
-  const label = rowLabel(row);
-  const status = plainCell(row.status ?? "").toLowerCase();
-  row.status = status;
-  if (status === "") {
-    result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
-  } else if (!SUBMISSION_STATUSES.includes(status)) {
-    result.errors.push(err("submission-invalid-status", `${label}: Status "${status}" is not a tracker status; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
-  } else {
-    result.counts[status] += 1;
-  }
-  const sent = rowDate(row, "dateSent", "Date Sent", label, result, { required: true });
-  const response = rowDate(row, "responseDate", "Response Date", label, result, { required: false });
-  const since = [sent, response].filter((date) => date !== undefined).sort((left, right) => right.days - left.days)[0];
-  row.waitingSince = null;
-  row.waitingDays = null;
-  row.overdue = false;
-  if (WAITING_STATUSES.has(status) && since !== undefined) {
-    row.waitingSince = since.text;
-    row.waitingDays = todayDays - since.days;
-    row.overdue = row.waitingDays >= days;
-    if (row.overdue) {
-      result.warnings.push(warn("submission-overdue", `${label}: ${status}, waiting ${plural(row.waitingDays, "day")} for a reply since ${since.text} (follow up after ${days}): follow up, or record the reply`, SUBMISSION_TRACKER));
-    }
-  }
-  return row;
-}
-function rowDate(row, field, column, label, result, { required }) {
-  if (row[field] === null) {
-    return;
-  }
-  const text = plainCell(row[field]);
-  row[field] = text;
-  if (text === "") {
-    if (required) {
-      result.errors.push(err("submission-invalid-date", `${label}: ${column} is empty; write the date as YYYY-MM-DD`, SUBMISSION_TRACKER));
-    }
-    return;
-  }
-  const date = parseClockDate(text);
-  if (date === undefined) {
-    result.errors.push(err("submission-invalid-date", `${label}: ${column} "${text}" must be a real YYYY-MM-DD calendar day`, SUBMISSION_TRACKER));
-  }
-  return date;
-}
-function trackerForNext(root, options) {
-  try {
-    return submissionsReport(root, options);
-  } catch {
-    return null;
-  }
-}
-function formatSubmissions(report) {
-  if (!report.found) {
-    return `No submission tracker: ${SUBMISSION_TRACKER} does not exist yet. The submission skill creates it when the first submission goes out.
-`;
-  }
-  const lines = [`# Submissions: ${SUBMISSION_TRACKER}`, "", `Today: ${report.today}; follow up after ${plural(report.days, "day")} without a reply`, ""];
-  if (report.rows.length === 0) {
-    lines.push("No submissions recorded yet.");
-  }
-  for (const row of report.rows) {
-    lines.push(`- ${formatRow(row)}`);
-  }
-  const counted = SUBMISSION_STATUSES.filter((status) => report.counts[status] > 0).map((status) => `${status} ${report.counts[status]}`);
-  lines.push("", `Counts: ${counted.length === 0 ? "none" : counted.join(", ")} (${plural(report.rows.length, "submission")})`, `Waiting for a reply: ${report.waiting}; due a follow-up: ${report.overdue}`);
-  return `${lines.join(`
-`)}
-`;
-}
-function formatRow(row) {
-  const name = outputText(plainCell(row.name)) || "(no name)";
-  const story = row.story !== null && plainCell(row.story) !== "" ? ` [${outputText(plainCell(row.story))}]` : "";
-  const status = row.status === "" ? "(no status)" : outputText(row.status);
-  const sent = row.dateSent ? ` sent ${outputText(row.dateSent)}` : "";
-  const response = row.responseDate ? `, reply ${outputText(row.responseDate)}` : "";
-  let waiting = "";
-  if (row.waitingDays !== null && row.waitingDays >= 0) {
-    waiting = `; waiting ${plural(row.waitingDays, "day")}${row.overdue ? ": follow up" : ""}`;
-  }
-  return `${name}${story}: ${status}${sent ? `,${sent}` : ""}${response}${waiting}`;
 }
 
 // src/validate.js
@@ -25549,7 +25564,8 @@ function projectActions(root, options = {}) {
   const days = options.days ?? DEFAULT_FOLLOW_UP_DAYS;
   const followUps = submissionFollowUps(project.root, { today, days, overrides: options.overrides });
   if (followUps > 0) {
-    releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${days} days or more for a reply: run story submissions ${shellWord(options.displayPath ?? ".")} to list ${followUps === 1 ? "it" : "them"}.`));
+    const list = `story submissions ${shellWord(options.displayPath ?? ".")}${days === DEFAULT_FOLLOW_UP_DAYS ? "" : ` --days ${days}`}`;
+    releaseActions.push(action("P2", "Follow up on submissions", `${plural(followUps, "submission")} in ${SUBMISSION_TRACKER} ${followUps === 1 ? "has" : "have"} waited ${plural(days, "day")} or more for a reply: run ${list} to list ${followUps === 1 ? "it" : "them"}.`));
   }
   return {
     root: project.root,
@@ -25568,8 +25584,7 @@ function submissionFollowUps(root, { today, days, overrides }) {
   if (tracker === null) {
     return 0;
   }
-  const checked = applySeverity(tracker, overrides);
-  return [...checked.errors, ...checked.warnings].filter((finding) => finding.code === "submission-overdue").length;
+  return recountOverdue(applySeverity(tracker, overrides)).overdue;
 }
 function formatActionReport(report) {
   const lines = [
@@ -38346,14 +38361,14 @@ var COMMANDS = [
     summary: [
       "List submission/tracker.md rows, count each status,",
       "check statuses and dates, and flag replies awaited",
-      "longer than --days (default 90); never writes"
+      "--days days or more (default 90); never writes"
     ],
     project: "positional",
     options: ["date", "days", "json"],
     run({ parsed, io, root, overrides }) {
       const today = todayOption(parsed.options.date, "submissions");
       const days = followUpDays(parsed.options);
-      const report = applySeverity(submissionsReport(root(), { today, days }), overrides);
+      const report = recountOverdue(applySeverity(submissionsReport(root(), { today, days }), overrides));
       if (wantsJson(parsed)) {
         return reportJson(io, "submissions", report);
       }

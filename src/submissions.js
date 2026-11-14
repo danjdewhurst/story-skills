@@ -31,10 +31,19 @@ export const SUBMISSION_STATUSES = ["queried", "submitted", "held", "requested-p
 export const WAITING_STATUSES = new Set(["queried", "submitted", "held", "requested-partial", "requested-full"]);
 
 export const DEFAULT_FOLLOW_UP_DAYS = 90;
+
+// A tracker holds one row per submission: some hundreds for a busy writer.
+// A file with far more is refused before the rows, and a finding for each,
+// can fill a terminal, a CI log, or the memory --json needs.
+export const MAX_TRACKER_ROWS = 10000;
+
+// Each row's submission-overdue finding, so recountOverdue can tell which
+// rows story.md severity or an exemption has dismissed.
+const OVERDUE_FINDINGS = new WeakMap();
 const MAX_FOLLOW_UP_DAYS = 3650;
 
-// The days a submission may wait from --days: a whole number 1 to 3650,
-// default 90.
+// The days from --days after which a submission still waiting for a reply
+// is due a follow-up: a whole number 1 to 3650, default 90.
 export function followUpDays(options = {}) {
   const raw = options.days;
   if (raw === undefined) {
@@ -110,14 +119,15 @@ function trackerTables(lines, start) {
   return tables;
 }
 
-// The template's placeholder row, `| *No submissions yet* | | | ... |`: a
-// first cell in emphasis and nothing else.
+// The template's placeholder row, `| *No submissions yet* | | | ... |`: that
+// text in the first cell and nothing else.
 function placeholderRow(cells) {
-  return /^([*_]).+\1$/.test(cells[0] ?? "") && cells.slice(1).every((cell) => cell === "");
+  return plainCell(cells[0] ?? "").toLowerCase() === "no submissions yet" && cells.slice(1).every((cell) => cell === "");
 }
 
-// A row as { line, name, story, dateSent, ... }, each column's text, or null
-// for a column the table does not have. `name` is the first column that is
+// A row as { line, name, story, dateSent, ... }, each column's text without
+// the emphasis or code marks around it, or null for a column the table does
+// not have. `name` is the first column that is
 // none of the known ones: Agent/Publisher, or Market.
 function trackerRow(headers, { line, cells }) {
   const row = { line, name: "" };
@@ -127,7 +137,7 @@ function trackerRow(headers, { line, cells }) {
   let named = false;
   for (const [index, header] of headers.entries()) {
     const field = COLUMNS.get(header);
-    const cell = cells[index] ?? "";
+    const cell = plainCell(cells[index] ?? "");
     if (field !== undefined) {
       row[field] = cell;
     } else if (!named) {
@@ -139,7 +149,7 @@ function trackerRow(headers, { line, cells }) {
 }
 
 function rowLabel(row) {
-  const name = plainCell(row.name);
+  const name = row.name;
   return `${SUBMISSION_TRACKER} line ${row.line}${name === "" ? "" : ` (${name})`}`;
 }
 
@@ -190,6 +200,12 @@ export function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }
   if (tables.length === 0) {
     result.errors.push(err("submission-tracker-no-table", `${SUBMISSION_TRACKER} has no tracker table: add one with a Status and a Date Sent column, as the submission skill's tracker template has`, SUBMISSION_TRACKER));
   }
+  const rowCount = tables.reduce((total, table) => total + table.rows.length, 0);
+  if (rowCount > MAX_TRACKER_ROWS) {
+    result.errors.push(err("submission-tracker-too-large", `${SUBMISSION_TRACKER} has ${rowCount} table rows, more than the ${MAX_TRACKER_ROWS} a tracker can hold: split it, or move old rows to another file`, SUBMISSION_TRACKER));
+    result.ok = false;
+    return result;
+  }
   const todayDays = parseClockDate(today).days;
   for (const table of tables) {
     for (const cells of table.rows) {
@@ -210,7 +226,7 @@ export function submissionsReport(root, { today, days = DEFAULT_FOLLOW_UP_DAYS }
 // request for the full manuscript waits from the day it came.
 function checkRow(row, todayDays, days, result) {
   const label = rowLabel(row);
-  const status = plainCell(row.status ?? "").toLowerCase();
+  const status = (row.status ?? "").toLowerCase();
   row.status = status;
   if (status === "") {
     result.errors.push(err("submission-invalid-status", `${label}: Status is empty; use one of ${SUBMISSION_STATUSES.join(", ")}`, SUBMISSION_TRACKER));
@@ -230,7 +246,9 @@ function checkRow(row, todayDays, days, result) {
     row.waitingDays = todayDays - since.days;
     row.overdue = row.waitingDays >= days;
     if (row.overdue) {
-      result.warnings.push(warn("submission-overdue", `${label}: ${status}, waiting ${plural(row.waitingDays, "day")} for a reply since ${since.text} (follow up after ${days}): follow up, or record the reply`, SUBMISSION_TRACKER));
+      const finding = warn("submission-overdue", `${label}: ${status}, waiting ${plural(row.waitingDays, "day")} for a reply since ${since.text} (${days} or more is due a follow-up): follow up, or record the reply`, SUBMISSION_TRACKER);
+      OVERDUE_FINDINGS.set(row, finding);
+      result.warnings.push(finding);
     }
   }
   return row;
@@ -238,13 +256,12 @@ function checkRow(row, todayDays, days, result) {
 
 // A row's date column as { text, days }, or undefined when it is blank or
 // not a date. A Date Sent is required; a Response Date stays blank until a
-// reply comes. The row keeps the date as written, without emphasis.
+// reply comes.
 function rowDate(row, field, column, label, result, { required }) {
   if (row[field] === null) {
     return undefined;
   }
-  const text = plainCell(row[field]);
-  row[field] = text;
+  const text = row[field];
   if (text === "") {
     if (required) {
       result.errors.push(err("submission-invalid-date", `${label}: ${column} is empty; write the date as YYYY-MM-DD`, SUBMISSION_TRACKER));
@@ -256,6 +273,15 @@ function rowDate(row, field, column, label, result, { required }) {
     result.errors.push(err("submission-invalid-date", `${label}: ${column} "${text}" must be a real YYYY-MM-DD calendar day`, SUBMISSION_TRACKER));
   }
   return date;
+}
+
+// The report after applySeverity: a row whose submission-overdue warning
+// story.md severity turned off, or an exemption dismissed, is no longer due
+// a follow-up, in the rows, the overdue count, and story next alike.
+export function recountOverdue(report) {
+  const active = new Set([...report.errors, ...report.warnings]);
+  const rows = report.rows.map((row) => ({ ...row, overdue: row.overdue && active.has(OVERDUE_FINDINGS.get(row)) }));
+  return { ...report, rows, overdue: rows.filter((row) => row.overdue).length };
 }
 
 // The tracker report for story next, or null when the tracker cannot be
@@ -272,8 +298,8 @@ export function formatSubmissions(report) {
   if (!report.found) {
     return `No submission tracker: ${SUBMISSION_TRACKER} does not exist yet. The submission skill creates it when the first submission goes out.\n`;
   }
-  const lines = [`# Submissions: ${SUBMISSION_TRACKER}`, "", `Today: ${report.today}; follow up after ${plural(report.days, "day")} without a reply`, ""];
-  if (report.rows.length === 0) {
+  const lines = [`# Submissions: ${SUBMISSION_TRACKER}`, "", `Today: ${report.today}; follow up after ${plural(report.days, "day")} or more without a reply`, ""];
+  if (report.rows.length === 0 && report.errors.length === 0) {
     lines.push("No submissions recorded yet.");
   }
   for (const row of report.rows) {
@@ -289,8 +315,8 @@ export function formatSubmissions(report) {
 }
 
 function formatRow(row) {
-  const name = outputText(plainCell(row.name)) || "(no name)";
-  const story = row.story !== null && plainCell(row.story) !== "" ? ` [${outputText(plainCell(row.story))}]` : "";
+  const name = outputText(row.name) || "(no name)";
+  const story = row.story ? ` [${outputText(row.story)}]` : "";
   const status = row.status === "" ? "(no status)" : outputText(row.status);
   const sent = row.dateSent ? ` sent ${outputText(row.dateSent)}` : "";
   const response = row.responseDate ? `, reply ${outputText(row.responseDate)}` : "";

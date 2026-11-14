@@ -137,8 +137,9 @@ Fill each field from the user's contract or acceptance; leave a field blank
 rather than guess it.
 
 When summarising, run `story submissions .` for the rows, the count of each
-status, and the entries past the window (`--days <n>` for the market's
-response time), then report stories out by market, exclusive submissions
+status, and the entries past the window (`--days <n>` sets one window for
+every row, so use the shortest response time among the markets and check
+each flagged row against its own market's window in Notes), then report stories out by market, exclusive submissions
 still open, holds, entries past their window, and stories with no
 submission out. The command reads a tracker inside a story project only; a
 shared tracker in a plain folder outside any project is summarised by
